@@ -29,8 +29,8 @@ framing.
 | H027 | Trace app residue | `Trace app`, `Trace UI`, `Open Trace`, `appId: "trace"`, `data-trace-app` | 0 current product-surface hits | Trace evidence remains valid; Trace app/dashboard direction is retired. |
 | H028 | raw Terminal app residue | `Terminal app`, `raw Terminal`, `manual terminal`, `/api/terminal/ws`, `appId: "terminal"` | 0 current product-surface hits | Super Console/zot is the repair surface; PTY terms may remain hidden implementation detail. |
 | H029 | Browser source-gathering residue | `Browser app`, `BrowserApp`, `browser_sessions`, `AppHint: "browser"`, `open_surface: "browser"` | 0 current product-surface hits | Browser names may remain only as transitional implementation names for Web Lens/source work. |
-| H030 | actor runtime database polling | `log.Unprocessed` warm-loop call, `Unprocessed` count in actor loop, warm loop querying durable log instead of `select` on `chan` | 0 active warm-loop hits | Repaired 2026-06-27; registry row update only. |
-| H031 | route resolves to VM/desktop identity | `UniversalWirePlatformOwnerID`, `UniversalWirePlatformDesktopID`, `route_profile` parsed as `owner_id/desktop_id` as product route target, `ResolveDesktopContext` as route target | 0 product-route hits | See `docs/choir-doctrine.md` H031; Banned Patterns list #16. |
+| H030 | actor runtime database polling | `log.Unprocessed` | 0 active warm-loop hits | Repaired 2026-06-27; remaining hits should be cold-start replay, post-drain overflow, or Sweep boot recovery, not warm-loop polling. Registry row update only. |
+| H031 | route resolves to VM/desktop identity | `UniversalWirePlatformOwnerID`, `UniversalWirePlatformDesktopID`, `ResolveDesktopContext`, `route_profile` | 0 product-route hits | See `docs/choir-doctrine.md` H031; Banned Patterns list #16. The `route_profile` hits need allowlist context for the parser implementation itself and tests. |
 | framing | retired root ontology | `personal writing system`, `publishing system`, `AI workspace`, `workflow app`, `StoryGraph`, `chat` | 0 current-root hits | Surface or historical usage is acceptable when explicitly labeled. |
 
 ## Baseline Counts
