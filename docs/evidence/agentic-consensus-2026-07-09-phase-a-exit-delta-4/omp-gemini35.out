@@ -1,0 +1,42 @@
+### 1. Verdict
+**clear** for Phase A exit.
+
+---
+
+### 2. Category-(a) Phase-Exit Defects (must fix before Phase B)
+**None.** Both Round 4 conditional findings (D1, D2) are resolved:
+- **D1 (Adjudication Table counts):** Resolved. `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md` correctly records Round 1 `opencode` as `conditional` (line 5), Round 3 `opencode` as `clear` (line 43), and Round 3 verdicts as `4 clear / 1 conditional` (line 45).
+- **D2 (Evergreen deployed SHA):** Resolved. The Determined State Snapshot W3 claim (`docs/definitions/og-dolt-heresy-completion-2026-07-08.md:389`) was updated to a time-scoped deploy sequence (`67fff296`, `1ed41f2b`, `14f56211`) matching the evidence ledger (line 737) and staging timeout proof.
+
+---
+
+### 3. Category-(b) New Definition Nodes (register, don't silently absorb)
+**None.** All changes are doc/truth corrections to existing nodes.
+
+---
+
+### 4. Category-(c) Out-of-Scope Noise (record and drop)
+- **External Integration Test Failures:** `internal/gateway` search tests (`TestExaProvider_Integration`, etc.) failed due to credit limits / payment required on third-party APIs (`exa`, `serpapi`, `serper`). This is external environment noise, unrelated to the core definition logic.
+- **D-STORE unresolved:** The storage fork (D-STORE) remains unresolved in the snapshot (`docs/definitions/og-dolt-heresy-completion-2026-07-08.md:424-426`), which is correct and scheduled to resolve in Phase D.
+- **Heresy discovery counts:** Discovery-mode count hits (e.g., I4 detector hits on `CALL DOLT_RESET` in the manifest and tests) are expected in discovery mode; enforcement and allowlists are deferred to Phase B/E.
+
+---
+
+### 5. Confidence
+**high**
+All findings were verified by direct file reads, git diffs of commit `5bcdca22`, and execution of local tests and scripts.
+
+---
+
+### 6. Specific Repo Evidence
+
+| Target / Check | File & Line Range | Observation / Command / Result |
+|---|---|---|
+| D1 Adjudication accuracy | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:3-7, 41-45` | Verified opencode round 1 recorded as `conditional` (line 5), round 3 recorded as `clear` (line 43), and round 3 verdicts recorded as `4 clear / 1 conditional` (line 45). |
+| D2 State Snapshot W3 claim | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:389` | Verified W3 claim updated to use time-scoped deploy sequence `67fff296`, `1ed41f2b`, and `14f56211` instead of present-tense evergreen assertion. |
+| W1 Detectors in CI | `.github/workflows/ci.yml:206-235` | Verified `Heresy Detector Discovery` CI job runs `scripts/check-heresies.sh --report heresy-detector-report.json` and is gated by the `check` job. |
+| W1 Script & Manifest | `docs/heresy-detectors.md:33-35`, `scripts/check-heresies.sh` | Verified detectors H030, H031, and I4 (destructive rollback guard) are present in the manifest and evaluated. Executed `bash scripts/check-heresies.sh` to confirm report exits `0` on baseline hits. |
+| W2 Timeouts Proven | `docs/evidence/w2-timeout-staging-proof-2026-07-09.md` | Verified staging metrics prove `/api/universal-wire/stories` returns a 504 Gateway Timeout in under 60 seconds (`avg_duration_ms: 37425`, `max_duration_ms: 60001`). |
+| S1 Scope Header | `specs/promotion_protocol.tla:39-49` | Scope note clearly outlines target-state model assumptions, embedded connection pooling limitations (D-PROMO), and tag-only interim adapter gap. |
+| P-TRIAGE Table | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:596-624` | Verified past-mission open-edge triage table is completely populated with dispositions for all ~25 open edges. |
+| D-PROMO Test | `internal/computerversion/` | Executed `go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` to confirm 10/10 passes. |

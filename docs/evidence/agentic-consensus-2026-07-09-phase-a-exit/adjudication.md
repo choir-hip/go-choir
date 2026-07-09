@@ -64,6 +64,16 @@
 | D1 | Adjudication table still inaccurately recorded opencode round 1 as `logs only` and round 3 as `logs only`, and under-counted round 3 verdicts as `3 clear / 1 conditional` | process defect | Updated adjudication: round 1 opencode is `conditional`; round 3 opencode is `clear`; round 3 verdicts are `4 clear / 1 conditional`. |
 | D2 | `Determined State Snapshot` still asserted a present-tense `the deployed SHA is 1ed41f2b` without a timestamp or scroll sequence | truth defect | Rewrote the snapshot W3 claim to use the time-scrolled sequence `67fff296` (first 60s timeout), `1ed41f2b` (2026-07-09T05:12:21Z), and `14f56211` (2026-07-09T05:42:19Z), matching the evidence ledger. |
 
+## Round 5 panel (delta-4, 2026-07-09)
+
+- **Panel:** cursor (`clear`), opencode (`clear`), omp-gpt55 (`clear`), omp-gemini35 (`clear`), omp-glm52 (`clear`).
+- **Raw outputs:** `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-4/`
+- **Verdicts:** `clear` (unanimous)
+
+### Category-(a) findings
+
+None.
+
 ## Final disposition
 
-All round 1–4 category-(a) findings are resolved. Phase A exit is cleared subject to a follow-up delta panel confirming the D1/D2 resolutions.
+All round 1–4 category-(a) findings are resolved, and round 5 confirmed zero new category-(a) findings. Phase A exit is **clear**.

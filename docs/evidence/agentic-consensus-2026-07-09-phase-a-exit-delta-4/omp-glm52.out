@@ -1,0 +1,55 @@
+I have complete evidence. All verification complete.
+
+---
+
+## Phase A Exit Gate DELTA-4 Review
+
+### 1. Verdict: **clear** for Phase A exit
+
+Both D1 and D2 fixes are accurate and complete against the raw panel outputs. The definition now presents a sound Phase A exit state with zero remaining category-(a) defects.
+
+### 2. Category-(a) phase-exit defects (must fix before Phase B)
+
+**None.**
+
+**D1 verification — adjudication accuracy** ✅:
+- opencode round 1 = `conditional` — confirmed at `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/opencode.out:23` (`Verdict: **conditional**`). Old label `logs only` was wrong; fix correct.
+- opencode round 3 = `clear` — confirmed at `…phase-a-exit-delta-2/opencode.out:199` (`Verdict: **clear** for Phase A exit`). Fix correct.
+- round 3 count = `4 clear / 1 conditional` — matches raw: cursor clear, opencode clear, gemini35 clear, glm52 clear, gpt55 conditional. Fix correct.
+- The `5bcdca22` diff to `adjudication.md` records all three corrections verbatim. Round 2 `opencode (logs only, no final verdict)` retained correctly — `…phase-a-exit-delta/opencode.out` has no verdict line.
+
+**D2 verification — W3 snapshot time-scoping** ✅:
+- `og-dolt…md:389` now reads: observed deploys are `67fff296` (first 60s timeout, 2026-07-09T04:56:18Z), `1ed41f2b` (2026-07-09T05:12:21Z), `14f56211` (2026-07-09T05:42:19Z).
+- No remaining evergreen assertion: `grep "deployed SHA is|current deployed|currently deployed|the deployed SHA"` across the definition and the W2 evidence doc returns **zero matches**.
+
+### 3. Category-(b) new definition nodes
+
+**None.** D1/D2 are accuracy corrections to already-governed surfaces (adjudication record + W3 truth claim). No new definition node warranted.
+
+### 4. Category-(c) out-of-scope noise (record and drop)
+
+- **glm52 round-4 misstatement:** glm52 claimed opencode was "logs-only in rounds 2 and 3." This is factually wrong for round 3 — `delta-2/opencode.out:199` shows a `clear` verdict. The adjudication correctly followed the raw evidence over the panelist's misstatement. Panelist error, not a definition/adjudication defect. Drop.
+- **gemini35 round-2 verdict header:** `delta/omp-gemini35.out` has no explicit `Verdict:` line, but its content confirms all deliverables (consistent with `clear`). Cosmetic. Drop.
+
+### 5. Confidence: **high**
+
+Every claim verified against raw panel outputs, the fix-commit diff, and the live repo. Red-class gate minimum of four returning panelists is met (5 returned in round 4); owner signed off via commit `5bcdca22`.
+
+### 6. Specific repo evidence
+
+| Check | File / Command | Observation |
+|---|---|---|
+| D1: opencode R1 = conditional | `…phase-a-exit/opencode.out:23` | `Verdict: **conditional**` — matches fixed adjudication `:5` |
+| D1: opencode R3 = clear | `…phase-a-exit-delta-2/opencode.out:199` | `Verdict: **clear** for Phase A exit` — matches fixed adjudication `:43` |
+| D1: R3 count | adjudication `:45` | `4 clear / 1 conditional` — cursor/opencode/gemini35/glm52 clear; gpt55 conditional |
+| D1: fix commit | `git show 5bcdca22 -- adjudication.md` | diff corrects R1 opencode→conditional, R3 opencode→clear, R3 verdicts→4 clear/1 conditional |
+| D2: W3 time-scoped | `og-dolt…md:389` | time-scrolled `67fff296`/`1ed41f2b`/`14f56211` with timestamps |
+| D2: no evergreen SHA | `grep "deployed SHA is\|current deployed\|currently deployed"` in definition + W2 doc | zero matches |
+| Exit: detectors in CI | `.github/workflows/ci.yml:206-235,262` | `heresy-detector` job runs `check-heresies.sh --report`; wired into `check` gate (fails if not success) |
+| Exit: timeouts proven | `docs/evidence/w2-timeout-staging-proof-2026-07-09.md` exists; ledger `:762` | `max_duration_ms 60,001`, 504 within 60s |
+| Exit: corrections committed | variant `og-dolt…md:446` | `doc_corrections_open: 0` |
+| Exit: S1 scoped | variant `og-dolt…md:447`; snapshot `:398` | `spec_impl_gaps_open: 0`; spec scope header names embedded store + tag-only gap |
+| Exit: P-TRIAGE full | `og-dolt…md:598-624`; variant `:451` | 25 rows triaged (absorbed/retired/external); `past_mission_open_edges_untriaged: 0` |
+| Red-class panel count | round 4 raw outputs | 5 returned (cursor, opencode, gpt55, gemini35, glm52) ≥ 4 required |
+
+**Disposition:** Phase A exit clears. Proceed into Phase B (heresy kill wave 1 + Dolt audit reads) under the red-gate proceed rule. D-STORE storage fork remains legitimately unresolved — it is not a Phase A gate item; it gates Phase D.

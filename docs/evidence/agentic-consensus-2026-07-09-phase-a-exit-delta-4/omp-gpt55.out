@@ -1,0 +1,74 @@
+1. **Verdict: clear for Phase A exit**
+
+2. **Category-(a) phase-exit defects: none**
+
+   The two DELTA-3 conditional blockers are fixed.
+
+   - **D1 fixed — adjudication table accurately records panel verdicts and counts.**
+     - `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:5` now records round 1 opencode as `conditional`, not logs-only.
+     - `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:43-45` now records round 3 as cursor `clear`, opencode `clear`, gpt55 `conditional`, gemini35 `clear`, glm52 `clear`; verdict count is effectively `4 clear / 1 conditional`.
+     - Raw output check:
+       - `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/opencode.out:21-25` has `Verdict: conditional`.
+       - `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/opencode.out:197-201` has `Verdict: clear for Phase A exit`.
+       - `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/opencode.out:48-50` has only a permission/tool rejection, so round 2 remains correctly “logs only, no final verdict.”
+     - Local summary command observation: parsed `adjudication.md`; panel lines now report:
+       - round 1: codex failed; cursor/devin/opencode/gpt55/gemini35/glm52 conditional.
+       - round 2: cursor conditional; opencode logs-only; gpt55/gemini35/glm52 clear.
+       - round 3: cursor/opencode/gemini35/glm52 clear; gpt55 conditional.
+       - round 4: cursor/opencode/gpt55 conditional; gemini35/glm52 clear.
+
+   - **D2 fixed — W3 deployed identity is time-scoped, not evergreen.**
+     - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:389-391` now states W3 as a sequence of observed deploys: `67fff296` first 60s timeout at `2026-07-09T04:56:18Z`, `1ed41f2b` at `2026-07-09T05:12:21Z`, and `14f56211` at `2026-07-09T05:42:19Z`.
+     - `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:737-743` ledger explicitly says deployed SHA changes with each CI deploy and W3 evidence is “the time-scrolled sequence of observed deploys, not an evergreen `current` identity.”
+     - `docs/evidence/w2-timeout-staging-proof-2026-07-09.md:19-24` mirrors the same time-scrolled sequence and says the deployed SHA changes with each CI deploy.
+     - Grep check for evergreen wording found no live evergreen SHA claim in the definition; matches were historical defect descriptions in `adjudication.md` and the corrected “deployed SHA changes” wording in the W2 proof.
+
+   - **Full Phase A exit bar is satisfied.**
+     - **Detectors in CI:** `docs/heresy-detectors.md:5-9` defines discovery-mode CI; `docs/heresy-detectors.md:33-35` includes H030/H031/I4 rows; `.github/workflows/ci.yml:206-235` wires `Heresy Detector Discovery` into the `check` gate; `scripts/check-heresies.sh:90-141` parses manifest rows and reports counts.
+     - Detector script command run: `bash scripts/check-heresies.sh` via Python subprocess exited `0`, parsed `13` rows, and returned H030, H031, and I4 rows. I4 reported `13` discovery hits; this is not a Phase A defect because Phase A requires CI reporting, and manifest/adjudication scope self/docs/evidence hits as discovery noise until fail-on-regression promotion.
+     - **Timeouts proven:** `docs/evidence/w2-timeout-staging-proof-2026-07-09.md:53-87` records deployed `/api/universal-wire/stories` resolve max `60001ms` and 504 within 60s; `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:383-388` marks W2/I3 settled.
+     - **Corrections committed:** `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:401-403` claims C1-C7 committed; spot checks show:
+       - `README.md:3-5` and `README.md:15` use the current “human-improving, machine-compounding mainframe” framing.
+       - `docs/README.md:87-89` registers `docs/choir-grip-checkpoint-2026-07-07.md` as narrative and non-authoritative.
+       - `docs/doc-authority-manifest.yaml:70-78` records `doc_role: narrative`, `authority: none`.
+       - `docs/missions/substrate-hardening-v0.md:514` and `docs/missions/cross-substrate-proof-v0.md:158` are `checkpoint_incomplete`.
+       - `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md:1-4` and `docs/archive/heresy-eradication-2026-07-07.md:1-5` redirect to the umbrella definition.
+     - **S1 scoped:** `specs/promotion_protocol.tla:39-49` scope header names the embedded store/pinned `*sql.Conn` assumption, references the Phase A D-PROMO test, and states the current `DoltPromotionAdapter` is tag-only and non-conformant until Phase D.
+     - **D-PROMO test proven:** command run: `go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` returned `ok` for 1 package in `14.02s`.
+     - **P-TRIAGE full:** `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:596-624` contains 25 table rows; local parse counted `P-TRIAGE rows 25`; `:626-629` states this is the Phase A exit bar.
+
+3. **Category-(b) new definition nodes: none**
+
+   - D1 is adjudication metadata correction, not a new semantic node.
+   - D2 is W3 evidence scoping, not a new semantic node.
+   - I4 is already represented as an invariant/detector row: `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:227-237`, `docs/heresy-detectors.md:35`.
+   - Remaining unresolved D-STORE storage fork is already open: `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:424-426`.
+
+4. **Category-(c) out-of-scope noise: record and drop**
+
+   - **Detector self/docs/evidence hits.** `scripts/check-heresies.sh` discovery run reports nonzero hits, including I4 `total_hits: 13`, because discovery scans docs/evidence/script text too. This is already scoped in `docs/heresy-detectors.md:5-9`, `docs/heresy-detectors.md:69-86`, and `adjudication.md:21-25`. Not a Phase A blocker; fail-on-regression/typed allowlists are deferred per phase.
+   - **Snapshot heading date is stale-looking but nonblocking.** `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:375` says `Determined State Snapshot (2026-07-08)` while the body includes 2026-07-09 evidence. Claims themselves carry timestamps and the checkpoint names the current round. This is editorial cleanup, not a Phase A semantic defect.
+
+5. **Confidence: high**
+
+6. **Specific repo evidence**
+
+   | Check | Evidence | Observation |
+   |---|---|---|
+   | Round 1 opencode verdict | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/opencode.out:21-25` | Raw output says `Verdict: conditional`. |
+   | Round 1 adjudication fixed | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:5-7` | Opencode now recorded as `conditional`; codex failed; returning agents conditional. |
+   | Round 2 opencode logs-only | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/opencode.out:48-50` | Permission/tool rejection, no final verdict. |
+   | Round 3 opencode verdict | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/opencode.out:197-201` | Raw output says `Verdict: clear for Phase A exit`. |
+   | Round 3 adjudication fixed | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:43-45` | Records opencode `clear`; clear count includes cursor/opencode/gemini35/glm52; gpt55 conditional. |
+   | Round 4 adjudication | `docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/adjudication.md:56-65` | Records cursor/opencode/gpt55 conditional, gemini35/glm52 clear; D1/D2 resolutions listed. |
+   | W3 snapshot time-scoped | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:389-391` | W3 uses deploy sequence `67fff296` → `1ed41f2b` → `14f56211`, not evergreen current SHA. |
+   | W3 ledger time-scoped | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:737-743` | Explicitly says time-scrolled observed deploys, not evergreen current identity. |
+   | W2 proof time-scoped | `docs/evidence/w2-timeout-staging-proof-2026-07-09.md:19-24` | Same sequence; says deployed SHA changes with each CI deploy. |
+   | W1 detector manifest | `docs/heresy-detectors.md:33-35` | H030, H031, I4 detector rows present. |
+   | W1 CI wiring | `.github/workflows/ci.yml:206-235` | `Heresy Detector Discovery` runs script and is a dependency of `check`. |
+   | Detector script run | command: `bash scripts/check-heresies.sh` via Python subprocess | Exit `0`; parsed `13` detector rows; H030/H031/I4 present. |
+   | W2 staging proof | `docs/evidence/w2-timeout-staging-proof-2026-07-09.md:53-87` | `api.resolve.max_duration_ms: 60001`; conclusion says 504 within 60s. |
+   | D-PROMO proof | command: `go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` | Passed: `go test: 1 packages ok` in `14.02s`. |
+   | S1 scoped | `specs/promotion_protocol.tla:39-49` | Target-state model; embedded pinned connection assumption; tag-only adapter conformance gap stated. |
+   | P-TRIAGE full | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:596-624` plus local row count | 25 open-edge rows; no untriaged Phase A edge observed. |
+   | Phase A bar statement | `docs/definitions/og-dolt-heresy-completion-2026-07-08.md:626-629` | Exit bar exactly names detectors in CI, timeouts, corrections, S1, and full triage. |

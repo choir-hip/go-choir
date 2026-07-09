@@ -1,0 +1,38 @@
+1. **Verdict: clear** for Phase A exit
+
+D1 and D2 are fixed in-repo. No remaining confirmed category-(a) defects. Phase A exit bar is met.
+
+2. **Category-(a) phase-exit defects**
+
+None.
+
+3. **Category-(b) new definition nodes**
+
+None. Fail-on-regression / typed-allowlist enforcement remains deferred (already registered under W1 / `heresy_families_without_ci_enforcement`); do not absorb as Phase A work.
+
+4. **Category-(c) out-of-scope noise**
+
+- I1/H031 still violated; tag-only adapter still non-conformant; D-STORE still open — Phase B–D work, not Phase A exit.
+- Nonzero I4 discovery hits under discovery mode (manifest/evidence/adapter self-hits) — expected.
+- Adjudication final disposition still says “cleared subject to follow-up delta panel” — correct framing for this confirmation round; not a defect.
+- W2 proof JSON still pins `67fff296`; surrounding prose is time-scrolled — fine.
+
+5. **Confidence: high**
+
+Direct reads of adjudication, definition snapshot/ledger, raw panel outs for rounds 1/3, CI/detector/S1/P-TRIAGE artifacts. Did not re-fetch live `/health` or re-run `go test -count=10` this round; not required to close D1/D2.
+
+6. **Specific repo evidence**
+
+| Check | Observation | Evidence |
+|---|---|---|
+| D1 fixed: R1 opencode | `conditional`, not logs-only | `adjudication.md:5`; raw `…phase-a-exit/opencode.out:23` `Verdict: **conditional**` |
+| D1 fixed: R3 opencode | `clear`; count `4 clear / 1 conditional` | `adjudication.md:43-45`; raw `…delta-2/opencode.out:199` `Verdict: **clear**` |
+| D1 fixed: R2 opencode | correctly remains logs-only | `adjudication.md:29`; `…delta/opencode.out` has no `Verdict` match |
+| D2 fixed: snapshot W3 | time-scrolled sequence, no evergreen “current” SHA | Definition `:389` — `67fff296` @ `04:56:18Z`, `1ed41f2b` @ `05:12:21Z`, `14f56211` @ `05:42:19Z`; grep for `deployed SHA is` / `current deployed SHA` in definition → no matches |
+| D2 aligned with ledger | same sequence + non-evergreen disclaimer | Definition `:737-743`; `w2-timeout-staging-proof-2026-07-09.md:19-24` |
+| W1 detectors in CI | H030/H031/I4 + discovery job | `docs/heresy-detectors.md:33-35`; `.github/workflows/ci.yml:207,223` |
+| W2 timeouts | 60s bounds + staging proof | `internal/proxy/config.go:83`; `internal/vmctl/client.go:22`; `internal/server/server.go:60-61`; I3 `:213-224` |
+| S1 scoped | embedded-store / tag-only gap noted | `specs/promotion_protocol.tla:47-48` |
+| P-TRIAGE full | 25 rows, all disposed | Definition `:600-624`; variant `:451` `past_mission_open_edges_untriaged: 0` |
+
+**Bottom line:** Clear Phase A. Proceed into Phase B under the gate protocol.
