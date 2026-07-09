@@ -54,7 +54,13 @@ type Server struct {
 // internet-reachable on Node B.
 const defaultBindHost = "127.0.0.1"
 
-const defaultShutdownTimeout = 10 * time.Second
+const (
+	defaultShutdownTimeout    = 10 * time.Second
+	defaultReadHeaderTimeout  = 30 * time.Second
+	defaultReadTimeout        = 120 * time.Second
+	defaultWriteTimeout       = 120 * time.Second
+	defaultIdleTimeout        = 120 * time.Second
+)
 
 // NewServer creates a new Server for the given service name and port.
 // The port should be a string like "8081". Use PortFromEnv to resolve
@@ -86,8 +92,12 @@ func NewServer(serviceName, port string) *Server {
 		s.healthHandler(w, r)
 	})
 	s.httpServer = &http.Server{
-		Addr:    addr,
-		Handler: mux,
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: ReadHeaderTimeoutFromEnv(),
+		ReadTimeout:       ReadTimeoutFromEnv(),
+		WriteTimeout:      WriteTimeoutFromEnv(),
+		IdleTimeout:       IdleTimeoutFromEnv(),
 	}
 	return s
 }
@@ -250,6 +260,58 @@ func ShutdownTimeoutFromEnv() time.Duration {
 	d, err := time.ParseDuration(raw)
 	if err != nil {
 		return defaultShutdownTimeout
+	}
+	return d
+}
+
+// ReadHeaderTimeoutFromEnv reads SERVER_READ_HEADER_TIMEOUT as a Go duration.
+func ReadHeaderTimeoutFromEnv() time.Duration {
+	raw := os.Getenv("SERVER_READ_HEADER_TIMEOUT")
+	if raw == "" {
+		return defaultReadHeaderTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return defaultReadHeaderTimeout
+	}
+	return d
+}
+
+// ReadTimeoutFromEnv reads SERVER_READ_TIMEOUT as a Go duration.
+func ReadTimeoutFromEnv() time.Duration {
+	raw := os.Getenv("SERVER_READ_TIMEOUT")
+	if raw == "" {
+		return defaultReadTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return defaultReadTimeout
+	}
+	return d
+}
+
+// WriteTimeoutFromEnv reads SERVER_WRITE_TIMEOUT as a Go duration.
+func WriteTimeoutFromEnv() time.Duration {
+	raw := os.Getenv("SERVER_WRITE_TIMEOUT")
+	if raw == "" {
+		return defaultWriteTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return defaultWriteTimeout
+	}
+	return d
+}
+
+// IdleTimeoutFromEnv reads SERVER_IDLE_TIMEOUT as a Go duration.
+func IdleTimeoutFromEnv() time.Duration {
+	raw := os.Getenv("SERVER_IDLE_TIMEOUT")
+	if raw == "" {
+		return defaultIdleTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return defaultIdleTimeout
 	}
 	return d
 }

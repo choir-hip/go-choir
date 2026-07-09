@@ -19,7 +19,7 @@ type Client struct {
 	httpClient *http.Client
 }
 
-const DefaultClientTimeout = 180 * time.Second
+const DefaultClientTimeout = 60 * time.Second
 
 // NewClient creates a vmctl client pointing at the given base URL.
 func NewClient(baseURL string) *Client {

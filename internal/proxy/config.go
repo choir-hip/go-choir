@@ -34,9 +34,10 @@ type Config struct {
 	// SandboxURL (VAL-VM-001, VAL-VM-002).
 	VmctlURL string
 
-	// VmctlTimeout is the proxy -> vmctl request timeout. It must exceed the
-	// vmmanager boot-ready timeout so cold computer boots do not fail halfway
-	// through normal readiness probing.
+	// VmctlTimeout is the proxy -> vmctl request timeout. It is bounded to
+	// fail fast when vmctl is hung or unreachable; cold computer boot waits are
+	// a separate lifecycle reliability concern (Phase D). The default keeps
+	// the request path below the server WriteTimeout.
 	VmctlTimeout time.Duration
 
 	// CorpusdURL is the internal platform service URL. The proxy uses it
@@ -75,9 +76,11 @@ const (
 	// DefaultAuthPublicKeyPath is the default path to the auth public key.
 	DefaultAuthPublicKeyPath = defaultLocalDir + "/auth-signing-key.pub"
 
-	// DefaultVmctlTimeout keeps proxy resolve calls aligned with the staging
-	// VM_BOOT_READY_TIMEOUT=150s deployment setting.
-	DefaultVmctlTimeout = 180 * time.Second
+	// DefaultVmctlTimeout bounds proxy -> vmctl resolve calls so a hung or
+	// unreachable vmctl does not keep a public request open for three minutes.
+	// It must stay below DefaultWriteTimeout so the proxy handler can return a
+	// legible 504 instead of the server cutting the connection.
+	DefaultVmctlTimeout = 60 * time.Second
 
 	// DefaultCorpusdURL is the localhost-only platform service endpoint.
 	DefaultCorpusdURL = "http://127.0.0.1:8086"

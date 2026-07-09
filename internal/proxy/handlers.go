@@ -43,6 +43,10 @@ var clientIdentityHeaders = []string{
 }
 
 var (
+	// sandboxResolveRetryWindow bounds retries for transient vmctl errors that
+	// return quickly (e.g. connection refused, 503). It must stay below the
+	// vmctl client timeout (DefaultClientTimeout = 60s) so a hung call does not
+	// trigger a second long attempt.
 	sandboxResolveRetryWindow    = 10 * time.Second
 	sandboxResolveRetryBaseDelay = 200 * time.Millisecond
 	sandboxResolveRetryMaxDelay  = time.Second
@@ -522,7 +526,7 @@ func (h *Handler) HandleBootstrap(w http.ResponseWriter, r *http.Request) {
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		writeResolveError(w, err)
 		h.lifecycle.record("bootstrap.resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record("bootstrap.total", "resolve_error", time.Since(started))
 		return
@@ -583,7 +587,7 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), resolveOwnerID, resolveDesktopID)
 	if err != nil {
 		log.Printf("proxy: failed to resolve sandbox for owner %s desktop %s (caller %s): %v", resolveOwnerID, resolveDesktopID, authResult.UserID, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		writeResolveError(w, err)
 		h.lifecycle.record(stagePrefix+".resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record(stagePrefix+".total", "resolve_error", time.Since(started))
 		return
@@ -739,7 +743,7 @@ func (h *Handler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
 		log.Printf("proxy WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		writeResolveError(w, err)
 		h.lifecycle.record("ws.resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record("ws.total", "resolve_error", time.Since(started))
 		return
@@ -854,7 +858,7 @@ func (h *Handler) HandleSuperConsoleWS(w http.ResponseWriter, r *http.Request) {
 	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
 		log.Printf("proxy super console WS: failed to resolve sandbox for user %s desktop %s: %v", authResult.UserID, desktopID, err)
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve user sandbox"})
+		writeResolveError(w, err)
 		return
 	}
 
@@ -1094,6 +1098,35 @@ func isTransientVMCTLResolveError(err error) bool {
 		}
 	}
 	return false
+}
+
+// isResolveTimeoutError reports whether an error from resolveSandboxURL is a
+// timeout (vmctl client deadline, context deadline, or URL-level timeout).
+// This matters for the public response code: timeouts are 504 Gateway Timeout,
+// other resolve failures are 502 Bad Gateway.
+func isResolveTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var uerr *url.Error
+	if errors.As(err, &uerr) {
+		return uerr.Timeout()
+	}
+	return false
+}
+
+// writeResolveError writes the appropriate JSON error response for a sandbox
+// resolve failure. Timeouts surface as 504 Gateway Timeout; other failures are
+// 502 Bad Gateway.
+func writeResolveError(w http.ResponseWriter, err error) {
+	status := http.StatusBadGateway
+	if isResolveTimeoutError(err) {
+		status = http.StatusGatewayTimeout
+	}
+	writeJSON(w, status, errorResponse{Error: "failed to resolve user sandbox"})
 }
 
 // wsWriter serializes writes to a single websocket.Conn. gorilla/websocket
