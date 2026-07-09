@@ -227,7 +227,7 @@
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
-          vendorHash = "sha256-VWqAiOlvLJtOe77Qhn4s3tjAi3Tnu+kEjIyEAjHJ5YQ=";
+          vendorHash = "sha256-RK7qe8KB4EvjDVOhEj5jALOQcLcH7B9pwNUeuB4dl5s=";
           internalDirs = [
             "internal/auth"
             "internal/buildinfo"
@@ -281,7 +281,10 @@
           vendorHash = "sha256-YyAcn3sytf8hoLJXCyatpwSx+QD/fiV/DXx+s+PaAak=";
           internalDirs = [
             "internal/agentprofile"
-            "internal/base"
+            "internal/base/blob"
+            "internal/base/journal"
+            "internal/base/model"
+            "internal/base/tree"
             "internal/buildinfo"
             "internal/capsule"
             "internal/computerversion"
@@ -336,7 +339,10 @@
           vendorHash = "sha256-YyAcn3sytf8hoLJXCyatpwSx+QD/fiV/DXx+s+PaAak=";
           internalDirs = [
             "internal/agentprofile"
-            "internal/base"
+            "internal/base/blob"
+            "internal/base/journal"
+            "internal/base/model"
+            "internal/base/tree"
             "internal/buildinfo"
             "internal/capsule"
             "internal/computerversion"
@@ -380,7 +386,10 @@
             "internal/actorruntime"
             "internal/apihandler"
             "internal/agentprofile"
-            "internal/base"
+            "internal/base/blob"
+            "internal/base/journal"
+            "internal/base/model"
+            "internal/base/tree"
             "internal/buildinfo"
             "internal/capsule"
             "internal/computerversion"
