@@ -238,6 +238,7 @@
             "internal/proxy"
             "internal/server"
             "internal/sourcecontract"
+            "internal/store"
             "internal/texturedoc"
             "internal/types"
             "internal/vmctl"
@@ -280,8 +281,10 @@
           vendorHash = "sha256-YyAcn3sytf8hoLJXCyatpwSx+QD/fiV/DXx+s+PaAak=";
           internalDirs = [
             "internal/agentprofile"
+            "internal/base"
             "internal/buildinfo"
             "internal/capsule"
+            "internal/computerversion"
             "internal/events"
             "internal/gateway"
             "internal/gatewayruntime"
@@ -333,8 +336,10 @@
           vendorHash = "sha256-YyAcn3sytf8hoLJXCyatpwSx+QD/fiV/DXx+s+PaAak=";
           internalDirs = [
             "internal/agentprofile"
+            "internal/base"
             "internal/buildinfo"
             "internal/capsule"
+            "internal/computerversion"
             "internal/cycle"
             "internal/events"
             "internal/gatewayruntime"
@@ -375,8 +380,10 @@
             "internal/actorruntime"
             "internal/apihandler"
             "internal/agentprofile"
+            "internal/base"
             "internal/buildinfo"
             "internal/capsule"
+            "internal/computerversion"
             "internal/events"
             "internal/gatewayruntime"
             "internal/health"

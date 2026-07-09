@@ -65,7 +65,10 @@ func (e *Executor) RestartBroker(id string) error { return stubErr("restart") }
 func (e *Executor) SyncRevokedCaps(revokedIDs []string) {}
 
 // Capsule stub
-type Capsule struct{}
+type Capsule struct {
+	ID    string
+	State CapsuleState
+}
 
 func (c *Capsule) Exec(ctx context.Context, cap *Capability, req ExecRequest) (ExecResult, error) {
 	return ExecResult{}, stubErr("exec")
