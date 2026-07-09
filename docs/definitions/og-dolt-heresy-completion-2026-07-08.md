@@ -443,13 +443,13 @@ Baseline 2026-07-08. Productive execution reduces these counts:
 variant:
   heresy_families_without_ci_detector: 31        # H001–H031, target 0
   heresy_families_live: 9                        # live-site clusters, target 0: texture forcing (H009-12/H024a,b/H026), parent/child (H001-05 + H015-16), continuations (H006-08), acceptance/obligations (H013-14/H017-18), surface residue (H019-23), vocabulary (H025/H027-29), candidate-VM (H031+new), route-over-CV violation, dual-store SQL paths
-  doc_corrections_open: 7                        # C1–C7 below, target 0
-  spec_impl_gaps_open: 1                         # S1, target 0
-  unbounded_request_paths: 1                     # W2, target 0
-  seam_commits_unlabeled: 2                      # e393eb5c, e5c1d38a
-  mislabeled_complete_missions: 2                # substrate-hardening, cross-substrate-proof
-  past_mission_open_edges_untriaged: 25          # ledger-sweep inventory, target 0 (each closed, absorbed, or explicitly retired)
-  decision_nodes_unresolved: 2                   # D-STORE, D-PROMO (D-WIRE settled 2026-07-08)
+  doc_corrections_open: 0                        # C1–C7 committed, target 0
+  spec_impl_gaps_open: 0                         # S1 settled with scope/conformance note, target 0
+  unbounded_request_paths: 0                     # W2 committed and staging-proven, target 0
+  seam_commits_unlabeled: 0                      # e393eb5c, e5c1d38a evidence recorded in W3
+  mislabeled_complete_missions: 0                # substrate-hardening, cross-substrate-proof relabeled in C4
+  past_mission_open_edges_untriaged: 0           # P-TRIAGE table committed below, target 0
+  decision_nodes_unresolved: 1                   # D-STORE storage fork remains unresolved; D-PROMO and D-WIRE settled 2026-07-08
   sql_dual_paths_live: 9                         # ~8–10 per assessment
 ```
 
@@ -592,6 +592,36 @@ yellow/green auto-proceed rule.
   `retired` (no longer real, with reason), or `external:<successor>` (own
   mission, with pointer). Record the triage table in this document. No edge
   may remain untriaged.
+
+#### P-TRIAGE — past-mission open-edge triage table
+
+| Open edge | Disposition | Reason / pointer |
+|---|---|---|
+| mission-3c APIHandler extraction | external: `docs/mission-3c_2-actor-runtime-migration-real-v0.md` | Actor/runtime extraction is outside og-dolt scope (mission-3c_2). |
+| texture hard-cutover C43 | external: `texture-product-loop-recovery-v0` | `texture-hard-cutover-v0` superseded; C43 folded into active product-loop recovery. |
+| transclusion cutover | external: `texture-structured-document-transclusion-cutover-v0` | Active Texture successor mission; not og-dolt. |
+| long-running-agent R1–R7 | retired | `texture-long-running-agent-v0` superseded; R1–R7 folded into `texture-durable-thread-v1` and `texture-product-loop-recovery-v0`. |
+| durable-thread link route | external: `texture-durable-thread-v1` | Active successor mission; not og-dolt. |
+| product-loop failure path | external: `texture-product-loop-recovery-v0` | Active product-loop mission; not og-dolt. |
+| coagent source-centric follow-ups | external: `source-system-loop8-simplify-v0` | `update-coagent-source-centric-deletion-v0` settled; remaining VText/source follow-ups live in the active source-system loop. |
+| wire-agent-pipeline staging proof | external: `universal-wire-stabilization-v1` | Active successor to `universal-wire-agent-pipeline-v1`; staging proof belongs there. |
+| stabilization substrate boot | external: `universal-wire-stabilization-v1` | Active stabilization mission; not og-dolt. |
+| lifecycle-cutover residues (texture forcing / parent/child) | absorbed: Phase B | og-dolt Phase B heresy kill wave 1 (M3.1 texture forcing, M3.2 parent/child). |
+| lifecycle-cutover residues (continuations / acceptance) | absorbed: Phase C | og-dolt Phase C heresy kill wave 2 (M4 continuation deletion, M3.3 acceptance). |
+| conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E M5 surface cleanup (H019–H029); source-intake routing overlap remains in `conductor-url-source-routing-h029-v0`. |
+| doc-truth-drift checker review | external: `docs-truth-system-v1` | `doc-truth-drift-context-v0` superseded; active successor is docs-truth-system-v1. |
+| node-B fail-closed auth | external: `overnight-autoradio-platform-checklist-v0` | Platform/auth ops checklist; not og-dolt. |
+| sandbox→computer rename | absorbed: Phase E | og-dolt Phase E surface cleanup / rename machinery. |
+| SQLite cleanup | external: `docs/mission-unified-object-graph-v0.md` | Object graph consolidation / sourcecycled SQLite sidecar removal; not og-dolt. |
+| node-B retention | external: `node-b-storage-retention-v0` | `node-b-nix-store-retention-v0` settled; vm-state/recovery budget remains in `node-b-storage-retention-v0`. |
+| news-live landing | external: `news-live-pr-merge-model-default-v0` | Active news-live mission; not og-dolt. |
+| orchestrator C15/M9/M10 | external: `orchestrator-suite-2026-06-28`; `docs-revision-v1`; `campaign-compiler-selfdev-v0` | Own missions (orchestrator suite, docs revision, campaign compiler); not og-dolt. |
+| autoradio verifier review | external: `overnight-autoradio-platform-checklist-v0` | Active platform checklist; not og-dolt. |
+| substrate-hardening MPCal TLC | external: `docs/missions/substrate-hardening-v0.md` | `checkpoint_incomplete`; not og-dolt. |
+| substrate-hardening cmd dedup | external: `docs/missions/substrate-hardening-v0.md` | `checkpoint_incomplete`; not og-dolt. |
+| cross-substrate extractor | external: `docs/missions/cross-substrate-proof-v0.md` | `checkpoint_incomplete`; not og-dolt. |
+| wire-on-settlement | external: `m5-wire-on-settlement` | M5 route-switch evidence gate; not og-dolt. |
+| continuation-deletion sequencing | absorbed: Phase C | og-dolt Phase C continuation deletion (H006–H008). |
 
 Phase A exit bar (what the gate panel reviews): detectors reporting in CI;
 timeouts proven in staging; all corrections committed; S1 settled or
@@ -823,26 +853,42 @@ logs.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: a703bf44 (docs checkpoint, pushed 2026-07-08)
+  last_checkpoint: P-TRIAGE table committed (Phase A deliverables landed; pending Phase A exit panel)
   current_artifact_state: >-
-    Seams e393eb5c/e5c1d38a merged but inert; Phase A entirely unbuilt;
-    consensus review adjudicated into this document 2026-07-08.
-  what_shipped: []
+    Phase A deliverables committed: W1 detector manifest + CI discovery job,
+    W2 proxy/vmctl timeout hardening with staging 504 proof, W3 seam-commit
+    landing-loop evidence, C1–C7 doc truth corrections, D-PROMO pinned-
+    connection branch-isolation settlement, S1 spec↔adapter scope/conformance
+    note, and P-TRIAGE past-mission open-edge table. D-STORE storage fork
+    remains unresolved; D-PROMO and D-WIRE settled. Phase A exit panel is the
+    next gate before Phase B.
+  what_shipped:
+    - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031 refs, CI heresy-detector job)
+    - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
+    - W3 seam-commit evidence for e393eb5c/e5c1d38a
+    - C1–C7 doc truth corrections
+    - D-PROMO pinned-connection branch-isolation settlement test
+    - S1 promotion_protocol.tla scope and conformance note
+    - P-TRIAGE past-mission open-edge triage table
   what_was_proven:
     - seam status of the two Red commits (observed, grep-verified)
-    - timeout invariant violation (observed)
+    - timeout invariant violation (observed) and fix (staging 504)
+    - lineage resolver not active in staging; promotion adapter not wired in production
+    - embedded Dolt branch isolation on a pinned connection is deterministic (D-PROMO -count=10)
+    - all past-mission open edges triaged (absorbed/external/retired)
   unproven_or_partial_claims:
-    - CI/staging state of e393eb5c/e5c1d38a (W3)
-    - cross-substrate-proof gates 4/5
-  remaining_error_field: see Variant baseline
-  highest_impact_remaining_uncertainty: D-PROMO (embedded-store branch isolation) + wire-store sql-server migration mechanics + D-STORE storage-inventory answers
+    - D-STORE storage-fork six questions
+    - heresy live-site counts (families still in discovery; fail-on-regression deferred per phase)
+    - Phase B–E kill waves, cutovers, and deletion not yet executed
+  remaining_error_field: see Variant below
+  highest_impact_remaining_uncertainty: D-STORE storage fork + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
   next_executable_probe: >-
-    Phase A in parallel: W1 detector manifest + CI discovery job, and W2
-    proxy/vmctl timeout hardening with staging 504 proof; C1–C7 doc
-    corrections in the same window.
+    Phase A exit panel (agentic consensus) on the triage table and full Phase A
+    state; on clear, begin Phase B heresy kill wave 1 + Dolt audit reads.
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
-    - docs/evidence/agentic-consensus-2026-07-08/ (panel raw outputs, preserved from /tmp)
+    - docs/evidence/agentic-consensus-2026-07-08/ (plan review panel raw outputs)
+    - docs/evidence/w2-timeout-staging-proof-2026-07-09.md
     - docs/assessment-overall-state-2026-07-07.md
   rollback_refs:
     - a703bf44 (pre-mission docs state)
