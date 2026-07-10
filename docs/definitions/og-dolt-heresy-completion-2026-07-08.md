@@ -178,8 +178,9 @@ counterexamples:
     slash, fails the parser, and falls back to the hard-coded VM identity.
 execution_effect:
   - H031 may not be recorded as repaired until the observables above are gone,
-    the resolver's product-level routing table resolves through `ComputerVersion`
-    records, and the detector for the banned pattern is green.
+    the resolver reads a receipted `ComputerVersion` from D-ROUTE's vmctl-owned
+    ledger before materialization, and the detector for the banned pattern is
+    green.
 forbidden_collapses:
   - resolver reads route_profile -> route is over ComputerVersion
   - ComputerVersion -> SandboxURL materialization seam treated as a route-over-VM
@@ -198,7 +199,7 @@ observables:
 execution_effect:
   - BranchIsolation is a property of promotion operations on the VM's EMBEDDED store (D-STORES taxonomy), not the world-wire store. The spec stays branch-based as target-state; its scope header must name the embedded store and note the tag-only adapter is interim. The adapter rewrite direction follows the D-PROMO experiment; W6 adds the conformance binding before "spec implemented" can be claimed.
   - Until the branch adapter + conformance binding land, "promotion protocol model-checked" claims must carry the scope caveat.
-  - The spec rewrite must model merge and tag as SEPARATE steps (Dolt docs: DOLT_MERGE implicitly commits the transaction; merge+tag cannot be one SQL transaction). Promotion atomicity is a route-flip property; the ledger operations are idempotent/resumable steps with a recovery path between them.
+  - The spec rewrite must model merge and tag as SEPARATE preparation steps (Dolt docs: DOLT_MERGE implicitly commits the transaction; merge+tag cannot be one SQL transaction). Those preparation steps are idempotent/resumable. Promotion atomicity is exclusively D-ROUTE's route-slot CAS + receipt transaction.
 ```
 
 ### I3. Invariant: bounded request path
@@ -244,34 +245,45 @@ execution_effect:
   - Work item C6 records this in the docs index; agents must not cite grip narrative as execution authority.
 ```
 
-### D-STORES. Term: the two Dolt stores — SETTLED (owner + observed, 2026-07-08)
+### D-STORES. Term: Dolt persistence domains — SETTLED (owner constraints + orchestrator + observed, 2026-07-10)
 
 ```yaml
 id: dolt-store-taxonomy
 kind: term
 status: settled
-source: user-stated (owner, 2026-07-08) + observed (code)
+source: orchestrator-settled synthesis of owner D-STORE/computer-ontology constraints + observed source audit, 2026-07-10
 term: Dolt store taxonomy
 definition: >-
-  The tree has two Dolt stores that must never be conflated:
-  (1) the WORLD-WIRE STORE — the platform ObjectGraphStore
+  The tree has two product-state Dolt stores and one narrow platform-control
+  Dolt ledger. They must never be conflated: (1) the WORLD-WIRE STORE — the
+  platform ObjectGraphStore
   (internal/platform/objectgraph_store.go, served by corpusd; HTTP access
   via internal/objectgraph/http_store.go), ill-named "platform Dolt"; it
   serves the world-wire system only. (2) VM-LOCAL EMBEDDED STORES — one
   embedded Dolt per user VM (internal/objectgraph/dolt_store.go: DoltStore
   is the VM-LOCAL store, not the platform one), shared by all capsules
-  running in that VM.
-  PROMOTION IS AN OPERATION, NOT A STORE: ComputerVersion
-  fork/promote/rollback executes against the VM's embedded store
+  running in that VM. (3) the COMPUTERVERSION ROUTE LEDGER — a distinct,
+  durable, vmctl-owned control ledger containing only route-slot generations,
+  current ComputerVersion values, and immutable transition receipts. It is
+  shared control authority, not user application state and not world-wire
+  state.
+  PROMOTION REMAINS AN OPERATION, NOT A WORKSPACE: ComputerVersion
+  fork/merge/tag preparation executes against the VM's embedded store
   (DoltPromotionAdapter.WorkspacePath is the filesystem path to that
-  embedded workspace). Promotion is NOT a property of the world-wire store,
-  and there are no separate per-app promotion workspaces.
+  embedded workspace); served-route activation executes as a CAS in the
+  ComputerVersion route ledger. Promotion is NOT a property of the world-wire
+  store, and there are no separate per-app promotion workspaces.
 forbidden_collapses:
   - wire store -> promotion substrate
-  - promotion -> its own store
+  - VM-local embedded store -> shared served-route authority
+  - ComputerVersion route ledger -> promotion workspace or application store
+  - world-wire lineage or route_profile -> served-route authority
+  - VMOwnership.Published -> ComputerVersion route activation
   - sql-server decision for the wire store -> promotion mechanics decided
 execution_effect:
-  - Every spec, doc, and work item in this mission must name which store it means; "platform Dolt" without qualification is vocabulary drift (candidate rename in Phase E alongside World Wire).
+  - Every spec, doc, and work item in this mission must name which persistence domain it means; "platform Dolt" without qualification is vocabulary drift (candidate rename in Phase E alongside World Wire).
+  - Earlier "two-store" language means two product-state stores only. It may not be used to erase the narrow route-control ledger or to smuggle route authority into either product-state store.
+  - The proxy reads route decisions through vmctl's route-ledger contract; it never opens any of these Dolt stores directly to decide a route.
 ```
 
 ### D-WIRE. Decision node: world-wire store topology — SETTLED (owner, 2026-07-08)
@@ -287,7 +299,8 @@ definition: >-
   needed for the decision; migration engineering still needs its own probes
   (connection topology, migration path, concurrency tests).
 execution_effect:
-  - Unblocks the lineage route resolver reading live wire state without PROXY_RUNTIME_DB_PATH file-sharing hacks. Docs research 2026-07-08 confirms this hack is structurally impossible anyway — embedded mode holds an exclusive directory lock, so proxy and runtime can never share the embedded store across processes; sql-server is the only multi-process topology.
+  - Unblocks honest multi-writer world-wire state without PROXY_RUNTIME_DB_PATH file-sharing hacks. Docs research 2026-07-08 confirms this hack is structurally impossible anyway — embedded mode holds an exclusive directory lock, so proxy and runtime can never share the embedded store across processes; sql-server is the only multi-process topology.
+  - This migration does not make world-wire lineage a route resolver. D-ROUTE assigns served-route authority to the vmctl-owned ComputerVersion route ledger; the proxy consumes that contract and then asks vmctl to materialize the resolved version.
 migration_notes:
   - NO DATA MIGRATION (owner, 2026-07-08): the universal-wire/world-wire loop has never worked end-to-end and the current wire-store data is junk. Stand up the sql-server store fresh; discard existing data. No stop-the-world window, no blue/green, no preservation ceremony.
   - Cutover is therefore code-only: swap dolthub/driver file DSN for go-sql-driver/mysql TCP DSN in the wire-store paths; config.yaml max_connections/timeouts govern multi-writer. Delete PROXY_RUNTIME_DB_PATH and the proxy's direct-file-open path with it. Rollback ref for this red-class change is the pre-swap commit SHA plus the old `config.yaml`/DSN values; because there is no data migration, git-revert of the DSN swap is sufficient.
@@ -353,67 +366,184 @@ settlement:
   settled_by: evidence
 ```
 
-### D-ROUTE. Boundary: promotion is a receipted served-route change — OPEN
+### D-ROUTE. Boundary: one vmctl-owned ComputerVersion route ledger — SETTLED AUTHORITY / OPEN IMPLEMENTATION
 
 ```yaml
 id: promotion-route-receipt
 kind: boundary
-status: testing
-source: observed source audit 2026-07-10
+status: settled (definition) / violated (implementation)
+source: orchestrator-settled synthesis of owner D-STORE/computer-ontology constraints + observed source audit, 2026-07-10
+authority_object:
+  id: computer-version-route-ledger
+  name: ComputerVersion route ledger
+  owner: vmctl
+  persistence: >-
+    A distinct durable Dolt-backed platform-control ledger. It is neither the
+    world-wire store, a VM-local application store, the JSON ownership
+    registry, nor a per-app promotion workspace.
 definition: >-
-  Owner approval, adoption verification, package admission, branch/tag state,
-  and vmctl desktop publication are evidence or preparation. Promotion occurs
-  only when one load-bearing route-slot writer changes the ComputerVersion
-  served for ordinary owner requests and emits a receipt naming old version,
-  new version, approval/certificate evidence, and rollback target.
+  For each logical served-route slot, the ComputerVersion route ledger is the
+  sole authority for the ComputerVersion served to ordinary requests. vmctl is
+  the sole compare-and-swap writer: one durable transaction compares the
+  expected generation and old ComputerVersion, writes the new ComputerVersion
+  and generation, and appends an immutable transition receipt. Promotion and
+  rollback are names for successful transitions through this same writer.
+  Everything else is preparation, evidence, materialization, or a projection.
+state_shape:
+  route_slot:
+    - route_slot_id
+    - current_computer_version  # (CodeRef, ArtifactProgramRef)
+    - generation
+    - latest_receipt_id
+  immutable_transition_receipt:
+    - receipt_id
+    - route_slot_id
+    - transition_kind  # bootstrap | promote | rollback
+    - old_computer_version
+    - new_computer_version
+    - expected_generation
+    - committed_generation
+    - approval_and_promotion_certificate_refs
+    - rollback_target_and_prior_receipt_ref
+    - idempotency_key
+    - committed_at
+non_definition:
+  - owner approval, adoption verification, or package admission
+  - Dolt branch, merge, tag, or candidate materialization state
+  - ComputerSourceLineage.ActiveSourceRef or route_profile
+  - VMOwnership.Published or desktop visibility
+  - an AppAdoption status, UI label, Trace event, or run-acceptance level
 problem_cluster:
   - live-app promotion persists adopted and can report success before an optional route adapter exists or succeeds
   - rollback can advance lineage after a best-effort DOLT_RESET failure
   - candidate-package intake contains a second switch/rollback state machine despite its evidence-only boundary
   - proxy routing resolves owner/desktop and fallback constants rather than a receipted ComputerVersion
   - vmctl PublishDesktop is a separate publication notion, not a ComputerVersion route flip
+  - specs/promotion_protocol.tla carries a computer route and version route without a receipt-backed single authority
+authority_boundary:
+  - Runtime may submit a validated transition command but never write route state, lineage, status, Trace, or acceptance as a substitute for the route CAS.
+  - vmctl alone validates expected generation/version, certificate and approval refs, materialization readiness, and idempotency before committing the route transition.
+  - Proxy obtains the slot's ComputerVersion and receipt identity through vmctl, then resolves that version through the vmctl materializer. Proxy never selects an owner/desktop identity as product route truth.
+  - VM lifecycle and VMOwnership.Published remain materialization/visibility facts and cannot mutate or imply the route ledger.
+receipt_projection_contract:
+  - Adoption may become adopted/promoted/rolled_back only after its matching durable receipt is read back; it stores the receipt id as provenance.
+  - ComputerSourceLineage is a rebuildable receipt projection/index. It cannot authorize a route transition and disagreement resolves in favor of the route ledger.
+  - UI active, rollback-available, and rolled-back claims require a matching receipt and generation; status strings alone render no activation claim.
+  - Trace promotion/rollback events are emitted after receipt durability and carry receipt id, route slot, old/new ComputerVersion, and generation.
+  - Run acceptance may project a promotion level only after independently reading and validating the receipt against the current or claimed historical route generation. An event alone is inadmissible.
+fail_closed_invariants:
+  - Missing ledger, missing slot, missing executor, stale expected generation/version, invalid certificate/approval, failed materialization preflight, persistence error, or receipt read-back failure leaves the slot unchanged and returns failure.
+  - A route slot is initialized only through the same writer with an explicit bootstrap receipt; there is no unreceipted default or hard-coded fallback after cutover.
+  - The route update and receipt append commit atomically; neither may exist without the other.
+  - Rollback is a new CAS transition from the current version to the recorded prior version through the same writer, never DOLT_RESET and never a lineage rewrite.
 existing_replacement: >-
-  AppChangePackage admission, ComputerVersion identity, promotion certificate,
-  owner approval, run acceptance, and lineage records already provide the
-  evidence vocabulary. They need one route executor, not another status path.
+  AppChangePackage admission, ComputerVersion identity, PromotionCertificate,
+  owner approval, and materializer contracts already provide the command and
+  evidence vocabulary. The missing object is one durable route ledger and CAS
+  executor, not another activation status.
+conjecture_delta: >-
+  Before this decision, several records could claim activation while no object
+  owned the served-route change. The executable conjecture is now singular:
+  if vmctl durably commits one version-to-version CAS and receipt, ordinary
+  routing and all human-visible evidence can be made faithful projections of
+  that fact; without the receipt, no activation claim exists.
 construction:
-  - delete or demote non-production candidate-intake mutation routes to read-only review evidence
-  - fail promotion and rollback closed when the route executor is absent or fails
-  - do not persist or render active/rollback-success before the route receipt exists
-  - route ordinary requests by the receipted ComputerVersion, not route_profile or desktop publication
-  - keep the tag-only Dolt adapter inert until D-PROMO branch operations replace it
+  next_executable_slice:
+    mutation_class: red
+    objective: >-
+      Install the truth gate before the route writer: define the pure
+      RouteTransitionCommand/Receipt and required executor port; make promotion
+      and rollback fail closed when no executor/receipt exists; gate adoption,
+      lineage, UI, Trace, and run acceptance on a receipt; delete the duplicate
+      roll-forward and candidate-intake mutation paths. With no executor wired,
+      the product truthfully reports promotion unavailable.
+    deletion_targets:
+      - internal/runtime/app_promotion.go: RollForwardAppAdoption; a rolled-back version may be promoted again only by a fresh validated CAS command
+      - internal/runtime/candidate_package_intake.go: SwitchCandidatePackageIntakeAdoptionReview, RollbackCandidatePackageIntakeAdoptionReview, and RollForwardCandidatePackageIntakeAdoptionReview, plus their mutating API routes/callers; retain read-only intake/review evidence
+      - frontend/src/lib/FeaturesApp.svelte: canRollForward and status-only active/rollback affordances
+    verifier: >-
+      Inverted tests prove all deleted routes/callers are absent and prove that
+      nil/error/stale receipt paths leave adoption, lineage, UI-visible state,
+      Trace, and run acceptance unchanged.
+  following_slice:
+    - implement the Dolt-backed ComputerVersion route ledger and vmctl-only CAS/read APIs, including restart recovery and idempotent receipt lookup
+    - seed each existing slot through the writer with an explicit bootstrap receipt after materialization preflight
+    - cut proxy routing to route-slot read -> ComputerVersion -> vmctl materializer, then delete lineage/hard-coded routing and PROXY_RUNTIME_DB_PATH
+    - replace the tag-only adapter with D-PROMO branch preparation while keeping route activation exclusively in the ledger
+formalization_effect:
+  - Rewrite specs/promotion_protocol.tla before the Go writer so the only route variable maps a route slot to ComputerVersion plus generation; remove any authoritative computer/desktop route.
+  - Model receipt append and route change as one CAS action, rollback as the same action in reverse, and require NoReceiptWithoutRouteChange, NoRouteChangeWithoutReceipt, AtMostOneWinnerPerGeneration, and NoProjectionBeforeReceipt.
 protected_surfaces:
   - ComputerVersion route authority
   - promotion and rollback
   - candidate computers
+  - vmctl persistence and materialization
   - run acceptance and Trace evidence
-settlement_rule: >-
-  On staging, an ordinary owner request resolves the old explicit
-  ComputerVersion before promotion, the receipted new version after promotion,
-  and the old version again after rollback. API/UI success is impossible when
-  the executor is missing or any route transition fails. TLA and implementation
-  bind the same writer and receipt semantics.
+admissible_evidence:
+  contract:
+    - concurrent CAS property test proves exactly one writer wins an expected generation
+    - idempotent retry returns the same receipt; stale version/generation and certificate mismatch fail without mutation
+    - injected persistence failure proves neither route nor receipt advances; restart reload proves both do
+    - negative projection tests prove no receipt means no adopted/active/rolled_back lineage, UI, Trace, or acceptance claim
+  formal:
+    - TLC-green rewritten spec plus a conformance test binding the modeled CAS/receipt fields to the Go command, slot, and receipt types
+  deployed_product_path:
+    - staging ordinary request records explicit old ComputerVersion and bootstrap receipt, then new ComputerVersion and promotion receipt, then old ComputerVersion and rollback receipt
+    - each response's materialization and each API/UI/Trace/acceptance projection name the matching receipt and generation
+    - missing/failing executor, ledger, persistence, or materializer produces failure and no success projection
+settlement:
+  definition: settled by the authority decision in this node and D-STORE/D-STORES
+  implementation: >-
+    Open until the contract, formal, and deployed product-path evidence above
+    are recorded. Merge/tag, lineage, adoption, or desktop publication alone
+    cannot settle it.
 execution_effect: >-
   Phase D may use D-PROMO's settled branch mechanics, but it cannot claim
-  promotion from merge/tag/adoption alone. Until settlement, active and
-  rollback-available product claims must fail closed.
+  promotion from merge/tag/adoption alone. Until the implementation settles,
+  active and rollback-available product claims fail closed. The roll-forward
+  and candidate-intake switch state machines are superseded future deletions,
+  not compatibility paths to preserve.
+rollback_path:
+  documentation: revert this authority-decision hunk; no runtime state changed by this pass
+  future_red_rollout:
+    - record the pre-change commit and disable promotion before the truth-gate slice; rollback returns to disabled/fail-closed behavior, never to legacy false-success paths
+    - seed old versions only with bootstrap receipts and verify materialization before proxy cutover; once a slot is ledger-authoritative there is no lineage, desktop, or hard-coded fallback
+    - after any promotion, operational rollback is a receipted CAS to the recorded prior ComputerVersion; a code rollback is admissible only while preserving ledger reads and fail-closed semantics
 heresy_delta:
   discovered:
+    - D-STORES omitted the shared control authority that D-ROUTE required, while D-WIRE implied world-wire lineage could resolve routes
     - five competing activation/publication meanings without one served-route writer
+    - promotion acceptance can be inferred from events/status without durable route evidence
+    - the TLA model carries dual route meanings and no immutable transition receipt
   introduced: []
   repaired: []
+definition_correction: >-
+  The storage/route authority contradiction is repaired in semantic authority
+  only. No live H031, promotion, acceptance, or rollback implementation heresy
+  is claimed repaired by this documentation pass.
 ```
 
-### D-STORE. Decision node: all-in on Dolt — SETTLED (owner, reaffirmed 2026-07-09)
+### D-STORE. Decision node: all-in on Dolt — SETTLED (owner, applied to route control 2026-07-10)
 
 ```yaml
 id: storage-fork
 kind: term
 status: settled
-source: owner authority, all-in on Dolt; reaffirmed 2026-07-09
-definition: Choir commits to Dolt as the load-bearing product-state substrate and will make its native history/branch features real. Application-level revision/provenance chains remain useful domain indexes but do not reopen the database choice.
+source: owner authority, all-in on Dolt; route-ledger consequence settled by orchestrator 2026-07-10
+definition: >-
+  Choir commits to Dolt as the load-bearing persistence substrate for durable
+  product state and for the narrow ComputerVersion route-control ledger. Native
+  history/branch features become real where their domains require them.
+  Application-level revision/provenance chains and lifecycle registries remain
+  useful indexes, caches, or projections but do not reopen the database choice
+  and cannot become route authority.
+non_definition:
+  - every ephemeral cache or materializer fact must be stored in Dolt
+  - the vmctl JSON ownership registry is durable enough for route authority
+  - ComputerSourceLineage can substitute for the ComputerVersion route ledger
 execution_effect:
   - Phase B/C history-read work and Phase D promotion work execute against Dolt.
+  - Phase D implements the D-ROUTE ledger as a distinct Dolt-backed vmctl control domain with atomic route-slot CAS + receipt append; it does not add a promotion workspace.
   - Per-write commit/batching, rollback mechanics, AS OF/DOLT_LOG correctness and latency, throughput, ICU/cgo build friction, and replication/sync are engineering verification axes inside the relevant phases, not decision gates.
   - If evidence exposes an actual feasibility contradiction, document and escalate it; do not silently degrade or re-open the choice by implication.
 settlement:
@@ -643,18 +773,25 @@ determined_state:
     - claim: Texture still parses prompt/document prose after a canonical write and directly executes request_email_draft.
       source: observed (`executeTextureEditTool` → `requiredContinuationAfterTextureEdit` → `extractEmailDraftIntent`, 2026-07-10)
       execution_effect: M3.1b is settled by deletion, inverted tests, CI, Node B identity, and a deployed Texture proof; broader H010/H024/H026 work remains.
+    - claim: D-ROUTE assigns ordinary served-route authority to one distinct, durable, Dolt-backed ComputerVersion route ledger owned by vmctl; vmctl is the sole CAS writer and every adoption/lineage/UI/Trace/acceptance statement is a receipt projection.
+      source: orchestrator synthesis of owner constraints + observed promotion/routing source audit, 2026-07-10
+      execution_effect: >-
+        The definition/storage contradiction is settled while implementation
+        remains violated. Phase D starts with the fail-closed truth gate and
+        deletion of roll-forward/candidate-intake mutation paths, then builds
+        the ledger and cuts proxy routing to it.
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
       execution_effect: Phase B/C/D proceed against Dolt; escalate only on demonstrated feasibility contradiction.
-    - claim: Two-store Dolt taxonomy — world-wire store (moves to sql-server now) and per-VM embedded stores shared by that VM's capsules; promotion is an operation on the embedded store.
-      source: user-stated + observed
-      execution_effect: D-WIRE settled; D-PROMO settled (pinned-connection branch isolation); promotion explicitly decoupled from the wire store; S1 scope header names the embedded store.
+    - claim: Dolt persistence taxonomy — two product-state stores (world-wire sql-server and per-VM embedded stores) plus one narrow vmctl-owned ComputerVersion route-control ledger; promotion preparation is an operation on the embedded store and activation is a CAS in the ledger.
+      source: user-stated product-store constraints + orchestrator-settled route-control consequence + observed
+      execution_effect: D-WIRE, D-PROMO, D-STORE, and D-ROUTE authority are settled; promotion is decoupled from the wire store and VM ownership/desktop publication.
     - claim: Universal→World Wire rename will be executed in Phase E.
       source: user-stated
     - claim: Current wire-store data is junk (the wire loop has never worked end-to-end); the sql-server store stands up fresh with no data migration.
       source: user-stated
-      execution_effect: D-WIRE cutover is code-only and cheap; it need not wait for Phase D if sequencing benefits from doing it earlier (it deletes PROXY_RUNTIME_DB_PATH and unblocks honest route resolution).
+      execution_effect: D-WIRE cutover is code-only and cheap; it need not wait for Phase D if sequencing benefits from doing it earlier. It deletes PROXY_RUNTIME_DB_PATH and restores the world-wire boundary; D-ROUTE, not lineage, supplies honest route resolution.
   open: []
 ```
 
@@ -681,7 +818,7 @@ variant:
   seam_commits_unlabeled: 0                      # e393eb5c, e5c1d38a evidence recorded in W3
   mislabeled_complete_missions: 0                # substrate-hardening, cross-substrate-proof relabeled in C4
   past_mission_open_edges_untriaged: 0           # P-TRIAGE table committed below, target 0
-  decision_nodes_unresolved: 0                   # D-STORE, D-PROMO, and D-WIRE are settled
+  decision_nodes_unresolved: 0                   # D-STORE, D-PROMO, D-WIRE, and D-ROUTE authority are settled; D-ROUTE implementation violation remains counted above
   sql_dual_paths_live: 9                         # ~8–10 per assessment
 ```
 
@@ -883,22 +1020,34 @@ SQL fallback exercised; detector families for these clusters enforcing.
 ### Phase D — Hot-path cutover + promotion over ComputerVersion
 
 Imported from mission-og-dolt Phases 3, 4, 4b, executing against settled
-D-STORE/D-PROMO direction and the S1 scope header. This phase includes the world-wire store's sql-server
-migration (D-WIRE, decided): batch-commit infrastructure, hot-table cutover
-with a rollback latency budget **defined before cutover**, storage-growth
-measurement before victory; promotion_protocol rewrite over ComputerVersion
-(TLC-checked before Go changes), adapter made load-bearing or deleted per the
-D-PROMO outcome; candidate-VM residue elimination (vmctl candidate lifecycle,
-candidate_computer_package*, cmd audits, wire platform routing, data.img
-residue, sandbox→autoputer rename) under the C3-assigned heresy number.
-H031 closes only when I1's observables are gone.
+D-STORE/D-PROMO/D-ROUTE direction and the S1 scope header. This phase includes
+the world-wire store's sql-server migration (D-WIRE, decided): batch-commit
+infrastructure, hot-table cutover with a rollback latency budget **defined
+before cutover**, and storage-growth measurement before victory. Promotion
+starts with D-ROUTE's fail-closed truth gate: delete `RollForwardAppAdoption`,
+the three candidate-intake switch/rollback/roll-forward mutation paths and
+their callers, and every status-only UI/Trace/acceptance activation claim.
+Then rewrite `promotion_protocol.tla` around one route-slot → ComputerVersion
+CAS + immutable receipt (TLC-checked before the Go writer), implement the
+distinct Dolt-backed ledger behind vmctl, and cut proxy routing to
+route-ledger read → ComputerVersion → materializer. Adoption, lineage, UI,
+Trace, and acceptance are receipt projections only. Branch merge/tag remains
+D-PROMO preparation, never activation. Candidate-VM residue elimination
+(vmctl candidate lifecycle, candidate_computer_package*, cmd audits, wire
+platform routing, data.img residue, sandbox→autoputer rename) proceeds under
+the C3-assigned heresy number. H031 closes only when I1's observables are gone.
 
 Phase D exit bar: hot entities cut over within the pre-declared rollback
 latency budget with storage growth measured; wire store on sql-server with
 `PROXY_RUNTIME_DB_PATH` and the direct-file-open path deleted; rewritten
-promotion spec TLC-green with the W6 conformance binding green; one staging
-promotion + rollback route flip executed (completion criterion 3's
-evidence); I1 observables gone and the H031/candidate-VM detector enforcing.
+promotion spec TLC-green with the W6 conformance binding green; route-ledger
+concurrency, idempotency, injected-failure, and restart contracts green; one
+staging old-version → new-version → old-version sequence executed through
+ordinary requests with explicit bootstrap/promotion/rollback receipt ids and
+generations; negative staging proof shows a failed writer/materializer creates
+no adoption, lineage, UI, Trace, or acceptance success projection; the deleted
+roll-forward/candidate-switch surfaces have zero callers; I1 observables are
+gone and the H031/candidate-VM detector is enforcing.
 
 ### Phase E — Deletion, doctrine replacement, surface cleanup
 
@@ -929,8 +1078,18 @@ Per the definition skill. Specific bindings:
 - "H0xx repaired" requires: deletion diff + inverted test + detector at
   fail-on-regression showing zero live sites.
 - "Phase D promotion works" requires: staging trace of an atomic route flip
-  between ComputerVersions plus a demonstrated rollback flip — not a
-  TLC-green spec, not an adapter unit test.
+  between explicit ComputerVersions plus the immutable vmctl ledger receipt
+  and generation for that flip and a demonstrated receipted rollback flip —
+  not a TLC-green spec, merge/tag, lineage mutation, event, adoption status,
+  desktop publication, or adapter unit test.
+- "ComputerVersion route ledger is load-bearing" requires: CAS concurrency,
+  idempotency, injected-persistence-failure, and restart-recovery contracts;
+  proxy ordinary-request evidence reading the ledger before materialization;
+  and negative proof that no fallback or downstream success projection occurs
+  when ledger read/write or materialization fails.
+- "Promotion accepted" requires run acceptance to independently resolve the
+  named receipt against the claimed ledger generation. A Trace event or status
+  without that lookup is evidence of an attempted projection, not promotion.
 - "Cutover complete" per entity requires: OG reads default in production +
   SQL fallback exercised or expired + dual-write deleted.
 - Panel/reviewer statements are `external second opinion` — adjudicated,
@@ -945,6 +1104,36 @@ Per the definition skill. Specific bindings:
   command_or_observation: grep WithPromotionAdapter cmd/ (zero hits); grep PROXY_RUNTIME_DB_PATH (env-gated, default unset); route_resolver.go:47 hard-coded constants.
   result: confirmed
   uncertainty: W3 closed by landing-loop evidence below.
+- claim: Promotion had no assigned durable served-route authority and seven live code/model surfaces supplied competing activation meanings.
+  definition_node: promotion-route-receipt, dolt-store-taxonomy, storage-fork
+  evidence_class: observed file/tool result + orchestrator authority settlement
+  command_or_observation: >-
+    Source audit 2026-07-10: internal/runtime/app_promotion.go persists adopted
+    before the optional adapter and contains a separate RollForwardAppAdoption;
+    internal/runtime/candidate_package_intake.go contains switch, rollback, and
+    roll-forward lineage mutators despite declaring deployed mutation blocked;
+    internal/vmctl/ownership.go stores VMOwnership.Published in a JSON registry
+    whose saveLocked reports and returns on persistence errors;
+    internal/proxy/lineage_route_resolver.go resolves route_profile to
+    owner/desktop; frontend/src/lib/FeaturesApp.svelte renders active and
+    rollback/roll-forward affordances from status plus rollback refs;
+    internal/runtime/run_acceptance.go raises promotion acceptance from
+    promotion events; specs/promotion_protocol.tla has dual route meanings and
+    no immutable transition receipt.
+  result: >-
+    D-STORES/D-STORE/D-ROUTE now assign one distinct Dolt-backed
+    ComputerVersion route ledger to vmctl's sole CAS writer. Adoption, lineage,
+    UI, Trace, and acceptance are receipt projections; roll-forward and
+    candidate-intake switch mutation paths are explicit future deletions.
+  uncertainty: >-
+    Definition authority is settled only. No ledger, receipt projection gate,
+    deletion, proxy cutover, formal rewrite, or staging proof exists yet.
+  heresy_delta:
+    discovered:
+      - unassigned served-route authority behind competing activation paths
+      - status/event-based promotion acceptance without durable route evidence
+    introduced: []
+    repaired: []
 - claim: W3 landing-loop evidence for seam commits e393eb5c and e5c1d38a.
   definition_node: w3
   evidence_class: observed tool result + observed staging state
@@ -1120,6 +1309,9 @@ the boundaries above. Escalations use the skill's `human_escalation` shape.
 - TLC green → implementation isolates.
 - adapter exists → promotion is Dolt-native.
 - adoption or desktop publication exists → a ComputerVersion is active.
+- lineage/status/UI/Trace/acceptance says promoted → a route transition occurred.
+- merge/tag exists → the ComputerVersion route ledger changed.
+- rollback means resetting or rewriting lineage → receipted CAS to the prior ComputerVersion.
 - resolver reads route_profile → route is over ComputerVersion.
 - ledger says complete → mission complete (check remaining_error_field).
 - detector written → detector enforces (discovery mode is not enforcement).
@@ -1140,14 +1332,20 @@ plus this mission's additions):
    `go test ./...` green without dual-path code.
 3. `choir texture history` served from `dolt_history`; at least one promotion
    executed as an atomic route flip between ComputerVersions with a
-   demonstrated rollback flip, using the D-PROMO-settled isolation mechanism
+   durable vmctl route-ledger receipt/generation and a demonstrated receipted
+   rollback flip through the same CAS writer, using the D-PROMO-settled
+   preparation mechanism
    — pinned-connection branches if supported, or the escalated-and-accepted
    fallback (serialized single writer / separate database per candidate) if
    D-PROMO falsifies — with the spec↔implementation conformance binding
-   green. Criterion 3 is satisfiable under EITHER D-PROMO outcome; a
-   falsified D-PROMO changes the mechanism, not the criterion.
+   green. Negative deployed proof must show failed route persistence or
+   materialization produces no adoption/lineage/UI/Trace/acceptance success
+   projection. Criterion 3 is satisfiable under EITHER D-PROMO outcome; a
+   falsified D-PROMO changes preparation, not route authority or the criterion.
 4. No route resolves to a VM identity (I1 observables gone); vmctl
-   candidate-desktop lifecycle deleted.
+   candidate-desktop lifecycle and the duplicate roll-forward/candidate-intake
+   route-switch paths deleted; ordinary routing reads the receipted
+   ComputerVersion ledger before materialization.
 5. choir-doctrine.md reduced to thesis + invariants + enforcement pointers;
    no live heresy entries.
 6. `choir` CLI `trajectory`/`texture` verbs read identical shapes before and
@@ -1166,8 +1364,13 @@ bounds. A checkpoint is not completion.
 
 Every red pass names its rollback ref before mutation. Entity cutovers keep
 SQL fallback for a declared window. Promotion-path work is inert-by-default
-until its gate settles (never enabled speculatively). Doc corrections are
-git-revertable individually. This document's Run Checkpoint section is the
+until its gate settles (never enabled speculatively). D-ROUTE rollout seeds
+each old version through the same writer with a bootstrap receipt; after a slot
+becomes ledger-authoritative it has no lineage/desktop/hard-coded fallback, and
+operational rollback is a new receipted CAS to the recorded prior
+ComputerVersion. A code rollback returns promotion to disabled/fail-closed
+operation and may not restore the deleted false-success paths. Doc corrections
+are git-revertable individually. This document's Run Checkpoint section is the
 resumption state; update it every pass.
 
 ## Mission Report Policy
@@ -1190,7 +1393,10 @@ run_checkpoint_and_resumption_state:
     evidence, C1–C7 doc truth corrections, D-PROMO pinned-connection
     branch-isolation settlement, S1 spec↔adapter scope/conformance note, and
     P-TRIAGE past-mission open-edge table. The Phase A exit panel adjudication is
-    committed. D-STORE, D-PROMO, and D-WIRE are settled. Phase B inspection
+    committed. D-STORE, D-PROMO, D-WIRE, and D-ROUTE semantic authority are
+    settled. D-ROUTE implementation remains violated: the source audit found
+    no durable route ledger and multiple status/lineage/desktop/event paths
+    claiming activation. Phase B inspection
     found that the public Texture history route still walked the application
     revision chain and that normal object-graph writes created no explicit Dolt
     commits. The local implementation now checkpoints canonical Texture writes
@@ -1204,6 +1410,10 @@ run_checkpoint_and_resumption_state:
     Texture revision are green. M3.1b also removes the post-write email prose
     parser/direct executor while retaining the typed Email appagent handoff;
     its full red landing loop and inert-email-prose staging revision are green.
+    This docs-only authority pass assigns a distinct Dolt-backed
+    ComputerVersion route ledger to vmctl's sole CAS writer and makes every
+    adoption/lineage/UI/Trace/acceptance claim a receipt projection; it changes
+    no runtime behavior and claims no implementation repair.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -1228,6 +1438,7 @@ run_checkpoint_and_resumption_state:
     - Dolt engineering verification axes: history latency/correctness,
       batching/throughput, rollback recovery, build friction, and replication
     - heresy live-site counts (families still in discovery; fail-on-regression and allowlist enforcement deferred per phase)
+    - D-ROUTE ledger, receipt projection gates, duplicate-path deletions, TLA rewrite, proxy cutover, and deployed old-new-old proof
     - Phase B–E kill waves, cutovers, and deletion not yet executed
   remaining_error_field: see Variant below
   highest_impact_remaining_uncertainty: remaining H009/H010 forcing sites + M3.2 authority residues
@@ -1236,6 +1447,14 @@ run_checkpoint_and_resumption_state:
     evidence-driven Texture behavior, identify any already-built replacement
     that is not wired in, then open the smallest deletion-first conjecture with
     inverted honest-first-revision and unforced-delegation tests before editing.
+  queued_phase_d_executable_slice: >-
+    Install D-ROUTE's red fail-closed truth gate before its writer: introduce
+    RouteTransitionCommand/Receipt plus a required executor; prevent adoption,
+    lineage, UI, Trace, and run acceptance from advancing without read-back of
+    a durable receipt; delete RollForwardAppAdoption and all three
+    candidate-intake switch/rollback/roll-forward mutators and their callers.
+    Verify nil/error/stale paths leave every projection unchanged. The next
+    slice then implements the vmctl-owned Dolt CAS ledger.
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
     - this Definition's adjudicated evidence ledger

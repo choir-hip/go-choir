@@ -278,29 +278,231 @@ execution_effect: >-
 id: base-exact-byte-kernel
 kind: object
 status: proposed
-source: observed 2026-07-10 + computer ontology
+source: observed source/caller audit 2026-07-10 + computer ontology
 definition: >-
   A per-computer private file/source substrate with append-only observations,
   content-addressed exact bytes, stable owner/device/item identity, explicit
   conflict ancestry, and derived materialization. It does not own canonical
   Texture, runtime, trajectory, or promotion truth.
+non_definition:
+  - a path-keyed desktop folder scanner
+  - a REST handler collection or registered Wails service
+  - a zero-byte presence projection awaiting later byte repair
+  - the internal/computerversion Base contract-builder tower
+  - a canonical private app-state store competing with embedded Dolt
+classification: substrate
+authority_cut:
+  kernel: >-
+    One computer-scoped observation and acknowledgement protocol is the only
+    authority for Base identity, bytes, ancestry, conflicts, and cursor
+    progress. internal/desktop is a future adapter; REST, Wails, and File
+    Provider are future transports or projections; computerversion is evidence
+    and materialization support.
+  immediate_effect: >-
+    Stop treating SyncEngine, the registered SyncService, local JSON synced
+    state, or the self-validating Base contract builders as kernel authority.
+    Do not patch the placeholder downloader as an incremental route to PC-5.
+missing_kernel_transaction:
+  name: computer-scoped-observation-and-acknowledgement
+  transaction_identity:
+    - computer_ref
+    - authenticated_owner_id
+    - registered_device_id
+    - stable_item_id
+    - expected_parent_event_id
+    - idempotency_key
+  commit_observation_phase: >-
+    Resolve computer and owner authority; allocate or validate a stable ItemID;
+    read the file bytes once; derive the sole BlobRef from those bytes; durably
+    store and re-hash the blob; compare the caller's explicit expected parent;
+    then append one immutable observation and return a receipt containing the
+    item, event, parent, blob, and cursor identities. Empty file bytes are
+    valid. Oversize, partial-read, missing, corrupt, hash-mismatched, stale,
+    cross-owner, and cross-computer inputs fail closed before an accepted event
+    can reference them.
+  acknowledge_materialization_phase: >-
+    After a device has durably materialized exact bytes or durably recorded and
+    resolved a conflict, append/update its contiguous acknowledged position
+    under (computer, owner, device). An error or unresolved event at cursor k
+    prevents acknowledgement of k or any later cursor as one accepted prefix.
+    Conflict records, choices, pending observations, identity mappings, and the
+    last acknowledged cursor survive process restart.
+  conflict_rule: >-
+    A stale expected parent is never silently rewritten to the current head.
+    The rejected or branched observation preserves its proposed parent and both
+    byte refs so the common ancestor and every resolution remain inspectable.
+  derived_materialization_rule: >-
+    Filesystem state is a projection of accepted observations and verified
+    blobs. Materialization cannot invent bytes, allocate replacement identity,
+    or advance acknowledgement merely because a path now exists.
+identity_laws:
+  - owner identity comes from authenticated authority, never a request body
+  - device identity is registered and durably unique, never a constant path basename
+  - ItemID is allocated/adopted once and survives rename, move, restart, and materialization
+  - path and parent/name are mutable location observations, not object identity
+  - computer scope is explicit or structurally isolated and resolves ArtifactProgramRef
+content_laws:
+  - BlobRef is the single SHA-256 authority for file bytes
+  - ContentHash, when exposed for compatibility, is derived from BlobRef and never an independent write input
+  - VersionID identifies an immutable observation and cannot override unequal BlobRefs
+  - a folder scan with no semantic change cannot mint a new version
 problem_cluster:
   - no deployed service owns /api/base routes and owner scoping is incomplete
   - remote downloads write zero-byte placeholders and mark them synced
   - unresolved-conflict persistence advances the full remote cursor
   - path-derived item IDs break identity on rename and remote materialization
   - folder versions randomize on each scan
-  - 38 unused base_* contract builders risk becoming architecture by inertia
-classification: substrate
+  - desktop device identity is desktop:.choir on every machine
+  - blob upload rejects valid empty files and silently accepts a truncated 64 MiB prefix
+  - caller-controlled BlobRef, ContentHash, VersionID, OwnerID, and DeviceID are not bound into one authority check
+  - the journal auto-selects the latest parent by ItemID and cannot express a stale expected parent
+  - server device cursors are unused while a second client JSON cursor claims full progress
+  - keep_both uploads and downloads the same ItemID instead of preserving two objects
+  - event folding, tree types, REST schemas, status, and materialization each have competing implementations
+  - 38 unused base_* contract files and their tests risk becoming architecture by inertia
+observed_contradictions:
+  - >-
+    internal/base/model and planner require path-independent ItemID, while
+    internal/desktop/localtree.go hashes relative path into ItemID and gives
+    folders a random VersionID on every scan.
+  - >-
+    cmd/desktop/main.go derives every device ID as desktop plus the basename of
+    ~/.choir, which is desktop:.choir across devices.
+  - >-
+    internal/base/blob/store.go verifies exact content-addressed bytes and
+    internal/computerversion/TreeToFS materializes them safely, while
+    internal/desktop/sync.go writes an empty placeholder and returns success.
+  - >-
+    internal/base/api/handlers.go uses a 64 MiB LimitReader without checking an
+    additional byte, rejects a zero-length request, trusts a supplied OwnerID,
+    and authenticates reads before returning an unfiltered global tree/delta.
+  - >-
+    internal/base/planner versionsEqual trusts equal client-controlled
+    VersionIDs before comparing bytes; model Version.Valid and POST /items do
+    not require ContentHash to equal BlobRef or prove that the blob exists.
+  - >-
+    internal/base/journal device cursors are test-only and keyed by device alone;
+    desktop persistState ignores its executed set and stores the full delta
+    cursor after errors and unresolved conflicts.
+  - >-
+    tree.Derive, desktop applyDelta, and planner.ApplyEvent implement three event
+    folds; the latter two are incomplete or wrong for updates against an
+    existing snapshot.
+existing_replacement:
+  keep:
+    - internal/base/blob Store Put/Get/Stat exact-byte substrate
+    - internal/base/tree Derive canonical replay
+    - internal/base/planner Plan pure three-tree reconciliation
+    - internal/computerversion StateGenerator, GenerateFromEvents, and TreeToFS
+    - internal/computerversion Base current-state observation and blob integrity readers
+  limits: >-
+    These are useful primitives, not a kernel. No existing code supplies stable
+    local identity, computer/owner-scoped expected-parent commit, durable
+    conflict choice, contiguous acknowledgement, or ArtifactProgramRef
+    resolution. The current materializer also requires an already-correctly
+    scoped journal/blob binding.
+wiring_prohibition:
+  status: binding
+  until: every pre-wiring row in the PC-5 acceptance matrix passes
+  prohibited:
+    - mount /api/base handlers in any deployed service
+    - enable or rely on StartSync from the registered Wails SyncService
+    - package or register the Base-backed File Provider extension
+    - add a blob GET endpoint as a substitute for the kernel transaction
+    - cite fake HTTP, MemJournal, path-rescan, contract-builder, or placeholder tests as kernel proof
+  permitted: >-
+    cmd/baseharness and cmd/evidenceroot may remain explicitly local fixture and
+    evidence tools. Before any Wails build/package claim, the existing
+    newSyncService registration must be removed or hard-gated so it cannot reach
+    the nonconformant SyncEngine path.
+mutation_class: red
+protected_surfaces:
+  - private persistent state
+  - owner and computer authorization
+  - exact blob bytes
+  - stable identity and conflict ancestry
+  - device acknowledgement and restart durability
+admissible_kernel_evidence: >-
+  A fresh integration proof using real SQLite persistence, real filesystem blob
+  stores, two independently persisted device roots, a second owner, actual
+  process close/reopen boundaries, and byte-for-byte/hash assertions. Pure
+  planner tests remain useful component evidence but cannot settle the object.
+conjecture_delta:
+  falsified: >-
+    Adding blob download to SyncEngine or mounting the existing handlers would
+    complete Base. Those moves retain path identity, unscoped authority,
+    auto-parented ancestry, split hash inputs, and false cursor success.
+  supported: >-
+    blob.Store, tree.Derive, planner.Plan, and the concrete computerversion
+    generator/observer code are reusable beneath one new authority transaction.
+rollback_policy:
+  pre_wiring: >-
+    Build and test only against fresh fixture roots. Rollback is commit revert
+    plus fixture deletion; no live Base data migration, route, Wails service, or
+    File Provider state is authorized.
+  future_product_cutover: >-
+    Requires a separately documented schema/data migration, previous accepted
+    kernel version, persistence backup/restore probe, and route-level disable
+    path. The current placeholder SyncEngine is not an admissible rollback
+    target because it violates byte and cursor invariants.
+heresy_delta:
+  discovered:
+    - path-as-item identity and constant desktop device identity
+    - placeholder existence and fetched cursor treated as accepted materialization
+    - client-supplied owner/hash/version fields treated as authority
+    - linear auto-parent history treated as explicit conflict ancestry
+    - inert contract builders treated as architecture candidates
+  introduced: []
+  repaired: []
 settlement_rule: >-
-  A fresh two-device proof demonstrates exact bytes/hash, cross-owner denial,
-  rename-stable identity, conflict cursor retention and all resolution choices,
-  plus restart durability before any Wails/File Provider/deployed wiring.
+  Every pre-wiring acceptance row passes in one fresh two-device trajectory;
+  the deletion/authority cut is complete; exact bytes/hash, cross-owner denial,
+  rename-stable identity, conflict cursor retention, all resolution choices,
+  replay idempotence, ArtifactProgramRef binding, and restart durability are
+  evidenced before any Wails, File Provider, REST, or deployed wiring.
 execution_effect: >-
-  Do not connect the existing handlers or SyncService yet. First define service
-  ownership, identity namespace, cursor ancestry, Dolt boundary, and
-  ArtifactProgramRef resolution.
+  First document the red problem, then build the transaction behind a fresh
+  kernel-only acceptance caller. Do not connect the existing handlers or
+  SyncService. After the kernel gate passes, separately define and prove a
+  deployed service owner without widening Base into embedded-Dolt app authority.
 ```
+
+#### PC-5 Acceptance Matrix
+
+The matrix is an executable gate. Rows marked `pre-wiring` must pass together
+before any Base-backed API, Wails, or File Provider product path is enabled.
+
+| Gate | Phase | Executable setup | Passing observation |
+|---|---|---|---|
+| Computer and owner scope | pre-wiring | Create one computer for owner A with devices A1/A2, plus owner B and a second computer; deliberately reuse guessed item/blob identifiers. | B and the second computer cannot read, delta, mutate, acknowledge, or materialize A's state; physical blob deduplication never grants logical access. |
+| Exact bytes | pre-wiring | A1 commits an empty file, binary bytes containing NULs, ordinary text, and supported size-boundary files; A2 materializes them. | Every length and byte sequence matches exactly; SHA-256 equals BlobRef; oversize, partial-read, missing, and corrupt inputs fail without an accepted observation or cursor advance. |
+| Stable identity | pre-wiring | Create a file and folder, close/reopen A1, rename/move both, sync A2, and rescan unchanged state. | Each object keeps one ItemID; rename is a location observation rather than delete/create; unchanged folders mint no new version. |
+| Explicit ancestry | pre-wiring | Disconnect A1/A2 after a shared parent, edit both, then submit both expected-parent observations. | The stale/concurrent branch is not auto-parented to the latest head; conflict evidence names the common parent and preserves both byte refs. |
+| Cursor retention | pre-wiring | Place an unresolved conflict at cursor k followed by an independent event; fail and restart materialization between pulls. | The contiguous acknowledgement remains below k until durable resolution/materialization; it advances exactly once afterward and never jumps to the full fetched cursor. |
+| All resolutions | pre-wiring | Replay the same conflict independently with keep-local, keep-remote, and keep-both. | Local and remote preserve the chosen exact bytes; keep-both produces two stable ItemIDs and two non-colliding paths; no side is silently overwritten. |
+| Restart durability | pre-wiring | Close and reopen journal, blob store, identity map, pending observation/conflict store, and device cursor between every major transition. | Identity, pending work, choices, ancestry, acknowledged position, and materialized bytes are unchanged after restart. |
+| Idempotent delivery | pre-wiring | Repeat the same idempotency key/event receipt and redeliver an accepted delta around restart. | One observation/version exists, tree and bytes are unchanged, and acknowledgement does not double-advance. |
+| Canonical replay and materialization | pre-wiring | Derive and materialize the same accepted tape through the retained tree/blob/generator path. | One replay implementation determines state; no desktop merge or placeholder path participates; traversal and blob mismatch fail closed. |
+| Artifact and Dolt boundary | pre-wiring | Resolve the tape/blob set from its ArtifactProgramRef and compare the emitted file/blob observations. | The ref selects exactly that state; Base writes no canonical Texture/runtime/trajectory/promotion or embedded-Dolt app truth. |
+| Service ownership | post-gate only | After all prior rows pass, name one deployed owner/router and repeat owner denial plus exact-byte acceptance on staging. | The serving service and build identity are explicit, scoped requests traverse the proved kernel, and Wails/File Provider remain adapters rather than alternate authorities. |
+
+Current passing tests do not satisfy this matrix. In particular,
+`TestSyncEngineDownloadCycle` explicitly blesses placeholder creation and cursor
+advance; `TestLocalTreeBuilderDeterministicIDs` only rescans an unchanged path;
+the testkit duplicate-event scenario supplies already-identical trees rather
+than redelivering an event; and the Base contract-builder tests validate a
+closed declaration graph with no product caller.
+
+#### PC-5 Deletion and Authority Map
+
+| Surface | Measured state | Disposition | Mutation class |
+|---|---|---|---|
+| `internal/computerversion/base_*_contract.go` | 38 production files, 39 builders, 8,655 lines; no non-test callers outside the closed definition cluster | Delete after retaining the concrete extractor/materializer files below; these declarations are not the Base architecture. | yellow |
+| Paired `base_*_contract_test.go` files | 38 files, 17,725 lines; combined tower total 26,380 lines | Delete with the unused builders; replace self-validation with the PC-5 integration matrix. | yellow |
+| `base_event.go`, `base_journal.go`, `base_tree.go`, `base_blob.go`, `base_current_state*.go`, `state_generator.go`, `tree_to_fs.go` | Concrete replay, integrity observation, and exact materialization | Retain as evidence/materialization substrate; bind only through the kernel's scoped tape/blob view. | no behavior change until kernel wiring |
+| `planner.ApplyEvent` and its item-count-only test | No non-test caller; does not parse move/update payloads or track EventID | Delete after canonical replay is exposed to the kernel. | yellow with test-pressure change |
+| Desktop `applyDelta`, tree conversions, path-derived scanner, placeholder downloader, and JSON cursor authority | Competing/incomplete kernel in `internal/desktop` | Remove from authority now; later rewrite desktop as a thin adapter to the proved kernel rather than patching these paths. | red when behavior changes |
+| Mirrored desktop REST request/response structs and API status semantics | A second schema/status authority before service ownership exists | Do not widen; delete or generate from the settled kernel contract during post-gate adapter work. | red when product API changes |
 
 ### PC-6. Autopaper single authoritative activation — OPEN
 
@@ -411,11 +613,18 @@ determined_state:
       source: source call-graph audit
     - claim: CLI timeout, promotion false-success, Base data integrity, and Autopaper duplicate activation are reproducible code-path defects.
       source: source and staging audit 2026-07-10
+    - claim: Base has exact blob, canonical replay, and exact materialization primitives, but no stable-identity and acknowledged-cursor transaction.
+      source: Base source and caller audit 2026-07-10
+    - claim: The current desktop Base path contradicts the kernel definition and its passing tests encode placeholder, path-identity, and cursor false success.
+      source: Base source, test, and caller audit 2026-07-10
   open:
     - node: autopaper-single-activation
       missing: wider product ownership, schedule, and edition acceptance semantics
     - node: base-exact-byte-kernel
-      missing: deployed owner, identity namespace, conflict ancestry, and ArtifactProgramRef binding
+      missing: >-
+        computer/owner-scoped stable identity, expected-parent observation
+        commit, exact-byte acknowledgement, durable conflict/cursor state,
+        ArtifactProgramRef binding, and a later deployed owner
 ```
 
 ## Invariants
@@ -554,6 +763,31 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     Focused repetition and scheduler/passivation call-graph review must decide
     whether this is a real lost wake or suite-pressure timing failure before
     any actor or timeout change. It is not attributed to PC-0 source.
+- claim: Base's useful exact-byte substrate exists, but the product-facing path bypasses it and no stable-identity/acknowledgement kernel exists.
+  definition_node: base-exact-byte-kernel
+  evidence_class: read-only source/caller audit + focused unit-suite baseline
+  command_or_observation: >-
+    Inspected internal/base, internal/desktop, cmd/desktop,
+    internal/computerversion, cmd/baseharness, cmd/baseobserve, cmd/basecompare,
+    and cmd/evidenceroot; searched all production callers of Base builders,
+    cursor methods, replay helpers, persistent route helpers, and exact
+    materializers; ran go test ./internal/base/... ./internal/desktop/...
+    ./internal/computerversion.
+  result: >-
+    All focused suites passed while TestSyncEngineDownloadCycle explicitly
+    accepted a zero-byte placeholder and cursor advance. The audit found
+    path-derived ItemIDs, random folder versions, desktop:.choir shared device
+    identity, unscoped owner reads/writes, silent 64 MiB upload truncation,
+    auto-parented linear history, full-cursor persistence across conflicts,
+    non-durable/incorrect keep-both, and three event-fold paths. Exact
+    blob.Store, tree.Derive, planner.Plan, StateGenerator, and TreeToFS are
+    reusable primitives. The unused Base contract tower contains 38 production
+    files, 39 builders, and 26,380 source-plus-test lines with no product caller.
+  uncertainty: >-
+    No stable local identity map, expected-parent transaction, owner/computer
+    scoping decision, durable conflict/ack store, or ArtifactProgramRef resolver
+    has been implemented or proven. Local fixture routes are not deployed
+    service ownership.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
@@ -602,6 +836,8 @@ run_checkpoint_and_resumption_state:
     - CLI timeout hides the server's bounded 504
     - current source contains reachable API-key and Wails secret-boundary failures
     - Base and Autopaper gaps are substrate/control-path defects, not missing UI alone
+    - Base exact-byte primitives exist, but stable identity plus expected-parent commit plus acknowledged cursor is the missing kernel transaction
+    - the current Base desktop path and 26,380-line unused contract tower are adapters/deletion candidates, not kernel authority
     - proxy-global deployed_commit is not affected-service activation proof
     - API-key delegation and sibling revocation are bounded by caller capability on staging
   unproven_or_partial_claims:
