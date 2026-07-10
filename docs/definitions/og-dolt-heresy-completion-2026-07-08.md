@@ -451,12 +451,12 @@ settlement:
   settled_by: evidence
 ```
 
-### M3.1a. H011/H012 role-keyword oracle deletion — TESTING
+### M3.1a. H011/H012 role-keyword oracle deletion — SETTLED
 
 ```yaml
 id: role-keyword-oracle-deletion
 kind: conjecture
-status: testing  # local deletion/inverted tests/detector enforcement green; landing loop pending
+status: proven
 source: choir-doctrine H011/H012 + Phase B M3.1
 claim: >-
   Narrative words such as researcher, code, deploy, test, or verify must not
@@ -481,9 +481,16 @@ local_evidence:
   - all 345 standard runtime tests pass across four local shards
   - H011/H012 reports enforced=true and total_hits=0
   - a temporary production marker makes `--fail-on-regression` exit 1; marker removed
+deployed_evidence:
+  - CI run 29074494439 passed, including all standard/race lanes and the enforced Heresy Detector
+  - Node B health reported deployed commit 82839687ff092549483a4da17128c3cc4818508f
+  - a real-passkey Texture request containing researcher/code/deploy/test/verify returned 202 and produced appagent revision 62dc25fd-37d2-4569-924b-a6f004a3a979
+  - proof document b3ac94d8-b0b0-4cb6-b5c0-23ee9e6e5a97 was deleted successfully
 execution_effect: >-
-  No H011/H012 repair claim until CI, Node B identity, and a deployed Texture
-  prompt/product probe are green. Rollback ref is d6ce587d.
+  H011/H012 are repaired at the Phase B deletion bar: the branches are absent,
+  inverted tests and zero enforcement prevent their return, and the deployed
+  Texture path remains healthy. This does not settle H009/H010 or the rest of
+  M3.1. Rollback ref is d6ce587d.
 ```
 
 ## Determined State Snapshot (2026-07-08)
@@ -529,9 +536,9 @@ determined_state:
     - claim: The existing Texture history route walks current object-graph revision objects and normal VM-local object-graph writes create no explicit Dolt commits.
       source: observed (Phase B source reconciliation, 2026-07-10)
       execution_effect: D-HISTORY is settled; Phase B proceeds to the M3.1/M3.2 heresy kill waves.
-    - claim: H011/H012 production substring-oracle callsites are deleted locally and their detector is promoted to zero enforcement.
-      source: observed (local diff + focused tests + detector negative proof, 2026-07-10)
-      execution_effect: M3.1a is testing pending the red landing loop.
+    - claim: H011/H012 production substring-oracle callsites are deleted and their detector is promoted to zero enforcement.
+      source: observed (deletion diff + inverted tests + detector negative proof + CI/staging landing loop, 2026-07-10)
+      execution_effect: M3.1a is settled; M3.1 continues with the H009/H010 forcing cluster.
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
@@ -562,7 +569,7 @@ Baseline 2026-07-08. Productive execution reduces these counts:
 ```yaml
 variant:
   heresy_families_without_ci_detector: 0         # 12 aggregate detector families (H001-H031 + I4) are wired to CI discovery via docs/heresy-detectors.md and scripts/check-heresies.sh; target 0
-  heresy_families_without_ci_enforcement: 11      # H011/H012 promoted locally; landing loop pending; target 0
+  heresy_families_without_ci_enforcement: 11      # H011/H012 is deployed at zero enforcement; target 0
   heresy_families_live: 9                        # live-site clusters, target 0: texture forcing (H009-12/H024a,b/H026), parent/child (H001-05 + H015-16), continuations (H006-08), acceptance/obligations (H013-14/H017-18), surface residue (H019-23), vocabulary (H025/H027-29), candidate-VM (H031+new), route-over-CV violation, dual-store SQL paths
   doc_corrections_open: 0                        # C1–C7 committed, target 0
   spec_impl_gaps_open: 0                         # S1 settled with scope/conformance note, target 0
@@ -938,20 +945,30 @@ Per the definition skill. Specific bindings:
     introduced: []  # eager regression was never deployed and was superseded before acceptance
     repaired:
       - native history now uses a dirty-batch checkpoint plus validated-hash AS OF reads
-- claim: M3.1a removes production role-keyword policy switches and promotes H011/H012 to zero enforcement locally.
+- claim: M3.1a removes production role-keyword policy switches and promotes H011/H012 to deployed zero enforcement.
   definition_node: role-keyword-oracle-deletion
-  evidence_class: unit/inverted test + executable detector
+  evidence_class: deletion diff + unit/inverted test + executable detector + deployed product proof
   command_or_observation: >-
     go test ./internal/runtime -run
     'TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches|TestExplicitNoWorkerDecisionParsesWithoutNarrativeRouteOracle|TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims'
     -count=1; go test ./internal/runtime/textureprompts -count=1;
     scripts/check-heresies.sh --fail-on-regression; temporary production marker
-    negative proof.
+    negative proof; CI run 29074494439; Node B /health; real-passkey staging
+    create/revision/revise/poll/delete probe.
   result: >-
-    Focused tests green; production H011/H012 detector count zero; enforced
-    detector passes clean and fails with exit 1 when a banned production marker
-    is temporarily introduced.
-  uncertainty: CI/deploy/staging evidence pending; broader H009/H010 forcing cluster remains live.
+    Focused and full runtime tests green; production H011/H012 detector count
+    zero; enforced detector passes clean and fails with exit 1 when a banned
+    production marker is temporarily introduced. CI passed, Node B reported
+    82839687, and deployed Texture loop d562f055-b21a-4678-93f4-79cabcb11796
+    produced appagent revision 62dc25fd-37d2-4569-924b-a6f004a3a979 before
+    proof cleanup.
+  uncertainty: broader H009/H010 forcing cluster remains live; staging product health does not independently reveal internal branch selection.
+  heresy_delta:
+    discovered: []
+    introduced: []
+    repaired:
+      - H011 narrative role-word policy oracle
+      - H012 narrative execution-word policy oracle
 - claim: Plan-review consensus round 2026-07-08 (4/4 panelists returned; gpt55 output empty/failed-silently) adjudicated. Confirmed blockers, all fixed in this document — D-STORES file mapping was inverted (world-wire store is internal/platform/objectgraph_store.go, not internal/objectgraph/dolt_store.go); D-PROMO had ignored the prior 2026-07-07 experiment (adapter comment + two test files), whose falsification is diagnosed as a connection-pooling artifact (checkout ran on one pooled conn, queries on others; pinned-conn variant reportedly isolates correctly) — settlement pulled into Phase A with a -count=10 determinism bar; completion criterion 3 gained a falsified-D-PROMO fallback clause; Phases B–E gained explicit exit bars; gate adjudication must be committed as auditable evidence; supersession must be machine-readable (C5 expanded to mission-graph superseded nodes + doc-authority-manifest entries for all three docs).
   definition_node: seam, embedded-branch-isolation, dolt-store-taxonomy, phase-gate-protocol
   evidence_class: external second opinion (panel) + observed (repo re-verification of B1/B2; diag test re-run showing pooled-connection checkout non-stick; Phase A -count=10 determinism test run 2026-07-09)
@@ -1038,7 +1055,7 @@ logs.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: D-HISTORY settled; M3.1a role-keyword oracle deletion green locally
+  last_checkpoint: D-HISTORY and M3.1a role-keyword oracle deletion settled on staging
   current_artifact_state: >-
     Phase A deliverables committed and exit gate cleared: W1 detector manifest +
     CI discovery job (including the I4 destructive-rollback guard), W2 proxy/vmctl
@@ -1053,10 +1070,11 @@ run_checkpoint_and_resumption_state:
     and reads committed snapshots through dolt_history + AS OF. The eager
     per-write commit tactic caused a CI performance contradiction and was
     replaced by a dirty-batch history-read barrier. Fresh CI, Node B identity,
-    and authenticated staging create/revise/history proof are green. M3.1a now
+    and authenticated staging create/revise/history proof are green. M3.1a
     deletes the production H011/H012 substring oracles, preserves structured
-    intent/agentic affordances, and promotes that detector family to zero
-    enforcement locally; landing proof remains.
+    intent/agentic affordances, and promotes that detector family to deployed
+    zero enforcement. CI, Node B identity, and a real-passkey narrative-word
+    Texture revision are green.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -1066,6 +1084,7 @@ run_checkpoint_and_resumption_state:
     - S1 promotion_protocol.tla scope and conformance note
     - P-TRIAGE past-mission open-edge triage table
     - D-HISTORY dirty-batch native Texture history (b7f512f2)
+    - M3.1a H011/H012 role-keyword oracle deletion and detector enforcement (82839687)
   what_was_proven:
     - seam status of the two Red commits (observed, grep-verified)
     - timeout invariant violation (observed) and fix (staging 504)
@@ -1073,27 +1092,29 @@ run_checkpoint_and_resumption_state:
     - embedded Dolt branch isolation on a pinned connection is deterministic (D-PROMO -count=10)
     - all past-mission open edges triaged (absorbed/external/retired)
     - native Texture history reads committed dolt_history snapshots through bounded AS OF queries; staging history returned the exact two-revision parent chain in 29.8ms
+    - H011/H012 production branches are absent and zero-enforced; staging Texture loop d562f055-b21a-4678-93f4-79cabcb11796 accepted narrative role words and produced appagent revision 62dc25fd-37d2-4569-924b-a6f004a3a979
   unproven_or_partial_claims:
-    - M3.1a H011/H012 CI/deploy/staging proof
     - Dolt engineering verification axes: history latency/correctness,
       batching/throughput, rollback recovery, build friction, and replication
     - heresy live-site counts (families still in discovery; fail-on-regression and allowlist enforcement deferred per phase)
     - Phase B–E kill waves, cutovers, and deletion not yet executed
   remaining_error_field: see Variant below
-  highest_impact_remaining_uncertainty: M3.1a deployed evidence + remaining H009/H010 forcing sites + M3.2 authority residues
+  highest_impact_remaining_uncertainty: remaining H009/H010 forcing sites + M3.2 authority residues
   next_executable_probe: >-
-    Commit and push M3.1a, require the H011/H012 enforced detector and runtime
-    shards green in CI, verify Node B identity, then run a deployed Texture prompt
-    containing narrative researcher/code/deploy words and prove it does not select
-    the removed policy branches before claiming H011/H012 repaired.
+    Reconcile every remaining H009/H010 production hit against existing
+    evidence-driven Texture behavior, identify any already-built replacement
+    that is not wired in, then open the smallest deletion-first conjecture with
+    inverted honest-first-revision and unforced-delegation tests before editing.
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
     - this Definition's adjudicated evidence ledger
     - https://github.com/choir-hip/go-choir/actions/runs/29072918594
+    - https://github.com/choir-hip/go-choir/actions/runs/29074494439
   rollback_refs:
     - a703bf44 (pre-mission docs state)
     - f1e2d7a3 (pre-D-HISTORY behavior state)
     - 1870452c (superseded eager-checkpoint implementation)
+    - d6ce587d (pre-M3.1a behavior state)
 ```
 
 ## Suggested Goal String
