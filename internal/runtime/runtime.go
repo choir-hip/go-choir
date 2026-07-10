@@ -49,6 +49,12 @@ type Runtime struct {
 	running   map[string]context.CancelFunc // loop_id → cancel function
 	healthMu  sync.Mutex
 	health    types.RuntimeHealthState
+	// internalIngestionSubmissionMu serializes the durable idempotency lookup
+	// and creation of typed ingestion runs submitted through the internal runtime
+	// API. It also owns the processor overload check. Without one critical
+	// section, concurrent retries can both miss the persisted handoff identity
+	// and activate duplicate runs.
+	internalIngestionSubmissionMu sync.Mutex
 
 	wg           sync.WaitGroup
 	toolRegistry *ToolRegistry

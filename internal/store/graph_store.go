@@ -132,6 +132,17 @@ func (s *Store) ogListByMetadata(ctx context.Context, kind objectgraph.ObjectKin
 	return store.ListObjectsByMetadata(ctx, string(kind), "$."+metadataField, value, limit)
 }
 
+func (s *Store) ogListByOwnerAndBody(ctx context.Context, kind objectgraph.ObjectKind, ownerID string, matches []objectgraph.JSONFieldMatch, limit int) ([]objectgraph.Object, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+	return store.ListObjectsByOwnerAndBody(ctx, string(kind), ownerID, matches, limit)
+}
+
 // ogIsEmpty reports whether the object graph has any objects at all.
 // Used to gate SQL-to-OG backfill so it only runs on the first open,
 // not on every restart (which would replay stale SQL over newer OG state).
@@ -2253,4 +2264,3 @@ func mustMarshalMetadata(m map[string]any) json.RawMessage {
 	}
 	return json.RawMessage(out)
 }
-

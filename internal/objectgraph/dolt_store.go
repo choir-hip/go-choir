@@ -54,6 +54,16 @@ type DoltStore struct {
 	db *sql.DB
 }
 
+// JSONFieldMatch is one JSON field predicate for a Dolt object lookup.
+// JSONPath is passed as a query argument (for example, "$.run_id"), never
+// interpolated into SQL. MissingMatchesEmpty lets legacy JSON bodies whose
+// omitempty field is absent match the current empty-string representation.
+type JSONFieldMatch struct {
+	JSONPath            string
+	Value               string
+	MissingMatchesEmpty bool
+}
+
 // NewDoltStore returns a DoltStore backed by the given *sql.DB. The
 // caller must call EnsureSchema before using the store.
 func NewDoltStore(db *sql.DB) *DoltStore {
@@ -296,6 +306,52 @@ func (s *DoltStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, v
 		kind, jsonPath, value, NormalizedLimit(limit))
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph dolt: list by metadata: %w", err)
+	}
+	defer rows.Close()
+	var out []Object
+	for rows.Next() {
+		obj, err := scanDoltObject(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
+// ListObjectsByOwnerAndBody finds objects by kind, owner, and an exact set of
+// predicates evaluated against the persisted JSON body. The body is the
+// canonical authority for record fields that must not be duplicated into
+// independently drifting object metadata.
+func (s *DoltStore) ListObjectsByOwnerAndBody(ctx context.Context, kind, ownerID string, matches []JSONFieldMatch, limit int) ([]Object, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	query := `SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE object_kind = ? AND owner_id = ?`
+	args := []any{kind, ownerID}
+	for _, match := range matches {
+		if match.JSONPath == "" {
+			return nil, fmt.Errorf("objectgraph dolt: body JSON path is required")
+		}
+		if match.MissingMatchesEmpty {
+			if match.Value != "" {
+				return nil, fmt.Errorf("objectgraph dolt: missing body field can only match an empty value")
+			}
+			query += ` AND (JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), ?) IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), ?)) = ?)`
+			args = append(args, match.JSONPath, match.JSONPath, match.Value)
+			continue
+		}
+		query += ` AND JSON_UNQUOTE(JSON_EXTRACT(CAST(CAST(body AS CHAR) AS JSON), ?)) = ?`
+		args = append(args, match.JSONPath, match.Value)
+	}
+	query += ` ORDER BY updated_at DESC LIMIT ?`
+	args = append(args, NormalizedLimit(limit))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: list by owner and body: %w", err)
 	}
 	defer rows.Close()
 	var out []Object

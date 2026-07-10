@@ -979,6 +979,54 @@ func (s *Store) ListRunsByOwner(ctx context.Context, ownerID string, limit int) 
 	return s.ListRunsByOwnerOG(ctx, ownerID, limit)
 }
 
+// ListRunsByIngestionHandoff returns top-level runs for one typed ingestion
+// identity. Every identity component is applied inside the owner-scoped object
+// query so unrelated owners and provenance-inheriting child runs cannot consume
+// a global result window before the caller sees its authoritative receipt.
+func (s *Store) ListRunsByIngestionHandoff(ctx context.Context, ownerID, profile, requestID, requestKind string, limit int) ([]types.RunRecord, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	profile = strings.TrimSpace(profile)
+	requestID = strings.TrimSpace(requestID)
+	requestKind = strings.TrimSpace(requestKind)
+	if ownerID == "" || profile == "" || requestID == "" || requestKind == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	objects, err := s.ogListByOwnerAndBody(ctx, ogKindRun, ownerID, []objectgraph.JSONFieldMatch{
+		{JSONPath: "$.metadata.ingestion_handoff_request_id", Value: requestID},
+		{JSONPath: "$.metadata.ingestion_handoff_request_kind", Value: requestKind},
+		{JSONPath: "$.agent_profile", Value: profile},
+		{JSONPath: "$.requested_by_run_id", Value: "", MissingMatchesEmpty: true},
+	}, limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0, min(limit, len(objects)))
+	for _, object := range objects {
+		var rec types.RunRecord
+		if err := ogDecode(object, &rec); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(rec.OwnerID) != ownerID ||
+			!strings.EqualFold(strings.TrimSpace(rec.AgentProfile), profile) ||
+			strings.TrimSpace(rec.RequestedByRunID) != "" {
+			continue
+		}
+		kind, _ := rec.Metadata["ingestion_handoff_request_kind"].(string)
+		id, _ := rec.Metadata["ingestion_handoff_request_id"].(string)
+		if strings.TrimSpace(id) != requestID || strings.TrimSpace(kind) != requestKind {
+			continue
+		}
+		runs = append(runs, rec)
+		if len(runs) >= limit {
+			break
+		}
+	}
+	return runs, nil
+}
+
 // ListRunsByState returns runs in the given state, ordered by created_at
 // descending, limited to the given count.
 func (s *Store) ListRunsByState(ctx context.Context, state types.RunState, limit int) ([]types.RunRecord, error) {

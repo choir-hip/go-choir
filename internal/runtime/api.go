@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -57,6 +58,77 @@ type internalRunSubmitRequest struct {
 	OwnerID  string         `json:"owner_id"`
 	Prompt   string         `json:"prompt"`
 	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+const internalRunSubmissionFingerprintMetadataKey = "internal_run_submission_fingerprint"
+
+// These are the typed sourcecycled processor and reconciler fields used to
+// compare a pre-idempotency run that does not yet carry the durable full-request
+// fingerprint. New submissions persist a fingerprint of the complete normalized
+// request metadata, so future metadata additions automatically participate in
+// conflict detection.
+var internalIngestionSubmissionLegacyFingerprintKeys = []string{
+	runMetadataAgentID,
+	runMetadataChannelID,
+	runMetadataAgentProfile,
+	runMetadataAgentRole,
+	"request_source",
+	"activation_origin",
+	"ingestion_event_ids",
+	"source_network_cycle_id",
+	"source_network_request_id",
+	"source_network_request_kind",
+	"ingestion_handoff_request_kind",
+	"ingestion_handoff_request_id",
+	"ingestion_handoff_cycle_id",
+	runMetadataProcessorKey,
+	"source_item_ids",
+	"source_count",
+	"source_types",
+	"verticals",
+	"regions",
+	"continuity_ref",
+	runMetadataReconcilerScope,
+	"processor_request_ids",
+}
+
+func hashInternalRunSubmission(ownerID, prompt string, metadata map[string]any) (string, error) {
+	payload := struct {
+		OwnerID  string         `json:"owner_id"`
+		Prompt   string         `json:"prompt"`
+		Metadata map[string]any `json:"metadata"`
+	}{
+		OwnerID:  strings.TrimSpace(ownerID),
+		Prompt:   prompt,
+		Metadata: metadata,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(encoded)
+	return fmt.Sprintf("%x", sum[:]), nil
+}
+
+func internalRunSubmissionFingerprint(ownerID, prompt string, metadata map[string]any) (string, error) {
+	normalized := make(map[string]any, len(metadata))
+	for key, value := range metadata {
+		if key == internalRunSubmissionFingerprintMetadataKey {
+			continue
+		}
+		normalized[key] = value
+	}
+	return hashInternalRunSubmission(ownerID, prompt, normalized)
+}
+
+func legacyInternalIngestionSubmissionFingerprint(ownerID, prompt string, metadata map[string]any) (string, error) {
+	normalized := make(map[string]any, len(internalIngestionSubmissionLegacyFingerprintKeys))
+	for _, key := range internalIngestionSubmissionLegacyFingerprintKeys {
+		if value, ok := metadata[key]; ok {
+			normalized[key] = value
+		}
+	}
+	return hashInternalRunSubmission(ownerID, prompt, normalized)
 }
 
 // promptBarSubmitRequest is the public product payload for POST
@@ -848,9 +920,81 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		req.Metadata["request_source"] = "internal_worker_vm"
 	}
 
-	// Overload guard: reject processor submissions when too many runs are active.
-	// This prevents the platform computer from wedging under concurrent processor load.
+	rawRequestID, hasRequestID := req.Metadata["ingestion_handoff_request_id"]
+	rawRequestKind, hasRequestKind := req.Metadata["ingestion_handoff_request_kind"]
+	requestID, requestIDIsString := rawRequestID.(string)
+	requestKind, requestKindIsString := rawRequestKind.(string)
+	requestID = strings.TrimSpace(requestID)
+	requestKind = strings.TrimSpace(requestKind)
+	if hasRequestID != hasRequestKind ||
+		(hasRequestID && (!requestIDIsString || !requestKindIsString || requestID == "" || requestKind == "")) {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "ingestion_handoff_request_id and ingestion_handoff_request_kind must be provided together as non-empty strings"})
+		return
+	}
+	typedIngestionSubmission := hasRequestID
+	if typedIngestionSubmission && profile != AgentProfileProcessor && profile != AgentProfileReconciler {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "ingestion handoff identity is only valid for processor or reconciler profiles"})
+		return
+	}
+	if profile == AgentProfileProcessor || typedIngestionSubmission {
+		// One critical section owns typed identity lookup and persistence across
+		// ingestion profiles. It also serializes processor overload admission.
+		// Concurrent lost-receipt retries therefore cannot both observe absence.
+		h.rt.internalIngestionSubmissionMu.Lock()
+		defer h.rt.internalIngestionSubmissionMu.Unlock()
+	}
+
+	if typedIngestionSubmission {
+		req.Metadata["ingestion_handoff_request_id"] = requestID
+		req.Metadata["ingestion_handoff_request_kind"] = requestKind
+		fingerprint, err := internalRunSubmissionFingerprint(ownerID, req.Prompt, req.Metadata)
+		if err != nil {
+			log.Printf("runtime api: fingerprint internal ingestion submission: %v", err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to fingerprint internal ingestion submission"})
+			return
+		}
+		req.Metadata[internalRunSubmissionFingerprintMetadataKey] = fingerprint
+
+		existing, err := h.rt.Store().ListRunsByIngestionHandoff(r.Context(), ownerID, profile, requestID, requestKind, 2)
+		if err != nil {
+			log.Printf("runtime api: resolve ingestion handoff: %v", err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to resolve ingestion handoff"})
+			return
+		}
+		if len(existing) > 1 {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "ingestion handoff identity resolves to multiple runs"})
+			return
+		}
+		if len(existing) == 1 {
+			existingFingerprint := strings.TrimSpace(metadataStringValue(existing[0].Metadata, internalRunSubmissionFingerprintMetadataKey))
+			if existingFingerprint == "" {
+				// Runs created before the durable fingerprint was introduced can
+				// still be retried safely by comparing the complete typed
+				// sourcecycled ingestion contract for their profile.
+				existingFingerprint, err = legacyInternalIngestionSubmissionFingerprint(existing[0].OwnerID, existing[0].Prompt, existing[0].Metadata)
+				if err == nil {
+					fingerprint, err = legacyInternalIngestionSubmissionFingerprint(ownerID, req.Prompt, req.Metadata)
+				}
+				if err != nil {
+					log.Printf("runtime api: compare legacy ingestion handoff: %v", err)
+					writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to compare ingestion handoff"})
+					return
+				}
+			}
+			if existingFingerprint != fingerprint {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "ingestion handoff identity already exists with a different payload"})
+				return
+			}
+			// Resolve idempotency before overload: the admitted run is the
+			// durable receipt even while it occupies the last processor slot.
+			writeAPIJSON(w, http.StatusAccepted, runStatusFromRecord(&existing[0]))
+			return
+		}
+	}
+
 	if profile == AgentProfileProcessor {
+		// Reject genuinely new processor submissions when too many runs are
+		// active. Duplicate typed identities were returned above.
 		maxProc := 1
 		if v := os.Getenv("RUNTIME_MAX_PROCESSOR_RUNS"); v != "" {
 			if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && parsed > 0 {

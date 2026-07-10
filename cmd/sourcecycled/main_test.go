@@ -727,26 +727,62 @@ func TestIngestionRuntimeDispatcherSkipsProcessorWithoutIngestionEvents(t *testi
 	}
 }
 
-func TestIngestionRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testing.T) {
+func assertStableRuntimeRetrySubmissions(t *testing.T, wantRequestID, wantRequestKind string, submissions []runtimeRunSubmitRequest) {
+	t.Helper()
+	if len(submissions) == 0 {
+		t.Fatal("captured no runtime retry submissions")
+	}
+	wantPayload, err := json.Marshal(submissions[0])
+	if err != nil {
+		t.Fatalf("marshal first retry submission: %v", err)
+	}
+	for i, submission := range submissions {
+		requestID, _ := submission.Metadata["ingestion_handoff_request_id"].(string)
+		requestKind, _ := submission.Metadata["ingestion_handoff_request_kind"].(string)
+		if requestID != wantRequestID || requestKind != wantRequestKind {
+			t.Fatalf("retry %d identity = %q/%q, want %q/%q", i+1, requestID, requestKind, wantRequestID, wantRequestKind)
+		}
+		gotPayload, err := json.Marshal(submission)
+		if err != nil {
+			t.Fatalf("marshal retry submission %d: %v", i+1, err)
+		}
+		if string(gotPayload) != string(wantPayload) {
+			t.Fatalf("retry %d changed submission payload\n got: %s\nwant: %s", i+1, gotPayload, wantPayload)
+		}
+	}
+}
+
+func TestIngestionRuntimeDispatcherRetriesTransientRuntimeUnavailableWithStableHandoffIdentity(t *testing.T) {
 	ctx := context.Background()
 	req := cycle.ProcessorRequest{
-		RequestID:     "processor_retry",
-		CycleID:       "cycle_retry",
-		ProcessorKey:  "processor:global_firehose:global:gdelt",
-		Status:        "queued",
-		SourceItemIDs: []string{"srcitem_retry_1"},
-		SourceCount:   1,
-		ContinuityRef: "sourcecycled://processor/processor:global_firehose:global:gdelt/latest",
-		Prompt:        "Processor retry",
+		RequestID:         "processor_retry",
+		CycleID:           "cycle_retry",
+		ProcessorKey:      "processor:global_firehose:global:gdelt",
+		Status:            "queued",
+		SourceItemIDs:     []string{"srcitem_retry_1"},
+		IngestionEventIDs: []string{"ingestionevt_retry_1"},
+		SourceCount:       1,
+		ContinuityRef:     "sourcecycled://processor/processor:global_firehose:global:gdelt/latest",
+		Prompt:            "Processor retry",
 	}
 
 	var attempts int
+	var submissions []runtimeRunSubmitRequest
 	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
 		if r.Method != http.MethodPost || r.URL.Path != "/internal/runtime/runs" {
 			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
 		}
-		if attempts < 3 {
+		var submission runtimeRunSubmitRequest
+		if err := json.NewDecoder(r.Body).Decode(&submission); err != nil {
+			t.Fatalf("decode retry submission %d: %v", attempts, err)
+		}
+		submissions = append(submissions, submission)
+		switch attempts {
+		case 1:
+			writeSourceServiceJSON(w, http.StatusTooManyRequests, map[string]string{"error": "processor capacity occupied"})
+			return
+		case 2:
 			writeSourceServiceJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "runtime warming"})
 			return
 		}
@@ -774,8 +810,113 @@ func TestIngestionRuntimeDispatcherRetriesTransientRuntimeUnavailable(t *testing
 	if attempts != 3 {
 		t.Fatalf("runtime attempts = %d, want 3", attempts)
 	}
+	if len(submissions) != 3 {
+		t.Fatalf("captured submissions = %d, want 3", len(submissions))
+	}
+	assertStableRuntimeRetrySubmissions(t, req.RequestID, "processor", submissions)
 	if run.RunID != "run-processor-retry" || run.AgentProfile != "processor" {
 		t.Fatalf("unexpected run response: %+v", run)
+	}
+}
+
+func TestIngestionRuntimeDispatcherRetriesLostAcceptedResponseWithStableHandoffIdentity(t *testing.T) {
+	processorReq := cycle.ProcessorRequest{
+		RequestID:         "processor_lost_response",
+		CycleID:           "cycle_lost_response",
+		ProcessorKey:      "processor:general:global:rss",
+		Status:            "queued",
+		SourceItemIDs:     []string{"srcitem_lost_response_1"},
+		IngestionEventIDs: []string{"ingestionevt_lost_response_1"},
+		SourceCount:       1,
+		ContinuityRef:     "sourcecycled://processor/processor:general:global:rss/latest",
+		Prompt:            "Processor lost response",
+	}
+	reconcilerReq := cycle.ReconcilerRequest{
+		RequestID:           "reconciler_lost_response",
+		CycleID:             "cycle_lost_response",
+		Status:              "queued",
+		Scope:               "story-corpus",
+		SourceItemIDs:       []string{"srcitem_lost_response_1"},
+		ProcessorRequestIDs: []string{processorReq.RequestID},
+		Prompt:              "Reconciler lost response",
+	}
+	tests := []struct {
+		name        string
+		requestID   string
+		requestKind string
+		acceptedRun runtimeRunStatusResponse
+		submit      func(context.Context, *ingestionRuntimeDispatcher) (runtimeRunStatusResponse, error)
+	}{
+		{
+			name:        "processor",
+			requestID:   processorReq.RequestID,
+			requestKind: "processor",
+			acceptedRun: runtimeRunStatusResponse{RunID: "run-processor-lost-response", AgentID: "processor:lost-response", AgentProfile: "processor", AgentRole: "processor", State: "pending"},
+			submit: func(ctx context.Context, dispatcher *ingestionRuntimeDispatcher) (runtimeRunStatusResponse, error) {
+				return dispatcher.submitProcessor(ctx, processorReq)
+			},
+		},
+		{
+			name:        "reconciler",
+			requestID:   reconcilerReq.RequestID,
+			requestKind: "reconciler",
+			acceptedRun: runtimeRunStatusResponse{RunID: "run-reconciler-lost-response", AgentID: "reconciler:lost-response", AgentProfile: "reconciler", AgentRole: "reconciler", State: "pending"},
+			submit: func(ctx context.Context, dispatcher *ingestionRuntimeDispatcher) (runtimeRunStatusResponse, error) {
+				return dispatcher.submitReconciler(ctx, reconcilerReq)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var attempts int
+			var submissions []runtimeRunSubmitRequest
+			runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempts++
+				var submission runtimeRunSubmitRequest
+				if err := json.NewDecoder(r.Body).Decode(&submission); err != nil {
+					t.Errorf("decode lost-response submission %d: %v", attempts, err)
+					return
+				}
+				submissions = append(submissions, submission)
+				if attempts == 1 {
+					// Model the failure boundary that motivated runtime idempotency:
+					// the run was admitted, but its 202 receipt was lost in transit.
+					hijacker, ok := w.(http.Hijacker)
+					if !ok {
+						t.Error("test runtime response writer does not support hijacking")
+						return
+					}
+					conn, _, err := hijacker.Hijack()
+					if err != nil {
+						t.Errorf("hijack first runtime response: %v", err)
+						return
+					}
+					_ = conn.Close()
+					return
+				}
+				writeSourceServiceJSON(w, http.StatusAccepted, tt.acceptedRun)
+			}))
+			defer runtimeServer.Close()
+
+			dispatcher := &ingestionRuntimeDispatcher{
+				baseURL:       runtimeServer.URL,
+				ownerID:       "owner-universal-wire",
+				client:        runtimeServer.Client(),
+				retryAttempts: 3,
+				retryDelay:    time.Millisecond,
+			}
+			run, err := tt.submit(context.Background(), dispatcher)
+			if err != nil {
+				t.Fatalf("submit %s after lost accepted response: %v", tt.name, err)
+			}
+			if attempts != 2 || len(submissions) != 2 {
+				t.Fatalf("lost-response attempts/submissions = %d/%d, want 2/2", attempts, len(submissions))
+			}
+			assertStableRuntimeRetrySubmissions(t, tt.requestID, tt.requestKind, submissions)
+			if run.RunID != tt.acceptedRun.RunID {
+				t.Fatalf("retry returned run id = %q, want admitted %q", run.RunID, tt.acceptedRun.RunID)
+			}
+		})
 	}
 }
 
