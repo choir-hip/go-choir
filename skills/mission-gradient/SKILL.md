@@ -16,7 +16,7 @@ Use MissionGradient to convert a long-running agent mission into a navigable opt
 
 The output is not a normal plan. It is a goal geometry: real artifact, invariants, value criterion, quality gradient, homotopy parameters, conjecture ledger (the typed belief state), receding-horizon control, dense feedback, evidence ledger, mission report, anti-Goodhart constraints, rollback policy, learning side-channel, escalation rules, and stopping condition.
 
-Since v2.0.0 the supervisory object is the **conjecture trajectory**: what the mission currently believes, how it would know, what its tests cannot see, and what it may claim afterward. Theory: `docs/conjecture-learning-proof-theory-2026-06-11.md` and `docs/handoff-conjecture-learning-fixed-point-2026-06-10.md`. The compact frame: an observer is a proof system; its hyperthesis is its incompleteness; a claim's authority is the reach of its evidence — including this one.
+Since v2.0.0 the supervisory object is the **conjecture trajectory**: what the mission currently believes, how it would know, what its tests cannot see, and what it may claim afterward. The superseded theory sources remain in Git history. The compact frame: an observer is a proof system; its hyperthesis is its incompleteness; a claim's authority is the reach of its evidence — including this one.
 
 ## Execution Kernel
 
@@ -626,7 +626,7 @@ Common examples:
 Define how the mission preserves reversibility. Include git, deploy, state, VM, database, route, and artifact rollback where relevant.
 
 For missions that mutate canonical/user-facing state, decompose the safety
-claim per `docs/conjecture-learning-proof-theory-2026-06-11.md` Part II:
+claim into:
 protocol-safe (machine-checked) AND instance-compliant (record check) AND
 contracts-passed (bounded, scoped) AND revertible-within-window AND
 residual-accepted-by-owner. Reversibility substitutes for unprovable

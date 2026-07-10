@@ -14,17 +14,16 @@ this document as a plan, checklist, or summary. Its definitions govern what
 
 This document **supersedes as executable authority**:
 
-- `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` (the 2026-07-07 program
+- historical source in Git history (the 2026-07-07 program
   paradoc) — its phases were partially executed and its sequencing was violated
   in practice (Phase 4 seams landed before Phase 0 foundations); this document
   absorbs its remaining work and corrects the sequencing.
-- `docs/archive/heresy-eradication-2026-07-07.md` — its definition graph
+- historical source in Git history — its definition graph
   (heresy, eliminated, detector, registry-close semantics) is imported by
   reference; its execution state is absorbed here.
 
-Both documents remain valid as **source material and per-heresy authority**;
-neither remains an independent execution target. A future `/goal` against
-either should redirect here.
+Their conclusions are absorbed here. The deleted originals are source material
+in Git history only and are not independent execution targets.
 
 ## Source Authority Order
 
@@ -36,22 +35,19 @@ either should redirect here.
    comprehensive mission encompasses the incomplete og-dolt and
    heresy-eradication runs plus all cleanup/completion debt from past
    missions** (2026-07-08).
-3. `docs/definitions/substrate-independent-audited-computer-2026-07-04.md`
-   (ComputerVersion, materializer, route-over-computer-version).
+3. `docs/computer-ontology.md` (ComputerVersion, materializer,
+   route-over-computer-version).
 4. `docs/choir-doctrine.md` heresy registry (H001–H031) — per-heresy authority
    for bad pattern and blessed replacement.
-5. `docs/archive/heresy-eradication-2026-07-07.md` — imported definition
+5. historical source in Git history — imported definition
    graph for `heresy`, `eliminated`, detector semantics.
-6. `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` — phase inventories,
+6. historical source in Git history — phase inventories,
    deletion inventories, completion criteria (imported, resequenced here).
-7. `docs/assessment-overall-state-2026-07-07.md` — evidence baseline
-   (completeness percentages, timeout diagnosis, storage-fork analysis).
-8. Agentic-consensus panel reviews 2026-07-08
-   (`docs/evidence/agentic-consensus-2026-07-08-docs-review/`,
-   `docs/evidence/agentic-consensus-2026-07-08-docs-review-2/`,
-   `docs/evidence/agentic-consensus-2026-07-08-mission-readiness/`) — reviewer
-   evidence class; findings adjudicated into this document, not authority on their
-   own.
+7. Pre-purge evidence snapshot at Git commit `8f62fe3b` (completeness
+   percentages, timeout diagnosis, storage-fork analysis).
+8. Agentic-consensus panel reviews 2026-07-08/09 — reviewer evidence class;
+   findings were adjudicated into this document, not authority on their own.
+   Raw panel transcripts are intentionally absent from the worktree.
 9. `AGENTS.md` (repo operating contract, mutation ceremony, Landing Loop).
 
 Where this document conflicts with older mission docs or ledgers that label
@@ -97,11 +93,11 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 
 **Non-purpose:**
 
-- Not a rewrite of `internal/runtime`; business-logic extraction remains its
-  own mission (mission-3c_2 Phase 2.5) — this mission deletes dual paths
-  inside what exists and records that extraction as an open dependency.
-- Not the grip/RL research program (`choir-grip-checkpoint-2026-07-07.md` is
-  narrative authority only; its research forks are out of scope).
+- Not a rewrite of `internal/runtime`; business-logic extraction remains an
+  external dependency. This mission deletes dual paths inside what exists and
+  records that extraction as an open dependency.
+- Not the grip/RL research program; that retired narrative remains in Git
+  history and its research forks are out of scope.
 - Not new product surface (headless CLI Phase 1.5 verbs, MCP, reader UX
   options B/C stay deferred unless a node here requires them).
 - Not detector theater: a detector that cannot fail is not evidence.
@@ -111,7 +107,7 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 ## Definition Graph
 
 Imported nodes: `heresy`, `eliminated`, detector semantics, registry-close
-semantics from `docs/archive/heresy-eradication-2026-07-07.md` — status carried as
+semantics from historical source in Git history — status carried as
 settled there.
 
 ### T1. Term: `seam`
@@ -151,8 +147,8 @@ status: settled
 source: observed (ledger sweep 2026-07-08)
 definition: Any mission document whose status field claims completion while its own remaining_error_field, unproven_or_partial_claims, or open-edge notes are non-empty is checkpoint_incomplete regardless of its label.
 examples:
-  - docs/missions/substrate-hardening-v0.md (MPCal TLC unverified, embed refactor deferred).
-  - docs/missions/cross-substrate-proof-v0.md (gates 4/5 listed as unproven while checkpoint text claims them satisfied).
+  - A historical substrate checkpoint with MPCal TLC unverified and embed refactor deferred.
+  - A historical cross-substrate checkpoint whose gates 4/5 remained unproven.
 execution_effect:
   - Work item C4 must relabel these documents; no downstream mission may cite them as complete.
 ```
@@ -163,7 +159,7 @@ execution_effect:
 id: route-over-computer-version
 kind: invariant
 status: settled (definition) / violated (implementation)
-source: docs/definitions/substrate-independent-audited-computer-2026-07-04.md; choir-doctrine.md H031
+source: computer-ontology.md; choir-doctrine.md H031
 definition: >-
   No product route resolves to a VM or desktop identity at the routing decision
   layer; routes must key off `ComputerVersion = (CodeRef, ArtifactProgramRef)`
@@ -211,7 +207,7 @@ execution_effect:
 id: bounded-request-path
 kind: invariant
 status: settled (definition and implementation)
-source: docs/assessment-overall-state-2026-07-07.md (historical staging trace: api.resolve max 180,029ms, 23 errors); docs/evidence/w2-timeout-staging-proof-2026-07-09.md (post-fix: api.resolve max 60,001ms, 504 within 60s)
+source: observed staging traces adjudicated into this Definition (pre-fix api.resolve max 180,029ms / 23 errors; post-fix max 60,001ms with a bounded 504)
 definition: No public request may hang for the vmctl client default; the proxy fails fast with a 504 within a bounded window.
 observables:
   - internal/vmctl/client.go:22 DefaultClientTimeout = 60s.
@@ -243,7 +239,7 @@ id: narrative-authority-boundary
 kind: boundary
 status: settled
 source: reviewer (gpt55), consistent with doc-authority-manifest
-definition: choir-grip-checkpoint-2026-07-07.md and other narrative/philosophy documents cannot override doctrine, definitions, specs, or evidence.
+definition: Narrative and philosophy documents cannot override doctrine, definitions, specs, or evidence.
 execution_effect:
   - Work item C6 records this in the docs index; agents must not cite grip narrative as execution authority.
 ```
@@ -357,19 +353,21 @@ settlement:
   settled_by: evidence
 ```
 
-### D-STORE. Decision node: storage fork
+### D-STORE. Decision node: all-in on Dolt — SETTLED (owner, reaffirmed 2026-07-09)
 
 ```yaml
 id: storage-fork
 kind: term
-status: unresolved (requires_human_authority)
-source: docs/assessment-overall-state-2026-07-07.md lines 90-119
-definition: Commit to Dolt version-control features as load-bearing (per owner 2026-07-07 direction) vs acknowledge an application-level audit trail. Owner direction says Dolt; the six open storage-inventory questions (starting with per-write commit semantics and rollback mechanics) remain unanswered.
+status: settled
+source: owner authority, all-in on Dolt; reaffirmed 2026-07-09
+definition: Choir commits to Dolt as the load-bearing product-state substrate and will make its native history/branch features real. Application-level revision/provenance chains remain useful domain indexes but do not reopen the database choice.
 execution_effect:
-  - Phase C history-read work and Phase D promotion work execute against the Dolt answer; if the experiment evidence contradicts feasibility, escalate rather than silently degrade.
+  - Phase B/C history-read work and Phase D promotion work execute against Dolt.
+  - Per-write commit/batching, rollback mechanics, AS OF/DOLT_LOG correctness and latency, throughput, ICU/cgo build friction, and replication/sync are engineering verification axes inside the relevant phases, not decision gates.
+  - If evidence exposes an actual feasibility contradiction, document and escalate it; do not silently degrade or re-open the choice by implication.
 settlement:
-  rule: Answer the six storage-inventory questions with experiments; escalate only if evidence contradicts the standing owner decision.
-  settled_by: evidence, escalating to human on contradiction
+  rule: Settled by owner authority. Verification tasks may change implementation tactics but not the chosen substrate without a new explicit owner decision.
+  settled_by: human
 ```
 
 ## Determined State Snapshot (2026-07-08)
@@ -405,7 +403,7 @@ determined_state:
       source: observed
       execution_effect: W4 closed.
     - claim: Migration completeness baseline — actor substrate 95%, wire wiring 70%, OG integration 60%, business-logic extraction 0%, continuation deletion 0%, parent/child deletion 5%, texture-forcing removal 0%.
-      source: docs/assessment-overall-state-2026-07-07.md
+      source: pre-purge evidence snapshot at Git commit 8f62fe3b
       execution_effect: variant baseline below.
     - claim: H030 (mailbox polling) repaired 2026-06-27; registry update only.
       source: settled-definition (heresy-eradication doc)
@@ -413,6 +411,9 @@ determined_state:
       source: observed (assessment)
       execution_effect: C-RETR and C-PAGE work items exist in Phase E.
   settled_2026_07_08_owner:
+    - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
+      source: owner authority, reaffirmed 2026-07-09
+      execution_effect: Phase B/C/D proceed against Dolt; escalate only on demonstrated feasibility contradiction.
     - claim: Two-store Dolt taxonomy — world-wire store (moves to sql-server now) and per-VM embedded stores shared by that VM's capsules; promotion is an operation on the embedded store.
       source: user-stated + observed
       execution_effect: D-WIRE settled; D-PROMO settled (pinned-connection branch isolation); promotion explicitly decoupled from the wire store; S1 scope header names the embedded store.
@@ -421,15 +422,13 @@ determined_state:
     - claim: Current wire-store data is junk (the wire loop has never worked end-to-end); the sql-server store stands up fresh with no data migration.
       source: user-stated
       execution_effect: D-WIRE cutover is code-only and cheap; it need not wait for Phase D if sequencing benefits from doing it earlier (it deletes PROXY_RUNTIME_DB_PATH and unblocks honest route resolution).
-  open:
-    - node: storage-fork (D-STORE)
-      missing: answers to six storage-inventory questions.
+  open: []
 ```
 
 ## Value Criterion
 
 Every pass must reduce the mission variant (below) or buy decision evidence
-for D-PROMO / D-STORE. Prefer, in order: (1) work that makes future claims
+for implementation conjectures. Prefer, in order: (1) work that makes future claims
 falsifiable (detectors, conformance checks, relabeling), (2) work that
 unblocks staging proof (timeouts), (3) deletions with inverted tests,
 (4) cutover construction.
@@ -449,7 +448,7 @@ variant:
   seam_commits_unlabeled: 0                      # e393eb5c, e5c1d38a evidence recorded in W3
   mislabeled_complete_missions: 0                # substrate-hardening, cross-substrate-proof relabeled in C4
   past_mission_open_edges_untriaged: 0           # P-TRIAGE table committed below, target 0
-  decision_nodes_unresolved: 1                   # D-STORE storage fork remains unresolved; D-PROMO and D-WIRE settled 2026-07-08
+  decision_nodes_unresolved: 0                   # D-STORE, D-PROMO, and D-WIRE are settled
   sql_dual_paths_live: 9                         # ~8–10 per assessment
 ```
 
@@ -476,16 +475,15 @@ At each phase exit:
 
 1. **Run agentic consensus** using `skills/agentic-consensus/` against the
    phase's claimed exit state: the phase's deliverables, evidence-ledger
-   entries, and the diff/commits landed. Output directory:
-   `/tmp/agentic-consensus-<date>-phase-<X>/`, preserved into
-   `docs/evidence/` on gate close.
+   entries, and the diff/commits landed. Raw output is ephemeral; only the
+   adjudicated conclusion belongs in a current authority document.
 2. **Adjudicate** panel findings as `external second opinion` evidence:
    confirm each against the repo (the panel is not authority; grep/test/trace
    verification is). Sort confirmed findings into: (a) phase-exit defects
    (the phase's own bar not met), (b) new definition nodes (register, don't
    silently absorb), (c) out-of-scope noise (record and drop). The
    adjudication table (finding → category → one-line reasoning) MUST be
-   committed to `docs/evidence/` before the gate can clear. The executing
+   committed to this Definition's evidence ledger before the gate can clear. The executing
    agent MUST NOT be the sole adjudicator for red-class gates; either the
    owner signs off on the table, or a non-implementing
    independent agent (not the consensus runner) verifies the table and the
@@ -510,7 +508,7 @@ At each phase exit:
    work (W2, D-PROMO settlement), so its gate is red-class even though its
    yellow/green doc work can run in parallel. Do not stop, summarize-and-exit,
    or await owner input unless an escalation rule fires or a decision node
-   (D-PROMO, D-STORE) blocks the specific next phase.
+   blocks the specific next phase.
 
 If three consecutive panel rounds on the same phase fail to converge (new
 category-(a) findings each round), that is evidence of an unsettled
@@ -545,23 +543,22 @@ yellow/green auto-proceed rule.
   evidence ledger.
 - **C1–C7** Doc truth corrections (yellow, one pass):
   - C1 `current-architecture.md` — verify the capsule/substrate section clearly
-    separates "designed, not built" capsule substrate from any claim that
+    separates "partially implemented but inert" capsule substrate from any claim that
     promotion-bearing capsule transactions are proven.
-  - C2 `design-choir-headless-surface-v0.md` — strengthen the candidate-verb
-    gate (spec models ComputerVersion/capsule semantics + route-over-CV
-    load-bearing + atomic-or-degraded promotion + staging proof).
+  - C2 candidate-verb gate — its settled ComputerVersion/capsule semantics are
+    absorbed into `computer-ontology.md`; the superseded design was removed.
   - C3 `choir-doctrine.md` — verify H031 heresy entry is complete (it already
     exists) and Banned Patterns list #16 is present; ensure detector refs point
     to `docs/heresy-detectors.md` H030/H031 rows and W1's CI job. Do not
     duplicate the heresy entry.
-  - C4 Relabel `missions/substrate-hardening-v0.md` and
-    `missions/cross-substrate-proof-v0.md` to `checkpoint_incomplete`.
+  - C4 Historical substrate and cross-substrate sources were relabeled
+    `checkpoint_incomplete`, then removed from the live worktree.
   - C5 (FIRST Phase A commit — now landed in the green docs alignment pass;
     verify-and-close) — supersession made machine-readable, not just prose:
-    pointer notes in `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md`
+    pointer notes in historical source in Git history
     (plus its post-commit state note: tag adapter is an embedded-mode interim
     hook; freezes but does not settle H031) and
-    `docs/archive/heresy-eradication-2026-07-07.md`; `docs/mission-graph.yaml`
+    historical source in Git history; `docs/mission-graph.yaml`
     nodes for both absorbed docs with `status: superseded` pointing at this
     node; all three documents registered in `docs/doc-authority-manifest.yaml`
     with correct roles/witnesses.
@@ -597,30 +594,19 @@ yellow/green auto-proceed rule.
 
 | Open edge | Disposition | Reason / pointer |
 |---|---|---|
-| mission-3c APIHandler extraction | external: `docs/mission-3c_2-actor-runtime-migration-real-v0.md` | Actor/runtime extraction is outside og-dolt scope (mission-3c_2). |
-| texture hard-cutover C43 | external: `texture-product-loop-recovery-v0` | `texture-hard-cutover-v0` superseded; C43 folded into active product-loop recovery. |
-| transclusion cutover | external: `texture-structured-document-transclusion-cutover-v0` | Active Texture successor mission; not og-dolt. |
-| long-running-agent R1–R7 | retired | `texture-long-running-agent-v0` superseded; R1–R7 folded into `texture-durable-thread-v1` and `texture-product-loop-recovery-v0`. |
-| durable-thread link route | external: `texture-durable-thread-v1` | Active successor mission; not og-dolt. |
-| product-loop failure path | external: `texture-product-loop-recovery-v0` | Active product-loop mission; not og-dolt. |
-| coagent source-centric follow-ups | external: `source-system-loop8-simplify-v0` | `update-coagent-source-centric-deletion-v0` settled; remaining VText/source follow-ups live in the active source-system loop. |
-| wire-agent-pipeline staging proof | external: `universal-wire-stabilization-v1` | Active successor to `universal-wire-agent-pipeline-v1`; staging proof belongs there. |
-| stabilization substrate boot | external: `universal-wire-stabilization-v1` | Active stabilization mission; not og-dolt. |
+| actor/runtime business-logic extraction | external dependency | Outside og-dolt scope; no live successor Definition currently owns it. |
+| Texture product-loop, transclusion, and durable-thread gaps | external dependencies | Superseded mission chains were deleted; any resumed work requires a new Definition grounded in current code and staging. |
+| source-system follow-ups | external dependency | Superseded mission chain deleted; any resumed work requires a new Definition. |
+| Wire staging and substrate proof | external dependency | Superseded mission chain deleted; any resumed work requires a new Definition. |
 | lifecycle-cutover residues (texture forcing / parent/child) | absorbed: Phase B | og-dolt Phase B heresy kill wave 1 (M3.1 texture forcing, M3.2 parent/child). |
 | lifecycle-cutover residues (continuations / acceptance) | absorbed: Phase C | og-dolt Phase C heresy kill wave 2 (M4 continuation deletion, M3.3 acceptance). |
-| conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E M5 surface cleanup (H019–H029); source-intake routing overlap remains in `conductor-url-source-routing-h029-v0`. |
-| doc-truth-drift checker review | external: `docs-truth-system-v1` | `doc-truth-drift-context-v0` superseded; active successor is docs-truth-system-v1. |
-| node-B fail-closed auth | external: `overnight-autoradio-platform-checklist-v0` | Platform/auth ops checklist; not og-dolt. |
+| conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E surface cleanup (H019–H029). |
+| docs truth drift | external: documentation authority Definition | Governed by `documentation-authority-reduction-2026-07-09.md`. |
+| node-B fail-closed auth | external dependency | Platform/auth operations are not og-dolt work. |
 | sandbox→computer rename | absorbed: Phase E | og-dolt Phase E surface cleanup / rename machinery. |
-| SQLite cleanup | external: `docs/mission-unified-object-graph-v0.md` | Object graph consolidation / sourcecycled SQLite sidecar removal; not og-dolt. |
-| node-B retention | external: `node-b-storage-retention-v0` | `node-b-nix-store-retention-v0` settled; vm-state/recovery budget remains in `node-b-storage-retention-v0`. |
-| news-live landing | external: `news-live-pr-merge-model-default-v0` | Active news-live mission; not og-dolt. |
-| orchestrator C15/M9/M10 | external: `orchestrator-suite-2026-06-28`; `docs-revision-v1`; `campaign-compiler-selfdev-v0` | Own missions (orchestrator suite, docs revision, campaign compiler); not og-dolt. |
-| autoradio verifier review | external: `overnight-autoradio-platform-checklist-v0` | Active platform checklist; not og-dolt. |
-| substrate-hardening MPCal TLC | external: `docs/missions/substrate-hardening-v0.md` | `checkpoint_incomplete`; not og-dolt. |
-| substrate-hardening cmd dedup | external: `docs/missions/substrate-hardening-v0.md` | `checkpoint_incomplete`; not og-dolt. |
-| cross-substrate extractor | external: `docs/missions/cross-substrate-proof-v0.md` | `checkpoint_incomplete`; not og-dolt. |
-| wire-on-settlement | external: `m5-wire-on-settlement` | M5 route-switch evidence gate; not og-dolt. |
+| SQLite/sourcecycled cleanup | external dependency | Object-graph consolidation remains outside og-dolt scope; no live successor Definition owns it. |
+| node-B retention, news, orchestrator, autoradio, and cross-substrate gaps | external dependencies | Their checkpoint chains were removed; any resumed work requires fresh Definitions from current evidence. |
+| wire-on-settlement | external dependency | Route-switch evidence gate is not og-dolt work. |
 | continuation-deletion sequencing | absorbed: Phase C | og-dolt Phase C continuation deletion (H006–H008). |
 
 Phase A exit bar (what the gate panel reviews): detectors reporting in CI;
@@ -635,15 +621,15 @@ As specified in mission-og-dolt Phase 1 (imported): texture-forcing removal
 delegation — heed the mutually-gated transition: verify agent behavior before
 deleting forcing cues); parent/child deletion (H001–H005, H015–H016, H005
 first; proof gate: all authority trajectory-scoped); Dolt audit read-path
-(`texture history` from `dolt_history_<table>` + `AS OF`) — this doubles as
-the first D-STORE evidence probe (history latency, latest-revision cost).
+(`texture history` from `dolt_history_<table>` + `AS OF`) — this is the first
+load-bearing D-STORE verification (history latency, latest-revision cost).
 Detector families for each cluster flip to fail-on-regression as they close.
 
 Phase B exit bar: M3.1 and M3.2 clusters at the `eliminated` bar (deletion
 diff + inverted tests + detector at fail-on-regression, zero live sites for
 H009–H012, H024a/b, H026, H001–H005, H015–H016); both proof gates evidenced;
-`texture history` served from `dolt_history` with latency numbers recorded
-as D-STORE evidence.
+`texture history` served from `dolt_history` with latency numbers recorded as
+Dolt implementation evidence.
 
 ### Phase C — Kill wave 2 + cold-entity cutover
 
@@ -663,8 +649,8 @@ SQL fallback exercised; detector families for these clusters enforcing.
 
 ### Phase D — Hot-path cutover + promotion over ComputerVersion
 
-Imported from mission-og-dolt Phases 3, 4, 4b, gated on D-STORE resolution,
-D-PROMO settlement (by Phase A experiment), and the S1 scope header landing. This phase includes the world-wire store's sql-server
+Imported from mission-og-dolt Phases 3, 4, 4b, executing against settled
+D-STORE/D-PROMO direction and the S1 scope header. This phase includes the world-wire store's sql-server
 migration (D-WIRE, decided): batch-commit infrastructure, hot-table cutover
 with a rollback latency budget **defined before cutover**, storage-growth
 measurement before victory; promotion_protocol rewrite over ComputerVersion
@@ -759,7 +745,7 @@ Per the definition skill. Specific bindings:
   definition_node: bounded-request-path
   evidence_class: observed file result + staging trace (assessment)
   command_or_observation: internal/vmctl/client.go:22 (180s); no ReadTimeout/WriteTimeout in proxy server; staging api.resolve max 180,029ms.
-  result: fixed by W2 (commit 67fff296 + prior server.go timeout defaults; staging api.resolve max now 60,001ms; see docs/evidence/w2-timeout-staging-proof-2026-07-09.md)
+  result: fixed by W2 (commit 67fff296 + prior server.go timeout defaults; staging api.resolve max now 60,001ms; raw staging proof removed from the worktree after this result was adjudicated here)
 - claim: Dolt operational semantics for promotion and topology (per-session branch checkout; embedded exclusive directory lock; optimistic-CAS commit with app-level retry; DOLT_MERGE/DOLT_RESET implicitly commit the transaction so merge+tag is never one transaction; branch-in-DSN undocumented for embedded driver; auto-GC default since 1.75, embedded applicability unverified; no official embedded→sql-server migration guide).
   definition_node: embedded-branch-isolation, wire-store-sql-server
   evidence_class: external documentation review (docs.dolthub.com, dolthub/driver README, DoltHub blog) + observed test result, 2026-07-08 / 2026-07-09
@@ -775,7 +761,7 @@ Per the definition skill. Specific bindings:
 - claim: Plan-review consensus round 2026-07-08 (4/4 panelists returned; gpt55 output empty/failed-silently) adjudicated. Confirmed blockers, all fixed in this document — D-STORES file mapping was inverted (world-wire store is internal/platform/objectgraph_store.go, not internal/objectgraph/dolt_store.go); D-PROMO had ignored the prior 2026-07-07 experiment (adapter comment + two test files), whose falsification is diagnosed as a connection-pooling artifact (checkout ran on one pooled conn, queries on others; pinned-conn variant reportedly isolates correctly) — settlement pulled into Phase A with a -count=10 determinism bar; completion criterion 3 gained a falsified-D-PROMO fallback clause; Phases B–E gained explicit exit bars; gate adjudication must be committed as auditable evidence; supersession must be machine-readable (C5 expanded to mission-graph superseded nodes + doc-authority-manifest entries for all three docs).
   definition_node: seam, embedded-branch-isolation, dolt-store-taxonomy, phase-gate-protocol
   evidence_class: external second opinion (panel) + observed (repo re-verification of B1/B2; diag test re-run showing pooled-connection checkout non-stick; Phase A -count=10 determinism test run 2026-07-09)
-  command_or_observation: docs/evidence/agentic-consensus-2026-07-08-plan/ (raw outputs); go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
+  command_or_observation: panel findings adjudicated into this Definition; go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
   result: all confirmed category-(a) findings fixed in-document; D-PROMO pinned-conn determinism test is Phase A work and has been independently reproduced
   uncertainty: none
 ```
@@ -828,8 +814,8 @@ plus this mission's additions):
    no live heresy entries.
 6. `choir` CLI `trajectory`/`texture` verbs read identical shapes before and
    after, verified against production — evidence artifact: a recorded
-   before/after CLI output diff against production, committed to
-   `docs/evidence/`.
+   before/after CLI output diff against production, summarized in this
+   Definition's evidence ledger.
 7. Request path bounded (I3) with staging proof.
 8. All C1–C7 corrections landed; no mission document mislabeled complete.
 9. Past-mission triage table complete with every `absorbed` edge executed
@@ -866,8 +852,7 @@ run_checkpoint_and_resumption_state:
     evidence, C1–C7 doc truth corrections, D-PROMO pinned-connection
     branch-isolation settlement, S1 spec↔adapter scope/conformance note, and
     P-TRIAGE past-mission open-edge table. The Phase A exit panel adjudication is
-    committed. D-STORE storage fork remains unresolved; D-PROMO and D-WIRE
-    settled.
+    committed. D-STORE, D-PROMO, and D-WIRE are settled.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -883,24 +868,18 @@ run_checkpoint_and_resumption_state:
     - embedded Dolt branch isolation on a pinned connection is deterministic (D-PROMO -count=10)
     - all past-mission open edges triaged (absorbed/external/retired)
   unproven_or_partial_claims:
-    - D-STORE storage-fork six questions
+    - Dolt engineering verification axes: history latency/correctness,
+      batching/throughput, rollback recovery, build friction, and replication
     - heresy live-site counts (families still in discovery; fail-on-regression and allowlist enforcement deferred per phase)
     - Phase B–E kill waves, cutovers, and deletion not yet executed
   remaining_error_field: see Variant below
-  highest_impact_remaining_uncertainty: D-STORE storage fork + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
+  highest_impact_remaining_uncertainty: Phase B heresy elimination evidence + Dolt history-read performance + wire-store sql-server migration mechanics
   next_executable_probe: >-
     Phase B heresy kill wave 1 + Dolt audit reads (start with the highest-impact
-    live heresy family and the D-STORE storage-fork six questions).
+    live heresy family and the first load-bearing Dolt history-read proof).
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
-    - docs/evidence/agentic-consensus-2026-07-08/ (plan review panel raw outputs)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1 + final adjudication)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/ (Phase A exit panel round 2)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/ (Phase A exit panel round 3)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-3/ (Phase A exit panel round 4)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-4/ (Phase A exit panel round 5 clear)
-    - docs/evidence/w2-timeout-staging-proof-2026-07-09.md
-    - docs/assessment-overall-state-2026-07-07.md
+    - this Definition's adjudicated evidence ledger
   rollback_refs:
     - a703bf44 (pre-mission docs state)
 ```

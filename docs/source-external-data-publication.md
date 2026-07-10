@@ -193,6 +193,22 @@ The Source Service API boundary should support at least:
 - item resolution;
 - manifest retrieval.
 
+### 7. Deduplication And Clustering
+
+Semantic similarity is evidence for grouping, not authority to erase a fetched
+capture. Every materially fetched item must first retain a durable item/capture
+record with source/fetch identity, hashes, and policy outcome. Deduplication may
+then create a reversible `duplicate_of`, cluster, or suppression-for-synthesis
+decision that records model, threshold, nearest object, score, and time.
+
+**Current conformance gap:** `internal/runtime/qdrant_dedup.go` uses
+Qdrant/Ollama similarity before object-graph projection and drops matching
+items from that projection; only logs/counts preserve the decision. This is
+code-present experimental behavior, not canonical evidence semantics. Until it
+records the capture and dedup decision durably, do not treat a dropped item as
+never fetched, use Qdrant as source authority, or calibrate the threshold as an
+irreversible publication rule.
+
 ## Texture Source Entities
 
 `source_entities` are revision metadata. They should be stored in
@@ -236,20 +252,25 @@ Selector kinds include:
 - table cell;
 - data vintage.
 
-Display policy tells Texture how the citation/transclusion should appear by
-default. It is canonical revision metadata, not a renderer guess. It must be
-easy for the Texture agent to set from context while drafting or revising. When
-Texture adds or revises a citation, it should set this field directly from the
-writing context instead of leaving the renderer to infer intent. The baseline
-display modes are:
+Display intent tells Texture how the citation/transclusion should appear by
+default. It is canonical revision metadata, not a renderer guess. The four
+names below are a semantic rendering taxonomy, not a second Texture node
+schema. Canonical Texture bodies use only `source_ref` with
+`display_mode: numbered_ref | expanded_ref`:
 
-- `collapsed_citation`: show only a compact citation marker until activated.
+- `collapsed_citation`: show only a compact citation marker until activated;
+  stored as `numbered_ref`.
 - `embedded_excerpt`: show the transcluded quote/excerpt inline by default,
-  with a citation marker and collapse/open controls.
+  with a citation marker and collapse/open controls; stored as `expanded_ref`
+  plus the excerpt selector.
 - `embedded_preview`: show a compact media/card/table/document preview inline
-  by default.
+  by default; stored as `expanded_ref` plus typed preview/media metadata.
 - `expanded`: open the transclusion in expanded inline form when the Texture is
-  first rendered.
+  first rendered; stored as `expanded_ref`.
+
+Do not persist these four semantic intent names as alternative `display_mode`
+values and do not recreate `source_embed`. A richer load-bearing distinction
+requires a promoted Texture schema change first.
 
 Every citation is a transclusion point, but not every transclusion starts
 collapsed. Texture should set the display policy from writing context:

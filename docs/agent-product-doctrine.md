@@ -41,11 +41,13 @@ Foreground/canonical state stays stable. Background/candidate computers mutate. 
   Community Cloud. Documents still using "Universal Wire" are historical or
   pending the Phase E rename.
 - **D-PROMO interim:** branch isolation on the VM-local embedded store is
-  under test; the current `DoltPromotionAdapter` is tag-only interim and must not
-  be enabled for production promotion flow until the conjecture settles.
-- **Timeout hardening pending:** `internal/vmctl/client.go` default timeout is
-  180s and `internal/server/server.go` has no `ReadTimeout`/`WriteTimeout`. This
-  is a known substrate gap (I3 in the umbrella mission).
+  settled for pinned single-writer connections; the current
+  `DoltPromotionAdapter` is tag-only interim and must not be enabled for
+  production promotion until the Phase D branch adapter and conformance binding land.
+- **Timeout hardening landed:** `vmctl.Client` defaults to 60 seconds and the
+  server has bounded read/write timeouts (120-second defaults). Staging proved
+  the induced resolve-failure path returns a bounded 504; re-prove after a
+  routing or timeout change rather than reopening the old 180-second diagnosis.
 
 Texture delegation is agentic. Texture may write, ask researcher, ask super, ask
 both, ask neither, wait for more evidence, or report a blocker within its
@@ -85,8 +87,7 @@ that requires divergence.
 
 Prefer prompts, tool descriptions, capability policy, and product-visible
 state over role-specific harness branches. (Prompt content itself is moving
-from persona framing toward obligation/authority-envelope framing — see
-`choir-role-free-actor-protocol-2026-06-11.md` — but the structural point
+from persona framing toward obligation/authority-envelope framing, but the structural point
 here, prompt/policy over code branches, holds either way.) If a proposed fix
 requires programmatic divergence in the core loop for one role, document the
 evidence, the invariant being protected, the simpler alternatives rejected,
@@ -216,9 +217,9 @@ target actor model. Use explicit levels: `docs-level`, `staging-smoke-level`,
 
 Do not claim `promotion-level` without AppChangePackage adoption verifier contract evidence plus owner review and promote/rollback evidence. Do not claim retired `continuation-level` without run-memory/compaction and continuation evidence.
 
-`continuation-level` is transitional H008/H014 residue: the durable-actors rearchitecture
-(`choir-rearchitecture-durable-actors-2026-06-11.md`) re-points this
-acceptance level at trajectory/work-item settlement evidence (portfolio M4).
+`continuation-level` is transitional H008/H014 residue: the durable-actor contract re-points this
+acceptance level at trajectory/work-item settlement evidence. No deleted
+portfolio mission remains executable authority.
 Until that cutover lands, retired `continuation-level` keeps its current meaning and
 evidence requirement above — do not weaken it and do not claim trajectory
 settlement evidence in its place before the level is formally re-pointed.

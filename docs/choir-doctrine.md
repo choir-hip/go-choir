@@ -23,15 +23,11 @@ Primary support docs:
 
 - [current-architecture.md](current-architecture.md)
 - [computer-ontology.md](computer-ontology.md)
-- [docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](archive/choir-rearchitecture-durable-actors-2026-06-11.md)
-- [conjecture-learning-proof-theory-2026-06-11.md](conjecture-learning-proof-theory-2026-06-11.md)
 - [conjecture-assertion-ledger-2026-06.md](conjecture-assertion-ledger-2026-06.md)
 - [why-texture-2026-06-15.md](why-texture-2026-06-15.md)
-- [why-texture-background-2026-06-15.md](why-texture-background-2026-06-15.md)
 - [texture-agentic-invariants-2026-06-13.md](texture-agentic-invariants-2026-06-13.md)
-- [mission-portfolio-2026-06-11.md](mission-portfolio-2026-06-11.md)
-- [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](archive/mission-agentic-debugging-vtext-stability-v0.md) <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
-- [docs/archive/mission-source-system-simplify-secure-smart-v0.md](archive/mission-source-system-simplify-secure-smart-v0.md)
+- [runtime-invariants.md](runtime-invariants.md)
+- [source-external-data-publication.md](source-external-data-publication.md)
 
 Reading order for architecture or behavior work:
 
@@ -54,8 +50,8 @@ mission form for long-running work is now `skills/definition/SKILL.md`
 (`/goal <doc>.md`); the current executable Definition for the OG/Dolt/heresy
 program is
 [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md).
-The older [mission-og-dolt-heresy-hard-cutover-v0.md](archive/mission-og-dolt-heresy-hard-cutover-v0.md)
-is superseded source material folded into that Definition. A heresy
+The older hard-cutover source was folded into that Definition and removed from
+the working-tree retrieval corpus. A heresy
 entry below without a CI detector is a heresy entry that is not yet done being
 written.
 
@@ -385,6 +381,13 @@ Claim classes:
 - `settlement-level`: trajectory/work-item settlement evidence exists for the
   relevant mission.
 
+**Current code conformance:** `internal/types/acceptance.go` currently exposes
+`docs-level`, `staging-smoke-level`, `export-level`, `promotion-level`, and
+transitional `continuation-level`. `architectural-level` and `settlement-level`
+are doctrine evidence classes, not yet Go `RunAcceptanceLevel` constants;
+`smoke-level` is represented by the narrower `staging-smoke-level`. Do not infer
+implementation of a stronger class from this doctrine taxonomy.
+
 Rules:
 
 1. `accepted` at smoke level must not be summarized as architectural success.
@@ -694,7 +697,7 @@ evidence, `continuation-level`.
 
 `evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
 [AGENTS.md](../AGENTS.md),
-[docs/archive/mission-lifecycle-cutover-v0.md](archive/mission-lifecycle-cutover-v0.md).
+historical source in Git history.
 
 `why it violates the spec:` architectural missions can appear settled on
 surface health rather than causal proof.
@@ -733,7 +736,7 @@ obligation delivery.
 trajectory-specific reconciliation.
 
 `evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
-[docs/archive/mission-lifecycle-cutover-v0.md](archive/mission-lifecycle-cutover-v0.md).
+historical source in Git history.
 
 `why it violates the spec:` authority lives on trajectory and work item, but
 delivery can be skipped because “some activation of this agent exists.”
@@ -779,7 +782,7 @@ state.
 [internal/runtime/researcher_checkpoint_fallback.go](../internal/runtime/researcher_checkpoint_fallback.go),
 [internal/runtime/delegate_worker_update_fallback.go](../internal/runtime/delegate_worker_update_fallback.go),
 [internal/runtime/trajectory.go](../internal/runtime/trajectory.go),
-[docs/archive/glossary.md](archive/glossary.md).
+historical source in Git history.
 
 `why it violates the spec:` the docs say blockers and questions are
 obligations, but the control substrate does not fully express them that way.
@@ -798,7 +801,7 @@ work items, but the generic update append path does not universally do that.
 
 `evidence:` [internal/store/store.go](../internal/store/store.go),
 [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
-[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](archive/choir-rearchitecture-durable-actors-2026-06-11.md).
+historical source in Git history.
 
 `why it violates the spec:` the one-message/one-obligation model remains only
 partially realized.
@@ -819,7 +822,7 @@ explicitly rejects lease as an architectural control concept.
 
 `evidence:` [AGENTS.md](../AGENTS.md),
 [docs/current-architecture.md](current-architecture.md),
-[docs/archive/glossary.md](archive/glossary.md),
+historical source in Git history,
 `internal/runtime/continuation.go` (deleted; references retained as provenance),
 [internal/runtime/tools_vmctl.go](../internal/runtime/tools_vmctl.go).
 
@@ -880,7 +883,7 @@ observe/finish/cancel sequences.
 `detectors:` `delegation_required`, `chained_required_tool`, `next_tools`,
 worker-delegation results that encode exact semantic tool choreography.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
+`evidence:` pre-purge review in Git history,
 `internal/runtime/tools_vmctl.go`, `internal/runtime/tools.go`.
 
 `why it violates the spec:` it preserves H009's vice under worker-specific
@@ -900,7 +903,7 @@ terminal condition.
 `detectors:` `pollInternalWorkerRun`, polling loops over worker run state,
 `time.After(500 * time.Millisecond)` control waits.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
+`evidence:` pre-purge review in Git history,
 `internal/runtime/tools_vmctl.go`.
 
 `why it violates the spec:` it keeps run-tree blocking semantics under the
@@ -920,7 +923,7 @@ loop.
 `detectors:` `initialTextureToolChoice`, `WithInitialToolChoice`,
 `exactRequiredToolChoice`, super-keyword routing lists.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
+`evidence:` pre-purge review in Git history,
 `internal/runtime/runtime.go`.
 
 `why it violates the spec:` even if conductor routes to Texture, the tool loop can
@@ -995,7 +998,7 @@ codebase and model the forbidden ontology.
 `detectors:` `PostChildResult`, `PostChildError`, `WaitForChildResult`,
 parent/child channel APIs with no production callers.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
+`evidence:` pre-purge review in Git history,
 `internal/runtime/channels.go`.
 
 `why it violates the spec:` unused compatibility surfaces still teach future
@@ -1015,7 +1018,7 @@ specific semantic workers as a required sequence.
 `buildAgentRevisionRequest`, "call spawn_agent now", numbered role-sequence
 scripts in Texture prompt defaults.
 
-`evidence:` [docs/choir-master-spec-review-2026-06-13.md](archive/choir-master-spec-review-2026-06-13.md),
+`evidence:` pre-purge review in Git history,
 `internal/runtime/prompt_defaults/texture.md`,
 `internal/runtime/texture_agent_revision.go`.
 
@@ -1039,7 +1042,7 @@ manual navigation destination.
 launchers for `trace`, tests expecting a Trace icon, copy that tells users to
 manually browse Trace as the debugging surface.
 
-`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](archive/mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+`evidence:` historical source in Git history, <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 [docs/platform-os-app-state.md](platform-os-app-state.md),
 [frontend/src/lib/FeaturesApp.svelte](../frontend/src/lib/FeaturesApp.svelte),
 [frontend/tests/desktop-shell-core.spec.js](../frontend/tests/desktop-shell-core.spec.js).
@@ -1066,7 +1069,7 @@ desktop-state tests, comments that say users open Terminal, routes that keep
 `/api/terminal/ws` as a live product affordance rather than a compatibility
 shim.
 
-`evidence:` [docs/archive/mission-agentic-debugging-vtext-stability-v0.md](archive/mission-agentic-debugging-vtext-stability-v0.md), <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
+`evidence:` historical source in Git history, <!-- texture-cutover-allow: historical mission evidence path; deletion receipt: texture-hard-cutover-v0 -->
 [internal/sandbox/terminal.go](../internal/sandbox/terminal.go),
 [frontend/tests/terminal-app.spec.js](../frontend/tests/terminal-app.spec.js),
 [internal/store/desktop_test.go](../internal/store/desktop_test.go).
@@ -1096,8 +1099,8 @@ for sources.
 `evidence:` [README.md](../README.md),
 [docs/current-architecture.md](current-architecture.md),
 [docs/platform-os-app-state.md](platform-os-app-state.md),
-[docs/archive/mission-web-surface-rationalization-v0.md](archive/mission-web-surface-rationalization-v0.md),
-[docs/archive/mission-source-system-simplify-secure-smart-v0.md](archive/mission-source-system-simplify-secure-smart-v0.md),
+historical source in Git history,
+historical source in Git history,
 [internal/runtime/content_extract.go](../internal/runtime/content_extract.go),
 [internal/store/browser.go](../internal/store/browser.go),
 [internal/types/browser.go](../internal/types/browser.go),
@@ -1125,8 +1128,7 @@ gathering workflow.
 `status:` **repaired 2026-06-27.** `internal/actor/actor.go:141` declares
 `mailbox chan Update` and the warm loop selects on the channel; the log is
 queried only for cold-start replay, post-drain overflow catch, and Sweep boot
-recovery. See
-[docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md).
+recovery.
 The entry remains as detector vocabulary because this heresy recurred three
 times; the deletion gate below is now the regression test.
 
@@ -1146,10 +1148,8 @@ or "steers are already in the log" inside the warm loop.
 `scripts/check-heresies.sh` (discovery mode); `.github/workflows/ci.yml`
 `Heresy Detector Discovery` job.
 
-`evidence:` [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md),
-[docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md](archive/choir-rearchitecture-durable-actors-2026-06-11.md)
-(section 2.2, "Go delivers, the database remembers"),
-[docs/mission-3c_2-actor-runtime-migration-real-v0.md](mission-3c_2-actor-runtime-migration-real-v0.md).
+`evidence:` [internal/actor/actor.go](../internal/actor/actor.go),
+[docs/heresy-detectors.md](heresy-detectors.md), and the pre-purge Git history.
 
 `why it violates the spec:` the design specifies Go-channel mailboxes for
 warm delivery with the durable log only for crash recovery and cold-start
@@ -1174,8 +1174,7 @@ pattern. The test: if there are no `chan` declarations in
 
 `status:` **active** (gated on Phase D of the current umbrella mission
 [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md);
-the older `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` is superseded source
-material).
+the older hard-cutover source was absorbed and removed from the working tree).
 
 `bad pattern:` Implementing the candidate computer concept as physical VM or desktop instances. This includes forking by cloning a VM/image, running speculative mutations inside a candidate VM, and promotion/rollback as VM-route or image operations.
 
@@ -1185,7 +1184,9 @@ material).
 `scripts/check-heresies.sh` (discovery mode); `.github/workflows/ci.yml`
 `Heresy Detector Discovery` job.
 
-`evidence:` [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](definitions/substrate-independent-audited-computer-2026-07-04.md), [docs/archive/heresy-eradication-2026-07-07.md](archive/heresy-eradication-2026-07-07.md) (superseded source material), and [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md) (current executable authority).
+`evidence:` [docs/computer-ontology.md](computer-ontology.md) and
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)
+(current executable authority).
 
 `why it violates the spec:` A candidate computer is a speculative fork of a platform or user computer — a forked `ComputerVersion = (CodeRef, ArtifactProgramRef)`, materialized on demand, with speculative effects executing in capsules, not a VM instance. Coupling promotion and routing to VM/desktop IDs violates substrate independence.
 

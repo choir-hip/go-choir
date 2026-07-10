@@ -11,8 +11,8 @@ configuration, product-path verification, run acceptance). Long-running mission
 rules live in [skills/definition/SKILL.md](skills/definition/SKILL.md)
 (Definition: executable mission authority for `/goal <doc>.md` runs, with
 definition graph, invariants, conjectures, evidence classes, and completion
-semantics). The older [docs/agent-parallax-rules.md](docs/agent-parallax-rules.md)
-and `skills/parallax/SKILL.md` are legacy reference. For multi-agent review
+semantics). `skills/parallax/SKILL.md` is legacy reference; its former companion
+document is available only in Git history. For multi-agent review
 panels used at definition or phase gates, see
 [skills/agentic-consensus/SKILL.md](skills/agentic-consensus/SKILL.md). Load those
 on demand.
@@ -36,6 +36,11 @@ local coverage prefer `scripts/go-test-runtime-shards` or focused
 `go test ./internal/runtime -run TestName` while shaping one transition. Do not
 hand-enter `CGO_*FLAGS` for the Dolt ICU dependency except as a short diagnostic
 — the durable fix is ensuring direnv is loaded (check with `echo $CGO_CFLAGS`).
+
+If those variables are empty, run `direnv status` first. In a fresh or changed
+worktree, run `direnv allow`, re-enter the directory, and verify
+`CGO_CFLAGS`/`PKG_CONFIG_PATH` before treating an ICU/Dolt build failure as a
+code failure.
 
 Per-developer secrets (API keys, provider tokens) live in a gitignored
 `.envrc.local` file that is sourced by `.envrc` if it exists. Create it with

@@ -6,8 +6,8 @@ ledger is part of mission stopping conditions (MissionGradient v2.0.0).
 An assertion whose premise dies reverts to a conjecture — edit it here,
 visibly, rather than letting it rot into heresy.
 
-Format per `conjecture-learning-proof-theory-2026-06-11.md`: a claim's scope
-is the domain its evidence covers; receipts are named artifacts.
+Format: a claim's scope is the domain its evidence covers; receipts are named
+artifacts. The superseded theory source remains available in Git history.
 
 ---
 

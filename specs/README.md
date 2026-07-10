@@ -96,7 +96,8 @@ computer.
 - Update the route before all ledgers prepare → route points to inconsistent
   state.
 
-**Design doc:** `docs/promotion-protocol-spec-staleness-and-redefinition-2026-07-03.md`.
+The promotion protocol's maintained product contract lives in
+`docs/computer-ontology.md`; historical design iterations remain in Git history.
 
 ---
 
@@ -182,5 +183,4 @@ changes the spec first; TLC runs in CI so the specs stay load-bearing.
 | route flip before all ledgers prepared | RouteConsistency | short trace |
 | candidate route-visible before commit | CandidateIsolation | short trace |
 
-Historical sabotage catalog for the old specs is preserved in the Git history
-of `docs/archive/` if needed.
+The historical sabotage catalog for old specs remains available in Git history.

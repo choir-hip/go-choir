@@ -25,17 +25,44 @@ const (
 )
 
 var highRead = map[string]bool{
-	"README.md":                                   true,
-	"AGENTS.md":                                   true,
-	"docs/README.md":                              true,
-	"docs/choir-doctrine.md":                      true,
-	"docs/current-architecture.md":                true,
-	"docs/platform-os-app-state.md":               true,
-	"docs/mission-portfolio-2026-06-11.md":        true,
-	"docs/conjecture-assertion-ledger-2026-06.md": true,
-	"docs/heresy-detectors.md":                    true,
-	"docs/runtime-invariants.md":                  true,
-	"docs/source-external-data-publication.md":    true,
+	"README.md":                                                true,
+	"AGENTS.md":                                                true,
+	"docs/README.md":                                           true,
+	"docs/choir-doctrine.md":                                   true,
+	"docs/semantic-registry.md":                                true,
+	"docs/NOW.md":                                              true,
+	"docs/ACTIVE.md":                                           true,
+	"docs/current-architecture.md":                             true,
+	"docs/platform-os-app-state.md":                            true,
+	"docs/conjecture-assertion-ledger-2026-06.md":              true,
+	"docs/heresy-detectors.md":                                 true,
+	"docs/agent-product-doctrine.md":                           true,
+	"docs/choir-prompting-invariants.md":                       true,
+	"docs/memo-problem-documentation-first.md":                 true,
+	"docs/computer-ontology.md":                                true,
+	"docs/runtime-invariants.md":                               true,
+	"docs/texture-agentic-invariants-2026-06-13.md":            true,
+	"docs/source-external-data-publication.md":                 true,
+	"docs/definitions/og-dolt-heresy-completion-2026-07-08.md": true,
+}
+
+// defaultReadPacket is intentionally small. It includes the docs router plus
+// the eleven content documents named by docs/README.md. --mode=live validates
+// this coherent current reading surface; the historical corpus remains
+// report-only until individual retention receipts exist.
+var defaultReadPacket = []string{
+	"README.md",
+	"AGENTS.md",
+	"docs/README.md",
+	"docs/choir-doctrine.md",
+	"docs/semantic-registry.md",
+	"docs/NOW.md",
+	"docs/ACTIVE.md",
+	"docs/computer-ontology.md",
+	"docs/runtime-invariants.md",
+	"docs/texture-agentic-invariants-2026-06-13.md",
+	"docs/source-external-data-publication.md",
+	"docs/definitions/og-dolt-heresy-completion-2026-07-08.md",
 }
 
 type manifestFile struct {
@@ -87,6 +114,7 @@ type warning struct {
 }
 
 type report struct {
+	Mode                  string          `json:"mode"`
 	GeneratedAt           string          `json:"generated_at"`
 	RuntimeMS             int64           `json:"runtime_ms"`
 	ManifestPath          string          `json:"manifest_path"`
@@ -104,6 +132,7 @@ type report struct {
 	AssertionRegister     assertionReport `json:"assertion_register"`
 	HeresyScan            heresyScan      `json:"heresy_scan"`
 	Documents             []docInfo       `json:"documents"`
+	LiveFailures          []warning       `json:"live_failures,omitempty"`
 }
 
 type heresyAccount struct {
@@ -180,7 +209,7 @@ type heresyScan struct {
 
 func main() {
 	start := time.Now()
-	var manifestPath, graphPath, assertionPath, reportPath, jsonPath, actor, writeAttempt string
+	var manifestPath, graphPath, assertionPath, reportPath, jsonPath, actor, writeAttempt, mode string
 	flag.StringVar(&manifestPath, "manifest", defaultManifest, "doc authority manifest path")
 	flag.StringVar(&graphPath, "mission-graph", defaultGraph, "mission graph path")
 	flag.StringVar(&assertionPath, "assertion-register", defaultAssertionRegister, "canonical conjecture/assertion register path")
@@ -188,7 +217,12 @@ func main() {
 	flag.StringVar(&jsonPath, "json", defaultJSON, "machine report output path")
 	flag.StringVar(&actor, "actor", "", "optional actor id for write-attempt guard probes")
 	flag.StringVar(&writeAttempt, "write-attempt", "", "optional markdown doc path an actor is attempting to write")
+	flag.StringVar(&mode, "mode", "full", "check mode: full (report-only corpus scan) or live (strict default reading packet)")
 	flag.Parse()
+	if mode != "full" && mode != "live" {
+		fmt.Fprintf(os.Stderr, "doccheck: invalid --mode %q (want full or live)\n", mode)
+		os.Exit(2)
+	}
 
 	rep, err := run(manifestPath, graphPath, assertionPath, actor, writeAttempt)
 	if err != nil {
@@ -196,8 +230,20 @@ func main() {
 		os.Exit(0)
 	}
 	rep.RuntimeMS = time.Since(start).Milliseconds()
+	rep.Mode = mode
+	if mode == "live" {
+		rep.LiveFailures = validateLiveReadPath(rep)
+	}
 	if err := writeReports(rep, reportPath, jsonPath); err != nil {
 		fmt.Fprintf(os.Stderr, "doccheck: write reports: %v\n", err)
+		os.Exit(0)
+	}
+	if mode == "live" {
+		if len(rep.LiveFailures) > 0 {
+			fmt.Printf("doccheck live check failed: %d failures, %dms\n", len(rep.LiveFailures), rep.RuntimeMS)
+			os.Exit(1)
+		}
+		fmt.Printf("doccheck live check passed: 11 content documents plus router, %dms\n", rep.RuntimeMS)
 		os.Exit(0)
 	}
 	fmt.Printf("doccheck report-only complete: %d docs, %d warnings, %dms\n", rep.DocsScanned, len(rep.Warnings), rep.RuntimeMS)
@@ -281,6 +327,7 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 			d.Edges = append(d.Edges, e)
 		}
 	}
+	warnings = append(warnings, scanBrokenCurrentDocLinks(mdFiles, docs)...)
 	reachable := reachableDocs(docs, allEdges)
 	for _, info := range docs {
 		if reachable[info.Path] {
@@ -506,6 +553,67 @@ func cleanPath(path string) string {
 var markdownLinkRe = regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
 var bareMDRe = regexp.MustCompile(`(?:^|[^A-Za-z0-9_./:-])((?:\.\./|\.\/)?(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.md)(?:#[A-Za-z0-9_.-]+)?`)
 
+// scanBrokenCurrentDocLinks catches a failure that edge collection intentionally
+// cannot represent: a Markdown link whose local target has already disappeared.
+// Historical evidence may retain such links; living docs may not.
+func scanBrokenCurrentDocLinks(files []string, docs map[string]*docInfo) []warning {
+	seen := map[string]bool{}
+	var warnings []warning
+	for _, path := range files {
+		info := docs[path]
+		if info == nil || !info.Manifested || (info.Scope != "current" && info.Scope != "mixed") {
+			continue
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		for line, text := range strings.Split(string(content), "\n") {
+			for _, match := range markdownLinkRe.FindAllStringSubmatch(text, -1) {
+				candidates := localMarkdownRefCandidates(path, match[1])
+				if len(candidates) == 0 {
+					continue
+				}
+				exists := false
+				for _, candidate := range candidates {
+					if fileExists(candidate) {
+						exists = true
+						break
+					}
+				}
+				if exists {
+					continue
+				}
+				key := fmt.Sprintf("%s\x00%d\x00%s", path, line+1, match[1])
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				warnings = append(warnings, warning{Rule: "R9", Severity: "warning", Path: path, Line: line + 1, Message: fmt.Sprintf("current or mixed doc links to missing markdown target %q", match[1]), Hint: "replace the reference with a retained authority or remove it before deleting the target"})
+			}
+		}
+	}
+	return warnings
+}
+
+func localMarkdownRefCandidates(source, raw string) []string {
+	ref := strings.TrimSpace(raw)
+	ref = strings.Trim(ref, "`'\"")
+	if i := strings.IndexAny(ref, "#?"); i >= 0 {
+		ref = ref[:i]
+	}
+	if ref == "" || strings.HasPrefix(ref, "http:") || strings.HasPrefix(ref, "https:") || strings.HasPrefix(ref, "mailto:") || !strings.HasSuffix(ref, ".md") {
+		return nil
+	}
+	if strings.HasPrefix(ref, "../") || strings.HasPrefix(ref, "./") {
+		return []string{cleanPath(filepath.Join(filepath.Dir(source), ref))}
+	}
+	if strings.Contains(ref, "/") {
+		return []string{cleanPath(ref), cleanPath(filepath.Join(filepath.Dir(source), ref))}
+	}
+	return []string{cleanPath(filepath.Join(filepath.Dir(source), ref)), cleanPath(filepath.Join("docs", ref)), cleanPath(ref)}
+}
+
 func collectEdges(files []string, docs map[string]*docInfo, manifestByPath map[string]manifestDoc) []edge {
 	seen := map[string]bool{}
 	var edges []edge
@@ -618,6 +726,72 @@ func reachableDocs(docs map[string]*docInfo, edges []edge) map[string]bool {
 		}
 	}
 	return reachable
+}
+
+// validateLiveReadPath deliberately checks only the authority surface a new
+// agent is expected to read. Historical graph/index problems remain visible in
+// --mode=full, but cannot make the current packet un-runnable forever.
+func validateLiveReadPath(rep report) []warning {
+	docs := map[string]docInfo{}
+	for _, doc := range rep.Documents {
+		docs[doc.Path] = doc
+	}
+
+	failures := []warning{}
+	packet := map[string]bool{}
+	for _, path := range defaultReadPacket {
+		packet[path] = true
+		doc, ok := docs[path]
+		if !ok || !doc.Exists {
+			failures = append(failures, warning{Rule: "L1", Severity: "error", Path: path, Message: "default reading packet document is missing"})
+			continue
+		}
+		if !doc.Manifested {
+			failures = append(failures, warning{Rule: "L1", Severity: "error", Path: path, Message: "default reading packet document is not manifested"})
+		}
+		if doc.Scope == "historical" || doc.Scope == "target" {
+			failures = append(failures, warning{Rule: "L1", Severity: "error", Path: path, Message: fmt.Sprintf("default reading packet document has non-current scope %q", doc.Scope)})
+		}
+	}
+
+	routerEdges := map[string]bool{}
+	for _, edge := range rep.Edges {
+		if edge.From == "docs/README.md" {
+			routerEdges[edge.To] = true
+		}
+	}
+	for _, path := range defaultReadPacket {
+		if path == "docs/README.md" {
+			continue
+		}
+		if !routerEdges[path] {
+			failures = append(failures, warning{Rule: "L2", Severity: "error", Path: "docs/README.md", Message: fmt.Sprintf("docs router does not link default reading packet document %q", path)})
+		}
+	}
+
+	for _, finding := range rep.Warnings {
+		if finding.Rule == "R3" && packet[finding.Path] {
+			failures = append(failures, warning{Rule: "L3", Severity: "error", Path: finding.Path, Line: finding.Line, Message: "default reading packet is not reachable from entry roots", Hint: finding.Message})
+		}
+	}
+
+	productDefinitions := 0
+	for _, doc := range rep.Documents {
+		if doc.Scope != "current" || doc.Annotations["doc_role"] != "definition" {
+			continue
+		}
+		for _, root := range doc.IsRoot {
+			if root == "authority" {
+				productDefinitions++
+				break
+			}
+		}
+	}
+	if productDefinitions != 1 {
+		failures = append(failures, warning{Rule: "L4", Severity: "error", Path: "docs/doc-authority-manifest.yaml", Message: fmt.Sprintf("expected exactly one current authority-root product Definition, found %d", productDefinitions)})
+	}
+
+	return failures
 }
 
 func witnessMatches(pattern string) ([]string, error) {
@@ -744,8 +918,8 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 			warnings = append(warnings, warning{Rule: "R5", Severity: "info", Path: path, Message: fmt.Sprintf("paradoc %s is not represented in mission graph", p), Hint: "add a mission graph node or classify it as historical/evidence"})
 		}
 	}
-	if !graphedPaths["docs/mission-docs-truth-system-v1.md"] {
-		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "current docs truth v1 paradoc is not represented in mission graph"})
+	if !graphedPaths["docs/definitions/documentation-authority-reduction-2026-07-09.md"] {
+		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "current documentation-authority Definition is not represented in mission graph"})
 	}
 	return rep, warnings
 }
@@ -1335,7 +1509,16 @@ func writeReports(rep report, reportPath, jsonPath string) error {
 func renderMarkdown(rep report) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Doccheck Report\n\n")
-	fmt.Fprintf(&b, "Report-only verdict: completed with %d warnings; v0 exits 0.\n\n", len(rep.Warnings))
+	if rep.Mode == "live" {
+		if len(rep.LiveFailures) == 0 {
+			fmt.Fprintf(&b, "Live verdict: default reading packet passes. Full-corpus warnings remain report-only.\n\n")
+		} else {
+			fmt.Fprintf(&b, "Live verdict: default reading packet fails with %d failures.\n\n", len(rep.LiveFailures))
+		}
+	} else {
+		fmt.Fprintf(&b, "Report-only verdict: completed with %d warnings; v0 exits 0.\n\n", len(rep.Warnings))
+	}
+	fmt.Fprintf(&b, "Mode: `%s`\n\n", rep.Mode)
 	fmt.Fprintf(&b, "Generated: %s\n\n", rep.GeneratedAt)
 	fmt.Fprintf(&b, "Runtime: %dms\n\n", rep.RuntimeMS)
 	fmt.Fprintf(&b, "Docs scanned: %d\n\n", rep.DocsScanned)
@@ -1343,6 +1526,17 @@ func renderMarkdown(rep report) string {
 	fmt.Fprintf(&b, "Inferred docs: %d\n\n", rep.InferredDocs)
 	fmt.Fprintf(&b, "Warnings by rule: %s\n\n", formatCounts(rep.WarningsByRule))
 	fmt.Fprintf(&b, "Warnings by severity: %s\n\n", formatCounts(rep.WarningsBySeverity))
+	if rep.Mode == "live" {
+		fmt.Fprintf(&b, "## Live Reading Packet\n\n")
+		if len(rep.LiveFailures) == 0 {
+			fmt.Fprintf(&b, "- passed: %d documents\n\n", len(defaultReadPacket))
+		} else {
+			for _, failure := range rep.LiveFailures {
+				fmt.Fprintf(&b, "- %s\n", formatWarning(failure))
+			}
+			fmt.Fprintf(&b, "\n")
+		}
+	}
 	fmt.Fprintf(&b, "## Mission Graph\n\n")
 	fmt.Fprintf(&b, "- Path: `%s`\n", rep.MissionGraph.Path)
 	fmt.Fprintf(&b, "- Status: `%s`\n", rep.MissionGraph.Status)

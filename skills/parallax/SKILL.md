@@ -16,8 +16,7 @@ claim. The artifact is the witness; observer shifts keep the mission from
 confusing a local proxy with real success; the variant keeps the search from
 mistaking motion for descent.
 
-Theory: `docs/conjecture-learning-proof-theory-2026-06-11.md`; design:
-`docs/parallax-design-2026-06-11.md`.
+The superseded theory and design sources remain available in Git history.
 
 ## The Mission Conjecture
 
@@ -468,8 +467,7 @@ review.
 - **No fake islands:** every domain embeds in production's.
 - **No self-checked proofs.**
 - **No unconsolidated handoffs:** accreted duplication is open variant.
-- **No identity:** obligations, not personas
-  (`docs/choir-role-free-actor-protocol-2026-06-11.md`).
+- **No identity:** obligations, not personas.
 
 ## Runtime Mapping
 
