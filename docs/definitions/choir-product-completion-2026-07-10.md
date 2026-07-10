@@ -615,6 +615,23 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     This PC-0 repair records but does not yet replace the package contract.
     The follow-up must create a sandbox manifest at build/install time and have
     vmctl transport that manifest without re-authoring its identity.
+- claim: one shared vendor checksum still materializes one vendor output per service derivation.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: Nix derivation graph + independently generated vendor trees
+  command_or_observation: >-
+    Evaluate all nine Go service derivations and generate the filtered vendor
+    tree for auth, sourcecycled, and sandbox.
+  result: >-
+    All filtered trees converge on
+    sha256-JxOGfaZ3J71NVicFEhn1Vsgy5nOa1Sk74gQ0oroAhLA=, but buildGoModule
+    creates a pname-specific go-modules derivation for each service. The
+    identical vendor tree is about 354 MiB, or roughly 3.2 GiB across a cold
+    nine-service build before Nix store optimization.
+  uncertainty: >-
+    This is a deployment cost, not an identity correctness blocker. A later
+    build-graph slice should expose one shared vendored source or one
+    multi-binary derivation without collapsing per-service activation and
+    rollback pointers.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
