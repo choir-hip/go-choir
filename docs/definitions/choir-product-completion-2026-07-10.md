@@ -86,12 +86,12 @@ Initial rollback ref: `224243de`.
 
 ## Definition Graph
 
-### PC-0. Deployment identity follows activation — OPEN, P0
+### PC-0. Deployment identity follows activation — SETTLED, P0
 
 ```yaml
 id: deployment-identity-follows-activation
 kind: boundary
-status: testing
+status: settled
 source: observed staging acceptance 2026-07-10
 definition: >-
   A service health response distinguishes the immutable commit compiled into
@@ -138,9 +138,9 @@ settlement_rule: >-
   undistributed cmd/choir-only and cmd/desktop-native-only changes do not
   activate Node B or guest images.
 execution_effect: >-
-  Health target identity alone is inadmissible for PC-1 or later settlement.
-  Wait for the deploy job and affected service activation before repeating the
-  product proof, then repair this boundary before the next identity-only claim.
+  Product acceptance names the affected artifact's compiled identity and a
+  completed activation receipt. Mutable target metadata, another component's
+  commit, or an in-progress deployment remains inadmissible.
 ```
 
 ### PC-1. API-key capability delegation — SETTLED, P0
@@ -447,7 +447,7 @@ surface expansion.
 
 ```yaml
 variant:
-  false_deploy_identity_paths: 1
+  false_deploy_identity_paths: 0
   reachable_auth_boundary_failures: 1
   false_promotion_success_paths: 1
   cli_product_contract_failures: 2
@@ -632,6 +632,52 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     build-graph slice should expose one shared vendored source or one
     multi-binary derivation without collapsing per-service activation and
     rollback pointers.
+- claim: PC-0 is settled by exact-source build, selected-artifact verification, and an activation receipt.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: full CI + exact-SHA deploy log + inverted in-progress probe + public staging acceptance
+  command_or_observation: >-
+    GitHub Actions run 29083767049 and deploy job 86334471531 for
+    f2d1d330c532e164bd21cdc1c013fcbe370c5404; GET https://choir.news/health;
+    GET https://choir.news/auth/session; inspect the served frontend asset.
+  result: >-
+    All standard and five race lanes passed. Node B fetched and reset to the
+    workflow SHA, and the one Nix builder completed the selected closure in
+    344 seconds. During activation, proxy already served compiled/header
+    commit f2d1d330 while deployed_commit remained empty; it advanced only
+    after verification. The durable receipt names ordinary_guest active,
+    playwright_guest installed, sandbox and one active computer active, all
+    seven host services active, and frontend asset index-CDCcbfLL.js active,
+    every one at f2d1d330. Public proxy health then reported compiled commit,
+    header commit, and deployed_commit all equal to f2d1d330; auth independently
+    reported its service/header commit, and the served frontend asset embedded
+    the same selected commit.
+  verifier_contracts:
+    - .github/scripts/deploy-workflow-contract-test
+    - internal/buildinfo activation-receipt validation
+    - internal/server immutable identity middleware
+    - sandbox runtime build manifest and active-computer commit poll
+  acceptance_level: deployed selected-artifact activation receipt plus public product identity proof
+  accepted_deploy_id: "29083767049/1"
+  rollback_refs:
+    - /var/lib/go-choir/deploy-receipt-previous.json
+    - /var/lib/go-choir/services/<service>-previous
+    - /var/www/go-choir/frontend-previous
+    - /nix/var/nix/profiles/system
+  mutation_class: red
+  protected_surfaces: [deployment routing, service identity, guest activation, run acceptance]
+  heresy_delta:
+    discovered: [moving-main checkout, dual builders, handwritten dependency closures, cross-component identity equality, inherited sandbox identity, nonfatal refresh]
+    introduced: []
+    repaired: [moving-main checkout, dual builders, handwritten dependency closures, cross-component identity equality, inherited sandbox identity, nonfatal refresh]
+  conjecture_delta: >-
+    Deployment truth is not one repository-wide SHA assertion. It is one
+    immutable tested source commit projected into independently observable
+    selected artifacts, followed by a receipt only after those artifacts meet
+    their activation class.
+  residual_risk: >-
+    Identical 354 MiB vendor trees remain separately materialized per service;
+    a later build-graph optimization must preserve the settled identity and
+    per-service rollback boundaries.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
@@ -663,19 +709,18 @@ SyncService, or one published Texture is not completion.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: deploy rerun selected moving main and failed the auth Nix fallback before activation
+  last_checkpoint: PC-0 exact-SHA selected-artifact activation receipt accepted on staging
   current_artifact_state: >-
     API-key delegation commit 3f4f4aac is active and accepted on staging after
-    the auth deploy completed. The transient pre-activation proof remains the
-    PC-0 problem record. The CLI timeout repair is green locally but held until
-    deployment routing stops treating the undistributed CLI as a full
-    host-and-guest rollout. PC-0 commit 94416899 is pushed but not deployed.
-    Its same-SHA actor rerun passed, then deploy job 86324338577 reset Node B
-    to newer origin/main commit b0b6d8af and failed the auth Nix fallback
-    because its source filter omitted internal/buildinfo. No activation ran.
+    the auth deploy completed. PC-0 is settled at f2d1d330: run 29083767049
+    built exactly its tested SHA through one Nix path, verified host, guest,
+    active-computer, and frontend identities, then published receipt
+    29083767049/1. The prepared CLI, Wails, promotion-definition, and Autopaper
+    slices remain local pending integration onto this deployed base.
   what_shipped:
     - 3f4f4aac API-key capability-envelope enforcement
     - eb3bdd35 false deployment identity problem record
+    - f2d1d330 exact-SHA single-builder selected-artifact activation receipts
   what_was_proven:
     - CLI trajectories read works on staging
     - CLI timeout hides the server's bounded 504
@@ -683,19 +728,18 @@ run_checkpoint_and_resumption_state:
     - Base and Autopaper gaps are substrate/control-path defects, not missing UI alone
     - proxy-global deployed_commit is not affected-service activation proof
     - API-key delegation and sibling revocation are bounded by caller capability on staging
+    - compiled identity is visible before and independent from activation receipt metadata
+    - every selected artifact in deploy 29083767049 has an explicit verified receipt entry
   unproven_or_partial_claims:
-    - immutable per-service deployment identity
-    - workflow-SHA-pinned deployment and PC-0 clean CI/deploy rerun
     - no Wails built-app acceptance
     - no deployed Autopaper duplicate count
     - no Base exact-byte two-device proof
     - no served ComputerVersion promotion
-  highest_impact_remaining_uncertainty: immutable per-service deployment identity
+  highest_impact_remaining_uncertainty: typed Autopaper retry idempotency and served route-slot promotion authority
   next_executable_probe: >-
-    Pin Node B checkout to the tested workflow SHA, add internal/buildinfo to
-    the auth Nix source closure, inject Commit and BuiltAt through the shared
-    Nix build path, then rerun CI/deploy and verify affected service identity.
-    Only then land and stage-time the prepared CLI timeout slice.
+    Integrate the prepared local slices onto f2d1d330. Finish the typed
+    Autopaper retry idempotency boundary, then land/stage the CLI timeout and
+    Wails containment slices under exact selected-artifact receipts.
   suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
@@ -703,4 +747,5 @@ run_checkpoint_and_resumption_state:
   rollback_refs:
     - 224243de (pre-program source state)
     - b7f689d4 (pre-API-key behavior repair)
+    - f2d1d330 deployment receipt rollback paths named in the PC-0 evidence entry
 ```
