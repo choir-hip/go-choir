@@ -22,8 +22,12 @@ authority, but it is not a second top-level product Definition.
 [`definitions/choir-seam-repair-2026-07-10.md`](definitions/choir-seam-repair-2026-07-10.md)
 is the active maintenance Definition for service-scoped deployment identity,
 RouteProfile format repair, compiled-only source-workspace identity, dead-code
-excision, and product-completion Definition state refresh. It may not override
-the product Definition.
+excision, and product-completion Definition state refresh. It is **settled**.
+
+[`definitions/choir-autopaper-activation-2026-07-10.md`](definitions/choir-autopaper-activation-2026-07-10.md)
+is the active sub-mission for Autopaper source-to-edition activation and
+sourcecycled/platform-computer stability. It inherits from the product-completion
+Definition and may not override the settled seam-repair state.
 
 [`definitions/documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md)
 is **complete**. It remains in the retained packet as the deletion receipt and
@@ -36,10 +40,16 @@ The seam-repair Definition is **settled** after staging acceptance at `944d4d94`
 proved per-service `/health` identity and RouteProfile promotion/rollback on
 `choir.news`.
 
+The next executable focus is the Autopaper sub-mission:
+[`definitions/choir-autopaper-activation-2026-07-10.md`](definitions/choir-autopaper-activation-2026-07-10.md).
+Root cause the platform computer and/or sourcecycled reboot loop, prove stable
+sourcecycled → platform computer → runtime → Texture activation, and produce a
+visible edition through `/api/universal-wire/stories`.
+
 Resume product-completion work at PC-2 (Wails token containment) and PC-3 (CLI
-request-budget), with Base product wiring still gated on the exact-byte
-stable-identity kernel. Typed Autopaper handoff idempotency remains open after
-projection-triggered activation deletion.
+request-budget) once Autopaper activation is stable, with Base product wiring
+still gated on the exact-byte stable-identity kernel. Typed Autopaper handoff
+idempotency remains open after projection-triggered activation deletion.
 
 The OG/Dolt/heresy spine still owns Texture semantic-forcing residue removal,
 Dolt history/audit load-bearing reads, and ComputerVersion promotion protocol

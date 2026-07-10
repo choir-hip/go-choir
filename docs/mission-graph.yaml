@@ -79,3 +79,24 @@ nodes:
       - docs/definitions/choir-product-completion-2026-07-10.md
       - docs/agent-product-doctrine.md
       - docs/computer-ontology.md
+  - id: choir-autopaper-activation-2026-07-10
+    title: Choir Autopaper Source-to-Edition Activation and Stability
+    path: docs/definitions/choir-autopaper-activation-2026-07-10.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    depends_on:
+      - choir-product-completion-2026-07-10
+      - choir-seam-repair-2026-07-10
+    enables: []
+    sources:
+      - docs/definitions/choir-autopaper-activation-2026-07-10.md
+      - docs/definitions/choir-product-completion-2026-07-10.md
+      - docs/definitions/choir-seam-repair-2026-07-10.md
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
+      - docs/runtime-invariants.md
+      - docs/texture-agentic-invariants-2026-06-13.md
+      - docs/source-external-data-publication.md

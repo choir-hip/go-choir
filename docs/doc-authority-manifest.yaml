@@ -199,3 +199,11 @@ documents:
     annotations: {doc_role: definition, authority: mission, lifecycle: active}
     witnesses: [docs/definitions/choir-seam-repair-2026-07-10.md, docs/definitions/choir-product-completion-2026-07-10.md, docs/mission-graph.yaml]
     refresh_triggers: [mission_state_change, deployment_identity_change, promotion_route_change]
+
+  - path: docs/definitions/choir-autopaper-activation-2026-07-10.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: active}
+    witnesses: [docs/definitions/choir-autopaper-activation-2026-07-10.md, docs/definitions/choir-product-completion-2026-07-10.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, autopaper_change, sourcecycled_change, vmctl_change, platform_computer_change]
