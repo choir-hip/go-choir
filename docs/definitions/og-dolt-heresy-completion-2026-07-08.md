@@ -493,6 +493,45 @@ execution_effect: >-
   M3.1. Rollback ref is d6ce587d.
 ```
 
+### M3.1b. H010 post-write email forcing deletion — READY
+
+```yaml
+id: post-write-email-forcing-deletion
+kind: conjecture
+status: ready
+source: choir-doctrine H010 + Phase B M3.1
+problem: >-
+  After a Texture write succeeds, `requiredContinuationAfterTextureEdit` parses
+  the original prompt and canonical document prose, synthesizes an email intent,
+  and directly invokes `request_email_draft`. Narrative content therefore still
+  selects and executes an exact next tool after the canonical write.
+classification: symptom on the Texture prompt-policy layer; not a substrate defect
+existing_replacement: >-
+  `request_email_draft` is already an unconditional typed Texture tool, and the
+  revision policy already tells Texture when the Email appagent handoff is
+  legitimate. The actor can choose that affordance from the structured owner
+  request and stored artifact without a backend prose oracle.
+conjecture: >-
+  Deleting the post-write parser/executor will remove hidden email routing while
+  preserving owner-requested draft creation through Texture's typed tool.
+protected_surfaces:
+  - canonical Texture revision aftermath
+  - Email appagent draft creation and approval boundary
+admissible_evidence:
+  - deletion diff and inverted tests proving a write result carries no forced email continuation
+  - direct typed request_email_draft contract remains green
+  - full runtime/race CI, Node B identity, and deployed Texture product smoke
+rollback_ref: 73657a8f
+heresy_delta:
+  discovered:
+    - H010 post-write prose parser directly executes request_email_draft
+  introduced: []
+  repaired: []
+execution_effect: >-
+  Problem documentation precedes behavior edits. The next action is the smallest
+  deletion-only implementation and inverted contract; no H010 repair claim yet.
+```
+
 ## Determined State Snapshot (2026-07-08)
 
 ```yaml
@@ -539,6 +578,9 @@ determined_state:
     - claim: H011/H012 production substring-oracle callsites are deleted and their detector is promoted to zero enforcement.
       source: observed (deletion diff + inverted tests + detector negative proof + CI/staging landing loop, 2026-07-10)
       execution_effect: M3.1a is settled; M3.1 continues with the H009/H010 forcing cluster.
+    - claim: Texture still parses prompt/document prose after a canonical write and directly executes request_email_draft.
+      source: observed (`executeTextureEditTool` → `requiredContinuationAfterTextureEdit` → `extractEmailDraftIntent`, 2026-07-10)
+      execution_effect: M3.1b is ready; delete the superseded branch before broad H009/H010 work.
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
