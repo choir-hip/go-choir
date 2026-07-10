@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -4586,7 +4588,7 @@ func TestCreateAPIKeyWithBearerToken(t *testing.T) {
 	}
 
 	// Create the first API key via cookie auth.
-	body := `{"label":"first key","scopes":["read:texture"]}`
+	body := `{"label":"first key","scopes":["manage:keys","read:texture","read:base"]}`
 	req := authedAPIKeyReq(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(body), priv, user.ID)
 	rec := httptest.NewRecorder()
 	h.HandleCreateAPIKey(rec, req)
@@ -4616,5 +4618,194 @@ func TestCreateAPIKeyWithBearerToken(t *testing.T) {
 	}
 	if secondResp.Label != "second key" {
 		t.Fatalf("label = %q, want second key", secondResp.Label)
+	}
+}
+
+func TestCreateAPIKeyRejectsReadOnlyBearerEscalation(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-escalation-user", "bearerescalation@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, secret, err := h.store.CreateAPIKey(t.Context(), user.ID, "read only", []string{"read:texture"}, nil)
+	if err != nil {
+		t.Fatalf("create read-only key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"escalated","scopes":["admin"]}`))
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	keys, err := h.store.ListAPIKeys(t.Context(), user.ID)
+	if err != nil {
+		t.Fatalf("list keys: %v", err)
+	}
+	if len(keys) != 1 {
+		t.Fatalf("keys = %d, want only the original key", len(keys))
+	}
+}
+
+func TestCreateAPIKeyRejectsBearerScopeBroadening(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-subset-user", "bearersubset@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, secret, err := h.store.CreateAPIKey(t.Context(), user.ID, "delegating key", []string{"manage:keys", "read:texture"}, nil)
+	if err != nil {
+		t.Fatalf("create delegating key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"broader","scopes":["write:runtime"]}`))
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+func TestRevokeAPIKeyRejectsReadOnlyBearerRevokingSibling(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-revoke-user", "bearerrevoke@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, callerSecret, err := h.store.CreateAPIKey(t.Context(), user.ID, "read only", []string{"read:texture"}, nil)
+	if err != nil {
+		t.Fatalf("create caller key: %v", err)
+	}
+	targetID, targetSecret, err := h.store.CreateAPIKey(t.Context(), user.ID, "target", []string{"read:base"}, nil)
+	if err != nil {
+		t.Fatalf("create target key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/auth/api-keys/"+targetID, nil)
+	req.Header.Set("Authorization", "Bearer "+callerSecret)
+	rec := httptest.NewRecorder()
+	h.HandleRevokeAPIKey(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if _, err := h.store.GetAPIKeyByHash(t.Context(), hashAPIKeySecret(targetSecret)); err != nil {
+		t.Fatalf("target key should remain active: %v", err)
+	}
+}
+
+func TestRevokeAPIKeyRejectsBearerRevokingBroaderSibling(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-revoke-broader-user", "bearerrevokebroader@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, callerSecret, err := h.store.CreateAPIKey(t.Context(), user.ID, "delegating key", []string{"manage:keys", "read:texture"}, nil)
+	if err != nil {
+		t.Fatalf("create caller key: %v", err)
+	}
+	targetID, targetSecret, err := h.store.CreateAPIKey(t.Context(), user.ID, "admin target", []string{"admin"}, nil)
+	if err != nil {
+		t.Fatalf("create target key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/auth/api-keys/"+targetID, nil)
+	req.Header.Set("Authorization", "Bearer "+callerSecret)
+	rec := httptest.NewRecorder()
+	h.HandleRevokeAPIKey(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+	if _, err := h.store.GetAPIKeyByHash(t.Context(), hashAPIKeySecret(targetSecret)); err != nil {
+		t.Fatalf("broader target key should remain active: %v", err)
+	}
+}
+
+func TestManageKeyCanRevokeSubsetSibling(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-revoke-subset-user", "bearerrevokesubset@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, callerSecret, err := h.store.CreateAPIKey(t.Context(), user.ID, "delegating key", []string{"manage:keys", "read:texture"}, nil)
+	if err != nil {
+		t.Fatalf("create caller key: %v", err)
+	}
+	targetID, targetSecret, err := h.store.CreateAPIKey(t.Context(), user.ID, "read target", []string{"read:texture"}, nil)
+	if err != nil {
+		t.Fatalf("create target key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/auth/api-keys/"+targetID, nil)
+	req.Header.Set("Authorization", "Bearer "+callerSecret)
+	rec := httptest.NewRecorder()
+	h.HandleRevokeAPIKey(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if _, err := h.store.GetAPIKeyByHash(t.Context(), hashAPIKeySecret(targetSecret)); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("target key should be revoked, got: %v", err)
+	}
+}
+
+func TestReadOnlyBearerCanRevokeItself(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-self-revoke-user", "bearerselfrevoke@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	keyID, secret, err := h.store.CreateAPIKey(t.Context(), user.ID, "read only", []string{"read:texture"}, nil)
+	if err != nil {
+		t.Fatalf("create key: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/auth/api-keys/"+keyID, nil)
+	req.Header.Set("Authorization", "Bearer "+secret)
+	rec := httptest.NewRecorder()
+	h.HandleRevokeAPIKey(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status: got %d, want %d; body: %s", rec.Code, http.StatusNoContent, rec.Body.String())
+	}
+	if _, err := h.store.GetAPIKeyByHash(t.Context(), hashAPIKeySecret(secret)); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("caller key should be revoked, got: %v", err)
+	}
+}
+
+func TestAdminBearerCanCreateAndRevokeOwnerKeys(t *testing.T) {
+	h, _ := testHandlerEnv(t)
+	user, err := h.store.CreateUser("bearer-admin-user", "beareradmin@example.com")
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, adminSecret, err := h.store.CreateAPIKey(t.Context(), user.ID, "admin", []string{"admin"}, nil)
+	if err != nil {
+		t.Fatalf("create admin key: %v", err)
+	}
+
+	createReq := httptest.NewRequest(http.MethodPost, "/auth/api-keys", bytes.NewBufferString(`{"label":"runtime writer","scopes":["write:runtime"]}`))
+	createReq.Header.Set("Authorization", "Bearer "+adminSecret)
+	createRec := httptest.NewRecorder()
+	h.HandleCreateAPIKey(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create status: got %d, want %d; body: %s", createRec.Code, http.StatusCreated, createRec.Body.String())
+	}
+	var created createAPIKeyResponse
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode created key: %v", err)
+	}
+
+	revokeReq := httptest.NewRequest(http.MethodDelete, "/auth/api-keys/"+created.ID, nil)
+	revokeReq.Header.Set("Authorization", "Bearer "+adminSecret)
+	revokeRec := httptest.NewRecorder()
+	h.HandleRevokeAPIKey(revokeRec, revokeReq)
+	if revokeRec.Code != http.StatusNoContent {
+		t.Fatalf("revoke status: got %d, want %d; body: %s", revokeRec.Code, http.StatusNoContent, revokeRec.Body.String())
 	}
 }

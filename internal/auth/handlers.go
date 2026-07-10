@@ -1276,6 +1276,7 @@ var validScopes = map[string]bool{
 	"write:base":    true,
 	"read:runtime":  true,
 	"write:runtime": true,
+	"manage:keys":   true,
 	"admin":         true,
 }
 
@@ -1331,17 +1332,17 @@ func (h *Handler) requireAuthUser(w http.ResponseWriter, r *http.Request) *User 
 }
 
 // requireAuthUserAny validates either the choir_access cookie (browser session)
-// or a Bearer API key (headless/CLI) and returns the authenticated user. This
-// allows API key management routes to be used from the CLI with an existing
-// API key. The first key must still be created via the browser UI.
-func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) *User {
+// or a Bearer API key (headless/CLI). For Bearer auth it also returns the
+// validated key so callers can preserve its capability envelope instead of
+// silently upgrading key authentication to full owner authority.
+func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) (*User, *APIKey) {
 	// 1. Try cookie-based JWT (browser sessions).
 	if cookie, err := r.Cookie(AccessTokenCookieName); err == nil && cookie.Value != "" {
 		userID, err := h.ValidateAccessToken(cookie.Value)
 		if err == nil {
 			user, err := h.store.GetUserByID(userID)
 			if err == nil {
-				return user
+				return user, nil
 			}
 		}
 	}
@@ -1358,13 +1359,38 @@ func (h *Handler) requireAuthUserAny(w http.ResponseWriter, r *http.Request) *Us
 				if err == nil {
 					// Update last_used_at (best-effort, ignore errors).
 					_ = h.store.TouchAPIKeyLastUsed(r.Context(), ak.ID)
-					return user
+					return user, ak
 				}
 			}
 		}
 	}
 	writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
-	return nil
+	return nil, nil
+}
+
+func apiKeyHasScope(scopes []string, want string) bool {
+	for _, scope := range scopes {
+		if scope == want {
+			return true
+		}
+	}
+	return false
+}
+
+func apiKeyScopeSubset(requested, delegated []string) bool {
+	if apiKeyHasScope(delegated, "admin") {
+		return true
+	}
+	for _, scope := range requested {
+		if !apiKeyHasScope(delegated, scope) {
+			return false
+		}
+	}
+	return true
+}
+
+func apiKeyMayManageKeys(key *APIKey) bool {
+	return key == nil || apiKeyHasScope(key.Scopes, "admin") || apiKeyHasScope(key.Scopes, "manage:keys")
 }
 
 // formatTimePtr formats a *time.Time as RFC3339, returning nil for nil.
@@ -1401,16 +1427,16 @@ func validateScopes(scopes []string) error {
 }
 
 // HandleCreateAPIKey handles POST /auth/api-keys.
-// It accepts either a choir_access cookie (WebAuthn session) or a Bearer API
-// key, creates a new API key, and returns the secret once. The secret is never
-// stored in plaintext — only the SHA-256 hash is persisted.
+// Cookie-authenticated owners may create any valid key. Bearer callers require
+// manage:keys or admin and may delegate only a subset of their own scopes.
+// The secret is returned once and never stored in plaintext.
 func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
 
-	user := h.requireAuthUserAny(w, r)
+	user, callerKey := h.requireAuthUserAny(w, r)
 	if user == nil {
 		return
 	}
@@ -1428,6 +1454,14 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 
 	if err := validateScopes(req.Scopes); err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+	if !apiKeyMayManageKeys(callerKey) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key requires manage:keys or admin to create keys"})
+		return
+	}
+	if callerKey != nil && !apiKeyScopeSubset(req.Scopes, callerKey.Scopes) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key cannot delegate requested scopes"})
 		return
 	}
 
@@ -1478,7 +1512,7 @@ func (h *Handler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := h.requireAuthUserAny(w, r)
+	user, _ := h.requireAuthUserAny(w, r)
 	if user == nil {
 		return
 	}
@@ -1499,15 +1533,16 @@ func (h *Handler) HandleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleRevokeAPIKey handles DELETE /auth/api-keys/{id}.
-// It accepts either a choir_access cookie or a Bearer API key and soft-deletes
-// (revokes) the specified API key. Only the key owner can revoke their own keys.
+// Cookie-authenticated owners may revoke any of their keys. A Bearer key may
+// always revoke itself; revoking a sibling requires manage:keys or admin, and a
+// non-admin manager may revoke only a key whose scopes are a subset of its own.
 func (h *Handler) HandleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
 
-	user := h.requireAuthUserAny(w, r)
+	user, callerKey := h.requireAuthUserAny(w, r)
 	if user == nil {
 		return
 	}
@@ -1518,6 +1553,34 @@ func (h *Handler) HandleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	if keyID == "" {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "key id is required"})
 		return
+	}
+	if callerKey != nil && callerKey.ID != keyID {
+		if !apiKeyMayManageKeys(callerKey) {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key requires manage:keys or admin to revoke sibling keys"})
+			return
+		}
+		if !apiKeyHasScope(callerKey.Scopes, "admin") {
+			keys, err := h.store.ListAPIKeys(r.Context(), user.ID)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to authorize api key revocation"})
+				return
+			}
+			var target *APIKey
+			for i := range keys {
+				if keys[i].ID == keyID {
+					target = &keys[i]
+					break
+				}
+			}
+			if target == nil {
+				writeJSON(w, http.StatusNotFound, errorResponse{Error: "api key not found"})
+				return
+			}
+			if !apiKeyScopeSubset(target.Scopes, callerKey.Scopes) {
+				writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key cannot revoke a key with broader scopes"})
+				return
+			}
+		}
 	}
 
 	if err := h.store.RevokeAPIKey(r.Context(), user.ID, keyID); err != nil {

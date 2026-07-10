@@ -92,8 +92,8 @@ Commands:
   run start <text>    Submit a prompt to the conductor (starts a run)
   run status <id>     Get the status of a prompt-bar submission
   api-key list        List your API keys
-  api-key create      Create a new API key (prints secret once)
-  api-key revoke <id> Revoke an API key
+  api-key create      Create a delegated API key (requires manage:keys or admin)
+  api-key revoke <id> Revoke this key, or a delegated key with manage:keys/admin
   version             Print CLI version
   help                Print this usage
 
@@ -539,7 +539,7 @@ func runAPIKeyCreate(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir api-key create", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	labelFlag := fs.String("label", "CLI key", "Label for the new API key")
-	scopesFlag := fs.String("scopes", "read:texture,read:base,read:runtime", "Comma-separated scopes")
+	scopesFlag := fs.String("scopes", "read:texture,read:base,read:runtime", "Comma-separated child scopes (must be within the caller's delegated scopes)")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir api-key create: %v\n", err)

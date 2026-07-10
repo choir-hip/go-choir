@@ -45,6 +45,7 @@
     { value: 'write:base', label: 'Write Base' },
     { value: 'read:runtime', label: 'Read Runtime' },
     { value: 'write:runtime', label: 'Write Runtime' },
+    { value: 'manage:keys', label: 'Manage API Keys' },
     { value: 'admin', label: 'Admin' },
   ];
 

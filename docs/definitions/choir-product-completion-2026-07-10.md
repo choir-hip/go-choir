@@ -109,13 +109,26 @@ existing_replacement: >-
   Proxy route authorization already carries and enforces API-key scopes. The
   auth handler must preserve the same capability envelope and enforce explicit
   key-management delegation plus child-scope subset rules.
+construction:
+  - add explicit manage:keys scope
+  - preserve the validated Bearer key through API-key management authentication
+  - require manage:keys or admin for sibling create/revoke operations
+  - constrain delegated and revoked sibling scopes to the caller's envelope
+  - retain cookie-owner authority and safe Bearer self-revocation
+local_evidence:
+  - pre-fix negative tests observed read-only create=201 and sibling revoke=204
+  - post-fix negative, subset, admin, cookie-owner, list, and self-revoke tests pass
+  - full internal/auth and internal/proxy suites pass
+  - focused auth/proxy race suites and go vet pass
 protected_surfaces: [auth/session, API-key authority, headless CLI]
 settlement_rule: >-
   Negative tests prove read-only keys cannot create or revoke; delegated key
   managers cannot mint broader scopes; admin and cookie-owner paths remain
   explicit; full auth/proxy tests and staging acceptance are green.
 execution_effect: >-
-  Fix before broadening CLI default scopes or adding mutation verbs.
+  Local repair is testing. No deployed repair claim until CI, Node B identity,
+  and non-destructive staging denial/delegation evidence are green. Do not
+  broaden CLI default scopes or add mutation verbs before settlement.
 ```
 
 ### PC-2. Wails token containment — OPEN, P0
@@ -412,9 +425,10 @@ run_checkpoint_and_resumption_state:
   status: working
   last_checkpoint: source/staging audit at 224243de
   current_artifact_state: >-
-    No behavior changes yet. Current evidence records two reachable auth
-    failures, a CLI timeout mismatch, false promotion success, a broken Base
-    synchronization kernel, and duplicate Autopaper activation.
+    The API-key delegation repair is green locally but unlanded. Current
+    evidence also records Wails token exposure, a CLI timeout mismatch, false
+    promotion success, a broken Base synchronization kernel, and duplicate
+    Autopaper activation.
   what_shipped: []
   what_was_proven:
     - CLI trajectories read works on staging
@@ -422,15 +436,17 @@ run_checkpoint_and_resumption_state:
     - current source contains reachable API-key and Wails secret-boundary failures
     - Base and Autopaper gaps are substrate/control-path defects, not missing UI alone
   unproven_or_partial_claims:
-    - no fixes have landed
+    - API-key delegation CI/deploy/staging proof
     - no Wails built-app acceptance
     - no deployed Autopaper duplicate count
     - no Base exact-byte two-device proof
     - no served ComputerVersion promotion
-  highest_impact_remaining_uncertainty: API-key delegation repair semantics
+  highest_impact_remaining_uncertainty: API-key delegation deployed enforcement
   next_executable_probe: >-
-    Add failing auth tests for read-only Bearer create/revoke and scope
-    escalation, then implement the smallest capability-preserving server fix.
+    Commit and push the API-key capability-envelope repair, require auth/proxy
+    standard and race CI green, verify Node B identity, then prove on staging
+    that a read-only Bearer cannot mint or revoke sibling authority while an
+    explicitly delegated manager can mint only a subset key.
   suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
