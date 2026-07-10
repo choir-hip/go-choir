@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+classifier="$script_dir/ci-impact-classify"
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+assert_output() {
+  local name="$1"
+  local paths="$2"
+  shift 2
+  local output="$tmpdir/$name.out"
+  printf '%s' "$paths" | "$classifier" --sha 0000000000000000000000000000000000000000 "$output" >/dev/null
+  local expected
+  for expected in "$@"; do
+    if ! grep -qxF "$expected" "$output"; then
+      echo "$name: missing output: $expected" >&2
+      cat "$output" >&2
+      exit 1
+    fi
+  done
+}
+
+assert_output docs-only $'docs/README.md\nAGENTS.md\n' \
+  'docs_only=true' 'non_docs=false' 'go=false' 'sbom=false' 'flakehub=false'
+
+assert_output auth-change $'internal/auth/service.go\ninternal/auth/service_test.go\n' \
+  'docs_only=false' 'go=true' 'sbom=true' 'flakehub=true' 'high_risk_race=false'
+
+assert_output tests-only $'internal/auth/service_test.go\ninternal/auth/testdata/fixture.json\n' \
+  'go=true' 'sbom=false' 'high_risk_race=false'
+
+assert_output runtime-change $'internal/runtime/engine.go\n' \
+  'go=true' 'sbom=true' 'high_risk_race=true'
+
+assert_output frontend-change $'frontend/src/routes/+page.svelte\n' \
+  'frontend=true' 'go=false' 'sbom=true' 'flakehub=true'
+
+assert_output workflow-only $'.github/workflows/ci.yml\n' \
+  'non_docs=true' 'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
+
+assert_output sbom-helper $'.github/scripts/build-sboms-differential\n' \
+  'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
+
+assert_output specs-change $'specs/promotion.tla\n' \
+  'specs=true' 'go=false' 'sbom=false' 'flakehub=true'
+
+sample_output="$tmpdir/sample.out"
+printf 'cmd/auth/main.go\n' | "$classifier" --sha 0000001400000000000000000000000000000000 "$sample_output" >/dev/null
+grep -qxF 'sample_bucket=0' "$sample_output"
+grep -qxF 'sampled_race=true' "$sample_output"
+
+force_output="$tmpdir/force.out"
+printf '' | CI_FORCE_ALL=true "$classifier" --sha 1111111111111111111111111111111111111111 "$force_output" >/dev/null
+for expected in go=true frontend=true specs=true sbom=true flakehub=true high_risk_race=true ci=true; do
+  grep -qxF "$expected" "$force_output"
+done
+
+echo "ci-impact-classify: all tests passed"

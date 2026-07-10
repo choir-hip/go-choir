@@ -2,11 +2,6 @@ name: Race Detector
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
   schedule:
     - cron: '17 8 * * 1'
 

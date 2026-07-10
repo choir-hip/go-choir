@@ -10,14 +10,8 @@ on:
         default: true
   push:
     branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
   pull_request:
     branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - '*.md'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -27,9 +21,89 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  plan:
+    name: Plan CI Lanes
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+      non_docs: ${{ steps.classify.outputs.non_docs }}
+      go: ${{ steps.classify.outputs.go }}
+      frontend: ${{ steps.classify.outputs.frontend }}
+      specs: ${{ steps.classify.outputs.specs }}
+      sbom: ${{ steps.classify.outputs.sbom }}
+      flakehub: ${{ steps.classify.outputs.flakehub }}
+      high_risk_race: ${{ steps.classify.outputs.high_risk_race }}
+      ci: ${{ steps.classify.outputs.ci }}
+      sampled_race: ${{ steps.classify.outputs.sampled_race }}
+      sample_bucket: ${{ steps.classify.outputs.sample_bucket }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Classify changed paths and deterministic race sample
+        id: classify
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          force_all=false
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              force_all=true
+              before=""
+              ;;
+            pull_request)
+              before="$PR_BASE"
+              ;;
+            push)
+              before="$PUSH_BEFORE"
+              ;;
+            *)
+              force_all=true
+              before=""
+              ;;
+          esac
+
+          if [[ "$force_all" != "true" && -n "$before" && ! "$before" =~ ^0+$ ]]; then
+            git cat-file -e "${before}^{commit}" 2>/dev/null || git fetch --no-tags --depth=1 origin "$before"
+          else
+            force_all=true
+          fi
+
+          if [[ "$force_all" == "true" ]]; then
+            printf '' | CI_FORCE_ALL=true .github/scripts/ci-impact-classify --sha "$AFTER" "$GITHUB_OUTPUT"
+          else
+            git diff --name-only "$before" "$AFTER" |
+              .github/scripts/ci-impact-classify --sha "$AFTER" "$GITHUB_OUTPUT"
+          fi
+
+  ci-config-test:
+    name: Test CI Configuration
+    runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.ci == 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Test CI classifiers and differential SBOM reuse
+        shell: bash
+        run: |
+          set -euo pipefail
+          .github/scripts/ci-impact-classify-test
+          .github/scripts/build-sboms-differential-test
+          .github/scripts/deploy-impact-classify-test
+          bash -n .github/scripts/*
+
   go-vet-build:
     name: Go Vet + Build
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -48,6 +122,8 @@ jobs:
   tla-model-check:
     name: TLA+ Model Check (specs/)
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.specs == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -72,6 +148,8 @@ jobs:
   go-test:
     name: Go Test (non-runtime shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -95,6 +173,8 @@ jobs:
   go-test-runtime:
     name: Go Test (internal/runtime shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -115,9 +195,16 @@ jobs:
           SHARD_INDEX: ${{ matrix.shard }}
         run: scripts/go-test-runtime-shards
 
+      - name: Go test integration-tagged smoke
+        if: matrix.shard == 1
+        shell: bash
+        run: scripts/go-test-integration
+
   go-test-runtime-race:
     name: Go Test (internal/runtime race shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.high_risk_race == 'true' || (github.event_name == 'push' && needs.plan.outputs.go == 'true' && needs.plan.outputs.sampled_race == 'true')
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -130,6 +217,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Go test internal/runtime shard with -race
         shell: bash
@@ -141,6 +229,8 @@ jobs:
   go-test-race:
     name: Go Test (non-runtime race)
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.high_risk_race == 'true' || (github.event_name == 'push' && needs.plan.outputs.go == 'true' && needs.plan.outputs.sampled_race == 'true')
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
@@ -149,6 +239,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Go test non-runtime packages with -race
         shell: bash
@@ -159,25 +250,10 @@ jobs:
             scripts/go-test-with-timing -race -count=1 "${packages[@]}"
           fi
 
-  go-test-integration:
-    name: Go Test (integration-tagged smoke)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Go test integration-tagged smoke
-        shell: bash
-        run: scripts/go-test-integration
-
   doccheck:
     name: Docs Truth Check
     runs-on: ubuntu-latest
+    needs: plan
     steps:
       - uses: actions/checkout@v6
 
@@ -196,7 +272,7 @@ jobs:
         run: test -s doccheck-report.md && test -s doccheck.json
 
       - name: Upload doccheck reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: doccheck-report
           path: |
@@ -206,6 +282,8 @@ jobs:
   heresy-detector:
     name: Heresy Detector Discovery
     runs-on: ubuntu-latest
+    needs: plan
+    if: needs.plan.outputs.non_docs == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -223,7 +301,7 @@ jobs:
         run: scripts/check-heresies.sh --report heresy-detector-report.json
 
       - name: Upload heresy detector report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: heresy-detector-report
           path: heresy-detector-report.json
@@ -232,44 +310,64 @@ jobs:
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [go-vet-build, go-test, go-test-runtime, go-test-integration, doccheck, heresy-detector]
+    needs: [plan, ci-config-test, go-vet-build, tla-model-check, go-test, go-test-runtime, go-test-runtime-race, go-test-race, doccheck, heresy-detector, build-frontend]
     if: always()
     steps:
-      - name: Confirm Go gates passed
+      - name: Confirm selected CI gates passed
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ needs.go-vet-build.result }}" != "success" ]]; then
-            echo "go-vet-build result: ${{ needs.go-vet-build.result }}" >&2
+          require_success() {
+            local selected="$1"
+            local name="$2"
+            local result="$3"
+            if [[ "$selected" == "true" && "$result" != "success" ]]; then
+              echo "$name was selected but result was $result" >&2
+              exit 1
+            fi
+          }
+          require_if_run() {
+            local name="$1"
+            local result="$2"
+            if [[ "$result" != "skipped" && "$result" != "success" ]]; then
+              echo "$name ran but result was $result" >&2
+              exit 1
+            fi
+          }
+
+          [[ "${{ needs.plan.result }}" == "success" ]] || {
+            echo "plan result: ${{ needs.plan.result }}" >&2
             exit 1
-          fi
-          if [[ "${{ needs.go-test.result }}" != "success" ]]; then
-            echo "go-test result: ${{ needs.go-test.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.go-test-runtime.result }}" != "success" ]]; then
-            echo "go-test-runtime result: ${{ needs.go-test-runtime.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.go-test-integration.result }}" != "success" ]]; then
-            echo "go-test-integration result: ${{ needs.go-test-integration.result }}" >&2
-            exit 1
-          fi
-          if [[ "${{ needs.doccheck.result }}" != "success" ]]; then
+          }
+          [[ "${{ needs.doccheck.result }}" == "success" ]] || {
             echo "doccheck result: ${{ needs.doccheck.result }}" >&2
             exit 1
+          }
+
+          require_success "${{ needs.plan.outputs.go }}" go-vet-build "${{ needs.go-vet-build.result }}"
+          require_success "${{ needs.plan.outputs.go }}" go-test "${{ needs.go-test.result }}"
+          require_success "${{ needs.plan.outputs.go }}" go-test-runtime "${{ needs.go-test-runtime.result }}"
+          require_success "${{ needs.plan.outputs.specs }}" tla-model-check "${{ needs.tla-model-check.result }}"
+          require_success "${{ needs.plan.outputs.non_docs }}" heresy-detector "${{ needs.heresy-detector.result }}"
+          require_success "${{ needs.plan.outputs.ci }}" ci-config-test "${{ needs.ci-config-test.result }}"
+          race_selected=false
+          if [[ "${{ needs.plan.outputs.high_risk_race }}" == "true" ]] || \
+             [[ "${{ github.event_name }}" == "push" && "${{ needs.plan.outputs.go }}" == "true" && "${{ needs.plan.outputs.sampled_race }}" == "true" ]]; then
+            race_selected=true
           fi
-          if [[ "${{ needs.heresy-detector.result }}" != "success" ]]; then
-            echo "heresy-detector result: ${{ needs.heresy-detector.result }}" >&2
-            exit 1
-          fi
-          echo "Go vet, test, build, doccheck, and heresy-detector gates passed"
+          require_success "$race_selected" go-test-runtime-race "${{ needs.go-test-runtime-race.result }}"
+          require_success "$race_selected" go-test-race "${{ needs.go-test-race.result }}"
+          require_if_run build-frontend "${{ needs.build-frontend.result }}"
+          echo "All selected CI gates passed"
 
   sbom:
-    name: Generate SBOMs
+    name: Generate Differential SBOMs
     runs-on: ubuntu-latest
-    needs: [go-vet-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [plan, check]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.sbom == 'true' && needs.check.result == 'success'
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -278,86 +376,55 @@ jobs:
         with:
           determinate: false
 
-      - name: Build SBOMs for all packages
+      - name: Cache Nix store
+        uses: DeterminateSystems/magic-nix-cache-action@v14
+        with:
+          use-gha-cache: enabled
+          use-flakehub: disabled
+
+      - name: Restore previous complete SBOM bundle
+        id: restore-sbom-baseline
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/sbom-baseline
+          key: sbom-bundle-v2-${{ github.sha }}
+          restore-keys: |
+            sbom-bundle-v2-
+
+      - name: Build changed SBOM derivations and reuse identical ones
+        shell: bash
+        run: .github/scripts/build-sboms-differential sboms "$RUNNER_TEMP/sbom-baseline" "$GITHUB_SHA"
+
+      - name: Save complete SBOM bundle as next baseline
+        shell: bash
         run: |
-          set -euo pipefail
-          mkdir -p sboms
-          sbomnix_bin=$(nix build github:tiiuae/sbomnix#sbomnix --no-link --print-out-paths 2>/dev/null)
-          required_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend zot "
-          failed=0
-          required_failed=0
-          manifest="sboms/manifest.jsonl"
-          : > "$manifest"
-          is_required() {
-            [[ "$required_packages" == *" $1 "* ]]
-          }
-          record_manifest() {
-            local pkg="$1"
-            local required="$2"
-            local status="$3"
-            local reason="$4"
-            printf '{"package":"%s","required":%s,"status":"%s","reason":"%s"}\n' "$pkg" "$required" "$status" "$reason" >> "$manifest"
-          }
-          for pkg in auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot; do
-            echo "==> Building SBOM for ${pkg}"
-            required=false
-            if is_required "$pkg"; then
-              required=true
-            fi
-            err_log=$(mktemp)
-            store_path=$(nix build .#${pkg} --no-link --print-out-paths 2>"$err_log") || {
-              echo "    SKIP: package build failed for ${pkg}"
-              echo "      --- first 40 stderr lines ---"
-              sed -n '1,40p' "$err_log" | sed 's/^/      /'
-              echo "      --- last 80 stderr lines ---"
-              tail -80 "$err_log" | sed 's/^/      /'
-              failed=$((failed + 1))
-              if [[ "$required" == "true" ]]; then
-                required_failed=$((required_failed + 1))
-              fi
-              record_manifest "$pkg" "$required" "skipped" "package_build_failed"
-              rm -f "$err_log"
-              continue
-            }
-            rm -f "$err_log"
-            mkdir -p "sboms/${pkg}"
-            if "$sbomnix_bin/bin/sbomnix" --cdx "sboms/${pkg}/sbom.json" "$store_path" 2>&1; then
-              echo "    OK: sboms/${pkg}/sbom.json"
-              record_manifest "$pkg" "$required" "ok" ""
-            else
-              echo "    SKIP: sbomnix failed for ${pkg}"
-              failed=$((failed + 1))
-              if [[ "$required" == "true" ]]; then
-                required_failed=$((required_failed + 1))
-              fi
-              record_manifest "$pkg" "$required" "skipped" "sbomnix_failed"
-            fi
-          done
-          echo "==> SBOM generation complete: $failed package(s) skipped, $required_failed required package(s) missing"
-          if [ "$failed" -gt 0 ]; then
-            echo "::warning::${failed} SBOM(s) skipped due to build failures (artifacts uploaded for successful packages)"
-          fi
-          if [ "$required_failed" -gt 0 ]; then
-            echo "::error::${required_failed} required SBOM(s) missing; see sboms/manifest.jsonl"
-            exit 1
-          fi
+          rm -rf "$RUNNER_TEMP/sbom-baseline"
+          mkdir -p "$RUNNER_TEMP/sbom-baseline"
+          cp -a sboms/. "$RUNNER_TEMP/sbom-baseline/"
+
+      - name: Cache complete SBOM baseline
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/sbom-baseline
+          key: sbom-bundle-v2-${{ github.sha }}
 
       - name: Upload SBOM artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sboms-${{ github.sha }}
           path: |
             sboms/*/sbom.json
             sboms/manifest.jsonl
+            sboms/diff.json
           if-no-files-found: error
           retention-days: 90
 
   build-frontend:
     name: Build Frontend
     runs-on: ubuntu-latest
-    needs: [deploy-impact]
-    if: always() && (github.event_name == 'pull_request' || needs.deploy-impact.outputs.deploy_frontend == 'true')
+    needs: [plan, deploy-impact]
+    if: always() && ((github.event_name == 'pull_request' && needs.plan.outputs.frontend == 'true') || needs.deploy-impact.outputs.deploy_frontend == 'true')
     steps:
       - uses: actions/checkout@v6
 
@@ -380,7 +447,8 @@ jobs:
   deploy-impact:
     name: Detect Staging Deploy Impact
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    needs: plan
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && needs.plan.outputs.non_docs == 'true'
     outputs:
       deploy_needed: ${{ steps.detect.outputs.deploy_needed }}
       deploy_host: ${{ steps.detect.outputs.deploy_host }}
@@ -447,6 +515,26 @@ jobs:
           else
             echo "Skipping staging deploy: only docs, workflow, or Playwright test artifacts changed."
           fi
+
+  flakehub-publish:
+    name: Publish Rolling Flake
+    runs-on: ubuntu-latest
+    needs: [plan, check]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.flakehub == 'true' && needs.check.result == 'success'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: DeterminateSystems/flakehub-push@main
+        with:
+          name: choir-hip/go-choir
+          rolling: true
+          visibility: public
+          include-output-paths: true
 
   deploy-staging:
     name: Deploy to Staging (Node B)

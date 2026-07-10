@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+ci-impact-classify reads changed file paths from stdin and writes a CI plan.
+
+Usage:
+  git diff --name-only <base>..<head> | ci-impact-classify --sha <commit> [output-file]
+
+Set CI_FORCE_ALL=true for manual or recovery runs where every lane must run.
+EOF
+}
+
+sha=""
+output_file=""
+while (($# > 0)); do
+  case "$1" in
+    --sha)
+      [[ $# -ge 2 ]] || { usage; exit 2; }
+      sha="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      if [[ -n "$output_file" ]]; then
+        usage
+        exit 2
+      fi
+      output_file="$1"
+      shift
+      ;;
+  esac
+done
+
+if [[ -t 0 ]]; then
+  usage
+  exit 1
+fi
+
+if [[ -n "$sha" && ! "$sha" =~ ^[0-9a-fA-F]{8,40}$ ]]; then
+  echo "--sha must be 8-40 hexadecimal characters, got: $sha" >&2
+  exit 2
+fi
+
+declare -a changed=()
+declare -a explanations=()
+while IFS= read -r path; do
+  [[ -z "$path" ]] && continue
+  changed+=("$path")
+done
+
+non_docs=false
+go=false
+frontend=false
+specs=false
+sbom=false
+flakehub=false
+high_risk_race=false
+ci=false
+
+is_docs_path() {
+  local path="$1"
+  [[ "$path" == docs/* ]] || [[ "$path" != */* && "$path" == *.md ]]
+}
+
+mark() {
+  local variable="$1"
+  local reason="$2"
+  printf -v "$variable" true
+  explanations+=("$reason")
+}
+
+if [[ "${CI_FORCE_ALL:-false}" == "true" ]]; then
+  non_docs=true
+  go=true
+  frontend=true
+  specs=true
+  sbom=true
+  flakehub=true
+  high_risk_race=true
+  ci=true
+  explanations+=("manual/recovery run -> all CI lanes")
+else
+  for path in "${changed[@]}"; do
+    if ! is_docs_path "$path"; then
+      non_docs=true
+    fi
+
+    if ! is_docs_path "$path" && [[ "$path" != .github/* ]]; then
+      flakehub=true
+    fi
+
+    case "$path" in
+      .github/*)
+        mark ci "$path -> CI tooling verification"
+        ;;
+    esac
+
+    case "$path" in
+      .github/workflows/ci.yml|.github/scripts/build-sboms-*)
+        mark sbom "$path -> differential SBOM implementation verification"
+        ;;
+    esac
+
+    case "$path" in
+      cmd/*|internal/*|configs/*|skills/*|go.mod|go.sum|scripts/go-test-*)
+        mark go "$path -> Go verification"
+        ;;
+    esac
+
+    case "$path" in
+      frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/pnpm-lock.yaml|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
+        mark frontend "$path -> frontend build"
+        ;;
+    esac
+
+    case "$path" in
+      specs/*)
+        mark specs "$path -> TLA+ model check"
+        ;;
+    esac
+
+    case "$path" in
+      flake.nix|flake.lock|go.mod|go.sum|skills/*|frontend/src/*|frontend/public/*|frontend/package.json|frontend/package-lock.json|frontend/svelte.config.js|frontend/vite.config.js|frontend/index.html)
+        mark sbom "$path -> SBOM derivation input"
+        ;;
+      cmd/*|internal/*)
+        if [[ "$path" != *_test.go && "$path" != internal/*/testdata/* ]]; then
+          mark sbom "$path -> service SBOM derivation input"
+        fi
+        ;;
+    esac
+
+    case "$path" in
+      go.mod|go.sum|scripts/go-test-*|internal/runtime/*|internal/actor/*|internal/actorruntime/*|internal/events/*|internal/store/*|internal/vmmanager/*|internal/vmctl/*)
+        mark high_risk_race "$path -> always-on race-sensitive substrate"
+        ;;
+    esac
+  done
+fi
+
+docs_only=false
+if ((${#changed[@]} > 0)) && [[ "$non_docs" == "false" ]]; then
+  docs_only=true
+fi
+
+sample_bucket=-1
+sampled_race=false
+if [[ -n "$sha" ]]; then
+  sample_bucket=$((16#${sha:0:8} % 20))
+  if ((sample_bucket == 0)); then
+    sampled_race=true
+  fi
+fi
+
+emit() {
+  cat <<EOF
+docs_only=${docs_only}
+non_docs=${non_docs}
+go=${go}
+frontend=${frontend}
+specs=${specs}
+sbom=${sbom}
+flakehub=${flakehub}
+high_risk_race=${high_risk_race}
+ci=${ci}
+sampled_race=${sampled_race}
+sample_bucket=${sample_bucket}
+EOF
+}
+
+if [[ -n "$output_file" ]]; then
+  emit >> "$output_file"
+fi
+
+emit
+printf '%s\n' "${explanations[@]}"
+echo "SHA sample bucket ${sample_bucket}/20 (bucket 0 runs the 5% sampled race lane)"

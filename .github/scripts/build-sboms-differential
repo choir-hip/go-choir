@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+output_dir="${1:-sboms}"
+baseline_dir="${2:-}"
+source_commit="${3:-$(git rev-parse HEAD)}"
+
+packages=(auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot)
+required_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend zot "
+
+rm -rf "$output_dir"
+mkdir -p "$output_dir"
+manifest="$output_dir/manifest.jsonl"
+diff_jsonl="$output_dir/diff.jsonl"
+: > "$manifest"
+: > "$diff_jsonl"
+
+baseline_manifest=""
+if [[ -n "$baseline_dir" && -s "$baseline_dir/manifest.jsonl" ]]; then
+  baseline_manifest="$baseline_dir/manifest.jsonl"
+fi
+
+baseline_commit=""
+if [[ -n "$baseline_manifest" ]]; then
+  baseline_commit="$(jq -r 'select(.source_commit != null) | .source_commit' "$baseline_manifest" | head -n 1)"
+fi
+
+is_required() {
+  [[ "$required_packages" == *" $1 "* ]]
+}
+
+baseline_field() {
+  local package="$1"
+  local field="$2"
+  if [[ -z "$baseline_manifest" ]]; then
+    return 0
+  fi
+  jq -r --arg package "$package" --arg field "$field" \
+    'select(.package == $package) | .[$field] // empty' "$baseline_manifest" | head -n 1
+}
+
+component_keys() {
+  local file="$1"
+  jq -r '
+    (.components // [])[]
+    | (.purl // ."bom-ref" // ((.name // "unknown") + "@" + (.version // "unknown")))
+  ' "$file" | sort -u
+}
+
+record_diff() {
+  local package="$1"
+  local status="$2"
+  local before_file="$3"
+  local after_file="$4"
+  local before_keys after_keys added_keys removed_keys
+  before_keys="$(mktemp)"
+  after_keys="$(mktemp)"
+  added_keys="$(mktemp)"
+  removed_keys="$(mktemp)"
+
+  if [[ -s "$before_file" ]]; then
+    component_keys "$before_file" > "$before_keys"
+  else
+    : > "$before_keys"
+  fi
+  component_keys "$after_file" > "$after_keys"
+  comm -13 "$before_keys" "$after_keys" > "$added_keys"
+  comm -23 "$before_keys" "$after_keys" > "$removed_keys"
+
+  jq -n \
+    --arg package "$package" \
+    --arg status "$status" \
+    --argjson added "$(jq -R . < "$added_keys" | jq -s .)" \
+    --argjson removed "$(jq -R . < "$removed_keys" | jq -s .)" \
+    '{package: $package, status: $status, added: $added, removed: $removed}' >> "$diff_jsonl"
+
+  rm -f "$before_keys" "$after_keys" "$added_keys" "$removed_keys"
+}
+
+failed=0
+required_failed=0
+built=0
+reused=0
+
+for package in "${packages[@]}"; do
+  required=false
+  if is_required "$package"; then
+    required=true
+  fi
+
+  attr=".#sbom.x86_64-linux.${package}"
+  echo "==> Evaluating SBOM derivation for ${package}"
+  derivation="$(nix eval --raw "${attr}.drvPath")"
+  previous_derivation="$(baseline_field "$package" derivation)"
+  previous_sha="$(baseline_field "$package" sbom_sha256)"
+  baseline_sbom=""
+  if [[ -n "$baseline_dir" ]]; then
+    baseline_sbom="${baseline_dir}/${package}/sbom.json"
+  fi
+  package_dir="$output_dir/$package"
+  package_sbom="$package_dir/sbom.json"
+  mkdir -p "$package_dir"
+
+  status=built
+  reason=derivation_changed
+  if [[ -n "$previous_derivation" && "$previous_derivation" == "$derivation" && -n "$baseline_sbom" && -s "$baseline_sbom" ]]; then
+    actual_previous_sha="$(sha256sum "$baseline_sbom" | awk '{print $1}')"
+    if [[ -n "$previous_sha" && "$previous_sha" == "$actual_previous_sha" ]]; then
+      cp "$baseline_sbom" "$package_sbom"
+      status=reused
+      reason=identical_derivation
+      reused=$((reused + 1))
+      echo "    Reused ${package} from ${baseline_commit:-previous baseline}"
+    else
+      reason=baseline_checksum_mismatch
+      echo "    Baseline checksum mismatch for ${package}; rebuilding"
+    fi
+  elif [[ -z "$previous_derivation" ]]; then
+    reason=no_baseline
+  fi
+
+  if [[ "$status" == "built" ]]; then
+    err_log="$(mktemp)"
+    if sbom_path="$(nix build "$attr" --no-link --print-out-paths 2>"$err_log")"; then
+      cp "$sbom_path/sbom.json" "$package_sbom"
+      built=$((built + 1))
+      echo "    Built ${package}"
+    else
+      echo "    Failed to build SBOM for ${package}" >&2
+      sed -n '1,40p' "$err_log" >&2
+      tail -80 "$err_log" >&2
+      failed=$((failed + 1))
+      if [[ "$required" == "true" ]]; then
+        required_failed=$((required_failed + 1))
+      fi
+      jq -nc \
+        --arg package "$package" \
+        --argjson required "$required" \
+        --arg source_commit "$source_commit" \
+        --arg previous_commit "$baseline_commit" \
+        --arg derivation "$derivation" \
+        --arg previous_derivation "$previous_derivation" \
+        '{package: $package, required: $required, status: "failed", reason: "sbom_build_failed", source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation}' >> "$manifest"
+      rm -f "$err_log"
+      continue
+    fi
+    rm -f "$err_log"
+  fi
+
+  sbom_sha="$(sha256sum "$package_sbom" | awk '{print $1}')"
+  jq -nc \
+    --arg package "$package" \
+    --argjson required "$required" \
+    --arg status "$status" \
+    --arg reason "$reason" \
+    --arg source_commit "$source_commit" \
+    --arg previous_commit "$baseline_commit" \
+    --arg derivation "$derivation" \
+    --arg previous_derivation "$previous_derivation" \
+    --arg sbom_sha256 "$sbom_sha" \
+    '{package: $package, required: $required, status: $status, reason: $reason, source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation, sbom_sha256: $sbom_sha256}' >> "$manifest"
+
+  record_diff "$package" "$status" "$baseline_sbom" "$package_sbom"
+done
+
+jq -s \
+  --arg source_commit "$source_commit" \
+  --arg previous_commit "$baseline_commit" \
+  '{source_commit: $source_commit, previous_commit: $previous_commit, packages: .}' \
+  "$diff_jsonl" > "$output_dir/diff.json"
+rm -f "$diff_jsonl"
+
+echo "==> SBOM generation complete: ${built} built, ${reused} reused, ${failed} failed"
+if ((required_failed > 0)); then
+  echo "${required_failed} required SBOM(s) failed" >&2
+  exit 1
+fi
