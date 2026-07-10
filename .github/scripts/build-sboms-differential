@@ -81,6 +81,25 @@ failed=0
 required_failed=0
 built=0
 reused=0
+sbomnix_bin=""
+
+ensure_sbomnix() {
+  if [[ -n "$sbomnix_bin" ]]; then
+    return 0
+  fi
+
+  local owner repo rev
+  owner="$(jq -r '.nodes.sbomnix.locked.owner' flake.lock)"
+  repo="$(jq -r '.nodes.sbomnix.locked.repo' flake.lock)"
+  rev="$(jq -r '.nodes.sbomnix.locked.rev' flake.lock)"
+  if [[ -z "$owner" || -z "$repo" || -z "$rev" || "$owner" == "null" || "$repo" == "null" || "$rev" == "null" ]]; then
+    echo "flake.lock does not contain a pinned sbomnix GitHub revision" >&2
+    return 1
+  fi
+
+  echo "==> Building pinned sbomnix ${owner}/${repo}@${rev}"
+  sbomnix_bin="$(nix build "github:${owner}/${repo}/${rev}#sbomnix" --no-link --print-out-paths)"
+}
 
 for package in "${packages[@]}"; do
   required=false
@@ -121,12 +140,8 @@ for package in "${packages[@]}"; do
 
   if [[ "$status" == "built" ]]; then
     err_log="$(mktemp)"
-    if sbom_path="$(nix build "$attr" --no-link --print-out-paths 2>"$err_log")"; then
-      cp "$sbom_path/sbom.json" "$package_sbom"
-      built=$((built + 1))
-      echo "    Built ${package}"
-    else
-      echo "    Failed to build SBOM for ${package}" >&2
+    if ! store_path="$(nix build ".#${package}" --no-link --print-out-paths 2>"$err_log")"; then
+      echo "    Failed to build package for ${package}" >&2
       sed -n '1,40p' "$err_log" >&2
       tail -80 "$err_log" >&2
       failed=$((failed + 1))
@@ -140,11 +155,35 @@ for package in "${packages[@]}"; do
         --arg previous_commit "$baseline_commit" \
         --arg derivation "$derivation" \
         --arg previous_derivation "$previous_derivation" \
-        '{package: $package, required: $required, status: "failed", reason: "sbom_build_failed", source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation}' >> "$manifest"
+        '{package: $package, required: $required, status: "failed", reason: "package_build_failed", source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation}' >> "$manifest"
       rm -f "$err_log"
       continue
     fi
     rm -f "$err_log"
+
+    err_log="$(mktemp)"
+    if ! ensure_sbomnix 2>"$err_log" || ! "$sbomnix_bin/bin/sbomnix" --cdx "$package_sbom" "$store_path" 2>>"$err_log"; then
+      echo "    Failed to generate SBOM for ${package}" >&2
+      sed -n '1,40p' "$err_log" >&2
+      tail -80 "$err_log" >&2
+      failed=$((failed + 1))
+      if [[ "$required" == "true" ]]; then
+        required_failed=$((required_failed + 1))
+      fi
+      jq -nc \
+        --arg package "$package" \
+        --argjson required "$required" \
+        --arg source_commit "$source_commit" \
+        --arg previous_commit "$baseline_commit" \
+        --arg derivation "$derivation" \
+        --arg previous_derivation "$previous_derivation" \
+        '{package: $package, required: $required, status: "failed", reason: "sbomnix_failed", source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation}' >> "$manifest"
+      rm -f "$err_log"
+      continue
+    fi
+    rm -f "$err_log"
+    built=$((built + 1))
+    echo "    Built ${package}"
   fi
 
   sbom_sha="$(sha256sum "$package_sbom" | awk '{print $1}')"

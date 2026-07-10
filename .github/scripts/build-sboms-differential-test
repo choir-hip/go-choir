@@ -6,10 +6,10 @@ builder="$script_dir/build-sboms-differential"
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 
-mkdir -p "$tmpdir/bin" "$tmpdir/fake-outputs"
+mkdir -p "$tmpdir/bin" "$tmpdir/fake-outputs" "$tmpdir/fake-store" "$tmpdir/fake-tool/bin"
 packages=(auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot)
 for package in "${packages[@]}"; do
-  mkdir -p "$tmpdir/fake-outputs/$package"
+  mkdir -p "$tmpdir/fake-outputs/$package" "$tmpdir/fake-store/$package"
   jq -n --arg package "$package" \
     '{bomFormat: "CycloneDX", components: [{name: $package, version: "1", purl: ("pkg:generic/" + $package + "@1")} ]}' \
     > "$tmpdir/fake-outputs/$package/sbom.json"
@@ -36,11 +36,20 @@ case "$command" in
   build)
     attr=""
     for arg in "$@"; do
-      [[ "$arg" == .#sbom.* ]] && attr="$arg"
+      if [[ "$arg" == .#* || "$arg" == github:* ]]; then
+        attr="$arg"
+      fi
     done
-    package="${attr##*.}"
-    echo "$package" >> "$FAKE_BUILD_LOG"
-    printf '%s\n' "$FAKE_OUTPUT_ROOT/$package"
+    printf '%s\n' "$attr" >> "$FAKE_BUILD_LOG"
+    if [[ "$attr" == github:*#sbomnix ]]; then
+      printf '%s\n' "$FAKE_SBOMNIX_BIN"
+    elif [[ "$attr" == .#* && "$attr" != .#sbom.* ]]; then
+      package="${attr#.#}"
+      printf '%s\n' "$FAKE_STORE_ROOT/$package"
+    else
+      echo "unexpected fake nix build attribute: $attr" >&2
+      exit 2
+    fi
     ;;
   *)
     echo "unexpected fake nix command: $command $*" >&2
@@ -50,26 +59,51 @@ esac
 EOF
 chmod +x "$tmpdir/bin/nix"
 
+cat > "$tmpdir/fake-tool/bin/sbomnix" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == "--cdx" ]]
+output="$2"
+store_path="$3"
+package="${store_path##*/}"
+printf '%s\n' "$package" >> "$FAKE_SBOMNIX_LOG"
+cp "$FAKE_OUTPUT_ROOT/$package/sbom.json" "$output"
+EOF
+chmod +x "$tmpdir/fake-tool/bin/sbomnix"
+
 export PATH="$tmpdir/bin:$PATH"
 export FAKE_OUTPUT_ROOT="$tmpdir/fake-outputs"
+export FAKE_STORE_ROOT="$tmpdir/fake-store"
+export FAKE_SBOMNIX_BIN="$tmpdir/fake-tool"
 export FAKE_BUILD_LOG="$tmpdir/build.log"
+export FAKE_SBOMNIX_LOG="$tmpdir/sbomnix.log"
 
 : > "$FAKE_BUILD_LOG"
+: > "$FAKE_SBOMNIX_LOG"
 "$builder" "$tmpdir/first" "" first-commit >/dev/null
-[[ "$(wc -l < "$FAKE_BUILD_LOG" | tr -d ' ')" == "12" ]]
+[[ "$(grep -c '^\.#' "$FAKE_BUILD_LOG")" == "12" ]]
+[[ "$(grep -c '^github:tiiuae/sbomnix/30c95eb2fc0c402300ee05354c5cf84c7e5f74e2#sbomnix$' "$FAKE_BUILD_LOG")" == "1" ]]
+! grep -q '^\.#sbom\.' "$FAKE_BUILD_LOG"
+[[ "$(wc -l < "$FAKE_SBOMNIX_LOG" | tr -d ' ')" == "12" ]]
 [[ "$(jq -s 'map(select(.status == "built")) | length' "$tmpdir/first/manifest.jsonl")" == "12" ]]
 
 : > "$FAKE_BUILD_LOG"
+: > "$FAKE_SBOMNIX_LOG"
 "$builder" "$tmpdir/second" "$tmpdir/first" second-commit >/dev/null
 [[ ! -s "$FAKE_BUILD_LOG" ]]
+[[ ! -s "$FAKE_SBOMNIX_LOG" ]]
 [[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/second/manifest.jsonl")" == "12" ]]
 
 jq '.components[0].version = "2" | .components[0].purl = "pkg:generic/auth@2"' \
   "$tmpdir/fake-outputs/auth/sbom.json" > "$tmpdir/fake-outputs/auth/sbom.json.next"
 mv "$tmpdir/fake-outputs/auth/sbom.json.next" "$tmpdir/fake-outputs/auth/sbom.json"
 : > "$FAKE_BUILD_LOG"
+: > "$FAKE_SBOMNIX_LOG"
 FAKE_CHANGED_PACKAGE=auth "$builder" "$tmpdir/third" "$tmpdir/second" third-commit >/dev/null
-[[ "$(cat "$FAKE_BUILD_LOG")" == "auth" ]]
+[[ "$(grep -c '^\.#auth$' "$FAKE_BUILD_LOG")" == "1" ]]
+[[ "$(grep -c '^github:tiiuae/sbomnix/30c95eb2fc0c402300ee05354c5cf84c7e5f74e2#sbomnix$' "$FAKE_BUILD_LOG")" == "1" ]]
+! grep -q '^\.#sbom\.' "$FAKE_BUILD_LOG"
+[[ "$(cat "$FAKE_SBOMNIX_LOG")" == "auth" ]]
 [[ "$(jq -s 'map(select(.status == "built")) | length' "$tmpdir/third/manifest.jsonl")" == "1" ]]
 [[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/third/manifest.jsonl")" == "11" ]]
 jq -e '.packages[] | select(.package == "auth") | (.added == ["pkg:generic/auth@2"] and .removed == ["pkg:generic/auth@1"])' \
