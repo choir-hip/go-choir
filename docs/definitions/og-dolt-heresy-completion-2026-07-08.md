@@ -493,12 +493,12 @@ execution_effect: >-
   M3.1. Rollback ref is d6ce587d.
 ```
 
-### M3.1b. H010 post-write email forcing deletion — READY
+### M3.1b. H010 post-write email forcing deletion — TESTING
 
 ```yaml
 id: post-write-email-forcing-deletion
 kind: conjecture
-status: ready
+status: testing
 source: choir-doctrine H010 + Phase B M3.1
 problem: >-
   After a Texture write succeeds, `requiredContinuationAfterTextureEdit` parses
@@ -521,6 +521,11 @@ admissible_evidence:
   - deletion diff and inverted tests proving a write result carries no forced email continuation
   - direct typed request_email_draft contract remains green
   - full runtime/race CI, Node B identity, and deployed Texture product smoke
+local_evidence:
+  - 491 lines deleted across the forcing path, prose parser, and superseded parser tests
+  - both initial-user and grounded-worker write contracts prove no email continuation fields are synthesized
+  - direct typed request_email_draft creation and sanitization contracts remain green
+  - all 338 standard runtime tests pass across four local shards; focused race and go vet pass
 rollback_ref: 73657a8f
 heresy_delta:
   discovered:
@@ -528,8 +533,8 @@ heresy_delta:
   introduced: []
   repaired: []
 execution_effect: >-
-  Problem documentation precedes behavior edits. The next action is the smallest
-  deletion-only implementation and inverted contract; no H010 repair claim yet.
+  Problem documentation preceded the deletion. No H010 repair claim until the
+  red landing loop is green; rollback remains 73657a8f.
 ```
 
 ## Determined State Snapshot (2026-07-08)

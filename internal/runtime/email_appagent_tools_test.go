@@ -298,7 +298,7 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	}
 }
 
-func TestEditTextureInitialEmailDraftRequiresEmailAppagentContinuation(t *testing.T) {
+func TestEditTextureEmailProseDoesNotForceEmailAppagentContinuation(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
@@ -377,41 +377,16 @@ func TestEditTextureInitialEmailDraftRequiresEmailAppagentContinuation(t *testin
 		t.Fatalf("decode edit result: %v", err)
 	}
 	if editResult["next_required_tool"] != nil {
-		t.Fatalf("next_required_tool = %v, want deterministic email handoff; result=%s", editResult["next_required_tool"], editRaw)
+		t.Fatalf("next_required_tool = %v, want no prose-selected continuation; result=%s", editResult["next_required_tool"], editRaw)
 	}
-	rawRequest, _ := editResult["email_draft_request"].(map[string]any)
-	if len(rawRequest) == 0 {
-		t.Fatalf("email_draft_request missing: %s", editRaw)
-	}
-	rawTo, _ := rawRequest["to_addresses"].([]any)
-	if len(rawTo) != 1 || rawTo[0] != "yusefnathanson@me.com" {
-		t.Fatalf("to_addresses = %+v", rawRequest["to_addresses"])
-	}
-	if rawRequest["subject"] != "Choir Email appagent bridge proof" {
-		t.Fatalf("subject = %+v", rawRequest["subject"])
-	}
-	if got, _ := rawRequest["status"].(string); got != "draft_pending_owner_approval" {
-		t.Fatalf("status = %q; result=%s", got, editRaw)
-	}
-	if got, _ := rawRequest["maild_persistence_status"].(string); got != "runtime_maild_url_not_configured" {
-		t.Fatalf("maild_persistence_status = %q; result=%s", got, editRaw)
-	}
-	if got, _ := rawRequest["source_content_hash"].(string); !strings.HasPrefix(got, "sha256:") {
-		t.Fatalf("source_content_hash = %q", got)
-	}
-	if got, _ := rawRequest["draft_version_hash"].(string); got == "" {
-		t.Fatalf("draft_version_hash empty; result=%s", editRaw)
-	}
-	if got, _ := rawRequest["send_authorized"].(bool); got {
-		t.Fatalf("send_authorized = true; result=%s", editRaw)
-	}
-	instruction, _ := editResult["next_instruction"].(string)
-	if !strings.Contains(instruction, "Email appagent draft handoff completed") || strings.Contains(instruction, "request_super_execution next") {
-		t.Fatalf("next_instruction = %q", instruction)
+	for _, key := range []string{"email_draft_request", "email_draft_request_status", "next_instruction"} {
+		if editResult[key] != nil {
+			t.Fatalf("%s = %v, want typed request_email_draft to remain an agent choice; result=%s", key, editResult[key], editRaw)
+		}
 	}
 }
 
-func TestEditTextureGroundedEmailArtifactRequiresEmailAppagentContinuation(t *testing.T) {
+func TestGroundedEmailArtifactDoesNotForceEmailAppagentContinuation(t *testing.T) {
 	rt, s := testRuntime(t)
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
@@ -515,101 +490,10 @@ func TestEditTextureGroundedEmailArtifactRequiresEmailAppagentContinuation(t *te
 	if err := json.Unmarshal([]byte(editRaw), &editResult); err != nil {
 		t.Fatalf("decode edit result: %v", err)
 	}
-	rawRequest, _ := editResult["email_draft_request"].(map[string]any)
-	if len(rawRequest) == 0 {
-		t.Fatalf("email_draft_request missing for grounded artifact: %s", editRaw)
-	}
-	if rawRequest["subject"] != "Choir Email researched result proof" {
-		t.Fatalf("subject = %+v", rawRequest["subject"])
-	}
-	if got, _ := rawRequest["draft_version_hash"].(string); got == "" {
-		t.Fatalf("draft_version_hash empty; result=%s", editRaw)
-	}
-	if got, _ := rawRequest["status"].(string); got != "draft_pending_owner_approval" {
-		t.Fatalf("status = %q; result=%s", got, editRaw)
-	}
-}
-
-func TestExtractEmailDraftIntentHandlesMarkdownArtifactLabels(t *testing.T) {
-	content := "# Email Appagent Draft Request\n\n" +
-		"**Status:** Draft prepared -- pending Email appagent review.\n\n" +
-		"**Recipient:** yusefnathanson@me.com\n" +
-		"**Subject:** Choir Email appagent bridge proof\n" +
-		"**Body:**\n" +
-		"This is a deployed staging proof that Texture requests an Email appagent draft.\n\n" +
-		"---\n\n" +
-		"**Source refs:** User request via conductor:test. No outbound email is authorized."
-	intent, ok := extractEmailDraftIntent("Draft an email to yusefnathanson@me.com", content)
-	if !ok {
-		t.Fatal("extractEmailDraftIntent returned false")
-	}
-	if len(intent.ToAddresses) != 1 || intent.ToAddresses[0] != "yusefnathanson@me.com" {
-		t.Fatalf("to_addresses = %+v", intent.ToAddresses)
-	}
-	if intent.Subject != "Choir Email appagent bridge proof" {
-		t.Fatalf("subject = %q", intent.Subject)
-	}
-	lowerBody := strings.ToLower(intent.BodyText)
-	if strings.Contains(lowerBody, "status") || strings.Contains(lowerBody, "source refs") || strings.Contains(intent.BodyText, "**") || strings.Contains(intent.BodyText, "---") {
-		t.Fatalf("body_text contains markdown/provenance residue: %q", intent.BodyText)
-	}
-	if !strings.Contains(intent.BodyText, "deployed staging proof") {
-		t.Fatalf("body_text = %q", intent.BodyText)
-	}
-}
-
-func TestExtractEmailDraftIntentHandlesPlainArtifactHeadings(t *testing.T) {
-	content := "Email Draft: Choir Email reply approval proof d78b6b3\n" +
-		"Status: Draft created -- pending user approval before send.\n\n" +
-		"Recipient\n" +
-		"yusefnathanson@me.com\n\n" +
-		"Subject\n" +
-		"Choir Email reply approval proof d78b6b3\n\n" +
-		"Body\n" +
-		"This is a deployed proof candidate for approval by email reply after commit d78b6b3. Please reply approve to the approval email to send this exact draft version.\n\n" +
-		"Instructions\n" +
-		"- This draft is a reviewable artifact only.\n" +
-		"- No outbound email has been sent.\n" +
-		"- User must explicitly approve before any send action is taken."
-	intent, ok := extractEmailDraftIntent("Draft an email to yusefnathanson@me.com", content)
-	if !ok {
-		t.Fatal("extractEmailDraftIntent returned false")
-	}
-	if len(intent.ToAddresses) != 1 || intent.ToAddresses[0] != "yusefnathanson@me.com" {
-		t.Fatalf("to_addresses = %+v", intent.ToAddresses)
-	}
-	if intent.Subject != "Choir Email reply approval proof d78b6b3" {
-		t.Fatalf("subject = %q", intent.Subject)
-	}
-	if !strings.Contains(intent.BodyText, "reply approve") {
-		t.Fatalf("body_text = %q", intent.BodyText)
-	}
-	if strings.Contains(strings.ToLower(intent.BodyText), "instructions") || strings.Contains(strings.ToLower(intent.BodyText), "no outbound email") {
-		t.Fatalf("body_text includes non-email instructions: %q", intent.BodyText)
-	}
-}
-
-func TestExtractEmailDraftIntentStopsAtInstructionsFromUserMarker(t *testing.T) {
-	content := "Email Draft: Choir Email clean approval proof 06e58f5\n" +
-		"Status: Draft created -- pending user approval before send.\n\n" +
-		"Recipient\n" +
-		"yusefnathanson@me.com\n\n" +
-		"Subject\n" +
-		"Choir Email clean approval proof 06e58f5\n\n" +
-		"Body\n" +
-		"This is a deployed clean approval-by-email proof candidate after commit 06e58f5.\n\n" +
-		"**Instructions from user:\n" +
-		"- This draft is review-only.\n" +
-		"- Do not send before approval."
-	intent, ok := extractEmailDraftIntent("Draft an email to yusefnathanson@me.com", content)
-	if !ok {
-		t.Fatal("extractEmailDraftIntent returned false")
-	}
-	if intent.Subject != "Choir Email clean approval proof 06e58f5" {
-		t.Fatalf("subject = %q", intent.Subject)
-	}
-	if strings.TrimSpace(intent.BodyText) != "This is a deployed clean approval-by-email proof candidate after commit 06e58f5." {
-		t.Fatalf("body_text = %q", intent.BodyText)
+	for _, key := range []string{"email_draft_request", "email_draft_request_status", "next_instruction", "next_required_tool"} {
+		if editResult[key] != nil {
+			t.Fatalf("%s = %v, want no prose-selected continuation for grounded artifacts; result=%s", key, editResult[key], editRaw)
+		}
 	}
 }
 
@@ -633,79 +517,6 @@ func TestCleanEmailDraftBodyTextStopsAtArtifactTail(t *testing.T) {
 	cleaned = cleanEmailDraftBodyText(body)
 	if cleaned != "This is the email body." {
 		t.Fatalf("cleaned body with workflow tail = %q", cleaned)
-	}
-}
-
-func TestExtractEmailDraftIntentHandlesBodyExactlyPromptBoundary(t *testing.T) {
-	prompt := "Create a Texture-backed Email appagent draft to yusefnathanson@me.com. " +
-		"Subject: Choir Email artifact-tail proof 552c443. " +
-		"Body exactly: This is a deployed proof that Choir trims artifact instructions before sending email. " +
-		"Create the draft only; do not send."
-	intent, ok := extractEmailDraftIntent(prompt, "")
-	if !ok {
-		t.Fatal("extractEmailDraftIntent returned false")
-	}
-	if intent.Subject != "Choir Email artifact-tail proof 552c443" {
-		t.Fatalf("subject = %q", intent.Subject)
-	}
-	if intent.BodyText != "This is a deployed proof that Choir trims artifact instructions before sending email." {
-		t.Fatalf("body_text = %q", intent.BodyText)
-	}
-}
-
-func TestExtractEmailDraftIntentRejectsGeneratedBodyPlaceholder(t *testing.T) {
-	prompt := "Find one concrete fact from Trace, then create an Email appagent draft to yusefnathanson@me.com " +
-		"with subject: Choir Email research draft proof. Body: a short plain-language summary of that fact. Draft only; do not send."
-	if intent, ok := extractEmailDraftIntent(prompt, ""); ok {
-		t.Fatalf("extractEmailDraftIntent returned placeholder draft: %+v", intent)
-	}
-}
-
-func TestExtractEmailDraftIntentPrefersConcreteRevisionBodyOverPromptPlaceholder(t *testing.T) {
-	prompt := "Look up the official title of https://example.com, then create an Email appagent draft to yusefnathanson@me.com " +
-		"with subject: Choir Email researched result proof. Body: a short plain-language summary of what you found. Draft only; do not send."
-	content := "# Email Appagent Draft Request\n\n" +
-		"**Recipient:** yusefnathanson@me.com\n" +
-		"**Subject:** Choir Email researched result proof\n" +
-		"**Body:**\n" +
-		"The official title of https://example.com is \"Example Domain\".\n\n" +
-		"---\n\n" +
-		"**Source refs:** Researcher worker message."
-	intent, ok := extractEmailDraftIntent(prompt, content)
-	if !ok {
-		t.Fatal("extractEmailDraftIntent returned false")
-	}
-	if intent.Subject != "Choir Email researched result proof" {
-		t.Fatalf("subject = %q", intent.Subject)
-	}
-	if strings.Contains(strings.ToLower(intent.BodyText), "short plain-language summary") {
-		t.Fatalf("body_text used prompt placeholder: %q", intent.BodyText)
-	}
-	if !strings.Contains(intent.BodyText, "Example Domain") {
-		t.Fatalf("body_text = %q", intent.BodyText)
-	}
-}
-
-func TestExtractEmailDraftIntentHandlesQualifiedBodyLabel(t *testing.T) {
-	content := "# Email Draft: Official Title of example.com\n\n" +
-		"Email Artifact\n\n" +
-		"To: yusefnathanson@me.com Subject: Choir Email researched result proof Body (plain language):\n" +
-		"I looked up the official title of https://example.com. The page's official HTML title is \"Example Domain\".\n" +
-		"Draft only — not sent.\n\n" +
-		"Next Step\n\n" +
-		"Hand off this email artifact to the Email appagent via request_email_draft."
-	intent, ok := extractEmailDraftIntent("Draft the researched result email.", content)
-	if !ok {
-		t.Fatal("extractEmailDraftIntent returned false")
-	}
-	if intent.Subject != "Choir Email researched result proof" {
-		t.Fatalf("subject = %q", intent.Subject)
-	}
-	if strings.Contains(strings.ToLower(intent.BodyText), "draft only") || strings.Contains(strings.ToLower(intent.BodyText), "next step") {
-		t.Fatalf("body_text includes artifact tail: %q", intent.BodyText)
-	}
-	if !strings.Contains(intent.BodyText, "Example Domain") {
-		t.Fatalf("body_text = %q", intent.BodyText)
 	}
 }
 

@@ -174,15 +174,6 @@ func (rt *Runtime) executeTextureEditTool(ctx context.Context, toolName string, 
 		"base_revision_id": rev.ParentRevisionID,
 		"status":           "stored",
 	}
-	if continuation, ok := rt.requiredContinuationAfterTextureEdit(context.Background(), rec, in, rev); ok && continuation.Tool == "request_email_draft" {
-		emailResult, err := rt.executeRequiredEmailDraftContinuation(ctx, rec, continuation.Args)
-		if err != nil {
-			return "", err
-		}
-		result["email_draft_request"] = emailResult
-		result["email_draft_request_status"] = emailResult["status"]
-		result["next_instruction"] = "Email appagent draft handoff completed from the stored Texture revision. Do not send mail directly; owner approval remains required."
-	}
 	return toolResultJSON(result)
 }
 
@@ -316,75 +307,6 @@ func validTextureDecisionKind(kind string) bool {
 	default:
 		return false
 	}
-}
-
-type textureRequiredContinuation struct {
-	Tool        string
-	Args        map[string]any
-	Instruction string
-}
-
-func (rt *Runtime) executeRequiredEmailDraftContinuation(ctx context.Context, rec *types.RunRecord, args map[string]any) (map[string]any, error) {
-	data, err := json.Marshal(args)
-	if err != nil {
-		return nil, fmt.Errorf("marshal email draft continuation args: %w", err)
-	}
-	var in requestEmailDraftArgs
-	if err := json.Unmarshal(data, &in); err != nil {
-		return nil, fmt.Errorf("decode email draft continuation args: %w", err)
-	}
-	result, err := rt.recordEmailDraftRequest(ctx, rec, in)
-	if err != nil {
-		return nil, fmt.Errorf("execute email draft continuation: %w", err)
-	}
-	return result, nil
-}
-
-func (rt *Runtime) requiredContinuationAfterTextureEdit(ctx context.Context, rec *types.RunRecord, in editTextureArgs, rev types.Revision) (textureRequiredContinuation, bool) {
-	if rt == nil || rt.store == nil || rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
-		return textureRequiredContinuation{}, false
-	}
-	docID := strings.TrimSpace(in.DocID)
-	baseRevisionID := strings.TrimSpace(in.BaseRevisionID)
-	if docID == "" || baseRevisionID == "" {
-		return textureRequiredContinuation{}, false
-	}
-	baseRevision, err := rt.store.GetRevision(ctx, baseRevisionID, rec.OwnerID)
-	if err != nil {
-		return textureRequiredContinuation{}, false
-	}
-	grounded, err := rt.channelHasGroundedHistory(ctx, rec.OwnerID, docID, time.Time{})
-	if err != nil {
-		return textureRequiredContinuation{}, false
-	}
-	prompt := strings.TrimSpace(firstNonEmpty(
-		metadataStringValue(rec.Metadata, "original_prompt"),
-		metadataStringValue(rec.Metadata, "request_intent"),
-		metadataStringValue(rec.Metadata, "seed_prompt"),
-	))
-	if prompt == "" {
-		prompt = strings.TrimSpace(baseRevision.Content)
-	}
-	if prompt != "" {
-		if intent, ok := extractEmailDraftIntent(prompt, rev.Content); ok {
-			if baseRevision.AuthorKind == types.AuthorUser || grounded {
-				return textureRequiredContinuation{
-					Tool: "request_email_draft",
-					Args: map[string]any{
-						"doc_id":              rev.DocID,
-						"revision_id":         rev.RevisionID,
-						"source_content_hash": emailSourceContentHash(rev.DocID, rev.RevisionID, rev.Content),
-						"to_addresses":        intent.ToAddresses,
-						"subject":             intent.Subject,
-						"body_text":           intent.BodyText,
-						"approval_mode":       "owner_click_or_email_reply",
-					},
-					Instruction: "The Texture email artifact is now stored. Call request_email_draft next with the provided arguments before ending this run; stopping now leaves the Email appagent handoff incomplete. Do not call request_super_execution for this simple email draft handoff, and do not send mail directly.",
-				}, true
-			}
-		}
-	}
-	return textureRequiredContinuation{}, false
 }
 
 func newRequestSuperExecutionTool(rt *Runtime) Tool {
