@@ -715,6 +715,27 @@ evidence_ledger:
     promotion_relevance: >-
       Prevents promoting `platform_computer_stability` from the reattach trace and
       reopens the repair implementation while leaving the root cause settled.
+  - claim: Deferred migration must begin only after synchronous runtime recovery
+      and listener publication.
+    definition_node: root_cause_reboot_loop
+    evidence_class: deployed staging proof
+    source: 94f6c744 fresh-boot trace on Node B
+    command_or_observation: >-
+      Inspect vmctl guest-console ordering after deploy job 86464853189.
+    artifact_path: cmd/sandbox/main.go
+    result: >-
+      On the persistent platform guest, `objectgraph-backfill status=deferred` and
+      orchestration topology logged, then the background migration entered `runs`.
+      The synchronous `rt.Start` recovery did not return and the server-listen marker
+      did not appear because both paths contend for the single embedded-Dolt handle.
+      A small-store guest completed `rt.Start`, bound 0.0.0.0:8085, and finished the
+      same migration, proving the deferred protocol but falsifying its launch order.
+    uncertainty: >-
+      Runtime recovery must finish against the already-authoritative OG state before
+      migration starts; migration should start only after the TCP listener is published.
+    promotion_relevance: >-
+      Authorizes an ordering-only correction. Completion markers and SQL preservation
+      remain the migration authority.
 ```
 
 ## Active Red Mutation Ceremony
@@ -746,8 +767,12 @@ active_red_mutation:
     introduced:
       - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
         SQL remains intact, so the risk is reversible but the completion claim is invalid.
+      - 94f6c744 launches deferred migration before synchronous runtime recovery,
+        allowing migration to block listener startup on the single Dolt handle.
     repaired:
       - Populated `choir.run` no longer blocks startup with per-record replay.
+      - Partial migration is no longer collapsed into completion; successful passes
+        receive durable markers and interrupted passes remain resumable.
 ```
 
 ## Completion Semantics
@@ -836,14 +861,16 @@ run_checkpoint_and_resumption_state:
       disconnected `ogKindIsEmpty` replacement as the intended substrate repair.
     - Fresh-boot verification falsifies non-empty-kind as a universal completion
       marker: channel messages complete, but worker updates can be interrupted mid-kind.
+    - Completion-aware migration is correct, but its first launch ordering must move
+      after `rt.Start` and listener publication to avoid single-handle contention.
   remaining_error_field:
     - The platform computer is rebooting in a loop because its runtime never becomes ready.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: resumable migration completion semantics
+  highest_impact_remaining_uncertainty: post-listener migration launch ordering
   next_executable_probe: >-
-    Replace non-empty-as-complete with a completion-aware, resumable migration
-    protocol that does not block runtime health during large first migrations;
-    preserve SQL until completion and prove restart resumes missing objects.
+    Complete synchronous runtime recovery first, publish the sandbox listener, then
+    launch resumable migration. Prove a fresh persistent guest binds health before
+    the long run pass and remains alive beyond vmctl's three-minute deadline.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
