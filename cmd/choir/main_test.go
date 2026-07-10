@@ -3,12 +3,89 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestClientTimeoutPrecedence(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string
+		args []string
+		want time.Duration
+	}{
+		{name: "default", want: 75 * time.Second},
+		{name: "environment", env: "90s", want: 90 * time.Second},
+		{name: "flag overrides environment", env: "90s", args: []string{"--timeout=2m"}, want: 2 * time.Minute},
+		{name: "valid flag ignores invalid environment", env: "eventually", args: []string{"--timeout=2m"}, want: 2 * time.Minute},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(timeoutEnvVar, tt.env)
+			fs := flag.NewFlagSet("test", flag.ContinueOnError)
+			args := append([]string{"--api-key=choir_sk_test"}, tt.args...)
+			c, err := newClient(fs, args, io.Discard, io.Discard)
+			if err != nil {
+				t.Fatalf("newClient() error = %v", err)
+			}
+			if c.http.Timeout != tt.want {
+				t.Fatalf("timeout = %s, want %s", c.http.Timeout, tt.want)
+			}
+		})
+	}
+}
+
+func TestClientRejectsInvalidTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     string
+		args    []string
+		wantErr string
+	}{
+		{name: "invalid environment", env: "eventually", wantErr: "$CHOIR_TIMEOUT must be a valid duration"},
+		{name: "zero environment", env: "0s", wantErr: "$CHOIR_TIMEOUT must be greater than zero"},
+		{name: "negative flag", env: "90s", args: []string{"--timeout=-1s"}, wantErr: "--timeout must be greater than zero"},
+		{name: "invalid flag overrides environment", env: "90s", args: []string{"--timeout=soon"}, wantErr: "--timeout must be a valid duration"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(timeoutEnvVar, tt.env)
+			fs := flag.NewFlagSet("test", flag.ContinueOnError)
+			args := append([]string{"--api-key=choir_sk_test"}, tt.args...)
+			_, err := newClient(fs, args, io.Discard, io.Discard)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("newClient() error = %v, want containing %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestRequestTimeoutCancelsDelayedServer(t *testing.T) {
+	t.Setenv(timeoutEnvVar, "")
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer stub.Close()
+
+	started := time.Now()
+	var out, errOut bytes.Buffer
+	code := run([]string{"wire", "stories", "--api-key=choir_sk_test", "--host=" + stub.URL, "--timeout=30ms"}, &out, &errOut)
+	elapsed := time.Since(started)
+	if code != 1 {
+		t.Fatalf("code = %d, want 1; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "context deadline exceeded") {
+		t.Fatalf("stderr = %q, want context deadline exceeded", errOut.String())
+	}
+	if elapsed > time.Second {
+		t.Fatalf("request elapsed = %s, want cancellation within 1s", elapsed)
+	}
+}
 
 // TestRunRequiresAPIKey asserts the CLI fails fast with a clear error when
 // no API key is supplied, without making a network request.

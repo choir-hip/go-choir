@@ -4,7 +4,8 @@
 // start runs, and verify the Universal Wire news feed without a browser.
 //
 // Auth: CHOIR_API_KEY env var or --api-key flag. Host: CHOIR_HOST env var
-// or --host flag (defaults to https://choir.news).
+// or --host flag (defaults to https://choir.news). Request timeout:
+// CHOIR_TIMEOUT env var or --timeout flag (defaults to 75 seconds).
 //
 // This is Phase 1 of nucleus-cli-v0: it targets the existing /api/ routes
 // that the proxy already auth-gates with API keys. The graph-native
@@ -29,8 +30,9 @@ const (
 	defaultHost      = "https://choir.news"
 	apiKeyEnvVar     = "CHOIR_API_KEY"
 	hostEnvVar       = "CHOIR_HOST"
+	timeoutEnvVar    = "CHOIR_TIMEOUT"
 	apiKeyPrefix     = "choir_sk_"
-	defaultTimeout   = 30 * time.Second
+	defaultTimeout   = 75 * time.Second
 	defaultListLimit = 50
 )
 
@@ -100,6 +102,7 @@ Commands:
 Auth:
   --api-key string    API key (choir_sk_...). Defaults to $CHOIR_API_KEY.
   --host string       Choir host. Defaults to $CHOIR_HOST or https://choir.news.
+  --timeout duration  Request timeout. Defaults to $CHOIR_TIMEOUT or 75s.
 
 Output is JSON to stdout; diagnostics and errors go to stderr.`)
 }
@@ -116,6 +119,7 @@ type client struct {
 func newClient(flags *flag.FlagSet, args []string, stdout, stderr io.Writer) (*client, error) {
 	apiKey := flags.String("api-key", os.Getenv(apiKeyEnvVar), "API key (choir_sk_...)")
 	host := flags.String("host", envOr(hostEnvVar, defaultHost), "Choir host")
+	timeout := flags.String("timeout", "", "Request timeout (for example 75s or 2m)")
 	if err := flags.Parse(args); err != nil {
 		return nil, err
 	}
@@ -130,13 +134,37 @@ func newClient(flags *flag.FlagSet, args []string, stdout, stderr io.Writer) (*c
 	if h == "" {
 		h = defaultHost
 	}
+	requestTimeout, err := resolveTimeout(*timeout, os.Getenv(timeoutEnvVar))
+	if err != nil {
+		return nil, err
+	}
 	return &client{
 		host:   h,
 		apiKey: key,
-		http:   &http.Client{Timeout: defaultTimeout},
+		http:   &http.Client{Timeout: requestTimeout},
 		stdout: stdout,
 		stderr: stderr,
 	}, nil
+}
+
+func resolveTimeout(flagValue, envValue string) (time.Duration, error) {
+	raw := strings.TrimSpace(flagValue)
+	source := "--timeout"
+	if raw == "" {
+		raw = strings.TrimSpace(envValue)
+		source = "$" + timeoutEnvVar
+	}
+	if raw == "" {
+		return defaultTimeout, nil
+	}
+	timeout, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a valid duration: %w", source, err)
+	}
+	if timeout <= 0 {
+		return 0, fmt.Errorf("%s must be greater than zero", source)
+	}
+	return timeout, nil
 }
 
 func envOr(key, def string) string {
