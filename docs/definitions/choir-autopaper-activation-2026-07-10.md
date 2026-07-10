@@ -810,6 +810,35 @@ evidence_ledger:
       Reopens single authoritative activation. A reused completed receipt can
       mark a new handoff submitted without processing its source handles, so a
       stable VM alone cannot produce an authoritative Autopaper edition.
+  - claim: Universal Wire publication bootstraps a missing edition alias but
+      cannot recover when the alias points to a missing Texture document.
+    definition_node: edition_visible
+    evidence_class: deployed staging trace + canonical Texture artifact inspection
+    source: exact-SHA ce6b6455 staging window beginning 2026-07-10T22:47:34Z
+    command_or_observation: >-
+      Inspect eligible Texture revisions and vmctl guest logs, then query the
+      authenticated /api/universal-wire/stories diagnostics.
+    artifact_path: internal/runtime/wire_publication.go
+    result: >-
+      Processor 1c8dc4a9-4484-4c59-9f9f-7397f78d3685 completed with
+      all_source_items_decided_with_story_route for cycle_1bf612bf298d883333169770.
+      Texture produced canonical cited revisions for documents c783a45a and
+      456f920a; revision 14024b34 carries a corpusd_publication_ref and exact
+      ingestion lineage. Later eligible articles failed at 23:06:45 and 23:07:43
+      with `load wire edition document: record not found`. Stories returned 200
+      with texture_edition state=missing, candidate_count=0, and no stories.
+      The bootstrap code creates an edition only when GetDocumentAlias returns
+      ErrNotFound; it returns immediately when the alias resolves but GetDocument
+      reports ErrNotFound.
+    uncertainty: >-
+      The origin of the dangling alias predates this activation window and is not
+      required to repair the live invariant. The canonical publication writer can
+      safely replace the alias with a newly bootstrapped edition document while
+      preserving all story documents and revisions.
+    promotion_relevance: >-
+      Reopens edition visibility. The existing missing-alias bootstrap is the
+      intended substrate repair and must also cover a dangling alias target before
+      the reconciler debounce and canonical feed can operate.
 ```
 
 ## Active Red Mutation Ceremony
@@ -845,6 +874,8 @@ active_red_mutation:
         sandbox artifact identity even when the sandbox artifact was not selected.
       - Fresh source handoff drains can reuse a completed runtime receipt from an
         older cycle while reporting processor_submitted=1 for the new drain.
+      - The Universal Wire edition alias exists but targets a missing Texture
+        document, and first-publication bootstrap does not repair that state.
     introduced:
       - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
         SQL remains intact, so the risk is reversible but the completion claim is invalid.
@@ -857,6 +888,10 @@ active_red_mutation:
       - Runtime recovery now completes and publishes :8085 before deferred migration.
       - Same-identity VM lifecycle operations are serialized, different identities
         remain concurrent, and stale process monitors cannot fail a replacement instance.
+      - Refreshed-guest deploy verification respects the independently selected
+        sandbox artifact identity.
+      - Sourcecycled run-status reads traverse the vmctl sandbox proxy, so completed
+        handoffs are reconciled instead of reset and resubmitted with stale receipts.
 ```
 
 ## Completion Semantics
@@ -964,18 +999,22 @@ run_checkpoint_and_resumption_state:
       healthy beyond the former three-minute stale-waiter horizon with no recovery.
     - Fresh source cycles complete without sourcecycled restart, but later queue
       drains can return ecd89fa9 from cycle_59a77 for unrelated newer requests.
+    - ce6b6455 repairs status reconciliation: run 1c8dc4a9 completed and the next
+      drain created distinct run e14f6e73 instead of reusing its receipt.
+    - Canonical Texture story revisions now exist with publication refs and source
+      lineage, but edition publication fails because the edition alias target is missing.
   remaining_error_field:
-    - Fresh source handoffs can receive stale completed processor receipts and remain
-      unprocessed despite processor_submitted=1 dispatch evidence.
+    - A dangling Universal Wire edition alias prevents eligible canonical Texture
+      revisions from entering the edition and prevents reconciler debounce activation.
     - No cycle-correlated reconciler exists; reconciler dispatch is publish-debounced
       and currently carries no ingestion_handoff_cycle_id.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: stale processor receipt reuse boundary
+  highest_impact_remaining_uncertainty: dangling edition alias recovery
   next_executable_probe: >-
-    Reproduce consecutive typed processor handoffs with the production MemoryStore,
-    vmctl proxy transport, and completed first run. Identify whether stale reuse comes
-    from source queue state, status reconciliation, or runtime typed lookup before
-    changing either authority.
+    Extend ensureUniversalWireEdition's existing missing-alias bootstrap to treat an
+    alias whose target document is missing as repairable, test that the alias is
+    replaced and the published story enters the edition, then redeploy and observe
+    reconciler activation plus /api/universal-wire/stories.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -983,6 +1022,8 @@ run_checkpoint_and_resumption_state:
     - CI run 29120219036 and Node B deploy job 86455558809 for e8dda030.
     - CI run 29125293553 and failed Node B deploy job 86471236444 for 83b1f594.
     - CI run 29126218631, deploy job 86474002411, and activation receipt for 838a4799.
+    - CI run 29128036529, deploy job 86479161920, activation receipt for ce6b6455,
+      processor 1c8dc4a9, and Texture revisions 14024b34/ec37a6ff.
   rollback_refs: []
 ```
 
