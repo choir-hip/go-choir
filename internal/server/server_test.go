@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 )
 
 func TestHealthHandler(t *testing.T) {
@@ -22,16 +24,19 @@ func TestHealthHandler(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", w.Code)
 	}
 
-	var body map[string]string
+	var body healthResponse
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode response body: %v", err)
 	}
 
-	if body["status"] != "ok" {
-		t.Errorf("expected status \"ok\", got %q", body["status"])
+	if body.Status != "ok" {
+		t.Errorf("expected status \"ok\", got %q", body.Status)
 	}
-	if body["service"] != "test-service" {
-		t.Errorf("expected service \"test-service\", got %q", body["service"])
+	if body.Service != "test-service" {
+		t.Errorf("expected service \"test-service\", got %q", body.Service)
+	}
+	if body.Build != buildinfo.Snapshot("test-service") {
+		t.Errorf("build identity = %+v, want %+v", body.Build, buildinfo.Snapshot("test-service"))
 	}
 
 	ct := w.Header().Get("Content-Type")
@@ -60,17 +65,17 @@ func TestHealthHandlerIncludesAddrAfterStart(t *testing.T) {
 	w := httptest.NewRecorder()
 	s.defaultHealthHandler(w, req)
 
-	var body map[string]string
+	var body healthResponse
 	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 		t.Fatalf("failed to decode response body: %v", err)
 	}
 
 	// After the server starts, the Addr field should be populated.
-	if body["addr"] == "" {
+	if body.Addr == "" {
 		t.Error("expected non-empty addr in health response after server start")
 	}
-	if !strings.HasPrefix(body["addr"], "127.0.0.1:") {
-		t.Errorf("expected addr to start with 127.0.0.1:, got %q", body["addr"])
+	if !strings.HasPrefix(body.Addr, "127.0.0.1:") {
+		t.Errorf("expected addr to start with 127.0.0.1:, got %q", body.Addr)
 	}
 }
 
@@ -83,12 +88,15 @@ func TestHealthHandlerServiceName(t *testing.T) {
 			w := httptest.NewRecorder()
 			s.defaultHealthHandler(w, req)
 
-			var body map[string]string
+			var body healthResponse
 			if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
 				t.Fatalf("failed to decode response body: %v", err)
 			}
-			if body["service"] != name {
-				t.Errorf("expected service %q, got %q", name, body["service"])
+			if body.Service != name {
+				t.Errorf("expected service %q, got %q", name, body.Service)
+			}
+			if body.Build.Service != name {
+				t.Errorf("expected build service %q, got %q", name, body.Build.Service)
 			}
 		})
 	}

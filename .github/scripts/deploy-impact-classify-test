@@ -64,6 +64,21 @@ assert_contains "$doccheck_tooling_output" "AGENTS.md -> ignored (top-level mark
 assert_not_contains "$doccheck_tooling_output" "conservative Go impact"
 assert_not_contains "$doccheck_tooling_output" "unknown deployed path"
 
+choir_cli_output="$(
+  run_classifier \
+    "cmd/choir/main.go" \
+    "cmd/choir/main_test.go"
+)"
+assert_contains "$choir_cli_output" "deploy_needed=false"
+assert_contains "$choir_cli_output" "deploy_host=false"
+assert_contains "$choir_cli_output" "deploy_host_service=false"
+assert_contains "$choir_cli_output" "deploy_ordinary_guest=false"
+assert_contains "$choir_cli_output" "deploy_playwright_guest=false"
+assert_contains "$choir_cli_output" "host_services="
+assert_contains "$choir_cli_output" "cmd/choir/main.go -> ignored (undistributed Choir CLI; not installed on Node B or guest closures)"
+assert_contains "$choir_cli_output" "cmd/choir/main_test.go -> ignored (undistributed Choir CLI; not installed on Node B or guest closures)"
+assert_not_contains "$choir_cli_output" "conservative Go impact"
+
 node_b_storage_tooling_output="$(
   run_classifier \
     "scripts/node-b-storage-report" \

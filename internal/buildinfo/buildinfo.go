@@ -24,19 +24,16 @@ type Info struct {
 	DeployedCommit string `json:"deployed_commit,omitempty"`
 }
 
-// Snapshot returns the current service build identity. Deploy metadata is read
-// at request time so frontend-only deploys can update /health identity without
-// restarting otherwise-unaffected host services.
+// Snapshot returns the current service build identity and the separately
+// observed deployment metadata. Commit is immutable process identity filled by
+// the linker; a deploy marker must never rewrite what binary is actually
+// running.
 func Snapshot(service string) Info {
 	deployedAt, deployedCommit := deployMetadata()
-	commit := Commit
-	if deployedCommit != "" {
-		commit = deployedCommit
-	}
 	return Info{
 		Service:        service,
 		Version:        Version,
-		Commit:         commit,
+		Commit:         Commit,
 		BuiltAt:        BuiltAt,
 		DeployedAt:     deployedAt,
 		DeployedCommit: deployedCommit,

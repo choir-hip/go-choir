@@ -113,7 +113,7 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 	}
 
 	build := buildinfo.Snapshot("sandbox")
-	deploymentCommit := firstNonEmpty(build.DeployedCommit, build.Commit)
+	deploymentCommit := acceptanceServingCommit(build)
 	sourceObjective := strings.TrimSpace(in.SourcePromptObjective)
 	if sourceObjective == "" {
 		sourceObjective = root.Prompt
@@ -369,6 +369,13 @@ func (rt *Runtime) SynthesizeRunAcceptance(ctx context.Context, ownerID string, 
 		return types.RunAcceptanceRecord{}, err
 	}
 	return rec, nil
+}
+
+// acceptanceServingCommit records the immutable serving artifact when it is
+// available. Deploy metadata is a release target/receipt and cannot override
+// the commit compiled into the process that synthesized the acceptance.
+func acceptanceServingCommit(build buildinfo.Info) string {
+	return firstNonEmpty(build.Commit, build.DeployedCommit)
 }
 
 func stableRunAcceptanceID(ownerID, missionID, trajectoryID string) string {

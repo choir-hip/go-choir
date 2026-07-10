@@ -16,13 +16,16 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 )
 
 // healthResponse is the JSON structure returned by the /health endpoint.
 type healthResponse struct {
-	Status  string `json:"status"`
-	Service string `json:"service"`
-	Addr    string `json:"addr,omitempty"`
+	Status  string         `json:"status"`
+	Service string         `json:"service"`
+	Addr    string         `json:"addr,omitempty"`
+	Build   buildinfo.Info `json:"build"`
 }
 
 // Server wraps an http.Server with go-choir service configuration.
@@ -55,11 +58,11 @@ type Server struct {
 const defaultBindHost = "127.0.0.1"
 
 const (
-	defaultShutdownTimeout    = 10 * time.Second
-	defaultReadHeaderTimeout  = 30 * time.Second
-	defaultReadTimeout        = 120 * time.Second
-	defaultWriteTimeout       = 120 * time.Second
-	defaultIdleTimeout        = 120 * time.Second
+	defaultShutdownTimeout   = 10 * time.Second
+	defaultReadHeaderTimeout = 30 * time.Second
+	defaultReadTimeout       = 120 * time.Second
+	defaultWriteTimeout      = 120 * time.Second
+	defaultIdleTimeout       = 120 * time.Second
 )
 
 // NewServer creates a new Server for the given service name and port.
@@ -162,6 +165,7 @@ func (s *Server) defaultHealthHandler(w http.ResponseWriter, r *http.Request) {
 		Status:  "ok",
 		Service: s.serviceName,
 		Addr:    s.Addr(),
+		Build:   buildinfo.Snapshot(s.serviceName),
 	})
 }
 

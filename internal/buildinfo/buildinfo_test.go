@@ -7,6 +7,10 @@ import (
 )
 
 func TestSnapshotReadsDeployMetadataFile(t *testing.T) {
+	originalCommit := Commit
+	Commit = "compiled-commit"
+	t.Cleanup(func() { Commit = originalCommit })
+
 	t.Setenv("CHOIR_DEPLOYED_AT", "")
 	t.Setenv("CHOIR_DEPLOYED_COMMIT", "")
 
@@ -17,7 +21,7 @@ func TestSnapshotReadsDeployMetadataFile(t *testing.T) {
 	t.Setenv("CHOIR_DEPLOY_ENV_PATH", path)
 
 	info := Snapshot("proxy")
-	if info.Commit != "abc123" {
+	if info.Commit != "compiled-commit" {
 		t.Fatalf("Commit = %q", info.Commit)
 	}
 	if info.DeployedAt != "2026-05-24T12:00:00Z" {
@@ -29,6 +33,10 @@ func TestSnapshotReadsDeployMetadataFile(t *testing.T) {
 }
 
 func TestSnapshotDeployMetadataFileOverridesStaleEnvironment(t *testing.T) {
+	originalCommit := Commit
+	Commit = "compiled-commit"
+	t.Cleanup(func() { Commit = originalCommit })
+
 	path := filepath.Join(t.TempDir(), "deploy.env")
 	if err := os.WriteFile(path, []byte("CHOIR_DEPLOYED_AT=file-time\nCHOIR_DEPLOYED_COMMIT=file-commit\n"), 0o644); err != nil {
 		t.Fatalf("write deploy env: %v", err)
@@ -38,7 +46,7 @@ func TestSnapshotDeployMetadataFileOverridesStaleEnvironment(t *testing.T) {
 	t.Setenv("CHOIR_DEPLOYED_COMMIT", "env-commit")
 
 	info := Snapshot("proxy")
-	if info.Commit != "file-commit" {
+	if info.Commit != "compiled-commit" {
 		t.Fatalf("Commit = %q", info.Commit)
 	}
 	if info.DeployedAt != "file-time" {
