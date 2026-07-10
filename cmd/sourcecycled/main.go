@@ -813,11 +813,11 @@ func processorRunReconcileDecision(run runtimeRunStatusResponse) (verdict, runti
 
 func (d *ingestionRuntimeDispatcher) getRunStatus(ctx context.Context, runID string) (runtimeRunStatusResponse, error) {
 	var zero runtimeRunStatusResponse
-	baseURL := strings.TrimRight(strings.TrimSpace(d.baseURL), "/")
-	if baseURL == "" {
+	runsEndpoint := strings.TrimRight(strings.TrimSpace(d.runtimeRunsEndpoint()), "/")
+	if runsEndpoint == "" {
 		return zero, fmt.Errorf("runtime base URL is not configured")
 	}
-	endpoint, err := url.Parse(baseURL + "/internal/runtime/runs/" + url.PathEscape(strings.TrimSpace(runID)))
+	endpoint, err := url.Parse(runsEndpoint + "/" + url.PathEscape(strings.TrimSpace(runID)))
 	if err != nil {
 		return zero, fmt.Errorf("parse runtime status URL: %w", err)
 	}

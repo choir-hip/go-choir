@@ -274,6 +274,51 @@ func TestSandboxProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
 	}
 }
 
+func TestSandboxProxyForwardsInternalRuntimeStatusGET(t *testing.T) {
+	runtime := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("proxied method = %s, want GET", r.Method)
+		}
+		if r.URL.Path != "/internal/runtime/runs/run-status" {
+			t.Fatalf("proxied path = %q", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("owner_id"); got != UniversalWirePlatformOwnerID {
+			t.Fatalf("owner_id = %q, want %q", got, UniversalWirePlatformOwnerID)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"run_id":"run-status","state":"completed"}`))
+	}))
+	defer runtime.Close()
+
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	reg.ownerships[key] = &VMOwnership{
+		VMID:       UniversalWirePlatformVMID,
+		UserID:     UniversalWirePlatformOwnerID,
+		DesktopID:  UniversalWirePlatformDesktopID,
+		Kind:       VMKindInteractive,
+		Published:  true,
+		SandboxURL: runtime.URL,
+		State:      VMStateActive,
+		Epoch:      60,
+	}
+	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs/run-status?owner_id=universal-wire-platform",
+		nil,
+	)
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+
+	NewHandler(reg).HandleSandboxProxy(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestSandboxProxyPlatformEnsureFailureReturnsBoundedError(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)

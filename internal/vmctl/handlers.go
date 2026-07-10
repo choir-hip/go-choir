@@ -1062,7 +1062,7 @@ func sandboxRuntimeBuildInfo(root string) (buildinfo.Info, error) {
 // HandleSandboxProxy resolves the live sandbox URL and reverse-proxies the request.
 // Path format: /internal/vmctl/sandbox-proxy/{owner-id}/{...remaining-path}
 func (h *Handler) HandleSandboxProxy(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
 		return
 	}

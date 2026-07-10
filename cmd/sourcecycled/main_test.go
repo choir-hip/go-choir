@@ -708,6 +708,45 @@ func TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly(t *testing.T) {
 	}
 }
 
+func TestIngestionRuntimeDispatcherStatusUsesSandboxProxyOverUnixSocket(t *testing.T) {
+	var gotPath string
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want GET", r.Method)
+		}
+		if r.Header.Get("X-Internal-Caller") != "true" {
+			t.Fatal("missing internal caller header")
+		}
+		if got := r.URL.Query().Get("owner_id"); got != "universal-wire-platform" {
+			t.Fatalf("owner_id = %q, want universal-wire-platform", got)
+		}
+		writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+			RunID: "run-status-proxy",
+			State: "completed",
+		})
+	}))
+	defer runtimeServer.Close()
+
+	dispatcher := &ingestionRuntimeDispatcher{
+		baseURL:    runtimeServer.URL,
+		ownerID:    "universal-wire-platform",
+		socketPath: "/test/vmctl.sock",
+		client:     runtimeServer.Client(),
+	}
+	status, err := dispatcher.getRunStatus(t.Context(), "run-status-proxy")
+	if err != nil {
+		t.Fatalf("get run status: %v", err)
+	}
+	if status.RunID != "run-status-proxy" || status.State != "completed" {
+		t.Fatalf("status = %+v", status)
+	}
+	wantPath := "/internal/vmctl/sandbox-proxy/universal-wire-platform/internal/runtime/runs/run-status-proxy"
+	if gotPath != wantPath {
+		t.Fatalf("status path = %q, want %q", gotPath, wantPath)
+	}
+}
+
 func TestIngestionRuntimeDispatcherSkipsProcessorWithoutIngestionEvents(t *testing.T) {
 	ctx := context.Background()
 	store := newTestCycleStorage(t)
