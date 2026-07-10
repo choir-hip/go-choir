@@ -326,7 +326,7 @@ settlement:
 ---
 id: root_cause_reboot_loop
 kind: conjecture
-status: testing
+status: settled
 source: user-stated 2026-07-10
 definition: >-
   The platform computer and/or sourcecycled are observed to reboot or restart in
@@ -476,10 +476,12 @@ determined_state:
       source: observed
       execution_effect: The next probe belongs inside `backfillOGFromSQL`; changing
         vmctl readiness or sourcecycled retry timing would mask the substrate bug.
+    - claim: The `choir.run` legacy backfill is the blocking branch, and the existing
+        per-kind emptiness gate is implemented but not connected to startup migration.
+      source: observed
+      execution_effect: Connect `ogKindIsEmpty` at the per-kind backfill boundary;
+        do not extend readiness timeouts or patch sourcecycled retries.
   open:
-    - node: root_cause_reboot_loop
-      missing: Which per-kind branch of `backfillOGFromSQL` fails to finish on the
-        persisted universal-wire workspace.
     - node: platform_computer_stability
       missing: Proof that the platform VM stays stable for a full cycle.
     - node: sourcecycled_liveness
@@ -670,6 +672,57 @@ evidence_ledger:
     promotion_relevance: >-
       Authorizes per-kind backfill instrumentation. Does not authorize extending
       the boot timeout or skipping legacy data migration.
+  - claim: Unconditionally replaying relational runs is the direct readiness blocker.
+    definition_node: root_cause_reboot_loop
+    evidence_class: deployed staging proof + code-level proof
+    source: CI run 29120219036, Node B deploy job 86455558809, and store migration source
+    command_or_observation: >-
+      Deploy e8dda030; inspect fresh guest journal from 2026-07-10T20:19:24Z;
+      read internal/store/{migration.go,graph_store.go}.
+    artifact_path: internal/store/migration.go
+    result: >-
+      The fresh guest completed `agents` in 0.43 seconds, entered `runs` at
+      20:19:27 UTC, emitted no completion marker, and was marked failed at
+      20:22:19 after the readiness deadline. `backfillRunsOG` loads every legacy
+      run and performs one OG lookup per record. `ogKindIsEmpty` already exists
+      with the explicit contract that per-kind backfill runs only for empty OG
+      kinds, but migration does not call it.
+    uncertainty: >-
+      A populated-kind fast path must be proved not to suppress first-time migration
+      of an empty kind. Later kinds may have the same scaling defect and must use
+      the same gate rather than fixing only runs.
+    promotion_relevance: >-
+      Settles `root_cause_reboot_loop` and authorizes the bounded substrate repair.
+```
+
+## Active Red Mutation Ceremony
+
+```yaml
+active_red_mutation:
+  conjecture_delta: >-
+    The lifecycle/retry hypotheses are superseded by deployed proof that sandbox
+    startup unconditionally replays populated relational `choir.run` rows into OG.
+    Wiring the existing per-kind emptiness gate will preserve first migration while
+    making subsequent boots independent of historical row count.
+  protected_surfaces:
+    - Embedded Dolt runtime and objectgraph startup/migration.
+    - Existing OG objects, including newer OG-only state that legacy SQL must not overwrite.
+    - VM guest readiness and platform-computer lifecycle.
+  admissible_evidence_class:
+    - Focused unit/integration tests for empty-kind migration and populated-kind skip.
+    - Full internal/store test suite.
+    - CI and race lanes for the exact pushed SHA.
+    - Deployed fresh-boot trace through runtime HTTP readiness, followed by a source cycle.
+  rollback_path: >-
+    Revert the repair commit to e8dda030 behavior; instrumentation remains available
+    for diagnosis. If staging regresses, roll back the deployed commit and restart
+    vmctl/platform runtime through the normal deployment path.
+  heresy_delta:
+    discovered:
+      - The stated per-kind migration gate exists in graph_store.go but is disconnected.
+      - Every boot replays populated legacy kinds, allowing historical run count to block readiness.
+    introduced: []
+    repaired: []
 ```
 
 ## Completion Semantics
@@ -754,18 +807,21 @@ run_checkpoint_and_resumption_state:
       guest never listens on port 8085.
     - Deployed phase markers localize the readiness failure to `backfillOGFromSQL`;
       all earlier persistent-store startup stages complete within seconds.
+    - Per-kind markers settle `choir.run` as the blocking kind and expose the
+      disconnected `ogKindIsEmpty` replacement as the intended substrate repair.
   remaining_error_field:
     - The platform computer is rebooting in a loop because its runtime never becomes ready.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: stalled objectgraph backfill kind
+  highest_impact_remaining_uncertainty: conformance of the per-kind emptiness gate
   next_executable_probe: >-
-    Add per-kind start/complete markers inside `backfillOGFromSQL`, deploy them,
-    and identify the first legacy replay branch that does not complete before
-    vmctl's readiness deadline.
+    Connect the existing per-kind emptiness gate to each legacy backfill branch;
+    prove populated kinds skip replay while empty kinds still migrate, then deploy
+    and observe a fresh universal-wire guest reach runtime readiness.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
     - CI run 29118850649 and Node B deploy job 86450906080 for c6b422bb.
+    - CI run 29120219036 and Node B deploy job 86455558809 for e8dda030.
   rollback_refs: []
 ```
 
