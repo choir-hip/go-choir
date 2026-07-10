@@ -104,20 +104,30 @@ problem: >-
   overwrites the binary Commit field with that mutable file value. During CI
   run 29078163452, proxy /health reported 3f4f4aac while the deploy job was
   still in progress and the auth service still served the pre-repair API-key
-  handler: a read-only key minted an admin child with HTTP 201.
+  handler: a read-only key minted an admin child with HTTP 201. During the
+  rerun of CI run 29079492757 for commit 94416899, the deploy host fetched and
+  reset to the then-current origin/main commit b0b6d8af instead of the tested
+  workflow commit. The auth fast build then fell back to Nix, whose
+  service-specific source filter omitted internal/buildinfo even though
+  internal/server now imports it. Deployment failed before activation.
 problem_cluster:
   - proxy health exposes mutable repository target identity, not immutable serving-binary identity
   - generic service health, including auth, exposes no compiled build identity
+  - the deploy job tests one immutable workflow commit but Node B independently selects a moving branch tip
+  - fast and Nix fallback builds use separate source/dependency declarations and inject different build identity fields
   - cmd/choir is not installed on Node B or guest images, yet its source falls through to the conservative full host plus both guest-image deploy class
   - cmd/desktop is a separate Wails distribution module, but its native-only source also falls through to the full platform deploy class; only shared frontend changes belong to Node B
 root_cause:
   - deploy.env publishes the target SHA before service activation
   - buildinfo conflates compiled artifact identity with mutable deploy metadata
+  - the remote checkout trusts origin/main rather than the immutable workflow SHA that passed CI
+  - the auth Nix source filter does not carry internal/server's internal/buildinfo dependency and common Nix ldflags omit Commit and BuiltAt
   - the landing loop treated proxy-global identity as proof for an affected auth service
   - path fallback substitutes repository-wide deployment for an explicit artifact dependency map
 protected_surfaces: [deployment routing, run acceptance, service build identity]
 settlement_rule: >-
-  Compiled service commit remains immutable and independently observable;
+  Node B builds exactly the workflow commit that passed CI; compiled service
+  commit remains immutable and independently observable;
   release-target metadata advances only after successful activation; affected
   service identity is probed before product acceptance; an inverted deploy
   contract prevents a target SHA from masquerading as a serving binary SHA;
@@ -547,6 +557,26 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     Focused repetition and scheduler/passivation call-graph review must decide
     whether this is a real lost wake or suite-pressure timing failure before
     any actor or timeout change. It is not attributed to PC-0 source.
+- claim: the actor race failure was a non-reproducing timing anomaly, and the rerun exposed two deployment authorities.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: same-SHA CI rerun + deploy log + source/build call graph
+  command_or_observation: >-
+    GitHub Actions run 29079492757 attempt 2; deploy job 86324338577;
+    focused TestNoLostWakeUnderConcurrentSendsAndPassivations race repetition;
+    flake.nix auth source filter and commonGoArgs; .github/workflows/ci.yml
+    remote checkout
+  result: >-
+    The actor lane passed on the same SHA without an actor or timeout change.
+    The deploy step then reset /opt/go-choir to origin/main at b0b6d8af rather
+    than workflow SHA 94416899. Selected auth deployment fell back from the
+    host fast build to Nix and failed because the filtered source omitted
+    internal/buildinfo, now imported by internal/server. The Nix common
+    ldflags also set Version only, unlike the fast build's Version, Commit,
+    and BuiltAt. No service was activated by this failed deploy.
+  uncertainty: >-
+    Repair must pin checkout to the workflow SHA, wire the existing buildinfo
+    dependency into the auth package, and make both build paths compile the
+    same identity fields before staging acceptance is admissible.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
@@ -578,15 +608,16 @@ SyncService, or one published Texture is not completion.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: transient false deployment identity observed during CI run 29078163452
+  last_checkpoint: deploy rerun selected moving main and failed the auth Nix fallback before activation
   current_artifact_state: >-
     API-key delegation commit 3f4f4aac is active and accepted on staging after
     the auth deploy completed. The transient pre-activation proof remains the
     PC-0 problem record. The CLI timeout repair is green locally but held until
     deployment routing stops treating the undistributed CLI as a full
-    host-and-guest rollout. PC-0 commit 94416899 is pushed but not deployed:
-    standard and runtime race CI passed, while a pre-existing actor lost-wake
-    race test blocked the aggregate gate and deploy.
+    host-and-guest rollout. PC-0 commit 94416899 is pushed but not deployed.
+    Its same-SHA actor rerun passed, then deploy job 86324338577 reset Node B
+    to newer origin/main commit b0b6d8af and failed the auth Nix fallback
+    because its source filter omitted internal/buildinfo. No activation ran.
   what_shipped:
     - 3f4f4aac API-key capability-envelope enforcement
     - eb3bdd35 false deployment identity problem record
@@ -599,17 +630,17 @@ run_checkpoint_and_resumption_state:
     - API-key delegation and sibling revocation are bounded by caller capability on staging
   unproven_or_partial_claims:
     - immutable per-service deployment identity
-    - actor lost-wake failure classification and PC-0 clean CI rerun
+    - workflow-SHA-pinned deployment and PC-0 clean CI/deploy rerun
     - no Wails built-app acceptance
     - no deployed Autopaper duplicate count
     - no Base exact-byte two-device proof
     - no served ComputerVersion promotion
   highest_impact_remaining_uncertainty: immutable per-service deployment identity
   next_executable_probe: >-
-    Repair PC-0 so compiled service identity is never overwritten by mutable
-    deploy target metadata, expose identity on affected service health, and
-    stop classifying cmd/choir-only changes as full Node B/guest rollouts. Then
-    land and stage-time the prepared CLI timeout slice.
+    Pin Node B checkout to the tested workflow SHA, add internal/buildinfo to
+    the auth Nix source closure, inject Commit and BuiltAt through the shared
+    Nix build path, then rerun CI/deploy and verify affected service identity.
+    Only then land and stage-time the prepared CLI timeout slice.
   suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
