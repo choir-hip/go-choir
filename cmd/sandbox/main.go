@@ -206,13 +206,26 @@ func main() {
 	// Start the runtime engine and supervisor.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	log.Printf("sandbox: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
+	rt.Start(ctx)
+
+	// Backfill can be much larger than vmctl's guest-readiness window and shares
+	// the embedded Dolt handle with synchronous runtime recovery. Wait until
+	// recovery is complete and the TCP listener is published before resuming it.
 	go func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for s.Addr() == "" {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
 		if err := db.BackfillObjectGraph(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("sandbox: objectgraph backfill failed: %v", err)
 		}
 	}()
-	log.Printf("sandbox: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
-	rt.Start(ctx)
 
 	s.Start()
 }
