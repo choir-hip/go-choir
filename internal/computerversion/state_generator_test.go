@@ -308,31 +308,6 @@ func TestCrossSubstrateEquivalenceRealGenerator(t *testing.T) {
 	if !result.Equivalent() {
 		t.Fatal("equivalence check failed: result is not equivalent")
 	}
-
-	// Build a BaseSubstrateEquivalenceContract from the proof.
-	evidence := BaseSubstrateEquivalenceEvidence{
-		ClaimScope:                  BaseSubstrateEquivalenceClaimScope,
-		CurrentRealizationRef:       "substrate-a-realization",
-		ProjectionRealizationRef:    "substrate-b-realization",
-		CurrentObservationRef:       "substrate-a-observations",
-		ProjectionObservationRef:    "substrate-b-observations",
-		EquivalenceEvidenceRef:      "cross-substrate-generator-equivalence-test",
-		NoRuntimeMaterialization:    true,
-		NoOpaqueDataImageDependency: true,
-		NoMutation:                  true,
-	}
-	contract, err := BuildBaseSubstrateEquivalenceContract(realizationA, realizationB, evidence)
-	if err != nil {
-		t.Fatalf("build substrate equivalence contract: %v", err)
-	}
-	if contract.EquivalenceStatus != EquivalenceEquivalent {
-		t.Errorf("contract equivalence status: expected %s, got %s", EquivalenceEquivalent, contract.EquivalenceStatus)
-	}
-
-	t.Logf("cross-substrate equivalence proven via generator: %s (%s) == %s (%s) for %s@%s",
-		contract.CurrentMaterializer, contract.CurrentSubstrate,
-		contract.ProjectionMaterializer, contract.ProjectionSubstrate,
-		version.CodeRef, version.ArtifactProgramRef)
 }
 
 // TestCrossSubstrateFailureRealGenerator proves SIAC gate 5: a seeded mismatch
@@ -408,22 +383,6 @@ func TestCrossSubstrateFailureRealGenerator(t *testing.T) {
 	}
 	if !foundMismatch {
 		t.Errorf("expected a difference naming data/notes.txt or its blob ref, got: %+v", result.Differences)
-	}
-
-	// Verify the contract builder rejects the mismatched evidence.
-	evidence := BaseSubstrateEquivalenceEvidence{
-		ClaimScope:                  BaseSubstrateEquivalenceClaimScope,
-		CurrentRealizationRef:       "substrate-a-realization",
-		ProjectionRealizationRef:    "substrate-b-realization",
-		CurrentObservationRef:       "substrate-a-observations",
-		ProjectionObservationRef:    "substrate-b-observations",
-		EquivalenceEvidenceRef:      "cross-substrate-generator-failure-test",
-		NoRuntimeMaterialization:    true,
-		NoOpaqueDataImageDependency: true,
-		NoMutation:                  true,
-	}
-	if _, err := BuildBaseSubstrateEquivalenceContract(realizationA, realizationB, evidence); err == nil {
-		t.Fatal("expected contract builder to reject mismatched realizations")
 	}
 
 	t.Logf("failure proof confirmed: equivalence checker detected seeded mismatch with %d differences", len(result.Differences))

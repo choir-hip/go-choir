@@ -524,12 +524,6 @@ func (h *APIHandler) corpusdStoryVerificationEnabled() bool {
 	return strings.TrimSpace(corpusdReadBaseURL()) != ""
 }
 
-func wireRevisionIsUniversalWireSynthesis(rev types.Revision) bool {
-	meta := decodeRevisionMetadata(rev.Metadata)
-	value, ok := meta["universal_wire_synthesis"].(bool)
-	return ok && value
-}
-
 func (h *APIHandler) corpusdHasPublishedTexture(ctx context.Context, docID, revisionID string) bool {
 	base := strings.TrimRight(strings.TrimSpace(corpusdReadBaseURL()), "/")
 	if base == "" || strings.TrimSpace(docID) == "" {
