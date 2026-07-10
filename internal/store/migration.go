@@ -54,12 +54,12 @@ func (s *Store) backfillOGFromSQL(ctx context.Context) error {
 
 func (s *Store) runOGBackfillStep(ctx context.Context, name string, kind objectgraph.ObjectKind, run func(context.Context) error) error {
 	if kind != "" {
-		empty, err := s.ogKindIsEmpty(ctx, kind)
+		complete, err := s.ogBackfillMigrationComplete(ctx, kind)
 		if err != nil {
-			return fmt.Errorf("backfill OG %s: inspect kind: %w", name, err)
+			return fmt.Errorf("backfill OG %s: inspect completion: %w", name, err)
 		}
-		if !empty {
-			log.Printf("store: objectgraph backfill kind=%s status=skipped reason=kind-populated", name)
+		if complete {
+			log.Printf("store: objectgraph backfill kind=%s status=skipped reason=migration-complete", name)
 			return nil
 		}
 	}
@@ -67,8 +67,43 @@ func (s *Store) runOGBackfillStep(ctx context.Context, name string, kind objectg
 	if err := run(ctx); err != nil {
 		return err
 	}
+	if kind != "" {
+		if err := s.markOGBackfillMigrationComplete(ctx, kind); err != nil {
+			return fmt.Errorf("backfill OG %s: mark completion: %w", name, err)
+		}
+	}
 	log.Printf("store: objectgraph backfill kind=%s status=complete", name)
 	return nil
+}
+
+func ogBackfillMigrationID(kind objectgraph.ObjectKind) string {
+	return "sql-to-objectgraph-v1:" + string(kind)
+}
+
+func (s *Store) ogBackfillMigrationComplete(ctx context.Context, kind objectgraph.ObjectKind) (bool, error) {
+	if s == nil || s.textureHandle() == nil {
+		return false, fmt.Errorf("store: object graph database not initialized")
+	}
+	var count int
+	if err := s.textureHandle().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM og_migrations WHERE migration_id = ?`,
+		ogBackfillMigrationID(kind),
+	).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s *Store) markOGBackfillMigrationComplete(ctx context.Context, kind objectgraph.ObjectKind) error {
+	if s == nil || s.textureHandle() == nil {
+		return fmt.Errorf("store: object graph database not initialized")
+	}
+	_, err := s.textureHandle().ExecContext(ctx,
+		`INSERT INTO og_migrations (migration_id, completed_at) VALUES (?, ?)
+		 ON DUPLICATE KEY UPDATE completed_at = VALUES(completed_at)`,
+		ogBackfillMigrationID(kind), time.Now().UTC(),
+	)
+	return err
 }
 
 func (s *Store) backfillAgentsOG(ctx context.Context) error {

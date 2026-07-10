@@ -176,26 +176,6 @@ func (s *Store) ogExistsByKey(ctx context.Context, kind objectgraph.ObjectKind, 
 	return false, err
 }
 
-// ogKindIsEmpty reports whether the object graph has zero objects of
-// the given kind. Used to gate per-kind SQL-to-OG backfill: stores that
-// already have OG objects from the Phase 3 dual-write period still need
-// to backfill newly cut-over kinds (e.g. texture_source_entities) that
-// were previously read from SQL only.
-func (s *Store) ogKindIsEmpty(ctx context.Context, kind objectgraph.ObjectKind) (bool, error) {
-	store := s.ogReadStore
-	if store == nil {
-		store = s.ogStore
-	}
-	if store == nil {
-		return true, nil
-	}
-	objs, err := store.ListObjects(ctx, objectgraph.ListFilter{Kind: kind, Limit: 1})
-	if err != nil {
-		return false, err
-	}
-	return len(objs) == 0, nil
-}
-
 // ogPutEdge creates an edge between two objects.
 func (s *Store) ogPutEdge(ctx context.Context, fromID, toID string, kind objectgraph.EdgeKind, metadata any) error {
 	if s.og == nil {

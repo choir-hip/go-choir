@@ -244,9 +244,9 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,
 	})
-	// Backfill existing SQL texture rows into the object graph.
-	// Each kind is gated individually so only empty kinds are
-	// backfilled, avoiding replaying stale SQL over newer OG writes.
+	// Backfill existing SQL texture rows into the object graph. Durable
+	// per-kind completion markers make interruption resumable without treating
+	// partial population as completion.
 	if err := s.backfillTextureTablesOG(context.Background()); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("texture workspace: backfill OG: %w", err)

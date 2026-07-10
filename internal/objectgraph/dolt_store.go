@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS og_edges (
 );
 CREATE INDEX IF NOT EXISTS idx_og_edges_from ON og_edges(from_id);
 CREATE INDEX IF NOT EXISTS idx_og_edges_to ON og_edges(to_id);
+
+CREATE TABLE IF NOT EXISTS og_migrations (
+	migration_id VARCHAR(255) NOT NULL PRIMARY KEY,
+	completed_at DATETIME NOT NULL
+);
 `
 
 // DoltStore is a Store backed by an embedded Dolt *sql.DB. It is the

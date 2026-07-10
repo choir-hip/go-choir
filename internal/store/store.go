@@ -626,11 +626,25 @@ CREATE INDEX IF NOT EXISTS idx_desktop_app_instances_stack ON desktop_app_instan
 CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_window_placements(owner_id, desktop_id, app_instance_id, updated_at);
 `
 
+// OpenOptions controls startup-only store behavior.
+type OpenOptions struct {
+	// DeferObjectGraphBackfill returns after schemas and legacy SQLite import
+	// are ready. The caller must invoke BackfillObjectGraph under its process
+	// context. This lets lifecycle health bind before a large resumable legacy
+	// replay without weakening the migration completion contract.
+	DeferObjectGraphBackfill bool
+}
+
 // Open opens (or creates) the unified embedded Dolt workspace derived from
 // dbPath and applies the runtime and texture schemas. If dbPath points at a
 // legacy runtime SQLite database, its rows are imported into Dolt once and the
 // SQLite file is left in place as a rollback source.
 func Open(dbPath string) (*Store, error) {
+	return OpenWithOptions(dbPath, OpenOptions{})
+}
+
+// OpenWithOptions opens the unified store with explicit startup behavior.
+func OpenWithOptions(dbPath string, opts OpenOptions) (*Store, error) {
 	log.Printf("store: open phase=prepare-path status=starting")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return nil, fmt.Errorf("runtime store: create directory: %w", err)
@@ -700,18 +714,14 @@ func Open(dbPath string) (*Store, error) {
 	}
 	log.Printf("store: open phase=legacy-import status=complete")
 
-	// Backfill existing SQL rows into the object graph. Each kind is
-	// gated individually so only empty kinds are backfilled — this
-	// covers freshly-imported SQLite data and pre-existing Dolt stores
-	// that accumulated SQL rows during the Phase 3 dual-write period,
-	// while avoiding replaying stale SQL over newer OG writes.
-	log.Printf("store: open phase=objectgraph-backfill status=starting")
-	if err := s.backfillOGFromSQL(context.Background()); err != nil {
-		_ = s.Close()
-		return nil, fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
+	if !opts.DeferObjectGraphBackfill {
+		if err := s.BackfillObjectGraph(context.Background()); err != nil {
+			_ = s.Close()
+			return nil, err
+		}
+	} else {
+		log.Printf("store: open phase=objectgraph-backfill status=deferred")
 	}
-	log.Printf("store: open phase=objectgraph-backfill status=complete")
-	s.markDoltHistoryDirty()
 
 	if freshStore {
 		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {
@@ -721,6 +731,19 @@ func Open(dbPath string) (*Store, error) {
 	}
 
 	return s, nil
+}
+
+// BackfillObjectGraph resumes SQL-to-OG migration kind by kind. Each kind is
+// idempotent and receives a durable completion marker only after its entire
+// pass succeeds, so interruption never collapses partial population into done.
+func (s *Store) BackfillObjectGraph(ctx context.Context) error {
+	log.Printf("store: open phase=objectgraph-backfill status=starting")
+	if err := s.backfillOGFromSQL(ctx); err != nil {
+		return fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
+	}
+	log.Printf("store: open phase=objectgraph-backfill status=complete")
+	s.markDoltHistoryDirty()
+	return nil
 }
 
 // bootstrap applies the schema DDL to the database.

@@ -71,7 +71,9 @@ func main() {
 	log.Printf("sandbox: startup phase=dolt-maintenance status=complete")
 
 	log.Printf("sandbox: startup phase=runtime-store-open status=starting")
-	db, err := store.Open(rtCfg.StorePath)
+	db, err := store.OpenWithOptions(rtCfg.StorePath, store.OpenOptions{
+		DeferObjectGraphBackfill: true,
+	})
 	if err != nil {
 		log.Fatalf("sandbox: open runtime store: %v", err)
 	}
@@ -204,6 +206,11 @@ func main() {
 	// Start the runtime engine and supervisor.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go func() {
+		if err := db.BackfillObjectGraph(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("sandbox: objectgraph backfill failed: %v", err)
+		}
+	}()
 	log.Printf("sandbox: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
 	rt.Start(ctx)
 
