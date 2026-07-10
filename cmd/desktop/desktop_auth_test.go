@@ -436,6 +436,23 @@ func TestDesktopRendererSourceCannotHandleSessionTokens(t *testing.T) {
 	}
 }
 
+func TestDesktopDoesNotRegisterSupersededBaseSyncService(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("main.go")
+	if err != nil {
+		t.Fatalf("read desktop main source: %v", err)
+	}
+	for _, forbidden := range []string{
+		"application.NewService(newSyncService",
+		"func newSyncService(",
+	} {
+		if strings.Contains(string(source), forbidden) {
+			t.Errorf("desktop still exposes superseded Base sync authority %q", forbidden)
+		}
+	}
+}
+
 func mustDesktopSession(t *testing.T, backend string) *desktopSession {
 	t.Helper()
 	session, err := newDesktopSession(backend)
