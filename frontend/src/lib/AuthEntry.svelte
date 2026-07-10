@@ -96,7 +96,7 @@
   }
 </script>
 
-<div class="auth-entry" data-auth-entry>
+<div class="auth-entry" data-auth-entry aria-busy={ceremonyInProgress ? 'true' : 'false'}>
   <div class="auth-card">
     <p class="auth-kicker">Continue in Choir</p>
     <h1>Sign in. Pick up where you left off.</h1>
@@ -147,7 +147,7 @@
           ariaLabel="What is a passkey?"
         />
 
-        <form on:submit|preventDefault={handleRegister}>
+        <form novalidate on:submit|preventDefault={handleRegister}>
           <label for="register-email">Email address</label>
           <input
             id="register-email"
@@ -161,8 +161,8 @@
             autocapitalize="none"
             spellcheck="false"
             disabled={ceremonyInProgress}
-            aria-invalid={displayError ? 'true' : 'false'}
-            aria-errormessage={displayError ? 'auth-error' : undefined}
+            aria-invalid={error ? 'true' : 'false'}
+            aria-errormessage={error ? 'auth-error' : undefined}
             required
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
@@ -189,7 +189,7 @@
           ariaLabel="What is a passkey?"
         />
 
-        <form on:submit|preventDefault={handleLogin}>
+        <form novalidate on:submit|preventDefault={handleLogin}>
           <label for="login-email">Email address</label>
           <input
             id="login-email"
@@ -203,8 +203,8 @@
             autocapitalize="none"
             spellcheck="false"
             disabled={ceremonyInProgress}
-            aria-invalid={displayError ? 'true' : 'false'}
-            aria-errormessage={displayError ? 'auth-error' : undefined}
+            aria-invalid={error ? 'true' : 'false'}
+            aria-errormessage={error ? 'auth-error' : undefined}
             required
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
@@ -223,11 +223,11 @@
       </div>
     {/if}
 
-    <p class="next-step"><strong>Next:</strong> Your browser asks you to unlock the passkey. Then Choir returns you to the action above.</p>
-
     {#if displayError}
       <p class="error" id="auth-error" role="alert" data-passkey-error>{displayError}</p>
     {/if}
+
+    <p class="next-step"><strong>Next:</strong> Your browser asks you to unlock the passkey. Then Choir returns you to the action above.</p>
   </div>
 </div>
 
@@ -249,6 +249,9 @@
     padding: 1.55rem;
     width: 100%;
     max-width: 480px;
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    overscroll-behavior: contain;
     text-align: left;
     box-shadow: var(--choir-shadow-floating);
     color: var(--choir-text-primary);
@@ -400,7 +403,7 @@
     transition: filter 0.2s, transform 0.2s;
   }
 
-  .primary-action:hover {
+  .primary-action:hover:enabled {
     filter: brightness(1.08);
     transform: translateY(-1px);
   }
@@ -413,6 +416,9 @@
 
   .error {
     margin-top: 1rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background: var(--choir-status-danger-soft);
     color: var(--choir-status-danger);
     font-size: 0.9rem;
     line-height: 1.35;

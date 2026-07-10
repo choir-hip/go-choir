@@ -158,6 +158,16 @@
     authOverlayOpen = false;
     pendingAuthIntent = null;
     passkeyError = '';
+    tick().then(() => requestAnimationFrame(() => {
+      const returnTarget = document.querySelector('[data-prompt-input], [data-universal-wire-public-sign-in]');
+      if (returnTarget instanceof HTMLElement) returnTarget.focus();
+    }));
+  }
+
+  function handleAuthOverlayKeydown(event: KeyboardEvent) {
+    if (!authOverlayOpen || event.key !== 'Escape' || ceremonyInProgress) return;
+    event.preventDefault();
+    clearAuthOverlay();
   }
 
   function handleAuthRequired(event) {
@@ -334,7 +344,7 @@
       // Ceremony failed or was cancelled — stay in signed-out
       // state and display a retryable error message.
       authState = 'signed_out';
-      passkeyError = passkeyErrorMessage(err);
+      passkeyError = passkeyErrorMessage(err, type);
     } finally {
       ceremonyInProgress = false;
     }
@@ -422,7 +432,7 @@
     }
   }
 
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   function isPublicTextureRoutePath(pathname) {
     return pathname.startsWith('/pub/texture/');
   }
@@ -498,6 +508,8 @@
   });
 </script>
 
+<svelte:window on:keydown={handleAuthOverlayKeydown} />
+
 <div class="app-root" data-theme-id={currentTheme.id} data-auth-state={authState}>
   {#if isLegalDocumentRoute}
     <LegalDocument kind={legalDocumentKind} />
@@ -562,13 +574,13 @@
     </main>
     {#if authOverlayOpen && !isAuthenticated}
       <div class="auth-overlay" data-auth-overlay data-auth-intent-kind={pendingAuthIntent?.kind || ''}>
-        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Use a passkey to continue">
+        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Sign in to Choir">
           <button
             class="auth-overlay-close"
             data-auth-overlay-close
             type="button"
             on:click={clearAuthOverlay}
-            aria-label="Close passkey sign in"
+            aria-label="Close sign-in and return to Choir"
           >
             ×
           </button>
@@ -600,13 +612,13 @@
     />
     {#if authOverlayOpen && !isAuthenticated}
       <div class="auth-overlay" data-auth-overlay data-auth-intent-kind={pendingAuthIntent?.kind || ''}>
-        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Use a passkey to continue">
+        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Sign in to Choir">
           <button
             class="auth-overlay-close"
             data-auth-overlay-close
             type="button"
             on:click={clearAuthOverlay}
-            aria-label="Close passkey sign in"
+            aria-label="Close sign-in and return to Choir"
           >
             ×
           </button>
@@ -813,6 +825,8 @@
     align-items: center;
     justify-content: center;
     padding: 1rem;
+    overflow: auto;
+    overscroll-behavior: contain;
     background: color-mix(in srgb, var(--choir-bg) 58%, transparent);
     backdrop-filter: blur(10px);
   }
@@ -841,6 +855,11 @@
 
   .auth-overlay-close:hover {
     background: var(--choir-state-selected);
+  }
+
+  .auth-overlay-close:focus-visible {
+    outline: 2px solid var(--choir-accent);
+    outline-offset: 3px;
   }
 
   .auth-overlay :global(.auth-entry) {
