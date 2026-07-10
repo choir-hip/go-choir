@@ -156,6 +156,12 @@
     dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon });
   }
 
+  function handleKeydown(event, app) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    dispatch('launchapp', { appId: app.id, appName: app.name, icon: app.icon });
+  }
+
   /** Handle drag start on icon */
   function handleDragStart(event, app) {
     if (event.button !== 0) return;
@@ -277,8 +283,6 @@
     {@const isOpen = isAppOpen($windows, app.id)}
     {@const isActive = isAppActive($windows, $activeWindowId, app.id)}
     {@const isSelected = $selectedIconId === app.id}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
       class="desktop-icon {isActive ? 'icon-active' : ''} {isSelected ? 'icon-selected' : ''} {isOpen ? 'icon-open' : ''}"
       style="left: {pos.x}px; top: {pos.y}px;"
@@ -286,6 +290,7 @@
       data-desktop-icon-id={app.id}
       on:click|stopPropagation={() => handleClick(app)}
       on:dblclick|stopPropagation={() => handleDblClick(app)}
+      on:keydown|stopPropagation={(event) => handleKeydown(event, app)}
       on:mousedown|stopPropagation={(e) => handleDragStart(e, app)}
       on:touchstart|stopPropagation={(e) => handleTouchStart(e, app)}
       role="button"

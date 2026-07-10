@@ -324,7 +324,7 @@
     ? 'display:none;'
     : `left:${renderedX}px; top:${renderedY}px; width:${renderedWidth}px; height:${renderedHeight}px;`;
 
-  $: maxRestoreIcon = mode === 'maximized' ? '❐' : '☐';
+  $: maxRestoreIcon = mode === 'maximized' ? '⤢' : '▢';
   $: maxRestoreTitle = mode === 'maximized' ? 'Restore' : 'Maximize';
   $: showResizeHandle = mode === 'normal' && !overviewOpen;
   $: overviewClass = overviewOpen ? `overview-preview overview-preview-${overviewPreviewState}` : '';
@@ -364,7 +364,7 @@
         on:click|stopPropagation={handleMinimize}
         title="Minimize"
         aria-label="Minimize"
-      >—</button>
+      >−</button>
       <button
         class="ctrl-btn maximize-btn"
         data-window-maximize
