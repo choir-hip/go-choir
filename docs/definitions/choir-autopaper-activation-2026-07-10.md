@@ -326,7 +326,7 @@ settlement:
 ---
 id: root_cause_reboot_loop
 kind: conjecture
-status: proposed
+status: testing
 source: user-stated 2026-07-10
 definition: >-
   The platform computer and/or sourcecycled are observed to reboot or restart in
@@ -459,9 +459,22 @@ determined_state:
       source: observed
       execution_effect: Duplicates must be rejected by the runtime, but the mission
         must verify this under retry and restart.
+    - claim: The host sourcecycled and vmctl services remain running while the
+        universal-wire platform guest repeatedly fails readiness and is recovered.
+      source: observed
+      execution_effect: The active failure is a platform guest/runtime startup
+        failure, not a systemd restart loop in either host daemon.
+    - claim: The universal-wire guest reaches its sandbox runtime service launcher,
+        but the runtime does not bind port 8085 before vmctl's three-minute readiness
+        deadline.
+      source: observed
+      execution_effect: Investigation moves inside sandbox startup before HTTP
+        serving; sourcecycled retry cadence is downstream amplification, not yet
+        the root cause.
   open:
     - node: root_cause_reboot_loop
-      missing: Which hypothesis (H1–H5) matches the observed staging logs.
+      missing: Which pre-listen sandbox startup transition stalls after the guest
+        launcher reports that the wire publish URL is configured.
     - node: platform_computer_stability
       missing: Proof that the platform VM stays stable for a full cycle.
     - node: sourcecycled_liveness
@@ -605,6 +618,32 @@ evidence_ledger:
     result: Confirmed
     uncertainty: Does not identify why the VM reboots.
     promotion_relevance: The fix surface may be in vmctl.
+  - claim: The deployed failure is a repeated platform-guest readiness failure,
+      while sourcecycled and vmctl themselves remain live.
+    definition_node: root_cause_reboot_loop
+    evidence_class: deployed staging proof
+    source: Node B systemd and journal observation on 2026-07-10
+    command_or_observation: >-
+      systemctl show go-choir-sourcecycled go-choir-vmctl; journalctl -u
+      go-choir-sourcecycled -u go-choir-vmctl --since 2026-07-10T18:30:00Z;
+      GET http://127.0.0.1:{8083/health,8787/health/ready}
+    artifact_path: docs/definitions/choir-autopaper-activation-2026-07-10.md
+    result: >-
+      From 18:30 UTC through the observation, vmctl logged 17 Firecracker boots,
+      16 guest-readiness timeouts, and sourcecycled logged 16 failed web-capture
+      projections. Every timeout ended after three minutes with connection refused
+      on the guest's port 8085 and a killed/failed Firecracker process. Both host
+      services reported NRestarts=0 and healthy service endpoints. The host pressure
+      sample reported 82.3% memory available and no memory, CPU, IO, or disk pressure.
+    uncertainty: >-
+      The guest console reports that the sandbox runtime service started and that
+      its wire publish URL is configured, but emits none of cmd/sandbox's later
+      runtime-topology logs. The exact blocking call before HTTP listen is not yet
+      identified; persistent workspace bootstrap, Dolt maintenance, and store.Open
+      remain candidates.
+    promotion_relevance: >-
+      Supports H1 and falsifies a sourcecycled systemd restart or host-pressure/OOM
+      explanation. Does not yet authorize a VM lifecycle or runtime fix.
 ```
 
 ## Completion Semantics
@@ -664,30 +703,41 @@ Escalate to the human before implementing changes that:
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: dd295f5c
+  last_checkpoint: live Node B observation 2026-07-10T18:30Z-19:31Z
   current_artifact_state: >-
-    docs/definitions/choir-autopaper-activation-2026-07-10.md is the new
-    mission Definition. No code changes yet. The reboot-loop root cause is
-    unknown.
+    No code changes yet. Staging reproduces the loop: sourcecycled projections
+    trigger a platform guest boot, the guest reaches its runtime launcher but
+    never binds port 8085, vmctl times out after three minutes and kills/marks
+    the guest failed, and the next projection repeats the recovery.
   what_shipped: []
-  what_was_proven: []
+  what_was_proven:
+    - The loop is platform guest readiness/recovery churn, not a host daemon restart.
+    - The guest never reaches cmd/sandbox's post-store runtime-topology log or HTTP listen.
+    - Host memory, CPU, IO, and state-disk pressure did not cause the observed loop.
   unproven_or_partial_claims:
     - The root cause of the platform/sourcecycled reboot loop.
     - Platform VM stability for a full source cycle.
     - Sourcecycled liveness for a full source cycle.
     - Single authoritative activation under retry/restart.
     - End-to-end Autopaper edition visibility.
-  belief_state_changes: []
+  belief_state_changes:
+    - H1 is supported: repeated guest readiness failure drives VM recovery.
+    - A sourcecycled process restart and host pressure/OOM are falsified for the
+      observed window.
+    - H2/H3 describe amplification and overlap but do not explain why a booted
+      guest never listens on port 8085.
   remaining_error_field:
-    - The platform computer and/or sourcecycled are rebooting in a loop.
+    - The platform computer is rebooting in a loop because its runtime never becomes ready.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: root_cause_reboot_loop
+  highest_impact_remaining_uncertainty: pre-listen sandbox runtime startup stall
   next_executable_probe: >-
-    Observe staging: capture `systemctl` status, `journalctl`, and `vmctl` pulse
-    for `go-choir-sourcecycled`, `go-choir-vmctl`, and the platform VM during a
-    sourcecycled cycle.
+    Determine the exact blocking transition between the guest launcher's final
+    wire-publish log and cmd/sandbox binding port 8085. Inspect persistent-store
+    startup state and add pre-listen phase instrumentation only if read-only
+    evidence cannot distinguish workspace bootstrap, Dolt GC, and store.Open.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
-  evidence_artifact_refs: []
+  evidence_artifact_refs:
+    - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
   rollback_refs: []
 ```
 
