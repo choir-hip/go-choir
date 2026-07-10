@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -25,39 +26,36 @@ func (s *Store) backfillOGFromSQL(ctx context.Context) error {
 	if s.og == nil {
 		return nil
 	}
-	if err := s.backfillAgentsOG(ctx); err != nil {
+	steps := []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{"agents", s.backfillAgentsOG},
+		{"runs", s.backfillRunsOG},
+		{"events", s.backfillEventsOG},
+		{"channel-messages", s.backfillChannelMessagesOG},
+		{"worker-updates", s.backfillWorkerUpdatesOG},
+		{"run-acceptances", s.backfillRunAcceptancesOG},
+		{"run-continuations", s.backfillRunContinuationsOG},
+		{"browser-sessions", s.backfillBrowserSessionsOG},
+		{"trajectories", s.backfillTrajectoriesOG},
+		{"work-items", s.backfillWorkItemsOG},
+		{"texture-tables", s.backfillTextureTablesOG},
+	}
+	for _, step := range steps {
+		if err := runOGBackfillStep(ctx, step.name, step.run); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runOGBackfillStep(ctx context.Context, name string, run func(context.Context) error) error {
+	log.Printf("store: objectgraph backfill kind=%s status=starting", name)
+	if err := run(ctx); err != nil {
 		return err
 	}
-	if err := s.backfillRunsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillEventsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillChannelMessagesOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillWorkerUpdatesOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillRunAcceptancesOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillRunContinuationsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillBrowserSessionsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillTrajectoriesOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillWorkItemsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillTextureTablesOG(ctx); err != nil {
-		return err
-	}
+	log.Printf("store: objectgraph backfill kind=%s status=complete", name)
 	return nil
 }
 
@@ -446,9 +444,9 @@ func (s *Store) backfillTextureDocumentsOG(ctx context.Context) error {
 	defer rows.Close()
 	for rows.Next() {
 		var (
-			doc         types.Document
-			createdAt   string
-			updatedAt   string
+			doc       types.Document
+			createdAt string
+			updatedAt string
 		)
 		if err := rows.Scan(&doc.DocID, &doc.OwnerID, &doc.Title, &doc.CurrentRevisionID, &createdAt, &updatedAt); err != nil {
 			return fmt.Errorf("backfill OG texture documents: scan: %w", err)
@@ -479,13 +477,13 @@ func (s *Store) backfillTextureRevisionsOG(ctx context.Context) error {
 	defer rows.Close()
 	for rows.Next() {
 		var (
-			rev             types.Revision
-			bodyDocJSON     string
-			sourceEntities  string
-			citationsJSON   string
-			metadataJSON    string
-			provenanceJSON  string
-			createdAt       string
+			rev            types.Revision
+			bodyDocJSON    string
+			sourceEntities string
+			citationsJSON  string
+			metadataJSON   string
+			provenanceJSON string
+			createdAt      string
 		)
 		if err := rows.Scan(&rev.RevisionID, &rev.DocID, &rev.OwnerID, &rev.AuthorKind, &rev.AuthorLabel, &rev.VersionNumber, &rev.Content, &bodyDocJSON, &sourceEntities, &citationsJSON, &metadataJSON, &provenanceJSON, &rev.RevisionHash, &rev.ParentRevisionID, &createdAt); err != nil {
 			return fmt.Errorf("backfill OG texture revisions: scan: %w", err)
@@ -553,11 +551,11 @@ func (s *Store) backfillContentItemsOG(ctx context.Context) error {
 	defer rows.Close()
 	for rows.Next() {
 		var (
-			rec         types.ContentItem
-			metadata    string
-			provenance  string
-			createdAt   string
-			updatedAt   string
+			rec        types.ContentItem
+			metadata   string
+			provenance string
+			createdAt  string
+			updatedAt  string
 		)
 		if err := rows.Scan(&rec.ContentID, &rec.OwnerID, &rec.SourceType, &rec.MediaType, &rec.AppHint, &rec.Title, &rec.SourceURL, &rec.CanonicalURL, &rec.FilePath, &rec.TextContent, &rec.ContentHash, &metadata, &provenance, &createdAt, &updatedAt); err != nil {
 			return fmt.Errorf("backfill OG content items: scan: %w", err)
@@ -615,9 +613,9 @@ func (s *Store) backfillTextureSourceEntitiesOG(ctx context.Context) error {
 	defer rows.Close()
 	for rows.Next() {
 		var (
-			rec         TextureSourceEntityGraphRecord
-			metadata    string
-			createdAt   string
+			rec       TextureSourceEntityGraphRecord
+			metadata  string
+			createdAt string
 		)
 		if err := rows.Scan(&rec.CanonicalID, &rec.VersionID, &rec.OwnerID, &rec.ComputerID, &rec.ContentHash, &rec.Body, &metadata, &rec.LegacySourceEntityID, &createdAt); err != nil {
 			return fmt.Errorf("backfill OG texture source entities: scan: %w", err)
@@ -647,9 +645,9 @@ func (s *Store) backfillTextureSourceRefsOG(ctx context.Context) error {
 	defer rows.Close()
 	for rows.Next() {
 		var (
-			rec         TextureSourceRefGraphRecord
-			metadata    string
-			createdAt   string
+			rec       TextureSourceRefGraphRecord
+			metadata  string
+			createdAt string
 		)
 		if err := rows.Scan(&rec.CanonicalID, &rec.VersionID, &rec.OwnerID, &rec.ComputerID, &rec.ContentHash, &rec.DocID, &rec.TextureRevisionID, &rec.BodyNodeID, &rec.BodyNodePathHash, &rec.LegacySourceEntityID, &rec.SourceEntityCanonicalID, &rec.SourceEntityVersionID, &rec.DisplayMode, &rec.CitationState, &metadata, &createdAt); err != nil {
 			return fmt.Errorf("backfill OG texture source refs: scan: %w", err)

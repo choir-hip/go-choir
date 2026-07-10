@@ -262,26 +262,22 @@ func (s *Store) backfillTextureTablesOG(ctx context.Context) error {
 	if s.og == nil {
 		return nil
 	}
-	if err := s.backfillTextureDocumentsOG(ctx); err != nil {
-		return err
+	steps := []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{"texture-documents", s.backfillTextureDocumentsOG},
+		{"texture-revisions", s.backfillTextureRevisionsOG},
+		{"texture-decisions", s.backfillTextureDecisionsOG},
+		{"content-items", s.backfillContentItemsOG},
+		{"podcast-subscriptions", s.backfillPodcastSubscriptionsOG},
+		{"texture-source-entities", s.backfillTextureSourceEntitiesOG},
+		{"texture-source-refs", s.backfillTextureSourceRefsOG},
 	}
-	if err := s.backfillTextureRevisionsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillTextureDecisionsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillContentItemsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillPodcastSubscriptionsOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillTextureSourceEntitiesOG(ctx); err != nil {
-		return err
-	}
-	if err := s.backfillTextureSourceRefsOG(ctx); err != nil {
-		return err
+	for _, step := range steps {
+		if err := runOGBackfillStep(ctx, step.name, step.run); err != nil {
+			return err
+		}
 	}
 	return nil
 }
