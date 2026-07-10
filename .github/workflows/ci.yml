@@ -82,15 +82,8 @@ jobs:
               .github/scripts/ci-impact-classify --sha "$AFTER" "$GITHUB_OUTPUT"
           fi
 
-  ci-config-test:
-    name: Test CI Configuration
-    runs-on: ubuntu-latest
-    needs: plan
-    if: needs.plan.outputs.ci == 'true'
-    steps:
-      - uses: actions/checkout@v6
-
       - name: Test CI classifiers and differential SBOM reuse
+        if: steps.classify.outputs.ci == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -200,55 +193,10 @@ jobs:
         shell: bash
         run: scripts/go-test-integration
 
-  go-test-runtime-race:
-    name: Go Test (internal/runtime race shard ${{ matrix.shard }})
-    runs-on: ubuntu-latest
+  race:
     needs: plan
     if: needs.plan.outputs.high_risk_race == 'true' || (github.event_name == 'push' && needs.plan.outputs.go == 'true' && needs.plan.outputs.sampled_race == 'true')
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3]
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Go test internal/runtime shard with -race
-        shell: bash
-        env:
-          TOTAL_SHARDS: 4
-          SHARD_INDEX: ${{ matrix.shard }}
-        run: scripts/go-test-runtime-shards -race
-
-  go-test-race:
-    name: Go Test (non-runtime race)
-    runs-on: ubuntu-latest
-    needs: plan
-    if: needs.plan.outputs.high_risk_race == 'true' || (github.event_name == 'push' && needs.plan.outputs.go == 'true' && needs.plan.outputs.sampled_race == 'true')
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Go test non-runtime packages with -race
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
-          if (( ${#packages[@]} > 0 )); then
-            scripts/go-test-with-timing -race -count=1 "${packages[@]}"
-          fi
+    uses: ./.github/workflows/race.yml
 
   doccheck:
     name: Docs Truth Check
@@ -310,7 +258,7 @@ jobs:
   check:
     name: Go Vet + Test + Build
     runs-on: ubuntu-latest
-    needs: [plan, ci-config-test, go-vet-build, tla-model-check, go-test, go-test-runtime, go-test-runtime-race, go-test-race, doccheck, heresy-detector, build-frontend]
+    needs: [plan, go-vet-build, tla-model-check, go-test, go-test-runtime, race, doccheck, heresy-detector, build-frontend]
     if: always()
     steps:
       - name: Confirm selected CI gates passed
@@ -349,14 +297,12 @@ jobs:
           require_success "${{ needs.plan.outputs.go }}" go-test-runtime "${{ needs.go-test-runtime.result }}"
           require_success "${{ needs.plan.outputs.specs }}" tla-model-check "${{ needs.tla-model-check.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" heresy-detector "${{ needs.heresy-detector.result }}"
-          require_success "${{ needs.plan.outputs.ci }}" ci-config-test "${{ needs.ci-config-test.result }}"
           race_selected=false
           if [[ "${{ needs.plan.outputs.high_risk_race }}" == "true" ]] || \
              [[ "${{ github.event_name }}" == "push" && "${{ needs.plan.outputs.go }}" == "true" && "${{ needs.plan.outputs.sampled_race }}" == "true" ]]; then
             race_selected=true
           fi
-          require_success "$race_selected" go-test-runtime-race "${{ needs.go-test-runtime-race.result }}"
-          require_success "$race_selected" go-test-race "${{ needs.go-test-race.result }}"
+          require_success "$race_selected" race "${{ needs.race.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
           echo "All selected CI gates passed"
 
@@ -376,12 +322,6 @@ jobs:
         with:
           determinate: false
 
-      - name: Cache Nix store
-        uses: DeterminateSystems/magic-nix-cache-action@v14
-        with:
-          use-gha-cache: enabled
-          use-flakehub: disabled
-
       - name: Restore previous complete SBOM bundle
         id: restore-sbom-baseline
         uses: actions/cache/restore@v6
@@ -391,7 +331,7 @@ jobs:
           restore-keys: |
             sbom-bundle-v2-
 
-      - name: Build changed SBOM derivations and reuse identical ones
+      - name: Build changed packages and reuse identical SBOMs
         shell: bash
         run: .github/scripts/build-sboms-differential sboms "$RUNNER_TEMP/sbom-baseline" "$GITHUB_SHA"
 

@@ -94,6 +94,27 @@ export FAKE_SBOMNIX_LOG="$tmpdir/sbomnix.log"
 [[ ! -s "$FAKE_SBOMNIX_LOG" ]]
 [[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/second/manifest.jsonl")" == "12" ]]
 
+cp -a "$tmpdir/second" "$tmpdir/failure-baseline"
+mv "$tmpdir/failure-baseline/obscura/sbom.json" "$tmpdir/failure-baseline/obscura/sbom.unavailable"
+jq -c 'if .package == "obscura" then .status = "failed" | .reason = "package_build_failed" | del(.sbom_sha256) else . end' \
+  "$tmpdir/failure-baseline/manifest.jsonl" > "$tmpdir/failure-baseline/manifest.jsonl.next"
+mv "$tmpdir/failure-baseline/manifest.jsonl.next" "$tmpdir/failure-baseline/manifest.jsonl"
+: > "$FAKE_BUILD_LOG"
+: > "$FAKE_SBOMNIX_LOG"
+"$builder" "$tmpdir/failure-reuse" "$tmpdir/failure-baseline" failure-reuse-commit >/dev/null
+[[ ! -s "$FAKE_BUILD_LOG" ]]
+[[ ! -s "$FAKE_SBOMNIX_LOG" ]]
+[[ "$(jq -s 'map(select(.status == "reused")) | length' "$tmpdir/failure-reuse/manifest.jsonl")" == "11" ]]
+jq -se 'map(select(.package == "obscura"))[0] | .status == "skipped" and .reason == "unchanged_previous_failure" and .previous_reason == "package_build_failed"' \
+  "$tmpdir/failure-reuse/manifest.jsonl" >/dev/null
+: > "$FAKE_BUILD_LOG"
+: > "$FAKE_SBOMNIX_LOG"
+"$builder" "$tmpdir/failure-reuse-again" "$tmpdir/failure-reuse" failure-reuse-again-commit >/dev/null
+[[ ! -s "$FAKE_BUILD_LOG" ]]
+[[ ! -s "$FAKE_SBOMNIX_LOG" ]]
+jq -se 'map(select(.package == "obscura"))[0] | .status == "skipped" and .reason == "unchanged_previous_failure" and .previous_reason == "package_build_failed"' \
+  "$tmpdir/failure-reuse-again/manifest.jsonl" >/dev/null
+
 jq '.components[0].version = "2" | .components[0].purl = "pkg:generic/auth@2"' \
   "$tmpdir/fake-outputs/auth/sbom.json" > "$tmpdir/fake-outputs/auth/sbom.json.next"
 mv "$tmpdir/fake-outputs/auth/sbom.json.next" "$tmpdir/fake-outputs/auth/sbom.json"

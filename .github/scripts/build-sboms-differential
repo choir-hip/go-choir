@@ -81,6 +81,7 @@ failed=0
 required_failed=0
 built=0
 reused=0
+skipped=0
 sbomnix_bin=""
 
 ensure_sbomnix() {
@@ -111,6 +112,9 @@ for package in "${packages[@]}"; do
   echo "==> Evaluating SBOM derivation for ${package}"
   derivation="$(nix eval --raw "${attr}.drvPath")"
   previous_derivation="$(baseline_field "$package" derivation)"
+  previous_status="$(baseline_field "$package" status)"
+  previous_reason="$(baseline_field "$package" reason)"
+  previous_failure_reason="$(baseline_field "$package" previous_reason)"
   previous_sha="$(baseline_field "$package" sbom_sha256)"
   baseline_sbom=""
   if [[ -n "$baseline_dir" ]]; then
@@ -119,6 +123,25 @@ for package in "${packages[@]}"; do
   package_dir="$output_dir/$package"
   package_sbom="$package_dir/sbom.json"
   mkdir -p "$package_dir"
+
+  if [[ "$required" == "false" && -n "$previous_derivation" && "$previous_derivation" == "$derivation" ]] && \
+     { [[ "$previous_status" == "failed" ]] || [[ "$previous_status" == "skipped" && "$previous_reason" == "unchanged_previous_failure" ]]; }; then
+    if [[ "$previous_status" == "failed" ]]; then
+      previous_failure_reason="$previous_reason"
+    fi
+    skipped=$((skipped + 1))
+    echo "    Skipped unchanged optional failure for ${package} (${previous_failure_reason:-unknown})"
+    jq -nc \
+      --arg package "$package" \
+      --argjson required "$required" \
+      --arg source_commit "$source_commit" \
+      --arg previous_commit "$baseline_commit" \
+      --arg derivation "$derivation" \
+      --arg previous_derivation "$previous_derivation" \
+      --arg previous_reason "$previous_failure_reason" \
+      '{package: $package, required: $required, status: "skipped", reason: "unchanged_previous_failure", previous_reason: $previous_reason, source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation}' >> "$manifest"
+    continue
+  fi
 
   status=built
   reason=derivation_changed
@@ -209,7 +232,7 @@ jq -s \
   "$diff_jsonl" > "$output_dir/diff.json"
 rm -f "$diff_jsonl"
 
-echo "==> SBOM generation complete: ${built} built, ${reused} reused, ${failed} failed"
+echo "==> SBOM generation complete: ${built} built, ${reused} reused, ${skipped} unchanged optional failures skipped, ${failed} failed"
 if ((required_failed > 0)); then
   echo "${required_failed} required SBOM(s) failed" >&2
   exit 1
