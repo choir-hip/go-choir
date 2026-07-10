@@ -693,6 +693,28 @@ evidence_ledger:
       the same gate rather than fixing only runs.
     promotion_relevance: >-
       Settles `root_cause_reboot_loop` and authorizes the bounded substrate repair.
+  - claim: A populated-kind gate fixes the completed run migration but is not a
+      sufficient completion protocol for an interrupted first migration.
+    definition_node: root_cause_reboot_loop
+    evidence_class: deployed staging proof + code-level counterexample
+    source: a3ebc171 fresh-boot trace on Node B
+    command_or_observation: >-
+      POST /internal/vmctl/resolve for universal-wire-platform after deployment;
+      inspect per-kind vmctl guest-console markers from 2026-07-10T20:45:57Z.
+    artifact_path: internal/store/migration.go
+    result: >-
+      A fresh guest skipped populated agents, runs, and events; migrated empty
+      channel-messages in 18 seconds; then remained in empty worker-updates. If
+      vmctl kills that guest mid-kind, the next boot observes a non-empty but
+      incomplete worker-update kind. Therefore non-empty is not equivalent to
+      migration-complete.
+    uncertainty: >-
+      The repair needs a completion-aware/resumable migration protocol and must
+      keep the runtime health endpoint available long enough for a large first
+      migration to finish without lifecycle recovery.
+    promotion_relevance: >-
+      Prevents promoting `platform_computer_stability` from the reattach trace and
+      reopens the repair implementation while leaving the root cause settled.
 ```
 
 ## Active Red Mutation Ceremony
@@ -721,8 +743,11 @@ active_red_mutation:
     discovered:
       - The stated per-kind migration gate exists in graph_store.go but is disconnected.
       - Every boot replays populated legacy kinds, allowing historical run count to block readiness.
-    introduced: []
-    repaired: []
+    introduced:
+      - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
+        SQL remains intact, so the risk is reversible but the completion claim is invalid.
+    repaired:
+      - Populated `choir.run` no longer blocks startup with per-record replay.
 ```
 
 ## Completion Semantics
@@ -809,14 +834,16 @@ run_checkpoint_and_resumption_state:
       all earlier persistent-store startup stages complete within seconds.
     - Per-kind markers settle `choir.run` as the blocking kind and expose the
       disconnected `ogKindIsEmpty` replacement as the intended substrate repair.
+    - Fresh-boot verification falsifies non-empty-kind as a universal completion
+      marker: channel messages complete, but worker updates can be interrupted mid-kind.
   remaining_error_field:
     - The platform computer is rebooting in a loop because its runtime never becomes ready.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: conformance of the per-kind emptiness gate
+  highest_impact_remaining_uncertainty: resumable migration completion semantics
   next_executable_probe: >-
-    Connect the existing per-kind emptiness gate to each legacy backfill branch;
-    prove populated kinds skip replay while empty kinds still migrate, then deploy
-    and observe a fresh universal-wire guest reach runtime readiness.
+    Replace non-empty-as-complete with a completion-aware, resumable migration
+    protocol that does not block runtime health during large first migrations;
+    preserve SQL until completion and prove restart resumes missing objects.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
