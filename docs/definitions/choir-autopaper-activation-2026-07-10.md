@@ -471,10 +471,15 @@ determined_state:
       execution_effect: Investigation moves inside sandbox startup before HTTP
         serving; sourcecycled retry cadence is downstream amplification, not yet
         the root cause.
+    - claim: A fresh universal-wire guest stalls inside relational-to-objectgraph
+        startup backfill after every earlier sandbox startup phase completes.
+      source: observed
+      execution_effect: The next probe belongs inside `backfillOGFromSQL`; changing
+        vmctl readiness or sourcecycled retry timing would mask the substrate bug.
   open:
     - node: root_cause_reboot_loop
-      missing: Which pre-listen sandbox startup transition stalls after the guest
-        launcher reports that the wire publish URL is configured.
+      missing: Which per-kind branch of `backfillOGFromSQL` fails to finish on the
+        persisted universal-wire workspace.
     - node: platform_computer_stability
       missing: Proof that the platform VM stays stable for a full cycle.
     - node: sourcecycled_liveness
@@ -644,6 +649,27 @@ evidence_ledger:
     promotion_relevance: >-
       Supports H1 and falsifies a sourcecycled systemd restart or host-pressure/OOM
       explanation. Does not yet authorize a VM lifecycle or runtime fix.
+  - claim: The blocking pre-listen transition is `backfillOGFromSQL`.
+    definition_node: root_cause_reboot_loop
+    evidence_class: deployed staging proof
+    source: CI run 29118850649, Node B deploy job 86450906080, and vmctl guest console
+    command_or_observation: >-
+      Deploy c6b422bb; verify https://choir.news/health reports c6b422bb; inspect
+      journalctl -u go-choir-vmctl from 2026-07-10T19:55:00Z.
+    artifact_path: cmd/sandbox/main.go + internal/store/store.go
+    result: >-
+      On a fresh boot, source workspace bootstrap, Dolt maintenance, workspace open,
+      runtime schema, objectgraph schema, Texture schema, and legacy import all
+      completed. `objectgraph-backfill status=starting` appeared at 19:56:21 UTC;
+      no completion marker followed, and vmctl marked the guest failed at 19:58:14
+      after its three-minute readiness bound. The guest never bound port 8085.
+    uncertainty: >-
+      `backfillOGFromSQL` serially executes agents, runs, events, channel messages,
+      worker updates, run acceptance/continuation, browser session, trajectory,
+      work-item, and Texture-table backfills. The stalled branch is not yet named.
+    promotion_relevance: >-
+      Authorizes per-kind backfill instrumentation. Does not authorize extending
+      the boot timeout or skipping legacy data migration.
 ```
 
 ## Completion Semantics
@@ -726,18 +752,20 @@ run_checkpoint_and_resumption_state:
       observed window.
     - H2/H3 describe amplification and overlap but do not explain why a booted
       guest never listens on port 8085.
+    - Deployed phase markers localize the readiness failure to `backfillOGFromSQL`;
+      all earlier persistent-store startup stages complete within seconds.
   remaining_error_field:
     - The platform computer is rebooting in a loop because its runtime never becomes ready.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: pre-listen sandbox runtime startup stall
+  highest_impact_remaining_uncertainty: stalled objectgraph backfill kind
   next_executable_probe: >-
-    Determine the exact blocking transition between the guest launcher's final
-    wire-publish log and cmd/sandbox binding port 8085. Inspect persistent-store
-    startup state and add pre-listen phase instrumentation only if read-only
-    evidence cannot distinguish workspace bootstrap, Dolt GC, and store.Open.
+    Add per-kind start/complete markers inside `backfillOGFromSQL`, deploy them,
+    and identify the first legacy replay branch that does not complete before
+    vmctl's readiness deadline.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
+    - CI run 29118850649 and Node B deploy job 86450906080 for c6b422bb.
   rollback_refs: []
 ```
 
