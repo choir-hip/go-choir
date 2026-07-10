@@ -381,6 +381,13 @@ Claim classes:
 - `settlement-level`: trajectory/work-item settlement evidence exists for the
   relevant mission.
 
+**Current code conformance:** `internal/types/acceptance.go` currently exposes
+`docs-level`, `staging-smoke-level`, `export-level`, `promotion-level`, and
+transitional `continuation-level`. `architectural-level` and `settlement-level`
+are doctrine evidence classes, not yet Go `RunAcceptanceLevel` constants;
+`smoke-level` is represented by the narrower `staging-smoke-level`. Do not infer
+implementation of a stronger class from this doctrine taxonomy.
+
 Rules:
 
 1. `accepted` at smoke level must not be summarized as architectural success.
@@ -876,7 +883,7 @@ observe/finish/cancel sequences.
 `detectors:` `delegation_required`, `chained_required_tool`, `next_tools`,
 worker-delegation results that encode exact semantic tool choreography.
 
-`evidence:` docs/choir-master-spec-review-2026-06-13.md,
+`evidence:` pre-purge review in Git history,
 `internal/runtime/tools_vmctl.go`, `internal/runtime/tools.go`.
 
 `why it violates the spec:` it preserves H009's vice under worker-specific
@@ -896,7 +903,7 @@ terminal condition.
 `detectors:` `pollInternalWorkerRun`, polling loops over worker run state,
 `time.After(500 * time.Millisecond)` control waits.
 
-`evidence:` docs/choir-master-spec-review-2026-06-13.md,
+`evidence:` pre-purge review in Git history,
 `internal/runtime/tools_vmctl.go`.
 
 `why it violates the spec:` it keeps run-tree blocking semantics under the
@@ -916,7 +923,7 @@ loop.
 `detectors:` `initialTextureToolChoice`, `WithInitialToolChoice`,
 `exactRequiredToolChoice`, super-keyword routing lists.
 
-`evidence:` docs/choir-master-spec-review-2026-06-13.md,
+`evidence:` pre-purge review in Git history,
 `internal/runtime/runtime.go`.
 
 `why it violates the spec:` even if conductor routes to Texture, the tool loop can
@@ -991,7 +998,7 @@ codebase and model the forbidden ontology.
 `detectors:` `PostChildResult`, `PostChildError`, `WaitForChildResult`,
 parent/child channel APIs with no production callers.
 
-`evidence:` docs/choir-master-spec-review-2026-06-13.md,
+`evidence:` pre-purge review in Git history,
 `internal/runtime/channels.go`.
 
 `why it violates the spec:` unused compatibility surfaces still teach future
@@ -1011,7 +1018,7 @@ specific semantic workers as a required sequence.
 `buildAgentRevisionRequest`, "call spawn_agent now", numbered role-sequence
 scripts in Texture prompt defaults.
 
-`evidence:` docs/choir-master-spec-review-2026-06-13.md,
+`evidence:` pre-purge review in Git history,
 `internal/runtime/prompt_defaults/texture.md`,
 `internal/runtime/texture_agent_revision.go`.
 

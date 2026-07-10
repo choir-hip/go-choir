@@ -1,7 +1,7 @@
 # Choir Computer Ontology
 
 **Status:** canonical architecture vocabulary
-**Last updated:** 2026-07-08
+**Last updated:** 2026-07-10
 
 This document names the durable object that Choir operates on.
 
@@ -67,6 +67,24 @@ A computer is not one database, one git checkout, one VM snapshot, or one
 browser session. It is a product object composed from several ledgers with
 different merge laws.
 
+## Current Implementation Status
+
+| Layer | Status now | Claim boundary |
+| --- | --- | --- |
+| Persistent user computer and VM lifecycle | **Live** | VM/desktop identifiers are current materializer/control identifiers, not the durable candidate ontology. |
+| Worker/background VM mutation | **Live transitional path** | A worker or forked desktop VM can host edits/builds and return evidence or an AppChangePackage. It is not itself a candidate `ComputerVersion`. |
+| `internal/computerversion` contracts/evidence machinery | **Substantial code-present substrate** | Contract tests and materialization/evidence code do not make route-over-ComputerVersion production behavior load-bearing. |
+| Candidate `ComputerVersion` route identity | **Target / not wired end to end** | Ordinary routes still resolve through owner/desktop/VM seams. |
+| Capsules | **Partially implemented, inert in the default product path** | Executor/host/tool code exists, but the default runtime does not install a production capsule path; isolation and transaction evidence are incomplete. |
+| Features adoption and activation | **Live protocol records** | Recipient verification, approval, and lineage updates do not switch the served runtime/UI. |
+| Personal promotion | **Target** | A real route/build cutover with rollback proof is not currently available through Choir CLI/UI. |
+
+Do not collapse a code-present substrate into a live product claim. In
+particular, `worker VM`, `forked desktop`, `AppChangePackage candidate ref`,
+`capsule`, and semantic `candidate ComputerVersion` are different objects.
+
+## Target Candidate Contract
+
 The user experiences one active computer at a time. Choir may create candidate
 computers to explore risky mutations, long-running work, app changes, package
 installs, new Go binaries, new Svelte builds, generated media, or semantic data
@@ -102,11 +120,17 @@ D-STORES and D-WIRE in
   Promotion (fork/promote/rollback) is an operation on this embedded store, not
   a property of the world-wire store and not a separate promotion workspace.
 
-Branch isolation on the VM-local embedded store is under test (D-PROMO). The
-current `DoltPromotionAdapter` is tag-only interim and must not be enabled in any
-production promotion flow until the conjecture settles. Rollback on a shared
+Branch isolation on the VM-local embedded store is settled for pinned
+single-writer connections (D-PROMO). The current `DoltPromotionAdapter` remains
+tag-only and non-conformant; it must not be enabled in a production promotion
+flow until the Phase D branch adapter and conformance binding land. Rollback on a shared
 main branch via `DOLT_RESET --hard` is not an admissible production mechanism
 (I4); rollback is a route flip or an isolated-branch operation.
+
+**Do-not-wire warning:** the inert interim adapter's `Rollback` method still
+uses `DOLT_RESET --hard` on main. `WithPromotionAdapter` has no production
+`cmd/` callers. Wiring this adapter would introduce the I4 violation; it must
+remain unwired until the Phase D branch-based replacement lands.
 
 ## Ledger Split
 
@@ -115,7 +139,9 @@ Do not force every change through one storage abstraction.
 | Ledger | Owns | Typical promotion |
 | --- | --- | --- |
 | VM/OS/runtime | machine image, installed packages, running services, local caches, process environment | snapshot/cutover, rebuild from typed inputs, or discard |
-| Dolt/app state | textures, appagent state, prompts, traces, run memory, theme records, file metadata, promotion records | Dolt branch/commit merge with app invariants on the VM-local embedded store; current adapter is tag-only interim while D-PROMO branch-isolation testing settles |
+| Dolt/app state | textures, appagent state, prompts, traces, run memory, theme records, file metadata, promotion records | Dolt branch/commit merge with app invariants on the VM-local embedded store; D-PROMO proved pinned-connection isolation, but the current adapter remains tag-only interim |
+| Actor recovery log (narrow SQLite) | durable actor updates and compacted activation snapshots used by `internal/actorruntime` | recovery/replay only; it must not become competing semantic app, trajectory, or promotion truth |
+| Choir Base (partial SQLite journal + tree/blob substrate) | append-only source/file observations, derived tree, content-addressed blobs, File Provider/materialization support | tested but not deployed as the canonical computer store; any product wiring must preserve embedded-Dolt app authority and declare reconciliation boundaries |
 | Source/build | Go code, Svelte code, tests, Nix/package recipes, app bundles | git-like patch/commit or typed package import |
 | Blob/content store | uploaded files, generated media, PDFs, audio, images, patch artifacts | content-addressed hash plus Dolt/artifact metadata |
 | Artifact/provenance graph | claims, citations, source anchors, verifier results, trace refs, promotion certificates | graph merge with provenance completeness checks |

@@ -1,7 +1,7 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-06-23
+**Last updated:** 2026-07-10
 **Changelog:** Reconciled the App Catalog and Apps & Changes/Features entries
 with the shipped `features` app (frontend/src/lib/FeaturesApp.svelte) after
 the 2026-05-28/31 frontend redesign cutover, the 2026-06-11 owner-approval
@@ -16,6 +16,25 @@ This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
 and known gaps. Keep it updated when platform-level OS, shell, routing, app, VM
 lifecycle, promotion, or public/default computer behavior changes.
+
+## Executable App Inventory
+
+`frontend/src/lib/apps/registry.ts` is the executable inventory and wins over
+this narrative if they drift. At this revision it registers 20 surfaces:
+
+```text
+Files, Web Lens, Email, Compute Monitor, Pulse, Texture, Universal Wire,
+Podcast, Image, Audio, Video, PDF, EPUB, Slides, Calendar, Features,
+Candidate Review, Source, Super Console, Settings
+```
+
+Registration means code-live surface, not feature completeness or semantic
+endorsement of its visible name. In particular, `Universal Wire` is retained
+implementation vocabulary pending the World Wire rename; Candidate Review is a
+read-only, non-deployed review surface; Source is the hidden reader/viewer path;
+and Features activation is an adoption/lineage protocol rather than a served
+runtime/UI cutover. Detailed rows below describe selected high-impact surfaces;
+absence of a row does not mean absence from the registry.
 
 User computers are allowed to diverge. For now, this ledger describes the common
 platform/default state that new and ordinary user computers inherit or project
@@ -223,7 +242,7 @@ Known gaps:
 | **Super Console** | Target replacement for retired Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that Texture can open. | Do not expose retired raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple retired chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
 | **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Features owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
 | **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
-| **Features** (`frontend/src/lib/FeaturesApp.svelte`, app id `features`, registry name "Features") | Launcher-facing catalog app that replaced "Apps & Changes" in the 2026-05-28/31 frontend redesign cutover (registry.ts:193-201). It lists `AppChangePackage`s as a catalog with status pills (available/importing/ready/active/rolled back/blocked), and a detail pane with demo video/screenshot, summary, and a "View details" technical panel (source package id, import/adoption id, build/runtime/UI digests, rollback recorded/pending, evidence refs). Actions: **Import** (creates an adoption for `TARGET_COMPUTER_ID = 'primary'` and kicks off an async verify with email notification on completion/block); **Activate**, which as of 2026-06-11 (commit `77f65651`) first POSTs `/api/adoptions/{id}/approve` (the resurrected owner-approval gate, producing status `owner_approved`) and then POSTs `/promote` — `promote` now requires `owner_approved` status server-side; **Roll back** (requires a recorded rollback ref); **Roll forward** (requires a rolled-back adoption with both runtime and UI digests). Live updates arrive via `/api/ws`-backed SSE on `app_change_package.published`, `app_adoption.proposed`, `app_adoption.verification_started`, `app_adoption.verified`, `app_adoption.blocked`, `app_adoption.promoted`, and `app_adoption.rolled_back`; the backend also now emits `app_adoption.owner_approved` (types.EventAppAdoptionOwnerApproved) when the approval gate fires, but the Features app's live-event handler does not yet include that kind in its refresh trigger list (verify on next touch). | Promotion mechanics: "Activate" updates the `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests, `RouteProfile`) — a durable pointer flip in product state. Nothing yet consumes `RouteProfile`: there is no route switch, process restart, or binary swap. Two new server-side guards landed 2026-06-11: promote requires `owner_approved` (the approve step above), and a freshness CAS blocks promotion with a "re-verify" error if the foreground lineage moved since verification. Making the route flip real is **planned**, not shipped: portfolio M6 (route-flip consumer, promotion record + reconciler) and the design in `docs/system-v1-one-cut-2026-06-11.md` Cut 4; see also `docs/choir-promotion-protocol-conjecture-2026-06-11.md`. A preview endpoint exists at `/api/adoptions/{id}/preview/*` (requires a verified recipient build) but the Features UI never calls it; wiring a Try-it-now flow to it is portfolio M7 ("cheapest high-value fix in the system"). `TARGET_COMPUTER_ID` is hardcoded to `'primary'` (single-computer assumption). See "Design intent, not shipped" below for Uninstall/Disable/portfolio-review/Trace-integration intentions that predate the cutover and were not carried into Features. |
+| **Features** (`frontend/src/lib/FeaturesApp.svelte`, app id `features`) | Launcher-facing AppChangePackage catalog. **Import** creates an adoption for hard-coded target `primary` and starts recipient build/verification. **Activate** records owner approval then calls promote; Roll back/Roll forward call the corresponding protocol APIs. | "Activate" updates `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests, `RouteProfile`) with approval and freshness guards. Nothing in the ordinary personal-computer path consumes `RouteProfile` to switch routes, restart a process, or swap runtime/UI binaries. Treat active/rolled-back labels and current API promotion-level records as adoption/lineage evidence, not completed ComputerVersion promotion. Preview exists server-side but has no Features UI. |
 | **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and Texture radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
 | **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/Texture hook, and keyboard controls. |
@@ -267,17 +286,15 @@ behavior.
   preview of a candidate before installing. A preview endpoint already EXISTS
   server-side at `/api/adoptions/{id}/preview/*` (requires a verified
   recipient build), but the Features UI never calls it — there is no
-  Try-it-now button or preview frame. Wiring this up is portfolio mission M7,
-  described as "the cheapest high-value fix in the system."
+  Try-it-now button or preview frame. Wiring it remains unowned product work.
 - **Promotion as a real route flip.** The pre-cutover design implied that
   Install/Activate changes what the computer actually serves. Today
   "Activate" only updates the `ComputerSourceLineageRecord`
   (`ActiveSourceRef`, digests, `RouteProfile`) — a durable pointer flip in
   product state, with no route switch, process restart, or binary swap
-  consuming it. Making the flip real (route-flip consumer, promotion record,
-  reconciler) is portfolio mission M6; the protocol design is in
-  `docs/choir-promotion-protocol-conjecture-2026-06-11.md` and
-  `docs/system-v1-one-cut-2026-06-11.md` Cut 4.
+  consuming it. Making the flip real requires the active product Definition's
+  Phase D route-over-ComputerVersion work; deleted portfolio/design chains are
+  not executable successors.
 
 ## App Boundary Rules
 

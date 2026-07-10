@@ -3,7 +3,7 @@ schema_version: 1
 generated: false
 status: current
 description: >-
-  Minimal index of directly confirmed active Definitions. Historical mission
+  Minimal index of retained active or settled Definitions. Historical mission
   topology was removed from the retrievable worktree on 2026-07-10; Git history
   is the forensic source for retired missions.
 rules:
@@ -41,7 +41,7 @@ nodes:
     title: Documentation Authority Reduction
     path: docs/definitions/documentation-authority-reduction-2026-07-09.md
     ledger: ''
-    status: working
+    status: settled
     kind: docs_truth
     depends_on: []
     enables: []

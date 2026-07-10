@@ -364,10 +364,10 @@ successor. No production behavior changes are in scope.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: complete
-  last_checkpoint: D3/D4 final deletion verified after D1/D2.
+  last_checkpoint: Post-deletion semantic-closure audit and repair verified.
   current_artifact_state: >-
     The default path is a bounded eleven-document content packet plus router;
-    legacy graph/index debt is report-only and cannot redefine active work.
+    the mission graph is a two-node discovery index and cannot redefine work.
   what_shipped:
     - Four-lane docs router: semantics, NOW, ACTIVE, history.
     - Derived semantic registry and dated NOW/ACTIVE views.
@@ -379,6 +379,9 @@ run_checkpoint_and_resumption_state:
     - D3 removed 81 superseded Markdown sources; D4 removed six unused design
       images. Retained docs and adjacent guides were repaired to stop naming
       deleted files as live dependencies.
+    - Blind new-reader audits drove a semantic-closure pass across current vs
+      target self-development, subsystem status, store authority, promotion
+      evidence ceilings, active mission state, source display, and source dedup.
   what_was_proven:
     - 310 of 331 docs Markdown files are outside the proposed 21-file retain set.
     - Archive has 178 files; raw ledgers have 37 files / about 2.35 MB; raw
@@ -388,6 +391,9 @@ run_checkpoint_and_resumption_state:
       required YAML authority indexes.
     - The retained architecture and operating docs no longer link into
       `docs/archive/**`; historical detail requires deliberate Git archaeology.
+    - Two fresh native readers and three substantive cross-model panel outputs
+      independently reconstructed the same live workflow, target boundary, and
+      Phase B next action; final minority contradictions were adjudicated here.
   unproven_or_partial_claims: []
   highest_impact_remaining_uncertainty: none for this documentation mission
   next_executable_probe: none; open a new Definition before expanding the live set
@@ -396,10 +402,12 @@ run_checkpoint_and_resumption_state:
     - b6fbd598 (pre-delete authority/retrieval baseline)
     - 2783a97a (D1 raw evidence and ledger deletion)
     - 8f62fe3b (D2 archive deletion and minimal manifest/graph)
+    - 99a995eb (21-document semantic-kernel baseline)
   rollback_refs:
     - b6fbd598
     - 2783a97a
     - 8f62fe3b
+    - 99a995eb
 ```
 
 ## Suggested Goal String

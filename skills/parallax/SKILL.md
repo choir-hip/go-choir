@@ -467,8 +467,7 @@ review.
 - **No fake islands:** every domain embeds in production's.
 - **No self-checked proofs.**
 - **No unconsolidated handoffs:** accreted duplication is open variant.
-- **No identity:** obligations, not personas
-  (`docs/choir-role-free-actor-protocol-2026-06-11.md`).
+- **No identity:** obligations, not personas.
 
 ## Runtime Mapping
 

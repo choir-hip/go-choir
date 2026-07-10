@@ -1,5 +1,9 @@
 # go-choir
 
+**Scope:** orientation only. For authority and claim scope, start with
+[`docs/README.md`](docs/README.md) and
+[`docs/doc-authority-manifest.yaml`](docs/doc-authority-manifest.yaml).
+
 `go-choir` is the implementation repo for Choir, a human-improving,
 machine-compounding mainframe: a persistent-computer system for owned learning
 over artifacts, evidence, provenance, and promotion history.
@@ -29,8 +33,8 @@ The canonical doctrine and architecture source is
 [docs/choir-doctrine.md](docs/choir-doctrine.md). This README gives the
 orientation; Choir Doctrine wins on architectural conflicts.
 Use [docs/README.md](docs/README.md) as the documentation index and truth
-spine: it points to the current architecture docs, mission portfolio, mission
-graph, assertion register, and heresy detector manifest.
+spine: it points to current architecture, the active Definition, the minimal
+mission graph, assertion register, and heresy detector manifest.
 
 Older docs and code comments may still describe Choir as a personal writing
 system, publishing system, AI workspace, sandbox, or workflow app. Treat that as
@@ -144,6 +148,14 @@ and the maintained desktop contract.
 public `/api/` and `/auth/` routes with API key auth (`choir_sk_...`) so
 agents and scripts can drive Choir without a browser.
 
+**Current status:** code-present, buildable Phase 1. It has no supported binary
+distribution or recorded staging acceptance in this document; build it from
+this checkout. It can submit and observe work, but it has no package, adoption,
+verifier, run-acceptance, promote, or rollback verbs. `/goal <definition.md>` is
+an invocation understood by compatible external agent harnesses; it is not a
+Choir CLI command, prompt-bar command, or end-to-end runner implemented by
+Choir today.
+
 ```bash
 go build -o choir ./cmd/choir
 export CHOIR_API_KEY=choir_sk_...   # or --api-key; host defaults to https://choir.news
@@ -199,29 +211,52 @@ For the deeper design frame, see:
 
 ## Runtime Model
 
-The implementation centers on persistent user computers and controlled
-candidate work.
+The implementation centers on persistent user computers. The target contract
+for controlled candidate work is ahead of the currently wired product path.
+
+### Live today
 
 At a high level:
 
 - each user computer is a persistent, stateful object;
-- canonical state stays stable unless a change is promoted;
-- risky or speculative mutation runs in capsules: ephemeral, capability-scoped
-  effect chambers whose effects commit as typed transactions
-  (`internal/capsule` plus super's `spawn_capsule`/`mint_capability`/
-  `commit_transaction` tools);
-- candidate state is a ComputerVersion fork — `(CodeRef, ArtifactProgramRef)` —
-  not a VM; substrates (Firecracker, containers, host process) are
-  materializers of a ComputerVersion, not its identity;
 - appagents own durable app artifacts;
-- workers produce evidence, deltas, candidates, or reports;
+- Super can delegate mutable work into worker/background VMs and repo
+  checkouts; those VMs are transitional execution substrates, not semantic
+  candidate ComputerVersions;
+- workers produce evidence, source deltas, AppChangePackages, or reports;
 - AppChangePackages carry source changes between divergent computers;
 - recipient computers rebuild and verify adopted changes themselves;
-- promotion is an atomic route flip between ComputerVersions, and requires
-  verification, owner acceptance, and rollback evidence;
 - compaction preserves what a run learned for future inference.
 
-A compact operating invariant:
+The usable self-development path is:
+
+```text
+prompt bar or `choir run start`
+-> conductor -> Texture
+-> optional Super delegation to a worker/background VM
+-> repo edit, build, tests, evidence
+-> AppChangePackage
+-> Features import and recipient build/verification
+-> owner approval and lineage/adoption record
+```
+
+This path does **not** perform a served runtime/UI route cutover and does not
+land shared Choir source. A shared platform change still uses the Git landing
+loop: commit, push, CI, deploy, deployed identity, and product-path proof.
+
+### Target contract
+
+- canonical state stays stable unless a change is promoted;
+- candidate state is a ComputerVersion fork — `(CodeRef, ArtifactProgramRef)` —
+  not a VM;
+- risky effects execute in capsules: ephemeral, capability-scoped chambers
+  whose typed transactions append to the candidate;
+- substrates such as Firecracker, containers, and host processes materialize a
+  ComputerVersion but do not define its identity;
+- promotion is an atomic route flip between ComputerVersions after verifier
+  evidence, owner acceptance, and a recorded rollback target.
+
+A compact **target** operating invariant:
 
 ```text
 Evidence enters through researchers.
@@ -232,7 +267,7 @@ Computers diverge.
 Canonical state changes only by promotion.
 ```
 
-The current self-development path is roughly:
+The target self-development path is:
 
 ```text
 prompt bar -> conductor -> appagent/Texture -> super
@@ -246,6 +281,14 @@ prompt bar -> conductor -> appagent/Texture -> super
 
 The objective is to improve artifacts over time while minimizing corruption,
 deadlock, human monitoring burden, and loss of understanding.
+
+**Promotion claim ceiling today:** Features **Activate** and **Roll back** are
+adoption/source-lineage protocol transitions. Nothing in the ordinary personal
+computer path currently consumes `RouteProfile` to switch the served runtime or
+UI binary. Current API `promotion-level` records therefore prove bounded
+package/adoption protocol evidence only; do not cite them as doctrine-level
+ComputerVersion promotion without an observed route/build cutover and rollback
+proof.
 
 Storage direction (owner decision, 2026-07-08): the Dolt substrate is split into
 a world-wire store (`internal/platform/objectgraph_store.go`, moving to
@@ -262,7 +305,7 @@ Definition mission
 
 ## Services
 
-The target architecture has five Go runtime services:
+The core edge/runtime topology has five Go services:
 
 | Service | Port | Role |
 | --- | --- | --- |
@@ -273,6 +316,18 @@ The target architecture has five Go runtime services:
 | `sandbox` | 8085 | Runtime service for desktop APIs, Texture, files, source/Web Lens sessions, Super Console, trace evidence APIs, and the agent/tool loop |
 
 Every service exposes `/health`.
+
+Additional deployed or deploy-wired host services are deliberately narrower:
+
+| Service | Role | Current boundary |
+| --- | --- | --- |
+| `corpusd` | Public publication and World Wire object-graph API/store boundary | Writes/serves public projections; platform-computer agents remain semantic owners. |
+| `sourcecycled` | Experimental source polling and handoff adapter | Cycle/queue state is in memory and lost on restart; it is not canonical article authority. |
+| `maild` | Host email ingress/adapter | Transport boundary, not private appagent authority. |
+
+`capsule-host`, Choir Base harnesses, materializers, evidence tools, and other
+`cmd/*` binaries are implementation utilities or partial substrates unless a
+current domain contract explicitly labels them deployed product services.
 
 The `sandbox` service name is an implementation name, not the product ontology.
 The product object is a persistent computer. The sandbox health response
@@ -412,6 +467,12 @@ contract evidence plus owner review and promote/rollback evidence. Do not claim
 `continuation-level` without run-memory/compaction and continuation evidence.
 Do not introduce new continuation-shaped proof as doctrine; the target evidence
 class is trajectory/work-item settlement.
+
+In the current implementation, a recorded rollback reference can satisfy the
+API checkpoint without an exercised rollback, and an adoption promotion event
+does not prove the served runtime/UI changed. Treat current `promotion-level`
+as package/adoption protocol evidence unless route identity, deployed build,
+and rollback behavior were independently observed.
 
 ## Documentation Map
 

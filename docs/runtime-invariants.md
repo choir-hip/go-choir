@@ -1,6 +1,6 @@
 # Runtime Invariants
 
-**Last updated:** 2026-05-14
+**Last updated:** 2026-07-10
 
 This file captures implementation invariants. For full context, read
 [docs/current-architecture.md](current-architecture.md).
@@ -128,18 +128,23 @@ Use `sandbox` only for the current runtime service/process name.
 appagents, per-user embedded Dolt, private app state, local files, prompts, and
 user-specific runtime state. It should stay stable and responsive.
 
-`background_computer` is a fork of the user's active computer. Risky mutable
-work goes there: code edits, package installs, tests, builds, deploy prep,
-generated files, and anything that can destabilize the active desktop.
+`background_computer` is the product term for an isolated mutable context.
+Today the live execution substrate is commonly a worker or forked desktop VM;
+that VM is a transitional materializer, not a semantic candidate
+`ComputerVersion`. Risky mutable work goes there: code edits, package installs,
+tests, builds, deploy prep, generated files, and anything that can destabilize
+the active desktop.
 
 Background work returns artifacts, findings, branch/commit refs, previews, test
 results, and proposed merges. A background computer can merge back into active
 state, publish a typed package, or be promoted to active while the previous
 active snapshot remains available for rollback.
 
-Candidate computers are background mutation contexts. They are allowed to break,
-install dependencies, run tests, build alternate runtimes, and fail. They produce
-deltas and evidence. They do not mutate canonical foreground state directly.
+The target `candidate_computer` is a forked
+`ComputerVersion = (CodeRef, ArtifactProgramRef)`. It is not yet wired as the
+ordinary route/promotion object. Current worker/background VMs may produce
+deltas and evidence but must not be described as completed candidate-computer
+promotion semantics.
 
 Candidate worlds are the broader substrate-neutral term. A candidate world may
 be a computer, worktree, Dolt branch, package branch, or future state branch.
@@ -164,7 +169,7 @@ provenance, Trace visibility, and merge/promotion review.
 
 ## State Placement
 
-Dolt is the desired canonical store for product state. SQLite may remain for
+Dolt is the canonical direction for product state. SQLite may remain for
 narrow hot runtime, cache, local compatibility, or transitional implementation
 roles only when explicitly justified. Do not introduce new durable product truth
 into SQLite by default. The current Dolt boundary is maintained here and in
@@ -178,11 +183,23 @@ The per-user snapshot filesystem holds files, working trees, uploads, large
 media, build artifacts, generated outputs, and filesystem aliases or materialized
 shortcuts for Dolt-backed `texture` documents.
 
-Platform Dolt holds platform-visible facts: accounts, VM lifecycle/capacity,
-routing records, publication records, public artifact metadata, citation graph,
-compute accounting, and later CHIPS state.
+The **world-wire Dolt store** (historically called Platform Dolt) owns
+public/source object-graph and publication records served through `corpusd`:
+public artifacts/manifests, source/retrieval/citation/provenance records, and
+public-object consent/review/verifier state. It does **not** own accounts,
+auth/session state, VM lifecycle/capacity, candidate identity, personal
+promotion rollback, or general compute accounting. Those remain in their
+respective host/control or VM-local ledgers until an explicit contract assigns
+them elsewhere. The world-wire store is a ledger, not the network or semantic
+author of Wire/Texture artifacts.
 
-Platform Dolt is a ledger, not the network.
+Two narrow SQLite substrates are explicitly transitional/permitted:
+
+- `internal/actorruntime` uses a durable actor update/snapshot log for recovery
+  and replay; embedded Dolt remains canonical for semantic app/trajectory state.
+- Choir Base uses an append-only journal and derived tree/blob substrate for
+  File Provider/materialization work; it is tested but not deployed as a
+  competing canonical computer store.
 
 Source/build state belongs in git-like source ledgers or typed app/package
 bundles. Uploaded/generated files belong in content-addressed blob storage with
@@ -226,12 +243,12 @@ or explicit failure.
 Cross-VM routing should use direct transport or a relay, not platform-Dolt
 polling.
 
-This invariant is the spirit of the target durable-actor model
-(historical source in Git history: "the database
-remembers, Go delivers"). Today's `channel_messages`/inbox-poll path is being
-replaced by Go-channel mailboxes with activation-on-send; until that cutover
-lands, the current per-turn inbox-poll path is what satisfies this invariant in
-code. "Channel" in product/UI contexts (a document or trajectory's update
+The current actor adapter implements the durable-actor rule: the database
+remembers and Go delivers. Sends append to the durable actor log and warm
+delivery uses Go-channel mailboxes with activation-on-send. Legacy
+`channel_messages` and per-turn inbox-poll code may remain as deletion residue,
+but it is not the current execution authority and must receive no new callers.
+"Channel" in product/UI contexts (a document or trajectory's update
 stream) names a different thing than the Go-channel mailbox described here —
 do not conflate the two.
 
@@ -260,17 +277,18 @@ Acceptance levels are explicit:
 - `promotion-level`
 - retired `continuation-level`
 
-Do not claim `promotion-level` without verifier contract evidence plus owner
-review and promotion or rollback evidence. Do not claim `continuation-level`
+Do not claim doctrine-level `promotion-level` without verifier contract
+evidence, owner review, an observed served route/build cutover, and rollback
+proof. The current API may synthesize a package/adoption `promotion-level` from
+a promotion event plus a recorded rollback reference; that is protocol evidence
+only until the served computer and rollback behavior are observed. Do not claim `continuation-level`
 without run-memory/compaction and bounded continuation evidence.
 `continuation-level` remains transitional residue, not a target permanent
 acceptance class.
 
-`continuation-level` is transitional: per
-historical source in Git history, this acceptance
-level is being re-pointed at trajectory/work-item settlement evidence
-(portfolio M4). Until that re-pointing lands, the current rule and evidence
-requirement above remain in force.
+`continuation-level` is transitional deletion residue. The target evidence is
+trajectory/work-item settlement, but no separate live successor Definition owns
+that migration outside the active product umbrella.
 
 Browser acceptance may use public authenticated product APIs. It must not use
 browser-public internal orchestration routes such as `/api/agent/*`,

@@ -353,19 +353,21 @@ settlement:
   settled_by: evidence
 ```
 
-### D-STORE. Decision node: storage fork
+### D-STORE. Decision node: all-in on Dolt — SETTLED (owner, reaffirmed 2026-07-09)
 
 ```yaml
 id: storage-fork
 kind: term
-status: unresolved (requires_human_authority)
-source: pre-purge evidence snapshot at Git commit 8f62fe3b
-definition: Commit to Dolt version-control features as load-bearing (per owner 2026-07-07 direction) vs acknowledge an application-level audit trail. Owner direction says Dolt; the six open storage-inventory questions (starting with per-write commit semantics and rollback mechanics) remain unanswered.
+status: settled
+source: owner authority, all-in on Dolt; reaffirmed 2026-07-09
+definition: Choir commits to Dolt as the load-bearing product-state substrate and will make its native history/branch features real. Application-level revision/provenance chains remain useful domain indexes but do not reopen the database choice.
 execution_effect:
-  - Phase C history-read work and Phase D promotion work execute against the Dolt answer; if the experiment evidence contradicts feasibility, escalate rather than silently degrade.
+  - Phase B/C history-read work and Phase D promotion work execute against Dolt.
+  - Per-write commit/batching, rollback mechanics, AS OF/DOLT_LOG correctness and latency, throughput, ICU/cgo build friction, and replication/sync are engineering verification axes inside the relevant phases, not decision gates.
+  - If evidence exposes an actual feasibility contradiction, document and escalate it; do not silently degrade or re-open the choice by implication.
 settlement:
-  rule: Answer the six storage-inventory questions with experiments; escalate only if evidence contradicts the standing owner decision.
-  settled_by: evidence, escalating to human on contradiction
+  rule: Settled by owner authority. Verification tasks may change implementation tactics but not the chosen substrate without a new explicit owner decision.
+  settled_by: human
 ```
 
 ## Determined State Snapshot (2026-07-08)
@@ -409,6 +411,9 @@ determined_state:
       source: observed (assessment)
       execution_effect: C-RETR and C-PAGE work items exist in Phase E.
   settled_2026_07_08_owner:
+    - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
+      source: owner authority, reaffirmed 2026-07-09
+      execution_effect: Phase B/C/D proceed against Dolt; escalate only on demonstrated feasibility contradiction.
     - claim: Two-store Dolt taxonomy — world-wire store (moves to sql-server now) and per-VM embedded stores shared by that VM's capsules; promotion is an operation on the embedded store.
       source: user-stated + observed
       execution_effect: D-WIRE settled; D-PROMO settled (pinned-connection branch isolation); promotion explicitly decoupled from the wire store; S1 scope header names the embedded store.
@@ -417,15 +422,13 @@ determined_state:
     - claim: Current wire-store data is junk (the wire loop has never worked end-to-end); the sql-server store stands up fresh with no data migration.
       source: user-stated
       execution_effect: D-WIRE cutover is code-only and cheap; it need not wait for Phase D if sequencing benefits from doing it earlier (it deletes PROXY_RUNTIME_DB_PATH and unblocks honest route resolution).
-  open:
-    - node: storage-fork (D-STORE)
-      missing: answers to six storage-inventory questions.
+  open: []
 ```
 
 ## Value Criterion
 
 Every pass must reduce the mission variant (below) or buy decision evidence
-for D-PROMO / D-STORE. Prefer, in order: (1) work that makes future claims
+for implementation conjectures. Prefer, in order: (1) work that makes future claims
 falsifiable (detectors, conformance checks, relabeling), (2) work that
 unblocks staging proof (timeouts), (3) deletions with inverted tests,
 (4) cutover construction.
@@ -445,7 +448,7 @@ variant:
   seam_commits_unlabeled: 0                      # e393eb5c, e5c1d38a evidence recorded in W3
   mislabeled_complete_missions: 0                # substrate-hardening, cross-substrate-proof relabeled in C4
   past_mission_open_edges_untriaged: 0           # P-TRIAGE table committed below, target 0
-  decision_nodes_unresolved: 1                   # D-STORE storage fork remains unresolved; D-PROMO and D-WIRE settled 2026-07-08
+  decision_nodes_unresolved: 0                   # D-STORE, D-PROMO, and D-WIRE are settled
   sql_dual_paths_live: 9                         # ~8–10 per assessment
 ```
 
@@ -505,7 +508,7 @@ At each phase exit:
    work (W2, D-PROMO settlement), so its gate is red-class even though its
    yellow/green doc work can run in parallel. Do not stop, summarize-and-exit,
    or await owner input unless an escalation rule fires or a decision node
-   (D-PROMO, D-STORE) blocks the specific next phase.
+   blocks the specific next phase.
 
 If three consecutive panel rounds on the same phase fail to converge (new
 category-(a) findings each round), that is evidence of an unsettled
@@ -540,7 +543,7 @@ yellow/green auto-proceed rule.
   evidence ledger.
 - **C1–C7** Doc truth corrections (yellow, one pass):
   - C1 `current-architecture.md` — verify the capsule/substrate section clearly
-    separates "designed, not built" capsule substrate from any claim that
+    separates "partially implemented but inert" capsule substrate from any claim that
     promotion-bearing capsule transactions are proven.
   - C2 candidate-verb gate — its settled ComputerVersion/capsule semantics are
     absorbed into `computer-ontology.md`; the superseded design was removed.
@@ -618,15 +621,15 @@ As specified in mission-og-dolt Phase 1 (imported): texture-forcing removal
 delegation — heed the mutually-gated transition: verify agent behavior before
 deleting forcing cues); parent/child deletion (H001–H005, H015–H016, H005
 first; proof gate: all authority trajectory-scoped); Dolt audit read-path
-(`texture history` from `dolt_history_<table>` + `AS OF`) — this doubles as
-the first D-STORE evidence probe (history latency, latest-revision cost).
+(`texture history` from `dolt_history_<table>` + `AS OF`) — this is the first
+load-bearing D-STORE verification (history latency, latest-revision cost).
 Detector families for each cluster flip to fail-on-regression as they close.
 
 Phase B exit bar: M3.1 and M3.2 clusters at the `eliminated` bar (deletion
 diff + inverted tests + detector at fail-on-regression, zero live sites for
 H009–H012, H024a/b, H026, H001–H005, H015–H016); both proof gates evidenced;
-`texture history` served from `dolt_history` with latency numbers recorded
-as D-STORE evidence.
+`texture history` served from `dolt_history` with latency numbers recorded as
+Dolt implementation evidence.
 
 ### Phase C — Kill wave 2 + cold-entity cutover
 
@@ -646,8 +649,8 @@ SQL fallback exercised; detector families for these clusters enforcing.
 
 ### Phase D — Hot-path cutover + promotion over ComputerVersion
 
-Imported from mission-og-dolt Phases 3, 4, 4b, gated on D-STORE resolution,
-D-PROMO settlement (by Phase A experiment), and the S1 scope header landing. This phase includes the world-wire store's sql-server
+Imported from mission-og-dolt Phases 3, 4, 4b, executing against settled
+D-STORE/D-PROMO direction and the S1 scope header. This phase includes the world-wire store's sql-server
 migration (D-WIRE, decided): batch-commit infrastructure, hot-table cutover
 with a rollback latency budget **defined before cutover**, storage-growth
 measurement before victory; promotion_protocol rewrite over ComputerVersion
@@ -849,8 +852,7 @@ run_checkpoint_and_resumption_state:
     evidence, C1–C7 doc truth corrections, D-PROMO pinned-connection
     branch-isolation settlement, S1 spec↔adapter scope/conformance note, and
     P-TRIAGE past-mission open-edge table. The Phase A exit panel adjudication is
-    committed. D-STORE storage fork remains unresolved; D-PROMO and D-WIRE
-    settled.
+    committed. D-STORE, D-PROMO, and D-WIRE are settled.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -866,14 +868,15 @@ run_checkpoint_and_resumption_state:
     - embedded Dolt branch isolation on a pinned connection is deterministic (D-PROMO -count=10)
     - all past-mission open edges triaged (absorbed/external/retired)
   unproven_or_partial_claims:
-    - D-STORE storage-fork six questions
+    - Dolt engineering verification axes: history latency/correctness,
+      batching/throughput, rollback recovery, build friction, and replication
     - heresy live-site counts (families still in discovery; fail-on-regression and allowlist enforcement deferred per phase)
     - Phase B–E kill waves, cutovers, and deletion not yet executed
   remaining_error_field: see Variant below
-  highest_impact_remaining_uncertainty: D-STORE storage fork + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
+  highest_impact_remaining_uncertainty: Phase B heresy elimination evidence + Dolt history-read performance + wire-store sql-server migration mechanics
   next_executable_probe: >-
     Phase B heresy kill wave 1 + Dolt audit reads (start with the highest-impact
-    live heresy family and the D-STORE storage-fork six questions).
+    live heresy family and the first load-bearing Dolt history-read proof).
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
     - this Definition's adjudicated evidence ledger

@@ -37,6 +37,11 @@ local coverage prefer `scripts/go-test-runtime-shards` or focused
 hand-enter `CGO_*FLAGS` for the Dolt ICU dependency except as a short diagnostic
 — the durable fix is ensuring direnv is loaded (check with `echo $CGO_CFLAGS`).
 
+If those variables are empty, run `direnv status` first. In a fresh or changed
+worktree, run `direnv allow`, re-enter the directory, and verify
+`CGO_CFLAGS`/`PKG_CONFIG_PATH` before treating an ICU/Dolt build failure as a
+code failure.
+
 Per-developer secrets (API keys, provider tokens) live in a gitignored
 `.envrc.local` file that is sourced by `.envrc` if it exists. Create it with
 `dotenv .env` to auto-load your `.env` file. The tracked `.envrc` never

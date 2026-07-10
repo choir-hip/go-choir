@@ -7,7 +7,8 @@ file. Choir documentation has four lanes:
 2. **NOW** — dated, evidence-scoped facts about the checked-out system and
    staging.
 3. **ACTIVE** — the currently confirmed work surface.
-4. **History** — searchable evidence, retired proposals, ledgers, and reviews.
+4. **History** — deliberate Git archaeology for retired evidence and designs;
+   it is not indexed as current worktree prose.
 
 Do not infer current authority from a document's existence, filename, or
 archive location. `docs/choir-doctrine.md` is the apex doctrine and `AGENTS.md`
@@ -64,20 +65,19 @@ desktop/app state, follow its links to
 ## ACTIVE
 
 [`ACTIVE.md`](ACTIVE.md) is the curated work view. The product umbrella remains
-the one top-level Definition in the default packet. The supporting
+the one top-level Definition in the default packet. The completed
 [`documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md)
-is intentionally outside that packet: it changes documentation navigation only
-and cannot override product semantics.
+is intentionally outside that packet: it is a deletion/maintenance receipt and
+cannot override product semantics.
 
-`mission-graph.yaml` remains the committed legacy mission-corpus graph during
-the Beads cutover transition. It is not an onboarding list: its historical
-nodes, duplicate placeholders, and unverified statuses must not be read as
-current work without the ACTIVE view or direct mission evidence.
+`mission-graph.yaml` is a minimal discovery index for retained Definitions. A
+Definition owns its own state; the graph, Beads, and Git history do not override
+it.
 
 ## Historical Material
 
 Historical missions, ledgers, raw evidence, reviews, and superseded proposals
-are being removed from the worktree because generic retrieval treats their
+were removed from the worktree because generic retrieval treated their
 prose as current context. Git history remains the recovery and forensic
 surface; it is deliberately not part of the ordinary reading packet.
 
@@ -89,6 +89,5 @@ catalog.
 
 When a semantic, current-state, or active-work claim changes, update its source
 authority and the appropriate compact view in the same change. Do not add a
-new orientation page to the default packet. See the active documentation
-maintenance Definition for the present migration and the future strict-live
-checker work.
+new orientation page to the default packet. The completed documentation
+authority Definition records the retention and validation boundary.

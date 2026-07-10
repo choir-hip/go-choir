@@ -180,6 +180,6 @@ documents:
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations: {doc_role: definition, authority: mission, lifecycle: active}
+    annotations: {doc_role: definition, authority: mission, lifecycle: settled}
     witnesses: [docs/definitions/documentation-authority-reduction-2026-07-09.md, docs/mission-graph.yaml, cmd/doccheck/main.go]
     refresh_triggers: [documentation_index_change, doccheck_rule_change]

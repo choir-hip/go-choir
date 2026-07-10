@@ -53,6 +53,24 @@ implementation or evidence residue. Current doctrine is Source Viewer before
 explicit Web Lens inspection, Trace as evidence rather than a user app, and
 `continuation-level` as transitional residue only.
 
+## Current Product/Subsystem Status
+
+| Subsystem | Status | Current authority boundary |
+| --- | --- | --- |
+| Automatic computer / autoputer | **Live substrate, partial product** | Persistent web desktop, runtime, VM lifecycle, appagents, and host services are wired. Candidate route/promotion and terminology cutover remain incomplete. |
+| Choir CLI | **Code-present Phase 1** | Submit/read/trajectory/search/Wire/API-key surface; no lifecycle/package/promotion verbs, supported distribution, or `/goal` runner. |
+| Web desktop | **Live** | `frontend/src/lib/apps/registry.ts` is the executable app inventory; this memo and `platform-os-app-state.md` classify behavior and gaps. |
+| macOS desktop | **Buildable wrapper; shipment unproven here** | Wails shell around the Svelte product; distribution/daily-driver status requires dated acceptance evidence. |
+| Choir Base / File Provider | **Substantial tested substrate, product wiring incomplete** | Append-only journal, tree/blob, sync, and API helpers exist. No deployed product service currently owns the API, and Base is not canonical app-state authority. |
+| Autopaper | **Tabled** | No active Definition or canonical implementation. Revival requires a fresh Definition; issue residue is not authority. |
+| `corpusd` | **Code-present and deployment-wired** | Service/store writer and sanitized public API boundary for publication/World Wire; platform-computer agents remain semantic owners. |
+| `sourcecycled` | **Code-present, deployment-wired experimental adapter** | Poll cycles and queue state are in memory and lost on restart. It hands off/projects durable artifacts; it does not own canonical article meaning. |
+| Capsules | **Partially implemented, inert by default** | Executor/host/tools exist, but the default runtime has no production capsule wiring; target semantics must not be claimed live. |
+| Features activation | **Live adoption/lineage protocol, not served-code activation** | Approval/freshness/build/lineage records exist. No ordinary user route consumer, binary swap, or restart makes Activate a ComputerVersion cutover. |
+
+`/goal <definition.md>` is an external compatible-harness invocation. Choir's
+CLI, prompt bar, and runtime do not implement an end-to-end Definition runner.
+
 ## Ontology (2026-06-11 Revision)
 
 The architecture program of 2026-06-11 revised the core ontology. Its settled
@@ -89,7 +107,7 @@ new work stops accreting on the retired ontology.
 | **settlement** | a trajectory's goal closure, earned by its rule (e.g. publication: published AND listed AND no open work). Replaces root-run completion as liveness truth. |
 | **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
 | **authority envelope** | what a bounded profile (super/vsuper/co-super/researcher/texture/...) may do — code-enforced capability boundary. Profiles are envelopes, not personas. |
-| **capsule** | (designed, not built) an ephemeral effect-fenced execution chamber inside a computer; never a seat of agency, never promotion authority. |
+| **capsule** | (partially implemented, inert in the default product path) an ephemeral effect-fenced execution chamber inside a computer; never a seat of agency, never promotion authority. Executor/host/tool code exists, but production wiring and proof do not. |
 | **MutationTransaction / promotion** | state change via a single commit point: per-ledger prepare → verify → owner approval → atomic flip → reconcile; freshness CAS against the foreground; rollback window explicit. |
 | **conjecture / hyperthesis / assertion** | the epistemic vocabulary: a claim under test with a named blind edge and scope; an assertion is a supported conjecture with receipts; heresy is a circulating claim whose proof died. |
 
@@ -608,7 +626,11 @@ configured always-on primary computers have an explicit protected/resume lane.
 
 `candidate_computer`:
 
-- A background computer allowed to mutate and fail.
+- **Target semantic object:** a forked
+  `ComputerVersion = (CodeRef, ArtifactProgramRef)`, never the worker VM or
+  desktop that materializes its effects.
+- May be materialized by a background/worker substrate allowed to mutate and
+  fail; the substrate and candidate identity remain distinct.
 - Produces findings, traces, diagnostics, AppChangePackages, and recipient
   adoption evidence.
 - Does not mutate canonical foreground state directly.
@@ -665,6 +687,11 @@ This section is the current authority for the public-identity roadmap target.
   `internal/proxy/lineage_route_resolver.go` that still falls back to hard-coded
   platform VM/desktop constants when the `route_profile` parser fails or
   `PROXY_RUNTIME_DB_PATH` is unset; this is a known violation tracked by H031.
+  The variable and proxy direct-file-open path are obsolete embedded-mode
+  relics: embedded Dolt cannot be shared this way with the runtime process.
+  Keep `PROXY_RUNTIME_DB_PATH` unset in embedded deployments and do not call
+  the owner/desktop resolver “route-over-ComputerVersion”; Phase D deletes the
+  seam after a real control-store/materializer resolver exists.
 - **Timeout hardening (I3):** `vmctl.Client` and `DefaultVmctlTimeout` default to
   60s, `internal/server/server.go` sets `ReadTimeout`/`WriteTimeout` defaults to
   120s, and staging `/api/universal-wire/stories` returns a fast 504 within
@@ -743,8 +770,9 @@ is split into two stores that must not be conflated (see D-STORES in
   decision (D-WIRE) is to move this to sql-server mode now; no data migration
   is needed and existing wire data is junk.
 - **VM-local embedded store:** one embedded Dolt workspace per user VM at
-  `internal/objectgraph/dolt_store.go`. Capsules are designed, not built; the
-  workspace currently backs the computer directly. When capsules land, the same
+  `internal/objectgraph/dolt_store.go`. Capsules are partially implemented but
+  not wired into the default product path; the workspace currently backs the
+  computer directly. If capsules land, the same
   workspace will be shared by all capsules in that VM. Promotion
   (fork/promote/rollback) is an operation on this embedded store, not a property
   of the world-wire store and not a separate promotion workspace.
@@ -803,6 +831,18 @@ their subsystem. Per D-WIRE, the world-wire store moves to sql-server mode for
 multi-writer access by proxy/runtime/wire agents. Per D-STORES, this does not
 change promotion mechanics: promotion operates on the VM-local embedded store.
 
+Two additional stores are code-present but narrower than product authority:
+
+- `internal/actorruntime` maintains a separate SQLite update/snapshot log for
+  durable actor recovery and replay. It is not canonical Texture, trajectory,
+  work-item, route, or promotion truth.
+- Choir Base (`internal/base` and `internal/desktop/fileprovider`) maintains an
+  append-only journal, derived tree, and content-addressed blobs for sync and
+  materialization. Its API helpers are tested but not owned by a deployed
+  product service. Base must not become a competing canonical app-state store
+  without a fresh Definition and explicit reconciliation with embedded Dolt,
+  source/build state, blob state, and `ArtifactProgramRef`.
+
 Do not keep the whole filesystem in git. Source files under a repo belong to the
 source/build ledger. Uploaded files and generated media belong to a
 content-addressed blob ledger with Dolt/artifact metadata. Runtime caches and
@@ -831,14 +871,15 @@ sender writes platform DB -> receiver polls platform DB -> receiver acts
 
 The database is the ledger. It is not the network.
 
-The durable-actor model makes this concrete (target; cutover in progress):
+The durable-actor model makes this concrete in the current actor adapter:
 within one runtime, **the database remembers, Go delivers** — sends durably
 append to an idempotent update log, then deliver into a Go-channel mailbox,
 activating the recipient if cold; nothing polls. Across VMs, the
 transactional outbox carries the same semantics over HTTP (at-least-once
 visibility, exactly-once ledger effects). Both protocols are model-checked:
 `specs/actor_protocol.tla`, `specs/actor_protocol_xvm.tla`. Today's
-`channel_messages` + per-turn inbox polling is the legacy path this replaces.
+`channel_messages` + per-turn inbox polling is legacy deletion residue and must
+receive no new callers.
 
 ## Provider Neutrality
 
