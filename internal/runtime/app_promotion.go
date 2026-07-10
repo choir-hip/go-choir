@@ -953,7 +953,7 @@ func normalizeRouteProfile(profile, ownerID, computerID string) string {
 	if strings.HasPrefix(profile, "route:") {
 		legacyID := strings.TrimSpace(strings.TrimPrefix(profile, "route:"))
 		if legacyID != "" {
-			return safeRefPart(ownerID) + "/" + legacyID
+			return safeRefPart(ownerID) + "/" + safeRefPart(legacyID)
 		}
 		return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
 	}

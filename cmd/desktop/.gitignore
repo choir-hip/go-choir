@@ -9,3 +9,4 @@ go.sum
 # macOS
 .DS_Store
 *.app
+desktop

@@ -79,7 +79,9 @@ func (r *LineageBasedRouteResolver) ResolvePlatformRoute(ctx context.Context) (s
 		if legacyComputerID == "" {
 			return "", "", &platformRouteError{msg: "invalid route_profile format: " + routeProfile}
 		}
-		routeProfile = ownerID + "/" + legacyComputerID
+		// Match runtime writers: sanitize both sides so legacy rows resolve to
+		// the same canonical identity that new RouteProfile writes emit.
+		routeProfile = safeRouteRefPart(ownerID) + "/" + safeRouteRefPart(legacyComputerID)
 	}
 	owner, desktop, ok := splitRouteProfile(routeProfile)
 	if !ok {
@@ -102,4 +104,21 @@ func splitRouteProfile(profile string) (owner, desktop string, ok bool) {
 		return "", "", false
 	}
 	return owner, desktop, true
+}
+
+// safeRouteRefPart mirrors runtime.safeRefPart for RouteProfile identity parts.
+func safeRouteRefPart(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return "default"
+	}
+	var b strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte('-')
+	}
+	return strings.Trim(b.String(), "-.")
 }

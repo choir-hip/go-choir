@@ -451,12 +451,12 @@ conjectures:
 
 ```yaml
 variant:
-  unscoped_deployment_identity: 1
-  route_profile_format_mismatch: 1
-  source_workspace_env_fallback: 1
-  dead_code_surfaces: 4
-  stale_definition_statuses: 4
-  agentic_consensus_gates_passed: 0
+  unscoped_deployment_identity: 0
+  route_profile_format_mismatch: 0
+  source_workspace_env_fallback: 0
+  dead_code_surfaces: 0
+  stale_definition_statuses: 0
+  agentic_consensus_gates_passed: 1
   staging_acceptance_proof: 0
 ```
 
@@ -685,30 +685,45 @@ Escalate to the owner for:
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: caf16a88 (HEAD at mission start)
+  last_checkpoint: 541a2ad0 (Phases A–E landed; Phase F consensus/CI in progress)
   current_artifact_state: >-
-    Two verified contradictions in buildinfo and RouteProfile; env fallback in
-    source workspace; dead code from previous deletion pass; stale product
-    completion Definition.
-  what_shipped: []
+    Service-scoped deployMetadata, RouteProfile owner_id/computer_id writers,
+    compiled-only source-workspace identity, SyncEngine/contract-tower/wire
+    helper deletion, and product-completion Definition refresh are committed
+    locally through 541a2ad0. Live doccheck passes with one authority-root
+    product Definition. Staging acceptance proof is not yet recorded.
+  what_shipped:
+    - cfc96d01 seam-repair Definition
+    - af042d1e service-scoped deployMetadata
+    - 0b21ecdb RouteProfile owner_id/computer_id + resolver legacy normalize
+    - a1073731 compiled-commit-only source lineage
+    - 7b59d33e dead-code excision (+ state_generator_test cleanup)
+    - 541a2ad0 product-completion / ACTIVE / manifest refresh
   what_was_proven:
-    - buildinfo.DeployMetadata is unscoped.
-    - RouteProfile format mismatch causes resolver fallback.
-    - source_workspace uses env fallback.
-    - Dead code remains after previous deletions.
+    - deployMetadata no longer claims another service's receipt artifact
+    - RouteProfile writers emit owner_id/computer_id; legacy route: normalized at resolve
+    - source_workspace ignores CHOIR_DEPLOYED_COMMIT / RUNTIME_WORKER_REPO_BASE_SHA for identity
+    - deleted SyncEngine/contract/wire surfaces have no remaining Go callers; go build/tests green
+    - live doccheck L4 passes with choir-product-completion as sole authority-root Definition
   unproven_or_partial_claims:
-    - The exact list of cmd/base* tools that depend on internal/desktop.
+    - staging per-service /health identity after deploy
+    - staging RouteProfile promotion/rollback receipt
+    - residual RouteProfile non-legacy garbage still returned unchanged by normalizeRouteProfile
+    - orphaned macos File Provider Swift still references deleted Go bridge (packaging prohibited)
   highest_impact_remaining_uncertainty: >-
-    Whether the internal/desktop SyncEngine deletion requires migrating or
-    deleting cmd/baseharness, cmd/baseobserve, and cmd/evidenceroot.
+    Whether staging activation receipts prove service-scoped identity and
+    route-slot promotion end-to-end after push.
   next_executable_probe: >-
-    Phase 0: write the consensus prompt and run agentic-consensus on the full
-    repair plan.
+    Phase F: finish final consensus adjudication, full CI, push/deploy, then
+    prove /health and RouteProfile on choir.news.
   suggested_goal_string: /goal docs/definitions/choir-seam-repair-2026-07-10.md
   evidence_artifact_refs:
     - caf16a88 (mission start)
+    - a1073731 (pre-delete rollback)
+    - /tmp/choir-seam-repair-final-consensus
   rollback_refs:
     - caf16a88
+    - a1073731
 ```
 
 ## Suggested Goal String

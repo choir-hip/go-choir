@@ -1,3 +1,9 @@
+> **Status (seam-repair 2026-07-10):** The Go File Provider bridge
+> (`internal/desktop/fileprovider/`) and SyncEngine were deleted as unwired dead
+> code. This Swift extension is orphaned and must not be packaged or registered
+> until the PC-5 Base kernel acceptance matrix passes and a new adapter is
+> defined. Do not treat the diagrams below as current product authority.
+
 # Choir File Provider Extension (macOS)
 
 This directory contains the macOS File Provider extension that projects

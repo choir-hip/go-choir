@@ -419,15 +419,17 @@ problem_cluster:
   - server device cursors are unused while a second client JSON cursor claims full progress
   - keep_both uploads and downloads the same ItemID instead of preserving two objects
   - event folding, tree types, REST schemas, status, and materialization each have competing implementations
-  - 38 unused base_* contract files and their tests risk becoming architecture by inertia
+  - 38 unused base_* contract files and their tests were deleted by seam-repair 2026-07-10; do not resurrect them as architecture
 observed_contradictions:
   - >-
-    internal/base/model and planner require path-independent ItemID, while
-    internal/desktop/localtree.go hashes relative path into ItemID and gives
-    folders a random VersionID on every scan.
+    internal/base/model and planner require path-independent ItemID. The former
+    path-hashing desktop localtree scanner was deleted by seam-repair 2026-07-10;
+    any future desktop adapter must not reintroduce path-as-ItemID.
   - >-
-    cmd/desktop/main.go derives every device ID as desktop plus the basename of
-    ~/.choir, which is desktop:.choir across devices.
+    Historical desktop device identity derived every device ID as desktop plus
+    the basename of ~/.choir (desktop:.choir across devices). That SyncEngine
+    path is deleted; the identity defect remains a kernel requirement for any
+    future adapter.
   - >-
     internal/base/blob/store.go verifies exact content-addressed bytes and
     internal/computerversion/TreeToFS materializes them safely, while
@@ -546,22 +548,21 @@ before any Base-backed API, Wails, or File Provider product path is enabled.
 | Artifact and Dolt boundary | pre-wiring | Resolve the tape/blob set from its ArtifactProgramRef and compare the emitted file/blob observations. | The ref selects exactly that state; Base writes no canonical Texture/runtime/trajectory/promotion or embedded-Dolt app truth. |
 | Service ownership | post-gate only | After all prior rows pass, name one deployed owner/router and repeat owner denial plus exact-byte acceptance on staging. | The serving service and build identity are explicit, scoped requests traverse the proved kernel, and Wails/File Provider remain adapters rather than alternate authorities. |
 
-Current passing tests do not satisfy this matrix. In particular,
-`TestSyncEngineDownloadCycle` explicitly blesses placeholder creation and cursor
-advance; `TestLocalTreeBuilderDeterministicIDs` only rescans an unchanged path;
-the testkit duplicate-event scenario supplies already-identical trees rather
-than redelivering an event; and the Base contract-builder tests validate a
-closed declaration graph with no product caller.
+Current passing tests do not satisfy this matrix. The former
+`TestSyncEngineDownloadCycle` / `TestLocalTreeBuilderDeterministicIDs` and Base
+contract-builder suites were deleted with SyncEngine and the contract tower by
+seam-repair 2026-07-10. Remaining Base/component tests still do not prove the
+kernel transaction; only the PC-5 acceptance matrix can settle it.
 
 #### PC-5 Deletion and Authority Map
 
 | Surface | Measured state | Disposition | Mutation class |
 |---|---|---|---|
-| `internal/computerversion/base_*_contract.go` | 38 production files, 39 builders, 8,655 lines; no non-test callers outside the closed definition cluster | Delete after retaining the concrete extractor/materializer files below; these declarations are not the Base architecture. | yellow |
-| Paired `base_*_contract_test.go` files | 38 files, 17,725 lines; combined tower total 26,380 lines | Delete with the unused builders; replace self-validation with the PC-5 integration matrix. | yellow |
+| `internal/computerversion/base_*_contract.go` | Deleted by seam-repair 2026-07-10 (7b59d33e); previously 38 production files with no non-test callers outside the closed cluster | Deleted. Do not resurrect; PC-5 integration matrix replaces self-validation. | black (done) |
+| Paired `base_*_contract_test.go` files | Deleted by seam-repair 2026-07-10 with the unused builders | Deleted. | black (done) |
 | `base_event.go`, `base_journal.go`, `base_tree.go`, `base_blob.go`, `base_current_state*.go`, `state_generator.go`, `tree_to_fs.go` | Concrete replay, integrity observation, and exact materialization | Retain as evidence/materialization substrate; bind only through the kernel's scoped tape/blob view. | no behavior change until kernel wiring |
 | `planner.ApplyEvent` and its item-count-only test | No non-test caller; does not parse move/update payloads or track EventID | Delete after canonical replay is exposed to the kernel. | yellow with test-pressure change |
-| Desktop `applyDelta`, tree conversions, path-derived scanner, placeholder downloader, and JSON cursor authority | Competing/incomplete kernel in `internal/desktop` | Remove from authority now; later rewrite desktop as a thin adapter to the proved kernel rather than patching these paths. | red when behavior changes |
+| Desktop SyncEngine (`applyDelta`, path-derived scanner, placeholder downloader, JSON cursor) and Wails SyncService | Deleted by seam-repair 2026-07-10; `internal/desktop` retains only client/apikey | Deleted from authority. Future desktop adapter must target the proved PC-5 kernel, not resurrect SyncEngine. | black (done) |
 | Mirrored desktop REST request/response structs and API status semantics | A second schema/status authority before service ownership exists | Do not widen; delete or generate from the settled kernel contract during post-gate adapter work. | red when product API changes |
 
 ### PC-6. Autopaper single authoritative activation — OPEN
