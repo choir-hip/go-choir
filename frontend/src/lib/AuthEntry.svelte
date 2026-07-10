@@ -18,7 +18,7 @@
     data-passkey-error    — passkey ceremony error message area
 -->
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import PretextInlineDisclosure from './PretextInlineDisclosure.svelte';
 
   export let passkeyError = '';
@@ -34,6 +34,7 @@
 
   /** Email input for the current view. */
   let email = '';
+  let emailInputEl: HTMLInputElement | null = null;
 
   /** Validation error message (empty email etc). */
   let error = '';
@@ -52,11 +53,21 @@
 
   function switchView(newView) {
     view = newView;
-    email = '';
     error = '';
     // Clear passkeyError when switching views so the user gets a clean retry state.
     dispatch('clearpasskeyerror');
+    tick().then(() => {
+      emailInputEl?.focus();
+      emailInputEl?.select();
+    });
   }
+
+  onMount(() => {
+    if (window.localStorage?.getItem('choir.auth.returning') === 'true') {
+      view = 'login';
+    }
+    tick().then(() => emailInputEl?.focus());
+  });
 
   function handleRegister() {
     error = '';
@@ -95,11 +106,16 @@
       <p>{intentMessage}</p>
     </div>
 
-    <div class="view-tabs">
+    <div class="view-tabs" role="tablist" aria-label="Choose sign-in path">
       <button
         class="tab"
         class:active={view === 'register'}
         data-register-toggle
+        type="button"
+        role="tab"
+        id="register-tab"
+        aria-controls="register-panel"
+        aria-selected={view === 'register'}
         on:click={() => switchView('register')}
         disabled={ceremonyInProgress}
       >
@@ -109,6 +125,11 @@
         class="tab"
         class:active={view === 'login'}
         data-login-toggle
+        type="button"
+        role="tab"
+        id="login-tab"
+        aria-controls="login-panel"
+        aria-selected={view === 'login'}
         on:click={() => switchView('login')}
         disabled={ceremonyInProgress}
       >
@@ -117,7 +138,7 @@
     </div>
 
     {#if view === 'register'}
-      <div class="auth-view" data-register-view>
+      <div class="auth-view" id="register-panel" role="tabpanel" aria-labelledby="register-tab" data-register-view>
         <PretextInlineDisclosure
           prefix="Create a "
           subject="passkey"
@@ -132,6 +153,7 @@
             id="register-email"
             name="email"
             type="email"
+            bind:this={emailInputEl}
             bind:value={email}
             placeholder="you@example.com"
             autocomplete="email"
@@ -139,6 +161,8 @@
             autocapitalize="none"
             spellcheck="false"
             disabled={ceremonyInProgress}
+            aria-invalid={displayError ? 'true' : 'false'}
+            aria-errormessage={displayError ? 'auth-error' : undefined}
             required
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
@@ -156,7 +180,7 @@
         </p>
       </div>
     {:else}
-      <div class="auth-view" data-login-view>
+      <div class="auth-view" id="login-panel" role="tabpanel" aria-labelledby="login-tab" data-login-view>
         <PretextInlineDisclosure
           prefix="Sign in with your "
           subject="passkey"
@@ -171,6 +195,7 @@
             id="login-email"
             name="email"
             type="email"
+            bind:this={emailInputEl}
             bind:value={email}
             placeholder="you@example.com"
             autocomplete="username webauthn"
@@ -178,6 +203,8 @@
             autocapitalize="none"
             spellcheck="false"
             disabled={ceremonyInProgress}
+            aria-invalid={displayError ? 'true' : 'false'}
+            aria-errormessage={displayError ? 'auth-error' : undefined}
             required
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
@@ -196,8 +223,10 @@
       </div>
     {/if}
 
+    <p class="next-step"><strong>Next:</strong> Your browser asks you to unlock the passkey. Then Choir returns you to the action above.</p>
+
     {#if displayError}
-      <p class="error" role="alert" data-passkey-error>{displayError}</p>
+      <p class="error" id="auth-error" role="alert" data-passkey-error>{displayError}</p>
     {/if}
   </div>
 </div>
@@ -387,6 +416,19 @@
     color: var(--choir-status-danger);
     font-size: 0.9rem;
     line-height: 1.35;
+  }
+
+  .next-step {
+    margin: 0.9rem 0 0;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--choir-border);
+    color: var(--choir-text-muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .next-step strong {
+    color: var(--choir-text-primary);
   }
 
   .fine-print {

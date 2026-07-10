@@ -93,6 +93,7 @@
       if (data.authenticated && data.user) {
         authState = 'signed_in';
         currentUser = data.user;
+        window.localStorage?.setItem('choir.auth.returning', 'true');
         startAuthenticatedPrewarm();
         void loadServerTheme();
         return { authenticated: true, user: data.user };
@@ -323,6 +324,7 @@
       // the authenticated state.
       const session = await checkSession();
       if (session?.authenticated) {
+        window.localStorage?.setItem('choir.auth.returning', 'true');
         maybeReplayPendingIntent(pendingAuthIntent);
         clearConsumedAppIntentFromURL(pendingAuthIntent);
         authOverlayOpen = false;
