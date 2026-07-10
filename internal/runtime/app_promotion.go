@@ -95,7 +95,7 @@ func (rt *Runtime) EnsureComputerSourceLineage(ctx context.Context, ownerID, com
 		ComputerID:      computerID,
 		ComputerKind:    kind,
 		ActiveSourceRef: activeRef,
-		RouteProfile:    "route:" + safeRefPart(computerID),
+		RouteProfile:    safeRefPart(ownerID) + "/" + safeRefPart(computerID),
 	})
 }
 
@@ -269,7 +269,7 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 		MergeConflictsJSON:                    json.RawMessage(`[]`),
 		VerifierResultsJSON:                   json.RawMessage(`[]`),
 		RollbackProfileJSON:                   json.RawMessage(`{}`),
-		RouteProfile:                          firstNonEmptyPromotion(strings.TrimSpace(in.RouteProfile), lineage.RouteProfile, "route:"+safeRefPart(targetComputerID)),
+		RouteProfile:                          normalizeRouteProfile(firstNonEmptyPromotion(strings.TrimSpace(in.RouteProfile), lineage.RouteProfile), ownerID, targetComputerID),
 		DefaultBaseProfile:                    strings.TrimSpace(in.DefaultBaseProfile),
 		TraceID:                               firstNonEmptyPromotion(strings.TrimSpace(in.TraceID), pkg.TraceID),
 	}
@@ -533,7 +533,7 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	lineage.ActiveSourceRef = rec.CandidateSourceRef
 	lineage.RuntimeDigest = rec.RuntimeArtifactDigest
 	lineage.UIDigest = rec.UIArtifactDigest
-	lineage.RouteProfile = firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile)
+	lineage.RouteProfile = normalizeRouteProfile(firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile), ownerID, rec.TargetComputerID)
 	lineage.DefaultBaseProfile = firstNonEmptyPromotion(rec.DefaultBaseProfile, lineage.DefaultBaseProfile)
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = pkg.PackageID
@@ -592,7 +592,7 @@ func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID 
 	lineage.ActiveSourceRef = stringFromMap(rollback, "previous_active_source_ref")
 	lineage.RuntimeDigest = stringFromMap(rollback, "previous_runtime_digest")
 	lineage.UIDigest = stringFromMap(rollback, "previous_ui_digest")
-	lineage.RouteProfile = stringFromMap(rollback, "previous_route_profile")
+	lineage.RouteProfile = normalizeRouteProfile(stringFromMap(rollback, "previous_route_profile"), ownerID, rec.TargetComputerID)
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = rec.PackageID
 	lineage.UpdatedAt = time.Now().UTC()
@@ -644,7 +644,7 @@ func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoption
 	lineage.ActiveSourceRef = rec.CandidateSourceRef
 	lineage.RuntimeDigest = rec.RuntimeArtifactDigest
 	lineage.UIDigest = rec.UIArtifactDigest
-	lineage.RouteProfile = firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile)
+	lineage.RouteProfile = normalizeRouteProfile(firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile), ownerID, rec.TargetComputerID)
 	lineage.DefaultBaseProfile = firstNonEmptyPromotion(rec.DefaultBaseProfile, lineage.DefaultBaseProfile)
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = pkg.PackageID
@@ -939,6 +939,25 @@ func safeRefPart(value string) string {
 		b.WriteByte('-')
 	}
 	return strings.Trim(b.String(), "-.")
+}
+
+// normalizeRouteProfile converts a legacy "route:computerID" RouteProfile to
+// the canonical "ownerID/computerID" format. If the profile is empty, a
+// canonical value is synthesized. Non-legacy values are returned unchanged for
+// splitRouteProfile to validate.
+func normalizeRouteProfile(profile, ownerID, computerID string) string {
+	profile = strings.TrimSpace(profile)
+	if profile == "" {
+		return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
+	}
+	if strings.HasPrefix(profile, "route:") {
+		legacyID := strings.TrimSpace(strings.TrimPrefix(profile, "route:"))
+		if legacyID != "" {
+			return safeRefPart(ownerID) + "/" + legacyID
+		}
+		return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
+	}
+	return profile
 }
 
 func rejectPrivateSourcePayload(payload string) error {

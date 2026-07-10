@@ -96,6 +96,50 @@ func TestLineageBasedRouteResolver_InvalidRouteProfileFallsBack(t *testing.T) {
 	}
 }
 
+func TestLineageBasedRouteResolver_NormalizesLegacyRoutePrefix(t *testing.T) {
+	resolver := &LineageBasedRouteResolver{
+		Reader: &mockLineageReader{
+			record: LineageRecord{
+				OwnerID:      vmctl.UniversalWirePlatformOwnerID,
+				ComputerID:   vmctl.UniversalWirePlatformComputerID,
+				RouteProfile: "route:platform-desktop",
+			},
+		},
+		OwnerID:    vmctl.UniversalWirePlatformOwnerID,
+		ComputerID: vmctl.UniversalWirePlatformComputerID,
+	}
+
+	owner, desktop, err := resolver.ResolvePlatformRoute(context.Background())
+	if err != nil {
+		t.Fatalf("ResolvePlatformRoute with legacy route: prefix: %v", err)
+	}
+	if owner != vmctl.UniversalWirePlatformOwnerID {
+		t.Errorf("owner = %q, want %q (normalized from legacy route: prefix)", owner, vmctl.UniversalWirePlatformOwnerID)
+	}
+	if desktop != "platform-desktop" {
+		t.Errorf("desktop = %q, want %q (extracted from legacy route: prefix)", desktop, "platform-desktop")
+	}
+}
+
+func TestLineageBasedRouteResolver_RejectsEmptyLegacyRoutePrefix(t *testing.T) {
+	resolver := &LineageBasedRouteResolver{
+		Reader: &mockLineageReader{
+			record: LineageRecord{
+				OwnerID:      vmctl.UniversalWirePlatformOwnerID,
+				ComputerID:   vmctl.UniversalWirePlatformComputerID,
+				RouteProfile: "route:",
+			},
+		},
+		OwnerID:    vmctl.UniversalWirePlatformOwnerID,
+		ComputerID: vmctl.UniversalWirePlatformComputerID,
+	}
+
+	_, _, err := resolver.ResolvePlatformRoute(context.Background())
+	if err == nil {
+		t.Fatal("expected error for empty legacy route: prefix, got nil")
+	}
+}
+
 func TestLineageBasedRouteResolver_LineageNotFoundFallsBack(t *testing.T) {
 	resolver := &LineageBasedRouteResolver{
 		Reader: &mockLineageReader{

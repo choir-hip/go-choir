@@ -508,7 +508,7 @@ func (rt *Runtime) CreateCandidatePackageIntakeAdoptionReview(ctx context.Contex
 		MergeConflictsJSON:                    json.RawMessage(`[]`),
 		VerifierResultsJSON:                   candidatePackageAdoptionReviewVerifierResultsJSON(intake, pkg, adoptionReviewContractRef, adoptionContractRef, rollbackContractRef, "pending", strings.TrimSpace(in.ReviewEvidenceRef)),
 		RollbackProfileJSON:                   candidatePackageAdoptionReviewRollbackProfileJSON(lineage, adoptionReviewContractRef, adoptionContractRef, rollbackContractRef),
-		RouteProfile:                          firstNonEmptyPromotion(lineage.RouteProfile, "route:"+safeRefPart(targetComputerID)),
+		RouteProfile:                          normalizeRouteProfile(lineage.RouteProfile, ownerID, targetComputerID),
 		DefaultBaseProfile:                    lineage.DefaultBaseProfile,
 		TraceID:                               firstNonEmptyPromotion(intake.TraceID, pkg.TraceID),
 	}

@@ -65,14 +65,22 @@ func (r *LineageBasedRouteResolver) ResolvePlatformRoute(ctx context.Context) (s
 		return "", "", &platformRouteError{msg: "lineage lookup failed: " + err.Error()}
 	}
 
-	// The route_profile field carries the routing identity in the format
-	// "owner_id/desktop_id". If it's empty, fall back to the hard-coded
-	// constants by returning an error.
+	// The route_profile field carries the routing identity in the canonical
+	// format "owner_id/computer_id". Legacy values with a "route:" prefix are
+	// normalized using the resolver's known owner context so that persisted
+	// records written before the format fix resolve correctly without requiring
+	// a data migration.
 	routeProfile := strings.TrimSpace(rec.RouteProfile)
 	if routeProfile == "" {
 		return "", "", &platformRouteError{msg: "lineage route_profile is empty"}
 	}
-
+	if strings.HasPrefix(routeProfile, "route:") {
+		legacyComputerID := strings.TrimSpace(strings.TrimPrefix(routeProfile, "route:"))
+		if legacyComputerID == "" {
+			return "", "", &platformRouteError{msg: "invalid route_profile format: " + routeProfile}
+		}
+		routeProfile = ownerID + "/" + legacyComputerID
+	}
 	owner, desktop, ok := splitRouteProfile(routeProfile)
 	if !ok {
 		return "", "", &platformRouteError{msg: "invalid route_profile format: " + routeProfile}
