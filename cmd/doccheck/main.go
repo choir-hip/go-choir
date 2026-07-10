@@ -841,7 +841,7 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 	rep.KindCounts = map[string]int{}
 	ids := map[string]missionGraphNode{}
 	validStatus := map[string]bool{"planned": true, "working": true, "open_handoff": true, "settled": true, "superseded": true, "blocked": true}
-	validKind := map[string]bool{"spine": true, "side": true, "docs_truth": true, "evidence": true, "superseded": true}
+	validKind := map[string]bool{"spine": true, "side": true, "product_completion": true, "docs_truth": true, "evidence": true, "superseded": true}
 	for _, n := range mf.Nodes {
 		if n.ID == "" {
 			warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "mission graph node has no id"})

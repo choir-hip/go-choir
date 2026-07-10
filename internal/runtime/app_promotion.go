@@ -942,9 +942,8 @@ func safeRefPart(value string) string {
 }
 
 // normalizeRouteProfile converts a legacy "route:computerID" RouteProfile to
-// the canonical "ownerID/computerID" format. If the profile is empty, a
-// canonical value is synthesized. Non-legacy values are returned unchanged for
-// splitRouteProfile to validate.
+// the canonical "ownerID/computerID" format. If the profile is empty or
+// malformed, a canonical value is synthesized from ownerID/computerID.
 func normalizeRouteProfile(profile, ownerID, computerID string) string {
 	profile = strings.TrimSpace(profile)
 	if profile == "" {
@@ -957,7 +956,16 @@ func normalizeRouteProfile(profile, ownerID, computerID string) string {
 		}
 		return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
 	}
-	return profile
+	// Reject anything that is not exactly "owner/computer" with non-empty parts.
+	parts := strings.Split(profile, "/")
+	if len(parts) == 2 {
+		ownerPart := strings.TrimSpace(parts[0])
+		computerPart := strings.TrimSpace(parts[1])
+		if ownerPart != "" && computerPart != "" {
+			return ownerPart + "/" + computerPart
+		}
+	}
+	return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
 }
 
 func rejectPrivateSourcePayload(payload string) error {

@@ -68,7 +68,7 @@ nodes:
     title: Choir Contradiction and Seam Repair
     path: docs/definitions/choir-seam-repair-2026-07-10.md
     ledger: ''
-    status: working
+    status: settled
     kind: product_completion
     depends_on:
       - choir-product-completion-2026-07-10

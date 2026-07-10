@@ -92,9 +92,10 @@ func (r *LineageBasedRouteResolver) ResolvePlatformRoute(ctx context.Context) (s
 }
 
 // splitRouteProfile splits a route profile string "owner_id/desktop_id"
-// into its components. Returns false if the format is invalid.
+// into its components. Returns false if the format is invalid. The string must
+// contain exactly one "/" and both parts must be non-empty.
 func splitRouteProfile(profile string) (owner, desktop string, ok bool) {
-	parts := strings.SplitN(profile, "/", 2)
+	parts := strings.Split(profile, "/")
 	if len(parts) != 2 {
 		return "", "", false
 	}

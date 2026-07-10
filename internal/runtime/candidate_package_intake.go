@@ -644,13 +644,13 @@ func (rt *Runtime) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	rec.Status = types.AppAdoptionSourceLineageSwitched
 	rec.Error = ""
 	rec.VerifierResultsJSON = candidatePackageAppendPromotionSwitchJSON(rec.VerifierResultsJSON, strings.TrimSpace(in.SwitchEvidenceRef))
-	rec.RollbackProfileJSON = candidatePackageAdoptionReviewSwitchRollbackProfileJSON(rec.RollbackProfileJSON, rec.CandidateSourceRef, strings.TrimSpace(in.SwitchEvidenceRef))
+	rec.RollbackProfileJSON = candidatePackageAdoptionReviewSwitchRollbackProfileJSON(rec.RollbackProfileJSON, rec.CandidateSourceRef, strings.TrimSpace(in.SwitchEvidenceRef), lineage.RouteProfile)
 	rec, err = rt.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	lineage.ActiveSourceRef = rec.CandidateSourceRef
-	lineage.RouteProfile = firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile)
+	lineage.RouteProfile = normalizeRouteProfile(firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile), ownerID, rec.TargetComputerID)
 	lineage.DefaultBaseProfile = firstNonEmptyPromotion(rec.DefaultBaseProfile, lineage.DefaultBaseProfile)
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = pkg.PackageID
@@ -736,7 +736,7 @@ func (rt *Runtime) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Cont
 		return types.AppAdoptionRecord{}, err
 	}
 	lineage.ActiveSourceRef = rec.TargetActiveSourceRefAtCutover
-	lineage.RouteProfile = previousRouteProfile
+	lineage.RouteProfile = normalizeRouteProfile(previousRouteProfile, ownerID, rec.TargetComputerID)
 	lineage.DefaultBaseProfile = rec.DefaultBaseProfile
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = pkg.PackageID
@@ -817,7 +817,7 @@ func (rt *Runtime) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.C
 		return types.AppAdoptionRecord{}, err
 	}
 	lineage.ActiveSourceRef = rec.CandidateSourceRef
-	lineage.RouteProfile = firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile)
+	lineage.RouteProfile = normalizeRouteProfile(firstNonEmptyPromotion(rec.RouteProfile, lineage.RouteProfile), ownerID, rec.TargetComputerID)
 	lineage.DefaultBaseProfile = firstNonEmptyPromotion(rec.DefaultBaseProfile, lineage.DefaultBaseProfile)
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = pkg.PackageID
@@ -1229,7 +1229,7 @@ func candidatePackageAdoptionReviewSwitchProfileMatches(raw json.RawMessage, act
 	return nil
 }
 
-func candidatePackageAdoptionReviewSwitchRollbackProfileJSON(raw json.RawMessage, candidateSourceRef, evidenceRef string) json.RawMessage {
+func candidatePackageAdoptionReviewSwitchRollbackProfileJSON(raw json.RawMessage, candidateSourceRef, evidenceRef, previousRouteProfile string) json.RawMessage {
 	raw = rawJSONOrFallback(raw, "{}")
 	var profile map[string]any
 	if err := json.Unmarshal(raw, &profile); err != nil {
@@ -1244,6 +1244,9 @@ func candidatePackageAdoptionReviewSwitchRollbackProfileJSON(raw json.RawMessage
 	profile["promotion_mode"] = "source_lineage_only"
 	if evidenceRef != "" {
 		profile["switch_evidence_ref"] = evidenceRef
+	}
+	if previousRouteProfile != "" {
+		profile["previous_route_profile"] = previousRouteProfile
 	}
 	data, err := json.Marshal(profile)
 	if err != nil {

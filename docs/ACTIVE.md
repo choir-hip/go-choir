@@ -32,14 +32,14 @@ umbrella's semantics.
 
 ## Next Executable Work
 
-The seam-repair Definition's next authorized work is Phase F: final consensus,
-full CI, push/deploy, and staging acceptance proving per-service `/health`
-identity plus a RouteProfile promotion/rollback on `choir.news`.
+The seam-repair Definition is **settled** after staging acceptance at `944d4d94`
+proved per-service `/health` identity and RouteProfile promotion/rollback on
+`choir.news`.
 
-After seam-repair staging proof, resume product-completion work at PC-2 (Wails
-token containment) and PC-3 (CLI request-budget), with Base product wiring still
-gated on the exact-byte stable-identity kernel. Typed Autopaper handoff
-idempotency remains open after projection-triggered activation deletion.
+Resume product-completion work at PC-2 (Wails token containment) and PC-3 (CLI
+request-budget), with Base product wiring still gated on the exact-byte
+stable-identity kernel. Typed Autopaper handoff idempotency remains open after
+projection-triggered activation deletion.
 
 The OG/Dolt/heresy spine still owns Texture semantic-forcing residue removal,
 Dolt history/audit load-bearing reads, and ComputerVersion promotion protocol

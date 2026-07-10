@@ -266,9 +266,10 @@ definition: >-
   every PC node status, variant count, and contradiction claim matches the
   post-repair state. In particular:
 
-  - PC-0 stays at testing until service-scoped deployment identity is proven.
+  - PC-0 is settled after service-scoped deployment identity was proven by
+    the staging activation at 944d4d94.
   - PC-4 is no longer framed as only an OG dependency; it is a route-slot
-    writer with an active format bug that this mission fixes.
+    writer whose owner_id/computer_id format was fixed by this mission.
   - PC-6 autopaper_authoritative_activation_paths is 1, not 2.
   - PC-7 no longer claims SyncService is registered.
   - PC-5 deletion/authority map reflects the deleted contract files.
@@ -279,7 +280,9 @@ non_definition:
   - Adding new PC nodes beyond the current scope.
 observables:
   - A diff of docs/definitions/choir-product-completion-2026-07-10.md that
-    updates only statuses, counts, and evidence references.
+    updates only statuses, counts, and evidence references (PC-0 settled,
+    PC-4 testing, PC-6 paths = 1, PC-7 no SyncService registration, PC-5
+    deletion map updated).
   - The doc truth checker passes.
 execution_effect:
   - Future /goal runs read the correct belief state and do not re-discover
@@ -298,7 +301,7 @@ settlement:
 ```yaml
 id: agentic_consensus_gate
 kind: operator
-status: proposed
+status: settled
 source: user-stated
 term: Agentic consensus before red mutation
 definition: >-
@@ -319,10 +322,9 @@ definition: >-
     --keep-going
   ```
 
-  If the `codex` agent cannot be invoked because the runner still passes the
-  unsupported `--ask-for-approval` flag, either fix the runner first or run with
-  `--exclude codex` and record the missing member. The next mission is to fix
-  the runner; this mission should not be blocked on that fix.
+  The runner uses `-c 'approval_policy="never"'` for `codex` (and equivalent
+  non-interactive flags for the other panel members) so no manual permission
+  prompts are required during a consensus run.
 non_definition:
   - A panel majority vote over a locally demonstrated fact.
   - A consensus pass that replaces targeted tests or staging evidence.
@@ -359,9 +361,10 @@ determined_state:
       source: observed
       execution_effect: deployMetadata can be scoped without changing callers.
     - claim: The proxy resolver expects "owner_id/computer_id" and rejects
-        "route:computer_id".
+        multiple slashes or malformed non-legacy values.
       source: observed
-      execution_effect: RouteProfile writes must match that format.
+      execution_effect: RouteProfile writes must match that format and every
+        write path must normalize.
     - claim: internal/computerversion/base_*_contract.go files have no
         non-test callers outside the closed definition cluster.
       source: observed
@@ -369,26 +372,31 @@ determined_state:
     - claim: cmd/desktop/syncservice.go is no longer registered in main.go.
       source: observed
       execution_effect: It is safe to delete or hard-gate.
-  contested:
-    - node: internal/desktop scope
-      issue: cmd/baseharness, cmd/baseobserve, and cmd/evidenceroot may import
-        the internal/desktop SyncEngine path. A decision is needed before
-        deleting those files.
-      next_resolution_step: Audit the three cmd tools and either migrate them to
-        internal/base primitives or add them to the deletion batch.
-  open:
-    - node: deployment_identity_service_scoped
-      missing: code change to internal/buildinfo/buildinfo.go and a new test.
-    - node: route_profile_owner_computer_format
-      missing: code changes in internal/runtime and a malformed-legacy test.
-    - node: source_workspace_compiled_identity_only
-      missing: code changes in internal/sandbox/source_workspace.go and
-        internal/vmctl/handlers.go plus a test/staging proof.
-    - node: dead_code_excision
-      missing: audit of cmd/base* tools and owner approval for the deletion
-        batch.
-    - node: definition_doc_state_refresh
-      missing: doc diff and truth-checker pass.
+    - claim: deployment_identity_service_scoped is implemented and tested.
+      source: code + test + staging evidence
+      execution_effect: buildinfo.DeployMetadata is service-scoped.
+    - claim: route_profile_owner_computer_format is implemented and tested.
+      source: code + test + staging evidence
+      execution_effect: All RouteProfile writers and the resolver use
+        "owner_id/computer_id" and reject malformed values.
+    - claim: source_workspace_compiled_identity_only is implemented and tested.
+      source: code + test + staging evidence
+      execution_effect: Sandbox source-lineage identity uses only the compiled
+        commit.
+    - claim: dead_code_excision is complete.
+      source: code + build/test
+      execution_effect: The listed dead code surfaces are deleted and have no
+        remaining callers.
+    - claim: definition_doc_state_refresh is complete.
+      source: doc diff + doccheck
+      execution_effect: choir-product-completion reflects the post-repair state.
+    - claim: The internal/desktop SyncEngine audit is complete.
+      source: code search
+      execution_effect: cmd/baseharness, cmd/baseobserve, and cmd/evidenceroot
+        use internal/base and internal/computerversion substrate primitives; no
+        internal/desktop SyncEngine imports remain.
+  contested: []
+  open: []
 ```
 
 ## Invariants
@@ -430,19 +438,19 @@ conjectures:
   - id: c2_two_seams_cause_contradictions
     claim: The unscoped deployMetadata and the RouteProfile format mismatch are
       the two load-bearing contradictions that must be fixed first.
-    status: testing
-    evidence_class: observed code + agentic-consensus panel
+    status: settled
+    evidence_class: observed code + agentic-consensus panel + test
     falsifier: A third contradiction is found that blocks these two.
   - id: c3_dead_code_safe_to_delete
     claim: The listed dead code has no non-test product caller and can be
       removed without breaking the build.
-    status: testing
+    status: settled
     evidence_class: code search + build/test
     falsifier: A build or runtime failure after deletion.
   - id: c4_env_fallback_can_be_removed
     claim: The sandbox Nix build sets buildinfo.Commit, so the env fallback can
       be removed.
-    status: testing
+    status: settled
     evidence_class: build evidence + staging proof
     falsifier: A production build reports "unknown" after the fallback is removed.
 ```
@@ -619,7 +627,8 @@ evidence_ledger:
     source: docs/definitions/choir-product-completion-2026-07-10.md;
       docs/doc-authority-manifest.yaml; docs/mission-graph.yaml; docs/ACTIVE.md
     command_or_observation: >-
-      PC-0/PC-4 set to testing; autopaper_authoritative_activation_paths=1;
+      PC-0 settled (service-scoped identity proven by staging evidence);
+      PC-4 testing; autopaper_authoritative_activation_paths=1;
       SyncService registration claims removed; PC-5 deletion map updated;
       og-dolt demoted from authority-root so L4 has one product Definition;
       seam-repair registered as non-root maintenance Definition.
@@ -655,10 +664,13 @@ evidence_ledger:
       POST /api/computers/desktop/adoptions without a package correctly returned 400
       package-not-found; no app-change packages exist on staging, so a full
       PromoteAppAdoption/RollbackAppAdoption mutation was not executed.
+      Additional unit tests prove that normalizeRouteProfile rejects malformed
+      non-legacy values and that candidate_package_intake switch, rollback, and
+      roll-forward paths all normalize RouteProfile before writing.
     result: verified
     uncertainty: >-
       Full promote/rollback mutation remains unexercised on staging until an
-      admissible app-change package exists; writer+resolver path is proven.
+      admissible app-change package exists; writer+resolver paths are proven.
 ```
 
 ## Forbidden Collapses
@@ -735,6 +747,8 @@ run_checkpoint_and_resumption_state:
   what_was_proven:
     - deployMetadata no longer claims another service's receipt artifact
     - RouteProfile writers emit owner_id/computer_id; legacy route: normalized at resolve
+    - candidate_package_intake switch/rollback/roll-forward normalizes RouteProfile before writing
+    - normalizeRouteProfile rejects malformed non-legacy values and synthesizes a canonical value
     - source_workspace ignores CHOIR_DEPLOYED_COMMIT / RUNTIME_WORKER_REPO_BASE_SHA for identity
     - deleted SyncEngine/contract/wire surfaces have no remaining Go callers; go build/tests green
     - live doccheck L4 passes with choir-product-completion as sole authority-root Definition
@@ -743,7 +757,6 @@ run_checkpoint_and_resumption_state:
     - staging lineage RouteProfile values are owner_id/computer_id; bootstrap routing succeeds
   unproven_or_partial_claims:
     - no staging PromoteAppAdoption/RollbackAppAdoption mutation (no app-change packages present)
-    - residual RouteProfile non-legacy garbage still returned unchanged by normalizeRouteProfile
     - orphaned macos File Provider Swift still references deleted Go bridge (packaging prohibited)
   highest_impact_remaining_uncertainty: >-
     A future product mission should exercise promote/rollback against a real

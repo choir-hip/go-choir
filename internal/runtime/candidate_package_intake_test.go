@@ -3341,3 +3341,79 @@ func assertNoCandidatePackageIntakePromotionSideEffects(t *testing.T, rt *Runtim
 		t.Fatalf("candidate package intake created app adoptions for %s: %+v", ownerID, adoptions)
 	}
 }
+
+func TestCandidatePackageIntakePromotionSwitchNormalizesRouteProfile(t *testing.T) {
+	t.Parallel()
+	rt, handler := testAPISetup(t)
+	srv := candidatePackageIntakeTestServer(handler)
+	intakeID := "intake-promotion-switch-route-profile-normalize"
+	ownerID := "user-alice"
+
+	fixture := createCandidatePackageIntakePromotionSwitchReviewThroughRoute(t, rt, srv, ownerID, intakeID)
+	approved := approveCandidatePackageIntakePromotionSwitchReviewThroughRoute(t, srv, fixture)
+
+	// Seed the lineage with a legacy route: profile before the switch. The
+	// switch must write a canonical owner/computer value, and the rollback must
+	// restore the pre-switch value (normalized from legacy).
+	lineage, err := rt.store.GetComputerSourceLineage(context.Background(), ownerID, fixture.TargetComputerID)
+	if err != nil {
+		t.Fatalf("get target source lineage: %v", err)
+	}
+	lineage.RouteProfile = "route:legacy"
+	if _, err := rt.store.UpsertComputerSourceLineage(context.Background(), lineage); err != nil {
+		t.Fatalf("upsert legacy route_profile lineage: %v", err)
+	}
+
+	wantSwitchedProfile := "user-alice/" + fixture.TargetComputerID
+	wantLegacyNormalizedProfile := "user-alice/legacy"
+
+	switchCandidatePackageIntakePromotionSwitchThroughRoute(t, srv, fixture, approved, "texture://evidence/"+intakeID+"/switch")
+	lineage, err = rt.store.GetComputerSourceLineage(context.Background(), ownerID, fixture.TargetComputerID)
+	if err != nil {
+		t.Fatalf("get target source lineage after switch: %v", err)
+	}
+	if lineage.RouteProfile != wantSwitchedProfile {
+		t.Fatalf("route_profile after switch = %q, want %q", lineage.RouteProfile, wantSwitchedProfile)
+	}
+
+	rollbackCandidatePackageIntakePromotionSwitchThroughRoute(t, srv, fixture, approved.AdoptionID)
+	lineage, err = rt.store.GetComputerSourceLineage(context.Background(), ownerID, fixture.TargetComputerID)
+	if err != nil {
+		t.Fatalf("get target source lineage after rollback: %v", err)
+	}
+	if lineage.RouteProfile != wantLegacyNormalizedProfile {
+		t.Fatalf("route_profile after rollback = %q, want %q", lineage.RouteProfile, wantLegacyNormalizedProfile)
+	}
+
+	rollForwardCandidatePackageIntakePromotionSwitchThroughRoute(t, srv, fixture, approved.AdoptionID, "texture://evidence/"+intakeID+"/roll-forward")
+	lineage, err = rt.store.GetComputerSourceLineage(context.Background(), ownerID, fixture.TargetComputerID)
+	if err != nil {
+		t.Fatalf("get target source lineage after roll-forward: %v", err)
+	}
+	if lineage.RouteProfile != wantSwitchedProfile {
+		t.Fatalf("route_profile after roll-forward = %q, want %q", lineage.RouteProfile, wantSwitchedProfile)
+	}
+}
+
+func TestNormalizeRouteProfile(t *testing.T) {
+	cases := []struct {
+		profile, ownerID, computerID, want string
+	}{
+		{"", "owner", "computer", "owner/computer"},
+		{"route:legacy", "owner", "computer", "owner/legacy"},
+		{"route:", "owner", "computer", "owner/computer"},
+		{"owner/computer", "owner", "computer", "owner/computer"},
+		{"  owner  /  computer  ", "owner", "computer", "owner/computer"},
+		{"invalid-no-slash", "owner", "computer", "owner/computer"},
+		{"owner/computer/extra", "owner", "computer", "owner/computer"},
+		{"owner//computer", "owner", "computer", "owner/computer"},
+		{"owner/", "owner", "computer", "owner/computer"},
+		{"/computer", "owner", "computer", "owner/computer"},
+	}
+	for _, tc := range cases {
+		got := normalizeRouteProfile(tc.profile, tc.ownerID, tc.computerID)
+		if got != tc.want {
+			t.Errorf("normalizeRouteProfile(%q, %q, %q) = %q, want %q", tc.profile, tc.ownerID, tc.computerID, got, tc.want)
+		}
+	}
+}

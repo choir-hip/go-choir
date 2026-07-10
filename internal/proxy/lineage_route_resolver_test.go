@@ -200,6 +200,9 @@ func TestSplitRouteProfile(t *testing.T) {
 		{"/desktop", "", "", false},
 		{"owner/", "", "", false},
 		{"  owner  /  desktop  ", "owner", "desktop", true},
+		{"owner/desktop/extra", "", "", false},
+		{"owner//desktop", "", "", false},
+		{"owner/desktop/", "", "", false},
 	}
 	for _, tc := range cases {
 		owner, desktop, ok := splitRouteProfile(tc.input)

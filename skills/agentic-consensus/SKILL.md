@@ -59,7 +59,7 @@ codex exec [OPTIONS] [PROMPT]
 Runner contract:
 
 ```bash
-codex exec --cd "$CWD" --sandbox read-only --ask-for-approval never --ephemeral --skip-git-repo-check "$PROMPT"
+codex exec --cd "$CWD" --sandbox read-only -c 'approval_policy="never"' --ephemeral --skip-git-repo-check "$PROMPT"
 ```
 
 Optional model override:
@@ -71,8 +71,9 @@ Optional model override:
 Notes:
 
 - `codex exec` reads from stdin if prompt is omitted or `-` is used, but the runner passes the prompt as an argument.
-- `--sandbox read-only` and `--ask-for-approval never` keep consensus runs non-interactive and review-oriented.
+- `--sandbox read-only` and `-c 'approval_policy="never"'` keep consensus runs non-interactive and review-oriented.
 - `--ephemeral` avoids session persistence.
+- If the configured default model is unavailable, pass `--codex-model` to override it.
 
 ### Devin CLI
 
