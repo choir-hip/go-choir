@@ -22,7 +22,7 @@
   import PretextInlineDisclosure from './PretextInlineDisclosure.svelte';
 
   export let passkeyError = '';
-  export let intentMessage = 'Choose when to make this preview durable.';
+  export let intentMessage = 'Open your private computer and keep working.';
 
   /** Whether a passkey ceremony is in progress (disables the form). */
   export let ceremonyInProgress = false;
@@ -41,8 +41,8 @@
   /** Combined error to display: validation error takes precedence, then passkeyError. */
   $: displayError = error || passkeyError;
   const passkeyTooltipCopy = {
-    register: 'Passkeys use Face ID, Touch ID, Windows Hello, a device PIN, or a security key. They are phishing-resistant and can work across your devices through your password manager or platform account.',
-    login: 'A passkey proves it is you with your device lock or security key. It is safer than a password and can be used from another device when your platform offers that option.',
+    register: 'Passkeys use Face ID, Touch ID, Windows Hello, a device PIN, or a security key. They are phishing-resistant. If your passkeys sync, you can use the same account on your other devices.',
+    login: 'Your passkey uses your device lock or security key to confirm it is you. Choir never receives your fingerprint, face scan, or device PIN.',
   };
 
   /** Simple email format validation. */
@@ -87,11 +87,11 @@
 
 <div class="auth-entry" data-auth-entry>
   <div class="auth-card">
-    <p class="auth-kicker">Choir private computer</p>
-    <h1>Keep the preview. Protect the changes.</h1>
-    <p class="tagline">Everything stays visible while logged out. A passkey is only needed when work becomes durable, private, shared, or spend-bearing.</p>
+    <p class="auth-kicker">Continue in Choir</p>
+    <h1>Sign in. Pick up where you left off.</h1>
+    <p class="tagline">Your preview stays open. A passkey unlocks your saved work without a password.</p>
     <div class="auth-intent" data-auth-intent>
-      <span>Private action</span>
+      <span>After sign-in</span>
       <p>{intentMessage}</p>
     </div>
 
@@ -103,7 +103,7 @@
         on:click={() => switchView('register')}
         disabled={ceremonyInProgress}
       >
-        Create passkey
+        Create account
       </button>
       <button
         class="tab"
@@ -112,7 +112,7 @@
         on:click={() => switchView('login')}
         disabled={ceremonyInProgress}
       >
-        Use passkey
+        Sign in
       </button>
     </div>
 
@@ -121,13 +121,13 @@
         <PretextInlineDisclosure
           prefix="Create a "
           subject="passkey"
-          collapsedDetail="Use your device lock once. Next time, the same passkey can sign you in without a password."
+          collapsedDetail="Use your device lock once. There is no password to create or remember."
           disclosure={passkeyTooltipCopy.register}
           ariaLabel="What is a passkey?"
         />
 
         <form on:submit|preventDefault={handleRegister}>
-          <label for="register-email">Email for this computer</label>
+          <label for="register-email">Email address</label>
           <input
             id="register-email"
             name="email"
@@ -143,14 +143,14 @@
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
             {#if ceremonyInProgress}
-              Creating passkey…
+              Waiting for your device…
             {:else}
-              Create Passkey
+              Create Account with Passkey
             {/if}
           </button>
         </form>
         <p class="fine-print">
-          No password is created. Choir stores only the public credential needed to recognize your passkey.
+          Choir stores a public credential, never your fingerprint, face scan, or device PIN.
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
         </p>
@@ -158,15 +158,15 @@
     {:else}
       <div class="auth-view" data-login-view>
         <PretextInlineDisclosure
-          prefix="Use your "
+          prefix="Sign in with your "
           subject="passkey"
-          collapsedDetail="Return to your saved documents, mailbox, traces, and private computer state."
+          collapsedDetail="Return to your saved documents, mailbox, and computer."
           disclosure={passkeyTooltipCopy.login}
           ariaLabel="What is a passkey?"
         />
 
         <form on:submit|preventDefault={handleLogin}>
-          <label for="login-email">Email</label>
+          <label for="login-email">Email address</label>
           <input
             id="login-email"
             name="email"
@@ -182,14 +182,14 @@
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
             {#if ceremonyInProgress}
-              Signing in…
+              Waiting for your device…
             {:else}
-              Use Passkey
+              Continue with Passkey
             {/if}
           </button>
         </form>
         <p class="fine-print">
-          The browser may offer this device, another device, or a security key depending on where your passkey lives.
+          Your browser will ask for the device, password manager, or security key that holds your passkey.
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
         </p>

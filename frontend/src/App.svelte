@@ -71,6 +71,12 @@
     return kinds.includes(normalizeTextureAuthIntentKind(intent?.kind));
   }
 
+  function summarizeIntentText(value, maxLength = 120) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+  }
+
   function startAuthenticatedPrewarm() {
     const now = Date.now();
     if (now - lastPrewarmStartedAt < 5000) return;
@@ -121,29 +127,30 @@
   }
 
   function getAuthIntentMessage(intent) {
-    if (!intent) return 'Choose when to make this preview durable.';
+    if (!intent) return 'Open your private computer and keep working.';
+    if (intent.kind === 'sign_in') return 'Open your private computer and keep working.';
     if (intent.kind === 'prompt') {
-      return `This prompt will run on your computer: ${intent.text}`;
+      return `Run your prompt after sign-in: “${summarizeIntentText(intent.text)}”`;
     }
     if (intent.kind === 'session_expired') {
-      return 'Your session ended. Use your passkey to continue.';
+      return 'Reconnect to your private computer and resume where you stopped.';
     }
     if (intent.kind === 'app_launch') {
-      return `Open ${intent.appName || 'this app'} with your private computer state.`;
+      return `Open ${intent.appName || 'this app'} with your saved work.`;
     }
-    if (isTextureAuthIntent(intent, 'save_texture')) return 'Save this Texture revision to your computer.';
-    if (isTextureAuthIntent(intent, 'publish_texture')) return 'Publish this Texture as owner-scoped work.';
-    if (intent.kind === 'file_upload') return 'Upload files into your private computer.';
-    if (intent.kind === 'file_mutation') return 'Change files on your private computer.';
-    if (String(intent.kind || '').startsWith('email')) return 'Use your mailbox, drafts, and send approval.';
-    if (String(intent.kind || '').startsWith('podcast')) return 'Subscribe, import, search providers, or sync playback.';
+    if (isTextureAuthIntent(intent, 'save_texture')) return 'Save this Texture as a new revision.';
+    if (isTextureAuthIntent(intent, 'publish_texture')) return 'Publish this Texture from your account.';
+    if (intent.kind === 'file_upload') return 'Upload these files to your private computer.';
+    if (intent.kind === 'file_mutation') return 'Make this change to your saved files.';
+    if (String(intent.kind || '').startsWith('email')) return 'Open your mailbox and continue this email action.';
+    if (String(intent.kind || '').startsWith('podcast')) return 'Continue this podcast action with your saved subscriptions.';
     if (isTextureAuthIntent(intent, 'published_texture_edit')) {
-      return `Edit your version of ${intent.title || 'this published Texture'}.`;
+      return `Edit your saved copy of ${summarizeIntentText(intent.title || 'this published Texture', 80)}.`;
     }
     if (isTextureAuthIntent(intent, 'private_texture_document')) {
-      return `Open ${intent.title || 'this Texture document'} from your private computer.`;
+      return `Open ${summarizeIntentText(intent.title || 'this Texture document', 80)} from your saved work.`;
     }
-    return 'Continue with private computer state.';
+    return 'Open your private computer and continue this action.';
   }
 
   function clearAuthOverlay() {
