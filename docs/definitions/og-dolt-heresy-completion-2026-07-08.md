@@ -353,6 +353,57 @@ settlement:
   settled_by: evidence
 ```
 
+### D-ROUTE. Boundary: promotion is a receipted served-route change — OPEN
+
+```yaml
+id: promotion-route-receipt
+kind: boundary
+status: testing
+source: observed source audit 2026-07-10
+definition: >-
+  Owner approval, adoption verification, package admission, branch/tag state,
+  and vmctl desktop publication are evidence or preparation. Promotion occurs
+  only when one load-bearing route-slot writer changes the ComputerVersion
+  served for ordinary owner requests and emits a receipt naming old version,
+  new version, approval/certificate evidence, and rollback target.
+problem_cluster:
+  - live-app promotion persists adopted and can report success before an optional route adapter exists or succeeds
+  - rollback can advance lineage after a best-effort DOLT_RESET failure
+  - candidate-package intake contains a second switch/rollback state machine despite its evidence-only boundary
+  - proxy routing resolves owner/desktop and fallback constants rather than a receipted ComputerVersion
+  - vmctl PublishDesktop is a separate publication notion, not a ComputerVersion route flip
+existing_replacement: >-
+  AppChangePackage admission, ComputerVersion identity, promotion certificate,
+  owner approval, run acceptance, and lineage records already provide the
+  evidence vocabulary. They need one route executor, not another status path.
+construction:
+  - delete or demote non-production candidate-intake mutation routes to read-only review evidence
+  - fail promotion and rollback closed when the route executor is absent or fails
+  - do not persist or render active/rollback-success before the route receipt exists
+  - route ordinary requests by the receipted ComputerVersion, not route_profile or desktop publication
+  - keep the tag-only Dolt adapter inert until D-PROMO branch operations replace it
+protected_surfaces:
+  - ComputerVersion route authority
+  - promotion and rollback
+  - candidate computers
+  - run acceptance and Trace evidence
+settlement_rule: >-
+  On staging, an ordinary owner request resolves the old explicit
+  ComputerVersion before promotion, the receipted new version after promotion,
+  and the old version again after rollback. API/UI success is impossible when
+  the executor is missing or any route transition fails. TLA and implementation
+  bind the same writer and receipt semantics.
+execution_effect: >-
+  Phase D may use D-PROMO's settled branch mechanics, but it cannot claim
+  promotion from merge/tag/adoption alone. Until settlement, active and
+  rollback-available product claims must fail closed.
+heresy_delta:
+  discovered:
+    - five competing activation/publication meanings without one served-route writer
+  introduced: []
+  repaired: []
+```
+
 ### D-STORE. Decision node: all-in on Dolt — SETTLED (owner, reaffirmed 2026-07-09)
 
 ```yaml
@@ -1068,6 +1119,7 @@ the boundaries above. Escalations use the skill's `human_escalation` shape.
 - seam merged → phase landed.
 - TLC green → implementation isolates.
 - adapter exists → promotion is Dolt-native.
+- adoption or desktop publication exists → a ComputerVersion is active.
 - resolver reads route_profile → route is over ComputerVersion.
 - ledger says complete → mission complete (check remaining_error_field).
 - detector written → detector enforces (discovery mode is not enforcement).
