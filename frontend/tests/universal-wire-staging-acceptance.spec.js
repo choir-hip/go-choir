@@ -56,17 +56,16 @@ test('deployed Universal Wire rename: stories API and app surface', async ({ bro
     await page.locator('[data-desktop][data-authenticated="true"]').waitFor({ state: 'visible', timeout: 60_000 });
 
     const stories = await fetchStories(page);
-    expect(stories.source).toMatch(/^universal-wire-/);
-    expect(stories.source).not.toBe('universal-wire-texture-index');
-    expect(stories.source).not.toBe('universal-wire-edition-texture');
-    expect(stories.edition).toBeTruthy();
-    expect(stories.edition.source_path).toBe('universal-wire/Wire.texture');
-    expect(stories.edition.doc_id).toBeTruthy();
+    expect(['universal-wire-texture-index', 'universal-wire-edition-texture']).toContain(stories.source);
     expect(Array.isArray(stories.stories)).toBe(true);
-    if (stories.source === 'universal-wire-edition-texture' && stories.stories.length > 0) {
-      expect(stories.stories[0].headline).toBeTruthy();
-      expect(stories.stories[0].story_texture_doc_id).toBeTruthy();
-      expect(stories.stories[0].story_texture_doc_id).toBeUndefined();
+    if (stories.source === 'universal-wire-edition-texture') {
+      expect(stories.edition).toBeTruthy();
+      expect(stories.edition.source_path).toBe('universal-wire/Wire.texture');
+      expect(stories.edition.doc_id).toBeTruthy();
+      for (const story of stories.stories) {
+        expect(story.headline).toBeTruthy();
+        expect(story.story_texture_doc_id).toBeTruthy();
+      }
       const published = stories.stories.find((story) => story.platform_route_path);
       if (published) {
         expect(published.changeState).toBe('platform published');
@@ -83,6 +82,9 @@ test('deployed Universal Wire rename: stories API and app surface', async ({ bro
         }, published.platform_route_path);
         expect(resolved?.route?.path || resolved?.publication?.route_path).toBeTruthy();
       }
+    } else {
+      expect(stories.edition).toBeFalsy();
+      expect(stories.stories).toHaveLength(0);
     }
 
     await openDeskApp(page, 'universal-wire');

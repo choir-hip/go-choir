@@ -69,25 +69,40 @@ func TestHandleUniversalWireStoriesReturnsHonestEmptyState(t *testing.T) {
 	}
 }
 
-func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t *testing.T) {
-	_, handler := testAPISetup(t)
+func TestHandleInternalSourcecycledWebCapturesProjectsGraphWithoutStartingRuns(t *testing.T) {
+	rt, handler := testAPISetup(t)
 	now := time.Date(2026, 6, 26, 18, 40, 0, 0, time.UTC)
-	item := sources.Item{
-		ID:           "srcitem-runtime-wire-1",
-		SourceID:     "rss:test_wire",
-		SourceType:   sources.SourceTypeRSS,
-		FetchID:      "fetch-runtime-wire-1",
-		OriginalID:   "https://example.com/runtime-wire",
-		Title:        "Runtime-projected sourcecycled story",
-		Body:         "Runtime endpoint should project this sourcecycled item into the platform objectgraph.",
-		URL:          "https://example.com/runtime-wire",
-		CanonicalURL: "https://example.com/runtime-wire",
-		FetchedAt:    now,
-		ContentHash:  sources.ContentHash("Runtime-projected sourcecycled story", "Runtime endpoint should project this sourcecycled item into the platform objectgraph.", "https://example.com/runtime-wire", "https://example.com/runtime-wire"),
+	items := []sources.Item{
+		{
+			ID:           "srcitem-runtime-wire-1",
+			SourceID:     "rss:test_wire",
+			SourceType:   sources.SourceTypeRSS,
+			FetchID:      "fetch-runtime-wire-1",
+			OriginalID:   "https://example.com/runtime-wire",
+			Title:        "Runtime-projected sourcecycled story",
+			Body:         "Runtime endpoint should project this sourcecycled item into the platform objectgraph.",
+			URL:          "https://example.com/runtime-wire",
+			CanonicalURL: "https://example.com/runtime-wire",
+			FetchedAt:    now,
+			ContentHash:  sources.ContentHash("Runtime-projected sourcecycled story", "Runtime endpoint should project this sourcecycled item into the platform objectgraph.", "https://example.com/runtime-wire", "https://example.com/runtime-wire"),
+		},
+		{
+			ID:           "srcitem-runtime-wire-2",
+			SourceID:     "rss:test_wire",
+			SourceType:   sources.SourceTypeRSS,
+			FetchID:      "fetch-runtime-wire-2",
+			OriginalID:   "https://example.com/runtime-wire-followup",
+			Title:        "Second sourcecycled observation",
+			Body:         "A second observation crosses the former graph synthesis threshold without activating a processor run.",
+			URL:          "https://example.com/runtime-wire-followup",
+			CanonicalURL: "https://example.com/runtime-wire-followup",
+			FetchedAt:    now.Add(time.Minute),
+			ContentHash:  sources.ContentHash("Second sourcecycled observation", "A second observation crosses the former graph synthesis threshold without activating a processor run.", "https://example.com/runtime-wire-followup", "https://example.com/runtime-wire-followup"),
+		},
 	}
 	body, err := json.Marshal(internalSourcecycledWebCapturesRequest{
 		OwnerID: universalWirePlatformOwnerID(),
-		Items:   []sources.Item{item},
+		Items:   items,
 		Now:     now.Format(time.RFC3339Nano),
 	})
 	if err != nil {
@@ -100,15 +115,74 @@ func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t
 	if w.Code != http.StatusCreated {
 		t.Fatalf("POST /internal/runtime/objectgraph/web-captures status = %d body=%s", w.Code, w.Body.String())
 	}
+	responseBody := append([]byte(nil), w.Body.Bytes()...)
 	var projection internalSourcecycledWebCapturesResponse
-	if err := json.NewDecoder(w.Body).Decode(&projection); err != nil {
+	if err := json.Unmarshal(responseBody, &projection); err != nil {
 		t.Fatalf("decode projection response: %v", err)
 	}
-	if projection.CaptureCount != 1 || projection.SourceEntityCount != 1 || projection.CapturedFromEdges != 1 {
-		t.Fatalf("projection response = %+v, want one capture/source/edge", projection)
+	if projection.CaptureCount != 2 || projection.SourceEntityCount != 2 || projection.CapturedFromEdges != 2 {
+		t.Fatalf("projection response = %+v, want two captures/sources/edges", projection)
 	}
-	if projection.SynthesisStatus != "skipped" || projection.SynthesisSourceCount != 1 {
-		t.Fatalf("projection synthesis = %+v, want skipped one-source cluster", projection)
+	var projectionJSON map[string]json.RawMessage
+	if err := json.Unmarshal(responseBody, &projectionJSON); err != nil {
+		t.Fatalf("decode projection response fields: %v", err)
+	}
+	for _, removed := range []string{
+		"synthesis_status",
+		"synthesis_doc_id",
+		"synthesis_revision_id",
+		"synthesis_cluster_id",
+		"synthesis_cluster_object_id",
+		"synthesis_source_count",
+		"synthesis_edition_ref",
+		"synthesis_skip_reason",
+	} {
+		if _, exists := projectionJSON[removed]; exists {
+			t.Fatalf("projection response retained removed activation field %q: %s", removed, responseBody)
+		}
+	}
+
+	ctx := context.Background()
+	notTombstoned := false
+	captures, err := rt.ObjectGraph().ListObjects(ctx, objectgraph.ListFilter{
+		Kind:      objectgraph.WebCaptureObjectKind,
+		OwnerID:   universalWirePlatformOwnerID(),
+		Limit:     10,
+		Tombstone: &notTombstoned,
+	})
+	if err != nil {
+		t.Fatalf("list projected captures: %v", err)
+	}
+	if len(captures) != 2 {
+		t.Fatalf("projected captures = %d, want 2", len(captures))
+	}
+	for _, capture := range captures {
+		edges, err := rt.ObjectGraph().ListEdges(ctx, objectgraph.EdgeFilter{
+			FromID:    capture.CanonicalID,
+			Kind:      "captured_from",
+			Limit:     10,
+			Tombstone: &notTombstoned,
+		})
+		if err != nil {
+			t.Fatalf("list captured_from edges for %s: %v", capture.CanonicalID, err)
+		}
+		if len(edges) != 1 {
+			t.Fatalf("captured_from edges for %s = %d, want 1", capture.CanonicalID, len(edges))
+		}
+		sourceEntity, err := rt.ObjectGraph().GetObject(ctx, edges[0].ToID)
+		if err != nil {
+			t.Fatalf("load captured_from target %s: %v", edges[0].ToID, err)
+		}
+		if sourceEntity.ObjectKind != "choir.source_entity" || sourceEntity.OwnerID != universalWirePlatformOwnerID() {
+			t.Fatalf("captured_from target = %+v, want platform source entity", sourceEntity)
+		}
+	}
+	runs, err := rt.Store().ListRunsByOwner(ctx, universalWirePlatformOwnerID(), 20)
+	if err != nil {
+		t.Fatalf("list platform runs after graph projection: %v", err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("graph projection started %d platform runs, want zero: %+v", len(runs), runs)
 	}
 
 	storiesW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "reader-1")
@@ -127,8 +201,8 @@ func TestHandleInternalSourcecycledWebCapturesExposeGraphCapturesAsDiagnostics(t
 	}
 	graphDiag := universalWireDiagnosticForSubstrate(stories.Diagnostics, "web_capture_graph")
 	if graphDiag.State != "diagnostic_only" ||
-		graphDiag.CandidateCount != 1 ||
-		graphDiag.StoryCount != 1 ||
+		graphDiag.CandidateCount != 2 ||
+		graphDiag.StoryCount != 2 ||
 		!strings.Contains(graphDiag.Reason, "does not publish raw capture projections") {
 		t.Fatalf("graph diagnostic = %+v, want diagnostic-only graph capture", graphDiag)
 	}
@@ -844,89 +918,5 @@ func TestResolveUniversalWireTextureReadOwnerAllowsEditionTranscludedPlatformDoc
 	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/texture/documents/"+doc.DocID, "", "user-universal-wire")
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET platform wire document status = %d body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestSynthesizeUniversalWireSourceClusterDispatchesProcessorRun(t *testing.T) {
-	rt, s := testRuntime(t)
-	ctx := context.Background()
-	now := time.Date(2026, 6, 27, 14, 0, 0, 0, time.UTC)
-
-	_, _, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-		ClusterID: "cluster-dispatch-test",
-		Sources: []universalWireSynthesisSource{
-			{
-				ItemID:       "srcitem-dispatch-pt",
-				SourceID:     "rss:pt-transport",
-				FetchID:      "fetch-dispatch-pt",
-				Title:        "Corredor ferroviario reabre parcialmente apos enchentes",
-				URL:          "https://example.test/pt/rail",
-				CanonicalURL: "https://example.test/pt/rail",
-				Language:     "pt",
-				Body:         "Equipes de emergencia informaram que o corredor ferroviario reabriu parcialmente depois das enchentes.",
-				FetchedAt:    now.Add(-20 * time.Minute),
-			},
-			{
-				ItemID:       "srcitem-dispatch-es",
-				SourceID:     "rss:es-commuters",
-				FetchID:      "fetch-dispatch-es",
-				Title:        "Autoridades advierten demoras para pasajeros regionales",
-				URL:          "https://example.test/es/commuters",
-				CanonicalURL: "https://example.test/es/commuters",
-				Language:     "es",
-				Body:         "Las autoridades regionales pidieron a los pasajeros prever demoras mientras continuaban las revisiones de seguridad.",
-				FetchedAt:    now.Add(-15 * time.Minute),
-			},
-		},
-		Now: now,
-	})
-	if err != nil {
-		t.Fatalf("synthesize dispatch: %v", err)
-	}
-	if !strings.HasPrefix(editionRef, universalWireProcessorDispatchRunID+":") {
-		t.Fatalf("edition ref = %q, want %s:<run_id> dispatch sentinel", editionRef, universalWireProcessorDispatchRunID)
-	}
-	runID := strings.TrimPrefix(editionRef, universalWireProcessorDispatchRunID+":")
-	if runID == "" {
-		t.Fatalf("dispatch sentinel missing run id: %q", editionRef)
-	}
-
-	rec, err := s.GetRun(ctx, runID)
-	if err != nil {
-		t.Fatalf("load dispatched processor run %s: %v", runID, err)
-	}
-	if canonicalAgentProfile(rec.AgentProfile) != AgentProfileProcessor {
-		t.Fatalf("dispatched run profile = %q, want %s", rec.AgentProfile, AgentProfileProcessor)
-	}
-	processorKey := metadataString(rec.Metadata, runMetadataProcessorKey)
-	if processorKey == "" || !strings.HasPrefix(processorKey, "processor:") {
-		t.Fatalf("dispatched run processor_key = %q, want processor:... key", processorKey)
-	}
-	if metadataString(rec.Metadata, "universal_wire_story_cluster_id") != "cluster-dispatch-test" {
-		t.Fatalf("dispatched run cluster metadata missing: %+v", rec.Metadata)
-	}
-	if metadataString(rec.Metadata, "ingestion_handoff_request_kind") != "synthesis_cluster" {
-		t.Fatalf("dispatched run request_kind missing: %+v", rec.Metadata)
-	}
-	dispatchedSourceItemIDs := metadataStringSlice(rec.Metadata["source_item_ids"])
-	if !slices.Contains(dispatchedSourceItemIDs, "srcitem-dispatch-pt") ||
-		!slices.Contains(dispatchedSourceItemIDs, "srcitem-dispatch-es") {
-		t.Fatalf("dispatched run source_item_ids = %+v, want both cluster sources", dispatchedSourceItemIDs)
-	}
-
-	// createRunWithMetadata must have opened a per-source-item decision work
-	// item for each dispatched source, keyed by the standard source-item
-	// fingerprint.
-	for _, sourceItemID := range []string{"srcitem-dispatch-pt", "srcitem-dispatch-es"} {
-		item, found, err := s.FindWorkItemByFingerprint(ctx, rec.OwnerID, rec.TrajectoryID, wireProcessorSourceItemDecisionWorkItemFingerprint(rec.TrajectoryID, sourceItemID))
-		if err != nil {
-			t.Fatalf("find source-item work item for %s: %v", sourceItemID, err)
-		}
-		if !found {
-			t.Fatalf("source-item work item not created for %s (trajectory %s)", sourceItemID, rec.TrajectoryID)
-		}
-		if item.AuthorityProfile != AgentProfileProcessor {
-			t.Fatalf("source-item work item authority = %q, want %s", item.AuthorityProfile, AgentProfileProcessor)
-		}
 	}
 }

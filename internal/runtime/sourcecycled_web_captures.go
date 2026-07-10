@@ -1,18 +1,14 @@
 package runtime
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/sourcegraph"
 	"github.com/yusefmosiah/go-choir/internal/sources"
-	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type internalSourcecycledWebCapturesRequest struct {
@@ -23,23 +19,15 @@ type internalSourcecycledWebCapturesRequest struct {
 }
 
 type internalSourcecycledWebCapturesResponse struct {
-	Status                   string  `json:"status"`
-	CaptureCount             int     `json:"capture_count"`
-	SourceEntityCount        int     `json:"source_entity_count"`
-	CapturedFromEdges        int     `json:"captured_from_edges"`
-	SkippedItemCount         int     `json:"skipped_item_count"`
-	DedupDroppedCount        int     `json:"dedup_dropped_count,omitempty"`
-	DedupSkipped             bool    `json:"dedup_skipped,omitempty"`
-	DedupSkipReason          string  `json:"dedup_skip_reason,omitempty"`
-	DedupThreshold           float32 `json:"dedup_threshold,omitempty"`
-	SynthesisStatus          string  `json:"synthesis_status,omitempty"`
-	SynthesisDocID           string  `json:"synthesis_doc_id,omitempty"`
-	SynthesisRevisionID      string  `json:"synthesis_revision_id,omitempty"`
-	SynthesisClusterID       string  `json:"synthesis_cluster_id,omitempty"`
-	SynthesisClusterObjectID string  `json:"synthesis_cluster_object_id,omitempty"`
-	SynthesisSourceCount     int     `json:"synthesis_source_count,omitempty"`
-	SynthesisEditionRef      string  `json:"synthesis_edition_ref,omitempty"`
-	SynthesisSkipReason      string  `json:"synthesis_skip_reason,omitempty"`
+	Status            string  `json:"status"`
+	CaptureCount      int     `json:"capture_count"`
+	SourceEntityCount int     `json:"source_entity_count"`
+	CapturedFromEdges int     `json:"captured_from_edges"`
+	SkippedItemCount  int     `json:"skipped_item_count"`
+	DedupDroppedCount int     `json:"dedup_dropped_count,omitempty"`
+	DedupSkipped      bool    `json:"dedup_skipped,omitempty"`
+	DedupSkipReason   string  `json:"dedup_skip_reason,omitempty"`
+	DedupThreshold    float32 `json:"dedup_threshold,omitempty"`
 }
 
 // HandleInternalSourcecycledWebCaptures projects source-service items into this
@@ -82,8 +70,8 @@ func (h *APIHandler) HandleInternalSourcecycledWebCaptures(w http.ResponseWriter
 	}
 	// Semantic dedup pass: embed each item, search Qdrant for near-duplicates
 	// above the configured threshold, and drop duplicates before they enter
-	// the object graph and reach the processor. Best-effort: if Qdrant or
-	// Ollama are unavailable, all items pass through unchanged.
+	// the object graph. Best-effort: if Qdrant or Ollama are unavailable, all
+	// items pass through unchanged.
 	dedup := h.rt.dedupSourceItemsWithTimeout(r.Context(), req.Items, ownerID, 30*time.Second)
 	if dedup.Skipped {
 		log.Printf("sourcecycled web captures: semantic dedup skipped (%s); projecting %d items",
@@ -102,206 +90,15 @@ func (h *APIHandler) HandleInternalSourcecycledWebCaptures(w http.ResponseWriter
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
 		return
 	}
-	synthesis, err := h.rt.synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures(r.Context(), now)
-	if err != nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: err.Error()})
-		return
-	}
-	synthesisStatus := "skipped"
-	synthesisSkipReason := "fewer than two eligible graph-backed source captures"
-	if synthesis.Triggered {
-		synthesisStatus = "ok"
-		synthesisSkipReason = ""
-	}
 	writeAPIJSON(w, http.StatusCreated, internalSourcecycledWebCapturesResponse{
-		Status:                   "ok",
-		CaptureCount:             len(result.Captures),
-		SourceEntityCount:        len(result.SourceEntities),
-		CapturedFromEdges:        result.EdgeCount,
-		SkippedItemCount:         result.Skipped,
-		DedupDroppedCount:        len(dedup.Dropped),
-		DedupSkipped:             dedup.Skipped,
-		DedupSkipReason:          dedup.SkipReason,
-		DedupThreshold:           dedup.Threshold,
-		SynthesisStatus:          synthesisStatus,
-		SynthesisDocID:           synthesis.Doc.DocID,
-		SynthesisRevisionID:      synthesis.Revision.RevisionID,
-		SynthesisClusterID:       synthesis.ClusterID,
-		SynthesisClusterObjectID: synthesis.ClusterObjectID,
-		SynthesisSourceCount:     synthesis.SourceCount,
-		SynthesisEditionRef:      synthesis.EditionRef,
-		SynthesisSkipReason:      synthesisSkipReason,
+		Status:            "ok",
+		CaptureCount:      len(result.Captures),
+		SourceEntityCount: len(result.SourceEntities),
+		CapturedFromEdges: result.EdgeCount,
+		SkippedItemCount:  result.Skipped,
+		DedupDroppedCount: len(dedup.Dropped),
+		DedupSkipped:      dedup.Skipped,
+		DedupSkipReason:   dedup.SkipReason,
+		DedupThreshold:    dedup.Threshold,
 	})
-}
-
-type universalWireGraphSynthesisResult struct {
-	Triggered       bool
-	Doc             types.Document
-	Revision        types.Revision
-	EditionRef      string
-	ClusterID       string
-	ClusterObjectID string
-	SourceCount     int
-}
-
-const universalWireLiveSourcecycledClusterID = "sourcecycled-live"
-
-func (rt *Runtime) synthesizeUniversalWireLiveSourcecycledClusterFromGraphCaptures(ctx context.Context, now time.Time) (universalWireGraphSynthesisResult, error) {
-	if rt == nil || rt.ObjectGraph() == nil {
-		return universalWireGraphSynthesisResult{}, nil
-	}
-	notTombstoned := false
-	objects, err := rt.ObjectGraph().ListObjects(ctx, objectgraph.ListFilter{
-		Kind:      objectgraph.WebCaptureObjectKind,
-		OwnerID:   universalWirePlatformOwnerID(),
-		Limit:     24,
-		Tombstone: &notTombstoned,
-	})
-	if err != nil {
-		return universalWireGraphSynthesisResult{}, fmt.Errorf("select universal wire graph captures: %w", err)
-	}
-	sources, err := rt.universalWireSynthesisSourcesFromGraphCaptures(ctx, objects)
-	if err != nil {
-		return universalWireGraphSynthesisResult{}, err
-	}
-	if len(sources) < 2 {
-		return universalWireGraphSynthesisResult{SourceCount: len(sources)}, nil
-	}
-	// Synthesis is dispatched into the agent pipeline (processor run ->
-	// Texture agent -> publication/reconciler), not produced inline. The
-	// processor agent decides whether to open a Texture story and produces the
-	// article asynchronously, so a successful dispatch returns the dispatch
-	// sentinel rather than a finished Document/Revision. Captures are already
-	// projected into the object graph above.
-	doc, rev, editionRef, err := rt.synthesizeUniversalWireSourceClusterTextureArticle(ctx, universalWireSynthesisClusterRequest{
-		ClusterID: universalWireLiveSourcecycledClusterID,
-		Sources:   sources,
-		Now:       now,
-	})
-	if err != nil {
-		return universalWireGraphSynthesisResult{SourceCount: len(sources)}, nil
-	}
-	dispatched := strings.HasPrefix(editionRef, universalWireProcessorDispatchRunID+":")
-	return universalWireGraphSynthesisResult{
-		Triggered:   dispatched,
-		Doc:         doc,
-		Revision:    rev,
-		EditionRef:  editionRef,
-		ClusterID:   universalWireLiveSourcecycledClusterID,
-		SourceCount: len(sources),
-	}, nil
-}
-
-func (rt *Runtime) universalWireSynthesisSourcesFromGraphCaptures(ctx context.Context, captures []objectgraph.Object) ([]universalWireSynthesisSource, error) {
-	out := make([]universalWireSynthesisSource, 0, len(captures))
-	seen := map[string]bool{}
-	for _, capture := range captures {
-		source, ok, err := rt.universalWireSynthesisSourceFromGraphCapture(ctx, capture)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			continue
-		}
-		key := firstNonEmpty(source.ItemID, source.CanonicalURL)
-		if key == "" || seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, source)
-	}
-	return out, nil
-}
-
-func (rt *Runtime) universalWireSynthesisSourceFromGraphCapture(ctx context.Context, capture objectgraph.Object) (universalWireSynthesisSource, bool, error) {
-	metadata, err := objectgraph.WebCaptureMetadataFromObject(capture)
-	if err != nil {
-		return universalWireSynthesisSource{}, false, nil
-	}
-	body := strings.TrimSpace(string(capture.Body))
-	if body == "" {
-		return universalWireSynthesisSource{}, false, nil
-	}
-	fetchedAt := capture.UpdatedAt
-	if parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(metadata.FetchedAt)); err == nil {
-		fetchedAt = parsed
-	}
-	source := universalWireSynthesisSource{
-		CaptureObjectID: capture.CanonicalID,
-		ItemID:          capture.CanonicalID,
-		Title:           firstNonEmpty(metadata.Title, metadata.CanonicalURL, metadata.URL),
-		URL:             metadata.URL,
-		CanonicalURL:    firstNonEmpty(metadata.CanonicalURL, metadata.URL),
-		Body:            body,
-		FetchedAt:       fetchedAt,
-	}
-	if rt != nil && rt.ObjectGraph() != nil {
-		fields, err := universalWireFirstCapturedFromSourceEntityFields(ctx, rt.ObjectGraph(), capture)
-		if err != nil {
-			return universalWireSynthesisSource{}, false, err
-		}
-		if fields.ItemID != "" {
-			source.ItemID = fields.ItemID
-			source.SourceID = fields.SourceID
-			source.FetchID = fields.FetchID
-			source.Language = fields.Language
-			source.CanonicalURL = firstNonEmpty(fields.CanonicalURL, source.CanonicalURL)
-			source.URL = firstNonEmpty(fields.URL, source.URL)
-		}
-	}
-	source.SourceID = firstNonEmpty(source.SourceID, "objectgraph:web_capture")
-	source.FetchID = firstNonEmpty(source.FetchID, capture.VersionID)
-	return source, true, nil
-}
-
-type universalWireCapturedFromSourceFields struct {
-	ItemID       string
-	SourceID     string
-	FetchID      string
-	Language     string
-	URL          string
-	CanonicalURL string
-}
-
-func universalWireFirstCapturedFromSourceEntityFields(ctx context.Context, graph *objectgraph.Service, capture objectgraph.Object) (universalWireCapturedFromSourceFields, error) {
-	if graph == nil || strings.TrimSpace(capture.CanonicalID) == "" {
-		return universalWireCapturedFromSourceFields{}, nil
-	}
-	notTombstoned := false
-	edges, err := graph.ListEdges(ctx, objectgraph.EdgeFilter{
-		FromID:    capture.CanonicalID,
-		Kind:      "captured_from",
-		Tombstone: &notTombstoned,
-		Limit:     1,
-	})
-	if err != nil {
-		return universalWireCapturedFromSourceFields{}, err
-	}
-	for _, edge := range edges {
-		sourceObj, err := graph.GetObject(ctx, edge.ToID)
-		if err != nil {
-			if err == objectgraph.ErrNotFound {
-				continue
-			}
-			return universalWireCapturedFromSourceFields{}, err
-		}
-		if sourceObj.ObjectKind != "choir.source_entity" || sourceObj.Tombstone {
-			continue
-		}
-		var meta struct {
-			Target map[string]any `json:"target"`
-		}
-		if err := json.Unmarshal(sourceObj.Metadata, &meta); err != nil {
-			return universalWireCapturedFromSourceFields{}, err
-		}
-		return universalWireCapturedFromSourceFields{
-			ItemID:       wireStringFromMap(meta.Target, "item_id"),
-			SourceID:     wireStringFromMap(meta.Target, "source_id"),
-			FetchID:      wireStringFromMap(meta.Target, "fetch_id"),
-			Language:     wireStringFromMap(meta.Target, "language"),
-			URL:          wireStringFromMap(meta.Target, "url"),
-			CanonicalURL: wireStringFromMap(meta.Target, "canonical_url"),
-		}, nil
-	}
-	return universalWireCapturedFromSourceFields{}, nil
 }

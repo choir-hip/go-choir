@@ -99,7 +99,7 @@
           title: related.headline,
           target: {
             target_kind: 'texture_document',
-            doc_id: related.story_texture_doc_id || related.story_texture_doc_id || storyId,
+            doc_id: related.story_texture_doc_id || storyId,
             story_id: storyId,
           },
           transclusion: {
@@ -246,7 +246,7 @@
   function openStoryTexture(story = selectedStory) {
     if (!story) return;
     selectedStoryId = story.id;
-    const docId = story.story_texture_doc_id || story.story_texture_doc_id || '';
+    const docId = story.story_texture_doc_id || '';
     if (!docId) return;
     launchTexture({
       title: story.headline,

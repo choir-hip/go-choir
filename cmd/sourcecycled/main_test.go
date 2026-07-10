@@ -613,6 +613,48 @@ func TestIngestionRuntimeDispatcherSubmitsProcessorProfilesOnly(t *testing.T) {
 	if submissions[0].OwnerID != "owner-universal-wire" || submissions[0].Metadata["agent_profile"] != "processor" || submissions[0].Metadata["processor_key"] == "" {
 		t.Fatalf("unexpected processor submission: %+v", submissions[0])
 	}
+	submittedRequestID, _ := submissions[0].Metadata["ingestion_handoff_request_id"].(string)
+	var submittedRequest *cycle.ProcessorRequest
+	for i := range handoff.ProcessorRequests {
+		if handoff.ProcessorRequests[i].RequestID == submittedRequestID {
+			submittedRequest = &handoff.ProcessorRequests[i]
+			break
+		}
+	}
+	if submittedRequest == nil {
+		t.Fatalf("submitted request id %q is not in typed handoff: %+v", submittedRequestID, handoff.ProcessorRequests)
+	}
+	for key, want := range map[string]string{
+		"request_source":                 "sourcecycled",
+		"activation_origin":              "ingestion_event",
+		"ingestion_handoff_request_kind": "processor",
+		"ingestion_handoff_request_id":   submittedRequest.RequestID,
+		"ingestion_handoff_cycle_id":     cycleID,
+		"source_network_request_id":      submittedRequest.RequestID,
+		"source_network_cycle_id":        cycleID,
+		"processor_key":                  submittedRequest.ProcessorKey,
+		"continuity_ref":                 submittedRequest.ContinuityRef,
+	} {
+		if got, _ := submissions[0].Metadata[key].(string); got != want {
+			t.Fatalf("typed processor metadata %s = %q, want %q: %+v", key, got, want, submissions[0].Metadata)
+		}
+	}
+	for key, want := range map[string][]string{
+		"source_item_ids":     submittedRequest.SourceItemIDs,
+		"ingestion_event_ids": submittedRequest.IngestionEventIDs,
+	} {
+		gotJSON, err := json.Marshal(submissions[0].Metadata[key])
+		if err != nil {
+			t.Fatalf("marshal submitted %s: %v", key, err)
+		}
+		wantJSON, err := json.Marshal(want)
+		if err != nil {
+			t.Fatalf("marshal expected %s: %v", key, err)
+		}
+		if string(gotJSON) != string(wantJSON) {
+			t.Fatalf("typed processor metadata %s = %s, want %s", key, gotJSON, wantJSON)
+		}
+	}
 	if !strings.Contains(submissions[0].Prompt, "Source item handles:") || !strings.Contains(submissions[0].Prompt, "Do not paste source bodies") {
 		t.Fatalf("processor prompt missing source handle contract:\n%s", submissions[0].Prompt)
 	}
