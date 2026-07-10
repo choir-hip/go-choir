@@ -53,7 +53,7 @@ documents:
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: active_work_navigation, authority: derived_support, lifecycle: living}
-    witnesses: [docs/mission-graph.yaml, docs/definitions/og-dolt-heresy-completion-2026-07-08.md]
+    witnesses: [docs/mission-graph.yaml, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-product-completion-2026-07-10.md]
     refresh_triggers: [active_definition_change, mission_graph_change]
 
   - path: docs/current-architecture.md
@@ -183,3 +183,11 @@ documents:
     annotations: {doc_role: definition, authority: mission, lifecycle: settled}
     witnesses: [docs/definitions/documentation-authority-reduction-2026-07-09.md, docs/mission-graph.yaml, cmd/doccheck/main.go]
     refresh_triggers: [documentation_index_change, doccheck_rule_change]
+
+  - path: docs/definitions/choir-product-completion-2026-07-10.md
+    claim_scope: current
+    is_root: [authority, entry]
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: active}
+    witnesses: [docs/definitions/choir-product-completion-2026-07-10.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, cli_change, desktop_shell_change, base_product_wiring_change, autopaper_change]

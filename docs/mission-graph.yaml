@@ -19,7 +19,7 @@ node_fields:
   path: active Definition path
   ledger: always empty; raw mission ledgers are not retained
   status: working | blocked | settled | superseded
-  kind: spine | docs_truth
+  kind: spine | product_completion | docs_truth
   depends_on: directly active Definition dependencies
   enables: directly unlocked active Definitions
   sources: current authority sources only
@@ -50,3 +50,17 @@ nodes:
       - AGENTS.md
       - docs/README.md
       - cmd/doccheck/main.go
+  - id: choir-product-completion-2026-07-10
+    title: Choir Product Completion
+    path: docs/definitions/choir-product-completion-2026-07-10.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    depends_on:
+      - og-dolt-heresy-completion-2026-07-08
+    enables: []
+    sources:
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/computer-ontology.md
+      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
