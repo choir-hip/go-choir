@@ -782,6 +782,34 @@ evidence_ledger:
       Blocks exact-SHA deployment acceptance for the lifecycle repair without
       falsifying its tests or host activation. The verifier must preserve artifact
       identity boundaries before the staging lifecycle proof can resume.
+  - claim: Sourcecycled can report a fresh processor submission while runtime
+      returns a completed run receipt from an older ingestion cycle.
+    definition_node: single_authoritative_activation
+    evidence_class: deployed staging trace + code-level proof
+    source: exact-SHA 838a4799 staging window beginning 2026-07-10T22:11:06Z
+    command_or_observation: >-
+      Correlate sourcecycled dispatch events after cycle_75496e7e24d94c238f8d6788
+      with runtime lifecycle logs and GET /internal/runtime/runs/{id}.
+    artifact_path: cmd/sourcecycled/main.go + internal/runtime/api.go
+    result: >-
+      Sourcecycled recorded processor_submitted=1 at 22:18:52, 22:19:51,
+      22:22:03, and 22:22:50 with no errors. Runtime created only
+      ecd89fa9-6f09-466c-9891-370d95dc28a3 at 22:18:51 for request
+      processor_6fbe0869375a2d455cf05036 in cycle_59a77f8f0b5c99d93ddba86b,
+      then completed it at 22:20:25. The later cycle_7998f11f3eff16dabd1817ec
+      dispatch event again reported that same run id even though its own two
+      processor requests had different request ids and remained queued. No new
+      runtime submission lifecycle entry existed for the later drains.
+    uncertainty: >-
+      The exact stale-receipt boundary is not yet settled. Typed runtime
+      idempotency is request-id scoped in source, while the live sourcecycled
+      MemoryStore path is not covered by the Dolt-backed dispatcher regression
+      test. The source ledger update, queue selection, proxy status reconciliation,
+      and runtime lookup must be reproduced together before repair.
+    promotion_relevance: >-
+      Reopens single authoritative activation. A reused completed receipt can
+      mark a new handoff submitted without processing its source handles, so a
+      stable VM alone cannot produce an authoritative Autopaper edition.
 ```
 
 ## Active Red Mutation Ceremony
@@ -815,6 +843,8 @@ active_red_mutation:
         generation guard at the failure transition.
       - Active-computer deployment verification collapses workflow identity into
         sandbox artifact identity even when the sandbox artifact was not selected.
+      - Fresh source handoff drains can reuse a completed runtime receipt from an
+        older cycle while reporting processor_submitted=1 for the new drain.
     introduced:
       - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
         SQL remains intact, so the risk is reversible but the completion claim is invalid.
@@ -891,12 +921,15 @@ run_checkpoint_and_resumption_state:
     Completion-aware background migration, listener-first launch ordering, and
     same-identity VM lifecycle serialization are committed. 83b1f594 passed every
     standard and race lane and its vmctl host package activated on Node B, but the
-    deployment was marked incomplete because the active-computer verifier demanded
-    workflow SHA 83b1f594 from the intentionally unchanged cb694846 sandbox artifact.
+    deployment was initially marked incomplete because the active-computer verifier
+    demanded workflow SHA 83b1f594 from the intentionally unchanged cb694846 sandbox
+    artifact. 838a4799 repaired that boundary and is fully deployed. The platform VM
+    is stable, but fresh source drains can reuse an older completed processor receipt.
   what_shipped:
     - 94f6c744 completion-aware resumable OG migration with deferred-open support.
     - cb694846 runtime recovery and listener publication before background migration.
     - 83b1f594 per-VM lifecycle serialization and stale-instance failure guard.
+    - 838a4799 artifact-aware refreshed-sandbox deploy verification.
   what_was_proven:
     - The loop is platform guest readiness/recovery churn, not a host daemon restart.
     - The guest never reaches cmd/sandbox's post-store runtime-topology log or HTTP listen.
@@ -925,23 +958,31 @@ run_checkpoint_and_resumption_state:
       older tap IP can kill the newer booted epoch by shared VM ID.
     - 83b1f594 passes all CI and race lanes; its deploy verifier fails because a
       vmctl-only refresh cannot make an unchanged sandbox artifact report that SHA.
+    - 838a4799 passes all CI/race lanes and deploys successfully; receipt and every
+      host health endpoint report the exact SHA.
+    - Concurrent platform resolves return the same active epoch 8102, which remains
+      healthy beyond the former three-minute stale-waiter horizon with no recovery.
+    - Fresh source cycles complete without sourcecycled restart, but later queue
+      drains can return ecd89fa9 from cycle_59a77 for unrelated newer requests.
   remaining_error_field:
-    - Exact-SHA deployment acceptance is incomplete because refreshed-guest identity
-      verification does not respect independently selected artifact identities.
-    - The lifecycle repair still needs an overlapping-resolve staging proof beyond
-      the three-minute stale-waiter horizon.
+    - Fresh source handoffs can receive stale completed processor receipts and remain
+      unprocessed despite processor_submitted=1 dispatch evidence.
+    - No cycle-correlated reconciler exists; reconciler dispatch is publish-debounced
+      and currently carries no ingestion_handoff_cycle_id.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: deploy verifier artifact identity boundary
+  highest_impact_remaining_uncertainty: stale processor receipt reuse boundary
   next_executable_probe: >-
-    Make refreshed-guest verification compare against the selected/installed sandbox
-    artifact identity, add a workflow contract regression test, then redeploy the
-    exact lifecycle-repair descendant and run overlapping platform resolves.
+    Reproduce consecutive typed processor handoffs with the production MemoryStore,
+    vmctl proxy transport, and completed first run. Identify whether stale reuse comes
+    from source queue state, status reconciliation, or runtime typed lookup before
+    changing either authority.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
     - CI run 29118850649 and Node B deploy job 86450906080 for c6b422bb.
     - CI run 29120219036 and Node B deploy job 86455558809 for e8dda030.
     - CI run 29125293553 and failed Node B deploy job 86471236444 for 83b1f594.
+    - CI run 29126218631, deploy job 86474002411, and activation receipt for 838a4799.
   rollback_refs: []
 ```
 
