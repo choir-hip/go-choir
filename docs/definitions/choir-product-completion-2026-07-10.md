@@ -320,6 +320,12 @@ problem: >-
   The web-capture projection path starts a run implicitly, then sourcecycled
   independently dispatches the typed ingestion handoff. Overload can turn this
   into delayed sequential duplicates rather than obvious parallel duplicates.
+validation_contradiction: >-
+  The opt-in universal-wire staging spec rejects both source values it later
+  branches on, then both requires and forbids story_texture_doc_id. The shared
+  UI also contains duplicate `story_texture_doc_id || story_texture_doc_id`
+  expressions left by a blind field rename. That spec is inadmissible as
+  activation or publication evidence until repaired.
 existing_replacement: >-
   BuildIngestionHandoff plus /internal/runtime/runs is already the typed,
   sourcecycled-tracked activation path. Projection should persist observations,
@@ -335,7 +341,8 @@ settlement_rule: >-
 execution_effect: >-
   The single-activation repair may proceed without settling the wider product
   edges because duplicate processing is invalid under every admissible
-  Autopaper definition.
+  Autopaper definition. Repair the contradictory reader acceptance separately;
+  it cannot substitute for cycle/request/run identity proof.
 ```
 
 ### PC-7. Wails build and packaging lane — OPEN
