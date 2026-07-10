@@ -92,3 +92,33 @@ func TestSnapshotRejectsReceiptWithMismatchedArtifactCommit(t *testing.T) {
 		t.Fatalf("mismatched receipt produced deployment metadata: %+v", info)
 	}
 }
+
+func TestSnapshotDoesNotLeakCrossServiceDeploymentIdentity(t *testing.T) {
+	originalCommit := Commit
+	Commit = "compiled-commit"
+	t.Cleanup(func() { Commit = originalCommit })
+
+	path := filepath.Join(t.TempDir(), "deploy-receipt.json")
+	const commit = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	receipt := `{"schema_version":1,"target_commit":"` + commit + `","activated_at":"2026-05-24T12:00:00Z","artifacts":{"frontend":{"commit":"` + commit + `","status":"active"}}}`
+	if err := os.WriteFile(path, []byte(receipt), 0o644); err != nil {
+		t.Fatalf("write deploy receipt: %v", err)
+	}
+	t.Setenv("CHOIR_DEPLOY_RECEIPT_PATH", path)
+
+	// proxy service is absent from the receipt; it must not inherit
+	// frontend's deployment identity.
+	info := Snapshot("proxy")
+	if info.DeployedCommit != "" {
+		t.Fatalf("DeployedCommit = %q, want empty: proxy leaked frontend artifact identity", info.DeployedCommit)
+	}
+	if info.DeployedAt != "" {
+		t.Fatalf("DeployedAt = %q, want empty: proxy leaked frontend activation time", info.DeployedAt)
+	}
+
+	// frontend service IS in the receipt; it should report deployment.
+	frontendInfo := Snapshot("frontend")
+	if frontendInfo.DeployedCommit != commit {
+		t.Fatalf("frontend DeployedCommit = %q, want %q", frontendInfo.DeployedCommit, commit)
+	}
+}

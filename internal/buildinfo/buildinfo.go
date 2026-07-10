@@ -31,7 +31,7 @@ type Info struct {
 // the linker; a deploy marker must never rewrite what binary is actually
 // running.
 func Snapshot(service string) Info {
-	deployedAt, deployedCommit := deployMetadata()
+	deployedAt, deployedCommit := deployMetadata(service)
 	return Info{
 		Service:        service,
 		Version:        Version,
@@ -54,7 +54,7 @@ type deployReceiptArtifact struct {
 	Status string `json:"status"`
 }
 
-func deployMetadata() (string, string) {
+func deployMetadata(service string) (string, string) {
 	path := strings.TrimSpace(os.Getenv("CHOIR_DEPLOY_RECEIPT_PATH"))
 	if path == "" {
 		path = "/var/lib/go-choir/deploy-receipt.json"
@@ -75,20 +75,18 @@ func deployMetadata() (string, string) {
 	if _, err := time.Parse(time.RFC3339, activatedAt); err != nil {
 		return "", ""
 	}
-	verified := false
-	for _, artifact := range receipt.Artifacts {
-		if strings.TrimSpace(artifact.Commit) != targetCommit {
-			continue
-		}
-		switch strings.TrimSpace(artifact.Status) {
-		case "active", "installed":
-			verified = true
-		}
-	}
-	if !verified {
+	artifact, ok := receipt.Artifacts[service]
+	if !ok {
 		return "", ""
 	}
-	return activatedAt, targetCommit
+	if strings.TrimSpace(artifact.Commit) != targetCommit {
+		return "", ""
+	}
+	switch strings.TrimSpace(artifact.Status) {
+	case "active", "installed":
+		return activatedAt, targetCommit
+	}
+	return "", ""
 }
 
 func isFullCommit(commit string) bool {
