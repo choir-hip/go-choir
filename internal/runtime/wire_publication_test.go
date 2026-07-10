@@ -324,6 +324,34 @@ func TestWireAutonomousPublishBootstrapsEditionWhenAliasMissing(t *testing.T) {
 	}
 }
 
+func TestEnsureUniversalWireEditionRepairsDanglingAlias(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	ownerID := universalWirePlatformOwnerID()
+	const missingDocID = "missing-wire-edition-document"
+
+	if err := handler.rt.Store().UpsertDocumentAlias(ctx, ownerID, universalWireEditionSourcePath, missingDocID, time.Now().UTC()); err != nil {
+		t.Fatalf("seed dangling edition alias: %v", err)
+	}
+	editionDoc, editionRev, err := handler.rt.ensureUniversalWireEdition(ctx, ownerID)
+	if err != nil {
+		t.Fatalf("repair dangling edition alias: %v", err)
+	}
+	if editionDoc.DocID == "" || editionDoc.DocID == missingDocID {
+		t.Fatalf("repaired edition doc id = %q, want a new live document", editionDoc.DocID)
+	}
+	if editionDoc.CurrentRevisionID != editionRev.RevisionID || editionRev.DocID != editionDoc.DocID {
+		t.Fatalf("repaired edition document/revision mismatch: doc=%+v rev=%+v", editionDoc, editionRev)
+	}
+	gotAlias, err := handler.rt.Store().GetDocumentAlias(ctx, ownerID, universalWireEditionSourcePath)
+	if err != nil {
+		t.Fatalf("resolve repaired edition alias: %v", err)
+	}
+	if gotAlias != editionDoc.DocID {
+		t.Fatalf("repaired edition alias = %q, want %q", gotAlias, editionDoc.DocID)
+	}
+}
+
 func TestWireInputRevisionDoesNotAutonomousPublish(t *testing.T) {
 	_, handler := testAPISetup(t)
 	seedUniversalWireEditionFixture(t, handler)

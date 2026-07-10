@@ -162,18 +162,24 @@ func (rt *Runtime) ensureUniversalWireEdition(ctx context.Context, ownerID strin
 	}
 	editionDocID, err := rt.store.GetDocumentAlias(ctx, ownerID, universalWireEditionSourcePath)
 	if err == nil {
-		editionDoc, err := rt.store.GetDocument(ctx, editionDocID, ownerID)
-		if err != nil {
-			return types.Document{}, types.Revision{}, fmt.Errorf("load wire edition document: %w", err)
+		editionDoc, docErr := rt.store.GetDocument(ctx, editionDocID, ownerID)
+		if docErr == nil {
+			if strings.TrimSpace(editionDoc.CurrentRevisionID) == "" {
+				return types.Document{}, types.Revision{}, fmt.Errorf("wire edition document has no current revision")
+			}
+			editionRev, revErr := rt.store.GetRevision(ctx, editionDoc.CurrentRevisionID, ownerID)
+			if revErr != nil {
+				return types.Document{}, types.Revision{}, fmt.Errorf("load wire edition revision: %w", revErr)
+			}
+			return editionDoc, editionRev, nil
 		}
-		if strings.TrimSpace(editionDoc.CurrentRevisionID) == "" {
-			return types.Document{}, types.Revision{}, fmt.Errorf("wire edition document has no current revision")
+		if docErr != store.ErrNotFound {
+			return types.Document{}, types.Revision{}, fmt.Errorf("load wire edition document: %w", docErr)
 		}
-		editionRev, err := rt.store.GetRevision(ctx, editionDoc.CurrentRevisionID, ownerID)
-		if err != nil {
-			return types.Document{}, types.Revision{}, fmt.Errorf("load wire edition revision: %w", err)
-		}
-		return editionDoc, editionRev, nil
+		// The alias survived while its OG document did not. Fall through to
+		// the same canonical bootstrap used for a wholly missing alias; the
+		// final UpsertDocumentAlias atomically replaces the dangling target.
+		err = store.ErrNotFound
 	}
 	if err != store.ErrNotFound {
 		return types.Document{}, types.Revision{}, fmt.Errorf("resolve wire edition alias: %w", err)
@@ -197,22 +203,22 @@ func (rt *Runtime) ensureUniversalWireEdition(ctx context.Context, ownerID strin
 		return types.Document{}, types.Revision{}, fmt.Errorf("create wire edition body_doc: %w", err)
 	}
 	editionMeta, _ := json.Marshal(map[string]any{
-		"source":           "universal_wire_edition",
-		"revision_role":    textureRevisionRoleCanonical,
+		"source":            "universal_wire_edition",
+		"revision_role":     textureRevisionRoleCanonical,
 		"published_doc_ids": []string{},
 	})
 	seedRev := types.Revision{
-		RevisionID:      revisionID,
-		DocID:           editionDoc.DocID,
-		OwnerID:         ownerID,
-		AuthorKind:      types.AuthorAppAgent,
-		AuthorLabel:     "wire_publication_policy",
-		Content:         projectedContent,
-		BodyDoc:         bodyDoc,
-		SourceEntities:  sourceEntitiesJSON,
-		Citations:       json.RawMessage("[]"),
-		Metadata:        editionMeta,
-		CreatedAt:       now,
+		RevisionID:     revisionID,
+		DocID:          editionDoc.DocID,
+		OwnerID:        ownerID,
+		AuthorKind:     types.AuthorAppAgent,
+		AuthorLabel:    "wire_publication_policy",
+		Content:        projectedContent,
+		BodyDoc:        bodyDoc,
+		SourceEntities: sourceEntitiesJSON,
+		Citations:      json.RawMessage("[]"),
+		Metadata:       editionMeta,
+		CreatedAt:      now,
 	}
 	if err := rt.store.CreateRevision(ctx, seedRev); err != nil {
 		return types.Document{}, types.Revision{}, fmt.Errorf("create wire edition seed revision: %w", err)
