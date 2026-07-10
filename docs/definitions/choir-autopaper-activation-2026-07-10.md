@@ -876,6 +876,9 @@ active_red_mutation:
         older cycle while reporting processor_submitted=1 for the new drain.
       - The Universal Wire edition alias exists but targets a missing Texture
         document, and first-publication bootstrap does not repair that state.
+      - Publish-debounced reconciler activation retains only document and revision
+        handles; it drops the canonical ingestion cycle/request lineage needed to
+        prove one processor and one reconciler for the same handoff.
     introduced:
       - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
         SQL remains intact, so the risk is reversible but the completion claim is invalid.
@@ -892,6 +895,8 @@ active_red_mutation:
         sandbox artifact identity.
       - Sourcecycled run-status reads traverse the vmctl sandbox proxy, so completed
         handoffs are reconciled instead of reset and resubmitted with stale receipts.
+      - A dangling Universal Wire edition alias is replaced through the existing
+        canonical bootstrap, allowing eligible Texture articles into Wire.texture.
 ```
 
 ## Completion Semantics
@@ -951,7 +956,7 @@ Escalate to the human before implementing changes that:
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: failed exact-SHA staging deploy 2026-07-10T21:49Z-21:50Z
+  last_checkpoint: exact-SHA edition visibility proof 2026-07-10T23:31Z-23:43Z
   current_artifact_state: >-
     Completion-aware background migration, listener-first launch ordering, and
     same-identity VM lifecycle serialization are committed. 83b1f594 passed every
@@ -959,12 +964,16 @@ run_checkpoint_and_resumption_state:
     deployment was initially marked incomplete because the active-computer verifier
     demanded workflow SHA 83b1f594 from the intentionally unchanged cb694846 sandbox
     artifact. 838a4799 repaired that boundary and is fully deployed. The platform VM
-    is stable, but fresh source drains can reuse an older completed processor receipt.
+    is stable. ce6b6455 repaired stale processor receipt reuse, and 614a3c9a repaired
+    a dangling edition alias. The canonical Texture edition is now visible, but the
+    publish-debounced reconciler has not produced cycle-correlated acceptance evidence.
   what_shipped:
     - 94f6c744 completion-aware resumable OG migration with deferred-open support.
     - cb694846 runtime recovery and listener publication before background migration.
     - 83b1f594 per-VM lifecycle serialization and stale-instance failure guard.
     - 838a4799 artifact-aware refreshed-sandbox deploy verification.
+    - ce6b6455 sourcecycled status reconciliation through the vmctl sandbox proxy.
+    - 614a3c9a dangling Universal Wire edition-alias recovery.
   what_was_proven:
     - The loop is platform guest readiness/recovery churn, not a host daemon restart.
     - The guest never reaches cmd/sandbox's post-store runtime-topology log or HTTP listen.
@@ -974,7 +983,7 @@ run_checkpoint_and_resumption_state:
     - Platform VM stability for a full source cycle.
     - Sourcecycled liveness for a full source cycle.
     - Single authoritative activation under retry/restart.
-    - End-to-end Autopaper edition visibility.
+    - A cycle-correlated reconciler completion and reconciler-produced canonical story.
   belief_state_changes:
     - H1 is supported: repeated guest readiness failure drives VM recovery.
     - A sourcecycled process restart and host pressure/OOM are falsified for the
@@ -1003,18 +1012,32 @@ run_checkpoint_and_resumption_state:
       drain created distinct run e14f6e73 instead of reusing its receipt.
     - Canonical Texture story revisions now exist with publication refs and source
       lineage, but edition publication fails because the edition alias target is missing.
+    - 614a3c9a passed all local runtime shards and its focused race test, then deployed
+      as exact sandbox/gateway artifact SHA in CI run 29129997504, deploy job
+      86484654190. The post-deploy Texture run 6f783283 completed without crash/OOM;
+      `/api/universal-wire/stories` returned 200 from
+      `universal-wire-edition-texture` with canonical doc d608c407 and edition doc
+      3b9cdc8b, proving the dangling alias repair.
+    - The visible story retains cycle_91067dc98d316d6bb3190b71 and request
+      processor_782a8418545784fe2207ccf2 in its canonical Texture metadata.
+      `dispatchStoryCorpusReconcilerFromPublishBatch`, however, accepts only doc and
+      revision handles and writes no ingestion_handoff_cycle_id or request id.
   remaining_error_field:
-    - A dangling Universal Wire edition alias prevents eligible canonical Texture
-      revisions from entering the edition and prevents reconciler debounce activation.
-    - No cycle-correlated reconciler exists; reconciler dispatch is publish-debounced
-      and currently carries no ingestion_handoff_cycle_id.
-    - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: dangling edition alias recovery
+    - No cycle-correlated reconciler exists; the publish batch drops canonical
+      ingestion_handoff_cycle_id/request lineage before StartRunWithMetadata.
+    - The expected reconciler was not visible in the guest journal after the first
+      eligible publish's five-minute debounce window; the pending-batch/timer state
+      is not externally observable, so dispatch versus correlation failure remains
+      to be separated by a regression test and targeted instrumentation.
+    - The visible canonical story was produced by the processor/Texture path, not by
+      a completed cycle-correlated reconciler as required by completion semantics.
+  highest_impact_remaining_uncertainty: publish-batch reconciler lineage and dispatch
   next_executable_probe: >-
-    Extend ensureUniversalWireEdition's existing missing-alias bootstrap to treat an
-    alias whose target document is missing as repairable, test that the alias is
-    replaced and the published story enters the edition, then redeploy and observe
-    reconciler activation plus /api/universal-wire/stories.
+    Reproduce the eligible-publish timer path with real revision lineage, then carry
+    cycle/request provenance into the debounced batch and reconciler metadata without
+    inventing lineage for mixed-cycle batches. Add an observable dispatch marker,
+    redeploy, and prove one completed processor plus one completed reconciler for one
+    ingestion_handoff_cycle_id.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1024,6 +1047,8 @@ run_checkpoint_and_resumption_state:
     - CI run 29126218631, deploy job 86474002411, and activation receipt for 838a4799.
     - CI run 29128036529, deploy job 86479161920, activation receipt for ce6b6455,
       processor 1c8dc4a9, and Texture revisions 14024b34/ec37a6ff.
+    - CI run 29129997504, deploy job 86484654190, activation receipt for 614a3c9a,
+      Texture run 6f783283, edition doc 3b9cdc8b, and story doc d608c407.
   rollback_refs: []
 ```
 
