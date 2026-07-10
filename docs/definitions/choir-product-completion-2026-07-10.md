@@ -115,6 +115,7 @@ problem_cluster:
   - generic service health, including auth, exposes no compiled build identity
   - the deploy job tests one immutable workflow commit but Node B independently selects a moving branch tip
   - fast and Nix fallback builds use separate source/dependency declarations and inject different build identity fields
+  - deployed-origin acceptance requires frontend and proxy compiled commits to be equal even though differential deployments intentionally advance them independently
   - cmd/choir is not installed on Node B or guest images, yet its source falls through to the conservative full host plus both guest-image deploy class
   - cmd/desktop is a separate Wails distribution module, but its native-only source also falls through to the full platform deploy class; only shared frontend changes belong to Node B
 root_cause:
@@ -122,6 +123,7 @@ root_cause:
   - buildinfo conflates compiled artifact identity with mutable deploy metadata
   - the remote checkout trusts origin/main rather than the immutable workflow SHA that passed CI
   - the auth Nix source filter does not carry internal/server's internal/buildinfo dependency and common Nix ldflags omit Commit and BuiltAt
+  - a global cross-component equality assertion substitutes for selected-component activation receipts
   - the landing loop treated proxy-global identity as proof for an affected auth service
   - path fallback substitutes repository-wide deployment for an explicit artifact dependency map
 protected_surfaces: [deployment routing, run acceptance, service build identity]
@@ -577,6 +579,24 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     Repair must pin checkout to the workflow SHA, wire the existing buildinfo
     dependency into the auth package, and make both build paths compile the
     same identity fields before staging acceptance is admissible.
+- claim: deployed-origin acceptance pressures independent component identities back into one false global identity.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: executable Playwright contract + differential deploy classifier
+  command_or_observation: >-
+    frontend/tests/deployed-origin-auth-shell.spec.js requires
+    window.__CHOIR_BUILD__.commit to equal proxy /health build.commit, while
+    .github/scripts/deploy-impact-classify permits frontend-only and
+    service-only activation.
+  result: >-
+    The equality can only remain universally true if mutable deployment
+    metadata overwrites compiled identity or unrelated components are
+    needlessly redeployed. Both outcomes violate PC-0. Frontend and proxy must
+    expose their own immutable identities; a deploy receipt must compare the
+    workflow SHA only with components selected and activated by that run.
+  uncertainty: >-
+    The repaired deployed-origin test can prove identity presence and internal
+    proxy header/body consistency, but selected-component equality belongs to
+    the deploy workflow rather than a timeless cross-component browser test.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
