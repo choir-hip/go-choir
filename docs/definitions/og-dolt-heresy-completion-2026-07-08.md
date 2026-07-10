@@ -375,7 +375,7 @@ settlement:
 ```yaml
 id: texture-native-history
 kind: conjecture
-status: testing  # local contract green; deployed product-path proof pending
+status: weakened  # correctness contract green; per-write commit performance contradicted
 source: observed 2026-07-10 (Phase B source-path reconciliation)
 claim: >-
   The existing `choir texture history` route is not yet a load-bearing Dolt
@@ -416,6 +416,20 @@ evidence_2026_07_10:
   - `TestTextureHistoryHasNativeDoltAuditCommits` proves at least 25 distinct
     revision commits and measures latest-10 history at 13.255625ms locally.
   - `go test ./internal/store -count=1` passes in 157.854s.
+performance_contradiction_2026_07_10: >-
+  After push of 1870452c, GitHub Actions run 29072160790 kept the selected
+  runtime-shard-0 and non-runtime race lanes in progress beyond 10 minutes,
+  while the two preceding main runs (29071521464 and 29067067716) completed the
+  entire workflow in roughly 3 minutes. The new per-document/per-revision
+  `DOLT_COMMIT` boundary is the only overlapping store-path change and is
+  therefore the leading causal hypothesis. Treat the current implementation as
+  a performance regression, not a landed proof.
+observer_upgrade: >-
+  Replace eager per-write checkpoints with a serialized dirty batch and a
+  history-read barrier: writes remain durable in the Dolt working set; the
+  first native history read after mutations creates one VM-state checkpoint,
+  then queries dolt_history + AS OF. Re-run focused correctness/latency, full
+  store tests, CI race lanes, deploy, and staging product proof.
 remaining_edge: >-
   Commit/push, CI/deploy identity, and authenticated staging CLI/API proof are
   required before this node settles or the Phase B audit-read gate is claimed.
@@ -463,7 +477,7 @@ determined_state:
       execution_effect: C-RETR and C-PAGE work items exist in Phase E.
     - claim: The existing Texture history route walks current object-graph revision objects and normal VM-local object-graph writes create no explicit Dolt commits.
       source: observed (Phase B source reconciliation, 2026-07-10)
-      execution_effect: D-HISTORY local contract is green; deployed product-path proof remains.
+      execution_effect: D-HISTORY correctness is supported locally but its eager commit tactic is weakened by CI performance evidence; replace it before deploy proof.
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
@@ -834,6 +848,14 @@ Per the definition skill. Specific bindings:
     No deployed product-path proof yet. The comprehensive runtime test target is
     independently unbuildable because stale tests reference removed response and
     request fields; this change does not rely on that suite as evidence.
+- claim: Eager per-Texture-write Dolt commits are not an admissible D-HISTORY implementation tactic.
+  definition_node: texture-native-history
+  evidence_class: CI timing observation
+  command_or_observation: >-
+    GitHub Actions run 29072160790 remained in selected race lanes beyond 10m;
+    prior main runs 29071521464 and 29067067716 completed in about 3m.
+  result: D-HISTORY weakened; replace eager commits with a dirty-batch history-read barrier.
+  uncertainty: The replacement must be verified by a fresh CI run; attribution is a leading causal inference until that comparison lands.
 - claim: Plan-review consensus round 2026-07-08 (4/4 panelists returned; gpt55 output empty/failed-silently) adjudicated. Confirmed blockers, all fixed in this document — D-STORES file mapping was inverted (world-wire store is internal/platform/objectgraph_store.go, not internal/objectgraph/dolt_store.go); D-PROMO had ignored the prior 2026-07-07 experiment (adapter comment + two test files), whose falsification is diagnosed as a connection-pooling artifact (checkout ran on one pooled conn, queries on others; pinned-conn variant reportedly isolates correctly) — settlement pulled into Phase A with a -count=10 determinism bar; completion criterion 3 gained a falsified-D-PROMO fallback clause; Phases B–E gained explicit exit bars; gate adjudication must be committed as auditable evidence; supersession must be machine-readable (C5 expanded to mission-graph superseded nodes + doc-authority-manifest entries for all three docs).
   definition_node: seam, embedded-branch-isolation, dolt-store-taxonomy, phase-gate-protocol
   evidence_class: external second opinion (panel) + observed (repo re-verification of B1/B2; diag test re-run showing pooled-connection checkout non-stick; Phase A -count=10 determinism test run 2026-07-09)
@@ -920,7 +942,7 @@ logs.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: D-HISTORY local contract green; landing loop not yet run
+  last_checkpoint: D-HISTORY eager-commit tactic weakened by CI performance contradiction
   current_artifact_state: >-
     Phase A deliverables committed and exit gate cleared: W1 detector manifest +
     CI discovery job (including the I4 destructive-rollback guard), W2 proxy/vmctl
@@ -932,8 +954,9 @@ run_checkpoint_and_resumption_state:
     found that the public Texture history route still walked the application
     revision chain and that normal object-graph writes created no explicit Dolt
     commits. The local implementation now checkpoints canonical Texture writes
-    and reads committed snapshots through dolt_history + AS OF; D-HISTORY remains
-    testing until deployed proof.
+    and reads committed snapshots through dolt_history + AS OF. The eager
+    per-write commit tactic caused a CI performance contradiction and is being
+    replaced by a dirty-batch history-read barrier before deploy proof.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -949,17 +972,17 @@ run_checkpoint_and_resumption_state:
     - embedded Dolt branch isolation on a pinned connection is deterministic (D-PROMO -count=10)
     - all past-mission open edges triaged (absorbed/external/retired)
   unproven_or_partial_claims:
-    - D-HISTORY deployed product-path wiring and staging latency (local correctness/latency green)
+    - D-HISTORY performant checkpoint batching, deployed product-path wiring, and staging latency
     - Dolt engineering verification axes: history latency/correctness,
       batching/throughput, rollback recovery, build friction, and replication
     - heresy live-site counts (families still in discovery; fail-on-regression and allowlist enforcement deferred per phase)
     - Phase B–E kill waves, cutovers, and deletion not yet executed
   remaining_error_field: see Variant below
-  highest_impact_remaining_uncertainty: D-HISTORY deployed product-path proof + Phase B heresy elimination evidence + wire-store sql-server migration mechanics
+  highest_impact_remaining_uncertainty: D-HISTORY performant checkpoint batching + deployed product-path proof + Phase B heresy elimination evidence
   next_executable_probe: >-
-    Commit and push the D-HISTORY implementation, monitor CI and Node B staging
-    identity, then execute an authenticated Texture create/revise/history product
-    path and record deployed correctness and latency before settling the node.
+    Document this performance contradiction, replace eager per-write Dolt commits
+    with a dirty-batch history-read barrier, then re-run focused/full tests and a
+    fresh landing loop before any deployed claim.
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
     - this Definition's adjudicated evidence ledger
