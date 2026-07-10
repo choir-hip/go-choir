@@ -126,9 +126,26 @@ export const LONDON_SALMON: ChoirTheme = {
 export const DEFAULT_THEME = FUTURISTIC_NOIR;
 export const THEME_PRESETS = [FUTURISTIC_NOIR, CARBON_FIBER_KINTSUGI, LONDON_SALMON];
 const PRESET_IDS = new Set(THEME_PRESETS.map((theme) => theme.id));
+const THEME_GROUPS = ['colors', 'radii', 'motion', 'fonts', 'effects'] as const;
 
 function isTheme(value: unknown): value is Partial<ChoirTheme> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isSafeCSSValue(value: unknown): value is string {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= 512 &&
+    !/[;{}\u0000-\u001f]/.test(value) &&
+    !/(?:url|expression)\s*\(|@import/i.test(value);
+}
+
+function mergeStringGroup(baseGroup: Record<string, string>, candidate: unknown): Record<string, string> {
+  if (!isTheme(candidate)) return { ...baseGroup };
+  return Object.fromEntries(Object.entries(baseGroup).map(([key, fallback]) => [
+    key,
+    isSafeCSSValue(candidate[key]) ? candidate[key] : fallback,
+  ]));
 }
 
 export function normalizeThemeConfig(theme: unknown = DEFAULT_THEME): ChoirTheme {
@@ -139,21 +156,64 @@ export function normalizeThemeConfig(theme: unknown = DEFAULT_THEME): ChoirTheme
   const placement = theme.layout?.promptSurfacePlacement === 'top' ? 'top' : preset.layout.promptSurfacePlacement;
   return {
     ...preset,
+    name: typeof theme.name === 'string' && theme.name.trim() ? theme.name.trim().slice(0, 80) : preset.name,
+    colors: mergeStringGroup(preset.colors, theme.colors),
+    radii: mergeStringGroup(preset.radii, theme.radii),
+    motion: mergeStringGroup(preset.motion, theme.motion),
+    fonts: mergeStringGroup(preset.fonts, theme.fonts),
+    effects: mergeStringGroup(preset.effects, theme.effects),
     layout: {
       ...preset.layout,
-      ...(theme.layout || {}),
       promptSurfacePlacement: placement,
+      promptSurfaceMinHeight: isSafeCSSValue(theme.layout?.promptSurfaceMinHeight)
+        ? theme.layout.promptSurfaceMinHeight
+        : preset.layout.promptSurfaceMinHeight,
+      deskSheetHeight: isSafeCSSValue(theme.layout?.deskSheetHeight)
+        ? theme.layout.deskSheetHeight
+        : preset.layout.deskSheetHeight,
     },
   };
 }
 
 export function validateThemeConfig(theme: unknown): { ok: boolean; errors: string[] } {
   if (!isTheme(theme)) return { ok: false, errors: ['theme must be an object'] };
-  if (theme.schema_version !== THEME_SCHEMA_VERSION) return { ok: false, errors: [`schema_version must be ${THEME_SCHEMA_VERSION}`] };
-  if (!theme.id || !PRESET_IDS.has(theme.id)) return { ok: false, errors: [`theme id must be one of ${[...PRESET_IDS].join(', ')}`] };
+  const errors: string[] = [];
+  if (theme.schema_version !== THEME_SCHEMA_VERSION) errors.push(`schema_version must be ${THEME_SCHEMA_VERSION}`);
+  if (!theme.id || !PRESET_IDS.has(theme.id)) errors.push(`theme id must be one of ${[...PRESET_IDS].join(', ')}`);
+  if (theme.name !== undefined && (typeof theme.name !== 'string' || !theme.name.trim() || theme.name.length > 80)) {
+    errors.push('name must be a non-empty string of at most 80 characters');
+  }
+
+  const preset = THEME_PRESETS.find((item) => item.id === theme.id) || DEFAULT_THEME;
+  for (const groupName of THEME_GROUPS) {
+    const group = theme[groupName];
+    if (group === undefined) continue;
+    if (!isTheme(group)) {
+      errors.push(`${groupName} must be an object`);
+      continue;
+    }
+    const allowedKeys = new Set(Object.keys(preset[groupName]));
+    for (const [key, value] of Object.entries(group)) {
+      if (!allowedKeys.has(key)) errors.push(`${groupName}.${key} is not supported`);
+      else if (!isSafeCSSValue(value)) errors.push(`${groupName}.${key} must be a safe CSS value`);
+    }
+  }
+
+  if (theme.layout !== undefined && !isTheme(theme.layout)) errors.push('layout must be an object');
   const placement = theme.layout?.promptSurfacePlacement;
-  if (placement && !['top', 'bottom'].includes(placement)) return { ok: false, errors: ['layout.promptSurfacePlacement must be top or bottom'] };
-  return { ok: true, errors: [] };
+  if (placement && !['top', 'bottom'].includes(placement)) errors.push('layout.promptSurfacePlacement must be top or bottom');
+  for (const key of ['promptSurfaceMinHeight', 'deskSheetHeight'] as const) {
+    if (theme.layout?.[key] !== undefined && !isSafeCSSValue(theme.layout[key])) {
+      errors.push(`layout.${key} must be a safe CSS value`);
+    }
+  }
+  if (isTheme(theme.layout)) {
+    const allowedLayoutKeys = new Set(['promptSurfacePlacement', 'promptSurfaceMinHeight', 'deskSheetHeight']);
+    for (const key of Object.keys(theme.layout)) {
+      if (!allowedLayoutKeys.has(key)) errors.push(`layout.${key} is not supported`);
+    }
+  }
+  return { ok: errors.length === 0, errors };
 }
 
 export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string, string> {

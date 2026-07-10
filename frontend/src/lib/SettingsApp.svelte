@@ -24,6 +24,8 @@
   let themeJSON = JSON.stringify(DEFAULT_THEME, null, 2);
   let themeError = '';
   let themeNotice = '';
+  let lastAppliedThemeJSON = JSON.stringify(DEFAULT_THEME, null, 2);
+  let themeDraftJSON = '';
 
   // API key management state
   let apiKeys = [];
@@ -194,6 +196,8 @@
   function selectTheme(theme) {
     selectedTheme = normalizeThemeConfig(theme);
     themeJSON = JSON.stringify(selectedTheme, null, 2);
+    lastAppliedThemeJSON = themeJSON;
+    themeDraftJSON = '';
     themeError = '';
     themeNotice = `${selectedTheme.name} applied`;
     applyTheme(selectedTheme);
@@ -209,6 +213,8 @@
     });
     selectedTheme = nextTheme;
     themeJSON = JSON.stringify(nextTheme, null, 2);
+    lastAppliedThemeJSON = themeJSON;
+    themeDraftJSON = '';
     themeError = '';
     themeNotice = `Prompt surface moved to the ${placement}`;
     applyTheme(nextTheme);
@@ -216,7 +222,23 @@
 
   function handleThemeJSONInput(event) {
     themeJSON = event.currentTarget.value;
+    themeDraftJSON = themeJSON;
     themeNotice = '';
+    themeError = '';
+    try {
+      const parsed = JSON.parse(themeJSON);
+      const validation = validateThemeConfig(parsed);
+      if (!validation.ok) {
+        themeError = validation.errors.join(', ');
+        return;
+      }
+      themeError = '';
+    } catch (_err) {
+      themeError = 'theme JSON is invalid';
+    }
+  }
+
+  function applyThemeJSON() {
     try {
       const parsed = JSON.parse(themeJSON);
       const validation = validateThemeConfig(parsed);
@@ -225,18 +247,32 @@
         return;
       }
       selectedTheme = normalizeThemeConfig(parsed);
+      lastAppliedThemeJSON = JSON.stringify(selectedTheme, null, 2);
+      themeJSON = lastAppliedThemeJSON;
+      themeDraftJSON = '';
       themeError = '';
+      themeNotice = `${selectedTheme.name} applied`;
       applyTheme(selectedTheme);
     } catch (_err) {
       themeError = 'theme JSON is invalid';
     }
   }
 
+  function revertThemeJSON() {
+    themeJSON = lastAppliedThemeJSON;
+    themeDraftJSON = '';
+    themeError = '';
+    themeNotice = 'Draft reverted';
+  }
+
+  $: hasThemeDraft = themeDraftJSON.length > 0 && themeDraftJSON !== lastAppliedThemeJSON;
+
   let removeLiveListener = () => {};
 
   onMount(async () => {
     selectedTheme = currentUser?.email ? await loadStoredTheme() : normalizeThemeConfig(currentTheme);
     themeJSON = JSON.stringify(selectedTheme, null, 2);
+    lastAppliedThemeJSON = themeJSON;
     void refreshStatus();
     if (currentUser?.email) void loadAPIKeys();
     removeLiveListener = addLiveEventListener((message) => {
@@ -245,6 +281,8 @@
         void loadStoredTheme().then((theme) => {
           selectedTheme = theme;
           themeJSON = JSON.stringify(selectedTheme, null, 2);
+          lastAppliedThemeJSON = themeJSON;
+          themeDraftJSON = '';
         });
       }
       if (kind === 'runtime.health' || kind === 'runtime.degraded') {
@@ -383,20 +421,31 @@
         {/each}
       </div>
       <details class="theme-dev-panel">
-        <summary>Developer theme JSON</summary>
+        <summary>Advanced theme JSON</summary>
         <textarea
           id="theme-editor"
           class="theme-editor"
           data-theme-editor
           spellcheck="false"
           value={themeJSON}
+          aria-invalid={themeError ? 'true' : 'false'}
+          aria-describedby="theme-editor-help theme-editor-feedback"
           on:input={handleThemeJSONInput}
         ></textarea>
+        <p id="theme-editor-help" class="theme-dev-help">Edit known theme values, then apply the draft. Unsafe or unknown CSS values are rejected.</p>
+        <div class="theme-dev-actions">
+          <button type="button" class="theme-apply-btn" data-theme-apply on:click={applyThemeJSON} disabled={!!themeError || !hasThemeDraft}>
+            Apply draft
+          </button>
+          <button type="button" class="theme-revert-btn" data-theme-revert on:click={revertThemeJSON} disabled={!hasThemeDraft}>
+            Revert
+          </button>
+        </div>
       </details>
       {#if themeError}
-        <p class="theme-error" data-theme-error>{themeError}</p>
+        <p id="theme-editor-feedback" class="theme-error" data-theme-error role="alert">{themeError}</p>
       {:else if themeNotice}
-        <p class="theme-notice" data-theme-notice>{themeNotice}</p>
+        <p id="theme-editor-feedback" class="theme-notice" data-theme-notice role="status">{themeNotice}</p>
       {/if}
     </section>
 
@@ -692,11 +741,68 @@
     border-radius: var(--choir-radius-control-sm, 14px);
     background: color-mix(in srgb, var(--choir-bg) 74%, transparent);
     color: var(--choir-text-primary);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: var(--choir-font-mono);
     font-size: 0.78rem;
     line-height: 1.45;
     padding: 0.75rem;
     resize: vertical;
+  }
+
+  .theme-editor[aria-invalid='true'] {
+    outline: 2px solid var(--choir-status-danger);
+    outline-offset: 2px;
+  }
+
+  .theme-dev-help {
+    margin-top: 0.45rem;
+    color: var(--choir-text-muted);
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+
+  .theme-dev-actions {
+    display: flex;
+    gap: 0.45rem;
+    margin-top: 0.6rem;
+  }
+
+  .theme-apply-btn,
+  .theme-revert-btn {
+    min-height: 2.5rem;
+    border: 0;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    padding: 0.5rem 0.8rem;
+    font: inherit;
+    font-weight: 750;
+    cursor: pointer;
+  }
+
+  .theme-apply-btn {
+    background: var(--choir-state-selected);
+    color: var(--choir-text-accent);
+  }
+
+  .theme-revert-btn {
+    background: var(--choir-surface-control);
+    color: var(--choir-text-muted);
+  }
+
+  .theme-apply-btn:hover:enabled,
+  .theme-revert-btn:hover:enabled {
+    background: var(--choir-state-hover);
+    color: var(--choir-text-primary);
+  }
+
+  .theme-apply-btn:focus-visible,
+  .theme-revert-btn:focus-visible {
+    outline: 2px solid var(--choir-accent);
+    outline-offset: 2px;
+  }
+
+  .theme-apply-btn:disabled,
+  .theme-revert-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .theme-error,
