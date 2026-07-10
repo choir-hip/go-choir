@@ -1560,6 +1560,10 @@
     }, durationMs);
   }
 
+  function dismissToast(id) {
+    toasts = toasts.filter((toast) => toast.id !== id);
+  }
+
   // ---- Lifecycle ----
 
   onMount(() => {
@@ -1765,9 +1769,12 @@
   {/if}
 
   {#if toasts.length > 0}
-    <div class="toast-stack" aria-live="polite" aria-atomic="true">
+    <div class="toast-stack">
       {#each toasts as toast (toast.id)}
-        <div class="toast" class:error={toast.kind === 'error'} role={toast.kind === 'error' ? 'alert' : undefined}>{toast.message}</div>
+        <div class="toast" class:error={toast.kind === 'error'} role={toast.kind === 'error' ? 'alert' : 'status'} aria-atomic="true">
+          <span>{toast.message}</span>
+          <button class="toast-close" type="button" aria-label="Dismiss notification" on:click={() => dismissToast(toast.id)}>×</button>
+        </div>
       {/each}
     </div>
   {/if}
@@ -2053,6 +2060,13 @@
   }
 
   .toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    width: max-content;
+    max-width: min(32rem, calc(100vw - 2rem));
     background: var(--choir-state-selected);
     color: var(--choir-text-accent);
     border: 0;
@@ -2060,12 +2074,47 @@
     padding: 0.6rem 0.95rem;
     font-size: 0.82rem;
     box-shadow: 0 12px 32px color-mix(in srgb, var(--choir-shadow-color) 25%, transparent);
+    animation: toast-enter var(--choir-motion-fast);
   }
 
   .toast.error {
     background: var(--choir-status-danger);
     box-shadow: 0 12px 32px color-mix(in srgb, var(--choir-status-danger) 18%, transparent);
-    color: var(--choir-status-danger);
+    color: var(--choir-text-on-danger);
+  }
+
+  .toast-close {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: -0.35rem -0.65rem -0.35rem 0;
+    border: 0;
+    border-radius: 50%;
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    color: inherit;
+    font: inherit;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+
+  .toast-close:hover {
+    background: color-mix(in srgb, currentColor 24%, transparent);
+  }
+
+  .toast-close:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+
+  @keyframes toast-enter {
+    from { opacity: 0; transform: translateY(0.4rem) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast { animation: none; }
   }
 
   @media (max-width: 768px) {

@@ -472,15 +472,31 @@ export async function fetchWithRenewal(url, options = {}) {
  * @param {Error} err
  * @returns {string}
  */
-export function passkeyErrorMessage(err) {
-  if (err.name === 'NotAllowedError') {
-    return 'Passkey ceremony was cancelled. Please try again.';
+export function passkeyErrorMessage(err, authType = 'login') {
+  const message = String(err?.message || '');
+  const normalized = message.toLowerCase();
+  if (err?.name === 'NotAllowedError') {
+    return 'Passkey prompt was cancelled. Nothing changed—try again when you’re ready.';
   }
-  if (err.message && err.message.includes('begin failed')) {
-    return err.message;
+  if (err?.name === 'InvalidStateError') {
+    return authType === 'register'
+      ? 'This device already has a passkey for Choir. Choose Sign in instead.'
+      : 'This passkey could not be used. Try another device or security key.';
   }
-  if (err.message && err.message.includes('finish failed')) {
-    return err.message;
+  if (/network|failed to fetch|temporarily unavailable/.test(normalized)) {
+    return 'Choir could not reach sign-in. Check your connection and try again.';
   }
-  return 'Passkey authentication failed. Please try again.';
+  if (authType === 'login' && /not found|no passkey|no credential|\b404\b/.test(normalized)) {
+    return 'No passkey was found for that email. Check the address or choose Create account.';
+  }
+  if (authType === 'register' && /already|taken|conflict|\b409\b/.test(normalized)) {
+    return 'An account already exists for that email. Choose Sign in instead.';
+  }
+  if (/begin failed/.test(normalized)) {
+    return `Choir could not start ${authType === 'register' ? 'account creation' : 'sign-in'}. Try again in a moment.`;
+  }
+  if (/finish failed/.test(normalized)) {
+    return 'Your device approved the passkey, but Choir could not finish. Try again.';
+  }
+  return 'Passkey sign-in failed. Nothing changed—try again or use another device.';
 }

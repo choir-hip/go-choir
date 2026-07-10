@@ -18,11 +18,11 @@
     data-passkey-error    — passkey ceremony error message area
 -->
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
   import PretextInlineDisclosure from './PretextInlineDisclosure.svelte';
 
   export let passkeyError = '';
-  export let intentMessage = 'Choose when to make this preview durable.';
+  export let intentMessage = 'Open your private computer and keep working.';
 
   /** Whether a passkey ceremony is in progress (disables the form). */
   export let ceremonyInProgress = false;
@@ -34,6 +34,7 @@
 
   /** Email input for the current view. */
   let email = '';
+  let emailInputEl: HTMLInputElement | null = null;
 
   /** Validation error message (empty email etc). */
   let error = '';
@@ -41,8 +42,8 @@
   /** Combined error to display: validation error takes precedence, then passkeyError. */
   $: displayError = error || passkeyError;
   const passkeyTooltipCopy = {
-    register: 'Passkeys use Face ID, Touch ID, Windows Hello, a device PIN, or a security key. They are phishing-resistant and can work across your devices through your password manager or platform account.',
-    login: 'A passkey proves it is you with your device lock or security key. It is safer than a password and can be used from another device when your platform offers that option.',
+    register: 'Passkeys use Face ID, Touch ID, Windows Hello, a device PIN, or a security key. They are phishing-resistant. If your passkeys sync, you can use the same account on your other devices.',
+    login: 'Your passkey uses your device lock or security key to confirm it is you. Choir never receives your fingerprint, face scan, or device PIN.',
   };
 
   /** Simple email format validation. */
@@ -52,11 +53,21 @@
 
   function switchView(newView) {
     view = newView;
-    email = '';
     error = '';
     // Clear passkeyError when switching views so the user gets a clean retry state.
     dispatch('clearpasskeyerror');
+    tick().then(() => {
+      emailInputEl?.focus();
+      emailInputEl?.select();
+    });
   }
+
+  onMount(() => {
+    if (window.localStorage?.getItem('choir.auth.returning') === 'true') {
+      view = 'login';
+    }
+    tick().then(() => emailInputEl?.focus());
+  });
 
   function handleRegister() {
     error = '';
@@ -85,53 +96,64 @@
   }
 </script>
 
-<div class="auth-entry" data-auth-entry>
+<div class="auth-entry" data-auth-entry aria-busy={ceremonyInProgress ? 'true' : 'false'}>
   <div class="auth-card">
-    <p class="auth-kicker">Choir private computer</p>
-    <h1>Keep the preview. Protect the changes.</h1>
-    <p class="tagline">Everything stays visible while logged out. A passkey is only needed when work becomes durable, private, shared, or spend-bearing.</p>
+    <p class="auth-kicker">Continue in Choir</p>
+    <h1>Sign in. Pick up where you left off.</h1>
+    <p class="tagline">Your preview stays open. A passkey unlocks your saved work without a password.</p>
     <div class="auth-intent" data-auth-intent>
-      <span>Private action</span>
+      <span>After sign-in</span>
       <p>{intentMessage}</p>
     </div>
 
-    <div class="view-tabs">
+    <div class="view-tabs" role="tablist" aria-label="Choose sign-in path">
       <button
         class="tab"
         class:active={view === 'register'}
         data-register-toggle
+        type="button"
+        role="tab"
+        id="register-tab"
+        aria-controls="register-panel"
+        aria-selected={view === 'register'}
         on:click={() => switchView('register')}
         disabled={ceremonyInProgress}
       >
-        Create passkey
+        Create account
       </button>
       <button
         class="tab"
         class:active={view === 'login'}
         data-login-toggle
+        type="button"
+        role="tab"
+        id="login-tab"
+        aria-controls="login-panel"
+        aria-selected={view === 'login'}
         on:click={() => switchView('login')}
         disabled={ceremonyInProgress}
       >
-        Use passkey
+        Sign in
       </button>
     </div>
 
     {#if view === 'register'}
-      <div class="auth-view" data-register-view>
+      <div class="auth-view" id="register-panel" role="tabpanel" aria-labelledby="register-tab" data-register-view>
         <PretextInlineDisclosure
           prefix="Create a "
           subject="passkey"
-          collapsedDetail="Use your device lock once. Next time, the same passkey can sign you in without a password."
+          collapsedDetail="Use your device lock once. There is no password to create or remember."
           disclosure={passkeyTooltipCopy.register}
           ariaLabel="What is a passkey?"
         />
 
-        <form on:submit|preventDefault={handleRegister}>
-          <label for="register-email">Email for this computer</label>
+        <form novalidate on:submit|preventDefault={handleRegister}>
+          <label for="register-email">Email address</label>
           <input
             id="register-email"
             name="email"
             type="email"
+            bind:this={emailInputEl}
             bind:value={email}
             placeholder="you@example.com"
             autocomplete="email"
@@ -139,38 +161,41 @@
             autocapitalize="none"
             spellcheck="false"
             disabled={ceremonyInProgress}
+            aria-invalid={error ? 'true' : 'false'}
+            aria-errormessage={error ? 'auth-error' : undefined}
             required
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
             {#if ceremonyInProgress}
-              Creating passkey…
+              Waiting for your device…
             {:else}
-              Create Passkey
+              Create Account with Passkey
             {/if}
           </button>
         </form>
         <p class="fine-print">
-          No password is created. Choir stores only the public credential needed to recognize your passkey.
+          Choir stores a public credential, never your fingerprint, face scan, or device PIN.
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
         </p>
       </div>
     {:else}
-      <div class="auth-view" data-login-view>
+      <div class="auth-view" id="login-panel" role="tabpanel" aria-labelledby="login-tab" data-login-view>
         <PretextInlineDisclosure
-          prefix="Use your "
+          prefix="Sign in with your "
           subject="passkey"
-          collapsedDetail="Return to your saved documents, mailbox, traces, and private computer state."
+          collapsedDetail="Return to your saved documents, mailbox, and computer."
           disclosure={passkeyTooltipCopy.login}
           ariaLabel="What is a passkey?"
         />
 
-        <form on:submit|preventDefault={handleLogin}>
-          <label for="login-email">Email</label>
+        <form novalidate on:submit|preventDefault={handleLogin}>
+          <label for="login-email">Email address</label>
           <input
             id="login-email"
             name="email"
             type="email"
+            bind:this={emailInputEl}
             bind:value={email}
             placeholder="you@example.com"
             autocomplete="username webauthn"
@@ -178,18 +203,20 @@
             autocapitalize="none"
             spellcheck="false"
             disabled={ceremonyInProgress}
+            aria-invalid={error ? 'true' : 'false'}
+            aria-errormessage={error ? 'auth-error' : undefined}
             required
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
             {#if ceremonyInProgress}
-              Signing in…
+              Waiting for your device…
             {:else}
-              Use Passkey
+              Continue with Passkey
             {/if}
           </button>
         </form>
         <p class="fine-print">
-          The browser may offer this device, another device, or a security key depending on where your passkey lives.
+          Your browser will ask for the device, password manager, or security key that holds your passkey.
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
         </p>
@@ -197,8 +224,10 @@
     {/if}
 
     {#if displayError}
-      <p class="error" role="alert" data-passkey-error>{displayError}</p>
+      <p class="error" id="auth-error" role="alert" data-passkey-error>{displayError}</p>
     {/if}
+
+    <p class="next-step"><strong>Next:</strong> Your browser asks you to unlock the passkey. Then Choir returns you to the action above.</p>
   </div>
 </div>
 
@@ -220,6 +249,9 @@
     padding: 1.55rem;
     width: 100%;
     max-width: 480px;
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    overscroll-behavior: contain;
     text-align: left;
     box-shadow: var(--choir-shadow-floating);
     color: var(--choir-text-primary);
@@ -371,7 +403,7 @@
     transition: filter 0.2s, transform 0.2s;
   }
 
-  .primary-action:hover {
+  .primary-action:hover:enabled {
     filter: brightness(1.08);
     transform: translateY(-1px);
   }
@@ -384,9 +416,25 @@
 
   .error {
     margin-top: 1rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: var(--choir-radius-control-sm, 14px);
+    background: var(--choir-status-danger-soft);
     color: var(--choir-status-danger);
     font-size: 0.9rem;
     line-height: 1.35;
+  }
+
+  .next-step {
+    margin: 0.9rem 0 0;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--choir-border);
+    color: var(--choir-text-muted);
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .next-step strong {
+    color: var(--choir-text-primary);
   }
 
   .fine-print {

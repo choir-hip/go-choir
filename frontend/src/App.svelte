@@ -71,6 +71,12 @@
     return kinds.includes(normalizeTextureAuthIntentKind(intent?.kind));
   }
 
+  function summarizeIntentText(value, maxLength = 120) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+  }
+
   function startAuthenticatedPrewarm() {
     const now = Date.now();
     if (now - lastPrewarmStartedAt < 5000) return;
@@ -87,6 +93,7 @@
       if (data.authenticated && data.user) {
         authState = 'signed_in';
         currentUser = data.user;
+        window.localStorage?.setItem('choir.auth.returning', 'true');
         startAuthenticatedPrewarm();
         void loadServerTheme();
         return { authenticated: true, user: data.user };
@@ -121,35 +128,46 @@
   }
 
   function getAuthIntentMessage(intent) {
-    if (!intent) return 'Choose when to make this preview durable.';
+    if (!intent) return 'Open your private computer and keep working.';
+    if (intent.kind === 'sign_in') return 'Open your private computer and keep working.';
     if (intent.kind === 'prompt') {
-      return `This prompt will run on your computer: ${intent.text}`;
+      return `Run your prompt after sign-in: “${summarizeIntentText(intent.text)}”`;
     }
     if (intent.kind === 'session_expired') {
-      return 'Your session ended. Use your passkey to continue.';
+      return 'Reconnect to your private computer and resume where you stopped.';
     }
     if (intent.kind === 'app_launch') {
-      return `Open ${intent.appName || 'this app'} with your private computer state.`;
+      return `Open ${intent.appName || 'this app'} with your saved work.`;
     }
-    if (isTextureAuthIntent(intent, 'save_texture')) return 'Save this Texture revision to your computer.';
-    if (isTextureAuthIntent(intent, 'publish_texture')) return 'Publish this Texture as owner-scoped work.';
-    if (intent.kind === 'file_upload') return 'Upload files into your private computer.';
-    if (intent.kind === 'file_mutation') return 'Change files on your private computer.';
-    if (String(intent.kind || '').startsWith('email')) return 'Use your mailbox, drafts, and send approval.';
-    if (String(intent.kind || '').startsWith('podcast')) return 'Subscribe, import, search providers, or sync playback.';
+    if (isTextureAuthIntent(intent, 'save_texture')) return 'Save this Texture as a new revision.';
+    if (isTextureAuthIntent(intent, 'publish_texture')) return 'Publish this Texture from your account.';
+    if (intent.kind === 'file_upload') return 'Upload these files to your private computer.';
+    if (intent.kind === 'file_mutation') return 'Make this change to your saved files.';
+    if (String(intent.kind || '').startsWith('email')) return 'Open your mailbox and continue this email action.';
+    if (String(intent.kind || '').startsWith('podcast')) return 'Continue this podcast action with your saved subscriptions.';
     if (isTextureAuthIntent(intent, 'published_texture_edit')) {
-      return `Edit your version of ${intent.title || 'this published Texture'}.`;
+      return `Edit your saved copy of ${summarizeIntentText(intent.title || 'this published Texture', 80)}.`;
     }
     if (isTextureAuthIntent(intent, 'private_texture_document')) {
-      return `Open ${intent.title || 'this Texture document'} from your private computer.`;
+      return `Open ${summarizeIntentText(intent.title || 'this Texture document', 80)} from your saved work.`;
     }
-    return 'Continue with private computer state.';
+    return 'Open your private computer and continue this action.';
   }
 
   function clearAuthOverlay() {
     authOverlayOpen = false;
     pendingAuthIntent = null;
     passkeyError = '';
+    tick().then(() => requestAnimationFrame(() => {
+      const returnTarget = document.querySelector('[data-prompt-input], [data-universal-wire-public-sign-in]');
+      if (returnTarget instanceof HTMLElement) returnTarget.focus();
+    }));
+  }
+
+  function handleAuthOverlayKeydown(event: KeyboardEvent) {
+    if (!authOverlayOpen || event.key !== 'Escape' || ceremonyInProgress) return;
+    event.preventDefault();
+    clearAuthOverlay();
   }
 
   function handleAuthRequired(event) {
@@ -316,6 +334,7 @@
       // the authenticated state.
       const session = await checkSession();
       if (session?.authenticated) {
+        window.localStorage?.setItem('choir.auth.returning', 'true');
         maybeReplayPendingIntent(pendingAuthIntent);
         clearConsumedAppIntentFromURL(pendingAuthIntent);
         authOverlayOpen = false;
@@ -325,7 +344,7 @@
       // Ceremony failed or was cancelled — stay in signed-out
       // state and display a retryable error message.
       authState = 'signed_out';
-      passkeyError = passkeyErrorMessage(err);
+      passkeyError = passkeyErrorMessage(err, type);
     } finally {
       ceremonyInProgress = false;
     }
@@ -413,7 +432,7 @@
     }
   }
 
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   function isPublicTextureRoutePath(pathname) {
     return pathname.startsWith('/pub/texture/');
   }
@@ -489,6 +508,8 @@
   });
 </script>
 
+<svelte:window on:keydown={handleAuthOverlayKeydown} />
+
 <div class="app-root" data-theme-id={currentTheme.id} data-auth-state={authState}>
   {#if isLegalDocumentRoute}
     <LegalDocument kind={legalDocumentKind} />
@@ -553,15 +574,15 @@
     </main>
     {#if authOverlayOpen && !isAuthenticated}
       <div class="auth-overlay" data-auth-overlay data-auth-intent-kind={pendingAuthIntent?.kind || ''}>
-        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Use a passkey to continue">
+        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Sign in to Choir">
           <button
             class="auth-overlay-close"
             data-auth-overlay-close
             type="button"
             on:click={clearAuthOverlay}
-            aria-label="Close passkey sign in"
+            aria-label="Close sign-in and return to Choir"
           >
-            x
+            ×
           </button>
           <AuthEntry
             {passkeyError}
@@ -591,15 +612,15 @@
     />
     {#if authOverlayOpen && !isAuthenticated}
       <div class="auth-overlay" data-auth-overlay data-auth-intent-kind={pendingAuthIntent?.kind || ''}>
-        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Use a passkey to continue">
+        <div class="auth-overlay-panel" role="dialog" aria-modal="true" aria-label="Sign in to Choir">
           <button
             class="auth-overlay-close"
             data-auth-overlay-close
             type="button"
             on:click={clearAuthOverlay}
-            aria-label="Close passkey sign in"
+            aria-label="Close sign-in and return to Choir"
           >
-            x
+            ×
           </button>
           <AuthEntry
             {passkeyError}
@@ -804,6 +825,8 @@
     align-items: center;
     justify-content: center;
     padding: 1rem;
+    overflow: auto;
+    overscroll-behavior: contain;
     background: color-mix(in srgb, var(--choir-bg) 58%, transparent);
     backdrop-filter: blur(10px);
   }
@@ -832,6 +855,11 @@
 
   .auth-overlay-close:hover {
     background: var(--choir-state-selected);
+  }
+
+  .auth-overlay-close:focus-visible {
+    outline: 2px solid var(--choir-accent);
+    outline-offset: 3px;
   }
 
   .auth-overlay :global(.auth-entry) {

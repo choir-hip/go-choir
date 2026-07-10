@@ -1,24 +1,39 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount, tick } from 'svelte';
 
   export let normalizedPlacement: 'top' | 'bottom' = 'bottom';
   export let deskApps: any[] = [];
   export let openWindows: any[] = [];
   export let authenticated = false;
   export let currentUser: any = null;
+  export let showDesktopActive = false;
 
   const dispatch = createEventDispatcher();
+  let closeButton: HTMLButtonElement | null = null;
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    dispatch('close');
+  }
+
+  onMount(() => {
+    tick().then(() => closeButton?.focus());
+  });
 </script>
 
+<svelte:window on:keydown={handleKeydown} />
+
 <button class="desk-sheet-backdrop" data-desk-sheet-backdrop type="button" aria-label="Close Desk" on:click={() => dispatch('close')}></button>
-<section class="desk-sheet placement-{normalizedPlacement}" data-desk-sheet role="dialog" aria-label="Desk">
+<section class="desk-sheet placement-{normalizedPlacement}" data-desk-sheet role="dialog" aria-modal="true" aria-labelledby="desk-sheet-title">
   <div class="sheet-handle" aria-hidden="true"></div>
   <header>
     <div>
-      <p>Desk</p>
+      <p id="desk-sheet-title">Desk</p>
       <h2>{openWindows.length} open</h2>
     </div>
-    <button type="button" data-desk-sheet-close on:click={() => dispatch('close')}>Close</button>
+    <button bind:this={closeButton} type="button" data-desk-sheet-close on:click={() => dispatch('close')}>Close</button>
   </header>
 
   <button class="overview-card" data-desk-overview type="button" on:click={() => dispatch('showoverview')}>
@@ -40,7 +55,9 @@
     </div>
   </section>
 
-  <button class="plain-row" data-desk-show-desktop type="button" on:click={() => dispatch('showdesktop')}>Show desktop</button>
+  <button class="plain-row" data-desk-show-desktop type="button" on:click={() => dispatch('showdesktop')}>
+    {showDesktopActive ? 'Restore windows' : 'Show desktop'}
+  </button>
 
   <footer>
     {#if authenticated}
@@ -72,7 +89,8 @@
     grid-template-rows: auto auto auto auto auto;
     gap: 0.48rem;
     max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 28px);
-    overflow: hidden;
+    overflow: auto;
+    overscroll-behavior: contain;
     padding: 0.72rem;
     background: var(--choir-sheet-bg);
     color: var(--choir-fg);
@@ -135,6 +153,11 @@
     color: var(--choir-fg);
     cursor: pointer;
     box-shadow: var(--choir-control-shadow);
+  }
+
+  button:focus-visible {
+    outline: 2px solid var(--choir-accent);
+    outline-offset: 2px;
   }
 
   header button,

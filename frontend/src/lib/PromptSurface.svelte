@@ -9,6 +9,7 @@
     focusWindow,
     DESK_APPS,
     liveStatus as desktopLiveStatus,
+    showDesktopMode,
   } from './stores/desktop.js';
   import { addLiveEventListener, liveEventKind, liveEventPayload } from './live-events.js';
 
@@ -23,12 +24,14 @@
   let promptValue = '';
   let promptInputEl: HTMLTextAreaElement | null = null;
   let surfaceEl: HTMLDivElement | null = null;
+  let deskButtonEl: HTMLButtonElement | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let sheetOpen = false;
   let mobileSwitcherOpen = false;
   let promptFocused = false;
   let chyronItems: Array<{ id: string; text: string }> = [];
   let removeLiveListener = () => {};
+  let promptWasDisabled = promptDisabled;
 
   const deskApps = DESK_APPS;
   const publicTicker = [
@@ -105,6 +108,29 @@
     tick().then(publishSurfaceMetrics);
   }
 
+  function closeDesk({ restoreFocus = true } = {}) {
+    sheetOpen = false;
+    mobileSwitcherOpen = false;
+    if (restoreFocus) tick().then(() => deskButtonEl?.focus());
+  }
+
+  function handleGlobalKeydown(event: KeyboardEvent) {
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      handleDeskButtonClick();
+    }
+  }
+
+  function focusPromptWhenReady() {
+    if (promptDisabled || isMobileViewport()) return;
+    tick().then(() => {
+      const active = document.activeElement;
+      if (!active || active === document.body || active === document.documentElement) {
+        promptInputEl?.focus();
+      }
+    });
+  }
+
   function summarizeLiveEvent(message: any) {
     const kind = liveEventKind(message);
     const payload = liveEventPayload(message);
@@ -156,16 +182,25 @@
       resizeObserver.observe(surfaceEl);
     }
     window.addEventListener('resize', resizePromptInput);
+    window.addEventListener('keydown', handleGlobalKeydown);
+    focusPromptWhenReady();
   });
 
   $: if (authenticated && chyronItems.some((item) => item.id.startsWith('public-'))) chyronItems = [];
   $: if ($openWindows.length === 0 && mobileSwitcherOpen) mobileSwitcherOpen = false;
   $: if (!sheetOpen && mobileSwitcherOpen) mobileSwitcherOpen = false;
+  $: if (promptDisabled) {
+    promptWasDisabled = true;
+  } else if (promptWasDisabled) {
+    promptWasDisabled = false;
+    focusPromptWhenReady();
+  }
 
   onDestroy(() => {
     removeLiveListener();
     resizeObserver?.disconnect();
     window.removeEventListener('resize', resizePromptInput);
+    window.removeEventListener('keydown', handleGlobalKeydown);
   });
 </script>
 
@@ -176,7 +211,8 @@
     openWindows={$openWindows}
     {authenticated}
     {currentUser}
-    on:close={() => (sheetOpen = false)}
+    showDesktopActive={$showDesktopMode}
+    on:close={() => closeDesk()}
     on:showoverview={() => { sheetOpen = false; dispatch('showoverview'); }}
     on:showdesktop={() => { sheetOpen = false; dispatch('showdesktop'); }}
     on:launchapp={(event) => launchApp(event.detail.app)}
@@ -196,11 +232,14 @@
   bind:this={surfaceEl}
 >
   <button
+    bind:this={deskButtonEl}
     class="desk-mark-button"
     data-desk-menu-button
     type="button"
     aria-label="Open app switcher or Desk, {$openWindows.length} open windows"
+    aria-keyshortcuts="Meta+K Control+K"
     aria-expanded={sheetOpen || mobileSwitcherOpen ? 'true' : 'false'}
+    title="Desk (⌘K)"
     on:click={handleDeskButtonClick}
   >
     <TetraMark />
