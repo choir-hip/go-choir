@@ -200,22 +200,66 @@ source: observed 2026-07-10
 definition: >-
   Native passkey exchange codes, access tokens, and refresh tokens never enter
   JavaScript-readable state or logs. The native boundary establishes an
-  HttpOnly same-origin session and returns only non-secret auth state.
+  HttpOnly same-origin session and returns only non-secret auth state. The auth
+  service is the sole cookie-name, attribute, token-minting, rotation, and
+  revocation authority; Wails owns only a native cookie jar and proxy boundary.
 problem: >-
-  The reachable desktop bridge logs the callback URL containing the exchange
-  code, returns raw access and refresh tokens to JavaScript, and auth.js writes
-  both as JavaScript-readable cookies. The compiled frontend contains this path.
+  The first containment slice removed callback/token logging, JavaScript token
+  responses, and document.cookie writes, but it retained a deeper split
+  authority. Auth exposes both JSON and redirect exchange-code issuers; each
+  stores raw access and refresh bearer tokens in plaintext
+  desktop_exchange_codes. Redeem returns both tokens as JSON, and Wails then
+  redefines the auth service's cookie names, paths, and attributes in
+  seedSession. Safari and Wails consequently share one refresh credential, so
+  the first client to rotate it invalidates the other. desktop-bridge.html also
+  retains a dead JSON exchange caller.
 observables:
-  - cmd/desktop/main.go desktop auth routing, callback logging, and token response
-  - frontend/src/lib/auth.js desktop-auth bridge and document.cookie writes
-  - built Wails app document.cookie, hard reload, renewal, logout, and unified log
+  - internal/auth/handlers.go HandleDesktopExchange and HandleDesktopExchangeRedirect mint the same authority through two routes
+  - internal/auth/store.go desktop_exchange_codes persists access_token and refresh_token values and ConsumeDesktopExchangeCode returns them
+  - internal/auth/handlers.go HandleDesktopRedeem serializes raw bearer credentials instead of using issueSession
+  - cmd/desktop/desktop_auth.go desktopTokenResponse and seedSession duplicate canonical server cookie policy
+  - frontend/public/desktop-bridge.html exchangeTokens is an unused JSON-exchange path while every live branch uses exchange-redirect
+existing_replacement: >-
+  Handler.issueSession already mints the access JWT, stores only a refresh-token
+  hash, and sets the canonical HttpOnly cookies. http.Client plus its native
+  cookie jar already absorbs Set-Cookie on redemption and can proxy those
+  cookies without exposing values to the renderer.
+authority_cut:
+  - retain only the redirect exchange issuer used by ASWebAuthenticationSession
+  - persist only an opaque one-time code, authenticated user reference, and expiry; compatibility token columns must contain empty values until removed by a later schema migration
+  - redeem consumes the code, resolves the user, and invokes issueSession; the response body contains authenticated/user state and no token-shaped fields
+  - delete Wails token decoding and seedSession; the native jar accepts only auth-service Set-Cookie policy
+  - delete the dead bridge JSON exchange function and the auth route registration/handler it targeted
 protected_surfaces: [auth/session renewal, native desktop, passkey exchange]
+mutation_class: red
+admissible_evidence:
+  - source and handler tests prove one exchange issuer and zero raw-token response fields/callers
+  - store tests inspect desktop_exchange_codes and prove no non-empty bearer value is persisted
+  - redemption tests prove canonical Secure, HttpOnly, SameSite, path, and TTL attributes plus a safe body
+  - coexistence tests prove Safari and native receive independent refresh sessions and can rotate in either order without signing the other out
+  - native proxy tests prove the jar absorbs redemption/rotation/logout cookies while renderer bodies and headers remain secret-free
+  - a built-app staging proof covers passkey, hard reload, renewal, logout, and unified-log/source scans
+rollback_path: >-
+  Before distribution, revert to the process-local native jar with desktop auth
+  disabled. Never restore raw-token JSON redemption, plaintext exchange storage,
+  JavaScript cookies, or the duplicate JSON exchange issuer.
+heresy_delta:
+  discovered:
+    - plaintext bearer credentials stored behind an exchange code
+    - auth-service cookie policy reimplemented by Wails
+    - duplicate JSON and redirect exchange issuers
+  introduced: []
+  repaired:
+    - JavaScript-readable desktop session tokens and secret callback logging
 settlement_rule: >-
   Unit/source invariants and a built-app staging proof show HttpOnly containment,
-  successful reload/renewal/logout, and no code/token in response bodies,
-  JavaScript, or logs.
+  one redirect-only issuer, empty/absent exchange-token storage, server-owned
+  cookie policy, successful reload/renewal/logout, and no code/token in response
+  bodies, JavaScript, or logs.
 execution_effect: >-
-  Fix before treating the Wails wrapper as distributable or daily-driver ready.
+  The current native-jar patch is containment, not settlement. Delete the
+  duplicate issuers and make server Set-Cookie the only session mint before
+  treating the Wails wrapper as distributable or daily-driver ready.
 ```
 
 ### PC-3. CLI request-budget and capability coherence — OPEN, P1
