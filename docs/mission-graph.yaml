@@ -64,3 +64,18 @@ nodes:
       - AGENTS.md
       - docs/computer-ontology.md
       - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+  - id: choir-seam-repair-2026-07-10
+    title: Choir Contradiction and Seam Repair
+    path: docs/definitions/choir-seam-repair-2026-07-10.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    depends_on:
+      - choir-product-completion-2026-07-10
+    enables: []
+    sources:
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/definitions/choir-product-completion-2026-07-10.md
+      - docs/agent-product-doctrine.md
+      - docs/computer-ontology.md

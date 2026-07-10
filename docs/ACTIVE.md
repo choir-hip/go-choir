@@ -5,19 +5,25 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definitions
 
-[`definitions/og-dolt-heresy-completion-2026-07-08.md`](definitions/og-dolt-heresy-completion-2026-07-08.md)
-is the one confirmed active top-level product Definition. It owns the remaining
-OG/Dolt/heresy completion program, including its problem records, protected
-surfaces, evidence requirements, and completion semantics.
-
 [`definitions/choir-product-completion-2026-07-10.md`](definitions/choir-product-completion-2026-07-10.md)
-is an active disjoint companion Definition for Choir CLI, Wails desktop, Choir
-Base, and Autopaper recovery. It records the newly reopened owner scope and the
-current auth, data-integrity, activation, packaging, and staging evidence. It
-inherits promotion semantics from the OG/Dolt/heresy Definition rather than
-creating a competing protocol.
+is the one confirmed active top-level product Definition. It owns Choir CLI,
+Wails desktop, Choir Base, and Autopaper recovery, including auth, data-
+integrity, activation, packaging, and staging evidence. It inherits promotion
+semantics from the OG/Dolt/heresy Definition rather than creating a competing
+protocol.
+
+[`definitions/og-dolt-heresy-completion-2026-07-08.md`](definitions/og-dolt-heresy-completion-2026-07-08.md)
+is the active spine Definition for the remaining OG/Dolt/heresy completion
+program. It is discoverable and load-bearing for promotion/storage protocol
+authority, but it is not a second top-level product Definition.
 
 ## Supporting Maintenance
+
+[`definitions/choir-seam-repair-2026-07-10.md`](definitions/choir-seam-repair-2026-07-10.md)
+is the active maintenance Definition for service-scoped deployment identity,
+RouteProfile format repair, compiled-only source-workspace identity, dead-code
+excision, and product-completion Definition state refresh. It may not override
+the product Definition.
 
 [`definitions/documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md)
 is **complete**. It remains in the retained packet as the deletion receipt and
@@ -26,24 +32,20 @@ umbrella's semantics.
 
 ## Next Executable Work
 
-The product Definition records Phase A as gate-cleared. The next authorized
-work is Phase B:
+The seam-repair Definition's next authorized work is Phase F: final consensus,
+full CI, push/deploy, and staging acceptance proving per-service `/health`
+identity plus a RouteProfile promotion/rollback on `choir.news`.
 
-- remove Texture semantic-forcing residue;
-- delete parent/child control residue;
-- make Dolt history/audit reads load-bearing;
-- invert tests and turn the relevant heresy detectors into enforcement.
+After seam-repair staging proof, resume product-completion work at PC-2 (Wails
+token containment) and PC-3 (CLI request-budget), with Base product wiring still
+gated on the exact-byte stable-identity kernel. Typed Autopaper handoff
+idempotency remains open after projection-triggered activation deletion.
 
-Milestone shorthand in doctrine maps to the Definition as follows: M3.1/M3.2
-work is Phase B; M4/M3.3 work is Phase C; ComputerVersion promotion is Phase D;
-surface/vocabulary cleanup is Phase E.
-
-The product-completion companion's first authorized work is the API-key
-capability-delegation repair, followed by Wails token containment and the CLI
-request-budget repair. Base product wiring remains gated on the exact-byte,
-stable-identity kernel. Autopaper may delete duplicate activation before its
-wider schedule/publication semantics settle because duplicate processing is
-invalid under every admissible definition.
+The OG/Dolt/heresy spine still owns Texture semantic-forcing residue removal,
+Dolt history/audit load-bearing reads, and ComputerVersion promotion protocol
+gates. Milestone shorthand in doctrine maps to that Definition as follows:
+M3.1/M3.2 work is Phase B; M4/M3.3 work is Phase C; ComputerVersion promotion is
+Phase D; surface/vocabulary cleanup is Phase E.
 
 D-STORE is settled by owner authority: Choir is all-in on Dolt. Storage
 questions about history latency, commit batching, rollback mechanics, ICU/build

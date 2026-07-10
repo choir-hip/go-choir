@@ -258,8 +258,8 @@ settlement:
 ```yaml
 id: definition_doc_state_refresh
 kind: object
-status: open
-source: observed
+status: testing
+source: observed; Phase E doc refresh 2026-07-10
 term: Product completion Definition matches the code
 definition: >-
   docs/definitions/choir-product-completion-2026-07-10.md is updated so that
@@ -613,6 +613,19 @@ evidence_ledger:
     source: internal/computerversion/base_*_contract.go; PC-5 deletion map
     result: verified
     uncertainty: exact count of non-test callers
+  - claim: product completion Definition statuses and variant counts match post-repair code.
+    definition_node: definition_doc_state_refresh
+    evidence_class: observed file + formal-check
+    source: docs/definitions/choir-product-completion-2026-07-10.md;
+      docs/doc-authority-manifest.yaml; docs/mission-graph.yaml; docs/ACTIVE.md
+    command_or_observation: >-
+      PC-0/PC-4 set to testing; autopaper_authoritative_activation_paths=1;
+      SyncService registration claims removed; PC-5 deletion map updated;
+      og-dolt demoted from authority-root so L4 has one product Definition;
+      seam-repair registered as non-root maintenance Definition.
+      ./scripts/doccheck --mode=live passed.
+    result: verified
+    uncertainty: staging proof of service-scoped identity and RouteProfile still open under Phase F
 ```
 
 ## Forbidden Collapses

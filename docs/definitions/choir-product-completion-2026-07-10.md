@@ -86,13 +86,13 @@ Initial rollback ref: `224243de`.
 
 ## Definition Graph
 
-### PC-0. Deployment identity follows activation — SETTLED, P0
+### PC-0. Deployment identity follows activation — TESTING, P0
 
 ```yaml
 id: deployment-identity-follows-activation
 kind: boundary
-status: settled
-source: observed staging acceptance 2026-07-10
+status: testing
+source: observed staging acceptance 2026-07-10; service-scoped receipt check added by seam-repair 2026-07-10
 definition: >-
   A service health response distinguishes the immutable commit compiled into
   the serving binary from the release target selected by the deploy. The
@@ -309,13 +309,13 @@ execution_effect: >-
   until capability delegation is repaired.
 ```
 
-### PC-4. Promotion truth gate — DEPENDENCY ON OG PHASE D
+### PC-4. Promotion truth gate — TESTING: ROUTE-SLOT WRITER FORMAT FIXED
 
 ```yaml
 id: promotion-truth-gate
 kind: boundary
-status: proposed
-source: observed 2026-07-10; authority remains OG/Dolt/heresy Definition
+status: testing
+source: observed 2026-07-10; RouteProfile format fixed to owner_id/computer_id by seam-repair 2026-07-10; authority remains OG/Dolt/heresy Definition
 definition: >-
   Adoption verification and owner approval are not served activation. No API or
   UI may persist or display active/rollback-success unless a load-bearing
@@ -357,9 +357,11 @@ authority_cut:
     Provider are future transports or projections; computerversion is evidence
     and materialization support.
   immediate_effect: >-
-    Stop treating SyncEngine, the registered SyncService, local JSON synced
-    state, or the self-validating Base contract builders as kernel authority.
-    Do not patch the placeholder downloader as an incremental route to PC-5.
+    SyncEngine, the registered SyncService, local JSON synced state, and the
+    self-validating Base contract-builder tower were deleted by seam-repair
+    2026-07-10 (commit 0434ff13 / 7b59d33e). Do not resurrect them as kernel
+    authority. Do not patch the placeholder downloader as an incremental route
+    to PC-5.
 missing_kernel_transaction:
   name: computer-scoped-observation-and-acknowledgement
   transaction_identity:
@@ -464,15 +466,15 @@ wiring_prohibition:
   until: every pre-wiring row in the PC-5 acceptance matrix passes
   prohibited:
     - mount /api/base handlers in any deployed service
-    - enable or rely on StartSync from the registered Wails SyncService
+    - reintroduce or enable StartSync from a Wails SyncService (deleted by seam-repair 2026-07-10)
     - package or register the Base-backed File Provider extension
     - add a blob GET endpoint as a substitute for the kernel transaction
     - cite fake HTTP, MemJournal, path-rescan, contract-builder, or placeholder tests as kernel proof
   permitted: >-
     cmd/baseharness and cmd/evidenceroot may remain explicitly local fixture and
-    evidence tools. Before any Wails build/package claim, the existing
-    newSyncService registration must be removed or hard-gated so it cannot reach
-    the nonconformant SyncEngine path.
+    evidence tools. The SyncService registration and SyncEngine subtree were
+    deleted by seam-repair 2026-07-10; do not reintroduce them before the PC-5
+    acceptance matrix passes.
 mutation_class: red
 protected_surfaces:
   - private persistent state
@@ -521,7 +523,7 @@ settlement_rule: >-
 execution_effect: >-
   First document the red problem, then build the transaction behind a fresh
   kernel-only acceptance caller. Do not connect the existing handlers or
-  SyncService. After the kernel gate passes, separately define and prove a
+  deleted SyncService. After the kernel gate passes, separately define and prove a
   deployed service owner without widening Base into embedded-Dolt app authority.
 ```
 
@@ -576,10 +578,11 @@ provisional_definition: >-
   edition only through explicit publication contracts. It is not a separate
   service and does not bypass Texture or provenance authority.
 problem: >-
-  Every non-empty source cycle currently has two processor activation paths.
-  The web-capture projection path starts a run implicitly, then sourcecycled
-  independently dispatches the typed ingestion handoff. Overload can turn this
-  into delayed sequential duplicates rather than obvious parallel duplicates.
+  Projection-triggered activation was deleted; the remaining typed ingestion
+  handoff is the sole authoritative activation path
+  (autopaper_authoritative_activation_paths: 1). Retry/overload idempotency for
+  that handoff is still unproven, so duplicate processing under retry remains an
+  open settlement gate.
 validation_contradiction: >-
   The opt-in universal-wire staging spec rejects both source values it later
   branches on, then both requires and forbids story_texture_doc_id. The shared
@@ -595,9 +598,10 @@ open_definition_edges:
   - schedule ownership and per-computer configuration
   - edition/publication acceptance and retry identity
 settlement_rule: >-
-  Delete projection-triggered activation, prove exactly one run per handoff
-  across retry/overload, preserve capture projection, then prove one deployed
-  source cycle to canonical Texture/edition evidence before widening scope.
+  Projection-triggered activation is already deleted. Prove exactly one run per
+  handoff across retry/overload, preserve capture projection, then prove one
+  deployed source cycle to canonical Texture/edition evidence before widening
+  scope.
 execution_effect: >-
   The single-activation repair may proceed without settling the wider product
   edges because duplicate processing is invalid under every admissible
@@ -619,7 +623,8 @@ definition: >-
 problem: >-
   cmd/desktop is outside root CI, has zero Go tests, fails without copied
   frontend assets, and does not package/register the File Provider extension.
-  SyncService is registered but unused by the frontend.
+  The SyncService registration was deleted by seam-repair 2026-07-10; do not
+  reintroduce it before PC-5 settles.
 execution_effect: >-
   Establish after PC-2. Do not package Base/File Provider before PC-5 settles.
 ```
@@ -634,10 +639,10 @@ other paths are evidence, adapters, or deletion candidates.
 | Real purpose | Competing paths or meanings | Authoritative path to keep | Delete or demote | Minimum proof |
 |---|---|---|---|---|
 | Prove what code is serving | compiled service commit; mutable global deploy target; proxy health used for unrelated services | immutable per-service build identity plus completed activation receipt | commit override and repository-global identity inference | affected service reports compiled SHA after deploy job succeeds |
-| Activate an approved ComputerVersion | live-app adoption; candidate-intake switch/rollback; optional Dolt tag adapter; vmctl desktop publish; actual proxy/VM route | one route-slot writer with activation/rollback receipt | candidate mutation routes, tag/publish semantics, and active UI/persistence when no executor changed the served route | ordinary owner request resolves through the receipted version |
+| Activate an approved ComputerVersion | live-app adoption; candidate-intake switch/rollback; optional Dolt tag adapter; vmctl desktop publish; actual proxy/VM route | one route-slot writer with activation/rollback receipt (RouteProfile format fixed to owner_id/computer_id by seam-repair 2026-07-10) | candidate mutation routes, tag/publish semantics, and active UI/persistence when no executor changed the served route | ordinary owner request resolves through the receipted version |
 | Give the desktop a durable authenticated session | direct exchange-redirect flow; bridge flow; JavaScript cookies; native process; cloud and local proxy/auth stacks | one bridge/passkey flow and one native Go cookie jar behind the renderer proxy | direct exchange attempt, raw token responses, JS token/cookie handling, secret logs, production claims for dev-only local orchestration | built app survives reload and renewal; logout clears; JS/log secret scan is empty |
-| Turn one source handoff into one processor run | graph-projection synthesis; typed ingestion handoff; non-idempotent retry | typed, durable, idempotent ingestion handoff and runtime admission | projection-triggered `wire_synthesis` and synthesis response fields | one cycle/request ID maps to exactly one processor run and publication lineage |
-| Provide private exact-byte computer files | placeholder downloader; path-derived identity; random folder versions; unwired contract builders | stable item/device identity, content-addressed bytes, explicit conflict ancestry | zero-byte success, cursor advance across unresolved conflicts, inert builders as presumed architecture | two-device rename/conflict/restart proof with exact hashes and owner denial |
+| Turn one source handoff into one processor run | typed ingestion handoff; non-idempotent retry (projection-triggered wire_synthesis deleted by prior guardrail run) | typed, durable, idempotent ingestion handoff and runtime admission | resurrected projection-triggered `wire_synthesis` and synthesis response fields | one cycle/request ID maps to exactly one processor run and publication lineage |
+| Provide private exact-byte computer files | placeholder downloader; path-derived identity; random folder versions; deleted SyncEngine/contract-builder tower (seam-repair 2026-07-10) | stable item/device identity, content-addressed bytes, explicit conflict ancestry | zero-byte success, cursor advance across unresolved conflicts, resurrected SyncEngine/contract builders as presumed architecture | two-device rename/conflict/restart proof with exact hashes and owner denial |
 | Offer a coherent headless client | `run start` creates a prompt-bar submission; 30-second client deadline versus 60-second server bound; undistributed CLI classified as platform code | thin transport over canonical request/submission, trajectory, Texture, and evidence contracts with its own future release lane | misleading run vocabulary, mirrored private schemas, hidden timeout authority, and Node B/guest deploy fallback | CLI/web conformance IDs and shapes match; structured server 504 reaches CLI near 60 seconds; no platform activation for CLI-only diff |
 
 This map is a routing constraint, not a claim that every kept path is already
@@ -669,8 +674,8 @@ determined_state:
   observed:
     - claim: Two reachable auth-boundary failures precede product expansion.
       source: source call-graph audit
-    - claim: CLI timeout, promotion false-success, Base data integrity, and Autopaper duplicate activation are reproducible code-path defects.
-      source: source and staging audit 2026-07-10
+    - claim: CLI timeout, promotion false-success, and Base data integrity remain reproducible code-path defects; Autopaper projection-triggered duplicate activation was deleted and only typed-handoff idempotency remains open.
+      source: source and staging audit 2026-07-10; seam-repair 2026-07-10
     - claim: Base has exact blob, canonical replay, and exact materialization primitives, but no stable-identity and acknowledged-cursor transaction.
       source: Base source and caller audit 2026-07-10
     - claim: The current desktop Base path contradicts the kernel definition and its passing tests encode placeholder, path-identity, and cursor false success.
@@ -712,7 +717,7 @@ variant:
   false_promotion_success_paths: 1
   cli_product_contract_failures: 2
   base_substrate_invariants_open: 5
-  autopaper_authoritative_activation_paths: 2
+  autopaper_authoritative_activation_paths: 1
   wails_unowned_build_acceptance_lanes: 1
   external_product_nodes_without_deployed_acceptance: 4
 target:
@@ -986,7 +991,7 @@ This mission is complete only when:
 7. residual risks, rollback refs, protected surfaces, and heresy deltas are
    recorded for every behavior slice.
 
-Passing unit tests, an API record labeled adopted, a local `.app`, a registered
+Passing unit tests, an API record labeled adopted, a local `.app`, a resurrected
 SyncService, or one published Texture is not completion.
 
 ## Run Checkpoint and Resumption State
@@ -994,45 +999,55 @@ SyncService, or one published Texture is not completion.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: PC-0 exact-SHA selected-artifact activation receipt accepted on staging
+  last_checkpoint: seam-repair Phases A–D landed locally; Phase E Definition refresh in progress
   current_artifact_state: >-
-    API-key delegation commit 3f4f4aac is active and accepted on staging after
-    the auth deploy completed. PC-0 is settled at f2d1d330: run 29083767049
-    built exactly its tested SHA through one Nix path, verified host, guest,
-    active-computer, and frontend identities, then published receipt
-    29083767049/1. The prepared CLI, Wails, promotion-definition, and Autopaper
-    slices remain local pending integration onto this deployed base.
+    Staging still carries f2d1d330 selected-artifact activation receipts. Local
+    seam-repair commits af042d1e (service-scoped deployMetadata), 0b21ecdb
+    (RouteProfile owner_id/computer_id), a1073731 (compiled-only source lineage),
+    and 7b59d33e (SyncEngine/contract-builder/wire-synthesis dead-code excision)
+    are not yet proven on staging. PC-0 remains testing until service-scoped
+    identity is staging-proven. PC-4 is testing with the route-slot writer format
+    fixed. PC-5/PC-6/PC-7 remain open; SyncService and the Base contract tower
+    are deleted, not registered.
   what_shipped:
     - 3f4f4aac API-key capability-envelope enforcement
     - eb3bdd35 false deployment identity problem record
     - f2d1d330 exact-SHA single-builder selected-artifact activation receipts
+    - af042d1e service-scoped deployMetadata (local; staging proof pending)
+    - 0b21ecdb RouteProfile owner_id/computer_id writers + resolver legacy normalize (local)
+    - a1073731 compiled-commit-only source-workspace identity (local)
+    - 7b59d33e dead-code excision of SyncService/SyncEngine/contract tower/wire helper (local)
   what_was_proven:
     - CLI trajectories read works on staging
     - CLI timeout hides the server's bounded 504
-    - current source contains reachable API-key and Wails secret-boundary failures
-    - Base and Autopaper gaps are substrate/control-path defects, not missing UI alone
+    - current source contains reachable Wails secret-boundary failures (PC-2 still open)
     - Base exact-byte primitives exist, but stable identity plus expected-parent commit plus acknowledged cursor is the missing kernel transaction
-    - the current Base desktop path and 26,380-line unused contract tower are adapters/deletion candidates, not kernel authority
-    - proxy-global deployed_commit is not affected-service activation proof
+    - SyncEngine, SyncService registration, and the Base contract-builder tower are deleted and no longer product authority
+    - projection-triggered Autopaper activation is deleted; typed handoff is the sole activation path
+    - proxy-global deployed_commit is not affected-service activation proof; deployMetadata is now service-scoped in code
     - API-key delegation and sibling revocation are bounded by caller capability on staging
     - compiled identity is visible before and independent from activation receipt metadata
     - every selected artifact in deploy 29083767049 has an explicit verified receipt entry
   unproven_or_partial_claims:
+    - no staging proof of service-scoped /health identity after seam-repair
+    - no staging proof of RouteProfile owner_id/computer_id promotion/rollback
     - no Wails built-app acceptance
-    - no deployed Autopaper duplicate count
+    - no deployed Autopaper typed-handoff idempotency proof
     - no Base exact-byte two-device proof
-    - no served ComputerVersion promotion
-  highest_impact_remaining_uncertainty: typed Autopaper retry idempotency and served route-slot promotion authority
+    - no served ComputerVersion promotion end-to-end
+  highest_impact_remaining_uncertainty: staging proof of service-scoped identity and route-slot promotion after seam-repair
   next_executable_probe: >-
-    Integrate the prepared local slices onto f2d1d330. Finish the typed
-    Autopaper retry idempotency boundary, then land/stage the CLI timeout and
-    Wails containment slices under exact selected-artifact receipts.
-  suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
+    Land seam-repair through CI/deploy, then prove per-service /health identity
+    and a RouteProfile promotion/rollback on choir.news. Resume PC-2/PC-3/PC-5
+    product work only after those receipts exist.
+  suggested_goal_string: "/goal docs/definitions/choir-seam-repair-2026-07-10.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
+    - docs/definitions/choir-seam-repair-2026-07-10.md
     - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
   rollback_refs:
     - 224243de (pre-program source state)
     - b7f689d4 (pre-API-key behavior repair)
     - f2d1d330 deployment receipt rollback paths named in the PC-0 evidence entry
+    - a1073731 (pre-delete rollback for Phase D dead-code excision)
 ```
