@@ -756,6 +756,32 @@ evidence_ledger:
     promotion_relevance: >-
       Reopens platform stability and the reboot-loop conjecture. The resumable store
       migration repair remains supported but cannot settle lifecycle stability alone.
+  - claim: The exact-SHA deploy verifier collapses workflow identity and sandbox
+      artifact identity during vmctl-only active-computer refreshes.
+    definition_node: platform_computer_stability
+    evidence_class: CI/deploy trace + code-level proof
+    source: CI run 29125293553, failed Node B deploy job 86471236444
+    command_or_observation: >-
+      Inspect the deploy impact classes, selected builds, refresh trace, and
+      wait_for_sandbox_commit implementation for 83b1f594.
+    artifact_path: .github/workflows/ci.yml + .github/scripts/deploy-impact-classify
+    result: >-
+      All standard and race lanes passed. The deploy selected and activated only
+      the vmctl host package, intentionally skipped the sandbox package and guest
+      images, refreshed an active computer successfully, then waited for that guest
+      to report workflow commit 83b1f594. The guest correctly reported the installed
+      sandbox artifact cb694846, so the verifier timed out and recorded incomplete
+      deployment evidence. f2d1d330 introduced the unconditional workflow-SHA
+      comparison while the classifier still models vmctl and sandbox as independent
+      deployed artifacts.
+    uncertainty: >-
+      A refreshed guest must prove readiness and the identity of the sandbox artifact
+      actually selected for that deployment. Workflow-SHA equality remains mandatory
+      only when sandbox or the ordinary guest artifact was rebuilt from that SHA.
+    promotion_relevance: >-
+      Blocks exact-SHA deployment acceptance for the lifecycle repair without
+      falsifying its tests or host activation. The verifier must preserve artifact
+      identity boundaries before the staging lifecycle proof can resume.
 ```
 
 ## Active Red Mutation Ceremony
@@ -763,10 +789,11 @@ evidence_ledger:
 ```yaml
 active_red_mutation:
   conjecture_delta: >-
-    The lifecycle/retry hypotheses are superseded by deployed proof that sandbox
-    startup unconditionally replays populated relational `choir.run` rows into OG.
-    Wiring the existing per-kind emptiness gate will preserve first migration while
-    making subsequent boots independent of historical row count.
+    Completion-aware migration and listener-first startup repair guest readiness.
+    Per-VM operation serialization and generation-guarded failure transitions should
+    prevent a stale ensure from failing a newer healthy generation. Exact staging
+    proof is now gated by a deploy verifier that compares an unchanged sandbox
+    artifact to the workflow SHA during a vmctl-only boot-contract refresh.
   protected_surfaces:
     - Embedded Dolt runtime and objectgraph startup/migration.
     - Existing OG objects, including newer OG-only state that legacy SQL must not overwrite.
@@ -786,6 +813,8 @@ active_red_mutation:
       - Every boot replays populated legacy kinds, allowing historical run count to block readiness.
       - Concurrent platform ensures share one VM identity without an effective
         generation guard at the failure transition.
+      - Active-computer deployment verification collapses workflow identity into
+        sandbox artifact identity even when the sandbox artifact was not selected.
     introduced:
       - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
         SQL remains intact, so the risk is reversible but the completion claim is invalid.
@@ -796,6 +825,8 @@ active_red_mutation:
       - Partial migration is no longer collapsed into completion; successful passes
         receive durable markers and interrupted passes remain resumable.
       - Runtime recovery now completes and publishes :8085 before deferred migration.
+      - Same-identity VM lifecycle operations are serialized, different identities
+        remain concurrent, and stale process monitors cannot fail a replacement instance.
 ```
 
 ## Completion Semantics
@@ -855,13 +886,17 @@ Escalate to the human before implementing changes that:
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: live Node B observation 2026-07-10T18:30Z-19:31Z
+  last_checkpoint: failed exact-SHA staging deploy 2026-07-10T21:49Z-21:50Z
   current_artifact_state: >-
-    No code changes yet. Staging reproduces the loop: sourcecycled projections
-    trigger a platform guest boot, the guest reaches its runtime launcher but
-    never binds port 8085, vmctl times out after three minutes and kills/marks
-    the guest failed, and the next projection repeats the recovery.
-  what_shipped: []
+    Completion-aware background migration, listener-first launch ordering, and
+    same-identity VM lifecycle serialization are committed. 83b1f594 passed every
+    standard and race lane and its vmctl host package activated on Node B, but the
+    deployment was marked incomplete because the active-computer verifier demanded
+    workflow SHA 83b1f594 from the intentionally unchanged cb694846 sandbox artifact.
+  what_shipped:
+    - 94f6c744 completion-aware resumable OG migration with deferred-open support.
+    - cb694846 runtime recovery and listener publication before background migration.
+    - 83b1f594 per-VM lifecycle serialization and stale-instance failure guard.
   what_was_proven:
     - The loop is platform guest readiness/recovery churn, not a host daemon restart.
     - The guest never reaches cmd/sandbox's post-store runtime-topology log or HTTP listen.
@@ -888,19 +923,25 @@ run_checkpoint_and_resumption_state:
       after `rt.Start` and listener publication to avoid single-handle contention.
     - Fresh cb694846 proof confirms that ordering, then reveals a stale ensure for an
       older tap IP can kill the newer booted epoch by shared VM ID.
+    - 83b1f594 passes all CI and race lanes; its deploy verifier fails because a
+      vmctl-only refresh cannot make an unchanged sandbox artifact report that SHA.
   remaining_error_field:
-    - The platform computer is rebooting in a loop because its runtime never becomes ready.
+    - Exact-SHA deployment acceptance is incomplete because refreshed-guest identity
+      verification does not respect independently selected artifact identities.
+    - The lifecycle repair still needs an overlapping-resolve staging proof beyond
+      the three-minute stale-waiter horizon.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: stale platform ensure generation guard
+  highest_impact_remaining_uncertainty: deploy verifier artifact identity boundary
   next_executable_probe: >-
-    Trace vmmanager/vmctl epoch ownership through concurrent Boot/Recover/MarkFailed
-    calls. Connect an existing generation guard if present, or add a compare-and-set
-    failure transition so an older waiter cannot fail/kill the current platform VM.
+    Make refreshed-guest verification compare against the selected/installed sandbox
+    artifact identity, add a workflow contract regression test, then redeploy the
+    exact lifecycle-repair descendant and run overlapping platform resolves.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
     - CI run 29118850649 and Node B deploy job 86450906080 for c6b422bb.
     - CI run 29120219036 and Node B deploy job 86455558809 for e8dda030.
+    - CI run 29125293553 and failed Node B deploy job 86471236444 for 83b1f594.
   rollback_refs: []
 ```
 
