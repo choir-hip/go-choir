@@ -109,6 +109,7 @@ problem_cluster:
   - proxy health exposes mutable repository target identity, not immutable serving-binary identity
   - generic service health, including auth, exposes no compiled build identity
   - cmd/choir is not installed on Node B or guest images, yet its source falls through to the conservative full host plus both guest-image deploy class
+  - cmd/desktop is a separate Wails distribution module, but its native-only source also falls through to the full platform deploy class; only shared frontend changes belong to Node B
 root_cause:
   - deploy.env publishes the target SHA before service activation
   - buildinfo conflates compiled artifact identity with mutable deploy metadata
@@ -120,7 +121,8 @@ settlement_rule: >-
   release-target metadata advances only after successful activation; affected
   service identity is probed before product acceptance; an inverted deploy
   contract prevents a target SHA from masquerading as a serving binary SHA;
-  undistributed cmd/choir-only changes do not activate Node B or guest images.
+  undistributed cmd/choir-only and cmd/desktop-native-only changes do not
+  activate Node B or guest images.
 execution_effect: >-
   Health target identity alone is inadmissible for PC-1 or later settlement.
   Wait for the deploy job and affected service activation before repeating the
@@ -518,6 +520,33 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
   uncertainty: >-
     A later distribution package will need an explicit release lane; it must
     not silently inherit platform deployment semantics.
+- claim: native Wails source selects an unrelated full platform rollout.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: executable deploy-impact classifier
+  command_or_observation: >-
+    printf cmd/desktop/main.go, cmd/desktop/desktop_auth.go, and
+    frontend/src/lib/auth.js into .github/scripts/deploy-impact-classify
+  result: >-
+    Native desktop paths select host services, ordinary and Playwright guests,
+    vmctl restart, and active-VM refresh. The shared auth.js path separately
+    and correctly selects the frontend bundle.
+  uncertainty: >-
+    PC-7 must create an explicit macOS build/release lane; native desktop paths
+    cannot remain a generic ignored class after that lane exists.
+- claim: PC-0 landing is blocked by a pre-existing actor lost-wake race failure.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: CI race result; investigation pending
+  command_or_observation: >-
+    GitHub Actions run 29079492757, non-runtime race job 86318810189,
+    TestNoLostWakeUnderConcurrentSendsAndPassivations
+  result: >-
+    Standard and all four runtime race lanes passed. The actor test failed
+    after 26.24s with "timeout waiting for: every update processed"; the
+    aggregate gate then failed and staging deployment did not run.
+  uncertainty: >-
+    Focused repetition and scheduler/passivation call-graph review must decide
+    whether this is a real lost wake or suite-pressure timing failure before
+    any actor or timeout change. It is not attributed to PC-0 source.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
@@ -555,7 +584,9 @@ run_checkpoint_and_resumption_state:
     the auth deploy completed. The transient pre-activation proof remains the
     PC-0 problem record. The CLI timeout repair is green locally but held until
     deployment routing stops treating the undistributed CLI as a full
-    host-and-guest rollout.
+    host-and-guest rollout. PC-0 commit 94416899 is pushed but not deployed:
+    standard and runtime race CI passed, while a pre-existing actor lost-wake
+    race test blocked the aggregate gate and deploy.
   what_shipped:
     - 3f4f4aac API-key capability-envelope enforcement
     - eb3bdd35 false deployment identity problem record
@@ -568,6 +599,7 @@ run_checkpoint_and_resumption_state:
     - API-key delegation and sibling revocation are bounded by caller capability on staging
   unproven_or_partial_claims:
     - immutable per-service deployment identity
+    - actor lost-wake failure classification and PC-0 clean CI rerun
     - no Wails built-app acceptance
     - no deployed Autopaper duplicate count
     - no Base exact-byte two-device proof
