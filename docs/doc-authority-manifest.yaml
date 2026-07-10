@@ -67,6 +67,59 @@ documents:
       - doctrine_change
       - documentation_index_change
 
+  - path: docs/semantic-registry.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations:
+      doc_role: semantic_navigation
+      authority: derived_support
+      lifecycle: living
+    witnesses:
+      - docs/choir-doctrine.md
+      - docs/computer-ontology.md
+      - docs/runtime-invariants.md
+      - docs/texture-agentic-invariants-2026-06-13.md
+      - docs/source-external-data-publication.md
+    refresh_triggers:
+      - doctrine_change
+      - domain_contract_change
+      - semantic_registry_change
+
+  - path: docs/NOW.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: true
+    annotations:
+      doc_role: observed_current_state
+      authority: evidence_scoped
+      lifecycle: living
+    witnesses:
+      - docs/current-architecture.md
+      - docs/platform-os-app-state.md
+      - docs/definitions/documentation-authority-reduction-2026-07-09.md
+    refresh_triggers:
+      - staging_deploy
+      - staging_acceptance_change
+      - current_state_route_choice
+
+  - path: docs/ACTIVE.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations:
+      doc_role: active_work_navigation
+      authority: derived_support
+      lifecycle: living
+    witnesses:
+      - docs/mission-graph.yaml
+      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+      - docs/definitions/documentation-authority-reduction-2026-07-09.md
+    refresh_triggers:
+      - active_definition_change
+      - mission_graph_change
+      - work_authority_cutover
+
   - path: docs/choir-grip-checkpoint-2026-07-07.md
     claim_scope: narrative
     is_root: []
@@ -273,6 +326,24 @@ documents:
       - computer_version_route_change
       - mission_supersession_change
 
+  - path: docs/definitions/documentation-authority-reduction-2026-07-09.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations:
+      doc_role: definition
+      authority: mission
+      lifecycle: active
+    witnesses:
+      - docs/doc-authority-manifest.yaml
+      - docs/mission-graph.yaml
+      - cmd/doccheck/main.go
+      - docs/mission-beads-doctrine-delta-v0.md
+    refresh_triggers:
+      - documentation_index_change
+      - mission_graph_change
+      - doccheck_rule_change
+
   - path: docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md
     claim_scope: historical
     is_root: false
@@ -359,15 +430,6 @@ documents:
       authority: support
       lifecycle: archived
 
-  - path: docs/auth-passkey-info-pretext-problem-2026-05-30.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
   - path: docs/archive/choir-agentic-depth-canonical.md
     claim_scope: historical
     is_root: false
@@ -422,15 +484,6 @@ documents:
       authority: support
       lifecycle: archived
 
-  - path: docs/choir-global-wire-living-vtext-newsroom-spec-2026-06-07.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
   - path: docs/archive/choir-liquid-material-engine-design-v0.md
     claim_scope: historical
     is_root: false
@@ -459,15 +512,6 @@ documents:
       lifecycle: archived
 
   - path: docs/archive/choir-strategy-overview-2026-06-09.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/code-docs-reconciliation-2026-06-06.md
     claim_scope: historical
     is_root: false
     is_evidence: true
@@ -1241,15 +1285,6 @@ documents:
       authority: support
       lifecycle: archived
 
-  - path: docs/mission-wire-community-news-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
   - path: docs/archive/mission-wire-community-news-v1.md
     claim_scope: historical
     is_root: false
@@ -1502,33 +1537,6 @@ documents:
       authority: support
       lifecycle: archived
 
-  - path: docs/vtext-durable-version-number-problem-2026-06-05.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/vtext-publish-export-ux-and-docx-pdf-research-2026-06-04.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/vtext-publish-public-guest-ux-problem-2026-06-04.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
   - path: docs/archive/vtext-styleguide-source-theme-synthesis-2026-06-06.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
     claim_scope: historical
     is_root: false
@@ -1539,24 +1547,6 @@ documents:
       lifecycle: archived
 
   - path: docs/archive/vtext-styleguide-system-research-2026-06-06.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/vtext-user-draft-versioning-problem-2026-06-03.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/vtext-version-compare-merge-debuggability-spec.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
     claim_scope: historical
     is_root: false
     is_evidence: true
@@ -1591,4 +1581,3 @@ documents:
       doc_role: historical_evidence
       authority: support
       lifecycle: archived
-

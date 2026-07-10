@@ -3016,3 +3016,16 @@ nodes:
   - docs/archive/heresy-eradication-2026-07-07.md
   - docs/assessment-overall-state-2026-07-07.md
   - docs/definitions/substrate-independent-audited-computer-2026-07-04.md
+- id: documentation-authority-reduction-2026-07-09
+  title: Documentation Authority Reduction
+  path: docs/definitions/documentation-authority-reduction-2026-07-09.md
+  ledger: ''
+  status: working
+  kind: docs_truth
+  depends_on: []
+  enables: []
+  sources:
+  - docs/choir-doctrine.md
+  - AGENTS.md
+  - docs/mission-docs-truth-system-v1.md
+  - docs/mission-beads-doctrine-delta-v0.md

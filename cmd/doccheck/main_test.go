@@ -205,3 +205,72 @@ func hasWarningMessage(warnings []warning, needle string) bool {
 	}
 	return false
 }
+
+func TestValidateLiveReadPathAcceptsCompletePacket(t *testing.T) {
+	rep := completeLivePacketReport()
+	if failures := validateLiveReadPath(rep); len(failures) != 0 {
+		t.Fatalf("validateLiveReadPath() failures = %#v, want none", failures)
+	}
+}
+
+func TestValidateLiveReadPathRejectsMissingRouterLink(t *testing.T) {
+	rep := completeLivePacketReport()
+	rep.Edges = rep.Edges[1:]
+
+	failures := validateLiveReadPath(rep)
+	if len(failures) != 1 {
+		t.Fatalf("validateLiveReadPath() failure count = %d, want 1: %#v", len(failures), failures)
+	}
+	if failures[0].Rule != "L2" {
+		t.Fatalf("validateLiveReadPath() failure rule = %q, want L2", failures[0].Rule)
+	}
+}
+
+func completeLivePacketReport() report {
+	rep := report{}
+	for _, path := range defaultReadPacket {
+		doc := docInfo{
+			Path:        path,
+			Scope:       "current",
+			Manifested:  true,
+			Exists:      true,
+			Annotations: map[string]string{},
+		}
+		if path == "docs/definitions/og-dolt-heresy-completion-2026-07-08.md" {
+			doc.Annotations["doc_role"] = "definition"
+			doc.IsRoot = []string{"authority", "entry"}
+		}
+		rep.Documents = append(rep.Documents, doc)
+		if path != "docs/README.md" {
+			rep.Edges = append(rep.Edges, edge{From: "docs/README.md", To: path, Kind: "markdown"})
+		}
+	}
+	return rep
+}
+
+func TestScanBrokenCurrentDocLinksFindsMissingTarget(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(oldwd)
+	})
+	if err := os.MkdirAll("docs", 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("docs/current.md", []byte("[missing](gone.md)\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	warnings := scanBrokenCurrentDocLinks([]string{"docs/current.md"}, map[string]*docInfo{
+		"docs/current.md": {Path: "docs/current.md", Scope: "current", Manifested: true},
+	})
+	if len(warnings) != 1 || warnings[0].Rule != "R9" {
+		t.Fatalf("scanBrokenCurrentDocLinks() = %#v, want one R9 warning", warnings)
+	}
+}
