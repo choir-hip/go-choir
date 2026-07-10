@@ -266,6 +266,8 @@ type Manager struct {
 	mu       sync.RWMutex
 	vms      map[string]*VMInstance // vmID → instance
 	nextPort int                    // next host port to assign
+	opMu     sync.Mutex
+	vmOps    map[string]*sync.Mutex // serializes lifecycle operations per VM identity
 
 	// healthCancel is used to stop the background health checker.
 	healthCancel chan struct{}
@@ -286,8 +288,22 @@ func NewManager(cfg ManagerConfig) *Manager {
 	return &Manager{
 		cfg:      cfg,
 		vms:      make(map[string]*VMInstance),
+		vmOps:    make(map[string]*sync.Mutex),
 		nextPort: cfg.HostBasePort,
 	}
+}
+
+func (m *Manager) lockVMOperation(vmID string) func() {
+	m.opMu.Lock()
+	lock := m.vmOps[vmID]
+	if lock == nil {
+		lock = &sync.Mutex{}
+		m.vmOps[vmID] = lock
+	}
+	m.opMu.Unlock()
+
+	lock.Lock()
+	return lock.Unlock
 }
 
 func (m *Manager) guestAndHostIP(hostPort int) (guestIP, hostIP string) {
@@ -515,6 +531,12 @@ func (m *Manager) stop(stopVMs bool) {
 // Provider credentials are never included in the guest environment,
 // config files, or process arguments (VAL-VM-011).
 func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
+	unlock := m.lockVMOperation(cfg.VMID)
+	defer unlock()
+	return m.bootVM(cfg)
+}
+
+func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	m.mu.Lock()
 	locked := true
 	defer func() {
@@ -1050,6 +1072,20 @@ func (m *Manager) MarkFailed(vmID string) {
 	}
 }
 
+func (m *Manager) markInstanceFailed(vmID string, expected *VMInstance) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	current, ok := m.vms[vmID]
+	if !ok || current != expected {
+		log.Printf("vmmanager: ignored stale failure for VM %s", vmID)
+		return
+	}
+	current.State = StateFailed
+	current.Healthy = false
+	log.Printf("vmmanager: marked VM %s as failed", vmID)
+}
+
 // RecoverVM attempts to recover a failed VM by force-killing and
 // rebooting it. The persistent data is preserved so the user's state
 // survives recovery (VAL-VM-009, VAL-CROSS-116).
@@ -1061,6 +1097,9 @@ func (m *Manager) RecoverVM(vmID string) (*VMInstance, error) {
 }
 
 func (m *Manager) RecoverVMWithConfig(vmID string, overrides VMConfig) (*VMInstance, error) {
+	unlock := m.lockVMOperation(vmID)
+	defer unlock()
+
 	m.mu.Lock()
 	inst, ok := m.vms[vmID]
 	if !ok {
@@ -1082,7 +1121,7 @@ func (m *Manager) RecoverVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	m.mu.Unlock()
 
 	// Boot with the same config but new epoch.
-	return m.BootVM(cfg)
+	return m.bootVM(cfg)
 }
 
 // RefreshVM force-kills and reboots a VM onto the current manager boot
@@ -1095,6 +1134,9 @@ func (m *Manager) RefreshVM(vmID string) (*VMInstance, error) {
 }
 
 func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInstance, error) {
+	unlock := m.lockVMOperation(vmID)
+	defer unlock()
+
 	m.mu.Lock()
 	inst, ok := m.vms[vmID]
 	if !ok {
@@ -1108,7 +1150,7 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	cfg.VMID = vmID
 	m.mu.Unlock()
 
-	return m.BootVM(cfg)
+	return m.bootVM(cfg)
 }
 
 func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
@@ -1460,14 +1502,14 @@ func (m *Manager) launchFirecracker(vmID string, fcConfig map[string]interface{}
 		}
 
 		// Monitor the process in the background.
-		go func() {
+		go func(expected *VMInstance) {
 			err := cmd.Wait()
-			close(inst.done)
+			close(expected.done)
 			if err != nil {
 				log.Printf("vmmanager: firecracker process for VM %s exited with error: %v", vmID, err)
-				m.MarkFailed(vmID)
+				m.markInstanceFailed(vmID, expected)
 			}
-		}()
+		}(inst)
 	}
 
 	return nil

@@ -387,6 +387,67 @@ func TestManagerMarkFailed(t *testing.T) {
 	}
 }
 
+func TestMarkInstanceFailedIgnoresSupersededGeneration(t *testing.T) {
+	mgr := NewManager(DefaultManagerConfig())
+	old := &VMInstance{Config: VMConfig{VMID: "vm-generation"}, State: StateRunning, Healthy: true}
+	current := &VMInstance{Config: VMConfig{VMID: "vm-generation", Epoch: 2}, State: StateRunning, Healthy: true}
+	mgr.vms["vm-generation"] = current
+
+	mgr.markInstanceFailed("vm-generation", old)
+	if current.State != StateRunning || !current.Healthy {
+		t.Fatalf("stale generation changed current VM: state=%s healthy=%t", current.State, current.Healthy)
+	}
+
+	mgr.markInstanceFailed("vm-generation", current)
+	if current.State != StateFailed || current.Healthy {
+		t.Fatalf("current generation failure not applied: state=%s healthy=%t", current.State, current.Healthy)
+	}
+}
+
+func TestVMOperationLockSerializesSameIdentityOnly(t *testing.T) {
+	mgr := NewManager(DefaultManagerConfig())
+	unlockFirst := mgr.lockVMOperation("vm-shared")
+	firstLocked := true
+	defer func() {
+		if firstLocked {
+			unlockFirst()
+		}
+	}()
+
+	sameAcquired := make(chan struct{})
+	go func() {
+		unlock := mgr.lockVMOperation("vm-shared")
+		close(sameAcquired)
+		unlock()
+	}()
+
+	differentAcquired := make(chan struct{})
+	go func() {
+		unlock := mgr.lockVMOperation("vm-different")
+		close(differentAcquired)
+		unlock()
+	}()
+
+	select {
+	case <-differentAcquired:
+	case <-time.After(time.Second):
+		t.Fatal("different VM identity was unnecessarily serialized")
+	}
+	select {
+	case <-sameAcquired:
+		t.Fatal("same VM identity acquired operation lock concurrently")
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	unlockFirst()
+	firstLocked = false
+	select {
+	case <-sameAcquired:
+	case <-time.After(time.Second):
+		t.Fatal("same VM identity did not proceed after release")
+	}
+}
+
 func TestManagerForceKillVM(t *testing.T) {
 	mgr := NewManager(DefaultManagerConfig())
 
