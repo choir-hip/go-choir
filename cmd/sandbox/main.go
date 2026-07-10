@@ -42,11 +42,13 @@ func main() {
 	sandbox.RegisterRoutes(s, h)
 
 	filesRoot := sandbox.ResolveFilesRoot(os.Getenv("SANDBOX_FILES_ROOT"))
+	log.Printf("sandbox: startup phase=source-workspace-bootstrap status=starting")
 	if _, err := sandbox.BootstrapSourceWorkspace(filesRoot, sandbox.SourceWorkspaceOptions{
 		ComputerID: cfg.SandboxID,
 	}); err != nil {
 		log.Fatalf("sandbox: bootstrap source workspace: %v", err)
 	}
+	log.Printf("sandbox: startup phase=source-workspace-bootstrap status=complete")
 
 	// Initialize the singleton Super Console PTY handler. The PTY process is
 	// zot, not an interactive shell.
@@ -62,14 +64,18 @@ func main() {
 		log.Fatalf("sandbox: create store directory: %v", err)
 	}
 
+	log.Printf("sandbox: startup phase=dolt-maintenance status=starting")
 	if err := store.MaybeRunDoltGC(filepath.Dir(rtCfg.StorePath), rtCfg.StorePath); err != nil {
 		log.Printf("sandbox: dolt gc maintenance: %v", err)
 	}
+	log.Printf("sandbox: startup phase=dolt-maintenance status=complete")
 
+	log.Printf("sandbox: startup phase=runtime-store-open status=starting")
 	db, err := store.Open(rtCfg.StorePath)
 	if err != nil {
 		log.Fatalf("sandbox: open runtime store: %v", err)
 	}
+	log.Printf("sandbox: startup phase=runtime-store-open status=complete")
 	defer func() {
 		_ = db.Close()
 	}()

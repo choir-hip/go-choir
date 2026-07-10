@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -630,6 +631,7 @@ CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_win
 // legacy runtime SQLite database, its rows are imported into Dolt once and the
 // SQLite file is left in place as a rollback source.
 func Open(dbPath string) (*Store, error) {
+	log.Printf("store: open phase=prepare-path status=starting")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return nil, fmt.Errorf("runtime store: create directory: %w", err)
 	}
@@ -642,30 +644,37 @@ func Open(dbPath string) (*Store, error) {
 		freshStore = true
 		_ = os.RemoveAll(deriveTextureWorkspacePath(dbPath))
 	}
+	log.Printf("store: open phase=prepare-path status=complete fresh=%t", freshStore)
 
+	log.Printf("store: open phase=workspace-open status=starting")
 	db, workspacePath, connector, err := openTextureWorkspaceDB(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("runtime store: open unified Dolt workspace: %w", err)
 	}
+	log.Printf("store: open phase=workspace-open status=complete")
 
 	readDB := sql.OpenDB(connector)
 	configureEmbeddedDoltDB(readDB)
 
 	s := &Store{db: db, readDB: readDB, path: dbPath, texturePath: workspacePath, doltConnector: connector}
+	log.Printf("store: open phase=runtime-schema status=starting")
 	if err := s.bootstrap(); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap: %w", err)
 	}
+	log.Printf("store: open phase=runtime-schema status=complete")
 
 	// Initialize the object graph service on the same Dolt workspace.
 	// The og_objects/og_edges tables coexist with the relational tables
 	// during the Phase 3 migration; converted methods use the object
 	// graph while unconverted methods continue using SQL.
 	ogDoltStore := objectgraph.NewDoltStore(db)
+	log.Printf("store: open phase=objectgraph-schema status=starting")
 	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap object graph: %w", err)
 	}
+	log.Printf("store: open phase=objectgraph-schema status=complete")
 	s.ogStore = ogDoltStore
 	// Create a read-only DoltStore using the read connection pool so OG
 	// reads don't block during write transactions on the main connection.
@@ -677,25 +686,31 @@ func Open(dbPath string) (*Store, error) {
 	})
 
 	// Apply the texture schema to the embedded Dolt workspace.
+	log.Printf("store: open phase=texture-schema status=starting")
 	if err := s.EnsureTextureSchema(); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: bootstrap texture: %w", err)
 	}
+	log.Printf("store: open phase=texture-schema status=complete")
 
+	log.Printf("store: open phase=legacy-import status=starting")
 	if err := s.importLegacySQLiteRuntime(dbPath); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: import legacy sqlite: %w", err)
 	}
+	log.Printf("store: open phase=legacy-import status=complete")
 
 	// Backfill existing SQL rows into the object graph. Each kind is
 	// gated individually so only empty kinds are backfilled — this
 	// covers freshly-imported SQLite data and pre-existing Dolt stores
 	// that accumulated SQL rows during the Phase 3 dual-write period,
 	// while avoiding replaying stale SQL over newer OG writes.
+	log.Printf("store: open phase=objectgraph-backfill status=starting")
 	if err := s.backfillOGFromSQL(context.Background()); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
 	}
+	log.Printf("store: open phase=objectgraph-backfill status=complete")
 	s.markDoltHistoryDirty()
 
 	if freshStore {
