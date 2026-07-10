@@ -1414,6 +1414,16 @@ func TestTextureHistoryHasNativeDoltAuditCommits(t *testing.T) {
 		parentID = rev.RevisionID
 	}
 
+	started := time.Now()
+	history, err := s.GetHistory(ctx, doc.DocID, doc.OwnerID, 10)
+	latency := time.Since(started)
+	if err != nil {
+		t.Fatalf("GetHistory: %v", err)
+	}
+	if len(history) != 10 || history[0].RevisionID != "rev-native-history-25" {
+		t.Fatalf("native history page = %#v, want latest 10 revisions", history)
+	}
+
 	var commits int
 	if err := s.textureHandle().QueryRowContext(ctx, `
 		SELECT COUNT(DISTINCT commit_hash)
@@ -1424,18 +1434,24 @@ func TestTextureHistoryHasNativeDoltAuditCommits(t *testing.T) {
 	).Scan(&commits); err != nil {
 		t.Fatalf("query native Dolt history: %v", err)
 	}
-	if commits < revisionCount {
-		t.Fatalf("native Dolt audit commits = %d, want at least %d revision commits", commits, revisionCount)
+	if commits != 1 {
+		t.Fatalf("native Dolt audit commits = %d, want one batched history checkpoint", commits)
 	}
-
-	started := time.Now()
-	history, err := s.GetHistory(ctx, doc.DocID, doc.OwnerID, 10)
-	latency := time.Since(started)
-	if err != nil {
-		t.Fatalf("GetHistory: %v", err)
+	if _, err := s.GetHistory(ctx, doc.DocID, doc.OwnerID, 10); err != nil {
+		t.Fatalf("repeat GetHistory: %v", err)
 	}
-	if len(history) != 10 || history[0].RevisionID != "rev-native-history-25" {
-		t.Fatalf("native history page = %#v, want latest 10 revisions", history)
+	var commitsAfterRepeat int
+	if err := s.textureHandle().QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT commit_hash)
+		FROM dolt_history_og_objects
+		WHERE object_kind = ?
+		  AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id')) = ?`,
+		string(ogKindTexRev), doc.DocID,
+	).Scan(&commitsAfterRepeat); err != nil {
+		t.Fatalf("query repeated native Dolt history: %v", err)
+	}
+	if commitsAfterRepeat != commits {
+		t.Fatalf("repeat history read created commit: before=%d after=%d", commits, commitsAfterRepeat)
 	}
 	t.Logf("native Dolt history latest-10 latency across %d revisions: %s", revisionCount, latency)
 }

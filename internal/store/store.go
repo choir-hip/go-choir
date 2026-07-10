@@ -70,6 +70,7 @@ type Store struct {
 	jsonPatchMu              sync.Mutex
 	textureRevMu             sync.Mutex
 	doltCommitMu             sync.Mutex
+	doltHistoryDirty         bool
 	workerUpdateMu           sync.Mutex
 	channelMsgMu             sync.Mutex
 	eventMu                  sync.Mutex
@@ -107,14 +108,28 @@ func (s *Store) commitDoltCheckpoint(ctx context.Context, message string) error 
 
 	s.doltCommitMu.Lock()
 	defer s.doltCommitMu.Unlock()
+	if !s.doltHistoryDirty {
+		return nil
+	}
 
 	if _, err := s.textureHandle().ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message); err != nil {
 		if strings.Contains(err.Error(), "nothing to commit") {
+			s.doltHistoryDirty = false
 			return nil
 		}
 		return fmt.Errorf("runtime store: dolt checkpoint: %w", err)
 	}
+	s.doltHistoryDirty = false
 	return nil
+}
+
+func (s *Store) markDoltHistoryDirty() {
+	if s == nil {
+		return
+	}
+	s.doltCommitMu.Lock()
+	s.doltHistoryDirty = true
+	s.doltCommitMu.Unlock()
 }
 
 // schemaDDL creates the runtime tables if they do not already exist.
@@ -681,10 +696,7 @@ func Open(dbPath string) (*Store, error) {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
 	}
-	if err := s.commitDoltCheckpoint(context.Background(), "vm state checkpoint after startup schema and backfill"); err != nil {
-		_ = s.Close()
-		return nil, err
-	}
+	s.markDoltHistoryDirty()
 
 	if freshStore {
 		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {

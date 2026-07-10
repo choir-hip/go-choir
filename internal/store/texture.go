@@ -251,10 +251,7 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 		_ = s.Close()
 		return nil, fmt.Errorf("texture workspace: backfill OG: %w", err)
 	}
-	if err := s.commitDoltCheckpoint(context.Background(), "vm state checkpoint after texture startup schema and backfill"); err != nil {
-		_ = s.Close()
-		return nil, err
-	}
+	s.markDoltHistoryDirty()
 	return s, nil
 }
 
@@ -533,7 +530,8 @@ func (s *Store) CreateDocument(ctx context.Context, doc types.Document) error {
 	if err := s.CreateTextureDocumentOG(ctx, doc); err != nil {
 		return err
 	}
-	return s.commitDoltCheckpoint(ctx, fmt.Sprintf("vm state checkpoint after texture document %s creation", doc.DocID))
+	s.markDoltHistoryDirty()
+	return nil
 }
 
 // GetDocument returns the document with the given doc ID, scoped to the
@@ -980,10 +978,8 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 		s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
 		return fmt.Errorf("update texture document head: %w", err)
 	}
-	return s.commitDoltCheckpoint(ctx, fmt.Sprintf(
-		"vm state checkpoint after texture revision %s by %s %s",
-		rev.RevisionID, rev.AuthorKind, strings.TrimSpace(rev.AuthorLabel),
-	))
+	s.markDoltHistoryDirty()
+	return nil
 }
 
 // PatchRevisionMetadata merges patch into an existing revision's metadata_json.
@@ -1027,7 +1023,8 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 	if err := s.CreateTextureRevisionOG(ctx, rev); err != nil {
 		return err
 	}
-	return s.commitDoltCheckpoint(ctx, fmt.Sprintf("vm state checkpoint after texture revision %s metadata update", rev.RevisionID))
+	s.markDoltHistoryDirty()
+	return nil
 }
 
 // GetRevision returns the revision with the given revision ID, scoped to
@@ -1106,6 +1103,9 @@ func (s *Store) GetHistory(ctx context.Context, docID, ownerID string, limit int
 	}
 	if doc.CurrentRevisionID == "" {
 		return []types.HistoryEntry{}, nil
+	}
+	if err := s.commitDoltCheckpoint(ctx, fmt.Sprintf("vm state checkpoint before texture history read for %s", docID)); err != nil {
+		return nil, err
 	}
 
 	type revisionSnapshot struct {
