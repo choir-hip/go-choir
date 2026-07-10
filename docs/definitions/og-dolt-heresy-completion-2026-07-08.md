@@ -493,12 +493,12 @@ execution_effect: >-
   M3.1. Rollback ref is d6ce587d.
 ```
 
-### M3.1b. H010 post-write email forcing deletion — TESTING
+### M3.1b. H010 post-write email forcing deletion — SETTLED
 
 ```yaml
 id: post-write-email-forcing-deletion
 kind: conjecture
-status: testing
+status: proven
 source: choir-doctrine H010 + Phase B M3.1
 problem: >-
   After a Texture write succeeds, `requiredContinuationAfterTextureEdit` parses
@@ -526,15 +526,21 @@ local_evidence:
   - both initial-user and grounded-worker write contracts prove no email continuation fields are synthesized
   - direct typed request_email_draft creation and sanitization contracts remain green
   - all 338 standard runtime tests pass across four local shards; focused race and go vet pass
+deployed_evidence:
+  - CI run 29075852884 passed all standard/race gates and deployed fd492b912b77639fc06143f55f05787fafa2a4f4 to Node B
+  - real-passkey Texture loop 8c6cb802-84b3-4684-9a8f-b0e9ab10c405 accepted old-parser-shaped inert email prose and produced appagent revision 5c2e7279-b331-47cd-b1fc-ca2d2cf5175b
+  - proof document 8b457c2b-e066-45f6-b910-05b002e287e9 was deleted successfully
 rollback_ref: 73657a8f
 heresy_delta:
   discovered:
     - H010 post-write prose parser directly executes request_email_draft
   introduced: []
-  repaired: []
+  repaired:
+    - H010 post-write prose parser and direct request_email_draft executor
 execution_effect: >-
-  Problem documentation preceded the deletion. No H010 repair claim until the
-  red landing loop is green; rollback remains 73657a8f.
+  The post-write H010 site is repaired at the deletion/inverted-test/deployed
+  product bar. The broader H010/H024/H026 family remains open and report-only;
+  rollback remains 73657a8f.
 ```
 
 ## Determined State Snapshot (2026-07-08)
@@ -585,7 +591,7 @@ determined_state:
       execution_effect: M3.1a is settled; M3.1 continues with the H009/H010 forcing cluster.
     - claim: Texture still parses prompt/document prose after a canonical write and directly executes request_email_draft.
       source: observed (`executeTextureEditTool` → `requiredContinuationAfterTextureEdit` → `extractEmailDraftIntent`, 2026-07-10)
-      execution_effect: M3.1b is ready; delete the superseded branch before broad H009/H010 work.
+      execution_effect: M3.1b is settled by deletion, inverted tests, CI, Node B identity, and a deployed Texture proof; broader H010/H024/H026 work remains.
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
@@ -1016,6 +1022,28 @@ Per the definition skill. Specific bindings:
     repaired:
       - H011 narrative role-word policy oracle
       - H012 narrative execution-word policy oracle
+- claim: M3.1b deletes the post-write prose parser and direct Email draft executor while preserving the typed request_email_draft contract.
+  definition_node: post-write-email-forcing-deletion
+  evidence_class: deletion diff + inverted/direct-tool tests + deployed product proof
+  command_or_observation: >-
+    go test ./internal/runtime -run
+    'Test(EditTextureEmailProseDoesNotForceEmailAppagentContinuation|GroundedEmailArtifactDoesNotForceEmailAppagentContinuation|TextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun)'
+    -count=1; PARALLEL_SHARDS=1 scripts/go-test-runtime-shards; focused -race;
+    go vet; CI run 29075852884; Node B /health; real-passkey staging
+    create/revision/revise/poll/delete probe.
+  result: >-
+    495 net lines removed; both old forcing cases now return only stored revision
+    data; direct typed draft creation remains green. CI passed, Node B reported
+    fd492b91, and deployed Texture loop 8c6cb802-84b3-4684-9a8f-b0e9ab10c405
+    produced appagent revision 5c2e7279-b331-47cd-b1fc-ca2d2cf5175b before
+    proof cleanup.
+  uncertainty: broader H010/H024/H026 detector family remains report-only and contains mechanical/typed candidates that require classification.
+  heresy_delta:
+    discovered:
+      - H010 post-write prose parser directly executed request_email_draft
+    introduced: []
+    repaired:
+      - H010 post-write prose parser and direct request_email_draft executor
 - claim: Plan-review consensus round 2026-07-08 (4/4 panelists returned; gpt55 output empty/failed-silently) adjudicated. Confirmed blockers, all fixed in this document — D-STORES file mapping was inverted (world-wire store is internal/platform/objectgraph_store.go, not internal/objectgraph/dolt_store.go); D-PROMO had ignored the prior 2026-07-07 experiment (adapter comment + two test files), whose falsification is diagnosed as a connection-pooling artifact (checkout ran on one pooled conn, queries on others; pinned-conn variant reportedly isolates correctly) — settlement pulled into Phase A with a -count=10 determinism bar; completion criterion 3 gained a falsified-D-PROMO fallback clause; Phases B–E gained explicit exit bars; gate adjudication must be committed as auditable evidence; supersession must be machine-readable (C5 expanded to mission-graph superseded nodes + doc-authority-manifest entries for all three docs).
   definition_node: seam, embedded-branch-isolation, dolt-store-taxonomy, phase-gate-protocol
   evidence_class: external second opinion (panel) + observed (repo re-verification of B1/B2; diag test re-run showing pooled-connection checkout non-stick; Phase A -count=10 determinism test run 2026-07-09)
@@ -1102,7 +1130,7 @@ logs.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: D-HISTORY and M3.1a role-keyword oracle deletion settled on staging
+  last_checkpoint: D-HISTORY, M3.1a, and M3.1b settled on staging
   current_artifact_state: >-
     Phase A deliverables committed and exit gate cleared: W1 detector manifest +
     CI discovery job (including the I4 destructive-rollback guard), W2 proxy/vmctl
@@ -1121,7 +1149,9 @@ run_checkpoint_and_resumption_state:
     deletes the production H011/H012 substring oracles, preserves structured
     intent/agentic affordances, and promotes that detector family to deployed
     zero enforcement. CI, Node B identity, and a real-passkey narrative-word
-    Texture revision are green.
+    Texture revision are green. M3.1b also removes the post-write email prose
+    parser/direct executor while retaining the typed Email appagent handoff;
+    its full red landing loop and inert-email-prose staging revision are green.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -1132,6 +1162,7 @@ run_checkpoint_and_resumption_state:
     - P-TRIAGE past-mission open-edge triage table
     - D-HISTORY dirty-batch native Texture history (b7f512f2)
     - M3.1a H011/H012 role-keyword oracle deletion and detector enforcement (82839687)
+    - M3.1b H010 post-write email forcing/parser deletion (fd492b91)
   what_was_proven:
     - seam status of the two Red commits (observed, grep-verified)
     - timeout invariant violation (observed) and fix (staging 504)
@@ -1140,6 +1171,7 @@ run_checkpoint_and_resumption_state:
     - all past-mission open edges triaged (absorbed/external/retired)
     - native Texture history reads committed dolt_history snapshots through bounded AS OF queries; staging history returned the exact two-revision parent chain in 29.8ms
     - H011/H012 production branches are absent and zero-enforced; staging Texture loop d562f055-b21a-4678-93f4-79cabcb11796 accepted narrative role words and produced appagent revision 62dc25fd-37d2-4569-924b-a6f004a3a979
+    - Texture writes no longer parse prose or directly create Email drafts; the typed request_email_draft boundary remains green and staging loop 8c6cb802-84b3-4684-9a8f-b0e9ab10c405 produced revision 5c2e7279-b331-47cd-b1fc-ca2d2cf5175b
   unproven_or_partial_claims:
     - Dolt engineering verification axes: history latency/correctness,
       batching/throughput, rollback recovery, build friction, and replication
@@ -1157,11 +1189,13 @@ run_checkpoint_and_resumption_state:
     - this Definition's adjudicated evidence ledger
     - https://github.com/choir-hip/go-choir/actions/runs/29072918594
     - https://github.com/choir-hip/go-choir/actions/runs/29074494439
+    - https://github.com/choir-hip/go-choir/actions/runs/29075852884
   rollback_refs:
     - a703bf44 (pre-mission docs state)
     - f1e2d7a3 (pre-D-HISTORY behavior state)
     - 1870452c (superseded eager-checkpoint implementation)
     - d6ce587d (pre-M3.1a behavior state)
+    - 73657a8f (pre-M3.1b behavior state)
 ```
 
 ## Suggested Goal String
