@@ -138,7 +138,7 @@ agent --print [OPTIONS] [prompt...]
 Runner contract:
 
 ```bash
-agent --print --output-format text --mode ask --trust --workspace "$CWD" "$PROMPT"
+agent --print --output-format text --mode ask --trust --force --approve-mcps --workspace "$CWD" "$PROMPT"
 ```
 
 Optional model override:
@@ -151,6 +151,8 @@ Notes:
 
 - `--mode ask` is read-only Q&A style.
 - `--trust` suppresses headless workspace trust prompts.
+- `--force` automatically approves all commands/permissions.
+- `--approve-mcps` automatically approves all MCP servers.
 - `--workspace` points Cursor at the review/planning root.
 
 ### opencode CLI
