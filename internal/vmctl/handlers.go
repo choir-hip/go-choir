@@ -1004,6 +1004,12 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package path is not a directory"})
 		return
 	}
+	artifactBuild, err := sandboxRuntimeBuildInfo(root)
+	if err != nil {
+		log.Printf("vmctl: sandbox runtime build manifest: %v", err)
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package build manifest is invalid"})
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/x-tar")
 	w.Header().Set("Content-Disposition", `attachment; filename="go-choir-sandbox-runtime.tar"`)
@@ -1014,10 +1020,43 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	if err := writeRuntimePackageTar(tw, root, buildinfo.Snapshot("vmctl"), runtimePackageServiceEnv(r)); err != nil {
+	if err := writeRuntimePackageTar(tw, root, artifactBuild, runtimePackageServiceEnv(r)); err != nil {
 		log.Printf("vmctl: stream runtime package from %s: %v", root, err)
 		return
 	}
+}
+
+type runtimePackageBuildManifest struct {
+	SchemaVersion int    `json:"schema_version"`
+	Artifact      string `json:"artifact"`
+	Version       string `json:"version"`
+	Commit        string `json:"commit"`
+	BuiltAt       string `json:"built_at"`
+}
+
+func sandboxRuntimeBuildInfo(root string) (buildinfo.Info, error) {
+	path := filepath.Join(root, "share", "go-choir", "build.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return buildinfo.Info{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	var manifest runtimePackageBuildManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return buildinfo.Info{}, fmt.Errorf("decode %s: %w", path, err)
+	}
+	manifest.Artifact = strings.TrimSpace(manifest.Artifact)
+	manifest.Version = strings.TrimSpace(manifest.Version)
+	manifest.Commit = strings.TrimSpace(manifest.Commit)
+	manifest.BuiltAt = strings.TrimSpace(manifest.BuiltAt)
+	if manifest.SchemaVersion != 1 || manifest.Artifact != "sandbox" || manifest.Commit == "" {
+		return buildinfo.Info{}, fmt.Errorf("manifest must identify a schema-v1 sandbox artifact with a commit")
+	}
+	return buildinfo.Info{
+		Service: "sandbox",
+		Version: manifest.Version,
+		Commit:  manifest.Commit,
+		BuiltAt: manifest.BuiltAt,
+	}, nil
 }
 
 // HandleSandboxProxy resolves the live sandbox URL and reverse-proxies the request.

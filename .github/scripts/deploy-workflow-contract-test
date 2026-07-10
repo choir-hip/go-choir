@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+workflow="$root/.github/workflows/ci.yml"
+
+require() {
+  local pattern="$1"
+  if ! grep -Fq -- "$pattern" "$workflow"; then
+    echo "deploy workflow contract missing: $pattern" >&2
+    exit 1
+  fi
+}
+
+reject() {
+  local pattern="$1"
+  if grep -Fq -- "$pattern" "$workflow"; then
+    echo "deploy workflow contract forbids: $pattern" >&2
+    exit 1
+  fi
+}
+
+require 'DEPLOY_COMMIT: ${{ github.sha }}'
+require 'git fetch --no-tags origin "$DEPLOY_COMMIT"'
+require 'git reset --hard "$DEPLOY_COMMIT"'
+require 'x-choir-build-commit:'
+require 'deploy-receipt.json'
+require 'Refusing to publish an activation receipt with no verified artifacts'
+require 'deploy-failures'
+require 'verify_artifact_manifest'
+reject 'git reset --hard origin/main'
+reject 'fast_build_host_service'
+reject 'active computer refresh failed; continuing'
+
+identity_line=$(grep -nF 'selected service build identity mismatch' "$workflow" | cut -d: -f1)
+receipt_line=$(grep -nF 'Published activation receipt' "$workflow" | cut -d: -f1)
+if [ -z "$identity_line" ] || [ -z "$receipt_line" ] || [ "$receipt_line" -le "$identity_line" ]; then
+  echo "activation receipt must be published after selected-service identity verification" >&2
+  exit 1
+fi
+
+# Keep the EXIT-trap artifact default valid JSON. A malformed parameter
+# expansion here silently suppresses the very failure evidence it should write.
+receipt_artifacts='{}'
+artifacts_json="${receipt_artifacts:-"{}"}"
+jq -n --argjson artifacts "$artifacts_json" '{observed_artifacts: $artifacts}' |
+  jq -e '.observed_artifacts == {}' >/dev/null
+
+echo "deploy workflow contract tests passed"

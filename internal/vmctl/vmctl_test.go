@@ -858,6 +858,11 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(pkgDir, "share", "go-choir", "skills", "SKILL.md"), []byte("skill"), 0o644); err != nil {
 		t.Fatalf("write skill: %v", err)
 	}
+	const sandboxCommit = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	manifest := `{"schema_version":1,"artifact":"sandbox","version":"0.1.0","commit":"` + sandboxCommit + `","built_at":"2026-07-10T12:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(pkgDir, "share", "go-choir", "build.json"), []byte(manifest), 0o644); err != nil {
+		t.Fatalf("write build manifest: %v", err)
+	}
 	handler.SetSandboxRuntimePackageDir(pkgDir)
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
@@ -896,11 +901,32 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 	if entries["share/go-choir/skills/SKILL.md"] != "skill" {
 		t.Fatalf("skills entry = %q", entries["share/go-choir/skills/SKILL.md"])
 	}
-	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WORKER_REPO_BASE_SHA=") ||
-		!strings.Contains(env, "CHOIR_DEPLOYED_COMMIT=") ||
+	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WORKER_REPO_BASE_SHA="+sandboxCommit) ||
+		!strings.Contains(env, "CHOIR_DEPLOYED_COMMIT="+sandboxCommit) ||
 		!strings.Contains(env, "RUNTIME_WIRE_PUBLISH_URL=http://10.203.154.1:8082") ||
 		!strings.Contains(env, "RUNTIME_CORPUSD_URL=http://10.203.154.1:8082") {
 		t.Fatalf("runtime env missing deployment/service refs: %q", env)
+	}
+}
+
+func TestHandler_RuntimePackageRejectsMissingSandboxBuildManifest(t *testing.T) {
+	handler := NewHandler(NewOwnershipRegistry("http://127.0.0.1:8085"))
+	pkgDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(pkgDir, "bin"), 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "bin", "sandbox"), []byte("sandbox-binary"), 0o755); err != nil {
+		t.Fatalf("write sandbox: %v", err)
+	}
+	handler.SetSandboxRuntimePackageDir(pkgDir)
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/vmctl/runtime-package/sandbox", nil)
+	req.Header.Set("X-Internal-Caller", "true")
+	rr := httptest.NewRecorder()
+	handler.HandleRuntimePackage(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d body=%s", rr.Code, http.StatusServiceUnavailable, rr.Body.String())
 	}
 }
 

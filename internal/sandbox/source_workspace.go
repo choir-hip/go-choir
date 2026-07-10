@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 )
 
 const sourceLineageSchemaVersion = 1
@@ -94,6 +96,7 @@ func sourceWorkspaceProjection(root, sourceRoot string, opts SourceWorkspaceOpti
 	ownerID := firstNonEmptySourceWorkspace(opts.OwnerID, os.Getenv("CHOIR_OWNER_ID"))
 	desktopID := firstNonEmptySourceWorkspace(opts.DesktopID, os.Getenv("CHOIR_DESKTOP_ID"), "primary")
 	baseCommit := firstNonEmptySourceWorkspace(
+		compiledSourceWorkspaceCommit(),
 		os.Getenv("CHOIR_DEPLOYED_COMMIT"),
 		os.Getenv("CHOIR_BUILD_SHA"),
 		os.Getenv("RUNTIME_WORKER_REPO_BASE_SHA"),
@@ -136,6 +139,14 @@ func sourceWorkspaceProjection(root, sourceRoot string, opts SourceWorkspaceOpti
 		LastVerifiedAt:          time.Now().UTC(),
 		LineagePath:             filepath.Join(root, ".choir", "source-lineage.json"),
 	}
+}
+
+func compiledSourceWorkspaceCommit() string {
+	commit := strings.TrimSpace(buildinfo.Commit)
+	if commit == "" || commit == "local" {
+		return ""
+	}
+	return commit
 }
 
 func writeSourceLineageProjection(projection SourceWorkspaceProjection) error {

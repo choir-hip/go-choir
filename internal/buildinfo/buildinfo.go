@@ -1,8 +1,10 @@
 package buildinfo
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
+	"time"
 )
 
 // These values are filled by release builds through Go ldflags. Local builds
@@ -40,29 +42,63 @@ func Snapshot(service string) Info {
 	}
 }
 
-func deployMetadata() (string, string) {
-	deployedAt := os.Getenv("CHOIR_DEPLOYED_AT")
-	deployedCommit := os.Getenv("CHOIR_DEPLOYED_COMMIT")
+type deployReceipt struct {
+	SchemaVersion int                              `json:"schema_version"`
+	TargetCommit  string                           `json:"target_commit"`
+	ActivatedAt   string                           `json:"activated_at"`
+	Artifacts     map[string]deployReceiptArtifact `json:"artifacts"`
+}
 
-	path := strings.TrimSpace(os.Getenv("CHOIR_DEPLOY_ENV_PATH"))
+type deployReceiptArtifact struct {
+	Commit string `json:"commit"`
+	Status string `json:"status"`
+}
+
+func deployMetadata() (string, string) {
+	path := strings.TrimSpace(os.Getenv("CHOIR_DEPLOY_RECEIPT_PATH"))
 	if path == "" {
-		path = "/var/lib/go-choir/deploy.env"
+		path = "/var/lib/go-choir/deploy-receipt.json"
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return deployedAt, deployedCommit
+		return "", ""
 	}
-	for _, line := range strings.Split(string(data), "\n") {
-		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
-		if !ok {
+	var receipt deployReceipt
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		return "", ""
+	}
+	activatedAt := strings.TrimSpace(receipt.ActivatedAt)
+	targetCommit := strings.TrimSpace(receipt.TargetCommit)
+	if receipt.SchemaVersion != 1 || !isFullCommit(targetCommit) || len(receipt.Artifacts) == 0 {
+		return "", ""
+	}
+	if _, err := time.Parse(time.RFC3339, activatedAt); err != nil {
+		return "", ""
+	}
+	verified := false
+	for _, artifact := range receipt.Artifacts {
+		if strings.TrimSpace(artifact.Commit) != targetCommit {
 			continue
 		}
-		switch key {
-		case "CHOIR_DEPLOYED_AT":
-			deployedAt = value
-		case "CHOIR_DEPLOYED_COMMIT":
-			deployedCommit = value
+		switch strings.TrimSpace(artifact.Status) {
+		case "active", "installed":
+			verified = true
 		}
 	}
-	return deployedAt, deployedCommit
+	if !verified {
+		return "", ""
+	}
+	return activatedAt, targetCommit
+}
+
+func isFullCommit(commit string) bool {
+	if len(commit) != 40 {
+		return false
+	}
+	for _, r := range commit {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
 }

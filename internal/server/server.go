@@ -32,6 +32,7 @@ type healthResponse struct {
 type Server struct {
 	serviceName string
 	httpServer  *http.Server
+	handler     http.Handler
 	mux         *http.ServeMux
 	addr        string
 	// listener is written by Start (in the Start goroutine) and read by Addr
@@ -65,6 +66,28 @@ const (
 	defaultIdleTimeout       = 120 * time.Second
 )
 
+const (
+	// BuildCommitHeader exposes the immutable commit compiled into the process.
+	// Deployment acceptance uses this header because service-specific health
+	// bodies are intentionally free to report different operational details.
+	BuildCommitHeader  = "X-Choir-Build-Commit"
+	BuildServiceHeader = "X-Choir-Build-Service"
+)
+
+// WithBuildIdentity adds immutable process identity to every response from a
+// service. This keeps identity independent of custom health response schemas
+// and of mutable deployment metadata.
+func WithBuildIdentity(serviceName string, next http.Handler) http.Handler {
+	if next == nil {
+		next = http.NotFoundHandler()
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(BuildCommitHeader, buildinfo.Commit)
+		w.Header().Set(BuildServiceHeader, serviceName)
+		next.ServeHTTP(w, r)
+	})
+}
+
 // NewServer creates a new Server for the given service name and port.
 // The port should be a string like "8081". Use PortFromEnv to resolve
 // the port from an environment variable with a default.
@@ -94,9 +117,10 @@ func NewServer(serviceName, port string) *Server {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		s.healthHandler(w, r)
 	})
+	s.handler = WithBuildIdentity(serviceName, mux)
 	s.httpServer = &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           s.handler,
 		ReadHeaderTimeout: ReadHeaderTimeoutFromEnv(),
 		ReadTimeout:       ReadTimeoutFromEnv(),
 		WriteTimeout:      WriteTimeoutFromEnv(),
@@ -128,7 +152,7 @@ func (s *Server) Handle(pattern string, handler http.Handler) {
 // ServeHTTP exposes the server mux for package tests and in-process callers
 // that need to exercise the registered route table without binding a port.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mux.ServeHTTP(w, r)
+	s.handler.ServeHTTP(w, r)
 }
 
 // SetUnixSocket configures an additional Unix domain socket listener.
