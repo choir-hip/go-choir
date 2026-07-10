@@ -71,42 +71,43 @@
         in
           if pkgs.lib.hasPrefix prefix full then pkgs.lib.removePrefix prefix full else full;
 
-      goServiceSrc = { subPackage, internalDirs, includeSkills ? false }:
+      # Keep source selection structural. Go owns the package dependency graph;
+      # repeating it here as per-service internalDirs caused fallback builds to
+      # omit new transitive imports that normal Go builds already understood.
+      goServiceSrc = { subPackage, includeSkills ? false }:
         pkgs.lib.cleanSourceWith {
           src = ./.;
           filter = path: type:
             let
+              full = toString path;
               rel = relPath path;
-              base = baseNameOf path;
-              isGoSource = pkgs.lib.hasSuffix ".go" path && !(pkgs.lib.hasSuffix "_test.go" path);
-              isSourceContractSchema = rel == "internal/sourcecontract/source_contract_schema.json";
-              inInternalDir = dir:
-                pkgs.lib.hasPrefix (dir + "/") rel && (isGoSource || isSourceContractSchema);
+              isProductionFile = !(pkgs.lib.hasSuffix "_test.go" path);
+              isRelevantDirectory =
+                full == rootPath ||
+                rel == "cmd" ||
+                rel == subPackage ||
+                pkgs.lib.hasPrefix (subPackage + "/") rel ||
+                rel == "internal" ||
+                pkgs.lib.hasPrefix "internal/" rel ||
+                (includeSkills && (rel == "skills" || pkgs.lib.hasPrefix "skills/" rel));
             in
-              type == "directory" ||
-              (base == "go.mod") ||
-              (base == "go.sum") ||
-              (pkgs.lib.hasPrefix (subPackage + "/") rel && isGoSource) ||
-              (pkgs.lib.any inInternalDir internalDirs) ||
-              (pkgs.lib.elem "internal/runtime" internalDirs &&
-                (
-                  (pkgs.lib.hasInfix "/internal/runtime/prompt_defaults/" path &&
-                    (pkgs.lib.hasSuffix ".yaml" path || pkgs.lib.hasSuffix ".md" path)) ||
-                  (pkgs.lib.hasInfix "/internal/runtime/textureprompts/" path &&
-                    pkgs.lib.hasSuffix ".yaml" path) ||
-                  (pkgs.lib.hasInfix "/internal/runtime/runtimeprompts/" path &&
-                    pkgs.lib.hasSuffix ".yaml" path)
-                )) ||
+              (type == "directory" && isRelevantDirectory) ||
+              (rel == "go.mod") ||
+              (rel == "go.sum") ||
+              (pkgs.lib.hasPrefix (subPackage + "/") rel && isProductionFile) ||
+              (pkgs.lib.hasPrefix "internal/" rel && isProductionFile) ||
               (includeSkills && pkgs.lib.hasInfix "/skills/" path && pkgs.lib.hasSuffix "SKILL.md" path);
         };
 
       # Common buildGoModule args for all Go services
       commonGoArgs = {
-        vendorHash = pkgs.lib.fakeHash; # default, not used by any service directly
+        vendorHash = "sha256-JxOGfaZ3J71NVicFEhn1Vsgy5nOa1Sk74gQ0oroAhLA=";
         nativeBuildInputs = [ pkgs.pkg-config ];
         buildInputs = [ pkgs.icu ];
         ldflags = [
           "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Version=${goModuleVersion}"
+          "-X github.com/yusefmosiah/go-choir/internal/buildinfo.Commit=${buildCommit}"
+          "-X github.com/yusefmosiah/go-choir/internal/buildinfo.BuiltAt=${buildDate}"
         ];
         doCheck = false; # Tests run separately in CI
       };
@@ -197,19 +198,21 @@
       };
 
       # Build a single Go service binary
-      mkGoService = { pname, subPackage, internalDirs, includeSkills ? false, vendorHash ? commonGoArgs.vendorHash }:
+      mkGoService = { pname, subPackage, includeSkills ? false }:
         pkgs.buildGoModule (commonGoArgs // {
           inherit pname;
           version = goModuleVersion;
-          inherit vendorHash;
-          src = goServiceSrc { inherit subPackage internalDirs includeSkills; };
+          src = goServiceSrc { inherit subPackage includeSkills; };
           subPackages = [ subPackage ];
-        } // pkgs.lib.optionalAttrs includeSkills {
           postInstall = ''
-            if [ -d skills ]; then
+            mkdir -p $out/share/go-choir
+            cat > $out/share/go-choir/build.json <<'EOF'
+            {"schema_version":1,"artifact":"${pname}","version":"${goModuleVersion}","commit":"${buildCommit}","built_at":"${buildDate}"}
+            EOF
+            ${pkgs.lib.optionalString includeSkills ''
               mkdir -p $out/share/go-choir/skills
               cp -R skills/. $out/share/go-choir/skills/
-            fi
+            ''}
           '';
         });
 
@@ -218,210 +221,38 @@
         auth = mkGoService {
           pname = "auth";
           subPackage = "cmd/auth";
-          vendorHash = "sha256-QrspfxtHqlTaQKVhkQKxYeoFF5TXmC21Mf5N3lLjwHg=";
-          internalDirs = [
-            "internal/auth"
-            "internal/server"
-          ];
         };
         proxy = mkGoService {
           pname = "proxy";
           subPackage = "cmd/proxy";
-          vendorHash = "sha256-RK7qe8KB4EvjDVOhEj5jALOQcLcH7B9pwNUeuB4dl5s=";
-          internalDirs = [
-            "internal/auth"
-            "internal/buildinfo"
-            "internal/markdownstructure"
-            "internal/objectgraph"
-            "internal/persistentdisk"
-            "internal/platform"
-            "internal/proxy"
-            "internal/server"
-            "internal/sourcecontract"
-            "internal/store"
-            "internal/texturedoc"
-            "internal/types"
-            "internal/vmctl"
-            "internal/wirepublish"
-          ];
         };
         maild = mkGoService {
           pname = "maild";
           subPackage = "cmd/maild";
-          vendorHash = "sha256-E3klM1YpHjPhf2Zn+e/1JxzghFAal7o2DuLTSKP/H8g=";
-          internalDirs = [
-            "internal/buildinfo"
-            "internal/maild"
-            "internal/server"
-          ];
         };
         maildctl = mkGoService {
           pname = "maildctl";
           subPackage = "cmd/maildctl";
-          vendorHash = "sha256-E3klM1YpHjPhf2Zn+e/1JxzghFAal7o2DuLTSKP/H8g=";
-          internalDirs = [
-            "internal/maild"
-            "internal/server"
-          ];
         };
         vmctl = mkGoService {
           pname = "vmctl";
           subPackage = "cmd/vmctl";
-          vendorHash = "sha256-E3klM1YpHjPhf2Zn+e/1JxzghFAal7o2DuLTSKP/H8g=";
-          internalDirs = [
-            "internal/buildinfo"
-            "internal/server"
-            "internal/vmctl"
-            "internal/vmmanager"
-          ];
         };
         gateway = mkGoService {
           pname = "gateway";
           subPackage = "cmd/gateway";
-          vendorHash = "sha256-YyAcn3sytf8hoLJXCyatpwSx+QD/fiV/DXx+s+PaAak=";
-          internalDirs = [
-            "internal/agentprofile"
-            "internal/base/blob"
-            "internal/base/journal"
-            "internal/base/model"
-            "internal/base/tree"
-            "internal/buildinfo"
-            "internal/capsule"
-            "internal/computerversion"
-            "internal/events"
-            "internal/gateway"
-            "internal/gatewayruntime"
-            "internal/health"
-            "internal/llmcost"
-            "internal/markdownstructure"
-            "internal/modelcatalog"
-            "internal/objectgraph"
-            "internal/persistentdisk"
-            "internal/provider"
-            "internal/provideriface"
-            "internal/qdrant"
-            "internal/runtime"
-            "internal/sandbox"
-            "internal/server"
-            "internal/sourceapi"
-            "internal/sourcecontract"
-            "internal/sourcefetch"
-            "internal/sourcegraph"
-            "internal/sources"
-            "internal/store"
-            "internal/texturedoc"
-            "internal/toolregistry"
-            "internal/pii"
-            "internal/trace"
-            "internal/types"
-            "internal/vmctl"
-            "internal/wire/processorkey"
-            "internal/wirepublish"
-          ];
         };
         corpusd = mkGoService {
           pname = "corpusd";
           subPackage = "cmd/corpusd";
-          vendorHash = "sha256-Brp+PtHUcw1pk++J2MRibuRB63lBhPEwAMNiap5wMAo=";
-          internalDirs = [
-            "internal/buildinfo"
-            "internal/markdownstructure"
-            "internal/objectgraph"
-            "internal/platform"
-            "internal/server"
-            "internal/sourcecontract"
-            "internal/texturedoc"
-          ];
         };
         sourcecycled = mkGoService {
           pname = "sourcecycled";
           subPackage = "cmd/sourcecycled";
-          vendorHash = "sha256-YyAcn3sytf8hoLJXCyatpwSx+QD/fiV/DXx+s+PaAak=";
-          internalDirs = [
-            "internal/agentprofile"
-            "internal/base/blob"
-            "internal/base/journal"
-            "internal/base/model"
-            "internal/base/tree"
-            "internal/buildinfo"
-            "internal/capsule"
-            "internal/computerversion"
-            "internal/cycle"
-            "internal/events"
-            "internal/gatewayruntime"
-            "internal/health"
-            "internal/llmcost"
-            "internal/markdownstructure"
-            "internal/modelcatalog"
-            "internal/objectgraph"
-            "internal/persistentdisk"
-            "internal/provider"
-            "internal/provideriface"
-            "internal/qdrant"
-            "internal/runtime"
-            "internal/sandbox"
-            "internal/server"
-            "internal/sourceapi"
-            "internal/sourcecontract"
-            "internal/sourcefetch"
-            "internal/sourcegraph"
-            "internal/sources"
-            "internal/store"
-            "internal/texturedoc"
-            "internal/toolregistry"
-            "internal/pii"
-            "internal/trace"
-            "internal/types"
-            "internal/vmctl"
-            "internal/wire/processorkey"
-            "internal/wirepublish"
-          ];
         };
         sandbox = mkGoService {
           pname = "sandbox";
           subPackage = "cmd/sandbox";
-          vendorHash = "sha256-YyAcn3sytf8hoLJXCyatpwSx+QD/fiV/DXx+s+PaAak=";
-          internalDirs = [
-            "internal/actor"
-            "internal/actorruntime"
-            "internal/apihandler"
-            "internal/agentprofile"
-            "internal/base/blob"
-            "internal/base/journal"
-            "internal/base/model"
-            "internal/base/tree"
-            "internal/buildinfo"
-            "internal/capsule"
-            "internal/computerversion"
-            "internal/events"
-            "internal/gatewayruntime"
-            "internal/health"
-            "internal/llmcost"
-            "internal/markdownstructure"
-            "internal/modelcatalog"
-            "internal/objectgraph"
-            "internal/persistentdisk"
-            "internal/provideriface"
-            "internal/qdrant"
-            "internal/runtime"
-            "internal/sandbox"
-            "internal/server"
-            "internal/sourceapi"
-            "internal/sourcecontract"
-            "internal/sourcefetch"
-            "internal/sourcegraph"
-            "internal/sources"
-            "internal/store"
-            "internal/texturedoc"
-            "internal/toolregistry"
-            "internal/pii"
-            "internal/trace"
-            "internal/types"
-            "internal/vmctl"
-            "internal/wire/processorkey"
-            "internal/wirepublish"
-            "internal/zot"
-          ];
           includeSkills = true;
         };
         frontend = frontendPkg;
@@ -469,6 +300,9 @@
         cp ${guestBootDisk} $out/rootfs.ext4
         cp ${guestInitrd}/${vmConfig.system.boot.loader.initrdFile} $out/initrd
         cp ${guestStoreDisk} $out/storedisk.erofs
+        cat > $out/build.json <<'EOF'
+{"schema_version":1,"artifact":"${name}","version":"${goModuleVersion}","commit":"${buildCommit}","built_at":"${buildDate}"}
+EOF
         cat > $out/kernel-params <<'EOF'
 ${builtins.concatStringsSep " " vmConfig.microvm.kernelParams}
 EOF

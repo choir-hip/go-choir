@@ -6,7 +6,22 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 )
+
+func TestSourceWorkspaceUsesCompiledCommitBeforeDeploymentEnvironment(t *testing.T) {
+	originalCommit := buildinfo.Commit
+	buildinfo.Commit = "ffffffffffffffffffffffffffffffffffffffff"
+	t.Cleanup(func() { buildinfo.Commit = originalCommit })
+	t.Setenv("CHOIR_DEPLOYED_COMMIT", "stale-deploy-target")
+	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", "stale-runtime-target")
+
+	projection := sourceWorkspaceProjection(t.TempDir(), t.TempDir(), SourceWorkspaceOptions{})
+	if projection.PlatformBaseCommit != buildinfo.Commit {
+		t.Fatalf("PlatformBaseCommit = %q, want compiled commit %q", projection.PlatformBaseCommit, buildinfo.Commit)
+	}
+}
 
 func TestBootstrapSourceWorkspaceCreatesRootsAndLineage(t *testing.T) {
 	root := t.TempDir()

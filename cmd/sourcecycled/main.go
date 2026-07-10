@@ -21,6 +21,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/cycle"
 	"github.com/yusefmosiah/go-choir/internal/health"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
@@ -425,6 +426,29 @@ func firstEnv(keys ...string) string {
 }
 
 func startSourceServiceAPI(ctx context.Context, store cycle.Store) *http.Server {
+	httpServer := &http.Server{
+		Addr:              sourceServiceAddr(),
+		Handler:           sourceServiceAPIHandler(store),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(shutdownCtx)
+	}()
+	go func() {
+		log.Printf("Source Service API listening on %s", httpServer.Addr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Source Service API stopped with error: %v", err)
+			return
+		}
+		log.Println("Source Service API stopped.")
+	}()
+	return httpServer
+}
+
+func sourceServiceAPIHandler(store cycle.Store) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
@@ -436,26 +460,7 @@ func startSourceServiceAPI(ctx context.Context, store cycle.Store) *http.Server 
 	// existing /internal/source-service/* routes.
 	mux.HandleFunc("/health", health.LivenessHandler("sourcecycled"))
 	mux.HandleFunc("/health/ready", health.ReadinessHandler("sourcecycled", health.NewAggregator("sourcecycled", 5*time.Second)))
-	server := &http.Server{
-		Addr:              sourceServiceAddr(),
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = server.Shutdown(shutdownCtx)
-	}()
-	go func() {
-		log.Printf("Source Service API listening on %s", server.Addr)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("Source Service API stopped with error: %v", err)
-			return
-		}
-		log.Println("Source Service API stopped.")
-	}()
-	return server
+	return server.WithBuildIdentity("sourcecycled", mux)
 }
 
 func handleSourceServiceHealth(store cycle.Store) http.HandlerFunc {

@@ -90,7 +90,7 @@ test('deployed SPA cache policy keeps shell fresh and assets immutable', async (
   expect(assetCache).toContain('immutable');
 });
 
-test('deployed frontend build identity matches proxy health identity', async ({
+test('deployed frontend and proxy expose independent build identities', async ({
   page,
 }) => {
   await page.goto(DEPLOYED_ORIGIN);
@@ -101,6 +101,7 @@ test('deployed frontend build identity matches proxy health identity', async ({
     return {
       frontend: window.__CHOIR_BUILD__,
       health,
+      proxyCommitHeader: healthRes.headers.get('x-choir-build-commit'),
       staleScripts: Array.from(document.scripts)
         .map((script) => script.getAttribute('src') || '')
         .filter((src) => src.includes('/src/')),
@@ -109,7 +110,7 @@ test('deployed frontend build identity matches proxy health identity', async ({
 
   expect(identity.frontend?.commit).toBeTruthy();
   expect(identity.health?.build?.commit).toBeTruthy();
-  expect(identity.frontend.commit).toBe(identity.health.build.commit);
+  expect(identity.proxyCommitHeader).toBe(identity.health.build.commit);
   expect(identity.staleScripts).toHaveLength(0);
 });
 

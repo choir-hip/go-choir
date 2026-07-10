@@ -45,6 +45,38 @@ func TestHealthHandler(t *testing.T) {
 	}
 }
 
+func TestServeHTTPAddsImmutableBuildIdentityToCustomHealth(t *testing.T) {
+	s := NewServer("custom-service", "8099")
+	s.SetHealthHandler(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"custom"}`))
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, req)
+
+	if got := w.Header().Get(BuildCommitHeader); got != buildinfo.Commit {
+		t.Fatalf("%s = %q, want %q", BuildCommitHeader, got, buildinfo.Commit)
+	}
+	if got := w.Header().Get(BuildServiceHeader); got != "custom-service" {
+		t.Fatalf("%s = %q, want custom-service", BuildServiceHeader, got)
+	}
+}
+
+func TestWithBuildIdentityHandlesNilNext(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/missing", nil)
+	w := httptest.NewRecorder()
+	WithBuildIdentity("identity-only", nil).ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+	if got := w.Header().Get(BuildCommitHeader); got != buildinfo.Commit {
+		t.Fatalf("%s = %q, want %q", BuildCommitHeader, got, buildinfo.Commit)
+	}
+}
+
 func TestHealthHandlerIncludesAddrAfterStart(t *testing.T) {
 	s := NewServer("test-addr-service", "0")
 

@@ -15,10 +15,28 @@ import (
 	"time"
 
 	embedded "github.com/dolthub/driver"
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/cycle"
+	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
 )
+
+func TestSourceServiceAPIHandlerAddsBuildIdentity(t *testing.T) {
+	store := newTestCycleStorage(t)
+	defer store.Close()
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	sourceServiceAPIHandler(store).ServeHTTP(rec, req)
+
+	if got := rec.Header().Get(server.BuildCommitHeader); got != buildinfo.Commit {
+		t.Fatalf("%s = %q, want %q", server.BuildCommitHeader, got, buildinfo.Commit)
+	}
+	if got := rec.Header().Get(server.BuildServiceHeader); got != "sourcecycled" {
+		t.Fatalf("%s = %q, want sourcecycled", server.BuildServiceHeader, got)
+	}
+}
 
 // newTestCycleStorage creates an embedded Dolt-backed cycle.Store for
 // sourcecycled tests, mirroring the platform package's openTestPlatformStore.

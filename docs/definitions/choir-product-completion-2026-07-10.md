@@ -86,12 +86,12 @@ Initial rollback ref: `224243de`.
 
 ## Definition Graph
 
-### PC-0. Deployment identity follows activation — OPEN, P0
+### PC-0. Deployment identity follows activation — SETTLED, P0
 
 ```yaml
 id: deployment-identity-follows-activation
 kind: boundary
-status: testing
+status: settled
 source: observed staging acceptance 2026-07-10
 definition: >-
   A service health response distinguishes the immutable commit compiled into
@@ -104,29 +104,43 @@ problem: >-
   overwrites the binary Commit field with that mutable file value. During CI
   run 29078163452, proxy /health reported 3f4f4aac while the deploy job was
   still in progress and the auth service still served the pre-repair API-key
-  handler: a read-only key minted an admin child with HTTP 201.
+  handler: a read-only key minted an admin child with HTTP 201. During the
+  rerun of CI run 29079492757 for commit 94416899, the deploy host fetched and
+  reset to the then-current origin/main commit b0b6d8af instead of the tested
+  workflow commit. The auth fast build then fell back to Nix, whose
+  service-specific source filter omitted internal/buildinfo even though
+  internal/server now imports it. Deployment failed before activation.
 problem_cluster:
   - proxy health exposes mutable repository target identity, not immutable serving-binary identity
   - generic service health, including auth, exposes no compiled build identity
+  - the deploy job tests one immutable workflow commit but Node B independently selects a moving branch tip
+  - fast and Nix fallback builds use separate source/dependency declarations and inject different build identity fields
+  - vmctl stamps its own process build identity into the separately built sandbox runtime package
+  - deployed-origin acceptance requires frontend and proxy compiled commits to be equal even though differential deployments intentionally advance them independently
   - cmd/choir is not installed on Node B or guest images, yet its source falls through to the conservative full host plus both guest-image deploy class
   - cmd/desktop is a separate Wails distribution module, but its native-only source also falls through to the full platform deploy class; only shared frontend changes belong to Node B
 root_cause:
   - deploy.env publishes the target SHA before service activation
   - buildinfo conflates compiled artifact identity with mutable deploy metadata
+  - the remote checkout trusts origin/main rather than the immutable workflow SHA that passed CI
+  - the auth Nix source filter does not carry internal/server's internal/buildinfo dependency and common Nix ldflags omit Commit and BuiltAt
+  - a global cross-component equality assertion substitutes for selected-component activation receipts
+  - runtime-package generation inherits vmctl identity instead of consuming a sandbox artifact manifest
   - the landing loop treated proxy-global identity as proof for an affected auth service
   - path fallback substitutes repository-wide deployment for an explicit artifact dependency map
 protected_surfaces: [deployment routing, run acceptance, service build identity]
 settlement_rule: >-
-  Compiled service commit remains immutable and independently observable;
+  Node B builds exactly the workflow commit that passed CI; compiled service
+  commit remains immutable and independently observable;
   release-target metadata advances only after successful activation; affected
   service identity is probed before product acceptance; an inverted deploy
   contract prevents a target SHA from masquerading as a serving binary SHA;
   undistributed cmd/choir-only and cmd/desktop-native-only changes do not
   activate Node B or guest images.
 execution_effect: >-
-  Health target identity alone is inadmissible for PC-1 or later settlement.
-  Wait for the deploy job and affected service activation before repeating the
-  product proof, then repair this boundary before the next identity-only claim.
+  Product acceptance names the affected artifact's compiled identity and a
+  completed activation receipt. Mutable target metadata, another component's
+  commit, or an in-progress deployment remains inadmissible.
 ```
 
 ### PC-1. API-key capability delegation — SETTLED, P0
@@ -693,7 +707,7 @@ surface expansion.
 
 ```yaml
 variant:
-  false_deploy_identity_paths: 1
+  false_deploy_identity_paths: 0
   reachable_auth_boundary_failures: 1
   false_promotion_success_paths: 1
   cli_product_contract_failures: 2
@@ -832,6 +846,123 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     scoping decision, durable conflict/ack store, or ArtifactProgramRef resolver
     has been implemented or proven. Local fixture routes are not deployed
     service ownership.
+- claim: the actor race failure was a non-reproducing timing anomaly, and the rerun exposed two deployment authorities.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: same-SHA CI rerun + deploy log + source/build call graph
+  command_or_observation: >-
+    GitHub Actions run 29079492757 attempt 2; deploy job 86324338577;
+    focused TestNoLostWakeUnderConcurrentSendsAndPassivations race repetition;
+    flake.nix auth source filter and commonGoArgs; .github/workflows/ci.yml
+    remote checkout
+  result: >-
+    The actor lane passed on the same SHA without an actor or timeout change.
+    The deploy step then reset /opt/go-choir to origin/main at b0b6d8af rather
+    than workflow SHA 94416899. Selected auth deployment fell back from the
+    host fast build to Nix and failed because the filtered source omitted
+    internal/buildinfo, now imported by internal/server. The Nix common
+    ldflags also set Version only, unlike the fast build's Version, Commit,
+    and BuiltAt. No service was activated by this failed deploy.
+  uncertainty: >-
+    Repair must pin checkout to the workflow SHA, wire the existing buildinfo
+    dependency into the auth package, and make both build paths compile the
+    same identity fields before staging acceptance is admissible.
+- claim: deployed-origin acceptance pressures independent component identities back into one false global identity.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: executable Playwright contract + differential deploy classifier
+  command_or_observation: >-
+    frontend/tests/deployed-origin-auth-shell.spec.js requires
+    window.__CHOIR_BUILD__.commit to equal proxy /health build.commit, while
+    .github/scripts/deploy-impact-classify permits frontend-only and
+    service-only activation.
+  result: >-
+    The equality can only remain universally true if mutable deployment
+    metadata overwrites compiled identity or unrelated components are
+    needlessly redeployed. Both outcomes violate PC-0. Frontend and proxy must
+    expose their own immutable identities; a deploy receipt must compare the
+    workflow SHA only with components selected and activated by that run.
+  uncertainty: >-
+    The repaired deployed-origin test can prove identity presence and internal
+    proxy header/body consistency, but selected-component equality belongs to
+    the deploy workflow rather than a timeless cross-component browser test.
+- claim: the sandbox runtime package inherits vmctl identity instead of carrying its own artifact identity.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: source call graph
+  command_or_observation: >-
+    internal/vmctl/handlers.go passes buildinfo.Snapshot("vmctl") to
+    writeRuntimePackageTar and projects that commit into choir-runtime.env as
+    RUNTIME_WORKER_REPO_BASE_SHA.
+  result: >-
+    One artifact claims another process's identity. A vmctl rebuild can change
+    the runtime-package commit even when the installed sandbox artifact did
+    not change, and a sandbox-only package change has no independent manifest
+    authority.
+  uncertainty: >-
+    This PC-0 repair records but does not yet replace the package contract.
+    The follow-up must create a sandbox manifest at build/install time and have
+    vmctl transport that manifest without re-authoring its identity.
+- claim: one shared vendor checksum still materializes one vendor output per service derivation.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: Nix derivation graph + independently generated vendor trees
+  command_or_observation: >-
+    Evaluate all nine Go service derivations and generate the filtered vendor
+    tree for auth, sourcecycled, and sandbox.
+  result: >-
+    All filtered trees converge on
+    sha256-JxOGfaZ3J71NVicFEhn1Vsgy5nOa1Sk74gQ0oroAhLA=, but buildGoModule
+    creates a pname-specific go-modules derivation for each service. The
+    identical vendor tree is about 354 MiB, or roughly 3.2 GiB across a cold
+    nine-service build before Nix store optimization.
+  uncertainty: >-
+    This is a deployment cost, not an identity correctness blocker. A later
+    build-graph slice should expose one shared vendored source or one
+    multi-binary derivation without collapsing per-service activation and
+    rollback pointers.
+- claim: PC-0 is settled by exact-source build, selected-artifact verification, and an activation receipt.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: full CI + exact-SHA deploy log + inverted in-progress probe + public staging acceptance
+  command_or_observation: >-
+    GitHub Actions run 29083767049 and deploy job 86334471531 for
+    f2d1d330c532e164bd21cdc1c013fcbe370c5404; GET https://choir.news/health;
+    GET https://choir.news/auth/session; inspect the served frontend asset.
+  result: >-
+    All standard and five race lanes passed. Node B fetched and reset to the
+    workflow SHA, and the one Nix builder completed the selected closure in
+    344 seconds. During activation, proxy already served compiled/header
+    commit f2d1d330 while deployed_commit remained empty; it advanced only
+    after verification. The durable receipt names ordinary_guest active,
+    playwright_guest installed, sandbox and one active computer active, all
+    seven host services active, and frontend asset index-CDCcbfLL.js active,
+    every one at f2d1d330. Public proxy health then reported compiled commit,
+    header commit, and deployed_commit all equal to f2d1d330; auth independently
+    reported its service/header commit, and the served frontend asset embedded
+    the same selected commit.
+  verifier_contracts:
+    - .github/scripts/deploy-workflow-contract-test
+    - internal/buildinfo activation-receipt validation
+    - internal/server immutable identity middleware
+    - sandbox runtime build manifest and active-computer commit poll
+  acceptance_level: deployed selected-artifact activation receipt plus public product identity proof
+  accepted_deploy_id: "29083767049/1"
+  rollback_refs:
+    - /var/lib/go-choir/deploy-receipt-previous.json
+    - /var/lib/go-choir/services/<service>-previous
+    - /var/www/go-choir/frontend-previous
+    - /nix/var/nix/profiles/system
+  mutation_class: red
+  protected_surfaces: [deployment routing, service identity, guest activation, run acceptance]
+  heresy_delta:
+    discovered: [moving-main checkout, dual builders, handwritten dependency closures, cross-component identity equality, inherited sandbox identity, nonfatal refresh]
+    introduced: []
+    repaired: [moving-main checkout, dual builders, handwritten dependency closures, cross-component identity equality, inherited sandbox identity, nonfatal refresh]
+  conjecture_delta: >-
+    Deployment truth is not one repository-wide SHA assertion. It is one
+    immutable tested source commit projected into independently observable
+    selected artifacts, followed by a receipt only after those artifacts meet
+    their activation class.
+  residual_risk: >-
+    Identical 354 MiB vendor trees remain separately materialized per service;
+    a later build-graph optimization must preserve the settled identity and
+    per-service rollback boundaries.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
@@ -863,18 +994,18 @@ SyncService, or one published Texture is not completion.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: transient false deployment identity observed during CI run 29078163452
+  last_checkpoint: PC-0 exact-SHA selected-artifact activation receipt accepted on staging
   current_artifact_state: >-
     API-key delegation commit 3f4f4aac is active and accepted on staging after
-    the auth deploy completed. The transient pre-activation proof remains the
-    PC-0 problem record. The CLI timeout repair is green locally but held until
-    deployment routing stops treating the undistributed CLI as a full
-    host-and-guest rollout. PC-0 commit 94416899 is pushed but not deployed:
-    standard and runtime race CI passed, while a pre-existing actor lost-wake
-    race test blocked the aggregate gate and deploy.
+    the auth deploy completed. PC-0 is settled at f2d1d330: run 29083767049
+    built exactly its tested SHA through one Nix path, verified host, guest,
+    active-computer, and frontend identities, then published receipt
+    29083767049/1. The prepared CLI, Wails, promotion-definition, and Autopaper
+    slices remain local pending integration onto this deployed base.
   what_shipped:
     - 3f4f4aac API-key capability-envelope enforcement
     - eb3bdd35 false deployment identity problem record
+    - f2d1d330 exact-SHA single-builder selected-artifact activation receipts
   what_was_proven:
     - CLI trajectories read works on staging
     - CLI timeout hides the server's bounded 504
@@ -884,19 +1015,18 @@ run_checkpoint_and_resumption_state:
     - the current Base desktop path and 26,380-line unused contract tower are adapters/deletion candidates, not kernel authority
     - proxy-global deployed_commit is not affected-service activation proof
     - API-key delegation and sibling revocation are bounded by caller capability on staging
+    - compiled identity is visible before and independent from activation receipt metadata
+    - every selected artifact in deploy 29083767049 has an explicit verified receipt entry
   unproven_or_partial_claims:
-    - immutable per-service deployment identity
-    - actor lost-wake failure classification and PC-0 clean CI rerun
     - no Wails built-app acceptance
     - no deployed Autopaper duplicate count
     - no Base exact-byte two-device proof
     - no served ComputerVersion promotion
-  highest_impact_remaining_uncertainty: immutable per-service deployment identity
+  highest_impact_remaining_uncertainty: typed Autopaper retry idempotency and served route-slot promotion authority
   next_executable_probe: >-
-    Repair PC-0 so compiled service identity is never overwritten by mutable
-    deploy target metadata, expose identity on affected service health, and
-    stop classifying cmd/choir-only changes as full Node B/guest rollouts. Then
-    land and stage-time the prepared CLI timeout slice.
+    Integrate the prepared local slices onto f2d1d330. Finish the typed
+    Autopaper retry idempotency boundary, then land/stage the CLI timeout and
+    Wails containment slices under exact selected-artifact receipts.
   suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
@@ -904,4 +1034,5 @@ run_checkpoint_and_resumption_state:
   rollback_refs:
     - 224243de (pre-program source state)
     - b7f689d4 (pre-API-key behavior repair)
+    - f2d1d330 deployment receipt rollback paths named in the PC-0 evidence entry
 ```
