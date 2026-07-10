@@ -86,6 +86,41 @@ Initial rollback ref: `224243de`.
 
 ## Definition Graph
 
+### PC-0. Deployment identity follows activation — OPEN, P0
+
+```yaml
+id: deployment-identity-follows-activation
+kind: boundary
+status: testing
+source: observed staging acceptance 2026-07-10
+definition: >-
+  A service health response distinguishes the immutable commit compiled into
+  the serving binary from the release target selected by the deploy. The
+  release target cannot become accepted deployment identity before the
+  affected services are installed, restarted, and healthy.
+problem: >-
+  The Node B workflow writes CHOIR_DEPLOYED_COMMIT immediately after checkout,
+  before selected service builds and activation. buildinfo.Snapshot then
+  overwrites the binary Commit field with that mutable file value. During CI
+  run 29078163452, proxy /health reported 3f4f4aac while the deploy job was
+  still in progress and the auth service still served the pre-repair API-key
+  handler: a read-only key minted an admin child with HTTP 201.
+root_cause:
+  - deploy.env publishes the target SHA before service activation
+  - buildinfo conflates compiled artifact identity with mutable deploy metadata
+  - the landing loop treated proxy-global identity as proof for an affected auth service
+protected_surfaces: [deployment routing, run acceptance, service build identity]
+settlement_rule: >-
+  Compiled service commit remains immutable and independently observable;
+  release-target metadata advances only after successful activation; affected
+  service identity is probed before product acceptance; an inverted deploy
+  contract prevents a target SHA from masquerading as a serving binary SHA.
+execution_effect: >-
+  Health target identity alone is inadmissible for PC-1 or later settlement.
+  Wait for the deploy job and affected service activation before repeating the
+  product proof, then repair this boundary before the next identity-only claim.
+```
+
 ### PC-1. API-key capability delegation — OPEN, P0
 
 ```yaml
@@ -346,6 +381,7 @@ surface expansion.
 
 ```yaml
 variant:
+  false_deploy_identity_paths: 1
   reachable_auth_boundary_failures: 2
   false_promotion_success_paths: 1
   cli_product_contract_failures: 2
@@ -359,13 +395,15 @@ target:
 
 ## Execution Order
 
-1. PC-1 API-key capability delegation.
-2. PC-2 Wails token containment.
-3. PC-3 CLI timeout and staging acceptance.
-4. PC-4 promotion truth gate through the OG Definition.
-5. PC-6 Autopaper single activation.
-6. PC-5 Base exact-byte/stable-identity kernel.
-7. PC-7 Wails package/acceptance lane, then authorized Base/File Provider UI.
+1. Finish PC-1 API-key capability delegation against the fully activated auth
+   service; do not accept proxy-global health identity as sufficient proof.
+2. PC-0 deployment identity truth repair.
+3. PC-2 Wails token containment.
+4. PC-3 CLI timeout and staging acceptance.
+5. PC-4 promotion truth gate through the OG Definition.
+6. PC-6 Autopaper single activation.
+7. PC-5 Base exact-byte/stable-identity kernel.
+8. PC-7 Wails package/acceptance lane, then authorized Base/File Provider UI.
 
 The order may change only when new evidence changes blast radius or unlocks a
 strictly safer dependency. Base and File Provider wiring may not jump PC-5.
@@ -392,6 +430,21 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
   evidence_class: code-level call graph + existing positive test
   result: read-only Bearer may create arbitrary valid-scope child key and revoke sibling keys
   uncertainty: staging exploit was not executed because source proof is sufficient and mutation is unsafe
+- claim: proxy health target identity can precede affected-service activation.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: deployed staging timing + source call graph
+  command_or_observation: >-
+    CI run 29078163452 in progress; https://choir.news/health reported
+    deployed_commit 3f4f4aac; immediate ephemeral API-key negative proof
+  result: >-
+    Read-only Bearer created an admin child with HTTP 201 while the selected
+    auth service deploy was still in progress. All three uniquely labelled
+    proof keys, including the unexpected admin child, were revoked. Workflow
+    writes deploy.env before builds; buildinfo.Snapshot replaces compiled
+    Commit with the mutable deployed target.
+  uncertainty: >-
+    The same negative proof must be repeated after the deploy job completes to
+    distinguish the transient activation window from an auth packaging defect.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
@@ -423,34 +476,39 @@ SyncService, or one published Texture is not completion.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: source/staging audit at 224243de
+  last_checkpoint: transient false deployment identity observed during CI run 29078163452
   current_artifact_state: >-
-    The API-key delegation repair is green locally but unlanded. Current
-    evidence also records Wails token exposure, a CLI timeout mismatch, false
-    promotion success, a broken Base synchronization kernel, and duplicate
-    Autopaper activation.
+    API-key delegation commit 3f4f4aac is pushed; standard CI lanes are green
+    and Node B deployment is still in progress. Proxy health advertised that
+    target before auth activation, and the old handler allowed a controlled
+    read-only escalation. Ephemeral proof keys were revoked. The CLI timeout
+    repair is green locally but deliberately uncommitted behind this problem
+    record.
   what_shipped: []
   what_was_proven:
     - CLI trajectories read works on staging
     - CLI timeout hides the server's bounded 504
     - current source contains reachable API-key and Wails secret-boundary failures
     - Base and Autopaper gaps are substrate/control-path defects, not missing UI alone
+    - proxy-global deployed_commit is not affected-service activation proof
   unproven_or_partial_claims:
-    - API-key delegation CI/deploy/staging proof
+    - API-key delegation after completed auth activation
+    - immutable per-service deployment identity
     - no Wails built-app acceptance
     - no deployed Autopaper duplicate count
     - no Base exact-byte two-device proof
     - no served ComputerVersion promotion
-  highest_impact_remaining_uncertainty: API-key delegation deployed enforcement
+  highest_impact_remaining_uncertainty: API-key enforcement after auth service activation
   next_executable_probe: >-
-    Commit and push the API-key capability-envelope repair, require auth/proxy
-    standard and race CI green, verify Node B identity, then prove on staging
-    that a read-only Bearer cannot mint or revoke sibling authority while an
-    explicitly delegated manager can mint only a subset key.
+    Wait for CI run 29078163452 and its Node B deploy job to complete, verify the
+    affected service has activated, then repeat the ephemeral denial/subset
+    matrix and cleanup. Record PC-1 separately before committing the prepared
+    CLI timeout slice. Repair the deployment identity boundary next.
   suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
     - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
   rollback_refs:
     - 224243de (pre-program source state)
+    - b7f689d4 (pre-API-key behavior repair)
 ```
