@@ -105,28 +105,34 @@ problem: >-
   run 29078163452, proxy /health reported 3f4f4aac while the deploy job was
   still in progress and the auth service still served the pre-repair API-key
   handler: a read-only key minted an admin child with HTTP 201.
+problem_cluster:
+  - proxy health exposes mutable repository target identity, not immutable serving-binary identity
+  - generic service health, including auth, exposes no compiled build identity
+  - cmd/choir is not installed on Node B or guest images, yet its source falls through to the conservative full host plus both guest-image deploy class
 root_cause:
   - deploy.env publishes the target SHA before service activation
   - buildinfo conflates compiled artifact identity with mutable deploy metadata
   - the landing loop treated proxy-global identity as proof for an affected auth service
+  - path fallback substitutes repository-wide deployment for an explicit artifact dependency map
 protected_surfaces: [deployment routing, run acceptance, service build identity]
 settlement_rule: >-
   Compiled service commit remains immutable and independently observable;
   release-target metadata advances only after successful activation; affected
   service identity is probed before product acceptance; an inverted deploy
-  contract prevents a target SHA from masquerading as a serving binary SHA.
+  contract prevents a target SHA from masquerading as a serving binary SHA;
+  undistributed cmd/choir-only changes do not activate Node B or guest images.
 execution_effect: >-
   Health target identity alone is inadmissible for PC-1 or later settlement.
   Wait for the deploy job and affected service activation before repeating the
   product proof, then repair this boundary before the next identity-only claim.
 ```
 
-### PC-1. API-key capability delegation — OPEN, P0
+### PC-1. API-key capability delegation — SETTLED, P0
 
 ```yaml
 id: api-key-capability-delegation
 kind: invariant
-status: testing
+status: settled
 source: observed 2026-07-10
 definition: >-
   A Bearer API key may never mint, broaden, or revoke authority beyond its own
@@ -155,15 +161,31 @@ local_evidence:
   - post-fix negative, subset, admin, cookie-owner, list, and self-revoke tests pass
   - full internal/auth and internal/proxy suites pass
   - focused auth/proxy race suites and go vet pass
+deployed_evidence:
+  - commit 3f4f4aacb7a77416b528982ec4da47d877858ed9
+  - all standard, frontend, deploy, rolling-flake, and differential-SBOM jobs succeeded in CI run 29078163452 before the run container was superseded by the problem-record docs push
+  - Node B auth activation job completed successfully at 2026-07-10T08:03:16Z
+  - read-only create-admin=403 and revoke-sibling=403
+  - denied sibling remained usable with list=200; read-only self-revoke=204
+  - manager create-subset=201, create-broader=403, revoke-subset=204
+  - cleanup observed zero active codex-capability proof keys
 protected_surfaces: [auth/session, API-key authority, headless CLI]
 settlement_rule: >-
   Negative tests prove read-only keys cannot create or revoke; delegated key
   managers cannot mint broader scopes; admin and cookie-owner paths remain
   explicit; full auth/proxy tests and staging acceptance are green.
 execution_effect: >-
-  Local repair is testing. No deployed repair claim until CI, Node B identity,
-  and non-destructive staging denial/delegation evidence are green. Do not
-  broaden CLI default scopes or add mutation verbs before settlement.
+  Settled at 3f4f4aac after affected-service activation and public staging
+  denial/delegation proof. This settlement does not settle PC-0: proxy-global
+  deploy target identity was proven capable of preceding auth activation.
+heresy_delta:
+  discovered:
+    - Bearer authentication discarded the caller capability envelope
+    - read-only keys could mint admin authority and revoke sibling keys
+  introduced:
+    - explicit manage:keys delegation scope and child-scope subset boundary
+  repaired:
+    - API-key capability escalation and unauthorized sibling revocation
 ```
 
 ### PC-2. Wails token containment — OPEN, P0
@@ -333,6 +355,34 @@ execution_effect: >-
   Establish after PC-2. Do not package Base/File Provider before PC-5 settles.
 ```
 
+## Authority Convergence and Deletion Map
+
+The repeated failure pattern is not missing functionality. It is one product
+purpose represented by multiple peers, none of which is forced to carry the
+whole truth. The simplification rule is one authoritative path per purpose;
+other paths are evidence, adapters, or deletion candidates.
+
+| Real purpose | Competing paths or meanings | Authoritative path to keep | Delete or demote | Minimum proof |
+|---|---|---|---|---|
+| Prove what code is serving | compiled service commit; mutable global deploy target; proxy health used for unrelated services | immutable per-service build identity plus completed activation receipt | commit override and repository-global identity inference | affected service reports compiled SHA after deploy job succeeds |
+| Activate an approved ComputerVersion | live-app adoption; candidate-intake switch/rollback; optional Dolt tag adapter; vmctl desktop publish; actual proxy/VM route | one route-slot writer with activation/rollback receipt | candidate mutation routes, tag/publish semantics, and active UI/persistence when no executor changed the served route | ordinary owner request resolves through the receipted version |
+| Give the desktop a durable authenticated session | direct exchange-redirect flow; bridge flow; JavaScript cookies; native process; cloud and local proxy/auth stacks | one bridge/passkey flow and one native Go cookie jar behind the renderer proxy | direct exchange attempt, raw token responses, JS token/cookie handling, secret logs, production claims for dev-only local orchestration | built app survives reload and renewal; logout clears; JS/log secret scan is empty |
+| Turn one source handoff into one processor run | graph-projection synthesis; typed ingestion handoff; non-idempotent retry | typed, durable, idempotent ingestion handoff and runtime admission | projection-triggered `wire_synthesis` and synthesis response fields | one cycle/request ID maps to exactly one processor run and publication lineage |
+| Provide private exact-byte computer files | placeholder downloader; path-derived identity; random folder versions; unwired contract builders | stable item/device identity, content-addressed bytes, explicit conflict ancestry | zero-byte success, cursor advance across unresolved conflicts, inert builders as presumed architecture | two-device rename/conflict/restart proof with exact hashes and owner denial |
+| Offer a coherent headless client | `run start` creates a prompt-bar submission; 30-second client deadline versus 60-second server bound; undistributed CLI classified as platform code | thin transport over canonical request/submission, trajectory, Texture, and evidence contracts with its own future release lane | misleading run vocabulary, mirrored private schemas, hidden timeout authority, and Node B/guest deploy fallback | CLI/web conformance IDs and shapes match; structured server 504 reaches CLI near 60 seconds; no platform activation for CLI-only diff |
+
+This map is a routing constraint, not a claim that every kept path is already
+correct. In particular, typed Autopaper retry is not yet idempotent, Wails has
+no native jar yet, Base has no admissible kernel, and promotion has no
+load-bearing route executor.
+
+Root-cause clustering applies now. Promotion symptoms share the missing
+`route_slot -> ComputerVersion` writer; Base symptoms share the missing stable
+identity + exact blob + acknowledged-cursor transaction; Autopaper symptoms
+share the missing durable source-cycle transaction. Do not patch another UI,
+placeholder, retry, or status symptom in those clusters without repairing or
+deleting at the substrate boundary.
+
 ## Determined State Snapshot
 
 ```yaml
@@ -382,7 +432,7 @@ surface expansion.
 ```yaml
 variant:
   false_deploy_identity_paths: 1
-  reachable_auth_boundary_failures: 2
+  reachable_auth_boundary_failures: 1
   false_promotion_success_paths: 1
   cli_product_contract_failures: 2
   base_substrate_invariants_open: 5
@@ -425,11 +475,21 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
   command_or_observation: authenticated choir trajectories
   result: HTTP success and four decoded document trajectories
   uncertainty: no supported distribution artifact yet
-- claim: API-key scope escalation is reachable in source.
+- claim: API-key capability delegation is enforced after auth activation.
   definition_node: api-key-capability-delegation
-  evidence_class: code-level call graph + existing positive test
-  result: read-only Bearer may create arbitrary valid-scope child key and revoke sibling keys
-  uncertainty: staging exploit was not executed because source proof is sufficient and mutation is unsafe
+  evidence_class: pre-fix negative proof + tests + CI/deploy + public staging matrix
+  command_or_observation: >-
+    Commit 3f4f4aac; focused, package, race, vet, and frontend checks; CI run
+    29078163452; completed Node B auth activation; rate-limit-aware ephemeral
+    create/revoke matrix through https://choir.news/auth/api-keys
+  result: >-
+    Pre-fix read-only create-admin=201 and revoke-sibling=204. After activation,
+    read-only create-admin=403 and revoke-sibling=403; denied target remained
+    active; self-revoke=204; manager subset create/revoke=201/204; broader
+    create=403; zero active proof keys remained after cleanup.
+  uncertainty: >-
+    Wails still violates the separate native secret-containment boundary. The
+    false deployment-identity window remains open as PC-0.
 - claim: proxy health target identity can precede affected-service activation.
   definition_node: deployment-identity-follows-activation
   evidence_class: deployed staging timing + source call graph
@@ -445,6 +505,19 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
   uncertainty: >-
     The same negative proof must be repeated after the deploy job completes to
     distinguish the transient activation window from an auth packaging defect.
+- claim: cmd/choir-only changes select an unrelated full platform rollout.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: executable deploy-impact classifier
+  command_or_observation: >-
+    printf cmd/choir/main.go and cmd/choir/main_test.go into
+    .github/scripts/deploy-impact-classify
+  result: >-
+    deploy_host_service=true, deploy_ordinary_guest=true,
+    deploy_playwright_guest=true, vmctl restart and active-VM refresh=true,
+    even though cmd/choir has no Node B or guest installation target.
+  uncertainty: >-
+    A later distribution package will need an explicit release lane; it must
+    not silently inherit platform deployment semantics.
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
@@ -478,32 +551,33 @@ run_checkpoint_and_resumption_state:
   status: working
   last_checkpoint: transient false deployment identity observed during CI run 29078163452
   current_artifact_state: >-
-    API-key delegation commit 3f4f4aac is pushed; standard CI lanes are green
-    and Node B deployment is still in progress. Proxy health advertised that
-    target before auth activation, and the old handler allowed a controlled
-    read-only escalation. Ephemeral proof keys were revoked. The CLI timeout
-    repair is green locally but deliberately uncommitted behind this problem
-    record.
-  what_shipped: []
+    API-key delegation commit 3f4f4aac is active and accepted on staging after
+    the auth deploy completed. The transient pre-activation proof remains the
+    PC-0 problem record. The CLI timeout repair is green locally but held until
+    deployment routing stops treating the undistributed CLI as a full
+    host-and-guest rollout.
+  what_shipped:
+    - 3f4f4aac API-key capability-envelope enforcement
+    - eb3bdd35 false deployment identity problem record
   what_was_proven:
     - CLI trajectories read works on staging
     - CLI timeout hides the server's bounded 504
     - current source contains reachable API-key and Wails secret-boundary failures
     - Base and Autopaper gaps are substrate/control-path defects, not missing UI alone
     - proxy-global deployed_commit is not affected-service activation proof
+    - API-key delegation and sibling revocation are bounded by caller capability on staging
   unproven_or_partial_claims:
-    - API-key delegation after completed auth activation
     - immutable per-service deployment identity
     - no Wails built-app acceptance
     - no deployed Autopaper duplicate count
     - no Base exact-byte two-device proof
     - no served ComputerVersion promotion
-  highest_impact_remaining_uncertainty: API-key enforcement after auth service activation
+  highest_impact_remaining_uncertainty: immutable per-service deployment identity
   next_executable_probe: >-
-    Wait for CI run 29078163452 and its Node B deploy job to complete, verify the
-    affected service has activated, then repeat the ephemeral denial/subset
-    matrix and cleanup. Record PC-1 separately before committing the prepared
-    CLI timeout slice. Repair the deployment identity boundary next.
+    Repair PC-0 so compiled service identity is never overwritten by mutable
+    deploy target metadata, expose identity on affected service health, and
+    stop classifying cmd/choir-only changes as full Node B/guest rollouts. Then
+    land and stage-time the prepared CLI timeout slice.
   suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
