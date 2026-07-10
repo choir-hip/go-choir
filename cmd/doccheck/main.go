@@ -34,9 +34,11 @@ var highRead = map[string]bool{
 	"docs/ACTIVE.md":                                           true,
 	"docs/current-architecture.md":                             true,
 	"docs/platform-os-app-state.md":                            true,
-	"docs/mission-portfolio-2026-06-11.md":                     true,
 	"docs/conjecture-assertion-ledger-2026-06.md":              true,
 	"docs/heresy-detectors.md":                                 true,
+	"docs/agent-product-doctrine.md":                           true,
+	"docs/choir-prompting-invariants.md":                       true,
+	"docs/memo-problem-documentation-first.md":                 true,
 	"docs/computer-ontology.md":                                true,
 	"docs/runtime-invariants.md":                               true,
 	"docs/texture-agentic-invariants-2026-06-13.md":            true,
@@ -916,8 +918,8 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 			warnings = append(warnings, warning{Rule: "R5", Severity: "info", Path: path, Message: fmt.Sprintf("paradoc %s is not represented in mission graph", p), Hint: "add a mission graph node or classify it as historical/evidence"})
 		}
 	}
-	if !graphedPaths["docs/mission-docs-truth-system-v1.md"] {
-		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "current docs truth v1 paradoc is not represented in mission graph"})
+	if !graphedPaths["docs/definitions/documentation-authority-reduction-2026-07-09.md"] {
+		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "current documentation-authority Definition is not represented in mission graph"})
 	}
 	return rep, warnings
 }

@@ -333,7 +333,7 @@ variant:
   dead_manifest_entries: 0
   unclassified_default_read_docs: 0
   unharvested_large_ledger_chains: 0
-  retrieval_polluting_markdown_candidates: 256
+  retrieval_polluting_markdown_candidates: 81
   retrieval_polluting_nonmarkdown_candidates: 6
 ```
 
@@ -366,7 +366,7 @@ successor. No production behavior changes are in scope.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: D1 raw-process deletion verified against rollback b6fbd598.
+  last_checkpoint: D2 archive deletion verified after D1 against rollback b6fbd598.
   current_artifact_state: >-
     The default path is a bounded eleven-document content packet plus router;
     legacy graph/index debt is report-only and cannot redefine active work.
@@ -376,27 +376,34 @@ run_checkpoint_and_resumption_state:
     - doccheck --mode=live structural gate; --mode=full retains corpus reporting.
     - Retention baseline, superseded by retrieval-driven deletion authority.
     - D1 removed 148 raw evidence artifacts and 37 mission ledgers.
+    - D2 removed the remaining 175 archive documents and collapsed the manifest
+      from 152 records to 23 and the mission graph from 175 nodes to two.
   what_was_proven:
     - 310 of 331 docs Markdown files are outside the proposed 21-file retain set.
     - Archive has 178 files; raw ledgers have 37 files / about 2.35 MB; raw
       agent-consensus evidence has 135 files.
-    - Strict-live packet validation still passes with zero failures after D1.
-    - The docs corpus fell from 331 to 277 Markdown files; full scan warnings
-      fell from 503 pre-delete to 464 after D1.
+    - Strict-live packet validation still passes with zero failures after D2.
+    - The docs corpus fell from 331 to 102 Markdown files; the full scan now
+      sees 121 repository documents and reports 116 non-blocking warnings.
+    - The retained architecture and operating docs no longer link into
+      `docs/archive/**`; historical detail requires deliberate Git archaeology.
   unproven_or_partial_claims:
     - Initial semantic kernel has not been owner-promoted.
-    - D2 archive live-link replacements remain to be verified.
+    - D3 must remove the remaining 81 superseded Markdown files and repair any
+      links from the retained packet exposed by that deletion.
   highest_impact_remaining_uncertainty: >-
-    Which archive-derived claims in living docs need to be inlined before all
-    178 archive files leave the worktree.
+    Which links from retained authorities still point at the 81 documents in
+    the final superseded-source deletion set.
   next_executable_probe: >-
-    Repair archive links from living docs, then delete D2 against rollback
-    b6fbd598 and the D1 commit.
+    Delete every Markdown file outside the explicit 21-file retain set, repair
+    the resulting live-link failures, then remove six unused design assets.
   suggested_goal_string: /goal docs/definitions/documentation-authority-reduction-2026-07-09.md
   evidence_artifact_refs:
     - b6fbd598 (pre-delete authority/retrieval baseline)
+    - 2783a97a (D1 raw evidence and ledger deletion)
   rollback_refs:
     - b6fbd598
+    - 2783a97a
 ```
 
 ## Suggested Goal String

@@ -102,8 +102,7 @@ platform docs record the common baseline and the desired divergence semantics.
   explicitly classified by ephemeral account policy, currently `example.com`
   auth emails, and only after they are stopped, hibernated, or failed past the
   diagnostic TTL. Real primary computers are retained. Platform rollback keeps
-  Git refs plus a small NixOS generation tail, not every historical guest image. See
-  [vm-priority-policy.md](archive/vm-priority-policy.md).
+  Git refs plus a small NixOS generation tail, not every historical guest image.
 
 ## Runtime Model Policy State
 
@@ -163,8 +162,7 @@ controls rather than a separate phone-mode navigation stack.
 A native macOS app (`cmd/desktop/`) wraps the same Svelte frontend in a Wails v3
 window with `ASWebAuthenticationSession` for passkey auth via Safari. It launches
 in cloud mode by default (connecting to `choir.news`). See
-[cmd/desktop/README.md](../cmd/desktop/README.md) and
-[docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](archive/spec-choir-desktop-wails-v3-2026-06-22.md).
+[cmd/desktop/README.md](../cmd/desktop/README.md).
 
 Current capabilities:
 

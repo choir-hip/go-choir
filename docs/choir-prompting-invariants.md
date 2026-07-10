@@ -3,7 +3,8 @@
 ## Status
 
 Operating invariant for seeded agent system prompts and YAML prompt specs.
-Companion: [choir-role-free-actor-protocol-2026-06-11.md](archive/choir-role-free-actor-protocol-2026-06-11.md).
+This document contains the maintained prompting contract; superseded protocol
+proposals are available only through Git history.
 
 ## No false identity assignment
 

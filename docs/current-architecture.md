@@ -1,22 +1,19 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-08 (status-tag pass: every claim is now marked
+**Last updated:** 2026-07-10 (archive-removal pass; every claim is marked
 **Live**, **Target**, or **Retired**; actor-runtime, capsule,
-candidate-computer, and storage claims corrected against
-[assessment-overall-state-2026-07-07.md](assessment-overall-state-2026-07-07.md)
-— historical evidence, see era note there — and
+candidate-computer, and storage claims are governed by
 [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)
-for current executable authority. The older
-[mission-og-dolt-heresy-hard-cutover-v0.md](archive/mission-og-dolt-heresy-hard-cutover-v0.md)
-is superseded source material.
+as current executable authority. The earlier assessment and hard-cutover
+sources were absorbed into that definition and removed from the worktree.
 Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
 conjecture vocabulary; see the Ontology section.)
 
 This is the current architecture memo for Choir. It is meant to be the first
 document read before changing `texture`, conductor routing, workers, Trace, Dolt,
-`vmctl`, publication, or appagent behavior. For current vocabulary, read
-[glossary.md](archive/glossary.md). For project direction, read
-[project-goals.md](archive/project-goals.md). For the current common platform/default
+`vmctl`, publication, or appagent behavior. For current vocabulary and project
+direction, read [semantic-registry.md](semantic-registry.md) and
+[choir-doctrine.md](choir-doctrine.md). For the current common platform/default
 computer OS, desktop shell, and app catalog state, read
 [platform-os-app-state.md](platform-os-app-state.md).
 
@@ -39,9 +36,8 @@ onboarding):
 
 Untagged prose inside a tagged section inherits the section's tag.
 
-Use [intended-architecture-next-2026-06-06.md](archive/intended-architecture-next-2026-06-06.md)
-for the intended architecture after the next week-plus of source, Base,
-desktop, Wire, voice, and radio work is written, deployed, and proven stable.
+Intended-but-unbuilt architecture belongs here as an explicitly labeled
+**Target** claim, not in a parallel roadmap document.
 
 When this document says "current," it should be backed by one of:
 
@@ -122,16 +118,14 @@ gates is the named anti-pattern.
 
 Choir is a durable learning control system over versioned artifacts. The web
 desktop is the current general-purpose projection of that substrate, not the
-whole ontology. Read [docs/archive/mission-geometry.md](archive/mission-geometry.md) for the
-higher-level frame and [glossary.md](archive/glossary.md) for the current
-Community Cloud / Private Cloud / Wire vocabulary.
+whole ontology. Read [choir-doctrine.md](choir-doctrine.md) for the higher-level
+frame and [semantic-registry.md](semantic-registry.md) for current vocabulary.
 
 The Automatic Computer already exists in deployed form: a web desktop, backend
 services, appagents, and NixOS-on-NixOS VM infrastructure. A native macOS app
 (Wails v3) wraps the web desktop with `ASWebAuthenticationSession` for passkey
 auth, transparent title bar, and cloud-mode-by-default. See
-[cmd/desktop/README.md](../cmd/desktop/README.md) and
-[docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](archive/spec-choir-desktop-wails-v3-2026-06-22.md).
+[cmd/desktop/README.md](../cmd/desktop/README.md).
 The product object is a persistent user **computer**, not a disposable sandbox.
 The current work is not to invent the product from scratch. The current work is
 to stabilize the deployed system around the right causal model.
@@ -160,10 +154,9 @@ that as target architecture until the product path is fully code-backed and
 proven.
 
 The current promotion architecture is stable platform, divergent computers.
-Read
-[stable-platform-divergent-computers-architecture-2026-05-17.md](archive/stable-platform-divergent-computers-architecture-2026-05-17.md)
-before changing source-lineage, app-package, runtime/UI promotion, platform
-computer, or deployment behavior. The short version is:
+Read [computer-ontology.md](computer-ontology.md) before changing
+source-lineage, app-package, runtime/UI promotion, platform-computer, or
+deployment behavior. The short version is:
 
 ```text
 platform substrate changes -> GitHub main -> CI -> NixOS deploy
@@ -588,8 +581,7 @@ host-process fallback, worktree, or later substrate. The user-facing object is
 still the computer.
 
 VM-backed computers are retained by a typed warmness policy, not by a single
-idle timeout. Current and future priority semantics are documented in
-[vm-priority-policy.md](archive/vm-priority-policy.md): ordinary primary computers stay
+idle timeout. Ordinary primary computers stay
 warm while capacity allows, candidates and workers hibernate first, and
 configured always-on primary computers have an explicit protected/resume lane.
 
@@ -665,7 +657,7 @@ should ask them to register or log in, then create or resume a user-owned active
 or candidate computer. Platform/public mutation is a fork/proposal/promotion
 path, not direct anonymous mutation of the platform computer.
 
-Read [public-identity-and-custom-domains.md](archive/public-identity-and-custom-domains.md).
+This section is the current authority for the public-identity roadmap target.
 
 ### Routing Invariants
 
@@ -759,10 +751,9 @@ is split into two stores that must not be conflated (see D-STORES in
   (fork/promote/rollback) is an operation on this embedded store, not a property
   of the world-wire store and not a separate promotion workspace.
 
-Read [adr-dolt-as-canonical-state.md](archive/adr-dolt-as-canonical-state.md) for the
-original Dolt/SQLite decision record, but note that the 2026-07-08 D-STORES /
-D-WIRE decisions refine the two-store topology and the sql-server migration
-path.
+The current Dolt/SQLite decision is the D-STORES/D-WIRE contract in this
+section and [computer-ontology.md](computer-ontology.md). Earlier decision
+records remain available only through Git history.
 
 VM-local embedded Dolt (one workspace per user VM, shared by its capsules once
  capsules are built) currently holds private product state directly:

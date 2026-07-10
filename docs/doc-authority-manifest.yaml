@@ -1,1565 +1,185 @@
-schema_version: 0
+schema_version: 1
 documents:
   - path: docs/choir-doctrine.md
     claim_scope: current
     is_root: [authority, entry]
     is_evidence: false
-    annotations:
-      doc_role: doctrine
-      authority: apex
-      lifecycle: living
-    witnesses:
-      - docs/choir-doctrine.md
-      - docs/heresy-detectors.md
-    refresh_triggers:
-      - doctrine_change
-      - protected_surface_change
+    annotations: {doc_role: doctrine, authority: apex, lifecycle: living}
+    witnesses: [docs/choir-doctrine.md, docs/heresy-detectors.md]
+    refresh_triggers: [doctrine_change, protected_surface_change]
 
   - path: AGENTS.md
     claim_scope: current
     is_root: [authority, entry]
     is_evidence: false
-    annotations:
-      doc_role: operating_contract
-      authority: apex_operating_contract
-      lifecycle: living
-    witnesses:
-      - AGENTS.md
-      - docs/choir-doctrine.md
-    refresh_triggers:
-      - doctrine_change
-      - agent_operating_contract_change
-      - protected_surface_change
+    annotations: {doc_role: operating_contract, authority: apex_operating_contract, lifecycle: living}
+    witnesses: [AGENTS.md, docs/choir-doctrine.md]
+    refresh_triggers: [doctrine_change, operating_contract_change]
 
   - path: README.md
     claim_scope: mixed
     is_root: [entry]
     is_evidence: false
-    annotations:
-      doc_role: orientation
-      authority: support
-      lifecycle: living
-    witnesses:
-      - cmd/**
-      - frontend/src/lib/apps/registry.ts
-      - frontend/src/lib/Desktop.svelte
-      - .github/workflows/**
-    refresh_triggers:
-      - cmd_service_topology_change
-      - app_registry_change
-      - doctrine_change
+    annotations: {doc_role: orientation, authority: support, lifecycle: living}
+    witnesses: [README.md, cmd, frontend]
+    refresh_triggers: [product_entrypoint_change, documentation_index_change]
 
   - path: docs/README.md
     claim_scope: current
     is_root: [entry]
     is_evidence: false
-    annotations:
-      doc_role: orientation
-      authority: support
-      lifecycle: living
-    witnesses:
-      - docs/choir-doctrine.md
-      - AGENTS.md
-      - docs/current-architecture.md
-      - docs/platform-os-app-state.md
-      - docs/mission-portfolio-2026-06-11.md
-    refresh_triggers:
-      - doctrine_change
-      - documentation_index_change
+    annotations: {doc_role: orientation, authority: support, lifecycle: living}
+    witnesses: [docs/README.md, docs/choir-doctrine.md, AGENTS.md]
+    refresh_triggers: [documentation_index_change, doctrine_change]
 
   - path: docs/semantic-registry.md
     claim_scope: current
     is_root: [entry]
     is_evidence: false
-    annotations:
-      doc_role: semantic_navigation
-      authority: derived_support
-      lifecycle: living
-    witnesses:
-      - docs/choir-doctrine.md
-      - docs/computer-ontology.md
-      - docs/runtime-invariants.md
-      - docs/texture-agentic-invariants-2026-06-13.md
-      - docs/source-external-data-publication.md
-    refresh_triggers:
-      - doctrine_change
-      - domain_contract_change
-      - semantic_registry_change
+    annotations: {doc_role: semantic_navigation, authority: derived_support, lifecycle: living}
+    witnesses: [docs/choir-doctrine.md, docs/computer-ontology.md, docs/runtime-invariants.md]
+    refresh_triggers: [doctrine_change, domain_contract_change]
 
   - path: docs/NOW.md
     claim_scope: current
     is_root: [entry]
     is_evidence: true
-    annotations:
-      doc_role: observed_current_state
-      authority: evidence_scoped
-      lifecycle: living
-    witnesses:
-      - docs/current-architecture.md
-      - docs/platform-os-app-state.md
-      - docs/definitions/documentation-authority-reduction-2026-07-09.md
-    refresh_triggers:
-      - staging_deploy
-      - staging_acceptance_change
-      - current_state_route_choice
+    annotations: {doc_role: observed_current_state, authority: evidence_scoped, lifecycle: living}
+    witnesses: [docs/NOW.md, docs/current-architecture.md, docs/platform-os-app-state.md]
+    refresh_triggers: [staging_deploy, current_state_route_choice]
 
   - path: docs/ACTIVE.md
     claim_scope: current
     is_root: [entry]
     is_evidence: false
-    annotations:
-      doc_role: active_work_navigation
-      authority: derived_support
-      lifecycle: living
-    witnesses:
-      - docs/mission-graph.yaml
-      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/definitions/documentation-authority-reduction-2026-07-09.md
-    refresh_triggers:
-      - active_definition_change
-      - mission_graph_change
-      - work_authority_cutover
-
-  - path: docs/choir-grip-checkpoint-2026-07-07.md
-    claim_scope: narrative
-    is_root: []
-    is_evidence: false
-    annotations:
-      doc_role: narrative
-      authority: none
-      lifecycle: living
-      notes: narrative grip checkpoint; may not override doctrine, definitions, specs, or evidence
-    witnesses:
-      - docs/choir-grip-checkpoint-2026-07-07.md
-    refresh_triggers:
-      - documentation_index_change
+    annotations: {doc_role: active_work_navigation, authority: derived_support, lifecycle: living}
+    witnesses: [docs/mission-graph.yaml, docs/definitions/og-dolt-heresy-completion-2026-07-08.md]
+    refresh_triggers: [active_definition_change, mission_graph_change]
 
   - path: docs/current-architecture.md
     claim_scope: current
-    is_root: [entry]
+    is_root: []
     is_evidence: false
-    annotations:
-      doc_role: current_state
-      authority: support
-      lifecycle: living
-    witnesses:
-      - cmd/**
-      - internal/**
-      - frontend/src/**
-      - .github/workflows/**
-    refresh_triggers:
-      - cmd_service_topology_change
-      - runtime_architecture_change
-      - frontend_app_change
+    annotations: {doc_role: current_state, authority: support, lifecycle: living}
+    witnesses: [docs/current-architecture.md, cmd, internal, frontend]
+    refresh_triggers: [runtime_architecture_change, frontend_app_change]
 
   - path: docs/platform-os-app-state.md
     claim_scope: current
-    is_root: [entry]
+    is_root: []
     is_evidence: false
-    annotations:
-      doc_role: current_state
-      authority: support
-      lifecycle: living
-    witnesses:
-      - frontend/src/lib/apps/registry.ts
-      - frontend/src/lib/Desktop.svelte
-      - frontend/src/lib/*App.svelte
-      - internal/**
-      - cmd/**
-    refresh_triggers:
-      - app_registry_change
-      - desktop_shell_change
-      - promotion_or_vm_lifecycle_change
-
-  - path: docs/mission-portfolio-2026-06-11.md
-    claim_scope: mixed
-    is_root: [entry]
-    is_evidence: false
-    annotations:
-      doc_role: mission
-      authority: support
-      lifecycle: living
-    witnesses:
-      - docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md
-      - docs/archive/choir-role-free-actor-protocol-2026-06-11.md
-      - docs/archive/system-v1-one-cut-2026-06-11.md
-    refresh_triggers:
-      - durable_actor_portfolio_change
-      - mission_settlement_change
-
-  - path: docs/runtime-invariants.md
-    claim_scope: current
-    is_root: false
-    is_evidence: false
-    annotations:
-      doc_role: current_state
-      authority: domain_invariant
-      lifecycle: living
-    witnesses:
-      - internal/runtime/**
-      - internal/store/**
-      - docs/choir-doctrine.md
-    refresh_triggers:
-      - runtime_authority_change
-      - prompt_default_change
-
-  - path: docs/source-external-data-publication.md
-    claim_scope: current
-    is_root: false
-    is_evidence: false
-    annotations:
-      doc_role: current_state
-      authority: domain_invariant
-      lifecycle: living
-    witnesses:
-      - cmd/sourcecycled/**
-      - internal/store/browser.go
-      - internal/types/browser.go
-      - frontend/src/lib/BrowserApp.svelte
-    refresh_triggers:
-      - source_system_change
-      - publication_contract_change
+    annotations: {doc_role: current_state, authority: support, lifecycle: living}
+    witnesses: [docs/platform-os-app-state.md, frontend, internal, cmd]
+    refresh_triggers: [app_registry_change, desktop_shell_change]
 
   - path: docs/computer-ontology.md
     claim_scope: current
-    is_root: false
+    is_root: []
     is_evidence: false
-    annotations:
-      doc_role: doctrine
-      authority: domain_doctrine
-      lifecycle: living
-    witnesses:
-      - docs/choir-doctrine.md
-      - docs/platform-os-app-state.md
-      - internal/**
-      - cmd/vmctl/**
-    refresh_triggers:
-      - computer_ontology_change
-      - vm_or_promotion_change
+    annotations: {doc_role: doctrine, authority: domain_doctrine, lifecycle: living}
+    witnesses: [docs/computer-ontology.md, docs/choir-doctrine.md, internal]
+    refresh_triggers: [computer_ontology_change, vm_or_promotion_change]
+
+  - path: docs/runtime-invariants.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: current_state, authority: domain_invariant, lifecycle: living}
+    witnesses: [docs/runtime-invariants.md, internal/runtime, internal/store]
+    refresh_triggers: [runtime_authority_change, prompt_default_change]
 
   - path: docs/texture-agentic-invariants-2026-06-13.md
     claim_scope: current
-    is_root: false
+    is_root: []
     is_evidence: false
-    annotations:
-      doc_role: doctrine
-      authority: domain_invariant
-      lifecycle: living
-    witnesses:
-      - internal/runtime/**
-      - internal/runtime/prompt_defaults/**
-      - docs/choir-doctrine.md
-    refresh_triggers:
-      - texture_tool_or_prompt_change
-      - role_authority_change
+    annotations: {doc_role: doctrine, authority: domain_invariant, lifecycle: living}
+    witnesses: [docs/texture-agentic-invariants-2026-06-13.md, internal/runtime, frontend]
+    refresh_triggers: [texture_authority_change, texture_tool_change]
+
+  - path: docs/source-external-data-publication.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: current_state, authority: domain_invariant, lifecycle: living}
+    witnesses: [docs/source-external-data-publication.md, cmd/sourcecycled, internal/platform]
+    refresh_triggers: [source_system_change, publication_contract_change]
+
+  - path: docs/conjecture-assertion-ledger-2026-06.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: assertion_register, authority: canonical_assertion_register, lifecycle: living}
+    witnesses: [docs/conjecture-assertion-ledger-2026-06.md, docs/choir-doctrine.md]
+    refresh_triggers: [assertion_change, doctrine_change]
+
+  - path: docs/heresy-detectors.md
+    claim_scope: mixed
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: evidence, authority: doctrine_detector_manifest, lifecycle: living}
+    witnesses: [docs/heresy-detectors.md, cmd/doccheck/main.go]
+    refresh_triggers: [detector_change, doctrine_change]
 
   - path: docs/why-texture-2026-06-15.md
     claim_scope: current
-    is_root: false
+    is_root: []
     is_evidence: false
-    annotations:
-      doc_role: explanatory_support
-      authority: support
-      lifecycle: living
-    witnesses:
-      - docs/choir-doctrine.md
-      - docs/archive/mission-geometry.md
-      - docs/archive/choir-strategy-overview-2026-06-09.md
-    refresh_triggers:
-      - texture_tool_or_prompt_change
-      - doctrine_change
-      - product_ontology_change
+    annotations: {doc_role: explanatory_support, authority: support, lifecycle: living}
+    witnesses: [docs/why-texture-2026-06-15.md, docs/choir-doctrine.md]
+    refresh_triggers: [texture_ontology_change]
 
-  - path: docs/why-texture-background-2026-06-15.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_background
-      authority: support
-      lifecycle: living
-    witnesses:
-      - docs/why-texture-2026-06-15.md
-      - docs/choir-doctrine.md
-      - docs/archive/mission-geometry.md
-      - docs/archive/choir-strategy-overview-2026-06-09.md
-    refresh_triggers:
-      - product_ontology_change
-      - doctrine_change
+  - path: docs/agent-product-doctrine.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: operating_contract, authority: domain_operating_contract, lifecycle: living}
+    witnesses: [docs/agent-product-doctrine.md, AGENTS.md]
+    refresh_triggers: [agent_product_contract_change]
 
-  - path: docs/archive/mission-texture-hard-cutover-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: paradoc
-      authority: mission
-      lifecycle: active
-    witnesses:
-      - docs/why-texture-2026-06-15.md
-      - docs/why-texture-background-2026-06-15.md
-      - docs/mission-graph.yaml
-      - docs/choir-doctrine.md
-    refresh_triggers:
-      - product_ontology_change
-      - texture_tool_or_prompt_change
-      - docs_checker_rule_change
+  - path: docs/choir-prompting-invariants.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: domain_invariant, authority: domain_invariant, lifecycle: living}
+    witnesses: [docs/choir-prompting-invariants.md, docs/choir-doctrine.md, internal/runtime]
+    refresh_triggers: [prompt_contract_change]
+
+  - path: docs/memo-problem-documentation-first.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: operating_rationale, authority: support, lifecycle: living}
+    witnesses: [docs/memo-problem-documentation-first.md, AGENTS.md]
+    refresh_triggers: [problem_documentation_policy_change]
+
+  - path: docs/legal/privacy-policy.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: legal, authority: product_legal, lifecycle: living}
+    witnesses: [docs/legal/privacy-policy.md, frontend/public/legal/privacy-policy.md]
+    refresh_triggers: [privacy_policy_change]
+
+  - path: docs/legal/terms-of-service.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: legal, authority: product_legal, lifecycle: living}
+    witnesses: [docs/legal/terms-of-service.md, frontend/public/legal/terms-of-service.md]
+    refresh_triggers: [terms_change]
 
   - path: docs/definitions/og-dolt-heresy-completion-2026-07-08.md
     claim_scope: current
     is_root: [authority, entry]
     is_evidence: false
-    annotations:
-      doc_role: definition
-      authority: mission
-      lifecycle: active
-    witnesses:
-      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md
-      - docs/archive/heresy-eradication-2026-07-07.md
-      - docs/assessment-overall-state-2026-07-07.md
-      - docs/mission-graph.yaml
-      - docs/choir-doctrine.md
-    refresh_triggers:
-      - dolt_promotion_change
-      - heresy_elimination_change
-      - computer_version_route_change
-      - mission_supersession_change
+    annotations: {doc_role: definition, authority: mission, lifecycle: active}
+    witnesses: [docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/mission-graph.yaml]
+    refresh_triggers: [mission_state_change, product_ontology_change]
 
   - path: docs/definitions/documentation-authority-reduction-2026-07-09.md
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations:
-      doc_role: definition
-      authority: mission
-      lifecycle: active
-    witnesses:
-      - docs/doc-authority-manifest.yaml
-      - docs/mission-graph.yaml
-      - cmd/doccheck/main.go
-      - docs/mission-beads-doctrine-delta-v0.md
-    refresh_triggers:
-      - documentation_index_change
-      - mission_graph_change
-      - doccheck_rule_change
-
-  - path: docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: paradoc
-      authority: mission
-      lifecycle: archived
-    witnesses:
-      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/assessment-overall-state-2026-07-07.md
-      - docs/mission-graph.yaml
-      - docs/choir-doctrine.md
-    refresh_triggers:
-      - mission_supersession_change
-
-  - path: docs/archive/heresy-eradication-2026-07-07.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: definition
-      authority: mission
-      lifecycle: archived
-    witnesses:
-      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
-      - docs/assessment-overall-state-2026-07-07.md
-      - docs/mission-graph.yaml
-      - docs/choir-doctrine.md
-    refresh_triggers:
-      - mission_supersession_change
-
-  - path: docs/heresy-detectors.md
-    claim_scope: mixed
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: evidence
-      authority: doctrine_detector_manifest
-      lifecycle: living
-    witnesses:
-      - docs/choir-doctrine.md
-      - docs/heresy-detectors.md
-    refresh_triggers:
-      - doctrine_heresy_change
-      - detector_baseline_change
-
-  - path: docs/conjecture-assertion-ledger-2026-06.md
-    claim_scope: current
-    is_root: false
-    is_evidence: false
-    annotations:
-      doc_role: assertion_register
-      authority: canonical_assertion_register
-      lifecycle: living
-    witnesses:
-      - docs/choir-doctrine.md
-      - docs/conjecture-learning-proof-theory-2026-06-11.md
-      - specs/**
-      - internal/actor/**
-      - internal/runtime/**
-    refresh_triggers:
-      - conjecture_promotion
-      - assertion_invalidation
-      - verifier_contract_change
-
-  - path: docs/archive/intended-architecture-next-2026-06-06.md
-    claim_scope: target
-    is_root: false
-    is_evidence: false
-    annotations:
-      doc_role: target_architecture
-      authority: support
-      lifecycle: living
-    refresh_triggers:
-      - target_architecture_change
-      - explicit_owner_promotion
-  - path: docs/archive/adr-dolt-as-canonical-state.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-agentic-depth-canonical.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-base-product-spec-2026-06-06.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-conjecture-refactor-program-2026-06-11.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-deck-treatment-and-faq-2026-06-09.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-design-language-2026-06-07.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-email-reference-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-liquid-material-engine-design-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-role-free-actor-protocol-2026-06-11.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/choir-strategy-overview-2026-06-09.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-attention-unifying-layer-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-conductor-supervision-protocol-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-index.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-mutation-transaction-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-object-graph-versioning-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-observer-hierarchy-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-philosophy-object-graph-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-search-provider-plane-v1.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-self-developing-software-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/design-virtual-agentic-graph-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/dispatch-proxy-architecture-2026-06-10.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/global-wire-sourcemaxx-newsroom-architecture-diagram-2026-06-07.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/glossary.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/handoff-conjecture-learning-fixed-point-2026-06-10.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/handoff-grand-synthesis-2026-06-10.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/handoff-hybrid-computer-capsule-architecture-2026-06-10.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/handoff-pptx-renderer-worktree.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/handoff-texture-structured-doc-legacy-surfaces-2026-06-22.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/implementation-scope.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/incident-gateway-auth-vm-orphan-2026-05-21.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/incident-vm-bootstrap-stale-route-2026-06-09.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/metaconductor.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-agentic-debugging-vtext-stability-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-apps-and-changes-store-sweep-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-campaign-compiler-selfdev-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-choir-base-reconciliation-kernel-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-choir-doctrine-upgrade-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-choir-grand-deformation-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-choir-in-choir-platform-pr-accelerator-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-computer-recovery-system-monitor-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-conductor-url-source-routing-h029-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-continuation-deletion-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-demo-stability-foundations-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-deploy-impact-isolation-cache-v1.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-doc-heresy-checker-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-doc-truth-drift-ci-context-packet-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-email-demo-ingress-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-geometry.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-global-wire-broad-source-vtext-newsroom-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-global-wire-hard-cutover-real-newsroom-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-global-wire-living-vtext-newsroom-v1.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-global-wire-style-vtext-collaborative-storygraph-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-human-proof-experiment-rerun-v1.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-lifecycle-cutover-m3.1-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-lifecycle-cutover-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-llm-run-memory-compaction-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-maild-email-ingress-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-messaging-cutover-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-natural-compaction-pdf-recall-eval-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-node-b-nix-store-retention-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-node-b-storage-retention-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-platform-source-service-vtext-publication-campaign-v1.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-provider-config-conformance-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-public-pulse-app-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-report-universal-wire-production-recovery-2026-06-10.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-report-wire-community-news-2026-06-09.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-research-runtime-evidence-cadence-v1.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-run-memory-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-runtime-human-proof-experiment-rerun-v1.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-runtime-model-context-substrate-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-runtime-test-pyramid-hardening-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-search-provider-plane-v1.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-source-system-loop8-simplify-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-source-system-simplify-secure-smart-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-standalone-sourcecycled-data-platform-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-super-console-real-zot-cutover-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-super-console-source-mount-promotion-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-surface-ontology-cleanup-h027-h029-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-texture-long-running-agent-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-texture-product-loop-recovery-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-texture-structured-document-transclusion-cutover-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-trajectory-model-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-update-coagent-source-centric-deletion-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vm-bootstrap-recovery-race-m3.3-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vtext-client-ready-source-transclusion-pretext-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vtext-first-draft-regression-m3.4-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vtext-fluid-editing-doc-roundtrip-transclusion-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vtext-live-cadence-repair-v3.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vtext-prompt-decision-notes-m3.2-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vtext-source-entities-multimedia-transclusion-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vtext-source-viewer-reader-mode-hardening-v0.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-vtext-version-compare-merge-debuggability-v1.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-web-surface-rationalization-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-wire-community-news-v1.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-wire-on-settlement-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-wire-settlement-substrate-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/mission-youtube-review-studio-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/news-econ-publishing-synthesis-2026-06-04.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/news-system-current-state-and-improvements-2026-06-06.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/news-voice-autoradio-forward-plan-2026-06-06.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/north-star.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/object-graph-schema-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/object-graph-synthesis-2026-06-23.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/paradoc-docs-checker-clear.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/paradoc-email-freeze-diagnosis.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/paradoc-object-service-prototype.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/paradoc-pptx-renderer-prototype.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/paradoc-qdrant-indexing-pipeline.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/paradoc-source-entity-migration.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/paradoc-universal-wire-diagnosis.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/project-goals.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/public-identity-and-custom-domains.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/publication-rich-export-design.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/runbook-node-b-universal-wire-migration-2026-06-10.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/stable-platform-divergent-computers-architecture-2026-05-17.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/texture-versioned-reader-ux-options-2026-06-19.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/theme-system-contract-v0.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/universal-wire-activation-topology-2026-06-10.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/universal-wire-production-recovery-missiongradient-2026-06-10.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/vm-priority-policy.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/vtext-styleguide-source-theme-synthesis-2026-06-06.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/vtext-styleguide-system-research-2026-06-06.md  # historical retired Texture predecessor name; texture-cutover-allow: deletion receipt
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/archive/wire-news-system-learning-saga-2026-06-09.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: frontend/src/lib/apps/README.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: load/README.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
+    annotations: {doc_role: definition, authority: mission, lifecycle: active}
+    witnesses: [docs/definitions/documentation-authority-reduction-2026-07-09.md, docs/mission-graph.yaml, cmd/doccheck/main.go]
+    refresh_triggers: [documentation_index_change, doccheck_rule_change]

@@ -14,11 +14,11 @@ this document as a plan, checklist, or summary. Its definitions govern what
 
 This document **supersedes as executable authority**:
 
-- `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` (the 2026-07-07 program
+- historical source in Git history (the 2026-07-07 program
   paradoc) — its phases were partially executed and its sequencing was violated
   in practice (Phase 4 seams landed before Phase 0 foundations); this document
   absorbs its remaining work and corrects the sequencing.
-- `docs/archive/heresy-eradication-2026-07-07.md` — its definition graph
+- historical source in Git history — its definition graph
   (heresy, eliminated, detector, registry-close semantics) is imported by
   reference; its execution state is absorbed here.
 
@@ -40,9 +40,9 @@ either should redirect here.
    (ComputerVersion, materializer, route-over-computer-version).
 4. `docs/choir-doctrine.md` heresy registry (H001–H031) — per-heresy authority
    for bad pattern and blessed replacement.
-5. `docs/archive/heresy-eradication-2026-07-07.md` — imported definition
+5. historical source in Git history — imported definition
    graph for `heresy`, `eliminated`, detector semantics.
-6. `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md` — phase inventories,
+6. historical source in Git history — phase inventories,
    deletion inventories, completion criteria (imported, resequenced here).
 7. `docs/assessment-overall-state-2026-07-07.md` — evidence baseline
    (completeness percentages, timeout diagnosis, storage-fork analysis).
@@ -108,7 +108,7 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 ## Definition Graph
 
 Imported nodes: `heresy`, `eliminated`, detector semantics, registry-close
-semantics from `docs/archive/heresy-eradication-2026-07-07.md` — status carried as
+semantics from historical source in Git history — status carried as
 settled there.
 
 ### T1. Term: `seam`
@@ -554,10 +554,10 @@ yellow/green auto-proceed rule.
     `missions/cross-substrate-proof-v0.md` to `checkpoint_incomplete`.
   - C5 (FIRST Phase A commit — now landed in the green docs alignment pass;
     verify-and-close) — supersession made machine-readable, not just prose:
-    pointer notes in `docs/archive/mission-og-dolt-heresy-hard-cutover-v0.md`
+    pointer notes in historical source in Git history
     (plus its post-commit state note: tag adapter is an embedded-mode interim
     hook; freezes but does not settle H031) and
-    `docs/archive/heresy-eradication-2026-07-07.md`; `docs/mission-graph.yaml`
+    historical source in Git history; `docs/mission-graph.yaml`
     nodes for both absorbed docs with `status: superseded` pointing at this
     node; all three documents registered in `docs/doc-authority-manifest.yaml`
     with correct roles/witnesses.

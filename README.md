@@ -135,10 +135,8 @@ task package    # build .app bundle
 task sign       # ad-hoc sign for local testing
 ```
 
-See [cmd/desktop/README.md](cmd/desktop/README.md) for setup, build, and
-auth bridge details, and
-[docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md)
-for the full build spec and phase plan.
+See [cmd/desktop/README.md](cmd/desktop/README.md) for setup, build, auth bridge,
+and the maintained desktop contract.
 
 ### Choir CLI
 
@@ -196,9 +194,8 @@ system. The deeper object is the owned computer and its durable artifacts.
 For the deeper design frame, see:
 
 - [docs/choir-doctrine.md](docs/choir-doctrine.md)
-- [docs/archive/mission-geometry.md](docs/archive/mission-geometry.md)
 - [docs/computer-ontology.md](docs/computer-ontology.md)
-- [docs/archive/project-goals.md](docs/archive/project-goals.md)
+- [docs/semantic-registry.md](docs/semantic-registry.md)
 
 ## Runtime Model
 
@@ -418,31 +415,10 @@ class is trajectory/work-item settlement.
 
 ## Documentation Map
 
-Start here:
-
-- [docs/choir-doctrine.md](docs/choir-doctrine.md): apex doctrine and architecture control document.
-- [AGENTS.md](AGENTS.md): repository agent operating contract.
-- [docs/archive/mission-geometry.md](docs/archive/mission-geometry.md): high-level mission geometry and product ontology.
-- [docs/computer-ontology.md](docs/computer-ontology.md): persistent computer, ledger, promotion, and update ontology.
-- [docs/archive/project-goals.md](docs/archive/project-goals.md): current goal continuum and absorbed historical mission signal.
-- [docs/archive/glossary.md](docs/archive/glossary.md): canonical vocabulary.
-- [docs/README.md](docs/README.md): documentation index and cleanup status.
-- [docs/current-architecture.md](docs/current-architecture.md): current architecture memo.
-- [docs/assessment-overall-state-2026-07-07.md](docs/assessment-overall-state-2026-07-07.md): evidence-backed system state assessment; corrects stale premises (actor runtime fully wired, wire outage is substrate not pipeline, audit trail is application-level today).
-- [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](docs/definitions/og-dolt-heresy-completion-2026-07-08.md): current umbrella Definition mission for object-graph hard cutover, Dolt-native audit/promotion, and heresy elimination (supersedes the older hard-cutover mission).
-- [docs/definitions/substrate-independent-audited-computer-2026-07-04.md](docs/definitions/substrate-independent-audited-computer-2026-07-04.md): executable definition of the product object — `ComputerVersion = (CodeRef, ArtifactProgramRef)` — with substrates as materializers.
-- [docs/choir-grip-checkpoint-2026-07-07.md](docs/choir-grip-checkpoint-2026-07-07.md): narrative checkpoint connecting the architecture, GRIP theory, and the project's conceptual lineage.
-- [docs/frontend-app-building-api.md](docs/frontend-app-building-api.md): current frontend app registry, preview, theme, and shell contract.
-- [docs/runtime-invariants.md](docs/runtime-invariants.md): implementation invariants.
-- [docs/archive/adr-dolt-as-canonical-state.md](docs/archive/adr-dolt-as-canonical-state.md): Dolt/SQLite state-boundary decision (original ADR; refined by D-STORES/D-WIRE in the umbrella mission).
-- [docs/legacy-promotion-experiments-learnings.md](docs/legacy-promotion-experiments-learnings.md): consolidated lessons from pruned patchset-promotion experiments.
-- [docs/archive/implementation-scope.md](docs/archive/implementation-scope.md): near-term scope and non-goals.
-- [docs/archive/north-star.md](docs/archive/north-star.md): longer product direction.
-- [cmd/desktop/README.md](cmd/desktop/README.md): native macOS app setup, build, and auth bridge docs.
-- [docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md](docs/archive/spec-choir-desktop-wails-v3-2026-06-22.md): desktop app build spec and phase plan.
-
-Many stale dated proof files have been pruned. Preserve their reusable lessons
-in consolidated docs instead of keeping obsolete success paths alive.
+Start with [docs/README.md](docs/README.md). It defines the bounded current
+packet: doctrine, operating contract, semantic registry, current state, domain
+contracts, and the one active product Definition. Historical missions and raw
+evidence are available through Git history, not the working-tree search corpus.
 
 ## Repository Shape
 

@@ -84,10 +84,8 @@ append to the candidate's tape. There is no background VM or desktop kept warm
 waiting to be switched to; promotion moves the route pointer between
 ComputerVersions (invariant `route-over-computer-version`).
 
-When the implementation substrate is VM-backed, computer liveness is governed
-by the warmness and reclaim policy in
-[vm-priority-policy.md](archive/vm-priority-policy.md). That policy is part of the
-computer ontology: active primary computers outrank candidate/background work,
+When the implementation substrate is VM-backed, computer liveness follows this
+policy: active primary computers outrank candidate/background work,
 and future always-on computers must be modeled as a first-class lifecycle class
 rather than a cosmetic account flag.
 

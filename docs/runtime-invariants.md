@@ -38,9 +38,7 @@ auth/session, and Choir-in-Choir claims.
 
 ## Computer Lifecycle And Reclaim
 
-For the concrete current and future policy, read
-[vm-priority-policy.md](archive/vm-priority-policy.md). This section records the
-invariants that policy must preserve.
+This section is the maintained source for the runtime priority invariants.
 
 Active user computers should stay warm when capacity allows. Fixed idle timeout
 is only a coarse safety valve; pressure-aware lifecycle policy must observe host
@@ -169,8 +167,8 @@ provenance, Trace visibility, and merge/promotion review.
 Dolt is the desired canonical store for product state. SQLite may remain for
 narrow hot runtime, cache, local compatibility, or transitional implementation
 roles only when explicitly justified. Do not introduce new durable product truth
-into SQLite by default. The decision record is
-[adr-dolt-as-canonical-state.md](archive/adr-dolt-as-canonical-state.md).
+into SQLite by default. The current Dolt boundary is maintained here and in
+[computer-ontology.md](computer-ontology.md).
 
 Per-user embedded Dolt holds private product state: app graph, appagent state,
 `texture` document/version content, prompts, local trajectories, findings, evidence
@@ -229,7 +227,7 @@ Cross-VM routing should use direct transport or a relay, not platform-Dolt
 polling.
 
 This invariant is the spirit of the target durable-actor model
-(`docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md`: "the database
+(historical source in Git history: "the database
 remembers, Go delivers"). Today's `channel_messages`/inbox-poll path is being
 replaced by Go-channel mailboxes with activation-on-send; until that cutover
 lands, the current per-turn inbox-poll path is what satisfies this invariant in
@@ -269,7 +267,7 @@ without run-memory/compaction and bounded continuation evidence.
 acceptance class.
 
 `continuation-level` is transitional: per
-`docs/archive/choir-rearchitecture-durable-actors-2026-06-11.md`, this acceptance
+historical source in Git history, this acceptance
 level is being re-pointed at trajectory/work-item settlement evidence
 (portfolio M4). Until that re-pointing lands, the current rule and evidence
 requirement above remain in force.
