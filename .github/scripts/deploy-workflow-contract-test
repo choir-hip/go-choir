@@ -28,9 +28,12 @@ require 'deploy-receipt.json'
 require 'Refusing to publish an activation receipt with no verified artifacts'
 require 'deploy-failures'
 require 'verify_artifact_manifest'
+require 'sandbox_runtime_commit=$(artifact_manifest_commit /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)'
+require 'wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit"'
 reject 'git reset --hard origin/main'
 reject 'fast_build_host_service'
 reject 'active computer refresh failed; continuing'
+reject 'if [ "$commit" = "$DEPLOY_COMMIT" ]; then'
 
 identity_line=$(grep -nF 'selected service build identity mismatch' "$workflow" | cut -d: -f1)
 receipt_line=$(grep -nF 'Published activation receipt' "$workflow" | cut -d: -f1)

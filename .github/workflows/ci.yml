@@ -618,7 +618,7 @@ jobs:
                 return 1
               fi
             }
-            verify_artifact_manifest() {
+            artifact_manifest_commit() {
               local manifest="$1"
               local expected_artifact="$2"
               if [ ! -f "$manifest" ]; then
@@ -629,8 +629,19 @@ jobs:
               local commit
               artifact=$(jq -er '.artifact' "$manifest")
               commit=$(jq -er '.commit' "$manifest")
-              if [ "$artifact" != "$expected_artifact" ] || [ "$commit" != "$DEPLOY_COMMIT" ]; then
-                echo "Build manifest mismatch at ${manifest}: artifact=${artifact} commit=${commit}, expected ${expected_artifact} ${DEPLOY_COMMIT}" >&2
+              if [ "$artifact" != "$expected_artifact" ] || [ "${#commit}" -ne 40 ] || [[ "$commit" == *[!0-9a-f]* ]]; then
+                echo "Build manifest invalid at ${manifest}: artifact=${artifact} commit=${commit}, expected artifact ${expected_artifact} with a full commit SHA" >&2
+                return 1
+              fi
+              printf '%s\n' "$commit"
+            }
+            verify_artifact_manifest() {
+              local manifest="$1"
+              local expected_artifact="$2"
+              local commit
+              commit=$(artifact_manifest_commit "$manifest" "$expected_artifact") || return 1
+              if [ "$commit" != "$DEPLOY_COMMIT" ]; then
+                echo "Build manifest mismatch at ${manifest}: artifact=${expected_artifact} commit=${commit}, expected ${expected_artifact} ${DEPLOY_COMMIT}" >&2
                 return 1
               fi
               printf '%s\n' "$commit"
@@ -638,16 +649,17 @@ jobs:
             wait_for_sandbox_commit() {
               local sandbox_url="$1"
               local vm_id="$2"
+              local expected_commit="$3"
               local commit=""
               for _ in $(seq 1 60); do
                 commit=$(curl -fsS --max-time 2 "${sandbox_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
-                if [ "$commit" = "$DEPLOY_COMMIT" ]; then
+                if [ "$commit" = "$expected_commit" ]; then
                   echo "    Verified ${vm_id} serves sandbox commit ${commit}"
                   return 0
                 fi
                 sleep 1
               done
-              echo "Timed out waiting for ${vm_id} to serve sandbox runtime ${DEPLOY_COMMIT}; observed ${commit:-missing}" >&2
+              echo "Timed out waiting for ${vm_id} to serve sandbox runtime ${expected_commit}; observed ${commit:-missing}" >&2
               return 1
             }
             dump_deploy_service_diagnostics() {
@@ -1050,6 +1062,7 @@ jobs:
               record_receipt_artifact sandbox "$sandbox_commit" installed
             fi
             if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] || [ "$sandbox_service_selected" = "true" ]; then
+              sandbox_runtime_commit=$(artifact_manifest_commit /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)
               if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
                 echo "==> Refreshing active interactive computers onto deployed guest image"
               elif [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
@@ -1120,7 +1133,7 @@ jobs:
                         echo "    Refreshed ${refresh_vm_id}"
                       fi
                     fi
-                    wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id"
+                    wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit"
                   ) &
                   refresh_pids+=("$!")
                   if [ "${#refresh_pids[@]}" -ge "$max_parallel_refresh" ]; then
