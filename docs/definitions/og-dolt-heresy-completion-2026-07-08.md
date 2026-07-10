@@ -46,12 +46,9 @@ either should redirect here.
    deletion inventories, completion criteria (imported, resequenced here).
 7. `docs/assessment-overall-state-2026-07-07.md` — evidence baseline
    (completeness percentages, timeout diagnosis, storage-fork analysis).
-8. Agentic-consensus panel reviews 2026-07-08
-   (`docs/evidence/agentic-consensus-2026-07-08-docs-review/`,
-   `docs/evidence/agentic-consensus-2026-07-08-docs-review-2/`,
-   `docs/evidence/agentic-consensus-2026-07-08-mission-readiness/`) — reviewer
-   evidence class; findings adjudicated into this document, not authority on their
-   own.
+8. Agentic-consensus panel reviews 2026-07-08/09 — reviewer evidence class;
+   findings were adjudicated into this document, not authority on their own.
+   Raw panel transcripts are intentionally absent from the worktree.
 9. `AGENTS.md` (repo operating contract, mutation ceremony, Landing Loop).
 
 Where this document conflicts with older mission docs or ledgers that label
@@ -211,7 +208,7 @@ execution_effect:
 id: bounded-request-path
 kind: invariant
 status: settled (definition and implementation)
-source: docs/assessment-overall-state-2026-07-07.md (historical staging trace: api.resolve max 180,029ms, 23 errors); docs/evidence/w2-timeout-staging-proof-2026-07-09.md (post-fix: api.resolve max 60,001ms, 504 within 60s)
+source: observed staging traces adjudicated into this Definition (pre-fix api.resolve max 180,029ms / 23 errors; post-fix max 60,001ms with a bounded 504)
 definition: No public request may hang for the vmctl client default; the proxy fails fast with a 504 within a bounded window.
 observables:
   - internal/vmctl/client.go:22 DefaultClientTimeout = 60s.
@@ -476,16 +473,15 @@ At each phase exit:
 
 1. **Run agentic consensus** using `skills/agentic-consensus/` against the
    phase's claimed exit state: the phase's deliverables, evidence-ledger
-   entries, and the diff/commits landed. Output directory:
-   `/tmp/agentic-consensus-<date>-phase-<X>/`, preserved into
-   `docs/evidence/` on gate close.
+   entries, and the diff/commits landed. Raw output is ephemeral; only the
+   adjudicated conclusion belongs in a current authority document.
 2. **Adjudicate** panel findings as `external second opinion` evidence:
    confirm each against the repo (the panel is not authority; grep/test/trace
    verification is). Sort confirmed findings into: (a) phase-exit defects
    (the phase's own bar not met), (b) new definition nodes (register, don't
    silently absorb), (c) out-of-scope noise (record and drop). The
    adjudication table (finding → category → one-line reasoning) MUST be
-   committed to `docs/evidence/` before the gate can clear. The executing
+   committed to this Definition's evidence ledger before the gate can clear. The executing
    agent MUST NOT be the sole adjudicator for red-class gates; either the
    owner signs off on the table, or a non-implementing
    independent agent (not the consensus runner) verifies the table and the
@@ -759,7 +755,7 @@ Per the definition skill. Specific bindings:
   definition_node: bounded-request-path
   evidence_class: observed file result + staging trace (assessment)
   command_or_observation: internal/vmctl/client.go:22 (180s); no ReadTimeout/WriteTimeout in proxy server; staging api.resolve max 180,029ms.
-  result: fixed by W2 (commit 67fff296 + prior server.go timeout defaults; staging api.resolve max now 60,001ms; see docs/evidence/w2-timeout-staging-proof-2026-07-09.md)
+  result: fixed by W2 (commit 67fff296 + prior server.go timeout defaults; staging api.resolve max now 60,001ms; raw staging proof removed from the worktree after this result was adjudicated here)
 - claim: Dolt operational semantics for promotion and topology (per-session branch checkout; embedded exclusive directory lock; optimistic-CAS commit with app-level retry; DOLT_MERGE/DOLT_RESET implicitly commit the transaction so merge+tag is never one transaction; branch-in-DSN undocumented for embedded driver; auto-GC default since 1.75, embedded applicability unverified; no official embedded→sql-server migration guide).
   definition_node: embedded-branch-isolation, wire-store-sql-server
   evidence_class: external documentation review (docs.dolthub.com, dolthub/driver README, DoltHub blog) + observed test result, 2026-07-08 / 2026-07-09
@@ -775,7 +771,7 @@ Per the definition skill. Specific bindings:
 - claim: Plan-review consensus round 2026-07-08 (4/4 panelists returned; gpt55 output empty/failed-silently) adjudicated. Confirmed blockers, all fixed in this document — D-STORES file mapping was inverted (world-wire store is internal/platform/objectgraph_store.go, not internal/objectgraph/dolt_store.go); D-PROMO had ignored the prior 2026-07-07 experiment (adapter comment + two test files), whose falsification is diagnosed as a connection-pooling artifact (checkout ran on one pooled conn, queries on others; pinned-conn variant reportedly isolates correctly) — settlement pulled into Phase A with a -count=10 determinism bar; completion criterion 3 gained a falsified-D-PROMO fallback clause; Phases B–E gained explicit exit bars; gate adjudication must be committed as auditable evidence; supersession must be machine-readable (C5 expanded to mission-graph superseded nodes + doc-authority-manifest entries for all three docs).
   definition_node: seam, embedded-branch-isolation, dolt-store-taxonomy, phase-gate-protocol
   evidence_class: external second opinion (panel) + observed (repo re-verification of B1/B2; diag test re-run showing pooled-connection checkout non-stick; Phase A -count=10 determinism test run 2026-07-09)
-  command_or_observation: docs/evidence/agentic-consensus-2026-07-08-plan/ (raw outputs); go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
+  command_or_observation: panel findings adjudicated into this Definition; go test ./internal/computerversion -run TestDoltEmbeddedBranchIsolationPinnedConnection -count=10
   result: all confirmed category-(a) findings fixed in-document; D-PROMO pinned-conn determinism test is Phase A work and has been independently reproduced
   uncertainty: none
 ```
@@ -828,8 +824,8 @@ plus this mission's additions):
    no live heresy entries.
 6. `choir` CLI `trajectory`/`texture` verbs read identical shapes before and
    after, verified against production — evidence artifact: a recorded
-   before/after CLI output diff against production, committed to
-   `docs/evidence/`.
+   before/after CLI output diff against production, summarized in this
+   Definition's evidence ledger.
 7. Request path bounded (I3) with staging proof.
 8. All C1–C7 corrections landed; no mission document mislabeled complete.
 9. Past-mission triage table complete with every `absorbed` edge executed
@@ -893,14 +889,7 @@ run_checkpoint_and_resumption_state:
     live heresy family and the D-STORE storage-fork six questions).
   suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
   evidence_artifact_refs:
-    - docs/evidence/agentic-consensus-2026-07-08/ (plan review panel raw outputs)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit/ (Phase A exit panel round 1 + final adjudication)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta/ (Phase A exit panel round 2)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-2/ (Phase A exit panel round 3)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-3/ (Phase A exit panel round 4)
-    - docs/evidence/agentic-consensus-2026-07-09-phase-a-exit-delta-4/ (Phase A exit panel round 5 clear)
-    - docs/evidence/w2-timeout-staging-proof-2026-07-09.md
-    - docs/assessment-overall-state-2026-07-07.md
+    - this Definition's adjudicated evidence ledger
   rollback_refs:
     - a703bf44 (pre-mission docs state)
 ```

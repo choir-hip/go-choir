@@ -38,7 +38,7 @@ nodes:
 - id: portfolio-2026-06-11
   title: Mission Portfolio
   path: docs/mission-portfolio-2026-06-11.md
-  ledger: docs/mission-portfolio-2026-06-11.ledger.md
+  ledger: ''
   status: working
   kind: spine
   depends_on: []
@@ -67,7 +67,7 @@ nodes:
 - id: overnight-autoradio-platform-checklist-v0
   title: Overnight Autoradio Platform Checklist v0
   path: docs/mission-overnight-autoradio-platform-checklist-v0.md
-  ledger: docs/mission-overnight-autoradio-platform-checklist-v0.ledger.md
+  ledger: ''
   status: working
   kind: spine
   depends_on:
@@ -111,7 +111,7 @@ nodes:
 - id: m2-messaging-cutover
   title: M2 Messaging Cutover
   path: docs/mission-messaging-cutover-v0.md
-  ledger: docs/mission-messaging-cutover-v0.ledger.md
+  ledger: ''
   status: settled
   kind: spine
   depends_on:
@@ -123,7 +123,7 @@ nodes:
 - id: m3.1-lifecycle-recovery
   title: M3.1 Lifecycle Cutover Regression Recovery
   path: docs/mission-lifecycle-cutover-m3.1-v0.md
-  ledger: docs/mission-lifecycle-cutover-m3.1-v0.ledger.md
+  ledger: ''
   status: settled
   kind: spine
   depends_on:
@@ -138,7 +138,7 @@ nodes:
 - id: m3.2-vtext-prompt-decision-notes # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: M3.2 Texture Prompt Register And Decision Notes
   path: docs/mission-vtext-prompt-decision-notes-m3.2-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
-  ledger: docs/mission-vtext-prompt-decision-notes-m3.2-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  ledger: ''
   status: settled
   kind: spine
   depends_on:
@@ -153,7 +153,7 @@ nodes:
 - id: m3.3-vm-bootstrap-recovery-race
   title: M3.3 VM Bootstrap Recovery Race
   path: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.md
-  ledger: docs/mission-vm-bootstrap-recovery-race-m3.3-v0.ledger.md
+  ledger: ''
   status: settled
   kind: spine
   depends_on:
@@ -169,7 +169,7 @@ nodes:
 - id: m3.4-vtext-first-draft-regression # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
   title: M3.4 Prompt-Bar Texture First-Draft Regression
   path: docs/mission-vtext-first-draft-regression-m3.4-v0.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
-  ledger: docs/mission-vtext-first-draft-regression-m3.4-v0.ledger.md # texture-cutover-allow: historical mission id/path; delete-by texture-hard-cutover-v0
+  ledger: ''
   status: settled
   kind: spine
   depends_on:
@@ -184,7 +184,7 @@ nodes:
 - id: texture-product-loop-recovery-v0
   title: Texture Hard Cutover And Product Loop Recovery v0
   path: docs/mission-texture-product-loop-recovery-v0.md
-  ledger: docs/mission-texture-product-loop-recovery-v0.ledger.md
+  ledger: ''
   status: open_handoff
   kind: spine
   # Triage 2026-06-28: ACTIVE. The V-name ontology cutover portion is
@@ -227,7 +227,7 @@ nodes:
 - id: texture-long-running-agent-v0
   title: Texture As A Long-Running Agent v0
   path: docs/mission-texture-long-running-agent-v0.md
-  ledger: docs/archive/mission-texture-long-running-agent-v0.ledger.md
+  ledger: ''
   status: superseded
   kind: superseded
   # Supersedes/folds in the cadence defect of texture-product-loop-recovery-v0
@@ -239,14 +239,13 @@ nodes:
   enables: []
   sources:
   - docs/mission-texture-product-loop-recovery-v0.md
-  - docs/mission-texture-product-loop-recovery-v0.ledger.md
   - docs/texture-agentic-invariants-2026-06-13.md
   - docs/choir-doctrine.md
   - AGENTS.md
 - id: texture-durable-thread-v1
   title: Texture Durable Thread v1
   path: docs/mission-texture-durable-thread-v1.md
-  ledger: docs/mission-texture-durable-thread-v1.ledger.md
+  ledger: ''
   status: planned
   kind: spine
   depends_on:
@@ -273,7 +272,7 @@ nodes:
 - id: texture-versioned-artifact-v0
   title: Texture As A Versioned Provenanced Artifact v0
   path: docs/mission-texture-versioned-artifact-v0.md
-  ledger: docs/mission-texture-versioned-artifact-v0.ledger.md
+  ledger: ''
   status: planned
   kind: spine
   # Carved out of texture-long-running-agent-v0 R0/R0b on 2026-06-18: the document
@@ -311,7 +310,7 @@ nodes:
 - id: texture-hard-cutover-v0
   title: Texture Hard Cutover v0
   path: docs/archive/mission-texture-hard-cutover-v0.md
-  ledger: docs/archive/mission-texture-hard-cutover-v0.ledger.md
+  ledger: ''
   status: superseded
   kind: superseded
   # Triage 2026-06-28: consolidated into texture-product-loop-recovery-v0
@@ -332,7 +331,7 @@ nodes:
 - id: texture-structured-document-transclusion-cutover-v0
   title: Texture Structured Document And Transclusion Cutover v0
   path: docs/mission-texture-structured-document-transclusion-cutover-v0.md
-  ledger: docs/mission-texture-structured-document-transclusion-cutover-v0.ledger.md
+  ledger: ''
   status: working
   kind: spine
   depends_on:
@@ -358,7 +357,7 @@ nodes:
 - id: m3-lifecycle-cutover
   title: M3 Lifecycle Cutover
   path: docs/mission-lifecycle-cutover-v0.md
-  ledger: docs/mission-lifecycle-cutover-v0.ledger.md
+  ledger: ''
   status: settled
   kind: spine
   # Lineage edge, not a blocking gate. M3's lifecycle settlement was proven
@@ -375,7 +374,7 @@ nodes:
 - id: m4-continuation-deletion
   title: M4 Continuation Deletion
   path: docs/mission-continuation-deletion-v0.md
-  ledger: docs/mission-continuation-deletion-v0.ledger.md
+  ledger: ''
   status: planned
   kind: spine
   depends_on:
@@ -399,7 +398,7 @@ nodes:
 - id: m5-wire-on-settlement
   title: M5 Wire On Settlement
   path: docs/mission-wire-on-settlement-v0.md
-  ledger: docs/mission-wire-on-settlement-v0.ledger.md
+  ledger: ''
   status: open_handoff
   kind: spine
   # Triage 2026-06-28: ACTIVE (deferred). The M5 route-switch evidence gate
@@ -493,7 +492,7 @@ nodes:
 - id: doc-heresy-checker-v0
   title: Doc/Heresy Checker v0
   path: docs/mission-doc-heresy-checker-v0.md
-  ledger: docs/mission-doc-heresy-checker-v0.ledger.md
+  ledger: ''
   status: settled
   kind: docs_truth
   depends_on: []
@@ -506,7 +505,7 @@ nodes:
 - id: doc-truth-drift-context-v0
   title: Doc Truth, Drift CI, And Context Packet v0
   path: docs/mission-doc-truth-drift-ci-context-packet-v0.md
-  ledger: docs/mission-doc-truth-drift-ci-context-packet-v0.ledger.md
+  ledger: ''
   status: superseded
   kind: superseded
   # Triage 2026-06-28: superseded by docs-truth-system-v1 (settled), which is
@@ -535,7 +534,7 @@ nodes:
 - id: docs-truth-system-v1
   title: Docs Truth System v1
   path: docs/mission-docs-truth-system-v1.md
-  ledger: docs/mission-docs-truth-system-v1.ledger.md
+  ledger: ''
   status: settled
   kind: docs_truth
   depends_on:
@@ -611,7 +610,7 @@ nodes:
 - id: choir-doctrine-upgrade-v0
   title: Mission - Choir Doctrine Upgrade - v0
   path: docs/mission-choir-doctrine-upgrade-v0.md
-  ledger: docs/mission-choir-doctrine-upgrade-v0.ledger.md
+  ledger: ''
   status: settled
   kind: docs_truth
   depends_on: []
@@ -676,7 +675,7 @@ nodes:
 - id: conductor-url-source-routing-h029-v0
   title: Mission - Texture Source Intake And Conductor URL Routing H029 - v0
   path: docs/mission-conductor-url-source-routing-h029-v0.md
-  ledger: docs/mission-conductor-url-source-routing-h029-v0.ledger.md
+  ledger: ''
   status: open_handoff
   kind: side
   # Triage 2026-06-28: ACTIVE. Source intake into Texture (YouTube, podcast,
@@ -895,7 +894,7 @@ nodes:
 - id: node-b-nix-store-retention-v0
   title: Node B Nix Store Retention Mission v0
   path: docs/mission-node-b-nix-store-retention-v0.md
-  ledger: docs/mission-node-b-nix-store-retention-v0.ledger.md
+  ledger: ''
   status: settled
   kind: side
   depends_on: []
@@ -905,7 +904,7 @@ nodes:
 - id: node-b-storage-retention-v0
   title: 'Mission: Node B Storage Retention And VM State Prevention v0'
   path: docs/mission-node-b-storage-retention-v0.md
-  ledger: docs/mission-node-b-storage-retention-v0.ledger.md
+  ledger: ''
   status: open_handoff
   kind: side
   # Triage 2026-06-28: ACTIVE. The nix-store retention piece is settled
@@ -957,7 +956,7 @@ nodes:
 - id: public-pulse-app-v0
   title: Public Pulse App Mission v0
   path: docs/mission-public-pulse-app-v0.md
-  ledger: docs/mission-public-pulse-app-v0.ledger.md
+  ledger: ''
   status: settled
   kind: side
   depends_on: []
@@ -1356,7 +1355,7 @@ nodes:
 - id: mission-3b-ingestion-path-v0
   title: 'Mission 3b: New Ingestion Path (E2E)'
   path: docs/mission-3b-ingestion-path-v0.md
-  ledger: docs/mission-3b-ingestion-path-v0.ledger.md
+  ledger: ''
   status: working
   kind: spine
   depends_on: []
@@ -1378,7 +1377,7 @@ nodes:
 - id: update-coagent-source-centric-deletion-v0
   title: 'Mission: update_coagent Source-Centric Deletion v0'
   path: docs/mission-update-coagent-source-centric-deletion-v0.md
-  ledger: docs/mission-update-coagent-source-centric-deletion-v0.ledger.md
+  ledger: ''
   status: settled
   kind: side
   depends_on: []
@@ -2791,7 +2790,7 @@ nodes:
 - id: orchestrator-suite-2026-06-28
   title: 'Mission: Orchestrator Suite 2026-06-28'
   path: docs/mission-orchestrator-suite-2026-06-28.md
-  ledger: docs/mission-orchestrator-suite-2026-06-28.ledger.md
+  ledger: ''
   status: settled
   kind: evidence
   # The orchestrator suite: 24 missions delegated to subagents, each in its
@@ -2806,7 +2805,6 @@ nodes:
   enables: []
   sources:
   - docs/mission-orchestrator-suite-2026-06-28.md
-  - docs/mission-orchestrator-suite-2026-06-28.ledger.md
   - docs/archive/orchestrator-checkpoint-report-2026-06-28.md
   - docs/mission-suite-2026-06-28.md
 - id: orchestrator-suite-2026-06-28
@@ -2967,7 +2965,7 @@ nodes:
 - id: universal-wire-stabilization-v1
   title: Universal Wire Stabilization v1
   path: docs/mission-universal-wire-stabilization-v1.md
-  ledger: docs/mission-universal-wire-stabilization-v1.ledger.md
+  ledger: ''
   status: active
   kind: paradoc
   depends_on:

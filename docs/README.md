@@ -74,22 +74,16 @@ the Beads cutover transition. It is not an onboarding list: its historical
 nodes, duplicate placeholders, and unverified statuses must not be read as
 current work without the ACTIVE view or direct mission evidence.
 
-## History And Evidence
+## Historical Material
 
-- [`archive/`](archive/) contains retained historical designs, missions, and
-  decision material.
-- [`evidence/`](evidence/) contains proof artifacts and run receipts.
-- `*.ledger.md`, dated reviews, and retired mission files are searchable
-  evidence, not default instructions.
-- [`doc-authority-manifest.yaml`](doc-authority-manifest.yaml) is a
-  machine-readable navigation inventory during this reduction, not a second
-  doctrine.
+Historical missions, ledgers, raw evidence, reviews, and superseded proposals
+are being removed from the worktree because generic retrieval treats their
+prose as current context. Git history remains the recovery and forensic
+surface; it is deliberately not part of the ordinary reading packet.
 
-History is retained by default. Exact duplicates may be removed only after a
-hash-addressed retained copy is named. A non-duplicate deletion needs a
-retention receipt showing its hash, classification, extracted learning,
-successor or bundle, and rollback commit, plus owner approval. There is no
-"archive, then delete the archive" phase.
+[`doc-authority-manifest.yaml`](doc-authority-manifest.yaml) is slim
+machine-readable navigation metadata, not a second doctrine or a historical
+catalog.
 
 ## Maintenance
 

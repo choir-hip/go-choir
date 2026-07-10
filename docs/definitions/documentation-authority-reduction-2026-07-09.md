@@ -332,9 +332,9 @@ variant:
   broken_live_graph_records: 205        # full-corpus index debt; not active-work truth
   dead_manifest_entries: 0
   unclassified_default_read_docs: 0
-  unharvested_large_ledger_chains: 37
-  retrieval_polluting_markdown_candidates: 310
-  retrieval_polluting_nonmarkdown_candidates: 137
+  unharvested_large_ledger_chains: 0
+  retrieval_polluting_markdown_candidates: 256
+  retrieval_polluting_nonmarkdown_candidates: 6
 ```
 
 ## Forbidden Collapses
@@ -366,7 +366,7 @@ successor. No production behavior changes are in scope.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: Owner authorized retrieval-driven mass deletion; audit completed.
+  last_checkpoint: D1 raw-process deletion verified against rollback b6fbd598.
   current_artifact_state: >-
     The default path is a bounded eleven-document content packet plus router;
     legacy graph/index debt is report-only and cannot redefine active work.
@@ -375,29 +375,28 @@ run_checkpoint_and_resumption_state:
     - Derived semantic registry and dated NOW/ACTIVE views.
     - doccheck --mode=live structural gate; --mode=full retains corpus reporting.
     - Retention baseline, superseded by retrieval-driven deletion authority.
+    - D1 removed 148 raw evidence artifacts and 37 mission ledgers.
   what_was_proven:
     - 310 of 331 docs Markdown files are outside the proposed 21-file retain set.
     - Archive has 178 files; raw ledgers have 37 files / about 2.35 MB; raw
       agent-consensus evidence has 135 files.
-    - Strict-live packet validation passes with zero failures.
-    - The full report has 505 warnings, including 205 retained legacy-graph structural warnings.
+    - Strict-live packet validation still passes with zero failures after D1.
+    - The docs corpus fell from 331 to 277 Markdown files; full scan warnings
+      fell from 503 pre-delete to 464 after D1.
   unproven_or_partial_claims:
     - Initial semantic kernel has not been owner-promoted.
-    - Exact package boundaries and live-link replacements remain to be verified.
+    - D2 archive live-link replacements remain to be verified.
   highest_impact_remaining_uncertainty: >-
-    Whether the proposed 21-file retain set has missed a current legal,
-    operational, or code-contract dependency.
+    Which archive-derived claims in living docs need to be inlined before all
+    178 archive files leave the worktree.
   next_executable_probe: >-
-    Verify the 21-file retain set against non-doc references, commit the current
-    authority reduction as rollback, then delete raw evidence and ledgers as
-    the first package.
+    Repair archive links from living docs, then delete D2 against rollback
+    b6fbd598 and the D1 commit.
   suggested_goal_string: /goal docs/definitions/documentation-authority-reduction-2026-07-09.md
   evidence_artifact_refs:
-    - docs/evidence/documentation-retention-inventory-2026-07-10.yaml
-    - /tmp/choir-doccheck-live.json
-    - /tmp/choir-doccheck-full.json
+    - b6fbd598 (pre-delete authority/retrieval baseline)
   rollback_refs:
-    - 21b159be
+    - b6fbd598
 ```
 
 ## Suggested Goal String

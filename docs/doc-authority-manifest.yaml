@@ -619,24 +619,6 @@ documents:
       authority: support
       lifecycle: archived
 
-  - path: docs/evidence/llm-run-memory-compaction-staging-2026-06-08.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
-  - path: docs/evidence/node-b-nix-root-classification-2026-06-14.md
-    claim_scope: historical
-    is_root: false
-    is_evidence: true
-    annotations:
-      doc_role: historical_evidence
-      authority: support
-      lifecycle: archived
-
   - path: docs/archive/global-wire-sourcemaxx-newsroom-architecture-diagram-2026-06-07.md
     claim_scope: historical
     is_root: false
