@@ -130,24 +130,31 @@ Safari, which shares cookies with the system browser.
    immediately; otherwise Safari performs the WebAuthn ceremony with Touch ID.
 4. The server redirects to `choir://auth-complete?code=...` and the native app
    validates the callback authority.
-5. Go redeems the one-time code through `/auth/desktop/redeem` with bounded
-   network and response limits.
-6. Go stores access and refresh credentials only in a process-local cookie jar
-   and returns `{"authenticated":true}` to the renderer.
+5. Go redeems the one-time, user-bound code through `/auth/desktop/redeem` with
+   bounded network and response limits. The auth service mints a distinct
+   native session through its canonical cookie issuer; Safari and the desktop
+   never share a refresh credential.
+6. Go's process-local cookie jar absorbs the auth service's HttpOnly
+   `Set-Cookie` response and returns only `{"authenticated":true}` to the
+   renderer. Go does not decode tokens or recreate cookie names, paths, or
+   attributes.
 7. The native reverse proxy deletes renderer-supplied cookies, attaches the jar
    cookies to backend requests, absorbs backend rotation/logout `Set-Cookie`
    headers, and strips those headers before the renderer sees the response.
 
 Access tokens, refresh tokens, exchange codes, and cookie values are not
-returned to JavaScript or written to logs. Renderer requests to the desktop
-exchange/redeem endpoints are blocked; only the native broker may use them.
+returned to JavaScript or written to logs. The handoff store contains only a
+hash of the one-time callback code, the authenticated user reference, and its
+expiry; legacy bearer columns are kept empty until a later schema migration.
+Renderer requests to the desktop redirect/redeem endpoints are blocked; only
+the native broker may redeem the callback.
 
 ### Key endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
 | `/auth/desktop/exchange-redirect` | GET | Safari bridge receives a one-time code through the `choir://` callback |
-| `/auth/desktop/redeem` | POST | Native Go broker redeems the one-time code; renderer access is blocked |
+| `/auth/desktop/redeem` | POST | Native Go broker redeems the one-time code into a distinct server-minted cookie session; renderer access is blocked |
 | `/auth/session` | GET | Check if user is authenticated (used by bridge page) |
 
 ### Why server-side 302 instead of JS redirect

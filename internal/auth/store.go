@@ -254,6 +254,15 @@ func (s *Store) bootstrap() error {
 		return fmt.Errorf("migrate drop username column: %w", err)
 	}
 
+	// The legacy desktop handoff schema carried raw access and refresh bearer
+	// values. The redirect-only handoff now stores only a user reference, but
+	// the NOT NULL columns remain until a later table migration. Scrub any
+	// in-flight legacy values on startup and keep writing empty compatibility
+	// values below so bearer credentials never persist in this table.
+	if _, err := s.db.Exec(`UPDATE desktop_exchange_codes SET access_token = '', refresh_token = '' WHERE access_token <> '' OR refresh_token <> ''`); err != nil {
+		return fmt.Errorf("scrub legacy desktop exchange tokens: %w", err)
+	}
+
 	return nil
 }
 
@@ -621,21 +630,25 @@ func (s *Store) CleanExpiredRefreshSessions() (int64, error) {
 	return res.RowsAffected()
 }
 
-// DesktopExchangeCode represents a one-time code for desktop token exchange.
+// DesktopExchangeCode represents a one-time, user-bound native session
+// handoff. It never contains access or refresh bearer credentials.
 type DesktopExchangeCode struct {
-	Code         string
-	UserID       string
-	AccessToken  string
-	RefreshToken string
-	CreatedAt    time.Time
-	ExpiresAt    time.Time
+	Code      string
+	UserID    string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
+func hashDesktopExchangeCode(code string) string {
+	hash := sha256.Sum256([]byte(code))
+	return fmt.Sprintf("%x", hash)
 }
 
 // CreateDesktopExchangeCode inserts a new one-time exchange code.
 func (s *Store) CreateDesktopExchangeCode(c *DesktopExchangeCode) error {
 	_, err := s.db.Exec(
 		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
-		c.Code, c.UserID, c.AccessToken, c.RefreshToken, c.CreatedAt, c.ExpiresAt,
+		hashDesktopExchangeCode(c.Code), c.UserID, "", "", c.CreatedAt, c.ExpiresAt,
 	)
 	if err != nil {
 		return fmt.Errorf("create desktop exchange code: %w", err)
@@ -646,6 +659,7 @@ func (s *Store) CreateDesktopExchangeCode(c *DesktopExchangeCode) error {
 // ConsumeDesktopExchangeCode atomically retrieves and deletes a code.
 // Returns sql.ErrNoRows if the code does not exist or is expired.
 func (s *Store) ConsumeDesktopExchangeCode(code string) (*DesktopExchangeCode, error) {
+	codeHash := hashDesktopExchangeCode(code)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
@@ -653,18 +667,18 @@ func (s *Store) ConsumeDesktopExchangeCode(code string) (*DesktopExchangeCode, e
 	defer tx.Rollback()
 
 	row := tx.QueryRow(
-		"SELECT code, user_id, access_token, refresh_token, created_at, expires_at FROM desktop_exchange_codes WHERE code = ?",
-		code,
+		"SELECT user_id, created_at, expires_at FROM desktop_exchange_codes WHERE code = ?",
+		codeHash,
 	)
-	c := &DesktopExchangeCode{}
-	if err := row.Scan(&c.Code, &c.UserID, &c.AccessToken, &c.RefreshToken, &c.CreatedAt, &c.ExpiresAt); err != nil {
+	c := &DesktopExchangeCode{Code: code}
+	if err := row.Scan(&c.UserID, &c.CreatedAt, &c.ExpiresAt); err != nil {
 		return nil, err
 	}
 	if time.Now().UTC().After(c.ExpiresAt) {
-		_, _ = tx.Exec("DELETE FROM desktop_exchange_codes WHERE code = ?", code)
+		_, _ = tx.Exec("DELETE FROM desktop_exchange_codes WHERE code = ?", codeHash)
 		return nil, fmt.Errorf("exchange code expired")
 	}
-	if _, err := tx.Exec("DELETE FROM desktop_exchange_codes WHERE code = ?", code); err != nil {
+	if _, err := tx.Exec("DELETE FROM desktop_exchange_codes WHERE code = ?", codeHash); err != nil {
 		return nil, fmt.Errorf("delete exchange code: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

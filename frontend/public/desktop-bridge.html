@@ -262,18 +262,6 @@ async function loginPasskey(email) {
   return finishRes.json();
 }
 
-async function exchangeTokens() {
-  const res = await fetch('/auth/desktop/exchange', {
-    method: 'POST',
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Token exchange failed');
-  }
-  return res.json();
-}
-
 async function handleRegister() {
   const email = document.getElementById('email').value.trim();
   if (!email) { showStatus('Please enter your email', 'error'); return; }

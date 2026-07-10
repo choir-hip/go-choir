@@ -64,7 +64,6 @@ func registerRoutes(s authRouteRegistrar, handler *auth.Handler, rateLimiter *au
 	s.HandleFunc("/auth/login/finish", limit(handler.HandleLoginFinish))
 	s.HandleFunc("/auth/session", limit(handler.HandleSession))
 	s.HandleFunc("/auth/logout", limit(handler.HandleLogout))
-	s.HandleFunc("/auth/desktop/exchange", limit(handler.HandleDesktopExchange))
 	s.HandleFunc("/auth/desktop/exchange-redirect", limit(handler.HandleDesktopExchangeRedirect))
 	s.HandleFunc("/auth/desktop/redeem", limit(handler.HandleDesktopRedeem))
 

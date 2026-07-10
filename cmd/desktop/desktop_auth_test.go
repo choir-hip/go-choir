@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+const (
+	testAccessCookieName  = "choir_access"
+	testRefreshCookieName = "choir_refresh"
+)
+
 func TestParseDesktopBackendRequiresHTTPSOrLoopback(t *testing.T) {
 	t.Parallel()
 
@@ -69,9 +74,11 @@ func TestDesktopAuthUsesOneBridgeAndKeepsTokensNative(t *testing.T) {
 		if request["code"] != exchangeCode {
 			t.Errorf("redemption code = %q, want %q", request["code"], exchangeCode)
 		}
-		writeJSON(w, http.StatusOK, desktopTokenResponse{
-			AccessToken:  accessToken,
-			RefreshToken: refreshToken,
+		http.SetCookie(w, &http.Cookie{Name: testAccessCookieName, Value: accessToken, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode})
+		http.SetCookie(w, &http.Cookie{Name: testRefreshCookieName, Value: refreshToken, Path: "/auth", HttpOnly: true, SameSite: http.SameSiteLaxMode})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"authenticated": true,
+			"user":          map[string]string{"id": "user-native", "email": email},
 		})
 	}))
 	defer backend.Close()
@@ -123,45 +130,12 @@ func TestDesktopAuthUsesOneBridgeAndKeepsTokensNative(t *testing.T) {
 	}
 
 	assertCookieValues(t, session.jar.Cookies(session.endpoint("/api/trajectories")), map[string]string{
-		accessCookieName: accessToken,
+		testAccessCookieName: accessToken,
 	})
 	assertCookieValues(t, session.jar.Cookies(session.endpoint("/auth/session")), map[string]string{
-		accessCookieName:  accessToken,
-		refreshCookieName: refreshToken,
+		testAccessCookieName:  accessToken,
+		testRefreshCookieName: refreshToken,
 	})
-}
-
-func TestDesktopSessionSeedsHttpOnlyScopedCookies(t *testing.T) {
-	t.Parallel()
-
-	backend, err := parseDesktopBackend("https://choir.news")
-	if err != nil {
-		t.Fatal(err)
-	}
-	jar := &recordingCookieJar{}
-	session := &desktopSession{backend: backend, jar: jar}
-	if err := session.seedSession(desktopTokenResponse{AccessToken: "access", RefreshToken: "refresh"}); err != nil {
-		t.Fatal(err)
-	}
-	if jar.setURL == nil || jar.setURL.String() != "https://choir.news/" {
-		t.Fatalf("cookie URL = %v, want backend root", jar.setURL)
-	}
-	if len(jar.setCookies) != 2 {
-		t.Fatalf("seeded cookies = %d, want 2", len(jar.setCookies))
-	}
-
-	byName := make(map[string]*http.Cookie, len(jar.setCookies))
-	for _, cookie := range jar.setCookies {
-		byName[cookie.Name] = cookie
-	}
-	access := byName[accessCookieName]
-	refresh := byName[refreshCookieName]
-	if access == nil || access.Path != "/" || !access.HttpOnly || !access.Secure || access.SameSite != http.SameSiteLaxMode {
-		t.Errorf("access cookie attributes = %#v", access)
-	}
-	if refresh == nil || refresh.Path != "/auth" || !refresh.HttpOnly || !refresh.Secure || refresh.SameSite != http.SameSiteLaxMode {
-		t.Errorf("refresh cookie attributes = %#v", refresh)
-	}
 }
 
 func TestDesktopProxyOwnsCookiesAndAbsorbsSetCookie(t *testing.T) {
@@ -173,19 +147,17 @@ func TestDesktopProxyOwnsCookiesAndAbsorbsSetCookie(t *testing.T) {
 	requestCookies := make(chan string, 1)
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCookies <- r.Header.Get("Cookie")
-		http.SetCookie(w, &http.Cookie{Name: accessCookieName, Value: "rotated-access", Path: "/", HttpOnly: true})
-		http.SetCookie(w, &http.Cookie{Name: refreshCookieName, Value: "rotated-refresh", Path: "/auth", HttpOnly: true})
+		http.SetCookie(w, &http.Cookie{Name: testAccessCookieName, Value: "rotated-access", Path: "/", HttpOnly: true})
+		http.SetCookie(w, &http.Cookie{Name: testRefreshCookieName, Value: "rotated-refresh", Path: "/auth", HttpOnly: true})
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	}))
 	defer backend.Close()
 
 	session := mustDesktopSession(t, backend.URL)
-	if err := session.seedSession(desktopTokenResponse{AccessToken: accessToken, RefreshToken: refreshToken}); err != nil {
-		t.Fatal(err)
-	}
+	seedNativeTestSession(session, accessToken, refreshToken)
 	handler := assetHandler(session)
 	request := httptest.NewRequest(http.MethodGet, "/api/trajectories", nil)
-	request.Header.Set("Cookie", "renderer_cookie=attacker; "+accessCookieName+"=renderer-access")
+	request.Header.Set("Cookie", "renderer_cookie=attacker; "+testAccessCookieName+"=renderer-access")
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, request)
 
@@ -196,10 +168,10 @@ func TestDesktopProxyOwnsCookiesAndAbsorbsSetCookie(t *testing.T) {
 	if strings.Contains(upstreamCookies, "attacker") || strings.Contains(upstreamCookies, "renderer-access") || strings.Contains(upstreamCookies, "renderer_cookie") {
 		t.Fatalf("proxy forwarded renderer cookies: %q", upstreamCookies)
 	}
-	if !strings.Contains(upstreamCookies, accessCookieName+"="+accessToken) {
+	if !strings.Contains(upstreamCookies, testAccessCookieName+"="+accessToken) {
 		t.Fatalf("proxy did not inject native access cookie: %q", upstreamCookies)
 	}
-	if strings.Contains(upstreamCookies, refreshCookieName+"=") {
+	if strings.Contains(upstreamCookies, testRefreshCookieName+"=") {
 		t.Fatalf("proxy sent /auth-scoped refresh cookie to /api: %q", upstreamCookies)
 	}
 	if got := response.Header().Values("Set-Cookie"); len(got) != 0 {
@@ -207,11 +179,11 @@ func TestDesktopProxyOwnsCookiesAndAbsorbsSetCookie(t *testing.T) {
 	}
 
 	assertCookieValues(t, session.jar.Cookies(session.endpoint("/api/trajectories")), map[string]string{
-		accessCookieName: "rotated-access",
+		testAccessCookieName: "rotated-access",
 	})
 	assertCookieValues(t, session.jar.Cookies(session.endpoint("/auth/session")), map[string]string{
-		accessCookieName:  "rotated-access",
-		refreshCookieName: "rotated-refresh",
+		testAccessCookieName:  "rotated-access",
+		testRefreshCookieName: "rotated-refresh",
 	})
 }
 
@@ -222,18 +194,16 @@ func TestDesktopProxyLogoutClearsNativeJar(t *testing.T) {
 			t.Errorf("logout path = %q", r.URL.Path)
 		}
 		requestCookies <- r.Header.Get("Cookie")
-		http.SetCookie(w, &http.Cookie{Name: accessCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
-		http.SetCookie(w, &http.Cookie{Name: refreshCookieName, Value: "", Path: "/auth", MaxAge: -1, HttpOnly: true})
+		http.SetCookie(w, &http.Cookie{Name: testAccessCookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
+		http.SetCookie(w, &http.Cookie{Name: testRefreshCookieName, Value: "", Path: "/auth", MaxAge: -1, HttpOnly: true})
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer backend.Close()
 
 	session := mustDesktopSession(t, backend.URL)
-	if err := session.seedSession(desktopTokenResponse{AccessToken: "native-access", RefreshToken: "native-refresh"}); err != nil {
-		t.Fatal(err)
-	}
+	seedNativeTestSession(session, "native-access", "native-refresh")
 	request := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	request.Header.Set("Cookie", accessCookieName+"=renderer-access; "+refreshCookieName+"=renderer-refresh")
+	request.Header.Set("Cookie", testAccessCookieName+"=renderer-access; "+testRefreshCookieName+"=renderer-refresh")
 	response := httptest.NewRecorder()
 	assetHandler(session).ServeHTTP(response, request)
 
@@ -241,7 +211,7 @@ func TestDesktopProxyLogoutClearsNativeJar(t *testing.T) {
 		t.Fatalf("logout status = %d, want 204", response.Code)
 	}
 	upstreamCookies := <-requestCookies
-	if !strings.Contains(upstreamCookies, accessCookieName+"=native-access") || !strings.Contains(upstreamCookies, refreshCookieName+"=native-refresh") {
+	if !strings.Contains(upstreamCookies, testAccessCookieName+"=native-access") || !strings.Contains(upstreamCookies, testRefreshCookieName+"=native-refresh") {
 		t.Fatalf("logout did not use native session cookies: %q", upstreamCookies)
 	}
 	if strings.Contains(upstreamCookies, "renderer-access") || strings.Contains(upstreamCookies, "renderer-refresh") {
@@ -261,19 +231,17 @@ func TestDesktopProxyRefreshRotatesNativeJar(t *testing.T) {
 			t.Errorf("refresh path = %q", r.URL.Path)
 		}
 		cookies := r.Header.Get("Cookie")
-		if !strings.Contains(cookies, accessCookieName+"=old-access") || !strings.Contains(cookies, refreshCookieName+"=old-refresh") {
+		if !strings.Contains(cookies, testAccessCookieName+"=old-access") || !strings.Contains(cookies, testRefreshCookieName+"=old-refresh") {
 			t.Errorf("refresh request cookies = %q", cookies)
 		}
-		http.SetCookie(w, &http.Cookie{Name: accessCookieName, Value: "new-access", Path: "/", HttpOnly: true})
-		http.SetCookie(w, &http.Cookie{Name: refreshCookieName, Value: "new-refresh", Path: "/auth", HttpOnly: true})
+		http.SetCookie(w, &http.Cookie{Name: testAccessCookieName, Value: "new-access", Path: "/", HttpOnly: true})
+		http.SetCookie(w, &http.Cookie{Name: testRefreshCookieName, Value: "new-refresh", Path: "/auth", HttpOnly: true})
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer backend.Close()
 
 	session := mustDesktopSession(t, backend.URL)
-	if err := session.seedSession(desktopTokenResponse{AccessToken: "old-access", RefreshToken: "old-refresh"}); err != nil {
-		t.Fatal(err)
-	}
+	seedNativeTestSession(session, "old-access", "old-refresh")
 	request := httptest.NewRequest(http.MethodPost, "/auth/refresh", nil)
 	response := httptest.NewRecorder()
 	assetHandler(session).ServeHTTP(response, request)
@@ -281,8 +249,8 @@ func TestDesktopProxyRefreshRotatesNativeJar(t *testing.T) {
 		t.Fatalf("refresh status = %d, want 204", response.Code)
 	}
 	assertCookieValues(t, session.jar.Cookies(session.endpoint("/auth/session")), map[string]string{
-		accessCookieName:  "new-access",
-		refreshCookieName: "new-refresh",
+		testAccessCookieName:  "new-access",
+		testRefreshCookieName: "new-refresh",
 	})
 }
 
@@ -383,7 +351,7 @@ func TestDesktopAuthRejectsConcurrentNativeSession(t *testing.T) {
 func TestDesktopAuthRedemptionUsesNetworkTimeout(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
-		writeJSON(w, http.StatusOK, desktopTokenResponse{AccessToken: "access", RefreshToken: "refresh"})
+		writeJSON(w, http.StatusOK, map[string]bool{"authenticated": true})
 	}))
 	defer backend.Close()
 
@@ -436,6 +404,30 @@ func TestDesktopRendererSourceCannotHandleSessionTokens(t *testing.T) {
 	}
 }
 
+func TestDesktopNativeSourceDoesNotMintOrDecodeSessionTokens(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("desktop_auth.go")
+	if err != nil {
+		t.Fatalf("read native auth source: %v", err)
+	}
+	for _, forbidden := range []string{"desktopTokenResponse", "seedSession", `"access_token"`, `"refresh_token"`, `"choir_access"`, `"choir_refresh"`} {
+		if strings.Contains(string(source), forbidden) {
+			t.Errorf("native auth source contains superseded session authority %q", forbidden)
+		}
+	}
+
+	bridgeSource, err := os.ReadFile("../../frontend/public/desktop-bridge.html")
+	if err != nil {
+		t.Fatalf("read desktop bridge source: %v", err)
+	}
+	for _, forbidden := range []string{"function exchangeTokens", "fetch('/auth/desktop/exchange',"} {
+		if strings.Contains(string(bridgeSource), forbidden) {
+			t.Errorf("desktop bridge source contains superseded JSON exchange path %q", forbidden)
+		}
+	}
+}
+
 func TestDesktopDoesNotRegisterSupersededBaseSyncService(t *testing.T) {
 	t.Parallel()
 
@@ -478,21 +470,10 @@ func assertCookieValues(t *testing.T, cookies []*http.Cookie, want map[string]st
 	}
 }
 
-type recordingCookieJar struct {
-	setURL     *url.URL
-	setCookies []*http.Cookie
-}
-
-func (j *recordingCookieJar) SetCookies(target *url.URL, cookies []*http.Cookie) {
-	copyURL := *target
-	j.setURL = &copyURL
-	j.setCookies = make([]*http.Cookie, 0, len(cookies))
-	for _, cookie := range cookies {
-		copyCookie := *cookie
-		j.setCookies = append(j.setCookies, &copyCookie)
-	}
-}
-
-func (j *recordingCookieJar) Cookies(*url.URL) []*http.Cookie {
-	return nil
+func seedNativeTestSession(session *desktopSession, access, refresh string) {
+	secure := session.backend.Scheme == "https"
+	session.jar.SetCookies(session.endpoint("/"), []*http.Cookie{
+		{Name: testAccessCookieName, Value: access, Path: "/", Secure: secure, HttpOnly: true, SameSite: http.SameSiteLaxMode},
+		{Name: testRefreshCookieName, Value: refresh, Path: "/auth", Secure: secure, HttpOnly: true, SameSite: http.SameSiteLaxMode},
+	})
 }

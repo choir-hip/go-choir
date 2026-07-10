@@ -3647,6 +3647,195 @@ func TestConcurrentSessionsOnReLogin(t *testing.T) {
 	}
 }
 
+func TestDesktopRedeemMintsIndependentCanonicalSession(t *testing.T) {
+	for _, first := range []string{"safari", "native"} {
+		t.Run(first+" rotates first", func(t *testing.T) {
+			h, _ := deployedHandlerEnv(t)
+			user, err := h.store.CreateUser("desktop-independent-"+first, first+"@desktop.example.com")
+			if err != nil {
+				t.Fatalf("create user: %v", err)
+			}
+
+			safariRec := httptest.NewRecorder()
+			safariIssueReq := httptest.NewRequest(http.MethodGet, "/", nil)
+			safariIssueReq.Header.Set("User-Agent", "Safari acceptance fixture")
+			if _, err := h.issueSession(safariRec, safariIssueReq, user); err != nil {
+				t.Fatalf("issue Safari session: %v", err)
+			}
+			safariCookies := safariRec.Result().Cookies()
+
+			redirectReq := httptest.NewRequest(http.MethodGet, "/auth/desktop/exchange-redirect", nil)
+			for _, cookie := range safariCookies {
+				redirectReq.AddCookie(cookie)
+			}
+			redirectRec := httptest.NewRecorder()
+			h.HandleDesktopExchangeRedirect(redirectRec, redirectReq)
+			if redirectRec.Code != http.StatusFound {
+				t.Fatalf("desktop redirect status = %d, body=%s", redirectRec.Code, redirectRec.Body.String())
+			}
+			const callbackPrefix = "choir://auth-complete?code="
+			location := redirectRec.Header().Get("Location")
+			if !strings.HasPrefix(location, callbackPrefix) {
+				t.Fatalf("desktop redirect location = %q", location)
+			}
+			code := strings.TrimPrefix(location, callbackPrefix)
+			if code == "" {
+				t.Fatal("desktop redirect omitted handoff code")
+			}
+
+			redeemReq := httptest.NewRequest(
+				http.MethodPost,
+				"/auth/desktop/redeem",
+				strings.NewReader(`{"code":"`+code+`"}`),
+			)
+			redeemReq.Header.Set("User-Agent", "Choir-Desktop/acceptance")
+			redeemRec := httptest.NewRecorder()
+			h.HandleDesktopRedeem(redeemRec, redeemReq)
+			if redeemRec.Code != http.StatusOK {
+				t.Fatalf("desktop redeem status = %d, body=%s", redeemRec.Code, redeemRec.Body.String())
+			}
+			for _, forbidden := range []string{"access_token", "refresh_token", code} {
+				if strings.Contains(redeemRec.Body.String(), forbidden) {
+					t.Fatalf("desktop redeem body exposed %q: %s", forbidden, redeemRec.Body.String())
+				}
+			}
+			var redeemState sessionResponse
+			if err := json.NewDecoder(redeemRec.Body).Decode(&redeemState); err != nil {
+				t.Fatalf("decode desktop redeem state: %v", err)
+			}
+			if !redeemState.Authenticated || redeemState.User == nil || redeemState.User.ID != user.ID {
+				t.Fatalf("desktop redeem state = %+v", redeemState)
+			}
+			replayReq := httptest.NewRequest(
+				http.MethodPost,
+				"/auth/desktop/redeem",
+				strings.NewReader(`{"code":"`+code+`"}`),
+			)
+			replayRec := httptest.NewRecorder()
+			h.HandleDesktopRedeem(replayRec, replayReq)
+			if replayRec.Code != http.StatusBadRequest {
+				t.Fatalf("desktop handoff replay status = %d, want 400", replayRec.Code)
+			}
+
+			nativeCookies := redeemRec.Result().Cookies()
+			var safariRefresh, nativeRefresh *http.Cookie
+			for _, cookie := range safariCookies {
+				if cookie.Name == RefreshTokenCookieName {
+					safariRefresh = cookie
+				}
+			}
+			for _, cookie := range nativeCookies {
+				switch cookie.Name {
+				case AccessTokenCookieName:
+					assertDeployedCookieAttributes(t, cookie, "/")
+					if cookie.MaxAge <= 0 {
+						t.Errorf("native access cookie MaxAge = %d, want positive", cookie.MaxAge)
+					}
+				case RefreshTokenCookieName:
+					nativeRefresh = cookie
+					assertDeployedCookieAttributes(t, cookie, "/auth")
+					if cookie.MaxAge <= 0 {
+						t.Errorf("native refresh cookie MaxAge = %d, want positive", cookie.MaxAge)
+					}
+				}
+			}
+			if safariRefresh == nil || nativeRefresh == nil {
+				t.Fatalf("refresh cookies missing: safari=%v native=%v", safariRefresh, nativeRefresh)
+			}
+			if safariRefresh.Value == nativeRefresh.Value {
+				t.Fatal("Safari and native received the same refresh credential")
+			}
+			sessions, err := h.store.ListRefreshSessionsByUserID(user.ID)
+			if err != nil {
+				t.Fatalf("list refresh sessions: %v", err)
+			}
+			if len(sessions) != 2 {
+				t.Fatalf("refresh sessions = %d, want independent Safari and native rows", len(sessions))
+			}
+
+			rotate := func(name string, refresh *http.Cookie) *http.Cookie {
+				t.Helper()
+				req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
+				req.AddCookie(refresh)
+				rec := httptest.NewRecorder()
+				h.HandleSession(rec, req)
+				if rec.Code != http.StatusOK {
+					t.Fatalf("%s rotation status = %d", name, rec.Code)
+				}
+				var state sessionResponse
+				if err := json.NewDecoder(rec.Body).Decode(&state); err != nil {
+					t.Fatalf("decode %s rotation: %v", name, err)
+				}
+				if !state.Authenticated {
+					t.Fatalf("%s could not rotate independently", name)
+				}
+				for _, cookie := range rec.Result().Cookies() {
+					if cookie.Name == RefreshTokenCookieName {
+						return cookie
+					}
+				}
+				t.Fatalf("%s rotation did not return a refresh cookie", name)
+				return nil
+			}
+
+			if first == "safari" {
+				safariRefresh = rotate("Safari", safariRefresh)
+				nativeRefresh = rotate("native", nativeRefresh)
+				safariRefresh = rotate("Safari after native", safariRefresh)
+			} else {
+				nativeRefresh = rotate("native", nativeRefresh)
+				safariRefresh = rotate("Safari", safariRefresh)
+				nativeRefresh = rotate("native after Safari", nativeRefresh)
+			}
+		})
+	}
+}
+
+func TestDesktopExchangeRedirectRejectsMismatchedRefreshAuthority(t *testing.T) {
+	h, _ := deployedHandlerEnv(t)
+	userA, err := h.store.CreateUser("desktop-mismatch-a", "desktop-mismatch-a@example.com")
+	if err != nil {
+		t.Fatalf("create user A: %v", err)
+	}
+	userB, err := h.store.CreateUser("desktop-mismatch-b", "desktop-mismatch-b@example.com")
+	if err != nil {
+		t.Fatalf("create user B: %v", err)
+	}
+	issue := func(user *User) []*http.Cookie {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		if _, err := h.issueSession(rec, httptest.NewRequest(http.MethodGet, "/", nil), user); err != nil {
+			t.Fatalf("issue session: %v", err)
+		}
+		return rec.Result().Cookies()
+	}
+	cookiesA := issue(userA)
+	cookiesB := issue(userB)
+	req := httptest.NewRequest(http.MethodGet, "/auth/desktop/exchange-redirect", nil)
+	for _, cookie := range cookiesA {
+		if cookie.Name == AccessTokenCookieName {
+			req.AddCookie(cookie)
+		}
+	}
+	for _, cookie := range cookiesB {
+		if cookie.Name == RefreshTokenCookieName {
+			req.AddCookie(cookie)
+		}
+	}
+	rec := httptest.NewRecorder()
+	h.HandleDesktopExchangeRedirect(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("mismatched desktop authority status = %d, want 401", rec.Code)
+	}
+	var count int
+	if err := h.store.DB().QueryRow("SELECT COUNT(*) FROM desktop_exchange_codes").Scan(&count); err != nil {
+		t.Fatalf("count desktop handoffs: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("mismatched authority created %d desktop handoff rows", count)
+	}
+}
+
 // ======================================================================
 // Email validation tests (VAL-AUTH-007, VAL-AUTH-008)
 // ======================================================================

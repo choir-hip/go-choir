@@ -20,8 +20,6 @@ const (
 	desktopAuthRequestLimit  = 8 << 10
 	desktopAuthResponseLimit = 64 << 10
 	desktopAuthNetworkLimit  = 15 * time.Second
-	accessCookieName         = "choir_access"
-	refreshCookieName        = "choir_refresh"
 )
 
 var blockedDesktopAuthRoutes = map[string]struct{}{
@@ -30,14 +28,9 @@ var blockedDesktopAuthRoutes = map[string]struct{}{
 	"/auth/desktop/redeem":            {},
 }
 
-type desktopTokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-}
-
-// desktopSession is the sole session authority for the Wails app. The native
-// process owns the backend cookies; renderer requests can use them through the
-// proxy but can neither read nor replace them.
+// desktopSession is the Wails app's native cookie jar and proxy boundary. The
+// auth service remains the sole session issuer and cookie-policy authority;
+// renderer requests can use its cookies but can neither read nor replace them.
 type desktopSession struct {
 	backend         *url.URL
 	jar             http.CookieJar
@@ -157,12 +150,7 @@ func (s *desktopSession) handleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := s.redeem(r, code)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "desktop authentication failed"})
-		return
-	}
-	if err := s.seedSession(tokens); err != nil {
+	if err := s.redeem(r, code); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "desktop authentication failed"})
 		return
 	}
@@ -182,10 +170,10 @@ func desktopExchangeCode(callback string) (string, error) {
 	return code, nil
 }
 
-func (s *desktopSession) redeem(r *http.Request, code string) (desktopTokenResponse, error) {
+func (s *desktopSession) redeem(r *http.Request, code string) error {
 	body, err := json.Marshal(map[string]string{"code": code})
 	if err != nil {
-		return desktopTokenResponse{}, errors.New("encode desktop token redemption")
+		return errors.New("encode desktop session redemption")
 	}
 	redeemRequest, err := http.NewRequestWithContext(
 		r.Context(),
@@ -194,55 +182,32 @@ func (s *desktopSession) redeem(r *http.Request, code string) (desktopTokenRespo
 		bytes.NewReader(body),
 	)
 	if err != nil {
-		return desktopTokenResponse{}, errors.New("create desktop token redemption")
+		return errors.New("create desktop session redemption")
 	}
 	redeemRequest.Header.Set("Content-Type", "application/json")
+	redeemRequest.Header.Set("User-Agent", "Choir-Desktop/"+appVersion)
 
 	response, err := s.client.Do(redeemRequest)
 	if err != nil {
-		return desktopTokenResponse{}, errors.New("perform desktop token redemption")
+		return errors.New("perform desktop session redemption")
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, desktopAuthResponseLimit))
-		return desktopTokenResponse{}, errors.New("desktop token redemption rejected")
+		return errors.New("desktop session redemption rejected")
 	}
 
 	limited := io.LimitReader(response.Body, desktopAuthResponseLimit+1)
 	payload, err := io.ReadAll(limited)
 	if err != nil || len(payload) > desktopAuthResponseLimit {
-		return desktopTokenResponse{}, errors.New("invalid desktop token redemption response")
+		return errors.New("invalid desktop session redemption response")
 	}
-	var tokens desktopTokenResponse
-	if err := json.Unmarshal(payload, &tokens); err != nil || tokens.AccessToken == "" || tokens.RefreshToken == "" {
-		return desktopTokenResponse{}, errors.New("invalid desktop token redemption response")
+	var state struct {
+		Authenticated bool `json:"authenticated"`
 	}
-	return tokens, nil
-}
-
-func (s *desktopSession) seedSession(tokens desktopTokenResponse) error {
-	if tokens.AccessToken == "" || tokens.RefreshToken == "" {
-		return errors.New("desktop session tokens are required")
+	if err := json.Unmarshal(payload, &state); err != nil || !state.Authenticated {
+		return errors.New("invalid desktop session redemption response")
 	}
-	secure := s.backend.Scheme == "https"
-	s.jar.SetCookies(s.endpoint("/"), []*http.Cookie{
-		{
-			Name:     accessCookieName,
-			Value:    tokens.AccessToken,
-			Path:     "/",
-			Secure:   secure,
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		},
-		{
-			Name:     refreshCookieName,
-			Value:    tokens.RefreshToken,
-			Path:     "/auth",
-			Secure:   secure,
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		},
-	})
 	return nil
 }
 

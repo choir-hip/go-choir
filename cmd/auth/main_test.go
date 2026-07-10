@@ -48,6 +48,17 @@ func TestRegisterRoutesAppliesGlobalAuthRateLimit(t *testing.T) {
 	s := server.NewServer("auth", "0")
 	registerRoutes(s, handler, auth.NewIPRateLimiter(2, time.Minute))
 
+	// The renderer-readable JSON exchange issuer was deleted. Native auth has
+	// exactly one exchange-code issuer: the redirect used by
+	// ASWebAuthenticationSession.
+	exchangeReq := httptest.NewRequest(http.MethodPost, "/auth/desktop/exchange", nil)
+	exchangeReq.RemoteAddr = "203.0.113.11:5000"
+	exchangeRec := httptest.NewRecorder()
+	s.ServeHTTP(exchangeRec, exchangeReq)
+	if exchangeRec.Code != http.StatusNotFound {
+		t.Fatalf("legacy JSON desktop exchange status: got %d, want 404", exchangeRec.Code)
+	}
+
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest(http.MethodGet, "/auth/session", nil)
 		req.RemoteAddr = "203.0.113.10:5000"

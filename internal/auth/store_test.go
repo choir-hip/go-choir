@@ -1099,29 +1099,38 @@ func TestCreateAndConsumeDesktopExchangeCode(t *testing.T) {
 
 	now := time.Now().UTC()
 	code := &DesktopExchangeCode{
-		Code:         "test-code-1",
-		UserID:       user.ID,
-		AccessToken:  "access-token-1",
-		RefreshToken: "refresh-token-1",
-		CreatedAt:    now,
-		ExpiresAt:    now.Add(60 * time.Second),
+		Code:      "test-code-1",
+		UserID:    user.ID,
+		CreatedAt: now,
+		ExpiresAt: now.Add(60 * time.Second),
 	}
 	if err := store.CreateDesktopExchangeCode(code); err != nil {
 		t.Fatalf("CreateDesktopExchangeCode: %v", err)
 	}
 
-	consumed, err := store.ConsumeDesktopExchangeCode("test-code-1")
+	var storedCode, storedAccess, storedRefresh string
+	if err := store.DB().QueryRow(
+		"SELECT code, access_token, refresh_token FROM desktop_exchange_codes WHERE user_id = ?",
+		user.ID,
+	).Scan(&storedCode, &storedAccess, &storedRefresh); err != nil {
+		t.Fatalf("read persisted desktop handoff: %v", err)
+	}
+	if storedCode == code.Code || storedCode != hashDesktopExchangeCode(code.Code) {
+		t.Fatalf("stored code = %q, want SHA-256 digest and not raw callback code", storedCode)
+	}
+	if storedAccess != "" || storedRefresh != "" {
+		t.Fatalf("legacy bearer columns = (%q, %q), want empty", storedAccess, storedRefresh)
+	}
+
+	consumed, err := store.ConsumeDesktopExchangeCode(code.Code)
 	if err != nil {
 		t.Fatalf("ConsumeDesktopExchangeCode: %v", err)
 	}
 	if consumed.UserID != user.ID {
 		t.Errorf("UserID: got %q, want %q", consumed.UserID, user.ID)
 	}
-	if consumed.AccessToken != "access-token-1" {
-		t.Errorf("AccessToken: got %q, want %q", consumed.AccessToken, "access-token-1")
-	}
-	if consumed.RefreshToken != "refresh-token-1" {
-		t.Errorf("RefreshToken: got %q, want %q", consumed.RefreshToken, "refresh-token-1")
+	if consumed.Code != code.Code {
+		t.Errorf("Code: got %q, want presented raw code", consumed.Code)
 	}
 
 	// Second consume should fail (code is deleted).
@@ -1141,12 +1150,10 @@ func TestConsumeExpiredDesktopExchangeCode(t *testing.T) {
 
 	now := time.Now().UTC()
 	code := &DesktopExchangeCode{
-		Code:         "expired-code-1",
-		UserID:       user.ID,
-		AccessToken:  "access-token-2",
-		RefreshToken: "refresh-token-2",
-		CreatedAt:    now.Add(-2 * time.Minute),
-		ExpiresAt:    now.Add(-1 * time.Minute), // already expired
+		Code:      "expired-code-1",
+		UserID:    user.ID,
+		CreatedAt: now.Add(-2 * time.Minute),
+		ExpiresAt: now.Add(-1 * time.Minute), // already expired
 	}
 	if err := store.CreateDesktopExchangeCode(code); err != nil {
 		t.Fatalf("CreateDesktopExchangeCode: %v", err)
@@ -1155,5 +1162,47 @@ func TestConsumeExpiredDesktopExchangeCode(t *testing.T) {
 	_, err = store.ConsumeDesktopExchangeCode("expired-code-1")
 	if err == nil {
 		t.Error("expected error for expired code, got nil")
+	}
+}
+
+func TestBootstrapScrubsLegacyDesktopExchangeBearerValues(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "legacy-desktop-exchange.db")
+	store, err := OpenStore(dbPath)
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	user, err := store.CreateUser("legacy-desktop-user", "legacy-desktop@example.com")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	now := time.Now().UTC()
+	if _, err := store.DB().Exec(
+		"INSERT INTO desktop_exchange_codes (code, user_id, access_token, refresh_token, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+		"legacy-raw-code", user.ID, "legacy-access-bearer", "legacy-refresh-bearer", now, now.Add(time.Minute),
+	); err != nil {
+		t.Fatalf("insert legacy handoff: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close legacy store: %v", err)
+	}
+
+	reopened, err := OpenStore(dbPath)
+	if err != nil {
+		t.Fatalf("reopen legacy store: %v", err)
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	var accessValue, refreshValue string
+	if err := reopened.DB().QueryRow(
+		"SELECT access_token, refresh_token FROM desktop_exchange_codes WHERE code = ?",
+		"legacy-raw-code",
+	).Scan(&accessValue, &refreshValue); err != nil {
+		t.Fatalf("read scrubbed legacy handoff: %v", err)
+	}
+	if accessValue != "" || refreshValue != "" {
+		t.Fatalf("scrubbed legacy values = (%q, %q), want empty", accessValue, refreshValue)
+	}
+	if _, err := reopened.ConsumeDesktopExchangeCode("legacy-raw-code"); err == nil {
+		t.Fatal("pre-upgrade raw code unexpectedly survived hashed-code cutover")
 	}
 }
