@@ -264,18 +264,19 @@ func (s *Store) backfillTextureTablesOG(ctx context.Context) error {
 	}
 	steps := []struct {
 		name string
+		kind objectgraph.ObjectKind
 		run  func(context.Context) error
 	}{
-		{"texture-documents", s.backfillTextureDocumentsOG},
-		{"texture-revisions", s.backfillTextureRevisionsOG},
-		{"texture-decisions", s.backfillTextureDecisionsOG},
-		{"content-items", s.backfillContentItemsOG},
-		{"podcast-subscriptions", s.backfillPodcastSubscriptionsOG},
-		{"texture-source-entities", s.backfillTextureSourceEntitiesOG},
-		{"texture-source-refs", s.backfillTextureSourceRefsOG},
+		{"texture-documents", ogKindTexDoc, s.backfillTextureDocumentsOG},
+		{"texture-revisions", ogKindTexRev, s.backfillTextureRevisionsOG},
+		{"texture-decisions", ogKindTexDecision, s.backfillTextureDecisionsOG},
+		{"content-items", ogKindContentItem, s.backfillContentItemsOG},
+		{"podcast-subscriptions", ogKindPodcastSub, s.backfillPodcastSubscriptionsOG},
+		{"texture-source-entities", TextureSourceEntityObjectKind, s.backfillTextureSourceEntitiesOG},
+		{"texture-source-refs", TextureSourceRefObjectKind, s.backfillTextureSourceRefsOG},
 	}
 	for _, step := range steps {
-		if err := runOGBackfillStep(ctx, step.name, step.run); err != nil {
+		if err := s.runOGBackfillStep(ctx, step.name, step.kind, step.run); err != nil {
 			return err
 		}
 	}

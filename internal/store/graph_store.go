@@ -14,28 +14,29 @@ import (
 
 // Object graph kind constants for VM store records.
 const (
-	ogKindAgent       = objectgraph.ObjectKind("choir.agent")
-	ogKindRun         = objectgraph.ObjectKind("choir.run")
-	ogKindEvent       = objectgraph.ObjectKind("choir.event")
-	ogKindTrajectory  = objectgraph.ObjectKind("choir.trajectory")
-	ogKindWorkItem    = objectgraph.ObjectKind("choir.work_item")
-	ogKindChannelMsg  = objectgraph.ObjectKind("choir.channel_message")
-	ogKindInboxDeliv  = objectgraph.ObjectKind("choir.inbox_delivery")
-	ogKindRunMemory   = objectgraph.ObjectKind("choir.run_memory_entry")
-	ogKindRunAccept   = objectgraph.ObjectKind("choir.run_acceptance")
-	ogKindRunContin   = objectgraph.ObjectKind("choir.run_continuation")
-	ogKindTexDoc      = objectgraph.ObjectKind("choir.texture_document")
-	ogKindTexRev      = objectgraph.ObjectKind("choir.texture_revision")
-	ogKindTexDecision = objectgraph.ObjectKind("choir.texture_decision")
-	ogKindEvidence    = objectgraph.ObjectKind("choir.agent_evidence")
-	ogKindContentItem = objectgraph.ObjectKind("choir.content_item")
-	ogKindPodcastSub  = objectgraph.ObjectKind("choir.podcast_subscription")
+	ogKindAgent        = objectgraph.ObjectKind("choir.agent")
+	ogKindRun          = objectgraph.ObjectKind("choir.run")
+	ogKindEvent        = objectgraph.ObjectKind("choir.event")
+	ogKindTrajectory   = objectgraph.ObjectKind("choir.trajectory")
+	ogKindWorkItem     = objectgraph.ObjectKind("choir.work_item")
+	ogKindChannelMsg   = objectgraph.ObjectKind("choir.channel_message")
+	ogKindWorkerUpdate = objectgraph.ObjectKind("choir.worker_update")
+	ogKindInboxDeliv   = objectgraph.ObjectKind("choir.inbox_delivery")
+	ogKindRunMemory    = objectgraph.ObjectKind("choir.run_memory_entry")
+	ogKindRunAccept    = objectgraph.ObjectKind("choir.run_acceptance")
+	ogKindRunContin    = objectgraph.ObjectKind("choir.run_continuation")
+	ogKindTexDoc       = objectgraph.ObjectKind("choir.texture_document")
+	ogKindTexRev       = objectgraph.ObjectKind("choir.texture_revision")
+	ogKindTexDecision  = objectgraph.ObjectKind("choir.texture_decision")
+	ogKindEvidence     = objectgraph.ObjectKind("choir.agent_evidence")
+	ogKindContentItem  = objectgraph.ObjectKind("choir.content_item")
+	ogKindPodcastSub   = objectgraph.ObjectKind("choir.podcast_subscription")
 	ogKindBrowserSess  = objectgraph.ObjectKind("choir.browser_session")
 	ogKindCoagentMail  = objectgraph.ObjectKind("choir.coagent_mailbox")
-	ogKindAppPackage  = objectgraph.ObjectKind("choir.app_change_package")
-	ogKindAppAdoption = objectgraph.ObjectKind("choir.app_adoption")
-	ogKindDesktopSess = objectgraph.ObjectKind("choir.desktop_session")
-	ogKindDesktopApp  = objectgraph.ObjectKind("choir.desktop_app_instance")
+	ogKindAppPackage   = objectgraph.ObjectKind("choir.app_change_package")
+	ogKindAppAdoption  = objectgraph.ObjectKind("choir.app_adoption")
+	ogKindDesktopSess  = objectgraph.ObjectKind("choir.desktop_session")
+	ogKindDesktopApp   = objectgraph.ObjectKind("choir.desktop_app_instance")
 )
 
 // Edge kind constants.
@@ -706,14 +707,14 @@ func (s *Store) CreateWorkItemOG(ctx context.Context, rec types.WorkItemRecord) 
 		rec.UpdatedAt = now
 	}
 	metadata := map[string]any{
-		"work_item_id":           rec.WorkItemID,
-		"trajectory_id":          rec.TrajectoryID,
-		"status":                 string(rec.Status),
-		"assigned_agent_id":      rec.AssignedAgentID,
-		"objective_fingerprint":  rec.ObjectiveFingerprint,
-		"created_by_run_id":      rec.CreatedByRunID,
-		"created_at":             rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":             rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"work_item_id":          rec.WorkItemID,
+		"trajectory_id":         rec.TrajectoryID,
+		"status":                string(rec.Status),
+		"assigned_agent_id":     rec.AssignedAgentID,
+		"objective_fingerprint": rec.ObjectiveFingerprint,
+		"created_by_run_id":     rec.CreatedByRunID,
+		"created_at":            rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":            rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	obj, err := s.ogPut(ctx, ogKindWorkItem, rec.OwnerID, rec.WorkItemID, rec, metadata, now)
@@ -800,14 +801,14 @@ func (s *Store) UpdateWorkItemStatusOG(ctx context.Context, ownerID, workItemID 
 	rec.UpdatedAt = time.Now().UTC()
 
 	metadata := map[string]any{
-		"work_item_id":           rec.WorkItemID,
-		"trajectory_id":          rec.TrajectoryID,
-		"status":                 string(rec.Status),
-		"assigned_agent_id":      rec.AssignedAgentID,
-		"objective_fingerprint":  rec.ObjectiveFingerprint,
-		"created_by_run_id":      rec.CreatedByRunID,
-		"created_at":             rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":             rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"work_item_id":          rec.WorkItemID,
+		"trajectory_id":         rec.TrajectoryID,
+		"status":                string(rec.Status),
+		"assigned_agent_id":     rec.AssignedAgentID,
+		"objective_fingerprint": rec.ObjectiveFingerprint,
+		"created_by_run_id":     rec.CreatedByRunID,
+		"created_at":            rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":            rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	bodyJSON, _ := json.Marshal(rec)
@@ -1009,16 +1010,16 @@ func (s *Store) CreateInboxDeliveryOG(ctx context.Context, rec types.InboxDelive
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"delivery_id":          rec.DeliveryID,
-		"to_agent_id":          rec.ToAgentID,
-		"to_run_id":            rec.ToRunID,
-		"from_agent_id":        rec.FromAgentID,
-		"from_run_id":          rec.FromRunID,
-		"channel_id":           rec.ChannelID,
-		"role":                 rec.Role,
-		"trajectory_id":        rec.TrajectoryID,
-		"delivered_to_run_id":  rec.DeliveredToLoopID,
-		"created_at":           rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"delivery_id":         rec.DeliveryID,
+		"to_agent_id":         rec.ToAgentID,
+		"to_run_id":           rec.ToRunID,
+		"from_agent_id":       rec.FromAgentID,
+		"from_run_id":         rec.FromRunID,
+		"channel_id":          rec.ChannelID,
+		"role":                rec.Role,
+		"trajectory_id":       rec.TrajectoryID,
+		"delivered_to_run_id": rec.DeliveredToLoopID,
+		"created_at":          rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 	if rec.DeliveredAt != nil {
 		metadata["delivered_at"] = rec.DeliveredAt.UTC().Format(time.RFC3339Nano)
@@ -1056,17 +1057,17 @@ func (s *Store) AppendRunMemoryEntryOG(ctx context.Context, rec types.RunMemoryE
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"entry_id":           rec.EntryID,
-		"run_id":             rec.RunID,
-		"agent_id":           rec.AgentID,
-		"parent_entry_id":    rec.ParentEntryID,
-		"seq":                rec.Seq,
-		"kind":               string(rec.Kind),
-		"role":               rec.Role,
-		"model":              rec.Model,
-		"tokens_before":      rec.TokensBefore,
+		"entry_id":            rec.EntryID,
+		"run_id":              rec.RunID,
+		"agent_id":            rec.AgentID,
+		"parent_entry_id":     rec.ParentEntryID,
+		"seq":                 rec.Seq,
+		"kind":                string(rec.Kind),
+		"role":                rec.Role,
+		"model":               rec.Model,
+		"tokens_before":       rec.TokensBefore,
 		"first_kept_entry_id": rec.FirstKeptEntryID,
-		"created_at":         rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"created_at":          rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	_, err := s.ogPut(ctx, ogKindRunMemory, rec.OwnerID, rec.EntryID, rec, metadata, now)
@@ -1108,23 +1109,23 @@ func (s *Store) CreateRunAcceptanceOG(ctx context.Context, rec types.RunAcceptan
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"acceptance_id":          rec.AcceptanceID,
-		"target_mission_id":      rec.TargetMissionID,
-		"trajectory_id":          rec.TrajectoryID,
-		"run_id":                 rec.RunID,
-		"desktop_id":             rec.DesktopID,
-		"authority_profile":      rec.AuthorityProfile,
-		"base_sha":               rec.BaseSHA,
-		"deployment_commit":      rec.DeploymentCommit,
-		"ci_run_id":              rec.CIRunID,
-		"deploy_run_id":          rec.DeployRunID,
-		"staging_url":            rec.StagingURL,
-		"health_commit":          rec.HealthCommit,
-		"acceptance_level":       string(rec.AcceptanceLevel),
-		"vm_mode":                rec.VMMode,
-		"state":                  string(rec.State),
-		"created_at":             rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":             rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"acceptance_id":     rec.AcceptanceID,
+		"target_mission_id": rec.TargetMissionID,
+		"trajectory_id":     rec.TrajectoryID,
+		"run_id":            rec.RunID,
+		"desktop_id":        rec.DesktopID,
+		"authority_profile": rec.AuthorityProfile,
+		"base_sha":          rec.BaseSHA,
+		"deployment_commit": rec.DeploymentCommit,
+		"ci_run_id":         rec.CIRunID,
+		"deploy_run_id":     rec.DeployRunID,
+		"staging_url":       rec.StagingURL,
+		"health_commit":     rec.HealthCommit,
+		"acceptance_level":  string(rec.AcceptanceLevel),
+		"vm_mode":           rec.VMMode,
+		"state":             string(rec.State),
+		"created_at":        rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":        rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	obj, err := s.ogPut(ctx, ogKindRunAccept, rec.OwnerID, rec.AcceptanceID, rec, metadata, now)
@@ -1217,14 +1218,14 @@ func (s *Store) CreateRunContinuationOG(ctx context.Context, rec types.RunContin
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"continuation_id":    rec.ContinuationID,
-		"source_run_id":      rec.SourceRunID,
-		"next_run_id":        rec.NextRunID,
-		"authority_profile":  rec.AuthorityProfile,
-		"lease_seconds":      rec.LeaseSeconds,
-		"status":             string(rec.Status),
-		"created_at":         rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":         rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"continuation_id":   rec.ContinuationID,
+		"source_run_id":     rec.SourceRunID,
+		"next_run_id":       rec.NextRunID,
+		"authority_profile": rec.AuthorityProfile,
+		"lease_seconds":     rec.LeaseSeconds,
+		"status":            string(rec.Status),
+		"created_at":        rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":        rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	obj, err := s.ogPut(ctx, ogKindRunContin, rec.OwnerID, rec.ContinuationID, rec, metadata, now)
@@ -1300,11 +1301,11 @@ func (s *Store) CreateTextureDocumentOG(ctx context.Context, rec types.Document)
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"doc_id":               rec.DocID,
-		"title":                rec.Title,
-		"current_revision_id":  rec.CurrentRevisionID,
-		"created_at":           rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":           rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"doc_id":              rec.DocID,
+		"title":               rec.Title,
+		"current_revision_id": rec.CurrentRevisionID,
+		"created_at":          rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":          rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	_, err := s.ogPut(ctx, ogKindTexDoc, rec.OwnerID, rec.DocID, rec, metadata, now)
@@ -1414,11 +1415,11 @@ func (s *Store) UpdateTextureDocumentOG(ctx context.Context, rec types.Document)
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"doc_id":               rec.DocID,
-		"title":                rec.Title,
-		"current_revision_id":  rec.CurrentRevisionID,
-		"created_at":           existing.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":           now.UTC().Format(time.RFC3339Nano),
+		"doc_id":              rec.DocID,
+		"title":               rec.Title,
+		"current_revision_id": rec.CurrentRevisionID,
+		"created_at":          existing.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":          now.UTC().Format(time.RFC3339Nano),
 	}
 
 	bodyJSON, _ := json.Marshal(rec)
@@ -1440,14 +1441,14 @@ func (s *Store) CreateTextureRevisionOG(ctx context.Context, rec types.Revision)
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"revision_id":       rec.RevisionID,
-		"doc_id":            rec.DocID,
-		"author_kind":       string(rec.AuthorKind),
-		"author_label":      rec.AuthorLabel,
-		"version_number":    rec.VersionNumber,
+		"revision_id":        rec.RevisionID,
+		"doc_id":             rec.DocID,
+		"author_kind":        string(rec.AuthorKind),
+		"author_label":       rec.AuthorLabel,
+		"version_number":     rec.VersionNumber,
 		"parent_revision_id": rec.ParentRevisionID,
-		"revision_hash":     rec.RevisionHash,
-		"created_at":        rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"revision_hash":      rec.RevisionHash,
+		"created_at":         rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	obj, err := s.ogPut(ctx, ogKindTexRev, rec.OwnerID, rec.RevisionID, rec, metadata, now)
@@ -1527,13 +1528,13 @@ func (s *Store) CreateTextureDecisionOG(ctx context.Context, rec types.TextureDe
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"decision_id":    rec.DecisionID,
-		"doc_id":         rec.DocID,
-		"run_id":         rec.RunID,
-		"trajectory_id":  rec.TrajectoryID,
-		"actor_id":       rec.ActorID,
-		"decision_kind":  rec.DecisionKind,
-		"created_at":     rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"decision_id":   rec.DecisionID,
+		"doc_id":        rec.DocID,
+		"run_id":        rec.RunID,
+		"trajectory_id": rec.TrajectoryID,
+		"actor_id":      rec.ActorID,
+		"decision_kind": rec.DecisionKind,
+		"created_at":    rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	obj, err := s.ogPut(ctx, ogKindTexDecision, rec.OwnerID, rec.DecisionID, rec, metadata, now)
@@ -1938,18 +1939,18 @@ func (s *Store) CreateAppChangePackageOG(ctx context.Context, rec types.AppChang
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"package_id":             rec.PackageID,
-		"app_id":                 rec.AppID,
-		"status":                 string(rec.Status),
-		"visibility":             rec.Visibility,
-		"source_computer_id":     rec.SourceComputerID,
-		"source_candidate_id":    rec.SourceCandidateID,
-		"source_active_ref":      rec.SourceActiveRef,
-		"candidate_source_ref":   rec.CandidateSourceRef,
+		"package_id":              rec.PackageID,
+		"app_id":                  rec.AppID,
+		"status":                  string(rec.Status),
+		"visibility":              rec.Visibility,
+		"source_computer_id":      rec.SourceComputerID,
+		"source_candidate_id":     rec.SourceCandidateID,
+		"source_active_ref":       rec.SourceActiveRef,
+		"candidate_source_ref":    rec.CandidateSourceRef,
 		"package_manifest_sha256": rec.PackageManifestSHA256,
-		"trace_id":               rec.TraceID,
-		"created_at":             rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":             rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"trace_id":                rec.TraceID,
+		"created_at":              rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":              rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	_, err := s.ogPut(ctx, ogKindAppPackage, rec.OwnerID, rec.PackageID, rec, metadata, now)
@@ -2008,18 +2009,18 @@ func (s *Store) CreateAppAdoptionOG(ctx context.Context, rec types.AppAdoptionRe
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"adoption_id":           rec.AdoptionID,
-		"package_id":            rec.PackageID,
-		"app_id":                rec.AppID,
-		"target_computer_id":    rec.TargetComputerID,
-		"target_computer_kind":  rec.TargetComputerKind,
-		"target_candidate_id":   rec.TargetCandidateID,
-		"status":                string(rec.Status),
-		"candidate_source_ref":  rec.CandidateSourceRef,
-		"route_profile":         rec.RouteProfile,
-		"trace_id":              rec.TraceID,
-		"created_at":            rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":            rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"adoption_id":          rec.AdoptionID,
+		"package_id":           rec.PackageID,
+		"app_id":               rec.AppID,
+		"target_computer_id":   rec.TargetComputerID,
+		"target_computer_kind": rec.TargetComputerKind,
+		"target_candidate_id":  rec.TargetCandidateID,
+		"status":               string(rec.Status),
+		"candidate_source_ref": rec.CandidateSourceRef,
+		"route_profile":        rec.RouteProfile,
+		"trace_id":             rec.TraceID,
+		"created_at":           rec.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":           rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 
 	obj, err := s.ogPut(ctx, ogKindAppAdoption, rec.OwnerID, rec.AdoptionID, rec, metadata, now)
@@ -2088,9 +2089,9 @@ func (s *Store) SaveDesktopStateOG(ctx context.Context, state types.DesktopState
 		now = time.Now().UTC()
 	}
 	metadata := map[string]any{
-		"desktop_id":      state.DesktopID,
+		"desktop_id":       state.DesktopID,
 		"active_window_id": state.ActiveWindowID,
-		"updated_at":      now.UTC().Format(time.RFC3339Nano),
+		"updated_at":       now.UTC().Format(time.RFC3339Nano),
 	}
 
 	_, err := s.ogPut(ctx, ogKindDesktopSess, state.OwnerID, state.DesktopID, state, metadata, now)

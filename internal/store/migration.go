@@ -13,6 +13,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -28,29 +29,40 @@ func (s *Store) backfillOGFromSQL(ctx context.Context) error {
 	}
 	steps := []struct {
 		name string
+		kind objectgraph.ObjectKind
 		run  func(context.Context) error
 	}{
-		{"agents", s.backfillAgentsOG},
-		{"runs", s.backfillRunsOG},
-		{"events", s.backfillEventsOG},
-		{"channel-messages", s.backfillChannelMessagesOG},
-		{"worker-updates", s.backfillWorkerUpdatesOG},
-		{"run-acceptances", s.backfillRunAcceptancesOG},
-		{"run-continuations", s.backfillRunContinuationsOG},
-		{"browser-sessions", s.backfillBrowserSessionsOG},
-		{"trajectories", s.backfillTrajectoriesOG},
-		{"work-items", s.backfillWorkItemsOG},
-		{"texture-tables", s.backfillTextureTablesOG},
+		{"agents", ogKindAgent, s.backfillAgentsOG},
+		{"runs", ogKindRun, s.backfillRunsOG},
+		{"events", ogKindEvent, s.backfillEventsOG},
+		{"channel-messages", ogKindChannelMsg, s.backfillChannelMessagesOG},
+		{"worker-updates", ogKindWorkerUpdate, s.backfillWorkerUpdatesOG},
+		{"run-acceptances", ogKindRunAccept, s.backfillRunAcceptancesOG},
+		{"run-continuations", ogKindRunContin, s.backfillRunContinuationsOG},
+		{"browser-sessions", ogKindBrowserSess, s.backfillBrowserSessionsOG},
+		{"trajectories", ogKindTrajectory, s.backfillTrajectoriesOG},
+		{"work-items", ogKindWorkItem, s.backfillWorkItemsOG},
+		{"texture-tables", "", s.backfillTextureTablesOG},
 	}
 	for _, step := range steps {
-		if err := runOGBackfillStep(ctx, step.name, step.run); err != nil {
+		if err := s.runOGBackfillStep(ctx, step.name, step.kind, step.run); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func runOGBackfillStep(ctx context.Context, name string, run func(context.Context) error) error {
+func (s *Store) runOGBackfillStep(ctx context.Context, name string, kind objectgraph.ObjectKind, run func(context.Context) error) error {
+	if kind != "" {
+		empty, err := s.ogKindIsEmpty(ctx, kind)
+		if err != nil {
+			return fmt.Errorf("backfill OG %s: inspect kind: %w", name, err)
+		}
+		if !empty {
+			log.Printf("store: objectgraph backfill kind=%s status=skipped reason=kind-populated", name)
+			return nil
+		}
+	}
 	log.Printf("store: objectgraph backfill kind=%s status=starting", name)
 	if err := run(ctx); err != nil {
 		return err
