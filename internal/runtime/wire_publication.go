@@ -56,7 +56,7 @@ func (rt *Runtime) maybeAutonomousPublishWireArticle(ctx context.Context, doc ty
 		// stands, but the settlement rule requires edition_ref, so the
 		// publication work item honestly stays open.
 		log.Printf("runtime: wire publication doc=%s rev=%s: edition ref unavailable, publication work item %s left open pending edition linkage", doc.DocID, rev.RevisionID, publicationItemID)
-		rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID)
+		rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID, rec)
 		return
 	}
 	if err := rt.recordWirePublicationTrajectoryRef(ctx, rec, "edition_ref", editionRef); err != nil {
@@ -75,7 +75,7 @@ func (rt *Runtime) maybeAutonomousPublishWireArticle(ctx context.Context, doc ty
 		log.Printf("runtime: wire publication settle doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
 		return
 	}
-	rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID)
+	rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID, rec)
 }
 
 func (rt *Runtime) autonomousPublishWireArticleToEdition(ctx context.Context, storyDoc types.Document, storyRev types.Revision) (string, error) {

@@ -18,9 +18,19 @@ const (
 )
 
 type wirePublishBatch struct {
-	DocIDs      []string
-	RevisionIDs []string
-	TriggeredAt time.Time
+	DocIDs       []string
+	RevisionIDs  []string
+	TriggeredAt  time.Time
+	CycleID      string
+	RequestID    string
+	RequestKind  string
+	MixedLineage bool
+}
+
+type wirePublishLineage struct {
+	CycleID     string
+	RequestID   string
+	RequestKind string
 }
 
 type wirePublishDebouncer struct {
@@ -30,13 +40,15 @@ type wirePublishDebouncer struct {
 	pendingRevisionIDs []string
 	firstPendingAt     time.Time
 	lastDispatch       time.Time
+	pendingLineage     wirePublishLineage
+	mixedLineage       bool
 }
 
 func newWirePublishDebouncer() *wirePublishDebouncer {
 	return &wirePublishDebouncer{}
 }
 
-func (d *wirePublishDebouncer) record(docID, revisionID string, now time.Time) (wirePublishBatch, bool) {
+func (d *wirePublishDebouncer) record(docID, revisionID string, lineage wirePublishLineage, now time.Time) (wirePublishBatch, bool) {
 	docID = strings.TrimSpace(docID)
 	revisionID = strings.TrimSpace(revisionID)
 	if docID == "" || revisionID == "" {
@@ -51,6 +63,10 @@ func (d *wirePublishDebouncer) record(docID, revisionID string, now time.Time) (
 
 	if len(d.pendingDocIDs) == 0 {
 		d.firstPendingAt = now
+		d.pendingLineage = lineage
+		d.mixedLineage = false
+	} else if d.pendingLineage != lineage {
+		d.mixedLineage = true
 	}
 	d.pendingDocIDs = append(d.pendingDocIDs, docID)
 	d.pendingRevisionIDs = append(d.pendingRevisionIDs, revisionID)
@@ -116,13 +132,19 @@ func (d *wirePublishDebouncer) publishBatchDueLocked(now time.Time) bool {
 
 func (d *wirePublishDebouncer) fireLocked(now time.Time) wirePublishBatch {
 	batch := wirePublishBatch{
-		DocIDs:      append([]string(nil), d.pendingDocIDs...),
-		RevisionIDs: append([]string(nil), d.pendingRevisionIDs...),
-		TriggeredAt: now,
+		DocIDs:       append([]string(nil), d.pendingDocIDs...),
+		RevisionIDs:  append([]string(nil), d.pendingRevisionIDs...),
+		TriggeredAt:  now,
+		CycleID:      d.pendingLineage.CycleID,
+		RequestID:    d.pendingLineage.RequestID,
+		RequestKind:  d.pendingLineage.RequestKind,
+		MixedLineage: d.mixedLineage,
 	}
 	d.pendingDocIDs = nil
 	d.pendingRevisionIDs = nil
 	d.firstPendingAt = time.Time{}
+	d.pendingLineage = wirePublishLineage{}
+	d.mixedLineage = false
 	d.lastDispatch = now
 	return batch
 }
@@ -131,7 +153,35 @@ func wireCanonicalRevisionEligibleForDebouncedReconciler(doc types.Document, rev
 	return wirepublish.EligibleForAutonomousPublish(doc, rev, rec, universalWirePlatformOwnerID())
 }
 
-func (rt *Runtime) noteWireEligiblePublish(ctx context.Context, docID, revisionID string) {
+func wirePublishLineageForRun(rec *types.RunRecord) wirePublishLineage {
+	if rec == nil {
+		return wirePublishLineage{}
+	}
+	return wirePublishLineage{
+		CycleID: firstNonEmptyString(
+			metadataStringValue(rec.Metadata, "ingestion_handoff_cycle_id"),
+			metadataStringValue(rec.Metadata, "source_network_cycle_id"),
+		),
+		RequestID: firstNonEmptyString(
+			metadataStringValue(rec.Metadata, "ingestion_handoff_request_id"),
+			metadataStringValue(rec.Metadata, "source_network_request_id"),
+		),
+		RequestKind: firstNonEmptyString(
+			metadataStringValue(rec.Metadata, "ingestion_handoff_request_kind"),
+			metadataStringValue(rec.Metadata, "source_network_request_kind"),
+		),
+	}
+}
+
+func wirePublishReconcilerRequestID(cycleID string) string {
+	cycleID = strings.TrimSpace(cycleID)
+	if cycleID == "" {
+		return ""
+	}
+	return "reconciler_publish_" + strings.TrimPrefix(cycleID, "cycle_")
+}
+
+func (rt *Runtime) noteWireEligiblePublish(ctx context.Context, docID, revisionID string, rec *types.RunRecord) {
 	if rt == nil {
 		return
 	}
@@ -139,7 +189,9 @@ func (rt *Runtime) noteWireEligiblePublish(ctx context.Context, docID, revisionI
 		rt.wirePublishDebouncer = newWirePublishDebouncer()
 	}
 	now := time.Now().UTC()
-	batch, fire := rt.wirePublishDebouncer.record(docID, revisionID, now)
+	lineage := wirePublishLineageForRun(rec)
+	batch, fire := rt.wirePublishDebouncer.record(docID, revisionID, lineage, now)
+	log.Printf("runtime: wire reconciler queued doc=%s rev=%s cycle=%s request=%s fire=%t", docID, revisionID, lineage.CycleID, lineage.RequestID, fire)
 	if fire {
 		rt.stopWirePublishDebouncerTimer()
 		rt.dispatchStoryCorpusReconcilerFromPublishBatch(ctx, batch)
@@ -165,6 +217,7 @@ func (rt *Runtime) scheduleWirePublishDebouncerTimer(now time.Time) {
 	rt.wirePublishTimer = rt.textureWakeAfter(delay, func() {
 		rt.onWirePublishDebouncerTimer()
 	})
+	log.Printf("runtime: wire reconciler timer scheduled delay=%s", delay)
 }
 
 func (rt *Runtime) stopWirePublishDebouncerTimer() {
@@ -189,8 +242,10 @@ func (rt *Runtime) onWirePublishDebouncerTimer() {
 	}
 	batch, fire := rt.wirePublishDebouncer.fireDue(time.Now().UTC())
 	if !fire {
+		log.Printf("runtime: wire reconciler timer fired without a due batch")
 		return
 	}
+	log.Printf("runtime: wire reconciler timer fired docs=%d cycle=%s mixed_lineage=%t", len(batch.DocIDs), batch.CycleID, batch.MixedLineage)
 	rt.dispatchStoryCorpusReconcilerFromPublishBatch(context.Background(), batch)
 }
 
@@ -207,7 +262,7 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 	if len(batch.RevisionIDs) > 0 {
 		prompt += "\nPublished revision handles: " + strings.Join(batch.RevisionIDs, ", ")
 	}
-	_, err := rt.StartRunWithMetadata(ctx, prompt, ownerID, map[string]any{
+	metadata := map[string]any{
 		runMetadataAgentProfile:    AgentProfileReconciler,
 		runMetadataAgentRole:       AgentProfileReconciler,
 		runMetadataReconcilerScope: "story-corpus",
@@ -215,8 +270,31 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 		"request_source":           "wire_publish_debouncer",
 		"published_doc_ids":        batch.DocIDs,
 		"published_revision_ids":   batch.RevisionIDs,
-	})
+	}
+	if !batch.MixedLineage && strings.TrimSpace(batch.CycleID) != "" {
+		reconcilerRequestID := wirePublishReconcilerRequestID(batch.CycleID)
+		metadata["ingestion_handoff_cycle_id"] = batch.CycleID
+		metadata["source_network_cycle_id"] = batch.CycleID
+		metadata["ingestion_handoff_request_id"] = reconcilerRequestID
+		metadata["source_network_request_id"] = batch.RequestID
+		metadata["ingestion_handoff_request_kind"] = "reconciler"
+		metadata["source_network_request_kind"] = batch.RequestKind
+		existing, listErr := rt.store.ListRunsByIngestionHandoff(ctx, ownerID, AgentProfileReconciler, reconcilerRequestID, "reconciler", 2)
+		if listErr != nil {
+			log.Printf("runtime: wire reconciler dedupe lookup failed cycle=%s request=%s: %v", batch.CycleID, reconcilerRequestID, listErr)
+			return
+		}
+		if len(existing) > 0 {
+			log.Printf("runtime: wire reconciler already exists run=%s cycle=%s request=%s; skipping duplicate publish batch", existing[0].RunID, batch.CycleID, reconcilerRequestID)
+			return
+		}
+	} else if batch.MixedLineage {
+		log.Printf("runtime: wire reconciler batch has mixed ingestion lineage; dispatching without a false cycle attribution")
+	}
+	rec, err := rt.StartRunWithMetadata(ctx, prompt, ownerID, metadata)
 	if err != nil {
 		log.Printf("runtime: wire reconciler dispatch failed: %v", err)
+		return
 	}
+	log.Printf("runtime: wire reconciler dispatched run=%s docs=%d cycle=%s request=%s", rec.RunID, len(batch.DocIDs), batch.CycleID, batch.RequestID)
 }
