@@ -50,7 +50,7 @@ export const FUTURISTIC_NOIR: ChoirTheme = {
   colors: {
     bg: '#050912', bg2: '#081224', panel: '#0D1628', panelStrong: '#09101F', panelSoft: 'rgba(18, 31, 55, 0.68)',
     fg: '#F7FAFF', muted: '#9AA9C0', subtle: '#65748D', accent: '#6D8DFF', accent2: '#45D7FF',
-    success: '#20D686', warning: '#FFB339', danger: '#FF5B6B',
+    success: '#20D686', warning: '#FFB339', danger: '#FF5B6B', onDanger: '#FFFFFF',
     border: 'rgba(133, 159, 211, 0.22)', borderStrong: 'rgba(130, 156, 255, 0.44)',
     inputBg: 'rgba(10, 17, 31, 0.78)', selected: 'rgba(91, 123, 255, 0.22)', onAccent: '#FFFFFF',
     promptSurfaceBg: 'linear-gradient(180deg, rgba(17, 28, 52, 0.88), rgba(8, 14, 27, 0.92))',
@@ -75,7 +75,7 @@ export const CARBON_FIBER_KINTSUGI: ChoirTheme = {
   colors: {
     bg: '#0B0C0D', bg2: '#131416', panel: '#151719', panelStrong: '#0F1012', panelSoft: 'rgba(28, 30, 33, 0.74)',
     fg: '#F2EFE7', muted: '#B2AA98', subtle: '#766F62', accent: '#FFD86B', accent2: '#FFF1BC',
-    success: '#55C27A', warning: '#FFD86B', danger: '#E36B5A',
+    success: '#55C27A', warning: '#FFD86B', danger: '#E36B5A', onDanger: '#14100A',
     border: 'rgba(255, 216, 107, 0.18)', borderStrong: 'rgba(255, 241, 188, 0.48)',
     inputBg: 'rgba(12, 13, 14, 0.78)', selected: 'rgba(255, 216, 107, 0.18)', onAccent: '#14100A',
     promptSurfaceBg: 'linear-gradient(180deg, rgba(27,29,31,.92), rgba(12,13,15,.96))',
@@ -100,7 +100,7 @@ export const LONDON_SALMON: ChoirTheme = {
   colors: {
     bg: '#FDF1EE', bg2: '#FFF7F4', panel: '#FFFCFA', panelStrong: '#FAECE8', panelSoft: 'rgba(255, 253, 251, 0.9)',
     fg: '#3A1517', muted: '#755B56', subtle: '#AD9088', accent: '#9C5852', accent2: '#244F4A',
-    success: '#1D6E45', warning: '#B46122', danger: '#9F2F2D',
+    success: '#1D6E45', warning: '#B46122', danger: '#9F2F2D', onDanger: '#FFF8F4',
     border: 'rgba(156, 88, 82, 0.1)', borderStrong: 'rgba(91, 28, 31, 0.2)',
     inputBg: 'rgba(255, 254, 252, 0.88)', selected: 'rgba(156, 88, 82, 0.1)', onAccent: '#FFF8F4',
     promptSurfaceBg: 'linear-gradient(180deg, rgba(255,254,252,.98), rgba(253,243,240,.98))',
@@ -271,6 +271,7 @@ export function themeCSSVariables(theme: unknown = DEFAULT_THEME): Record<string
     '--choir-status-warning-soft': colorMix(c.warning, 22),
     '--choir-status-danger': c.danger,
     '--choir-status-danger-soft': colorMix(c.danger, 24),
+    '--choir-text-on-danger': c.onDanger,
     '--choir-shadow-color': 'rgb(0, 0, 0)',
     '--choir-light-overlay': colorMix(c.fg, 8),
     '--choir-grid-line': colorMix(c.borderStrong || c.border, 28),

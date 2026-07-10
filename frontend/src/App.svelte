@@ -561,7 +561,7 @@
             on:click={clearAuthOverlay}
             aria-label="Close passkey sign in"
           >
-            x
+            ×
           </button>
           <AuthEntry
             {passkeyError}
@@ -599,7 +599,7 @@
             on:click={clearAuthOverlay}
             aria-label="Close passkey sign in"
           >
-            x
+            ×
           </button>
           <AuthEntry
             {passkeyError}
