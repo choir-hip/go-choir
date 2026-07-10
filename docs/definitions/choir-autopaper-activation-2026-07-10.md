@@ -326,7 +326,7 @@ settlement:
 ---
 id: root_cause_reboot_loop
 kind: conjecture
-status: settled
+status: testing
 source: user-stated 2026-07-10
 definition: >-
   The platform computer and/or sourcecycled are observed to reboot or restart in
@@ -736,6 +736,26 @@ evidence_ledger:
     promotion_relevance: >-
       Authorizes an ordering-only correction. Completion markers and SQL preservation
       remain the migration authority.
+  - claim: A stale concurrent platform ensure can fail a newer healthy VM generation.
+    definition_node: root_cause_reboot_loop
+    evidence_class: deployed staging proof
+    source: cb694846 fresh-boot observation on Node B
+    command_or_observation: >-
+      POST /internal/vmctl/resolve for universal-wire-platform at 21:29:04 UTC;
+      inspect vmctl journal and direct guest health/process state through 21:31:41 UTC.
+    artifact_path: internal/vmmanager + internal/vmctl platform lifecycle
+    result: >-
+      Generation 10.200.138.2 started at 21:29:05, bound :8085 at 21:29:21,
+      and vmmanager recorded epoch 8095 booted at 21:29:22. At 21:30:47 an older
+      concurrent ensure waiting on 10.200.137.2 hit its three-minute deadline,
+      marked the shared vm-universal-wire-platform identity failed, and the newer
+      Firecracker process disappeared. Direct health to 10.200.138.2 then timed out.
+    uncertainty: >-
+      The exact stale-write guard is not yet identified. Epoch/generation authority
+      must prevent an older waiter from mutating or killing the current generation.
+    promotion_relevance: >-
+      Reopens platform stability and the reboot-loop conjecture. The resumable store
+      migration repair remains supported but cannot settle lifecycle stability alone.
 ```
 
 ## Active Red Mutation Ceremony
@@ -764,6 +784,8 @@ active_red_mutation:
     discovered:
       - The stated per-kind migration gate exists in graph_store.go but is disconnected.
       - Every boot replays populated legacy kinds, allowing historical run count to block readiness.
+      - Concurrent platform ensures share one VM identity without an effective
+        generation guard at the failure transition.
     introduced:
       - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
         SQL remains intact, so the risk is reversible but the completion claim is invalid.
@@ -773,6 +795,7 @@ active_red_mutation:
       - Populated `choir.run` no longer blocks startup with per-record replay.
       - Partial migration is no longer collapsed into completion; successful passes
         receive durable markers and interrupted passes remain resumable.
+      - Runtime recovery now completes and publishes :8085 before deferred migration.
 ```
 
 ## Completion Semantics
@@ -863,14 +886,16 @@ run_checkpoint_and_resumption_state:
       marker: channel messages complete, but worker updates can be interrupted mid-kind.
     - Completion-aware migration is correct, but its first launch ordering must move
       after `rt.Start` and listener publication to avoid single-handle contention.
+    - Fresh cb694846 proof confirms that ordering, then reveals a stale ensure for an
+      older tap IP can kill the newer booted epoch by shared VM ID.
   remaining_error_field:
     - The platform computer is rebooting in a loop because its runtime never becomes ready.
     - Autopaper has not produced a visible edition on staging.
-  highest_impact_remaining_uncertainty: post-listener migration launch ordering
+  highest_impact_remaining_uncertainty: stale platform ensure generation guard
   next_executable_probe: >-
-    Complete synchronous runtime recovery first, publish the sandbox listener, then
-    launch resumable migration. Prove a fresh persistent guest binds health before
-    the long run pass and remains alive beyond vmctl's three-minute deadline.
+    Trace vmmanager/vmctl epoch ownership through concurrent Boot/Recover/MarkFailed
+    calls. Connect an existing generation guard if present, or add a compare-and-set
+    failure transition so an older waiter cannot fail/kill the current platform VM.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
