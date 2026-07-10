@@ -86,31 +86,35 @@ Initial rollback ref: `224243de`.
 
 ## Definition Graph
 
-### PC-0. Deployment identity follows activation — TESTING, P0
+### PC-0. Deployment identity follows activation — SETTLED, P0
 
 ```yaml
 id: deployment-identity-follows-activation
 kind: boundary
-status: testing
-source: observed staging acceptance 2026-07-10; service-scoped receipt check added by seam-repair 2026-07-10
+status: settled
+source: >-
+  observed staging acceptance 2026-07-10; service-scoped receipt check added by
+  seam-repair 2026-07-10; staging-proven at 944d4d94 via CI run 29091595925
 definition: >-
   A service health response distinguishes the immutable commit compiled into
   the serving binary from the release target selected by the deploy. The
   release target cannot become accepted deployment identity before the
   affected services are installed, restarted, and healthy.
 problem: >-
-  The Node B workflow writes CHOIR_DEPLOYED_COMMIT immediately after checkout,
-  before selected service builds and activation. buildinfo.Snapshot then
-  overwrites the binary Commit field with that mutable file value. During CI
-  run 29078163452, proxy /health reported 3f4f4aac while the deploy job was
+  Historical: The Node B workflow wrote CHOIR_DEPLOYED_COMMIT immediately after
+  checkout, before selected service builds and activation. buildinfo.Snapshot
+  then overwrote the binary Commit field with that mutable file value. During
+  CI run 29078163452, proxy /health reported 3f4f4aac while the deploy job was
   still in progress and the auth service still served the pre-repair API-key
   handler: a read-only key minted an admin child with HTTP 201. During the
   rerun of CI run 29079492757 for commit 94416899, the deploy host fetched and
   reset to the then-current origin/main commit b0b6d8af instead of the tested
   workflow commit. The auth fast build then fell back to Nix, whose
   service-specific source filter omitted internal/buildinfo even though
-  internal/server now imports it. Deployment failed before activation.
-problem_cluster:
+  internal/server now imports it. Deployment failed before activation. A later
+  gap remained after f2d1d330: deployMetadata could still claim another
+  service's receipt artifact until seam-repair af042d1e scoped it.
+problem_cluster_historical:
   - proxy health exposes mutable repository target identity, not immutable serving-binary identity
   - generic service health, including auth, exposes no compiled build identity
   - the deploy job tests one immutable workflow commit but Node B independently selects a moving branch tip
@@ -119,7 +123,7 @@ problem_cluster:
   - deployed-origin acceptance requires frontend and proxy compiled commits to be equal even though differential deployments intentionally advance them independently
   - cmd/choir is not installed on Node B or guest images, yet its source falls through to the conservative full host plus both guest-image deploy class
   - cmd/desktop is a separate Wails distribution module, but its native-only source also falls through to the full platform deploy class; only shared frontend changes belong to Node B
-root_cause:
+root_cause_historical:
   - deploy.env publishes the target SHA before service activation
   - buildinfo conflates compiled artifact identity with mutable deploy metadata
   - the remote checkout trusts origin/main rather than the immutable workflow SHA that passed CI
@@ -136,11 +140,24 @@ settlement_rule: >-
   service identity is probed before product acceptance; an inverted deploy
   contract prevents a target SHA from masquerading as a serving binary SHA;
   undistributed cmd/choir-only and cmd/desktop-native-only changes do not
-  activate Node B or guest images.
+  activate Node B or guest images; deployMetadata is service-scoped to the
+  calling service's own receipt artifact.
+deployed_evidence:
+  - commit 944d4d94f376dcabea2dba3c52c0ce207000d24f
+  - CI run 29091595925 / deploy job 86359870572 / receipt attempt 1
+  - proxy /health build.service=proxy with commit=deployed_commit=944d4d94...
+  - auth /session X-Choir-Build-Service=auth and X-Choir-Build-Commit=944d4d94...
+  - receipt artifacts auth/proxy/vmctl/gateway/corpusd/maild/sourcecycled/frontend/sandbox/ordinary_guest/active_computers active (playwright_guest installed) all at 944d4d94
+  - deploy-impact classifier ignores undistributed cmd/choir and cmd/desktop native paths
 execution_effect: >-
-  Product acceptance names the affected artifact's compiled identity and a
-  completed activation receipt. Mutable target metadata, another component's
-  commit, or an in-progress deployment remains inadmissible.
+  Settled after seam-repair service-scoped deployMetadata plus staging
+  acceptance at 944d4d94. Product acceptance must still name the affected
+  artifact's compiled identity and a completed activation receipt. Mutable
+  target metadata, another component's commit, or an in-progress deployment
+  remains inadmissible.
+residual_risk: >-
+  Identical per-service vendor materialization remains a build-cost concern,
+  not an identity correctness blocker.
 ```
 
 ### PC-1. API-key capability delegation — SETTLED, P0
@@ -309,13 +326,16 @@ execution_effect: >-
   until capability delegation is repaired.
 ```
 
-### PC-4. Promotion truth gate — TESTING: ROUTE-SLOT WRITER FORMAT FIXED
+### PC-4. Promotion truth gate — TESTING: ROUTE-SLOT FORMAT STAGING-PROVEN
 
 ```yaml
 id: promotion-truth-gate
 kind: boundary
 status: testing
-source: observed 2026-07-10; RouteProfile format fixed to owner_id/computer_id by seam-repair 2026-07-10; authority remains OG/Dolt/heresy Definition
+source: >-
+  observed 2026-07-10; RouteProfile format fixed to owner_id/computer_id by
+  seam-repair 2026-07-10 and staging-proven at 944d4d94; authority remains
+  OG/Dolt/heresy Definition
 definition: >-
   Adoption verification and owner approval are not served activation. No API or
   UI may persist or display active/rollback-success unless a load-bearing
@@ -325,8 +345,17 @@ problem: >-
   Features can persist adopted and show Activated with rollback available when
   the optional tag adapter is absent or fails. Rollback can advance lineage
   after best-effort DOLT_RESET fails. Ordinary proxy routing consumes neither.
+proven_partial:
+  - RouteProfile writers emit owner_id/computer_id
+  - resolver normalizes legacy route: values at read time
+  - staging lineage reads for desktop and computer-universal-wire-platform return owner_id/computer_id
+  - shell bootstrap succeeds against lineage-backed sandbox routing
+unproven:
+  - no staging PromoteAppAdoption/RollbackAppAdoption mutation (no app-change packages present)
+  - OG truth-gate slice still owns served-route receipt requirements for active/rollback-success claims
 execution_effect: >-
-  The active OG Definition must document and execute the red truth-gate slice.
+  The route-slot writer format seam is closed. The active OG Definition must
+  still document and execute the red truth-gate slice before PC-4 can settle.
   This mission may verify user-facing claims but may not redefine the protocol.
 ```
 
@@ -770,8 +799,8 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     active; self-revoke=204; manager subset create/revoke=201/204; broader
     create=403; zero active proof keys remained after cleanup.
   uncertainty: >-
-    Wails still violates the separate native secret-containment boundary. The
-    false deployment-identity window remains open as PC-0.
+    Wails still violates the separate native secret-containment boundary.
+    PC-0 deployment-identity settlement is recorded separately after 944d4d94.
 - claim: proxy health target identity can precede affected-service activation.
   definition_node: deployment-identity-follows-activation
   evidence_class: deployed staging timing + source call graph
@@ -969,6 +998,44 @@ strictly safer dependency. Base and File Provider wiring may not jump PC-5.
     Identical 354 MiB vendor trees remain separately materialized per service;
     a later build-graph optimization must preserve the settled identity and
     per-service rollback boundaries.
+- claim: PC-0 service-scoped deployment identity is staging-proven at 944d4d94.
+  definition_node: deployment-identity-follows-activation
+  evidence_class: deployed staging proof + activation receipt + live re-probe
+  command_or_observation: >-
+    CI run 29091595925 / deploy job 86359870572; receipt
+    /tmp/choir-seam-repair-receipt.json target_commit 944d4d94...; GET
+    https://choir.news/health; GET https://choir.news/auth/session; printf
+    cmd/choir/main.go and cmd/desktop/main.go into
+    .github/scripts/deploy-impact-classify
+  result: >-
+    Receipt 29091595925/1 names auth/proxy/vmctl/gateway/corpusd/maild/
+    sourcecycled/frontend/sandbox/ordinary_guest/active_computers active and
+    playwright_guest installed, all at 944d4d94. Live proxy /health reports
+    build.service=proxy with commit=deployed_commit=944d4d94...; auth session
+    headers report X-Choir-Build-Service=auth and matching commit. Undistributed
+    cmd/choir and cmd/desktop native paths classify as ignored with
+    deploy_needed=false.
+  acceptance_level: service-scoped selected-artifact activation receipt plus public product identity proof
+  accepted_deploy_id: "29091595925/1"
+  mutation_class: green
+  residual_risk: >-
+    Per-service vendor materialization cost remains; it does not reopen identity
+    correctness.
+- claim: PC-4 route-slot writer format is staging-proven; promote/rollback mutation remains open.
+  definition_node: promotion-truth-gate
+  evidence_class: deployed staging proof + seam-repair evidence ledger
+  command_or_observation: >-
+    Authenticated GET /api/computers/{desktop,computer-universal-wire-platform}/source-lineage;
+    GET /api/shell/bootstrap; POST /api/computers/desktop/adoptions without package
+  result: >-
+    Lineage route_profile values are owner_id/computer_id with no route: prefix.
+    Bootstrap succeeds against lineage-backed sandbox routing. Adoption without a
+    package returns 400 package-not-found; no app-change packages exist, so
+    PromoteAppAdoption/RollbackAppAdoption was not executed.
+  uncertainty: >-
+    PC-4 remains testing until an admissible promote/rollback mutation and the
+    OG truth-gate slice prove served-route receipt requirements.
+  mutation_class: green
 - claim: Autopaper has two activation paths per non-empty source cycle.
   definition_node: autopaper-single-activation
   evidence_class: code-level call graph
@@ -1000,24 +1067,27 @@ SyncService, or one published Texture is not completion.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: seam-repair 944d4d94 activated on staging (CI 29091595925)
+  last_checkpoint: >-
+    PC-0/PC-4 staging refresh against activated 944d4d94 (CI 29091595925);
+    live re-probe 2026-07-10 confirmed service-scoped identity still serving
   current_artifact_state: >-
-    Staging still carries f2d1d330 selected-artifact activation receipts. Local
-    seam-repair commits af042d1e (service-scoped deployMetadata), 0b21ecdb
-    (RouteProfile owner_id/computer_id), a1073731 (compiled-only source lineage),
-    and 7b59d33e (SyncEngine/contract-builder/wire-synthesis dead-code excision)
-    are not yet proven on staging. PC-0 remains testing until service-scoped
-    identity is staging-proven. PC-4 is testing with the route-slot writer format
-    fixed. PC-5/PC-6/PC-7 remain open; SyncService and the Base contract tower
-    are deleted, not registered.
+    Staging serves 944d4d94f376dcabea2dba3c52c0ce207000d24f under receipt
+    29091595925/1. Seam-repair service-scoped deployMetadata, RouteProfile
+    owner_id/computer_id writers, compiled-only source lineage, and dead-code
+    excision are activated. PC-0 is settled. PC-4 remains testing: route-slot
+    format is staging-proven, but PromoteAppAdoption/RollbackAppAdoption and the
+    OG truth-gate slice are still open. PC-2/PC-3/PC-5/PC-6/PC-7 remain open;
+    SyncService and the Base contract tower stay deleted.
   what_shipped:
     - 3f4f4aac API-key capability-envelope enforcement
     - eb3bdd35 false deployment identity problem record
     - f2d1d330 exact-SHA single-builder selected-artifact activation receipts
-    - af042d1e service-scoped deployMetadata (local; staging proof pending)
-    - 0b21ecdb RouteProfile owner_id/computer_id writers + resolver legacy normalize (local)
-    - a1073731 compiled-commit-only source-workspace identity (local)
-    - 7b59d33e dead-code excision of SyncService/SyncEngine/contract tower/wire helper (local)
+    - af042d1e service-scoped deployMetadata (activated)
+    - 0b21ecdb RouteProfile owner_id/computer_id writers + resolver legacy normalize (activated)
+    - a1073731 compiled-commit-only source-workspace identity (activated)
+    - 7b59d33e dead-code excision of SyncService/SyncEngine/contract tower/wire helper (activated)
+    - 944d4d94 final-consensus adjudication + staging activation
+    - 3d43f1c4 seam-repair staging acceptance docs
   what_was_proven:
     - CLI trajectories read works on staging
     - CLI timeout hides the server's bounded 504
@@ -1025,22 +1095,27 @@ run_checkpoint_and_resumption_state:
     - Base exact-byte primitives exist, but stable identity plus expected-parent commit plus acknowledged cursor is the missing kernel transaction
     - SyncEngine, SyncService registration, and the Base contract-builder tower are deleted and no longer product authority
     - projection-triggered Autopaper activation is deleted; typed handoff is the sole activation path
-    - proxy-global deployed_commit is not affected-service activation proof; deployMetadata is now service-scoped in code
+    - deployMetadata is service-scoped and staging /health identities do not cross-claim another service's artifact
     - API-key delegation and sibling revocation are bounded by caller capability on staging
     - compiled identity is visible before and independent from activation receipt metadata
-    - every selected artifact in deploy 29083767049 has an explicit verified receipt entry
+    - every selected artifact in deploy 29091595925 has an explicit verified receipt entry at 944d4d94
+    - staging lineage RouteProfile values are owner_id/computer_id; bootstrap routing succeeds
+    - undistributed cmd/choir and cmd/desktop native paths do not select Node B/guest deploy
   unproven_or_partial_claims:
     - no staging PromoteAppAdoption/RollbackAppAdoption mutation (no packages)
     - no Wails built-app acceptance
     - no deployed Autopaper typed-handoff idempotency proof
     - no Base exact-byte two-device proof
-    - no served ComputerVersion promotion end-to-end
-  highest_impact_remaining_uncertainty: staging proof of service-scoped identity and route-slot promotion after seam-repair
+    - no served ComputerVersion promotion end-to-end / OG truth-gate settlement
+  highest_impact_remaining_uncertainty: >-
+    PC-2 Wails token containment remains the highest open P0 product authority
+    failure on the activated 944d4d94 base.
   next_executable_probe: >-
-    Land seam-repair through CI/deploy, then prove per-service /health identity
-    and a RouteProfile promotion/rollback on choir.news. Resume PC-2/PC-3/PC-5
-    product work only after those receipts exist.
-  suggested_goal_string: "/goal docs/definitions/choir-seam-repair-2026-07-10.md"
+    Resume PC-2 Wails token containment (red): collapse exchange/redeem onto
+    auth-owned HttpOnly session cookies, delete renderer-visible token paths,
+    and prove built-app reload/logout containment. Keep PC-4 open until an
+    admissible promote/rollback package exists under OG authority.
+  suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
     - docs/definitions/choir-seam-repair-2026-07-10.md
@@ -1048,6 +1123,8 @@ run_checkpoint_and_resumption_state:
   rollback_refs:
     - 224243de (pre-program source state)
     - b7f689d4 (pre-API-key behavior repair)
-    - f2d1d330 deployment receipt rollback paths named in the PC-0 evidence entry
+    - f2d1d330 deployment receipt rollback paths named in the earlier PC-0 evidence entry
     - a1073731 (pre-delete rollback for Phase D dead-code excision)
+    - 944d4d94 activated tip / receipt 29091595925/1
+
 ```
