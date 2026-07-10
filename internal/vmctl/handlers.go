@@ -1198,17 +1198,10 @@ func writeRuntimePackageTar(tw *tar.Writer, root string, snapshot buildinfo.Info
 		return err
 	}
 
-	commit := strings.TrimSpace(snapshot.Commit)
-	if commit == "" {
-		commit = strings.TrimSpace(snapshot.DeployedCommit)
-	}
-	if commit == "" {
-		commit = "unknown"
-	}
 	deployedAt := strings.TrimSpace(snapshot.DeployedAt)
-	env := fmt.Sprintf("CHOIR_DEPLOYED_COMMIT=%s\nRUNTIME_WORKER_REPO_BASE_SHA=%s\n", shellEnvValue(commit), shellEnvValue(commit))
+	var env string
 	if deployedAt != "" {
-		env += fmt.Sprintf("CHOIR_DEPLOYED_AT=%s\n", shellEnvValue(deployedAt))
+		env = fmt.Sprintf("CHOIR_DEPLOYED_AT=%s\n", shellEnvValue(deployedAt))
 	}
 	for _, key := range []string{"RUNTIME_WIRE_PUBLISH_URL", "RUNTIME_CORPUSD_URL"} {
 		if value := strings.TrimSpace(serviceEnv[key]); value != "" {

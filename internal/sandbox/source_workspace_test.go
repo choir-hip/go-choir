@@ -28,7 +28,9 @@ func TestBootstrapSourceWorkspaceCreatesRootsAndLineage(t *testing.T) {
 	t.Setenv("RUNTIME_PROMOTION_SOURCE_REPO", "https://example.com/platform.git")
 	t.Setenv("RUNTIME_SOURCE_LEDGER_REPO", "https://example.com/source-ledger.git")
 	t.Setenv("RUNTIME_PROMOTION_WORKSPACE_ROOT", filepath.Join(root, "promotion-workspaces"))
-	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", "abc123")
+	originalCommit := buildinfo.Commit
+	buildinfo.Commit = "abc123"
+	t.Cleanup(func() { buildinfo.Commit = originalCommit })
 
 	projection, err := BootstrapSourceWorkspace(root, SourceWorkspaceOptions{
 		ComputerID: "candidate-computer-1",
@@ -172,7 +174,9 @@ func TestBootstrapSourceWorkspaceMaterializesPlatformAndCandidateCheckouts(t *te
 
 	filesRoot := filepath.Join(root, "files")
 	t.Setenv("RUNTIME_PROMOTION_SOURCE_REPO", repo)
-	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", commit)
+	originalCommit := buildinfo.Commit
+	buildinfo.Commit = commit
+	t.Cleanup(func() { buildinfo.Commit = originalCommit })
 	projection, err := BootstrapSourceWorkspace(filesRoot, SourceWorkspaceOptions{
 		ComputerID:              "sandbox-m1",
 		MaterializeGitCheckouts: true,

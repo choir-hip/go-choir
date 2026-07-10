@@ -97,9 +97,6 @@ func sourceWorkspaceProjection(root, sourceRoot string, opts SourceWorkspaceOpti
 	desktopID := firstNonEmptySourceWorkspace(opts.DesktopID, os.Getenv("CHOIR_DESKTOP_ID"), "primary")
 	baseCommit := firstNonEmptySourceWorkspace(
 		compiledSourceWorkspaceCommit(),
-		os.Getenv("CHOIR_DEPLOYED_COMMIT"),
-		os.Getenv("CHOIR_BUILD_SHA"),
-		os.Getenv("RUNTIME_WORKER_REPO_BASE_SHA"),
 		"unknown",
 	)
 	userRef := activeSourceRefForComputer(computerID, kind)

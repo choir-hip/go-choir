@@ -901,11 +901,9 @@ func TestHandler_RuntimePackageStreamsSandboxPackage(t *testing.T) {
 	if entries["share/go-choir/skills/SKILL.md"] != "skill" {
 		t.Fatalf("skills entry = %q", entries["share/go-choir/skills/SKILL.md"])
 	}
-	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WORKER_REPO_BASE_SHA="+sandboxCommit) ||
-		!strings.Contains(env, "CHOIR_DEPLOYED_COMMIT="+sandboxCommit) ||
-		!strings.Contains(env, "RUNTIME_WIRE_PUBLISH_URL=http://10.203.154.1:8082") ||
+	if env := entries["choir-runtime.env"]; !strings.Contains(env, "RUNTIME_WIRE_PUBLISH_URL=http://10.203.154.1:8082") ||
 		!strings.Contains(env, "RUNTIME_CORPUSD_URL=http://10.203.154.1:8082") {
-		t.Fatalf("runtime env missing deployment/service refs: %q", env)
+		t.Fatalf("runtime env missing service refs: %q", env)
 	}
 }
 
