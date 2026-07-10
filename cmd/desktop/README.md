@@ -81,8 +81,8 @@ CHOIR_BACKEND=https://choir.news task cloud
 ### Local mode
 
 Runs the full Choir backend stack locally as child processes. The Wails
-window loads `http://localhost:3000`, giving a real localhost origin so
-WebAuthn passkeys work in WKWebView.
+window loads `http://localhost:3000` for development. Authentication still
+uses the native Safari bridge because WKWebView is not the passkey authority.
 
 ```bash
 # Build everything and run in local mode
@@ -113,7 +113,7 @@ Wails v3 app (Go)
 
 The Svelte frontend works unchanged because it uses relative URLs
 (`/auth/*`, `/api/*`). The Wails asset handler intercepts these and
-forwards them to the backend.
+forwards them to the backend through the native session proxy.
 
 ## Authentication Bridge
 
@@ -121,33 +121,33 @@ WKWebView does not support WebAuthn platform authenticators (Touch ID).
 The desktop app uses `ASWebAuthenticationSession` to delegate auth to
 Safari, which shares cookies with the system browser.
 
-### Flow (already-signed-in user)
+### Single native flow
 
-1. Frontend calls `POST /desktop-auth/start-session`
-2. Desktop app opens `choir.news/auth/desktop/exchange-redirect` in
-   `ASWebAuthenticationSession` (listening for `choir://` scheme)
-3. Server sees existing Safari cookies, creates exchange code, responds
-   with 302 redirect to `choir://auth-complete?code=...`
-4. `ASWebAuthenticationSession` intercepts the redirect, returns callback URL
-5. Desktop app redeems the code for tokens via `POST /auth/desktop/redeem`
-6. Tokens are injected as cookies into the WKWebView
+1. The frontend calls `POST /desktop-auth/start-session` with the email.
+2. The desktop app opens `desktop-bridge.html` exactly once in
+   `ASWebAuthenticationSession`, listening for the `choir://` scheme.
+3. The bridge checks the Safari session. An already-signed-in user continues
+   immediately; otherwise Safari performs the WebAuthn ceremony with Touch ID.
+4. The server redirects to `choir://auth-complete?code=...` and the native app
+   validates the callback authority.
+5. Go redeems the one-time code through `/auth/desktop/redeem` with bounded
+   network and response limits.
+6. Go stores access and refresh credentials only in a process-local cookie jar
+   and returns `{"authenticated":true}` to the renderer.
+7. The native reverse proxy deletes renderer-supplied cookies, attaches the jar
+   cookies to backend requests, absorbs backend rotation/logout `Set-Cookie`
+   headers, and strips those headers before the renderer sees the response.
 
-### Flow (not signed in)
-
-1. Phase 1 (exchange-redirect) fails — user has no Safari session
-2. Desktop app falls back to opening `choir.news/desktop-bridge.html`
-3. Bridge page performs WebAuthn ceremony (Touch ID via Safari)
-4. Bridge page navigates to `/auth/desktop/exchange-redirect`
-5. Server 302-redirects to `choir://auth-complete?code=...`
-6. Same redemption flow as above
+Access tokens, refresh tokens, exchange codes, and cookie values are not
+returned to JavaScript or written to logs. Renderer requests to the desktop
+exchange/redeem endpoints are blocked; only the native broker may use them.
 
 ### Key endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/auth/desktop/exchange` | POST | JSON exchange — returns code in response body |
-| `/auth/desktop/exchange-redirect` | GET | 302 redirect — returns code via `choir://` scheme |
-| `/auth/desktop/redeem` | POST | Redeem exchange code for access/refresh tokens |
+| `/auth/desktop/exchange-redirect` | GET | Safari bridge receives a one-time code through the `choir://` callback |
+| `/auth/desktop/redeem` | POST | Native Go broker redeems the one-time code; renderer access is blocked |
 | `/auth/session` | GET | Check if user is authenticated (used by bridge page) |
 
 ### Why server-side 302 instead of JS redirect
@@ -156,6 +156,10 @@ Safari's `ASWebAuthenticationSession` web view does not reliably
 intercept `window.location.href` navigations to custom URL schemes.
 A server-side 302 redirect is followed natively by the web view and
 reliably triggers the `ASWebAuthenticationSession` callback.
+
+The cookie jar intentionally lasts only for the native process today. App
+relaunch requires authentication until PC-7 adds an approved Keychain/session
+restoration contract and built-app acceptance.
 
 ## App Icon
 

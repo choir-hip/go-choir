@@ -60,27 +60,20 @@ function isDesktopBridge() {
   return typeof window !== 'undefined' && window.__CHOIR_BRIDGE === true;
 }
 
-async function startDesktopAuthSession(email, authType) {
+async function startDesktopAuthSession(email) {
   const res = await fetch('/desktop-auth/start-session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, authType }),
+    body: JSON.stringify({ email }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || `Auth session failed (${res.status})`);
   }
 
-  // The desktop app returns raw access and refresh tokens. We inject them
-  // as cookies into the WKWebView so subsequent /auth/* and /api/* calls
-  // are authenticated. The auth service normally sets these as HttpOnly
-  // cookies, but since we received raw tokens we set them from JS.
-  const tokens = await res.json();
-  if (tokens.access_token) {
-    document.cookie = `choir_access=${tokens.access_token}; path=/; max-age=300; samesite=lax`;
-  }
-  if (tokens.refresh_token) {
-    document.cookie = `choir_refresh=${tokens.refresh_token}; path=/auth; max-age=2592000; samesite=lax`;
+  const session = await res.json();
+  if (session.authenticated !== true) {
+    throw new Error('Desktop authentication did not establish a session');
   }
 }
 
@@ -88,7 +81,7 @@ export async function registerPasskey(email) {
   // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
   // WKWebView doesn't support platform authenticators, so we delegate.
   if (isDesktopBridge()) {
-    await startDesktopAuthSession(email, 'register');
+    await startDesktopAuthSession(email);
     return { ok: true, user: { id: '', email, createdAt: '' } };
   }
 
@@ -177,7 +170,7 @@ export async function loginPasskey(email) {
   // Desktop bridge: Safari performs the WebAuthn ceremony (Touch ID).
   // WKWebView doesn't support platform authenticators, so we delegate.
   if (isDesktopBridge()) {
-    await startDesktopAuthSession(email, 'login');
+    await startDesktopAuthSession(email);
     return { ok: true, user: { id: '', email, createdAt: '' } };
   }
 

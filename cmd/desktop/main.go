@@ -227,9 +227,9 @@ func stopLocalServices(procs []*serviceProcess) {
 
 // startLocalFrontendServer serves embedded frontend assets on localhost and
 // proxies /api/* to the local proxy service. In local mode there is no auth
-// service — device access is ownership. The /desktop-auth/start-session
-// endpoint opens the cloud auth bridge via ASWebAuthenticationSession.
-func startLocalFrontendServer(backend string) (*http.Server, error) {
+// service — device access is ownership. Native authentication is held in the
+// process-local desktop session rather than exposed to the renderer.
+func startLocalFrontendServer(session *desktopSession) (*http.Server, error) {
 	mux := http.NewServeMux()
 
 	// API proxy — routes /api/* to the local proxy service.
@@ -239,10 +239,14 @@ func startLocalFrontendServer(backend string) (*http.Server, error) {
 	})
 	mux.HandleFunc("/api/", apiProxy.ServeHTTP)
 
-	// Desktop auth session — opens the cloud auth bridge via
-	// ASWebAuthenticationSession, redeems the exchange code for tokens.
-	mux.HandleFunc("/desktop-auth/start-session", func(w http.ResponseWriter, r *http.Request) {
-		handleDesktopAuthSession(w, r, backend)
+	mux.HandleFunc("/desktop-auth/start-session", session.handleStart)
+	authProxy := session.proxy()
+	mux.HandleFunc("/auth/", func(w http.ResponseWriter, r *http.Request) {
+		if isBlockedDesktopAuthRoute(r.URL.Path) {
+			http.NotFound(w, r)
+			return
+		}
+		authProxy.ServeHTTP(w, r)
 	})
 
 	// Frontend assets with bridge script injection.
@@ -354,6 +358,10 @@ func main() {
 	if backend == "" {
 		backend = "https://choir.news"
 	}
+	desktopSession, err := newDesktopSession(backend)
+	if err != nil {
+		log.Fatalf("Invalid Choir backend configuration: %v", err)
+	}
 
 	var procs []*serviceProcess
 	var frontendSrv *http.Server
@@ -390,7 +398,7 @@ func main() {
 		}
 		defer stopLocalServices(procs)
 
-		frontendSrv, err = startLocalFrontendServer(backend)
+		frontendSrv, err = startLocalFrontendServer(desktopSession)
 		if err != nil {
 			log.Fatalf("Failed to start frontend server: %v", err)
 		}
@@ -417,7 +425,7 @@ func main() {
 			application.NewService(newSyncService(localMode, backend)),
 		},
 		Assets: application.AssetOptions{
-			Handler: assetHandler(backend),
+			Handler: assetHandler(desktopSession),
 		},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
@@ -452,30 +460,22 @@ func main() {
 // assetHandler serves embedded frontend assets and proxies /auth/* and
 // /api/* to the staging backend. Used only in cloud mode — in local mode,
 // the window loads from the local frontend server which handles all routing.
-// It also handles /desktop-auth/start-session for the ASWebAuthenticationSession
-// flow and injects the bridge script into index.html.
-func assetHandler(backend string) http.Handler {
+// It also handles the single native desktop auth entrypoint and injects the
+// bridge script into index.html.
+func assetHandler(session *desktopSession) http.Handler {
 	embedded := application.AssetFileServerFS(assets)
-
-	proxyTarget, err := url.Parse(backend)
-	if err != nil {
-		log.Fatalf("invalid backend URL %q: %v", backend, err)
-	}
-
-	proxy := httputil.NewSingleHostReverseProxy(proxyTarget)
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		originalDirector(req)
-		req.Host = proxyTarget.Host
-	}
+	proxy := session.proxy()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Desktop auth session — same handler as local mode.
 		if r.URL.Path == "/desktop-auth/start-session" {
-			handleDesktopAuthSession(w, r, backend)
+			session.handleStart(w, r)
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/api/") {
+			if isBlockedDesktopAuthRoute(r.URL.Path) {
+				http.NotFound(w, r)
+				return
+			}
 			proxy.ServeHTTP(w, r)
 			return
 		}
@@ -508,95 +508,6 @@ func serveEmbedded(w http.ResponseWriter, r *http.Request, embedded http.Handler
 		return
 	}
 	embedded.ServeHTTP(w, r)
-}
-
-// handleDesktopAuthSession opens choir.news via ASWebAuthenticationSession.
-// It first tries /auth/desktop/exchange-redirect — if the user is already
-// signed in on Safari, the server immediately 302-redirects to choir://auth-complete?code=...,
-// which ASWebAuthenticationSession reliably intercepts (unlike JS window.location.href).
-// If that fails (user not signed in), it falls back to the bridge page for WebAuthn.
-func handleDesktopAuthSession(w http.ResponseWriter, r *http.Request, backend string) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var req struct {
-		Email    string `json:"email"`
-		AuthType string `json:"authType"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	// Phase 1: Try exchange-redirect directly (works if user is already signed in on Safari).
-	redirectURL := fmt.Sprintf("%s/auth/desktop/exchange-redirect", backend)
-	log.Printf("Starting ASWebAuthenticationSession (exchange-redirect): %s", redirectURL)
-
-	callbackURL, err := startWebAuthSession(redirectURL, "choir")
-	if err == nil {
-		log.Printf("ASWebAuthenticationSession completed via exchange-redirect: %s", callbackURL)
-	} else {
-		// Phase 2: Fall back to bridge page for WebAuthn ceremony.
-		log.Printf("Exchange-redirect failed (%v), falling back to bridge page", err)
-		bridgeURL := fmt.Sprintf("%s/desktop-bridge.html?email=%s",
-			backend, url.QueryEscape(req.Email))
-		log.Printf("Starting ASWebAuthenticationSession (bridge): %s", bridgeURL)
-
-		callbackURL, err = startWebAuthSession(bridgeURL, "choir")
-		if err != nil {
-			log.Printf("ASWebAuthenticationSession error: %v", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		log.Printf("ASWebAuthenticationSession completed via bridge: %s", callbackURL)
-	}
-
-	// Parse the callback URL to extract the exchange code.
-	cbURL, err := url.Parse(callbackURL)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "invalid callback URL"})
-		return
-	}
-	code := cbURL.Query().Get("code")
-	if code == "" {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "no code in callback"})
-		return
-	}
-
-	// Redeem the code for tokens.
-	redeemBody, _ := json.Marshal(map[string]string{"code": code})
-	redeemRes, err := http.Post(
-		backend+"/auth/desktop/redeem",
-		"application/json",
-		bytes.NewReader(redeemBody),
-	)
-	if err != nil {
-		log.Printf("Token redeem error: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to redeem token"})
-		return
-	}
-	defer redeemRes.Body.Close()
-
-	if redeemRes.StatusCode != http.StatusOK {
-		var errResp map[string]string
-		_ = json.NewDecoder(redeemRes.Body).Decode(&errResp)
-		log.Printf("Token redeem failed: %s", errResp["error"])
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": errResp["error"]})
-		return
-	}
-
-	var tokens struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-	}
-	if err := json.NewDecoder(redeemRes.Body).Decode(&tokens); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to parse tokens"})
-		return
-	}
-
-	log.Printf("Token redeem succeeded, returning tokens to frontend")
-	writeJSON(w, http.StatusOK, tokens)
 }
 
 func init() {

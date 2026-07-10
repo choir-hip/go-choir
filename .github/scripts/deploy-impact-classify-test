@@ -79,6 +79,34 @@ assert_contains "$choir_cli_output" "cmd/choir/main.go -> ignored (undistributed
 assert_contains "$choir_cli_output" "cmd/choir/main_test.go -> ignored (undistributed Choir CLI; not installed on Node B or guest closures)"
 assert_not_contains "$choir_cli_output" "conservative Go impact"
 
+desktop_native_output="$(
+  run_classifier \
+    "cmd/desktop/main.go" \
+    "cmd/desktop/desktop_auth.go" \
+    "cmd/desktop/desktop_auth_test.go"
+)"
+assert_contains "$desktop_native_output" "deploy_needed=false"
+assert_contains "$desktop_native_output" "deploy_host=false"
+assert_contains "$desktop_native_output" "deploy_host_service=false"
+assert_contains "$desktop_native_output" "deploy_ordinary_guest=false"
+assert_contains "$desktop_native_output" "deploy_playwright_guest=false"
+assert_contains "$desktop_native_output" "cmd/desktop/main.go -> ignored (native Wails distribution module; not installed on Node B or guest closures)"
+assert_not_contains "$desktop_native_output" "conservative Go impact"
+
+desktop_shared_frontend_output="$(
+  run_classifier \
+    "cmd/desktop/main.go" \
+    "frontend/src/lib/auth.js"
+)"
+assert_contains "$desktop_shared_frontend_output" "deploy_needed=true"
+assert_contains "$desktop_shared_frontend_output" "deploy_frontend=true"
+assert_contains "$desktop_shared_frontend_output" "deploy_host=false"
+assert_contains "$desktop_shared_frontend_output" "deploy_host_service=false"
+assert_contains "$desktop_shared_frontend_output" "deploy_ordinary_guest=false"
+assert_contains "$desktop_shared_frontend_output" "deploy_playwright_guest=false"
+assert_contains "$desktop_shared_frontend_output" "frontend/src/lib/auth.js -> frontend bundle"
+assert_not_contains "$desktop_shared_frontend_output" "conservative Go impact"
+
 node_b_storage_tooling_output="$(
   run_classifier \
     "scripts/node-b-storage-report" \

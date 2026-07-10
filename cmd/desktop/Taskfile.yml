@@ -28,6 +28,7 @@ tasks:
     desc: Copy frontend dist into embed directory
     deps: [build:frontend]
     cmds:
+      - mkdir -p frontend
       - rm -rf frontend/dist
       - cp -r "{{.FRONTEND_DIR}}/dist" frontend/dist
     sources:
