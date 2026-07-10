@@ -1000,7 +1000,7 @@ SyncService, or one published Texture is not completion.
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: seam-repair Phases A–D landed locally; Phase E Definition refresh in progress
+  last_checkpoint: seam-repair 944d4d94 activated on staging (CI 29091595925)
   current_artifact_state: >-
     Staging still carries f2d1d330 selected-artifact activation receipts. Local
     seam-repair commits af042d1e (service-scoped deployMetadata), 0b21ecdb
@@ -1030,8 +1030,7 @@ run_checkpoint_and_resumption_state:
     - compiled identity is visible before and independent from activation receipt metadata
     - every selected artifact in deploy 29083767049 has an explicit verified receipt entry
   unproven_or_partial_claims:
-    - no staging proof of service-scoped /health identity after seam-repair
-    - no staging proof of RouteProfile owner_id/computer_id promotion/rollback
+    - no staging PromoteAppAdoption/RollbackAppAdoption mutation (no packages)
     - no Wails built-app acceptance
     - no deployed Autopaper typed-handoff idempotency proof
     - no Base exact-byte two-device proof

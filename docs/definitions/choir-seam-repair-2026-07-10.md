@@ -90,7 +90,7 @@ consolidation of the half-finished seams from the previous run.
 ```yaml
 id: deployment_identity_service_scoped
 kind: boundary
-status: open
+status: settled
 source: observed
 term: Deployment identity is per-service
 definition: >-
@@ -128,7 +128,7 @@ settlement:
 ```yaml
 id: route_profile_owner_computer_format
 kind: boundary
-status: open
+status: settled
 source: observed
 term: RouteProfile is owner_id/computer_id
 definition: >-
@@ -170,7 +170,7 @@ settlement:
 ```yaml
 id: source_workspace_compiled_identity_only
 kind: boundary
-status: open
+status: settled
 source: observed
 term: Sandbox source lineage uses only compiled commit
 definition: >-
@@ -208,7 +208,7 @@ settlement:
 ```yaml
 id: dead_code_excision
 kind: object
-status: open
+status: settled
 source: observed
 term: Dead code from the deletion pass is removed
 definition: >-
@@ -258,7 +258,7 @@ settlement:
 ```yaml
 id: definition_doc_state_refresh
 kind: object
-status: testing
+status: settled
 source: observed; Phase E doc refresh 2026-07-10
 term: Product completion Definition matches the code
 definition: >-
@@ -457,7 +457,7 @@ variant:
   dead_code_surfaces: 0
   stale_definition_statuses: 0
   agentic_consensus_gates_passed: 1
-  staging_acceptance_proof: 0
+  staging_acceptance_proof: 1
 ```
 
 The mission reduces all variant counts to 0 and raises the two proof counts to
@@ -626,6 +626,39 @@ evidence_ledger:
       ./scripts/doccheck --mode=live passed.
     result: verified
     uncertainty: staging proof of service-scoped identity and RouteProfile still open under Phase F
+
+  - claim: staging activation proves service-scoped /health identity at 944d4d94.
+    definition_node: deployment_identity_service_scoped
+    evidence_class: deployed staging proof + activation receipt
+    source: CI run 29091595925 / deploy job 86359870572; https://choir.news/health;
+      https://choir.news/auth/session; /api/shell/bootstrap; frontend asset index-D5BQSLtj.js;
+      /tmp/choir-seam-repair-receipt.json
+    command_or_observation: >-
+      After Node B activation, proxy /health reported service=proxy,
+      commit=deployed_commit=944d4d94f376dcabea2dba3c52c0ce207000d24f with matching
+      X-Choir-Build-* headers. Auth /session independently reported service=auth at
+      the same commit. Bootstrap resolved to sandbox service headers at the same
+      commit. Receipt 29091595925/1 names auth/proxy/vmctl/gateway/corpusd/maild/
+      sourcecycled/frontend/sandbox/ordinary_guest/active_computers active (and
+      playwright_guest installed) all at 944d4d94.
+    result: verified
+    uncertainty: none
+  - claim: staging RouteProfile writers emit owner_id/computer_id and routing resolves.
+    definition_node: route_profile_owner_computer_format
+    evidence_class: deployed staging proof
+    source: GET /api/computers/{desktop,computer-universal-wire-platform}/source-lineage;
+      GET /api/shell/bootstrap
+    command_or_observation: >-
+      Authenticated lineage reads returned route_profile values
+      "<owner_id>/<computer_id>" with no route: prefix. Shell bootstrap succeeded
+      against the owner sandbox (vm-5b0c1bef...), exercising lineage-backed routing.
+      POST /api/computers/desktop/adoptions without a package correctly returned 400
+      package-not-found; no app-change packages exist on staging, so a full
+      PromoteAppAdoption/RollbackAppAdoption mutation was not executed.
+    result: verified
+    uncertainty: >-
+      Full promote/rollback mutation remains unexercised on staging until an
+      admissible app-change package exists; writer+resolver path is proven.
 ```
 
 ## Forbidden Collapses
@@ -684,14 +717,13 @@ Escalate to the owner for:
 
 ```yaml
 run_checkpoint_and_resumption_state:
-  status: working
-  last_checkpoint: 541a2ad0 (Phases A–E landed; Phase F consensus/CI in progress)
+  status: complete
+  last_checkpoint: 944d4d94 activated on staging via CI run 29091595925
   current_artifact_state: >-
-    Service-scoped deployMetadata, RouteProfile owner_id/computer_id writers,
-    compiled-only source-workspace identity, SyncEngine/contract-tower/wire
-    helper deletion, and product-completion Definition refresh are committed
-    locally through 541a2ad0. Live doccheck passes with one authority-root
-    product Definition. Staging acceptance proof is not yet recorded.
+    Seam-repair Phases A–F are landed and activated. Commit
+    944d4d94f376dcabea2dba3c52c0ce207000d24f is the serving identity on
+    choir.news with receipt 29091595925/1. Service-scoped /health identity and
+    owner_id/computer_id RouteProfile lineage writes are proven on staging.
   what_shipped:
     - cfc96d01 seam-repair Definition
     - af042d1e service-scoped deployMetadata
@@ -699,31 +731,39 @@ run_checkpoint_and_resumption_state:
     - a1073731 compiled-commit-only source lineage
     - 7b59d33e dead-code excision (+ state_generator_test cleanup)
     - 541a2ad0 product-completion / ACTIVE / manifest refresh
+    - 944d4d94 final-consensus adjudication + push/deploy
   what_was_proven:
     - deployMetadata no longer claims another service's receipt artifact
     - RouteProfile writers emit owner_id/computer_id; legacy route: normalized at resolve
     - source_workspace ignores CHOIR_DEPLOYED_COMMIT / RUNTIME_WORKER_REPO_BASE_SHA for identity
     - deleted SyncEngine/contract/wire surfaces have no remaining Go callers; go build/tests green
     - live doccheck L4 passes with choir-product-completion as sole authority-root Definition
+    - CI run 29091595925 succeeded and Node B activated 944d4d94
+    - proxy/auth/sandbox/frontend identities on choir.news match 944d4d94 under service-scoped headers
+    - staging lineage RouteProfile values are owner_id/computer_id; bootstrap routing succeeds
   unproven_or_partial_claims:
-    - staging per-service /health identity after deploy
-    - staging RouteProfile promotion/rollback receipt
+    - no staging PromoteAppAdoption/RollbackAppAdoption mutation (no app-change packages present)
     - residual RouteProfile non-legacy garbage still returned unchanged by normalizeRouteProfile
     - orphaned macos File Provider Swift still references deleted Go bridge (packaging prohibited)
   highest_impact_remaining_uncertainty: >-
-    Whether staging activation receipts prove service-scoped identity and
-    route-slot promotion end-to-end after push.
+    A future product mission should exercise promote/rollback against a real
+    app-change package; seam-repair route-slot format and resolver behavior are proven.
   next_executable_probe: >-
-    Phase F: finish final consensus adjudication, full CI, push/deploy, then
-    prove /health and RouteProfile on choir.news.
-  suggested_goal_string: /goal docs/definitions/choir-seam-repair-2026-07-10.md
+    Resume /goal docs/definitions/choir-product-completion-2026-07-10.md for
+    PC-2/PC-3/PC-5 product work on the activated 944d4d94 base.
+  suggested_goal_string: /goal docs/definitions/choir-product-completion-2026-07-10.md
   evidence_artifact_refs:
     - caf16a88 (mission start)
     - a1073731 (pre-delete rollback)
+    - 944d4d94 (activated tip)
+    - https://github.com/choir-hip/go-choir/actions/runs/29091595925
+    - /tmp/choir-seam-repair-receipt.json
+    - /tmp/choir-seam-repair-staging-evidence.json
     - /tmp/choir-seam-repair-final-consensus
   rollback_refs:
     - caf16a88
     - a1073731
+    - /var/lib/go-choir/deploy-receipt-previous.json
 ```
 
 ## Suggested Goal String
