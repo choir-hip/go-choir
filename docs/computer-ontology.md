@@ -38,9 +38,8 @@ Use these terms:
 - **Candidate computer**: a speculative fork of a platform computer or user
   computer. A candidate is a forked
   `ComputerVersion = (CodeRef, ArtifactProgramRef)` — forked by tape/program
-  reference — never a VM or desktop instance (see
-  [substrate-independent-audited-computer-2026-07-04](definitions/substrate-independent-audited-computer-2026-07-04.md)
-  and the H031 candidate-computer-as-VM heresy in [choir-doctrine.md](choir-doctrine.md)).
+  reference — never a VM or desktop instance (see the H031
+  candidate-computer-as-VM heresy in [choir-doctrine.md](choir-doctrine.md)).
 
 Do not model a customer Private Choir Cloud as just a tenant row in the
 Community Cloud. A private cloud may have a thousand employees, its own NixOS

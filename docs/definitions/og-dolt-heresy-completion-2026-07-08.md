@@ -22,9 +22,8 @@ This document **supersedes as executable authority**:
   (heresy, eliminated, detector, registry-close semantics) is imported by
   reference; its execution state is absorbed here.
 
-Both documents remain valid as **source material and per-heresy authority**;
-neither remains an independent execution target. A future `/goal` against
-either should redirect here.
+Their conclusions are absorbed here. The deleted originals are source material
+in Git history only and are not independent execution targets.
 
 ## Source Authority Order
 
@@ -36,16 +35,16 @@ either should redirect here.
    comprehensive mission encompasses the incomplete og-dolt and
    heresy-eradication runs plus all cleanup/completion debt from past
    missions** (2026-07-08).
-3. `docs/definitions/substrate-independent-audited-computer-2026-07-04.md`
-   (ComputerVersion, materializer, route-over-computer-version).
+3. `docs/computer-ontology.md` (ComputerVersion, materializer,
+   route-over-computer-version).
 4. `docs/choir-doctrine.md` heresy registry (H001–H031) — per-heresy authority
    for bad pattern and blessed replacement.
 5. historical source in Git history — imported definition
    graph for `heresy`, `eliminated`, detector semantics.
 6. historical source in Git history — phase inventories,
    deletion inventories, completion criteria (imported, resequenced here).
-7. `docs/assessment-overall-state-2026-07-07.md` — evidence baseline
-   (completeness percentages, timeout diagnosis, storage-fork analysis).
+7. Pre-purge evidence snapshot at Git commit `8f62fe3b` (completeness
+   percentages, timeout diagnosis, storage-fork analysis).
 8. Agentic-consensus panel reviews 2026-07-08/09 — reviewer evidence class;
    findings were adjudicated into this document, not authority on their own.
    Raw panel transcripts are intentionally absent from the worktree.
@@ -94,11 +93,11 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 
 **Non-purpose:**
 
-- Not a rewrite of `internal/runtime`; business-logic extraction remains its
-  own mission (mission-3c_2 Phase 2.5) — this mission deletes dual paths
-  inside what exists and records that extraction as an open dependency.
-- Not the grip/RL research program (`choir-grip-checkpoint-2026-07-07.md` is
-  narrative authority only; its research forks are out of scope).
+- Not a rewrite of `internal/runtime`; business-logic extraction remains an
+  external dependency. This mission deletes dual paths inside what exists and
+  records that extraction as an open dependency.
+- Not the grip/RL research program; that retired narrative remains in Git
+  history and its research forks are out of scope.
 - Not new product surface (headless CLI Phase 1.5 verbs, MCP, reader UX
   options B/C stay deferred unless a node here requires them).
 - Not detector theater: a detector that cannot fail is not evidence.
@@ -148,8 +147,8 @@ status: settled
 source: observed (ledger sweep 2026-07-08)
 definition: Any mission document whose status field claims completion while its own remaining_error_field, unproven_or_partial_claims, or open-edge notes are non-empty is checkpoint_incomplete regardless of its label.
 examples:
-  - docs/missions/substrate-hardening-v0.md (MPCal TLC unverified, embed refactor deferred).
-  - docs/missions/cross-substrate-proof-v0.md (gates 4/5 listed as unproven while checkpoint text claims them satisfied).
+  - A historical substrate checkpoint with MPCal TLC unverified and embed refactor deferred.
+  - A historical cross-substrate checkpoint whose gates 4/5 remained unproven.
 execution_effect:
   - Work item C4 must relabel these documents; no downstream mission may cite them as complete.
 ```
@@ -160,7 +159,7 @@ execution_effect:
 id: route-over-computer-version
 kind: invariant
 status: settled (definition) / violated (implementation)
-source: docs/definitions/substrate-independent-audited-computer-2026-07-04.md; choir-doctrine.md H031
+source: computer-ontology.md; choir-doctrine.md H031
 definition: >-
   No product route resolves to a VM or desktop identity at the routing decision
   layer; routes must key off `ComputerVersion = (CodeRef, ArtifactProgramRef)`
@@ -240,7 +239,7 @@ id: narrative-authority-boundary
 kind: boundary
 status: settled
 source: reviewer (gpt55), consistent with doc-authority-manifest
-definition: choir-grip-checkpoint-2026-07-07.md and other narrative/philosophy documents cannot override doctrine, definitions, specs, or evidence.
+definition: Narrative and philosophy documents cannot override doctrine, definitions, specs, or evidence.
 execution_effect:
   - Work item C6 records this in the docs index; agents must not cite grip narrative as execution authority.
 ```
@@ -360,7 +359,7 @@ settlement:
 id: storage-fork
 kind: term
 status: unresolved (requires_human_authority)
-source: docs/assessment-overall-state-2026-07-07.md lines 90-119
+source: pre-purge evidence snapshot at Git commit 8f62fe3b
 definition: Commit to Dolt version-control features as load-bearing (per owner 2026-07-07 direction) vs acknowledge an application-level audit trail. Owner direction says Dolt; the six open storage-inventory questions (starting with per-write commit semantics and rollback mechanics) remain unanswered.
 execution_effect:
   - Phase C history-read work and Phase D promotion work execute against the Dolt answer; if the experiment evidence contradicts feasibility, escalate rather than silently degrade.
@@ -402,7 +401,7 @@ determined_state:
       source: observed
       execution_effect: W4 closed.
     - claim: Migration completeness baseline — actor substrate 95%, wire wiring 70%, OG integration 60%, business-logic extraction 0%, continuation deletion 0%, parent/child deletion 5%, texture-forcing removal 0%.
-      source: docs/assessment-overall-state-2026-07-07.md
+      source: pre-purge evidence snapshot at Git commit 8f62fe3b
       execution_effect: variant baseline below.
     - claim: H030 (mailbox polling) repaired 2026-06-27; registry update only.
       source: settled-definition (heresy-eradication doc)
@@ -543,15 +542,14 @@ yellow/green auto-proceed rule.
   - C1 `current-architecture.md` — verify the capsule/substrate section clearly
     separates "designed, not built" capsule substrate from any claim that
     promotion-bearing capsule transactions are proven.
-  - C2 `design-choir-headless-surface-v0.md` — strengthen the candidate-verb
-    gate (spec models ComputerVersion/capsule semantics + route-over-CV
-    load-bearing + atomic-or-degraded promotion + staging proof).
+  - C2 candidate-verb gate — its settled ComputerVersion/capsule semantics are
+    absorbed into `computer-ontology.md`; the superseded design was removed.
   - C3 `choir-doctrine.md` — verify H031 heresy entry is complete (it already
     exists) and Banned Patterns list #16 is present; ensure detector refs point
     to `docs/heresy-detectors.md` H030/H031 rows and W1's CI job. Do not
     duplicate the heresy entry.
-  - C4 Relabel `missions/substrate-hardening-v0.md` and
-    `missions/cross-substrate-proof-v0.md` to `checkpoint_incomplete`.
+  - C4 Historical substrate and cross-substrate sources were relabeled
+    `checkpoint_incomplete`, then removed from the live worktree.
   - C5 (FIRST Phase A commit — now landed in the green docs alignment pass;
     verify-and-close) — supersession made machine-readable, not just prose:
     pointer notes in historical source in Git history
@@ -593,30 +591,19 @@ yellow/green auto-proceed rule.
 
 | Open edge | Disposition | Reason / pointer |
 |---|---|---|
-| mission-3c APIHandler extraction | external: `docs/mission-3c_2-actor-runtime-migration-real-v0.md` | Actor/runtime extraction is outside og-dolt scope (mission-3c_2). |
-| texture hard-cutover C43 | external: `texture-product-loop-recovery-v0` | `texture-hard-cutover-v0` superseded; C43 folded into active product-loop recovery. |
-| transclusion cutover | external: `texture-structured-document-transclusion-cutover-v0` | Active Texture successor mission; not og-dolt. |
-| long-running-agent R1–R7 | retired | `texture-long-running-agent-v0` superseded; R1–R7 folded into `texture-durable-thread-v1` and `texture-product-loop-recovery-v0`. |
-| durable-thread link route | external: `texture-durable-thread-v1` | Active successor mission; not og-dolt. |
-| product-loop failure path | external: `texture-product-loop-recovery-v0` | Active product-loop mission; not og-dolt. |
-| coagent source-centric follow-ups | external: `source-system-loop8-simplify-v0` | `update-coagent-source-centric-deletion-v0` settled; remaining VText/source follow-ups live in the active source-system loop. |
-| wire-agent-pipeline staging proof | external: `universal-wire-stabilization-v1` | Active successor to `universal-wire-agent-pipeline-v1`; staging proof belongs there. |
-| stabilization substrate boot | external: `universal-wire-stabilization-v1` | Active stabilization mission; not og-dolt. |
+| actor/runtime business-logic extraction | external dependency | Outside og-dolt scope; no live successor Definition currently owns it. |
+| Texture product-loop, transclusion, and durable-thread gaps | external dependencies | Superseded mission chains were deleted; any resumed work requires a new Definition grounded in current code and staging. |
+| source-system follow-ups | external dependency | Superseded mission chain deleted; any resumed work requires a new Definition. |
+| Wire staging and substrate proof | external dependency | Superseded mission chain deleted; any resumed work requires a new Definition. |
 | lifecycle-cutover residues (texture forcing / parent/child) | absorbed: Phase B | og-dolt Phase B heresy kill wave 1 (M3.1 texture forcing, M3.2 parent/child). |
 | lifecycle-cutover residues (continuations / acceptance) | absorbed: Phase C | og-dolt Phase C heresy kill wave 2 (M4 continuation deletion, M3.3 acceptance). |
-| conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E M5 surface cleanup (H019–H029); source-intake routing overlap remains in `conductor-url-source-routing-h029-v0`. |
-| doc-truth-drift checker review | external: `docs-truth-system-v1` | `doc-truth-drift-context-v0` superseded; active successor is docs-truth-system-v1. |
-| node-B fail-closed auth | external: `overnight-autoradio-platform-checklist-v0` | Platform/auth ops checklist; not og-dolt. |
+| conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E surface cleanup (H019–H029). |
+| docs truth drift | external: documentation authority Definition | Governed by `documentation-authority-reduction-2026-07-09.md`. |
+| node-B fail-closed auth | external dependency | Platform/auth operations are not og-dolt work. |
 | sandbox→computer rename | absorbed: Phase E | og-dolt Phase E surface cleanup / rename machinery. |
-| SQLite cleanup | external: `docs/mission-unified-object-graph-v0.md` | Object graph consolidation / sourcecycled SQLite sidecar removal; not og-dolt. |
-| node-B retention | external: `node-b-storage-retention-v0` | `node-b-nix-store-retention-v0` settled; vm-state/recovery budget remains in `node-b-storage-retention-v0`. |
-| news-live landing | external: `news-live-pr-merge-model-default-v0` | Active news-live mission; not og-dolt. |
-| orchestrator C15/M9/M10 | external: `orchestrator-suite-2026-06-28`; `docs-revision-v1`; `campaign-compiler-selfdev-v0` | Own missions (orchestrator suite, docs revision, campaign compiler); not og-dolt. |
-| autoradio verifier review | external: `overnight-autoradio-platform-checklist-v0` | Active platform checklist; not og-dolt. |
-| substrate-hardening MPCal TLC | external: `docs/missions/substrate-hardening-v0.md` | `checkpoint_incomplete`; not og-dolt. |
-| substrate-hardening cmd dedup | external: `docs/missions/substrate-hardening-v0.md` | `checkpoint_incomplete`; not og-dolt. |
-| cross-substrate extractor | external: `docs/missions/cross-substrate-proof-v0.md` | `checkpoint_incomplete`; not og-dolt. |
-| wire-on-settlement | external: `m5-wire-on-settlement` | M5 route-switch evidence gate; not og-dolt. |
+| SQLite/sourcecycled cleanup | external dependency | Object-graph consolidation remains outside og-dolt scope; no live successor Definition owns it. |
+| node-B retention, news, orchestrator, autoradio, and cross-substrate gaps | external dependencies | Their checkpoint chains were removed; any resumed work requires fresh Definitions from current evidence. |
+| wire-on-settlement | external dependency | Route-switch evidence gate is not og-dolt work. |
 | continuation-deletion sequencing | absorbed: Phase C | og-dolt Phase C continuation deletion (H006–H008). |
 
 Phase A exit bar (what the gate panel reviews): detectors reporting in CI;

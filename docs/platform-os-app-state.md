@@ -7,9 +7,8 @@ with the shipped `features` app (frontend/src/lib/FeaturesApp.svelte) after
 the 2026-05-28/31 frontend redesign cutover, the 2026-06-11 owner-approval
 gate (commit `77f65651`), and the freshness CAS guard; moved unshipped
 design intentions (Uninstall/Disable/portfolio review/trace evidence/Try-preview)
-to a clearly labeled "Design intent, not shipped" section with pointers to
-`mission-portfolio-2026-06-11.md` (M6, M7) and
-`choir-promotion-protocol-conjecture-2026-06-11.md`.
+to a clearly labeled "Design intent, not shipped" section. The superseded
+portfolio and promotion design sources remain available in Git history.
 **Baseline checked:** `choir.news` primary-domain cutover, WebAuthn hard reset,
 VM retention/pruning policy hardening, deploy-speed, and disk-pressure work.
 
@@ -256,8 +255,7 @@ behavior.
   an accepted-promotion-level row per experiment. Features has no portfolio
   aggregation view; it is a flat catalog list with a single detail pane.
   Portfolio-style review (headline, plan view, check badges gating Approve,
-  restore-point timeline) is the direction of portfolio mission M7 ("Changes
-  app review loop") — see `docs/mission-portfolio-2026-06-11.md`.
+  restore-point timeline) remains target behavior, not shipped behavior.
 - **Trace integration.** The pre-cutover design intended the selected Change
   to surface run-acceptance/evidence refs and expose evidence without a separate
   visual retired Trace app. In the shipped Features app, this path is still a

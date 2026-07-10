@@ -55,13 +55,11 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 
 ## Ontology (2026-06-11 Revision)
 
-The architecture program of 2026-06-11 revised the core ontology. The doctrine
-sources are `choir-rearchitecture-durable-actors-2026-06-11.md` (the target
-model and cutover program), `choir-role-free-actor-protocol-2026-06-11.md`
-(actors get obligations, not identities), `system-v1-one-cut-2026-06-11.md`
-(the v1 design every cutover mission implements), and
-`conjecture-learning-proof-theory-2026-06-11.md` (the epistemic frame). The
-runtime protocols are model-checked in `specs/` (TLC runs in CI).
+The architecture program of 2026-06-11 revised the core ontology. Its settled
+claims are now maintained in this document, [choir-doctrine.md](choir-doctrine.md),
+and [runtime-invariants.md](runtime-invariants.md); the source program remains
+available in Git history. The runtime protocols are model-checked in `specs/`
+(TLC runs in CI).
 
 **Transitional honesty (revised 2026-07-07):** the actor cutover is further
 along than earlier revisions of this paragraph claimed. **Live (2026-07):** the

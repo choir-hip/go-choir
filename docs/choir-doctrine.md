@@ -1121,8 +1121,7 @@ gathering workflow.
 `status:` **repaired 2026-06-27.** `internal/actor/actor.go:141` declares
 `mailbox chan Update` and the warm loop selects on the channel; the log is
 queried only for cold-start replay, post-drain overflow catch, and Sweep boot
-recovery. See
-[docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md).
+recovery.
 The entry remains as detector vocabulary because this heresy recurred three
 times; the deletion gate below is now the regression test.
 
@@ -1142,10 +1141,8 @@ or "steers are already in the log" inside the warm loop.
 `scripts/check-heresies.sh` (discovery mode); `.github/workflows/ci.yml`
 `Heresy Detector Discovery` job.
 
-`evidence:` [docs/memo-actor-runtime-database-polling-heresy-2026-06-27.md](memo-actor-runtime-database-polling-heresy-2026-06-27.md),
-historical source in Git history
-(section 2.2, "Go delivers, the database remembers"),
-[docs/mission-3c_2-actor-runtime-migration-real-v0.md](mission-3c_2-actor-runtime-migration-real-v0.md).
+`evidence:` [internal/actor/actor.go](../internal/actor/actor.go),
+[docs/heresy-detectors.md](heresy-detectors.md), and the pre-purge Git history.
 
 `why it violates the spec:` the design specifies Go-channel mailboxes for
 warm delivery with the durable log only for crash recovery and cold-start

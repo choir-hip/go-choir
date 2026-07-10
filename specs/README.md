@@ -96,7 +96,8 @@ computer.
 - Update the route before all ledgers prepare → route points to inconsistent
   state.
 
-**Design doc:** `docs/promotion-protocol-spec-staleness-and-redefinition-2026-07-03.md`.
+The promotion protocol's maintained product contract lives in
+`docs/computer-ontology.md`; historical design iterations remain in Git history.
 
 ---
 

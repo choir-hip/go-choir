@@ -1,6 +1,7 @@
 # App Building API
 
-Canonical docs: `docs/frontend-app-building-api.md`.
+This file is the maintained app-building guide. Earlier API design prose is
+available in Git history.
 
 Adding a shell app should be one registry/component operation:
 

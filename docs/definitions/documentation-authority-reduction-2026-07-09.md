@@ -21,10 +21,8 @@ directory, is the retrieval boundary.
    corrupt search/retrieval. Git history is the rollback surface; an archive
    directory inside the worktree is not retained merely for nostalgia.
 3. `docs/choir-doctrine.md` and `AGENTS.md`.
-4. `docs/mission-docs-truth-system-v1.md` — settled v1 evidence, not current
-   authority for this successor.
-5. `docs/mission-beads-doctrine-delta-v0.md` — proposed Beads cutover design;
-   it cannot make Beads canonical until its stated cutover is completed.
+4. Pre-purge Git history at `b6fbd598` for the settled docs-truth evidence and
+   unpromoted Beads proposal; neither is current authority.
 6. Observed repository state from `cmd/doccheck`, the authority manifest, and
    the mission graph.
 
@@ -177,7 +175,7 @@ settlement:
 id: active-work-authority
 kind: boundary
 status: settled
-source: observed; docs/mission-beads-doctrine-delta-v0.md
+source: observed; pre-purge Beads proposal at Git commit b6fbd598
 definition: >-
   Until a separately proven cutover, each committed paradoc/Definition remains
   the source of its own current mission state. The YAML mission graph is the
@@ -316,7 +314,7 @@ retain_machine_metadata:
 | --- | --- | ---: | --- |
 | `D1-raw-process` | all `docs/evidence/**` and every `*.ledger.md` | 148 evidence files; 37 ledgers / ~2.35 MB | Remove evidence/ledger links from living docs and graph; preserve current conclusions in the retained Definition or doctrine. |
 | `D2-archive` | remaining `docs/archive/**` | 178 files / ~5.7 MB before overlap with D1 | Rewrite or remove living links from README, doctrine, computer/current architecture, runtime, platform state, active Definition, desktop README, and specs README. |
-| `D3-superseded-source` | four old Definitions, 24 proposals, three reviews, 25 old mission/paradoc files, and 25 other stale top-level Markdown files | 84 Markdown files after D1/D2 accounting | Replace any remaining live claim with a retained contract; remove their graph/manifest nodes. |
+| `D3-superseded-source` | old Definitions, proposals, reviews, missions, and stale top-level Markdown | 81 Markdown files after D1/D2 | Replace any remaining live claim with a retained contract; remove their graph/manifest nodes. |
 | `D4-design-assets` | six historical `docs/assets/design-language/*.png` files | ~6.8 MB of non-Markdown docs corpus is mostly D1 evidence plus these images | Confirm no frontend/build path consumes them; remove their source-design references. |
 
 At the audited snapshot this leaves 21 Markdown authorities plus two
@@ -333,8 +331,8 @@ variant:
   dead_manifest_entries: 0
   unclassified_default_read_docs: 0
   unharvested_large_ledger_chains: 0
-  retrieval_polluting_markdown_candidates: 81
-  retrieval_polluting_nonmarkdown_candidates: 6
+  retrieval_polluting_markdown_candidates: 0
+  retrieval_polluting_nonmarkdown_candidates: 0
 ```
 
 ## Forbidden Collapses
@@ -365,8 +363,8 @@ successor. No production behavior changes are in scope.
 
 ```yaml
 run_checkpoint_and_resumption_state:
-  status: working
-  last_checkpoint: D2 archive deletion verified after D1 against rollback b6fbd598.
+  status: complete
+  last_checkpoint: D3/D4 final deletion verified after D1/D2.
   current_artifact_state: >-
     The default path is a bounded eleven-document content packet plus router;
     legacy graph/index debt is report-only and cannot redefine active work.
@@ -378,32 +376,30 @@ run_checkpoint_and_resumption_state:
     - D1 removed 148 raw evidence artifacts and 37 mission ledgers.
     - D2 removed the remaining 175 archive documents and collapsed the manifest
       from 152 records to 23 and the mission graph from 175 nodes to two.
+    - D3 removed 81 superseded Markdown sources; D4 removed six unused design
+      images. Retained docs and adjacent guides were repaired to stop naming
+      deleted files as live dependencies.
   what_was_proven:
     - 310 of 331 docs Markdown files are outside the proposed 21-file retain set.
     - Archive has 178 files; raw ledgers have 37 files / about 2.35 MB; raw
       agent-consensus evidence has 135 files.
-    - Strict-live packet validation still passes with zero failures after D2.
-    - The docs corpus fell from 331 to 102 Markdown files; the full scan now
-      sees 121 repository documents and reports 116 non-blocking warnings.
+    - Strict-live packet validation passes with zero failures after all deletes.
+    - The docs corpus fell from 331 to exactly 21 Markdown files plus the two
+      required YAML authority indexes.
     - The retained architecture and operating docs no longer link into
       `docs/archive/**`; historical detail requires deliberate Git archaeology.
-  unproven_or_partial_claims:
-    - Initial semantic kernel has not been owner-promoted.
-    - D3 must remove the remaining 81 superseded Markdown files and repair any
-      links from the retained packet exposed by that deletion.
-  highest_impact_remaining_uncertainty: >-
-    Which links from retained authorities still point at the 81 documents in
-    the final superseded-source deletion set.
-  next_executable_probe: >-
-    Delete every Markdown file outside the explicit 21-file retain set, repair
-    the resulting live-link failures, then remove six unused design assets.
+  unproven_or_partial_claims: []
+  highest_impact_remaining_uncertainty: none for this documentation mission
+  next_executable_probe: none; open a new Definition before expanding the live set
   suggested_goal_string: /goal docs/definitions/documentation-authority-reduction-2026-07-09.md
   evidence_artifact_refs:
     - b6fbd598 (pre-delete authority/retrieval baseline)
     - 2783a97a (D1 raw evidence and ledger deletion)
+    - 8f62fe3b (D2 archive deletion and minimal manifest/graph)
   rollback_refs:
     - b6fbd598
     - 2783a97a
+    - 8f62fe3b
 ```
 
 ## Suggested Goal String
