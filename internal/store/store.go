@@ -69,6 +69,7 @@ type Store struct {
 	doltConnector            doltConnector
 	jsonPatchMu              sync.Mutex
 	textureRevMu             sync.Mutex
+	doltCommitMu             sync.Mutex
 	workerUpdateMu           sync.Mutex
 	channelMsgMu             sync.Mutex
 	eventMu                  sync.Mutex
@@ -89,6 +90,31 @@ func (s *Store) DB() *sql.DB {
 		return nil
 	}
 	return s.db
+}
+
+// commitDoltCheckpoint makes the current VM-local working set addressable by
+// Dolt history and AS OF queries. Dolt commits are database-wide, so callers
+// must describe the boundary as a VM-state checkpoint rather than claiming the
+// commit contains only one logical record.
+func (s *Store) commitDoltCheckpoint(ctx context.Context, message string) error {
+	if s == nil || s.textureHandle() == nil {
+		return fmt.Errorf("runtime store: nil database")
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "vm state checkpoint"
+	}
+
+	s.doltCommitMu.Lock()
+	defer s.doltCommitMu.Unlock()
+
+	if _, err := s.textureHandle().ExecContext(ctx, "CALL DOLT_COMMIT('-Am', ?)", message); err != nil {
+		if strings.Contains(err.Error(), "nothing to commit") {
+			return nil
+		}
+		return fmt.Errorf("runtime store: dolt checkpoint: %w", err)
+	}
+	return nil
 }
 
 // schemaDDL creates the runtime tables if they do not already exist.
@@ -654,6 +680,10 @@ func Open(dbPath string) (*Store, error) {
 	if err := s.backfillOGFromSQL(context.Background()); err != nil {
 		_ = s.Close()
 		return nil, fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
+	}
+	if err := s.commitDoltCheckpoint(context.Background(), "vm state checkpoint after startup schema and backfill"); err != nil {
+		_ = s.Close()
+		return nil, err
 	}
 
 	if freshStore {

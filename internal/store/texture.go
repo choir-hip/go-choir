@@ -251,6 +251,10 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 		_ = s.Close()
 		return nil, fmt.Errorf("texture workspace: backfill OG: %w", err)
 	}
+	if err := s.commitDoltCheckpoint(context.Background(), "vm state checkpoint after texture startup schema and backfill"); err != nil {
+		_ = s.Close()
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -526,7 +530,10 @@ func (s *Store) EnsureTextureSchema() error {
 
 // CreateDocument inserts a new document record.
 func (s *Store) CreateDocument(ctx context.Context, doc types.Document) error {
-	return s.CreateTextureDocumentOG(ctx, doc)
+	if err := s.CreateTextureDocumentOG(ctx, doc); err != nil {
+		return err
+	}
+	return s.commitDoltCheckpoint(ctx, fmt.Sprintf("vm state checkpoint after texture document %s creation", doc.DocID))
 }
 
 // GetDocument returns the document with the given doc ID, scoped to the
@@ -973,7 +980,10 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 		s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
 		return fmt.Errorf("update texture document head: %w", err)
 	}
-	return nil
+	return s.commitDoltCheckpoint(ctx, fmt.Sprintf(
+		"vm state checkpoint after texture revision %s by %s %s",
+		rev.RevisionID, rev.AuthorKind, strings.TrimSpace(rev.AuthorLabel),
+	))
 }
 
 // PatchRevisionMetadata merges patch into an existing revision's metadata_json.
@@ -1014,7 +1024,10 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 		return fmt.Errorf("marshal revision metadata: %w", err)
 	}
 	rev.Metadata = json.RawMessage(merged)
-	return s.CreateTextureRevisionOG(ctx, rev)
+	if err := s.CreateTextureRevisionOG(ctx, rev); err != nil {
+		return err
+	}
+	return s.commitDoltCheckpoint(ctx, fmt.Sprintf("vm state checkpoint after texture revision %s metadata update", rev.RevisionID))
 }
 
 // GetRevision returns the revision with the given revision ID, scoped to
@@ -1078,11 +1091,10 @@ func (s *Store) CurrentVersionNumberByDoc(ctx context.Context, docID, ownerID st
 
 // ----- History -----
 
-// GetHistory returns the revision history for a document as a list of
-// HistoryEntry values ordered from the current head backward through the
-// parent_revision chain. Using the explicit revision chain rather than a raw
-// timestamp sort avoids ambiguity when multiple revisions share the same
-// coarse database timestamp.
+// GetHistory returns the revision history for a document from committed Dolt
+// snapshots. dolt_history_og_objects identifies an addressable commit for each
+// immutable revision object; AS OF resolves the revision body at that commit.
+// The explicit parent chain still defines ordering, avoiding timestamp ties.
 func (s *Store) GetHistory(ctx context.Context, docID, ownerID string, limit int) ([]types.HistoryEntry, error) {
 	if limit <= 0 {
 		limit = 50
@@ -1096,12 +1108,76 @@ func (s *Store) GetHistory(ctx context.Context, docID, ownerID string, limit int
 		return []types.HistoryEntry{}, nil
 	}
 
+	type revisionSnapshot struct {
+		commitHash  string
+		canonicalID string
+		preview     types.Revision
+	}
+	rows, err := s.textureHandle().QueryContext(ctx, `
+		SELECT commit_hash, canonical_id, body
+		FROM (
+			SELECT commit_hash, canonical_id, body,
+				ROW_NUMBER() OVER (
+					PARTITION BY canonical_id
+					ORDER BY commit_date DESC, commit_hash DESC
+				) AS snapshot_rank
+			FROM dolt_history_og_objects
+			WHERE object_kind = ?
+			  AND owner_id = ?
+			  AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id')) = ?
+		) AS committed_revisions
+		WHERE snapshot_rank = 1`, string(ogKindTexRev), ownerID, docID)
+	if err != nil {
+		return nil, fmt.Errorf("query native texture history: %w", err)
+	}
+
+	snapshots := make(map[string]revisionSnapshot)
+	for rows.Next() {
+		var snapshot revisionSnapshot
+		var body []byte
+		if err := rows.Scan(&snapshot.commitHash, &snapshot.canonicalID, &body); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("scan native texture history: %w", err)
+		}
+		if err := json.Unmarshal(body, &snapshot.preview); err != nil {
+			_ = rows.Close()
+			return nil, fmt.Errorf("decode native texture history preview: %w", err)
+		}
+		if snapshot.preview.OwnerID == ownerID && snapshot.preview.DocID == docID {
+			snapshots[snapshot.preview.RevisionID] = snapshot
+		}
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, fmt.Errorf("iterate native texture history: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close native texture history: %w", err)
+	}
+
 	currentID := doc.CurrentRevisionID
 	entries := make([]types.HistoryEntry, 0, limit)
 	for len(entries) < limit && currentID != "" {
-		rev, err := s.GetRevision(ctx, currentID, ownerID)
-		if err != nil {
-			return nil, fmt.Errorf("load texture history revision %s: %w", currentID, err)
+		snapshot, ok := snapshots[currentID]
+		if !ok {
+			return nil, fmt.Errorf("load native texture history revision %s: %w", currentID, ErrNotFound)
+		}
+		if err := validateDoltCommitHash(snapshot.commitHash); err != nil {
+			return nil, fmt.Errorf("load native texture history: %w", err)
+		}
+		var body []byte
+		if err := s.textureHandle().QueryRowContext(ctx,
+			fmt.Sprintf("SELECT body FROM og_objects AS OF '%s' WHERE canonical_id = ?", snapshot.commitHash),
+			snapshot.canonicalID,
+		).Scan(&body); err != nil {
+			return nil, fmt.Errorf("load texture revision AS OF %s: %w", snapshot.commitHash, err)
+		}
+		var rev types.Revision
+		if err := json.Unmarshal(body, &rev); err != nil {
+			return nil, fmt.Errorf("decode texture revision AS OF %s: %w", snapshot.commitHash, err)
+		}
+		if rev.OwnerID != ownerID || rev.DocID != docID || rev.RevisionID != currentID {
+			return nil, fmt.Errorf("load texture revision AS OF %s: snapshot identity mismatch", snapshot.commitHash)
 		}
 		entries = append(entries, types.HistoryEntry{
 			RevisionID:       rev.RevisionID,
@@ -1114,6 +1190,19 @@ func (s *Store) GetHistory(ctx context.Context, docID, ownerID string, limit int
 		currentID = rev.ParentRevisionID
 	}
 	return entries, nil
+}
+
+func validateDoltCommitHash(hash string) error {
+	if hash == "" {
+		return fmt.Errorf("empty Dolt commit hash")
+	}
+	for _, r := range hash {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			continue
+		}
+		return fmt.Errorf("unsafe Dolt commit hash %q", hash)
+	}
+	return nil
 }
 
 // ----- Diff -----

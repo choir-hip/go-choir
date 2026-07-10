@@ -1382,6 +1382,75 @@ func TestTextureGetHistory(t *testing.T) {
 	}
 }
 
+func TestTextureHistoryHasNativeDoltAuditCommits(t *testing.T) {
+	s := textureTestStore(t)
+	ctx := context.Background()
+
+	doc := types.Document{
+		DocID:   "doc-native-history",
+		OwnerID: "user-native-history",
+		Title:   "Native history",
+	}
+	if err := s.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+
+	parentID := ""
+	const revisionCount = 25
+	for i := 1; i <= revisionCount; i++ {
+		rev := testTextureRevisionWithBodyDoc(t, types.Revision{
+			RevisionID:       fmt.Sprintf("rev-native-history-%d", i),
+			DocID:            doc.DocID,
+			OwnerID:          doc.OwnerID,
+			AuthorKind:       types.AuthorUser,
+			AuthorLabel:      "alice",
+			Content:          fmt.Sprintf("revision %d", i),
+			ParentRevisionID: parentID,
+			CreatedAt:        time.Date(2026, 7, 10, 12, i, 0, 0, time.UTC),
+		})
+		if err := s.CreateRevision(ctx, rev); err != nil {
+			t.Fatalf("CreateRevision %d: %v", i, err)
+		}
+		parentID = rev.RevisionID
+	}
+
+	var commits int
+	if err := s.textureHandle().QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT commit_hash)
+		FROM dolt_history_og_objects
+		WHERE object_kind = ?
+		  AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), '$.doc_id')) = ?`,
+		string(ogKindTexRev), doc.DocID,
+	).Scan(&commits); err != nil {
+		t.Fatalf("query native Dolt history: %v", err)
+	}
+	if commits < revisionCount {
+		t.Fatalf("native Dolt audit commits = %d, want at least %d revision commits", commits, revisionCount)
+	}
+
+	started := time.Now()
+	history, err := s.GetHistory(ctx, doc.DocID, doc.OwnerID, 10)
+	latency := time.Since(started)
+	if err != nil {
+		t.Fatalf("GetHistory: %v", err)
+	}
+	if len(history) != 10 || history[0].RevisionID != "rev-native-history-25" {
+		t.Fatalf("native history page = %#v, want latest 10 revisions", history)
+	}
+	t.Logf("native Dolt history latest-10 latency across %d revisions: %s", revisionCount, latency)
+}
+
+func TestValidateDoltCommitHashRejectsSQLSyntax(t *testing.T) {
+	if err := validateDoltCommitHash("0123456789abcdefghijklmnopqrstuv"); err != nil {
+		t.Fatalf("valid Dolt hash rejected: %v", err)
+	}
+	for _, hash := range []string{"", "HEAD~1", "abc' OR 1=1 --"} {
+		if err := validateDoltCommitHash(hash); err == nil {
+			t.Fatalf("unsafe Dolt hash %q accepted", hash)
+		}
+	}
+}
+
 // ----- Diff -----
 
 func TestTextureGetDiff(t *testing.T) {
