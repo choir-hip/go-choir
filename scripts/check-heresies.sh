@@ -4,8 +4,8 @@
 # Reads the detector manifest in docs/heresy-detectors.md and reports counts for
 # each pattern. By default it is report-only (exits 0). Run with
 #   --fail-on-regression
-# to fail if any heresy row has non-zero hits. That mode is not wired into CI
-# until the discovery baseline is trusted.
+# to fail if any row promoted with `enforce: zero` has non-zero hits. Other rows
+# remain report-only until their discovery baselines are classified.
 #
 # The manifest is the source of truth. This script parses it at runtime so new
 # detector rows are picked up without script edits.
@@ -109,9 +109,11 @@ if os.path.exists(manifest):
             patterns = re.findall(r"`([^`]+)`", patterns_col)
             if not patterns:
                 continue
-            excludes = re.findall(r"exclude:\s*([^|]+)", notes)
-            if excludes:
-                excludes = [g.strip() for g in excludes[0].split(",")]
+            exclude_match = re.search(r"exclude:\s*([^;|]+)", notes)
+            excludes = []
+            if exclude_match:
+                excludes = [g.strip() for g in exclude_match.group(1).split(",")]
+            enforced = bool(re.search(r"enforce:\s*zero(?:\b|$)", notes))
             pattern_hits = {}
             total_hits = 0
             for p in patterns:
@@ -123,6 +125,7 @@ if os.path.exists(manifest):
                 "family": family,
                 "target": target,
                 "notes": notes,
+                "enforced": enforced,
                 "total_hits": total_hits,
                 "patterns": pattern_hits,
             })
@@ -134,7 +137,7 @@ if os.environ.get("report_path"):
         json.dump(rows, f, indent=2)
 
 if os.environ.get("fail_on_regression") == "true":
-    non_zero = [r for r in rows if r["total_hits"] > 0]
+    non_zero = [r for r in rows if r["enforced"] and r["total_hits"] > 0]
     if non_zero:
         print(f"{len(non_zero)} heresy row(s) have non-zero hits", file=sys.stderr)
         sys.exit(1)

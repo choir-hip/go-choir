@@ -3560,7 +3560,7 @@ func TestTexturePromptSteersCurrentEventsToResearcherNotSuper(t *testing.T) {
 	assertNoForcedSemanticDelegation(t, prompt)
 }
 
-func TestTexturePromptExplicitResearcherExposesAffordanceWithoutForcing(t *testing.T) {
+func TestTexturePromptNarrativeResearcherWordsDoNotSelectPolicyBranch(t *testing.T) {
 	t.Parallel()
 	current := types.Revision{
 		DocID:      "doc-explicit-researcher",
@@ -3573,12 +3573,12 @@ func TestTexturePromptExplicitResearcherExposesAffordanceWithoutForcing(t *testi
 		Prompt: "Ask researcher for a concise finding and ask super for a tiny verification note.",
 	}, "", false, nil, nil)
 
-	for _, want := range []string{
+	for _, forbidden := range []string{
 		"The owner explicitly asked for researcher help.",
 		"Probe (researcher) is the correct morphism class for that world-knowledge gap",
 	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("explicit researcher texture prompt missing %q:\n%s", want, prompt)
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("narrative researcher words selected policy branch %q:\n%s", forbidden, prompt)
 		}
 	}
 	assertNoForcedSemanticDelegation(t, prompt)

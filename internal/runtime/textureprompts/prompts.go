@@ -31,8 +31,6 @@ func RunOverlay() string {
 // RevisionWorkerFindingsOptions selects worker-findings overlay text for revision requests.
 type RevisionWorkerFindingsOptions struct {
 	IntegrateWorkerFindings bool
-	NeedsSuperExecution     bool
-	HasSuperDelivery        bool
 	ActiveWorkerDelegation  bool
 }
 

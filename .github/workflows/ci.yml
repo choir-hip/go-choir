@@ -228,7 +228,7 @@ jobs:
             doccheck.json
 
   heresy-detector:
-    name: Heresy Detector Discovery
+    name: Heresy Detector
     runs-on: ubuntu-latest
     needs: plan
     if: needs.plan.outputs.non_docs == 'true'
@@ -244,9 +244,9 @@ jobs:
             sudo apt-get install -y ripgrep
           fi
 
-      - name: Run heresy detector in discovery mode
+      - name: Report discovery counts and enforce promoted families
         shell: bash
-        run: scripts/check-heresies.sh --report heresy-detector-report.json
+        run: scripts/check-heresies.sh --fail-on-regression --report heresy-detector-report.json
 
       - name: Upload heresy detector report
         uses: actions/upload-artifact@v7

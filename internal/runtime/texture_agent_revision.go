@@ -654,11 +654,8 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString(truncatePromptSnippet(message.Content, 800))
 			b.WriteString("\n")
 		}
-		seedAndPrompt := metadataString(metadata, "seed_prompt") + " " + req.Prompt
 		b.WriteString(textureprompts.RevisionWorkerFindingsOverlay(textureprompts.RevisionWorkerFindingsOptions{
-			IntegrateWorkerFindings: strings.EqualFold(intent, "integrate_worker_findings") && !texturePromptNeedsSuperExecution(seedAndPrompt),
-			NeedsSuperExecution:     texturePromptNeedsSuperExecution(seedAndPrompt),
-			HasSuperDelivery:        textureWorkerMessagesContainRole(recentWorkerMessages, AgentProfileSuper),
+			IntegrateWorkerFindings: strings.EqualFold(intent, "integrate_worker_findings"),
 			ActiveWorkerDelegation:  workerMessagesContainActiveDelegation(recentWorkerMessages),
 		}))
 	}
@@ -700,7 +697,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 	b.WriteString(textureprompts.RevisionPolicyOverlay(textureprompts.RevisionPolicyOptions{
 		OwnerPromptRequestRevision: ownerPromptRequestRevision,
 		UserAuthoredRevision:       current.AuthorKind == types.AuthorUser,
-		ExplicitResearcherRequest:  metadataBoolValue(metadata, runMetadataExplicitResearcher) || texturePromptExplicitlyRequestsResearcher(metadataString(metadata, "seed_prompt")+" "+req.Prompt),
+		ExplicitResearcherRequest:  metadataBoolValue(metadata, runMetadataExplicitResearcher),
 		HasGroundedHistory:         hasGroundedHistory,
 		DocID:                      current.DocID,
 		RevisionID:                 current.RevisionID,

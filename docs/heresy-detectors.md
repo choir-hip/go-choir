@@ -2,11 +2,11 @@
 
 Status: doctrine-level manifest, baseline captured 2026-06-13. Updated 2026-07-09.
 
-This file is the current detector inventory for Choir Doctrine. The discovery-
-mode CI check (`scripts/check-heresies.sh` and `.github/workflows/ci.yml`)
-reports counts without failing. Fail-on-regression enforcement, generated
-ledgers, and typed allowlist syntax are deferred per phase because those changes
-would alter repo process behavior.
+This file is the current detector inventory for Choir Doctrine. The CI check
+(`scripts/check-heresies.sh` and `.github/workflows/ci.yml`) reports every
+family's discovery count and fails rows individually promoted with
+`enforce: zero`. Generated ledgers and broader typed allowlist syntax remain
+deferred per phase.
 
 Reduction rule: counts are evidence, not ontology. A count decrease supports a
 `repaired` claim only when the remaining hits are classified as historical
@@ -25,7 +25,7 @@ framing.
 | H006-H008/H014 | continuation residue | `RunContinuation`, `run_continuations`, `/api/continuations`, `continuation-level`, `"request_source": "run_continuation"` | 0 target-doctrine hits | `continuation-level` is transitional until M4 deletes or re-points it. |
 | H009/H022 | semantic next-tool forcing | `next_required_tool`, `next_tool`, `required_next_tool`, `delegation_required`, `chained_required_tool`, `next_tools` | 0 semantic forcing hits | Mechanical protocol envelopes need explicit allowlisting. |
 | H010/H024/H026 | Texture/prompt forcing | `requiredContinuationAfterTextureEdit`, `explicit_researcher_request`, `durableMetadataKeys`, `textureEditResearcherIntentText`, `initialTextureToolChoice`, `WithInitialToolChoice`, `buildAgentRevisionRequest`, `call spawn_agent now` | 0 semantic forcing hits | Long-running Texture work must keep exact tool choice mechanical only; detector hits need typed allowlist context. |
-| H011/H012 | role keyword oracles | `texturePromptNeedsSuperExecution`, `promptBarExplicitResearcherIntent`, `texturePromptExplicitlyRequestsResearcher`, super keyword lists | 0 routing-control hits | Role mentions may inform Texture; they must not route or force tools. |
+| H011/H012 | role keyword oracles | `texturePromptNeedsSuperExecution`, `promptBarExplicitResearcherIntent`, `texturePromptExplicitlyRequestsResearcher`, super keyword lists | 0 routing-control hits | Role mentions may inform Texture; they must not route or force tools; enforce: zero; exclude: docs/**, *_test.go |
 | H019 | lease vocabulary drift | `lease`, `leased`, `lease_seconds`, `worker lease` | 0 actor-control hits | Capacity/QoS or historical usage must be labeled explicitly. |
 | H027 | Trace app residue | `Trace app`, `Trace UI`, `Open Trace`, `appId: "trace"`, `data-trace-app` | 0 current product-surface hits | Trace evidence remains valid; Trace app/dashboard direction is retired. |
 | H028 | raw Terminal app residue | `Terminal app`, `raw Terminal`, `manual terminal`, `/api/terminal/ws`, `appId: "terminal"` | 0 current product-surface hits | Super Console/zot is the repair surface; PTY terms may remain hidden implementation detail. |
@@ -78,9 +78,14 @@ Done (Phase A):
 - create a structured detector manifest consumed by a script;
 - wire the discovery check into the `check` CI gate.
 
-Still deferred (Phase B/E): classify allow contexts
+In progress (Phase B/E): classify allow contexts
 (`historical-evidence`, `doctrine-detector`, `explicitly-deprecated`,
 `implementation-transitional`, `current-violation`); generate a heresy ledger
 with `discovered`, `introduced`, and `repaired` deltas; fail on unaccepted count
 increases for protected detector families; promote `scripts/check-heresies.sh`
 from `--report` to `--fail-on-regression` after the baseline is reviewed.
+
+H011/H012 is the first enforced family: doctrine/Definition text and tests are
+explicit allow-contexts, while any production reintroduction fails
+`--fail-on-regression`. Other families remain discovery-only until their Phase
+B/E cluster closes.

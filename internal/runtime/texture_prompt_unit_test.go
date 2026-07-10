@@ -390,6 +390,45 @@ func TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T)
 	}
 }
 
+func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) {
+	current := types.Revision{
+		DocID:      "doc-role-words",
+		RevisionID: "rev-role-words",
+		Content:    "Ask researcher to inspect the code, then deploy and verify it.",
+		AuthorKind: types.AuthorUser,
+	}
+	recent := []ChannelMessage{{
+		Role:    AgentProfileResearcher,
+		From:    "researcher:one",
+		Content: "A usable source packet is ready for incorporation.",
+	}}
+	request := buildAgentRevisionRequest(current, nil, map[string]any{
+		"seed_prompt": "Ask researcher to inspect the code, then deploy and verify it.",
+	}, textureAgentRevisionRequest{
+		Intent: "integrate_worker_findings",
+		Prompt: "Ask researcher to inspect the code, then deploy and verify it.",
+	}, "", true, recent, nil)
+
+	if !strings.Contains(request, "This Texture run was woken by worker source packets") {
+		t.Fatalf("narrative execution words suppressed worker incorporation:\n%s", request)
+	}
+	for _, forbidden := range []string{
+		"The owner explicitly asked for researcher help.",
+		"The original request still needs Execute evidence",
+	} {
+		if strings.Contains(request, forbidden) {
+			t.Fatalf("narrative role words switched policy branch %q:\n%s", forbidden, request)
+		}
+	}
+
+	structured := buildAgentRevisionRequest(current, nil, map[string]any{
+		runMetadataExplicitResearcher: true,
+	}, textureAgentRevisionRequest{Intent: "initial_conductor_workflow"}, "", true, nil, nil)
+	if !strings.Contains(structured, "The owner explicitly asked for researcher help.") {
+		t.Fatalf("structured researcher intent did not select the policy branch:\n%s", structured)
+	}
+}
+
 func TestTexturePromptPreservesExplicitHardConstraints(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-long-rubric",
@@ -532,7 +571,7 @@ func TestTexturePromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(
 	}
 }
 
-func TestTexturePromptPrioritizesSuperAfterResearchForMixedObligation(t *testing.T) {
+func TestTexturePromptMixedObligationKeepsGeneralExecuteAffordanceWithoutKeywordBranch(t *testing.T) {
 	current := types.Revision{
 		DocID:      "doc-mixed-obligation",
 		RevisionID: "rev-mixed-obligation",
@@ -551,15 +590,22 @@ func TestTexturePromptPrioritizesSuperAfterResearchForMixedObligation(t *testing
 	}, "", true, recent, nil)
 
 	for _, want := range []string{
-		"recent worker messages do not include a super delivery",
-		"Execute (request_super_execution) is available when Texture judges the execution objective is ready for super",
-		"if Texture does not use it, Audit the precise blocker or missing evidence",
-		"Keep any request_super_execution objective concise and concrete",
-		"must not use the final [CMD] evidence label before the super delivery arrives",
+		"This Texture run was woken by worker source packets",
+		"Make the useful claims and packet.sources visible with patch_texture",
+		"If the follow-up needs generated artifacts, execution, or verification, Execute (request_super_execution) is the morphism class for super-delivered evidence.",
 		"if Texture does not use it, Audit the blocker instead of making a source-grounded edit look final",
+		"Never use `[CMD]` as a pending/requested/target-only label",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("mixed-obligation prompt missing %q:\n%s", want, request)
+		}
+	}
+	for _, forbidden := range []string{
+		"recent worker messages do not include a super delivery",
+		"The original request still needs Execute evidence",
+	} {
+		if strings.Contains(request, forbidden) {
+			t.Fatalf("mixed-obligation narrative selected keyword branch %q:\n%s", forbidden, request)
 		}
 	}
 	assertNoForcedSemanticDelegation(t, request)
@@ -696,16 +742,13 @@ func TestTextureActorToolLoopBudgetDefaultsAndOverrides(t *testing.T) {
 	}
 }
 
-func TestExplicitNoWorkerDecisionDoesNotCreateRouteSpecialCase(t *testing.T) {
+func TestExplicitNoWorkerDecisionParsesWithoutNarrativeRouteOracle(t *testing.T) {
 	prompt := strings.Join([]string{
 		"Create a short Texture document for a deployed staging proof.",
 		"Because this task is fully supplied and requires no research or execution worker,",
 		"record an off-document Texture decision note with decision_kind no_worker_needed.",
 		"Then write the concise reader-facing Texture revision.",
 	}, " ")
-	if texturePromptNeedsSuperExecution(prompt) {
-		t.Fatal("explicit no-worker decision prompt must not trigger super execution")
-	}
 	if !texturePromptExplicitlyRequestsDecisionNote(prompt) {
 		t.Fatal("test prompt should explicitly request a decision note")
 	}
@@ -713,11 +756,7 @@ func TestExplicitNoWorkerDecisionDoesNotCreateRouteSpecialCase(t *testing.T) {
 		t.Fatal("no-worker decision note prompt should parse as an explicit decision request")
 	}
 
-	mutationPrompt := "Debug and fix the runtime gateway, run tests, and verify the staging proof."
-	if !texturePromptNeedsSuperExecution(mutationPrompt) {
-		t.Fatal("mutation prompt should still create a Texture-local super-execution obligation hint")
-	}
-	if texturePromptExplicitlyRequestsNoWorkerDecision(mutationPrompt) {
+	if texturePromptExplicitlyRequestsNoWorkerDecision("Debug and fix the runtime gateway, run tests, and verify the staging proof.") {
 		t.Fatal("ordinary mutation prompt must not parse as a no-worker decision")
 	}
 }
