@@ -96,3 +96,24 @@ func TestRunOGBackfillStepDoesNotMarkFailedPassComplete(t *testing.T) {
 		t.Fatalf("resume backfill calls = %d, want 1", resumeCalls)
 	}
 }
+
+func TestOGMetadataValueSetLoadsExistingEventIDs(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	for _, eventID := range []string{"event-resume-a", "event-resume-b"} {
+		if _, err := s.ogPut(ctx, ogKindEvent, "owner-resume", eventID,
+			map[string]string{"event_id": eventID}, map[string]any{"event_id": eventID}, time.Now().UTC()); err != nil {
+			t.Fatalf("seed event %s: %v", eventID, err)
+		}
+	}
+
+	values, err := s.ogMetadataValueSet(ctx, ogKindEvent, "$.event_id")
+	if err != nil {
+		t.Fatalf("load existing event ids: %v", err)
+	}
+	for _, eventID := range []string{"event-resume-a", "event-resume-b"} {
+		if _, ok := values[eventID]; !ok {
+			t.Fatalf("existing event id %q missing from value set: %#v", eventID, values)
+		}
+	}
+}

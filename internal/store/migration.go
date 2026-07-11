@@ -106,6 +106,39 @@ func (s *Store) markOGBackfillMigrationComplete(ctx context.Context, kind object
 	return err
 }
 
+// ogMetadataValueSet scans one object kind once and returns its non-empty
+// metadata values. Large resumable migrations use this instead of issuing one
+// JSON_EXTRACT lookup per legacy row, which becomes quadratic as OG grows.
+func (s *Store) ogMetadataValueSet(ctx context.Context, kind objectgraph.ObjectKind, jsonPath string) (map[string]struct{}, error) {
+	if s == nil || s.textureHandle() == nil {
+		return nil, fmt.Errorf("store: object graph database not initialized")
+	}
+	rows, err := s.textureHandle().QueryContext(ctx,
+		`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?))
+		 FROM og_objects
+		 WHERE object_kind = ? AND JSON_EXTRACT(CAST(metadata AS JSON), ?) IS NOT NULL`,
+		jsonPath, string(kind), jsonPath,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	values := make(map[string]struct{})
+	for rows.Next() {
+		var value sql.NullString
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		if value.Valid && strings.TrimSpace(value.String) != "" {
+			values[value.String] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return values, nil
+}
+
 func (s *Store) backfillAgentsOG(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT agent_id, owner_id, sandbox_id, profile, role, channel_id, created_at, updated_at FROM agents`)
 	if err != nil {
@@ -208,13 +241,13 @@ func (s *Store) backfillEventsOG(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("backfill OG events: iterate: %w", err)
 	}
+	existingEventIDs, err := s.ogMetadataValueSet(ctx, ogKindEvent, "$.event_id")
+	if err != nil {
+		return fmt.Errorf("backfill OG events: load existing event ids: %w", err)
+	}
 	for i := range records {
 		// Put-if-absent: skip if OG already has this event.
-		exists, err := s.ogExistsByKey(ctx, ogKindEvent, "event_id", records[i].EventID)
-		if err != nil {
-			return fmt.Errorf("backfill OG events: check %s: %w", records[i].EventID, err)
-		}
-		if exists {
+		if _, exists := existingEventIDs[records[i].EventID]; exists {
 			continue
 		}
 		// OG requires a non-empty owner_id. Synthesize a system owner
@@ -225,6 +258,7 @@ func (s *Store) backfillEventsOG(ctx context.Context) error {
 		if err := s.AppendEventOG(ctx, &records[i]); err != nil {
 			return fmt.Errorf("backfill OG events: put %s: %w", records[i].EventID, err)
 		}
+		existingEventIDs[records[i].EventID] = struct{}{}
 	}
 	return nil
 }
