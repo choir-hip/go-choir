@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: d2cde593b2b6e7b1ab407e74e713eee5534b8c42
+  journal_expected_parent_sha: 5629347ba0a5c344341c4f2220f6ebb4ab10450a
   orchestrator_lock:
     holder: Main
     epoch: 3
@@ -799,8 +799,8 @@ run_checkpoint_and_resumption_state:
       dispatch_prompt_ref: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md
       implementer_job_ref: S0RatchetImplementer
       implementer_output_ref: agent://S0RatchetImplementer
-      verifier_job_ref: S0RatchetVerifier_pending_dispatch
-      verifier_output_ref: pending_independent_verification
+      verifier_job_ref: S0RatchetVerifier
+      verifier_output_ref: agent://S0RatchetVerifier
       worktree_or_branch_ref: s0-runtime-inventory-ratchet-01@02f3a724d14a1896df6c7a9a2a95cf9fb417648b
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
@@ -809,13 +809,14 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-verifier-intent-04
-      expected_parent_sha: d2cde593b2b6e7b1ab407e74e713eee5534b8c42
+      transition_id: s0-runtime-inventory-ratchet-verifier-failed-05
+      expected_parent_sha: 5629347ba0a5c344341c4f2220f6ebb4ab10450a
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
         - {status: implementation_returned, transition_id: s0-runtime-inventory-ratchet-returned-03, recorded_at: 2026-07-11T21:23:47Z, actor: Main, expected_parent_sha: eca2f134cca65c85a02971af8f7e1140b7fc7f44, precondition: exactly_one_matching_agent_result_for_dispatch_nonce, postcondition: isolated_commit_recorded_for_integration, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-verifier-intent-04, recorded_at: 2026-07-11T21:28:23Z, actor: Main, expected_parent_sha: d2cde593b2b6e7b1ab407e74e713eee5534b8c42, precondition: corrected_implementation_integrated_and_orchestrator_smoke_passed, postcondition: independent_verifier_assignment_is_canonical, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s0-runtime-inventory-ratchet-verifier-failed-05, recorded_at: 2026-07-11T21:31:09Z, actor: S0RatchetVerifier, expected_parent_sha: 5629347ba0a5c344341c4f2220f6ebb4ab10450a, precondition: independent_read_only_verification_of_canonical_slice, postcondition: two_blocking_findings_recorded_for_repair, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-11T23:11:54Z
       mutation_class: yellow
       protected_surfaces: []
@@ -842,11 +843,11 @@ run_checkpoint_and_resumption_state:
       acceptance_ref: artifact://66
       acceptance_contract: go_test_cmd_runtime_ratchet_and_baseline_invocation_pass_with_regression_fixtures_failing
       evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md]
-      open_findings: []
+      open_findings: [S0-RAT-001_missing_real_production_caller_validation, S0-RAT-002_citer_identity_truncates_suffix_after_240_bytes]
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-11T21:28:23Z
-      reconciliation_result: corrected_commit_integrated_and_local_smoke_passed_pending_independent_verifier
+      last_reconciled_at: 2026-07-11T21:31:09Z
+      reconciliation_result: independent_verifier_blocking_fail_two_confirmed_findings
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
