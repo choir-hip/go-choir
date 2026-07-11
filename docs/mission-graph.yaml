@@ -83,14 +83,41 @@ nodes:
     title: Choir Autopaper Source-to-Edition Activation and Stability
     path: docs/definitions/choir-autopaper-activation-2026-07-10.md
     ledger: ''
-    status: working
+    status: superseded
     kind: product_completion
     depends_on:
       - choir-product-completion-2026-07-10
       - choir-seam-repair-2026-07-10
     enables: []
+    note: >-
+      Topology superseded by choir-wire-store-conformance-2026-07-11 after the
+      2026-07-11 post-mortem (attempt report) showed it contradicted D-WIRE.
+      Its evidence ledger remains valid history.
+  - id: choir-wire-store-conformance-2026-07-11
+    title: Universal Wire D-WIRE Conformance and Legacy Migration Deletion
+    path: docs/definitions/choir-wire-store-conformance-2026-07-11.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    depends_on:
+      - og-dolt-heresy-completion-2026-07-08
+      - choir-product-completion-2026-07-10
+    enables:
+      - choir-autoputer-cli-operability-2026-07-11
+  - id: choir-autoputer-cli-operability-2026-07-11
+    title: Autoputer External-CLI Operability Before Choir-in-Choir
+    path: docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
+    ledger: ''
+    status: working
+    kind: spine
+    depends_on:
+      - choir-wire-store-conformance-2026-07-11
+    enables:
+      - choir-run-lifecycle-and-completion-authority-2026-07-11
     sources:
-      - docs/definitions/choir-autopaper-activation-2026-07-10.md
+      - docs/definitions/choir-wire-store-conformance-2026-07-11.md
+      - docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
+      - docs/standing-questions.md
       - docs/definitions/choir-product-completion-2026-07-10.md
       - docs/definitions/choir-seam-repair-2026-07-10.md
       - docs/choir-doctrine.md
@@ -100,3 +127,21 @@ nodes:
       - docs/runtime-invariants.md
       - docs/texture-agentic-invariants-2026-06-13.md
       - docs/source-external-data-publication.md
+  - id: choir-run-lifecycle-and-completion-authority-2026-07-11
+    title: Choir Run Lifecycle and Completion Authority
+    path: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    depends_on:
+      - choir-wire-store-conformance-2026-07-11
+      - choir-autoputer-cli-operability-2026-07-11
+    enables: []
+    sources:
+      - docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
+      - docs/definitions/choir-wire-store-conformance-2026-07-11.md
+      - docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
+      - docs/standing-questions.md
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/runtime-invariants.md

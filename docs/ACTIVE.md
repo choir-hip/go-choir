@@ -25,9 +25,17 @@ RouteProfile format repair, compiled-only source-workspace identity, dead-code
 excision, and product-completion Definition state refresh. It is **settled**.
 
 [`definitions/choir-autopaper-activation-2026-07-10.md`](definitions/choir-autopaper-activation-2026-07-10.md)
-is the active sub-mission for Autopaper source-to-edition activation and
-sourcecycled/platform-computer stability. It inherits from the product-completion
-Definition and may not override the settled seam-repair state.
+is **superseded in topology** (2026-07-11): the post-mortem
+[`definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`](definitions/choir-autopaper-activation-attempt-report-2026-07-11.md)
+showed its Real Artifact contradicted the settled D-WIRE decision. Its
+evidence ledger remains valid history; do not execute its topology sections.
+Successors:
+[`definitions/choir-wire-store-conformance-2026-07-11.md`](definitions/choir-wire-store-conformance-2026-07-11.md)
+(wire state onto the world-wire store; legacy migration deletion),
+[`definitions/choir-autoputer-cli-operability-2026-07-11.md`](definitions/choir-autoputer-cli-operability-2026-07-11.md)
+(canonical sequence: audited computer → choir-CLI autoputer → choir-in-choir → autopaper), and
+[`definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`](definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md)
+(unified run status, idempotency/retry, and artifact-verified completion).
 
 [`definitions/documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md)
 is **complete**. It remains in the retained packet as the deletion receipt and
@@ -40,11 +48,18 @@ The seam-repair Definition is **settled** after staging acceptance at `944d4d94`
 proved per-service `/health` identity and RouteProfile promotion/rollback on
 `choir.news`.
 
-The next executable focus is the Autopaper sub-mission:
-[`definitions/choir-autopaper-activation-2026-07-10.md`](definitions/choir-autopaper-activation-2026-07-10.md).
-Root cause the platform computer and/or sourcecycled reboot loop, prove stable
-sourcecycled → platform computer → runtime → Texture activation, and produce a
-visible edition through `/api/universal-wire/stories`.
+The next executable focus is
+[`definitions/choir-wire-store-conformance-2026-07-11.md`](definitions/choir-wire-store-conformance-2026-07-11.md):
+move wire state to the corpusd-served world-wire store, delete the boot-time
+legacy migration, and decouple `/api/universal-wire/stories` from VM
+lifecycle. It is Phase 0 of the autoputer sequence in
+[`definitions/choir-autoputer-cli-operability-2026-07-11.md`](definitions/choir-autoputer-cli-operability-2026-07-11.md);
+PC-5 (Base exact-byte kernel) and audited-computer candidate-materialization work
+are owned by [`definitions/choir-product-completion-2026-07-10.md`](definitions/choir-product-completion-2026-07-10.md)
+and [`docs/computer-ontology.md`](docs/computer-ontology.md), and
+[`definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`](definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md)
+resolves run lifecycle and completion truth (Phase 3). Autopaper editorial work waits
+for the whole sequence per the restored autoputer-before-autopaper dictum.
 
 Resume product-completion work at PC-2 (Wails token containment) and PC-3 (CLI
 request-budget) once Autopaper activation is stable, with Base product wiring

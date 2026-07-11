@@ -258,7 +258,7 @@ run_one() {
   (
     cd "$CWD" || exit 2
     "${CMD[@]}"
-  ) > "$out" 2>&1
+  ) </dev/null >"$out" 2>&1
   local code=$?
   if [[ $code -eq 0 ]]; then
     append_manifest "$agent" "ok" "$code" "$out" "$rendered"

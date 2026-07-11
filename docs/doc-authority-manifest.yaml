@@ -201,9 +201,49 @@ documents:
     refresh_triggers: [mission_state_change, deployment_identity_change, promotion_route_change]
 
   - path: docs/definitions/choir-autopaper-activation-2026-07-10.md
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition, authority: superseded_mission_evidence, lifecycle: superseded}
+    witnesses: [docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md, docs/definitions/choir-wire-store-conformance-2026-07-11.md]
+    refresh_triggers: []
+
+  - path: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: post_mortem, authority: evidence_scoped, lifecycle: retained}
+    witnesses: [docs/definitions/choir-autopaper-activation-2026-07-10.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md]
+    refresh_triggers: []
+
+  - path: docs/standing-questions.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: agent_preflight, authority: derived_support, lifecycle: living}
+    witnesses: [AGENTS.md, docs/choir-doctrine.md, docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md]
+    refresh_triggers: [doctrine_change, mission_failure_postmortem, operating_contract_change]
+
+  - path: docs/definitions/choir-wire-store-conformance-2026-07-11.md
     claim_scope: current
     is_root: []
     is_evidence: false
     annotations: {doc_role: definition, authority: mission, lifecycle: active}
-    witnesses: [docs/definitions/choir-autopaper-activation-2026-07-10.md, docs/definitions/choir-product-completion-2026-07-10.md, docs/mission-graph.yaml, docs/ACTIVE.md]
-    refresh_triggers: [mission_state_change, autopaper_change, sourcecycled_change, vmctl_change, platform_computer_change]
+    witnesses: [docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/computer-ontology.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, wire_store_change, corpusd_change, sourcecycled_change]
+
+  - path: docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: active}
+    witnesses: [docs/definitions/choir-wire-store-conformance-2026-07-11.md, docs/definitions/choir-product-completion-2026-07-10.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, choir_cli_change, vmctl_change, promotion_protocol_change]
+
+  - path: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition, authority: mission, lifecycle: active}
+    witnesses: [docs/definitions/choir-autoputer-cli-operability-2026-07-11.md, docs/definitions/choir-wire-store-conformance-2026-07-11.md, docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: [mission_state_change, run_lifecycle_change, sourcecycled_change]

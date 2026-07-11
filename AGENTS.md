@@ -5,6 +5,14 @@ every session. It inherits [Choir Doctrine](docs/choir-doctrine.md) and must not
 become a competing doctrine source. When they conflict, follow Choir Doctrine
 unless this file is carrying a newer explicitly promoted operating update.
 
+Before authoring or executing any mission Definition, read
+[docs/standing-questions.md](docs/standing-questions.md) — the pre-flight
+question set (decision provenance, settled-decision conformance, deletion
+citers, single state authority, artifact-verified success, fate-sharing,
+restart durability, no-SSH operability, registry hygiene). Each question is
+backed by a dated failure receipt; a mission that cannot answer them is not
+ready to execute.
+
 Product architecture rules live in [docs/agent-product-doctrine.md](docs/agent-product-doctrine.md)
 (authority boundaries, harness minimalism, Texture control plane, runtime
 configuration, product-path verification, run acceptance). Long-running mission
