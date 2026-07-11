@@ -9,6 +9,7 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -73,10 +74,15 @@ func scanRepository(root string) (Inventory, error) {
 		DispatchNonce: "s0-runtime-inventory-ratchet-01-nonce-01",
 		Transition: "s0-runtime-inventory-ratchet-dispatch-intent-01",
 	}
-	if err := scanGo(root, &inv); err != nil {
+	files, err := repositoryFiles(root)
+	if err != nil {
 		return Inventory{}, err
 	}
-	if err := scanTextCiters(root, &inv); err != nil {
+	citerOrdinals := map[string]int{}
+	if err := scanGo(root, files, citerOrdinals, &inv); err != nil {
+		return Inventory{}, err
+	}
+	if err := scanTextCiters(root, files, citerOrdinals, &inv); err != nil {
 		return Inventory{}, err
 	}
 	sortInventory(&inv)
@@ -84,21 +90,56 @@ func scanRepository(root string) (Inventory, error) {
 	return inv, nil
 }
 
-func scanGo(root string, inv *Inventory) error {
-	fset := token.NewFileSet()
-	return filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+func repositoryFiles(root string) ([]string, error) {
+	if _, err := os.Stat(filepath.Join(root, ".git")); err == nil {
+		cmd := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
+		output, err := cmd.Output()
+		if err != nil {
+			return nil, fmt.Errorf("list non-ignored repository files: %w", err)
+		}
+		parts := bytes.Split(output, []byte{0})
+		files := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if len(part) == 0 {
+				continue
+			}
+			path := filepath.Join(root, filepath.FromSlash(string(part)))
+			info, statErr := os.Stat(path)
+			if statErr == nil && !info.IsDir() {
+				files = append(files, path)
+			}
+		}
+		sort.Strings(files)
+		return files, nil
+	}
+
+	ignoredDirectories := map[string]bool{
+		".git": true, ".cache": true, "build": true, "coverage": true,
+		"dist": true, "node_modules": true, "vendor": true,
+	}
+	var files []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if d.IsDir() {
-			name := d.Name()
-			if name == ".git" || name == "vendor" || strings.HasPrefix(name, ".runtime-ratchet-") {
+		if entry.IsDir() {
+			if path != root && (ignoredDirectories[entry.Name()] || strings.HasPrefix(entry.Name(), ".runtime-ratchet-")) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
+		files = append(files, path)
+		return nil
+	})
+	sort.Strings(files)
+	return files, err
+}
+
+func scanGo(root string, files []string, citerOrdinals map[string]int, inv *Inventory) error {
+	fset := token.NewFileSet()
+	for _, path := range files {
 		if filepath.Ext(path) != ".go" {
-			return nil
+			continue
 		}
 		rel := slashRel(root, path)
 		src, err := os.ReadFile(path)
@@ -125,9 +166,9 @@ func scanGo(root string, inv *Inventory) error {
 			inv.ProductionImporters = append(inv.ProductionImporters, Entry{ID: rel, Disposition: "delete"})
 			scanWrappers(rel, file, aliases, inv)
 		}
-		scanGoCommentCiters(rel, file, fset, inv)
-		return nil
-	})
+		scanGoCommentCiters(rel, file, citerOrdinals, inv)
+	}
+	return nil
 }
 
 func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool, inv *Inventory) {
@@ -278,51 +319,48 @@ func toolName(expr ast.Expr) (string, bool) {
 	return "", false
 }
 
-func scanGoCommentCiters(rel string, file *ast.File, fset *token.FileSet, inv *Inventory) {
+func scanGoCommentCiters(rel string, file *ast.File, citerOrdinals map[string]int, inv *Inventory) {
 	for _, cg := range file.Comments {
 		for _, c := range cg.List {
-			if !strings.Contains(c.Text, "internal/runtime") {
-				continue
+			if strings.Contains(c.Text, "internal/runtime") {
+				addCiter(inv, rel, c.Text, citerOrdinals)
 			}
-			id := rel + ":" + strconv.Itoa(fset.Position(c.Pos()).Line) + ":" + oneLine(c.Text)
-			inv.Citers = append(inv.Citers, Entry{ID: id, Disposition: citerDisposition(rel)})
 		}
 	}
 }
 
-func scanTextCiters(root string, inv *Inventory) error {
-	return filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			name := d.Name()
-			if name == ".git" || name == "vendor" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+func scanTextCiters(root string, files []string, citerOrdinals map[string]int, inv *Inventory) error {
+	for _, path := range files {
 		rel := slashRel(root, path)
 		textSurface := isCiterSurface(rel)
 		codeSurface := isCodeSurface(rel)
 		if rel == "docs/runtime-dissolution-inventory.yaml" || filepath.Ext(rel) == ".go" || (!textSurface && !codeSurface) {
-			return nil
+			continue
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
 		scanner := bufio.NewScanner(bytes.NewReader(data))
-		line := 0
+		scanner.Buffer(make([]byte, 64*1024), 8*1024*1024)
 		for scanner.Scan() {
-			line++
 			text := scanner.Text()
 			if strings.Contains(text, "internal/runtime") && (textSurface || looksLikeComment(text)) {
-				id := rel + ":" + strconv.Itoa(line) + ":" + strings.TrimSpace(text)
-				inv.Citers = append(inv.Citers, Entry{ID: id, Disposition: citerDisposition(rel)})
+				addCiter(inv, rel, text, citerOrdinals)
 			}
 		}
-		return scanner.Err()
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("scan citer surface %s: %w", rel, err)
+		}
+	}
+	return nil
+}
+
+func addCiter(inv *Inventory, rel, text string, ordinals map[string]int) {
+	base := rel + ":" + oneLine(text)
+	inv.Citers = append(inv.Citers, Entry{
+		ID:          uniqueID(base, ordinals),
+		Disposition: citerDisposition(rel),
 	})
 }
 

@@ -3185,297 +3185,297 @@ state_writers:
     - id: internal/runtime/tools_shipper.go:newPublishAppChangePackageTool:PublishAppChangePackage
       disposition: tools
 citers:
-    - id: .github/scripts/ci-impact-classify-test:34:assert_output runtime-change $'internal/runtime/engine.go\n' \
+    - id: .github/scripts/ci-impact-classify-test:assert_output runtime-change $'internal/runtime/engine.go\n' \
       disposition: block
-    - id: .github/scripts/ci-impact-classify:139:go.mod|go.sum|scripts/go-test-*|internal/runtime/*|internal/actor/*|internal/actorruntime/*|internal/events/*|internal/store/*|internal/vmmanager/*|internal/vmctl/*)
+    - id: .github/scripts/ci-impact-classify:go.mod|go.sum|scripts/go-test-*|internal/runtime/*|internal/actor/*|internal/actorruntime/*|internal/events/*|internal/store/*|internal/vmmanager/*|internal/vmctl/*)
       disposition: block
-    - id: .github/scripts/deploy-impact-classify-test:149:sandbox_runtime_output="$(run_classifier "internal/runtime/run_acceptance.go")"
+    - id: .github/scripts/deploy-impact-classify-test:assert_contains "$sandbox_runtime_output" "internal/runtime/run_acceptance.go -> gateway/sandbox service pointers + vmctl runtime-package endpoint restart"
       disposition: block
-    - id: .github/scripts/deploy-impact-classify-test:155:assert_contains "$sandbox_runtime_output" "internal/runtime/run_acceptance.go -> gateway/sandbox service pointers + vmctl runtime-package endpoint restart"
+    - id: .github/scripts/deploy-impact-classify-test:sandbox_runtime_output="$(run_classifier "internal/runtime/run_acceptance.go")"
       disposition: block
-    - id: .github/scripts/deploy-impact-classify:263:internal/runtime/model_policy.go)
+    - id: .github/scripts/deploy-impact-classify:internal/runtime/*)
       disposition: block
-    - id: .github/scripts/deploy-impact-classify:268:internal/runtime/api_trace.go)
+    - id: .github/scripts/deploy-impact-classify:internal/runtime/api_trace.go)
       disposition: block
-    - id: .github/scripts/deploy-impact-classify:273:internal/runtime/*)
+    - id: .github/scripts/deploy-impact-classify:internal/runtime/model_policy.go)
       disposition: block
-    - id: .github/workflows/ci.yml:1125:"${refresh_sandbox_url}/internal/runtime/refresh" || true)
+    - id: .github/workflows/ci.yml:"${refresh_sandbox_url}/internal/runtime/refresh" || true)
       disposition: block
-    - id: '.github/workflows/ci.yml:168:name: Go Test (internal/runtime shard ${{ matrix.shard }})'
+    - id: '.github/workflows/ci.yml:- name: Go test internal/runtime shard'
       disposition: block
-    - id: '.github/workflows/ci.yml:185:- name: Go test internal/runtime shard'
+    - id: '.github/workflows/ci.yml:name: Go Test (internal/runtime shard ${{ matrix.shard }})'
       disposition: block
-    - id: '.github/workflows/race.yml:18:name: Go Test (internal/runtime race shard ${{ matrix.shard }})'
+    - id: '.github/workflows/race.yml:- name: Go test internal/runtime shard with -race'
       disposition: block
-    - id: '.github/workflows/race.yml:44:- name: Go test internal/runtime shard with -race'
+    - id: .github/workflows/race.yml:mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
       disposition: block
-    - id: .github/workflows/race.yml:78:mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
+    - id: '.github/workflows/race.yml:name: Go Test (internal/runtime race shard ${{ matrix.shard }})'
       disposition: block
-    - id: AGENTS.md:44:`go test ./internal/runtime -run TestName` while shaping one transition. Do not
+    - id: AGENTS.md:`go test ./internal/runtime -run TestName` while shaping one transition. Do not
       disposition: block
-    - id: cmd/choir/main.go:283:// wireStoriesResponse mirrors internal/runtime.universalWireStoriesResponse.
+    - id: cmd/choir/main.go:// promptBarSubmitResponse mirrors internal/runtime.promptBarSubmitResponse.
       disposition: block
-    - id: cmd/choir/main.go:521:// promptBarSubmitResponse mirrors internal/runtime.promptBarSubmitResponse.
+    - id: cmd/choir/main.go:// wireStoriesResponse mirrors internal/runtime.universalWireStoriesResponse.
       disposition: block
-    - id: docs/ACTIVE.md:67:5. iteratively dissolve `internal/runtime`, with atomic caller cutover and
+    - id: docs/ACTIVE.md:5. iteratively dissolve `internal/runtime`, with atomic caller cutover and
       disposition: block
-    - id: docs/choir-doctrine.md:1002:`internal/runtime/channels.go`.
+    - id: docs/choir-doctrine.md:[internal/runtime/api.go](../internal/runtime/api.go).
       disposition: block
-    - id: docs/choir-doctrine.md:1022:`internal/runtime/prompt_defaults/texture.md`,
+    - id: docs/choir-doctrine.md:[internal/runtime/api_spawn_test.go](../internal/runtime/api_spawn_test.go).
       disposition: block
-    - id: docs/choir-doctrine.md:1023:`internal/runtime/texture_agent_revision.go`.
+    - id: docs/choir-doctrine.md:[internal/runtime/content_extract.go](../internal/runtime/content_extract.go),
       disposition: block
-    - id: docs/choir-doctrine.md:1104:[internal/runtime/content_extract.go](../internal/runtime/content_extract.go),
+    - id: docs/choir-doctrine.md:[internal/runtime/delegate_worker_update_fallback.go](../internal/runtime/delegate_worker_update_fallback.go),
       disposition: block
-    - id: docs/choir-doctrine.md:1193:`successor pattern:` Candidate = `(CodeRef, forked ArtifactProgramRef)`; speculative effects execute in capsules (`internal/capsule` + `internal/runtime/tools_capsule.go`); promotion = atomic route flip between `ComputerVersion` records.
+    - id: docs/choir-doctrine.md:[internal/runtime/researcher_checkpoint_fallback.go](../internal/runtime/researcher_checkpoint_fallback.go),
       disposition: block
-    - id: docs/choir-doctrine.md:436:`evidence:` [internal/runtime/api.go](../internal/runtime/api.go),
+    - id: docs/choir-doctrine.md:[internal/runtime/runtime.go](../internal/runtime/runtime.go),
       disposition: block
-    - id: docs/choir-doctrine.md:437:[internal/runtime/runtime.go](../internal/runtime/runtime.go),
+    - id: docs/choir-doctrine.md:[internal/runtime/super_controller.go](../internal/runtime/super_controller.go),
       disposition: block
-    - id: docs/choir-doctrine.md:439:[internal/runtime/api_spawn_test.go](../internal/runtime/api_spawn_test.go).
+    - id: docs/choir-doctrine.md:[internal/runtime/texture_agent_revision.go](../internal/runtime/texture_agent_revision.go),
       disposition: block
-    - id: docs/choir-doctrine.md:475:`evidence:` [internal/runtime/tools_researcher.go](../internal/runtime/tools_researcher.go).
+    - id: docs/choir-doctrine.md:[internal/runtime/texture_test.go](../internal/runtime/texture_test.go),
       disposition: block
-    - id: docs/choir-doctrine.md:495:`evidence:` [internal/runtime/texture_workflow_verifier.go](../internal/runtime/texture_workflow_verifier.go),
+    - id: docs/choir-doctrine.md:[internal/runtime/toolloop_test.go](../internal/runtime/toolloop_test.go).
       disposition: block
-    - id: docs/choir-doctrine.md:496:`internal/runtime/api_trace.go` (deleted; references retained as provenance).
+    - id: docs/choir-doctrine.md:[internal/runtime/tools_product_api.go](../internal/runtime/tools_product_api.go),
       disposition: block
-    - id: docs/choir-doctrine.md:515:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go).
+    - id: docs/choir-doctrine.md:[internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go).
       disposition: block
-    - id: docs/choir-doctrine.md:539:`evidence:` `internal/runtime/continuation.go` (deleted; references retained as provenance),
+    - id: docs/choir-doctrine.md:[internal/runtime/tools_vmctl.go](../internal/runtime/tools_vmctl.go).
       disposition: block
-    - id: docs/choir-doctrine.md:560:[internal/runtime/tools_product_api.go](../internal/runtime/tools_product_api.go),
+    - id: docs/choir-doctrine.md:[internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
       disposition: block
-    - id: docs/choir-doctrine.md:561:[internal/runtime/api.go](../internal/runtime/api.go).
+    - id: docs/choir-doctrine.md:[internal/runtime/trajectory.go](../internal/runtime/trajectory.go),
       disposition: block
-    - id: docs/choir-doctrine.md:579:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/api.go](../internal/runtime/api.go),
       disposition: block
-    - id: docs/choir-doctrine.md:581:`internal/runtime/api_trace.go` (deleted; references retained as provenance),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
       disposition: block
-    - id: docs/choir-doctrine.md:603:`evidence:` [internal/runtime/toolloop.go](../internal/runtime/toolloop.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),#2
       disposition: block
-    - id: docs/choir-doctrine.md:604:[internal/runtime/toolloop_test.go](../internal/runtime/toolloop_test.go).
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),#3
       disposition: block
-    - id: docs/choir-doctrine.md:625:`evidence:` [internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
       disposition: block
-    - id: docs/choir-doctrine.md:626:[internal/runtime/texture_test.go](../internal/runtime/texture_test.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),#2
       disposition: block
-    - id: docs/choir-doctrine.md:651:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),#3
       disposition: block
-    - id: docs/choir-doctrine.md:677:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),#4
       disposition: block
-    - id: docs/choir-doctrine.md:678:[internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go).
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),#5
       disposition: block
-    - id: docs/choir-doctrine.md:698:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go).
       disposition: block
-    - id: docs/choir-doctrine.md:719:`evidence:` [internal/runtime/run_acceptance.go](../internal/runtime/run_acceptance.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/texture_workflow_verifier.go](../internal/runtime/texture_workflow_verifier.go),
       disposition: block
-    - id: docs/choir-doctrine.md:738:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/toolloop.go](../internal/runtime/toolloop.go),
       disposition: block
-    - id: docs/choir-doctrine.md:757:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/tools_researcher.go](../internal/runtime/tools_researcher.go).
       disposition: block
-    - id: docs/choir-doctrine.md:758:[internal/runtime/super_controller.go](../internal/runtime/super_controller.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/tools_texture.go](../internal/runtime/tools_texture.go),
       disposition: block
-    - id: docs/choir-doctrine.md:781:`evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
       disposition: block
-    - id: docs/choir-doctrine.md:782:[internal/runtime/researcher_checkpoint_fallback.go](../internal/runtime/researcher_checkpoint_fallback.go),
+    - id: docs/choir-doctrine.md:`evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),#2
       disposition: block
-    - id: docs/choir-doctrine.md:783:[internal/runtime/delegate_worker_update_fallback.go](../internal/runtime/delegate_worker_update_fallback.go),
+    - id: docs/choir-doctrine.md:`evidence:` `internal/runtime/continuation.go` (deleted; references retained as provenance),
       disposition: block
-    - id: docs/choir-doctrine.md:784:[internal/runtime/trajectory.go](../internal/runtime/trajectory.go),
+    - id: docs/choir-doctrine.md:`internal/runtime/api_trace.go` (deleted; references retained as provenance),
       disposition: block
-    - id: docs/choir-doctrine.md:803:[internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
+    - id: docs/choir-doctrine.md:`internal/runtime/api_trace.go` (deleted; references retained as provenance).
       disposition: block
-    - id: docs/choir-doctrine.md:826:`internal/runtime/continuation.go` (deleted; references retained as provenance),
+    - id: docs/choir-doctrine.md:`internal/runtime/channels.go`.
       disposition: block
-    - id: docs/choir-doctrine.md:827:[internal/runtime/tools_vmctl.go](../internal/runtime/tools_vmctl.go).
+    - id: docs/choir-doctrine.md:`internal/runtime/continuation.go` (deleted; references retained as provenance),
       disposition: block
-    - id: docs/choir-doctrine.md:887:`internal/runtime/tools_vmctl.go`, `internal/runtime/tools.go`.
+    - id: docs/choir-doctrine.md:`internal/runtime/prompt_defaults/texture.md`,
       disposition: block
-    - id: docs/choir-doctrine.md:907:`internal/runtime/tools_vmctl.go`.
+    - id: docs/choir-doctrine.md:`internal/runtime/runtime.go`.
       disposition: block
-    - id: docs/choir-doctrine.md:927:`internal/runtime/runtime.go`.
+    - id: docs/choir-doctrine.md:`internal/runtime/texture_agent_revision.go`.
       disposition: block
-    - id: docs/choir-doctrine.md:950:`evidence:` [internal/runtime/runtime.go](../internal/runtime/runtime.go),
+    - id: docs/choir-doctrine.md:`internal/runtime/tools_vmctl.go`, `internal/runtime/tools.go`.
       disposition: block
-    - id: docs/choir-doctrine.md:951:[internal/runtime/texture_agent_revision.go](../internal/runtime/texture_agent_revision.go),
+    - id: docs/choir-doctrine.md:`internal/runtime/tools_vmctl.go`.
       disposition: block
-    - id: docs/choir-doctrine.md:978:`evidence:` [internal/runtime/tools_worker_update.go](../internal/runtime/tools_worker_update.go),
+    - id: docs/choir-doctrine.md:`successor pattern:` Candidate = `(CodeRef, forked ArtifactProgramRef)`; speculative effects execute in capsules (`internal/capsule` + `internal/runtime/tools_capsule.go`); promotion = atomic route flip between `ComputerVersion` records.
       disposition: block
-    - id: docs/choir-prompting-invariants.md:143:- Seeded defaults live in `internal/runtime/prompt_defaults/*.yaml` and
+    - id: docs/choir-prompting-invariants.md:- Per-run runtime overlays live in `internal/runtime/runtimeprompts/overlays/*.yaml`
       disposition: block
-    - id: docs/choir-prompting-invariants.md:144:`internal/runtime/textureprompts/texture.yaml`.
+    - id: docs/choir-prompting-invariants.md:- Seeded defaults live in `internal/runtime/prompt_defaults/*.yaml` and
       disposition: block
-    - id: docs/choir-prompting-invariants.md:145:- Per-run runtime overlays live in `internal/runtime/runtimeprompts/overlays/*.yaml`
+    - id: docs/choir-prompting-invariants.md:`internal/runtime/textureprompts/texture.yaml`.
       disposition: block
-    - id: docs/computer-ontology.md:99:`internal/capsule` + `internal/runtime/tools_capsule.go`), whose transactions
+    - id: docs/computer-ontology.md:`internal/capsule` + `internal/runtime/tools_capsule.go`), whose transactions
       disposition: block
-    - id: docs/conjecture-assertion-ledger-2026-06.md:21:- **Receipts:** `internal/runtime/tool_profiles.go:223-229` (AllowedDelegateTargets),
+    - id: docs/conjecture-assertion-ledger-2026-06.md:- **Receipts:** `internal/runtime/tool_profiles.go:223-229` (AllowedDelegateTargets),
       disposition: block
-    - id: docs/conjecture-assertion-ledger-2026-06.md:67:- **Receipts:** commit 77f65651; `internal/runtime/app_promotion.go`
+    - id: docs/conjecture-assertion-ledger-2026-06.md:- **Receipts:** commit 77f65651; `internal/runtime/app_promotion.go`
       disposition: block
-    - id: docs/current-architecture.md:86:(internal/runtime/runtime.go); cold-start, coagent wake, cancel, park-resume,
+    - id: docs/current-architecture.md:(internal/runtime/runtime.go); cold-start, coagent wake, cancel, park-resume,
       disposition: block
-    - id: docs/current-architecture.md:88:DB polling (H030 repaired). `internal/runtime` is the live business-logic layer
+    - id: docs/current-architecture.md:DB polling (H030 repaired). `internal/runtime` is the live business-logic layer
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:152:processor/reconciler requests to `/internal/runtime/runs` via the vmctl
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:- `internal/runtime/api.go` (typed ingestion handoff idempotency)
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:176:runtime API (`/internal/runtime/*`), objectgraph, and the processor/reconciler
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:- `internal/runtime/api.go` `ListRunsByIngestionHandoff` and fingerprint logic.
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:316:- `internal/runtime/api.go` `ListRunsByIngestionHandoff` and fingerprint logic.
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:- `internal/runtime/internal_run_idempotency_test.go`.
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:318:- `internal/runtime/internal_run_idempotency_test.go`.
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:- `internal/runtime/sourcecycled_web_captures.go`
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:31:- `internal/runtime/sourcecycled_web_captures.go`
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:- `internal/runtime` receiving web captures, durably storing them, and accepting
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:32:- `internal/runtime/api.go` (typed ingestion handoff idempotency)
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:`/internal/runtime/runs`;
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:512:and sandbox proxy), `internal/runtime` (typed ingestion handoff and web
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:and sandbox proxy), `internal/runtime` (typed ingestion handoff and web
       disposition: block
-    - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:612:source: internal/runtime/api.go'
+    - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:artifact_path: cmd/sourcecycled/main.go + internal/runtime/api.go'
       disposition: block
-    - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:614:artifact_path: internal/runtime/api.go'
+    - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:artifact_path: internal/runtime/api.go'
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:70:sourcecycled can reach `/internal/runtime/objectgraph/web-captures` and
+    - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:artifact_path: internal/runtime/wire_publication.go'
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:71:`/internal/runtime/runs`;
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:processor/reconciler requests to `/internal/runtime/runs` via the vmctl
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:72:- `internal/runtime` receiving web captures, durably storing them, and accepting
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:runtime API (`/internal/runtime/*`), objectgraph, and the processor/reconciler
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:791:with runtime lifecycle logs and GET /internal/runtime/runs/{id}.
+    - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:source: internal/runtime/api.go'
       disposition: block
-    - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:792:artifact_path: cmd/sourcecycled/main.go + internal/runtime/api.go'
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:sourcecycled can reach `/internal/runtime/objectgraph/web-captures` and
       disposition: block
-    - id: 'docs/definitions/choir-autopaper-activation-2026-07-10.md:820:artifact_path: internal/runtime/wire_publication.go'
+    - id: docs/definitions/choir-autopaper-activation-2026-07-10.md:with runtime lifecycle logs and GET /internal/runtime/runs/{id}.
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:321:**embedded** Dolt (`/internal/runtime/objectgraph/web-captures`,
+    - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:**embedded** Dolt (`/internal/runtime/objectgraph/web-captures`,
       disposition: block
-    - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:322:`/internal/runtime/runs`). Every attempt executing that definition therefore
+    - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:`/internal/runtime/runs`). Every attempt executing that definition therefore
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:102:3. Dissolve `internal/runtime` through repeated atomic deletion/cutover
+    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:142:- claim: internal/runtime had 48,551 production lines, 55,340 test lines, and 144 Go files at the 2026-07-11 audit.'
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- claim: The historical target deletes internal/runtime after moving only live core and app behavior.'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:145:- claim: The historical target deletes internal/runtime after moving only live core and app behavior.'
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- claim: internal/runtime had 48,551 production lines, 55,340 test lines, and 144 Go files at the 2026-07-11 audit.'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:182:deletion_target_reference: internal/runtime'
+    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- every `internal/runtime` citer across `docs/`, `specs/`, `skills/`,
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:379:- non-test and test LOC under `internal/runtime`;
+    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- internal/runtime god package and compatibility wrappers
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:381:- production packages importing `internal/runtime`;
+    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- non-test and test LOC under `internal/runtime`;
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:387:- every `internal/runtime` citer across `docs/`, `specs/`, `skills/`,
+    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- production packages importing `internal/runtime`;
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:420:- **No wrapper:** destination packages import no `internal/runtime` and do not
+    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:3. Dissolve `internal/runtime` through repeated atomic deletion/cutover
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:586:Implement against the extracted lifecycle boundary, not `internal/runtime`.
+    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:Implement against the extracted lifecycle boundary, not `internal/runtime`.
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:673:result: approximately 40K live app lines move, 6K-8K core moves, internal/runtime deleted'
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:deletion_target_reference: internal/runtime'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:820:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:878:- internal/runtime god package and compatibility wrappers
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:result: approximately 40K live app lines move, 6K-8K core moves, internal/runtime deleted'
       disposition: block
-    - id: docs/definitions/choir-product-completion-2026-07-10.md:627:BuildIngestionHandoff plus /internal/runtime/runs is already the typed,
+    - id: docs/definitions/choir-product-completion-2026-07-10.md:BuildIngestionHandoff plus /internal/runtime/runs is already the typed,
       disposition: block
-    - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:106:- Implement progress deadline + sweep in `internal/runtime`.
+    - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:- Before landing, record every added `internal/runtime` file, symbol, test,
       disposition: block
-    - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:110:- Before landing, record every added `internal/runtime` file, symbol, test,
+    - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:- Implement progress deadline + sweep in `internal/runtime`.
       disposition: block
-    - id: 'docs/definitions/choir-run-deploy-unblock-2026-07-11.md:36:6. Observed source: `internal/runtime/runtime.go`, `internal/runtime/api.go`,'
+    - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:1. `go test ./internal/runtime ./cmd/choir -run 'Deadline|Cancel|Sweep'`.
       disposition: block
-    - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:91:1. `go test ./internal/runtime ./cmd/choir -run 'Deadline|Cancel|Sweep'`.
+    - id: 'docs/definitions/choir-run-deploy-unblock-2026-07-11.md:6. Observed source: `internal/runtime/runtime.go`, `internal/runtime/api.go`,'
       disposition: block
-    - id: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md:15:recreate `internal/runtime`.
+    - id: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md:recreate `internal/runtime`.
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:145:- internal/runtime/app_promotion.go EnsureComputerSourceLineage writes
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:- Run `go test ./internal/proxy ./internal/runtime -run 'Route|Lineage|Promotion'`.
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:147:- internal/runtime/app_promotion.go CreateAppAdoption and
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:- Run agentic-consensus on the specific diff for `internal/runtime/app_promotion.go`
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:148:internal/runtime/candidate_package_intake.go set RouteProfile correctly.
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:- `internal/proxy/lineage_route_resolver` and `internal/runtime` promotion route
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:218:- internal/runtime/universal_wire.go lines 527-531 (wireRevisionIsUniversalWireSynthesis).
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:- `internal/runtime/universal_wire.go` lines 527-531.
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:419:- `internal/proxy/lineage_route_resolver` and `internal/runtime` promotion route
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:- internal/runtime/app_promotion.go CreateAppAdoption and
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:508:- Run agentic-consensus on the specific diff for `internal/runtime/app_promotion.go`
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:- internal/runtime/app_promotion.go EnsureComputerSourceLineage writes
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:509:and `internal/runtime/candidate_package_intake.go`.
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:- internal/runtime/universal_wire.go lines 527-531 (wireRevisionIsUniversalWireSynthesis).
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:518:- Run `go test ./internal/proxy ./internal/runtime -run 'Route|Lineage|Promotion'`.
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:and `internal/runtime/candidate_package_intake.go`.
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:543:- `internal/runtime/universal_wire.go` lines 527-531.
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:internal/runtime/candidate_package_intake.go set RouteProfile correctly.
       disposition: block
-    - id: 'docs/definitions/choir-seam-repair-2026-07-10.md:599:source: internal/runtime/app_promotion.go:98, :272;'
+    - id: docs/definitions/choir-seam-repair-2026-07-10.md:internal/runtime/candidate_package_intake.go:511;
       disposition: block
-    - id: docs/definitions/choir-seam-repair-2026-07-10.md:600:internal/runtime/candidate_package_intake.go:511;
+    - id: 'docs/definitions/choir-seam-repair-2026-07-10.md:source: internal/runtime/app_promotion.go:98, :272;'
       disposition: block
-    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:171:`internal/runtime` surface and it is not S5 observation completion.
+    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:- `internal/runtime/universal_wire.go` (stories route currently reads the
       disposition: block
-    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:46:- `internal/runtime/wire_platform_publish.go` (articles already publish to
+    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:- `internal/runtime/wire_platform_publish.go` (articles already publish to
       disposition: block
-    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:48:- `internal/runtime/universal_wire.go` (stories route currently reads the
+    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:- `internal/runtime/wire_publication.go` (edition/alias bootstrap in the
       disposition: block
-    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:50:- `internal/runtime/wire_publication.go` (edition/alias bootstrap in the
+    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:`internal/runtime` surface and it is not S5 observation completion.
       disposition: block
-    - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:1091:Source audit 2026-07-10: internal/runtime/app_promotion.go persists adopted'
+    - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:- internal/runtime/app_promotion.go: RollForwardAppAdoption; a rolled-back version may be promoted again only by a fresh validated CAS command'
       disposition: block
-    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:1093:internal/runtime/candidate_package_intake.go contains switch, rollback, and
+    - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:- internal/runtime/candidate_package_intake.go: SwitchCandidatePackageIntakeAdoptionReview, RollbackCandidatePackageIntakeAdoptionReview, and RollForwardCandidatePackageIntakeAdoptionReview, plus their mutating API routes/callers; retain re'
       disposition: block
-    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:1100:internal/runtime/run_acceptance.go raises promotion acceptance from
+    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:-count=1; go test ./internal/runtime/textureprompts -count=1;
       disposition: block
-    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:1167:rg/sed inspection of cmd/choir/main.go, internal/runtime/texture.go,
+    - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:Source audit 2026-07-10: internal/runtime/app_promotion.go persists adopted'
       disposition: block
-    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:1225:go test ./internal/runtime -run
+    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:go test ./internal/runtime -run
       disposition: block
-    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:1227:-count=1; go test ./internal/runtime/textureprompts -count=1;
+    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:go test ./internal/runtime -run#2
       disposition: block
-    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:1249:go test ./internal/runtime -run
+    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:internal/runtime/candidate_package_intake.go contains switch, rollback, and
       disposition: block
-    - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:451:- internal/runtime/app_promotion.go: RollForwardAppAdoption; a rolled-back version may be promoted again only by a fresh validated CAS command'
+    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:internal/runtime/run_acceptance.go raises promotion acceptance from
       disposition: block
-    - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:452:- internal/runtime/candidate_package_intake.go: SwitchCandidatePackageIntakeAdoptionReview, RollbackCandidatePackageIntakeAdoptionReview, and RollForwardCandidatePackageIntakeAdoptionReview, plus their mutating API routes/callers; retain read-only intake/review evidence'
+    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:rg/sed inspection of cmd/choir/main.go, internal/runtime/texture.go,
       disposition: block
-    - id: 'docs/doc-authority-manifest.yaml:144:witnesses: [docs/choir-prompting-invariants.md, docs/choir-doctrine.md, internal/runtime]'
+    - id: 'docs/doc-authority-manifest.yaml:witnesses: [docs/choir-prompting-invariants.md, docs/choir-doctrine.md, internal/runtime]'
       disposition: block
-    - id: 'docs/doc-authority-manifest.yaml:88:witnesses: [docs/runtime-invariants.md, internal/runtime, internal/store]'
+    - id: 'docs/doc-authority-manifest.yaml:witnesses: [docs/runtime-invariants.md, internal/runtime, internal/store]'
       disposition: block
-    - id: 'docs/doc-authority-manifest.yaml:96:witnesses: [docs/texture-agentic-invariants-2026-06-13.md, internal/runtime, frontend]'
+    - id: 'docs/doc-authority-manifest.yaml:witnesses: [docs/texture-agentic-invariants-2026-06-13.md, internal/runtime, frontend]'
       disposition: block
-    - id: 'docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:12:Create the mechanically checkable S0 inventory and ratchet for `internal/runtime`. Exact mutation targets are:'
+    - id: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:2. Inventory every production and test Go file under `internal/runtime`, every exported declaration, every route registration and tool registration owned by that package, every production external importer, every `*runtime.Runtime` / `*runt
       disposition: historical_evidence
-    - id: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:17:Do not modify `internal/runtime`, runtime callers, routes, registrations, lifecycle authority, Wire authority, promotion authority, suite/registry documents, CI, or deployment configuration.
+    - id: 'docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:Create the mechanically checkable S0 inventory and ratchet for `internal/runtime`. Exact mutation targets are:'
       disposition: historical_evidence
-    - id: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:22:2. Inventory every production and test Go file under `internal/runtime`, every exported declaration, every route registration and tool registration owned by that package, every production external importer, every `*runtime.Runtime` / `*runtime.APIHandler` wrapper or embed, compatibility markers, relevant state writers, and every literal `internal/runtime` citer across the suite-declared surfaces.
+    - id: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:Do not modify `internal/runtime`, runtime callers, routes, registrations, lifecycle authority, Wire authority, promotion authority, suite/registry documents, CI, or deployment configuration.
       disposition: historical_evidence
-    - id: docs/heresy-detectors.md:41:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
+    - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
       disposition: block
-    - id: docs/source-external-data-publication.md:204:**Current conformance gap:** `internal/runtime/qdrant_dedup.go` uses
+    - id: docs/source-external-data-publication.md:**Current conformance gap:** `internal/runtime/qdrant_dedup.go` uses
       disposition: block
-    - id: internal/actorruntime/adapter.go:3:// (internal/runtime).
+    - id: internal/actorruntime/adapter.go:// (internal/runtime).
       disposition: block
-    - id: internal/agentprofile/agentprofile.go:2:// the runtime. These constants were extracted from internal/runtime so that
+    - id: internal/agentprofile/agentprofile.go:// the runtime. These constants were extracted from internal/runtime so that
       disposition: block
-    - id: internal/apihandler/api.go:6:// internal/runtime package. The types in this package wrap the runtime
+    - id: internal/apihandler/api.go:// internal/runtime package. The types in this package wrap the runtime
       disposition: block
-    - id: internal/provideriface/provider.go:154:// concurrency behavior. Extracted from internal/runtime so the actorruntime
+    - id: internal/provideriface/provider.go:// concurrency behavior. Extracted from internal/runtime so the actorruntime
       disposition: block
-    - id: internal/provideriface/provider.go:2:// runtime and provider bridges. These types were extracted from internal/runtime
+    - id: internal/provideriface/provider.go:// runtime and provider bridges. These types were extracted from internal/runtime
       disposition: block
-    - id: internal/runtime/api.go:1018:// HandleInternalRunStatus handles GET /internal/runtime/runs/{id}.
+    - id: internal/runtime/api.go:// HandleInternalChannelCast handles POST /internal/runtime/channel-casts.
       disposition: block
-    - id: internal/runtime/api.go:1046:// HandleInternalRunCancel handles POST /internal/runtime/runs/{id}/cancel.
+    - id: internal/runtime/api.go:// HandleInternalRunCancel handles POST /internal/runtime/runs/{id}/cancel.
       disposition: block
-    - id: internal/runtime/api.go:1075:// HandleInternalChannelCast handles POST /internal/runtime/channel-casts.
+    - id: internal/runtime/api.go:// HandleInternalRunStatus handles GET /internal/runtime/runs/{id}.
       disposition: block
-    - id: internal/runtime/api.go:871:// HandleInternalRunSubmission handles POST /internal/runtime/runs.
+    - id: internal/runtime/api.go:// HandleInternalRunSubmission handles POST /internal/runtime/runs.
       disposition: block
-    - id: internal/runtime/runtime_refresh.go:17:// HandleInternalRuntimeRefresh handles POST /internal/runtime/refresh.
+    - id: internal/runtime/runtime_refresh.go:// HandleInternalRuntimeRefresh handles POST /internal/runtime/refresh.
       disposition: block
-    - id: internal/toolregistry/toolregistry.go:6:// Extracted from internal/runtime so that the actorruntime adapter and other
+    - id: internal/toolregistry/toolregistry.go:// Extracted from internal/runtime so that the actorruntime adapter and other
       disposition: block
-    - id: internal/trace/store.go:19:// Existing trace event recording in internal/runtime and internal/maild is
+    - id: internal/trace/store.go:// Existing trace event recording in internal/runtime and internal/maild is
       disposition: block
-    - id: skills/choir-cli/SKILL.md:157:- The CLI avoids importing `internal/runtime` (which needs cgo/ICU) by
+    - id: skills/choir-cli/SKILL.md:- The CLI avoids importing `internal/runtime` (which needs cgo/ICU) by
       disposition: block

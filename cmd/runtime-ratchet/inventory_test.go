@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -48,7 +49,7 @@ func TestInventoryBaselineAndRegressions(t *testing.T) {
 			mutate: func(t *testing.T, root string) {
 				writeFixture(t, root, "docs/new-contract.md", "Active dependency: internal/runtime must remain.\n")
 			},
-			diagnostic: `citers: added item "docs/new-contract.md:1:Active dependency: internal/runtime must remain."`,
+			diagnostic: `citers: added item "docs/new-contract.md:Active dependency: internal/runtime must remain."`,
 		},
 	}
 	for _, tc := range tests {
@@ -115,6 +116,32 @@ const notAnImport = "github.com/yusefmosiah/go-choir/internal/runtime"
 		t.Fatalf("production importers = %+v, string literal must not count as import", inv.ProductionImporters)
 	}
 }
+func TestInventoryUsesAuthoritativeFilesAndStableCiterIdentities(t *testing.T) {
+	t.Run("ignored generated tree is excluded", func(t *testing.T) {
+		root := fixtureRepository(t)
+		writeFixture(t, root, ".gitignore", "frontend/dist/\n")
+		initGitFixture(t, root)
+		baseline := mustScan(t, root)
+		writeFixture(t, root, "frontend/dist/assets/ghostty-web.js",
+			strings.Repeat("x", 700_000)+" // internal/runtime\n")
+		current := mustScan(t, root)
+		if err := compareInventory(baseline, current); err != nil {
+			t.Fatalf("ignored generated tree changed inventory: %v", err)
+		}
+	})
+
+	t.Run("unrelated preceding line does not change citer identity", func(t *testing.T) {
+		root := fixtureRepository(t)
+		baseline := mustScan(t, root)
+		writeFixture(t, root, "docs/evidence/history.md",
+			"Unrelated ledger entry.\nRemoved dependency: internal/runtime.\n")
+		current := mustScan(t, root)
+		if err := compareInventory(baseline, current); err != nil {
+			t.Fatalf("preceding line changed citer identity: %v", err)
+		}
+	})
+}
+
 
 func fixtureRepository(t *testing.T) string {
 	t.Helper()
@@ -124,6 +151,13 @@ func fixtureRepository(t *testing.T) string {
 	writeFixture(t, root, "internal/runtime/runtime_test.go", "package runtime\n\nfunc ExampleRuntime() {}\n")
 	writeFixture(t, root, "docs/evidence/history.md", "Removed dependency: internal/runtime.\n")
 	return root
+}
+
+func initGitFixture(t *testing.T, root string) {
+	t.Helper()
+	if output, err := exec.Command("git", "init", "--quiet", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, output)
+	}
 }
 
 func writeFixture(t *testing.T, root, rel, content string) {
