@@ -1222,6 +1222,12 @@ run_checkpoint_and_resumption_state:
       produce a canonical editorial revision. Existing per-cycle deduplication treats
       any prior reconciler run as authoritative, including a terminal failed run, so
       the same cycle cannot obtain a second run without violating the one-run contract.
+    - The same provider-pressure window blocked processor b3b8bfbe with an HTTP 429.
+      Runtime deliberately models `blocked` as non-terminal, but sourcecycled has no
+      generic continuation or rewarm path for a blocked processor. Its durable request
+      remains status=runtime_status=submitted, occupying the one allowed processor
+      admission slot while later drains report submitted=0. This is a sourcecycled/runtime
+      lifecycle contract gap, not merely provider availability.
   remaining_error_field:
     - The canonical context handoff is repaired and proven in the exact deployed prompt,
       but the first grounded run failed before iteration zero on provider availability.
@@ -1233,12 +1239,15 @@ run_checkpoint_and_resumption_state:
     - The first grounded reconciler encountered an upstream provider circuit before its
       first tool iteration. The dedupe contract has no same-run recovery semantics for
       this terminal failure, so a fresh lineage is currently required for another attempt.
-  highest_impact_remaining_uncertainty: failed reconciler same-run recovery semantics
+    - A blocked processor cannot currently release sourcecycled admission capacity or
+      be resumed by sourcecycled, so a transient provider 429 can freeze all later cycles.
+  highest_impact_remaining_uncertainty: blocked processor lifecycle ownership between sourcecycled and runtime
   next_executable_probe: >-
-    Keep the exact-SHA platform healthy and observe the next fresh story-producing
-    single-processor cycle. Require its one grounded reconciler to complete and produce
-    an inspectable canonical Texture revision before accepting the mission; if provider
-    circuit failures recur, assess retry/continuation semantics before another patch.
+    Define and test the sourcecycled projection for a runtime-blocked processor. Because
+    runtime exposes no generic source-run continuation endpoint, release admission without
+    inventing a second run for the blocked cycle, deploy, then require a later fresh
+    single-processor cycle and its one grounded reconciler to complete and produce an
+    inspectable canonical Texture revision.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
