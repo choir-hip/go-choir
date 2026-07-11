@@ -89,3 +89,29 @@ grounded in current code and staging evidence.
 [`mission-graph.yaml`](mission-graph.yaml) is a minimal discovery index. A
 Definition owns its own state. Beads and Git history are not executable mission
 authority.
+
+## Remaining Error
+
+`Deploy to Staging (Node B)` on `main` is failing because `vm-universal-wire-platform`
+has an active run (`running_runs: 1`) and the `Deploy` hot-refresh waits until the
+sandbox `/health` reports the new commit. The `sourcecycled` `blocked` fix
+(`f1ceba58`) treats a `blocked` processor run as terminal, but the stuck run is
+still `running`, so the refresh cannot complete.
+
+In addition, `.github/scripts/deploy-impact-classify` classifies `skills/*` as a
+`sandbox` runtime-package change, so agent-skill docs/scripts (e.g. the
+`agentic-consensus` runner and `SKILL.md` note) trigger `Deploy to Staging` and
+active-VM refresh. Each `main` push that touches `skills/*` therefore re-attempts
+the refresh and fails. `skills/` are agent-facing docs and scripts; they are not
+installed in the `sandbox` runtime or on Node B, so they should not select a
+sandbox host-service deploy.
+
+Evidence: runs `29154725145` (failed `Deploy` after `f2d0af69`), `29155456035`
+(cancelled `Merge` run), and `29155509641` (failed `Deploy` after `894eaf2c`);
+`Deploy` logs show `Timed out waiting for vm-universal-wire-platform` and
+`running_runs: 1` in the diagnostic ownership snapshot.
+
+The structural fix is the `choir-run-lifecycle-and-completion-authority` mission
+(`docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`),
+which will define run authority and artifact-verified completion. The immediate
+CI bypass is to stop routing `skills/*` to a sandbox host-service deploy.
