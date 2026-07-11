@@ -142,7 +142,7 @@ for path in "${changed[@]}"; do
       add_explanation "$path -> ignored (local developer service harness)"
       continue
       ;;
-    docs/*|.github/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*)
+    docs/*|.github/*|skills/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*)
       add_explanation "$path -> ignored (docs/workflow/test artifact)"
       continue
       ;;
@@ -255,7 +255,7 @@ for path in "${changed[@]}"; do
       mark_host_service
       add_explanation "$path -> host service closure (no deployed service pointer yet)"
       ;;
-    cmd/sandbox/*|internal/sandbox/*|skills/*)
+    cmd/sandbox/*|internal/sandbox/*)
       add_host_service "sandbox"
       mark_vmctl_restart
       add_explanation "$path -> sandbox runtime package + vmctl runtime-package endpoint restart"
