@@ -73,8 +73,6 @@ type Entry struct {
 }
 
 var compatibilityRE = regexp.MustCompile(`(?i)\b(deprecated|compatib(?:ility|le)|legacy|old runtime|new runtime)\b`)
-var writerVerbRE = regexp.MustCompile(`^(Create|Update|Set|Append|Record|Complete|Publish|Promote|Save|Put|Delete|Mark|Transition)`)
-var writerObjectRE = regexp.MustCompile(`(?i)(Run|Wire|Promotion|ComputerVersion|AppChangePackage|CandidatePackage)`)
 
 func scanRepository(root string) (Inventory, error) {
 	inv := Inventory{
@@ -95,11 +93,12 @@ func scanRepository(root string) (Inventory, error) {
 	if err := scanTextCiters(root, files, citerOrdinals, &inv); err != nil {
 		return Inventory{}, err
 	}
-	exportUses, err := scanTypeAwareExportUses(root, typePackages)
+	exportUses, stateWriters, err := scanTypeAwareInventory(root, typePackages)
 	if err != nil {
 		return Inventory{}, err
 	}
 	attachProductionCallers(&inv, exportUses)
+	inv.StateWriters = stateWriters
 	seedUnusedExportDebt(&inv)
 	sortInventory(&inv)
 	setCounts(&inv)
@@ -245,11 +244,6 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 		}
 		// Direct Tool literals are inventoried above. Register calls that receive
 		// constructor results are represented by the returned Tool declaration.
-		callee := sel.Sel.Name
-		if writerVerbRE.MatchString(callee) && writerObjectRE.MatchString(callee) {
-			id := rel + ":" + enclosingFunction(file, call.Pos()) + ":" + callee
-			inv.StateWriters = append(inv.StateWriters, Entry{ID: uniqueID(id, ordinals), Disposition: domainDisposition(rel)})
-		}
 		return true
 	})
 	for _, cg := range file.Comments {
@@ -306,7 +300,7 @@ func runtimeImports(file *ast.File) map[string]string {
 	}
 	return imports
 }
-func scanTypeAwareExportUses(root string, packageDirs map[string]bool) (map[string]map[string]bool, error) {
+func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[string]map[string]bool, []Entry, error) {
 	patterns := make([]string, 0, len(packageDirs))
 	for dir := range packageDirs {
 		if dir == "." {
@@ -317,6 +311,7 @@ func scanTypeAwareExportUses(root string, packageDirs map[string]bool) (map[stri
 	}
 	sort.Strings(patterns)
 	uses := map[string]map[string]bool{}
+	writers := map[string]Entry{}
 	environments := [][]string{
 		nil,
 		append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0"),
@@ -324,7 +319,7 @@ func scanTypeAwareExportUses(root string, packageDirs map[string]bool) (map[stri
 	for _, environment := range environments {
 		graph, err := listGoPackages(root, environment, patterns, false)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var selectedPatterns []string
 		for _, listedPackage := range graph {
@@ -340,7 +335,7 @@ func scanTypeAwareExportUses(root string, packageDirs map[string]bool) (map[stri
 		sort.Strings(selectedPatterns)
 		listed, err := listGoPackages(root, environment, selectedPatterns, true)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		exports := make(map[string]string, len(listed))
 		for _, listedPackage := range listed {
@@ -357,17 +352,22 @@ func scanTypeAwareExportUses(root string, packageDirs map[string]bool) (map[stri
 				continue
 			}
 			if listedPackage.Error != nil {
-				return nil, fmt.Errorf(
+				return nil, nil, fmt.Errorf(
 					"type-check production package %s: %s",
 					listedPackage.ImportPath, listedPackage.Error.Err,
 				)
 			}
-			if err := collectTypedUses(root, environment, listedPackage, exports, uses); err != nil {
-				return nil, err
+			if err := collectTypedUses(root, environment, listedPackage, exports, uses, writers); err != nil {
+				return nil, nil, err
 			}
 		}
 	}
-	return uses, nil
+	stateWriters := make([]Entry, 0, len(writers))
+	for _, writer := range writers {
+		stateWriters = append(stateWriters, writer)
+	}
+	sort.Slice(stateWriters, func(i, j int) bool { return stateWriters[i].ID < stateWriters[j].ID })
+	return uses, stateWriters, nil
 }
 
 type goListPackage struct {
@@ -429,7 +429,7 @@ func dependsOnRuntime(listed goListPackage) bool {
 	}
 	return false
 }
-func collectTypedUses(root string, environment []string, listed goListPackage, exports map[string]string, uses map[string]map[string]bool) error {
+func collectTypedUses(root string, environment []string, listed goListPackage, exports map[string]string, uses map[string]map[string]bool, writers map[string]Entry) error {
 	fset := token.NewFileSet()
 	names := append(append([]string{}, listed.GoFiles...), listed.CgoFiles...)
 	files := make([]*ast.File, 0, len(names))
@@ -495,6 +495,33 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 		}
 		uses[key][slashRel(root, position.Filename)] = true
 	}
+	if listed.ImportPath == runtimeImport || strings.HasPrefix(listed.ImportPath, runtimeImport+"/") {
+		for _, file := range files {
+			ordinals := map[string]int{}
+			ast.Inspect(file, func(node ast.Node) bool {
+				call, ok := node.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				function := calledFunction(call, typeInfo)
+				if function == nil || function.Pkg() == nil ||
+					function.Pkg().Path() != "github.com/yusefmosiah/go-choir/internal/store" {
+					return true
+				}
+				domain, mutation := writerDomain(function.Name())
+				if !mutation {
+					return true
+				}
+				position := fset.Position(call.Pos())
+				relative := slashRel(root, position.Filename)
+				base := relative + ":" + enclosingFunction(file, call.Pos()) + ":" +
+					strings.TrimPrefix(typeObjectKey(function), "github.com/yusefmosiah/go-choir/")
+				id := uniqueID(base, ordinals)
+				writers[id] = Entry{ID: id, Disposition: domain}
+				return true
+			})
+		}
+	}
 	return nil
 }
 
@@ -513,6 +540,59 @@ func typeObjectKey(object types.Object) string {
 	}
 	return object.Pkg().Path() + ".object:" + object.Name()
 }
+func calledFunction(call *ast.CallExpr, info *types.Info) *types.Func {
+	var object types.Object
+	switch function := call.Fun.(type) {
+	case *ast.Ident:
+		object = info.Uses[function]
+	case *ast.SelectorExpr:
+		object = info.Uses[function.Sel]
+	}
+	result, _ := object.(*types.Func)
+	return result
+}
+
+func writerDomain(name string) (string, bool) {
+	mutating := false
+	for _, prefix := range []string{
+		"Append", "CompareAndSwap", "Complete", "Create", "Delete", "Mark",
+		"Promote", "Publish", "Put", "Record", "Save", "Set", "Transition",
+		"Update", "Upsert",
+	} {
+		if strings.HasPrefix(name, prefix) {
+			mutating = true
+			break
+		}
+	}
+	if !mutating {
+		return "", false
+	}
+	for _, term := range []string{
+		"AppAdoption", "AppChangePackage", "ComputerSourceLineage",
+		"ComputerVersion", "Promotion",
+	} {
+		if strings.Contains(name, term) {
+			return "promotion", true
+		}
+	}
+	for _, term := range []string{
+		"Document", "Revision", "Trajectory", "Wire", "WorkItem",
+	} {
+		if strings.Contains(name, term) {
+			return "wire", true
+		}
+	}
+	for _, term := range []string{
+		"Agent", "Channel", "Checkpoint", "Event", "Lease", "Message",
+		"Mutation", "Run", "Worker",
+	} {
+		if strings.Contains(name, term) {
+			return "lifecycle", true
+		}
+	}
+	return "", false
+}
+
 
 func attachProductionCallers(inv *Inventory, uses map[string]map[string]bool) {
 	const modulePrefix = "github.com/yusefmosiah/go-choir/"

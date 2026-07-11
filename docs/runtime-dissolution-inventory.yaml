@@ -16,7 +16,7 @@ counts:
     production_importers: 4
     wrappers: 5
     compatibility_markers: 16
-    state_writers: 26
+    state_writers: 121
     citers: 147
 files:
     - id: internal/runtime/agent_tools_test.go [test]
@@ -4108,58 +4108,248 @@ compatibility_markers:
     - id: internal/runtime/universal_wire.go:1133:"platformd_route_path" key for backward compatibility with existing
       disposition: delete
 state_writers:
-    - id: internal/runtime/api_app_promotion.go:HandleAppChangePackagesRoot:PublishAppChangePackage
+    - id: internal/runtime/api.go:handleInternalRunEventAppend:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/api_app_promotion.go:HandleInternalAppChangePackagesRoot:internal/store.method:Store.UpsertAppChangePackage
       disposition: promotion
-    - id: internal/runtime/api_candidate_package_intake.go:HandleCandidatePackageIntakesRoot:CreateCandidatePackageIntake
-      disposition: candidate_package
-    - id: internal/runtime/api_candidate_package_intake.go:handleCandidatePackageIntakeAdoptionReviewCreate:CreateCandidatePackageIntakeAdoptionReview
-      disposition: candidate_package
-    - id: internal/runtime/api_candidate_package_intake.go:handleCandidatePackageIntakePublicationDraft:CreateCandidatePackageIntakePublicationDraft
-      disposition: candidate_package
-    - id: internal/runtime/candidate_package_intake.go:BindCandidatePackageIntakeAdoptionBoundary:UpdateCandidatePackageIntakeIfCurrent
-      disposition: candidate_package
-    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntake:UpdateCandidatePackageIntakeIfCurrent
-      disposition: candidate_package
-    - id: internal/runtime/run_memory.go:appendMessage:AppendRunMemoryEntry
+    - id: internal/runtime/app_promotion.go:ApproveAppAdoption:internal/store.method:Store.UpsertAppAdoption
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:CreateAppAdoption:internal/store.method:Store.UpsertAppAdoption
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:EnsureComputerSourceLineage:internal/store.method:Store.UpsertComputerSourceLineage
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:PromoteAppAdoption:internal/store.method:Store.UpsertAppAdoption
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:PromoteAppAdoption:internal/store.method:Store.UpsertAppAdoption#2
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:PromoteAppAdoption:internal/store.method:Store.UpsertComputerSourceLineage
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:PublishAppChangePackage:internal/store.method:Store.UpsertAppChangePackage
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:RollForwardAppAdoption:internal/store.method:Store.UpsertAppAdoption
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:RollForwardAppAdoption:internal/store.method:Store.UpsertComputerSourceLineage
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:RollbackAppAdoption:internal/store.method:Store.UpsertAppAdoption
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:RollbackAppAdoption:internal/store.method:Store.UpsertComputerSourceLineage
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:emitAppPromotionEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
-    - id: internal/runtime/run_memory.go:compactIfNeeded:AppendRunMemoryEntry
+    - id: internal/runtime/app_promotion.go:finishAppAdoptionVerification:internal/store.method:Store.UpsertAppAdoption
+      disposition: promotion
+    - id: internal/runtime/app_promotion.go:startAppAdoptionVerification:internal/store.method:Store.UpsertAppAdoption
+      disposition: promotion
+    - id: internal/runtime/browser.go:emitBrowserSessionEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
-    - id: internal/runtime/run_memory.go:compactRunEventLedger:AppendRunMemoryEntry
+    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertAppAdoption
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakePublicationDraft:internal/store.method:Store.UpsertAppChangePackage
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntakeAdoption:internal/store.method:Store.UpdateAppAdoptionIfCurrent
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:RollForwardCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpdateAppAdoptionIfCurrent
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:RollForwardCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertComputerSourceLineage
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:RollbackCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpdateAppAdoptionIfCurrent
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:RollbackCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertComputerSourceLineage
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpdateAppAdoptionIfCurrent
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertComputerSourceLineage
+      disposition: promotion
+    - id: internal/runtime/channel_store.go:ChannelCast:internal/store.method:Store.AppendChannelMessage
       disposition: lifecycle
-    - id: internal/runtime/run_memory.go:seedActorMemorySnapshot:AppendRunMemoryEntry
+    - id: internal/runtime/product_events.go:EmitProductEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:CancelRunTrajectory:UpdateRun
+    - id: internal/runtime/run_acceptance.go:SynthesizeRunAcceptance:internal/store.method:Store.UpsertRunAcceptance
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:StartCoagentRun:CreateRun
+    - id: internal/runtime/run_memory.go:appendMessage:internal/store.method:Store.AppendRunMemoryEntry
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:completePromptBarDecisionRun:CreateRun
+    - id: internal/runtime/run_memory.go:compactIfNeeded:internal/store.method:Store.AppendRunMemoryEntry
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:ensureConductorTextureRoute:UpdateRun
+    - id: internal/runtime/run_memory.go:compactRunEventLedger:internal/store.method:Store.AppendRunMemoryEntry
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:executeActivation:UpdateRun
+    - id: internal/runtime/run_memory.go:seedActorMemorySnapshot:internal/store.method:Store.AppendRunMemoryEntry
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:executeWithToolLoop:UpdateRun
+    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.UpdateRun
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:passivateIdleToolLoopRun:UpdateRun
+    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.UpdateTrajectoryStatus
+      disposition: wire
+    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.UpdateWorkItemStatus
+      disposition: wire
+    - id: internal/runtime/runtime.go:EnsurePersistentSuperAgent:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:passivateInterruptedActivations:UpdateRun
+    - id: internal/runtime/runtime.go:SetHealth:internal/store.method:Store.AppendEvent
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:sweepPassivatedSpawnedCoagentWork:UpdateRun
+    - id: internal/runtime/runtime.go:StartCoagentRun:internal/store.method:Store.CreateRun
       disposition: lifecycle
-    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:CreateRun
+    - id: internal/runtime/runtime.go:StartCoagentRun:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
-    - id: internal/runtime/super_controller.go:updateRunAndMarkSuccessfulCoagentActivationDelivered:UpdateRun
-      disposition: core
-    - id: internal/runtime/super_controller.go:updateRunAndMarkSuccessfulCoagentActivationDelivered:UpdateRun#2
-      disposition: core
-    - id: internal/runtime/super_controller.go:updateRunAndMarkSuccessfulCoagentActivationDelivered:UpdateRunAndMarkWorkerUpdatesDelivered
-      disposition: core
-    - id: internal/runtime/texture_controller.go:reactivatePassivatedTextureRun:UpdateRun
-      disposition: texture
-    - id: internal/runtime/tools_email.go:recordEmailDraftRequest:CreateRun
-      disposition: tools
-    - id: internal/runtime/tools_shipper.go:newPublishAppChangePackageTool:PublishAppChangePackage
-      disposition: tools
+    - id: internal/runtime/runtime.go:advanceTextureControllerCheckpoint:internal/store.method:Store.UpsertTextureControllerCheckpoint
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:completePromptBarDecisionRun:internal/store.method:Store.CreateRun
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:completePromptBarDecisionRun:internal/store.method:Store.UpsertAgent
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:createAgentMutationForRun:internal/store.method:Store.CreateAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:createSpawnedCoagentWorkItem:internal/store.method:Store.CreateWorkItem
+      disposition: wire
+    - id: internal/runtime/runtime.go:emitEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:ensureConductorTextureRoute:internal/store.method:Store.CreateDocument
+      disposition: wire
+    - id: internal/runtime/runtime.go:ensureConductorTextureRoute:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/runtime.go:ensureConductorTextureRoute:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:ensureConductorTextureRoute:internal/store.method:Store.UpsertAgent
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:executeActivation:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:executeWithToolLoop:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:handleExecutionError:internal/store.method:Store.CompleteAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:handleRunCompletion:internal/store.method:Store.CompleteAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:markTextureWorkerUpdatesDelivered:internal/store.method:Store.MarkWorkerUpdatesDelivered
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:passivateIdleToolLoopRun:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:passivateInterruptedActivations:internal/store.method:Store.MarkAgentMutationStale
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:passivateInterruptedActivations:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:persistEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:sweepPassivatedSpawnedCoagentWork:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/runtime/super_controller.go:completeSuccessfulRunWorkItems:internal/store.method:Store.UpdateWorkItemStatus
+      disposition: wire
+    - id: internal/runtime/super_controller.go:markPersistentSuperRunUpdatesDelivered:internal/store.method:Store.MarkWorkerUpdatesDelivered
+      disposition: lifecycle
+    - id: internal/runtime/super_controller.go:settlePersistentSuperNonExecutionUpdates:internal/store.method:Store.MarkWorkerUpdatesDelivered
+      disposition: lifecycle
+    - id: internal/runtime/super_controller.go:updateRunAndMarkSuccessfulCoagentActivationDelivered:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/runtime/super_controller.go:updateRunAndMarkSuccessfulCoagentActivationDelivered:internal/store.method:Store.UpdateRun#2
+      disposition: lifecycle
+    - id: internal/runtime/super_controller.go:updateRunAndMarkSuccessfulCoagentActivationDelivered:internal/store.method:Store.UpdateRunAndMarkWorkerUpdatesDelivered
+      disposition: lifecycle
+    - id: internal/runtime/texture.go:HandleTextureCreateDocument:internal/store.method:Store.CreateDocument
+      disposition: wire
+    - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateDocument
+      disposition: wire
+    - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.UpsertDocumentAlias
+      disposition: wire
+    - id: internal/runtime/texture.go:HandleTextureOpenFile:internal/store.method:Store.CreateDocument
+      disposition: wire
+    - id: internal/runtime/texture.go:HandleTextureOpenFile:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/texture.go:HandleTextureOpenFile:internal/store.method:Store.UpsertDocumentAlias
+      disposition: wire
+    - id: internal/runtime/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/texture.go:canonicalizeAliasedTextureDocumentTitle:internal/store.method:Store.UpdateDocument
+      disposition: wire
+    - id: internal/runtime/texture.go:createRebasedUserRevision:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/texture.go:handleTextureCreateRevision:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/texture.go:handleTextureDeleteDocument:internal/store.method:Store.DeleteDocument
+      disposition: wire
+    - id: internal/runtime/texture.go:handleTextureUpdateDocument:internal/store.method:Store.UpdateDocument
+      disposition: wire
+    - id: internal/runtime/texture_agent_revision.go:emitTextureAgentEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/texture_agent_revision.go:emitTextureDecisionRecordedEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/texture_agent_revision.go:emitTextureDocumentRevisionEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/texture_agent_revision.go:emitTextureDocumentRevisionEventForRun:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/texture_agent_revision.go:pendingAgentMutationByDoc:internal/store.method:Store.MarkAgentMutationStale
+      disposition: lifecycle
+    - id: internal/runtime/texture_agent_revision.go:reconcilePendingMutationFromDocumentHead:internal/store.method:Store.CompleteAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.CreateAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
+    - id: internal/runtime/texture_import.go:ensureTextureManifest:internal/store.method:Store.UpsertDocumentAlias
+      disposition: wire
+    - id: internal/runtime/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/tools_coagent.go:coagentTextureTargetDocument:internal/store.method:Store.CreateDocument
+      disposition: wire
+    - id: internal/runtime/tools_coagent.go:coagentTextureTargetDocument:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/tools_coagent.go:ensureCoagentTextureRevisionRoute:internal/store.method:Store.UpsertAgent
+      disposition: lifecycle
+    - id: internal/runtime/tools_email.go:recordEmailDraftRequest:internal/store.method:Store.CreateRun
+      disposition: lifecycle
+    - id: internal/runtime/tools_email.go:recordEmailDraftRequest:internal/store.method:Store.UpsertAgent
+      disposition: lifecycle
+    - id: internal/runtime/tools_researcher.go:emitChannelMessageEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.CreateRevisionWithSourceGraph
+      disposition: wire
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.RecordAgentMutationRevision
+      disposition: wire
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.UpsertTextureControllerCheckpoint
+      disposition: lifecycle
+    - id: internal/runtime/tools_vmctl.go:mirrorWorkerAppChangePackages:internal/store.method:Store.UpsertAppChangePackage
+      disposition: promotion
+    - id: internal/runtime/trajectory.go:stampAndMintTrajectory:internal/store.method:Store.CreateTrajectoryIfAbsent
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:autonomousPublishWireArticleToEdition:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:autonomousPublishWireArticleToEdition:internal/store.method:Store.UpdateDocument
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:beginWireProcessorDecisionWorkItem:internal/store.method:Store.CreateWorkItem
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:beginWireProcessorSourceDecisionWorkItems:internal/store.method:Store.CreateWorkItem
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:beginWirePublicationWorkItem:internal/store.method:Store.CreateWorkItem
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:beginWireStoryResolutionWorkItem:internal/store.method:Store.CreateWorkItem
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:completeWirePublicationWorkItem:internal/store.method:Store.UpdateWorkItemStatus
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:completeWireStoryResolutionWorkItem:internal/store.method:Store.UpdateWorkItemStatus
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.CreateDocument
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.CreateRevision
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.UpdateDocument
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.UpsertDocumentAlias
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:reconcileWireProcessorRequestResolution:internal/store.method:Store.UpdateTrajectoryStatus
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:reconcileWireProcessorRequestResolution:internal/store.method:Store.UpdateWorkItemDetails
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:reconcileWireProcessorRequestResolution:internal/store.method:Store.UpdateWorkItemStatus
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:recordWireProcessorDecision:internal/store.method:Store.UpdateWorkItemDetails
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:recordWireProcessorDecision:internal/store.method:Store.UpdateWorkItemStatus
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:recordWireProcessorSourceItemDecisions:internal/store.method:Store.UpdateWorkItemDetails
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:recordWireProcessorSourceItemDecisions:internal/store.method:Store.UpdateWorkItemStatus
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:recordWirePublicationTrajectoryRef:internal/store.method:Store.UpdateTrajectorySubjectRefs
+      disposition: wire
+    - id: internal/runtime/wire_publication.go:settleWirePublicationTrajectoryIfReady:internal/store.method:Store.UpdateTrajectoryStatus
+      disposition: wire
 citers:
     - id: .github/scripts/ci-impact-classify-test:assert_output runtime-change $'internal/runtime/engine.go\n' \
       disposition: block

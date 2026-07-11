@@ -116,6 +116,92 @@ const notAnImport = "github.com/yusefmosiah/go-choir/internal/runtime"
 		t.Fatalf("production importers = %+v, string literal must not count as import", inv.ProductionImporters)
 	}
 }
+func TestTypeAwareStateWriterInventory(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) CreateDocument() {}
+func (*Store) CreateRevision() {}
+func (*Store) UpdateDocument() {}
+func (*Store) CreateWorkItem() {}
+func (*Store) UpdateTrajectoryStatus() {}
+func (*Store) UpsertAppAdoption() {}
+func (*Store) UpsertComputerSourceLineage() {}
+func (*Store) UpsertAppChangePackage() {}
+func (*Store) UpdateAppAdoptionIfCurrent() {}
+`)
+	writeFixture(t, root, "internal/runtime/writers.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+
+func writeState(value *store.Store) {
+	value.CreateDocument()
+	value.CreateRevision()
+	value.UpdateDocument()
+	value.CreateWorkItem()
+	value.UpdateTrajectoryStatus()
+	value.UpsertAppAdoption()
+	value.UpsertComputerSourceLineage()
+	value.UpsertAppChangePackage()
+	value.UpdateAppAdoptionIfCurrent()
+}
+`)
+	inventory := mustScan(t, root)
+	required := map[string]string{
+		"CreateDocument": "wire",
+		"CreateRevision": "wire",
+		"UpdateDocument": "wire",
+		"CreateWorkItem": "wire",
+		"UpdateTrajectoryStatus": "wire",
+		"UpsertAppAdoption": "promotion",
+		"UpsertComputerSourceLineage": "promotion",
+		"UpsertAppChangePackage": "promotion",
+		"UpdateAppAdoptionIfCurrent": "promotion",
+	}
+	for _, writer := range inventory.StateWriters {
+		if !strings.Contains(writer.ID, "internal/store.") {
+			t.Errorf("state writer %q is not an underlying store mutation", writer.ID)
+		}
+	}
+	for name, disposition := range required {
+		found := false
+		for _, writer := range inventory.StateWriters {
+			if strings.Contains(writer.ID, "."+name) && writer.Disposition == disposition {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("state writers = %+v, missing %s disposition %s", inventory.StateWriters, name, disposition)
+		}
+	}
+}
+
+func TestNewStoreWriterRequiresBaselineDisposition(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) UpsertAppAdoption() {}
+`)
+	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+`)
+	baseline := mustScan(t, root)
+	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+func writePromotion() { stateStore.UpsertAppAdoption() }
+`)
+	err := compareInventory(baseline, mustScan(t, root))
+	assertDiagnostic(t, err, "state_writers: added item")
+	assertDiagnostic(t, err, "UpsertAppAdoption")
+}
+
 func TestInventoryUsesAuthoritativeFilesAndStableCiterIdentities(t *testing.T) {
 	t.Run("ignored generated tree is excluded", func(t *testing.T) {
 		root := fixtureRepository(t)
