@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: bdc47dfc98384d62d21941b928db1c35616e7c09
+  journal_expected_parent_sha: ad1a4213c7a83812814ddb2524d870d36ab991da
   orchestrator_lock:
     holder: Main
     epoch: 3
@@ -714,19 +714,19 @@ run_checkpoint_and_resumption_state:
     S8: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S7]}
     S9: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S8]}
   active_phase_checkpoint:
-    subgoal: B0
-    status: passed
-    deployed_sha: not_applicable_green_authority_landing
-    ci_ref: docs_only_workflow_for_008a7b88cf200119c0f762cc51cfba6be3007445
-    staging_ref: not_applicable_green_authority_landing
+    subgoal: S0
+    status: consensus_pending
+    deployed_sha: not_applicable_yellow_checker_phase
+    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29170071123
+    staging_ref: staging_reconciled_at_6e893d90d8df0655398177e839e5270547472cd7; S0_makes_no_product_behavior_claim
     product_proof_refs:
-      - 008a7b88cf200119c0f762cc51cfba6be3007445 pushed to origin/main
-      - scripts/doccheck -mode live (passed)
-      - scripts/doccheck -mode full (report-only, no errors)
-      - go test ./cmd/doccheck (passed)
-    consensus_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
+      - go test ./cmd/runtime-ratchet (passed)
+      - go run ./cmd/runtime-ratchet (passed; 150 files, 48815/55487 LOC, 1208 exports, 610 caller edges, 41 initial debt, 47 routes, 49 tools, 4 importers, 5 wrappers, 16 compatibility markers, 26 state writers, 147 citers)
+      - agent://S0RatchetVerifier final independent verification PASS
+      - CI 29170071123 required test and build gates passed; deploy job is outside S0 acceptance
+    consensus_ref: pending_docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md
     open_findings: []
-    adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
+    adjudication_ref: pending_orchestrator_adjudication
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -792,7 +792,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S0
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 3
-      status: verifying
+      status: consensus
       dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
       dispatch_ref: S0RatchetImplementer
       agent_session_ref: agent://S0RatchetImplementer
@@ -809,8 +809,8 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-debt-repair-returned-10
-      expected_parent_sha: bdc47dfc98384d62d21941b928db1c35616e7c09
+      transition_id: s0-runtime-inventory-ratchet-consensus-pending-11
+      expected_parent_sha: ad1a4213c7a83812814ddb2524d870d36ab991da
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
@@ -822,6 +822,7 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-type-repair-returned-08, recorded_at: 2026-07-11T22:02:29Z, actor: Main, expected_parent_sha: 022174f0a44335ad2332e2d64a7007fad233bd9f, precondition: type_aware_stdlib_only_caller_resolution_integrated_and_local_default_mode_passed, postcondition: S0_RAT_003_repaired_pending_independent_reverification, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-debt-gate-failed-09, recorded_at: 2026-07-11T22:05:28Z, actor: S0RatchetVerifier, expected_parent_sha: 09d5610f9ccacfc6a585be1032575fcf83792720, precondition: final_independent_reverification_including_debt_no_growth, postcondition: mutable_baseline_debt_laundering_blocker_recorded, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-debt-repair-returned-10, recorded_at: 2026-07-11T22:10:16Z, actor: Main, expected_parent_sha: bdc47dfc98384d62d21941b928db1c35616e7c09, precondition: Git_authority_debt_no_growth_repair_integrated_and_local_passed, postcondition: S0_RAT_004_repaired_pending_independent_reverification, external_operation_id: not_applicable}
+        - {status: consensus, transition_id: s0-runtime-inventory-ratchet-consensus-pending-11, recorded_at: 2026-07-11T22:22:43Z, actor: Main, expected_parent_sha: ad1a4213c7a83812814ddb2524d870d36ab991da, precondition: focused_pass_independent_verifier_pass_and_required_CI_gates_passed, postcondition: default_agentic_consensus_requested_on_exact_S0_diff_and_evidence, external_operation_id: agentic_consensus_S0_20260711_01}
       lock_expires_at: 2026-07-11T23:11:54Z
       mutation_class: yellow
       protected_surfaces: []
@@ -841,25 +842,25 @@ run_checkpoint_and_resumption_state:
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 8653ff896efa41fc7711bf100c45030d347f029d
       implementation_commit_sha: 8653ff896efa41fc7711bf100c45030d347f029d
-      push_ref: pending_push_for_debt_gate_reverification
-      ci_run_ref: not_applicable_until_integration
+      push_ref: ad1a4213c7a83812814ddb2524d870d36ab991da@origin/main
+      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29170071123
       deploy_ref: not_applicable_yellow_slice
       deployed_sha: not_applicable_yellow_slice
       acceptance_ref: artifact://181
       acceptance_contract: go_test_cmd_runtime_ratchet_and_baseline_invocation_pass_with_regression_fixtures_failing
       evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md]
-      open_findings: [S0-RAT-004_initial_unused_export_debt_can_be_laundered_by_manual_baseline_edit]
-      landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-11T22:10:16Z
-      reconciliation_result: S0_RAT_004_repaired_locally_with_Git_authority_no_growth_pending_independent_reverification
+      open_findings: []
+      landed_commit_sha: pending_consensus_adjudication
+      adjudication: consensus_pending_default_panel_review_of_008a7b88_to_ad1a4213
+      last_reconciled_at: 2026-07-11T22:22:43Z
+      reconciliation_result: focused_and_independent_verification_pass_required_CI_gates_passed_consensus_pending
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
-    path: ''
-    invocation: ''
-    baseline_ref: ''
-    last_verified_ref: ''
+    path: docs/runtime-dissolution-inventory.yaml
+    invocation: go run ./cmd/runtime-ratchet
+    baseline_ref: ad1a4213c7a83812814ddb2524d870d36ab991da
+    last_verified_ref: artifact://181; agent://S0RatchetVerifier
   current_artifact_state:
     suite_definition: authority_persisted_at_008a7b88cf200119c0f762cc51cfba6be3007445
     runtime_dissolution: not_started
