@@ -655,7 +655,10 @@ jobs:
               # reopening its store after a refresh. Keep the identity check fail-closed,
               # but allow the measured startup path to finish before declaring failure.
               for _ in $(seq 1 120); do
-                commit=$(curl -fsS --max-time 2 "${sandbox_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
+                # A bounded migration step can hold the embedded store for roughly
+                # three seconds. Give one health probe enough time to cross that
+                # contention window while keeping exact identity fail-closed.
+                commit=$(curl -fsS --max-time 5 "${sandbox_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
                 if [ "$commit" = "$expected_commit" ]; then
                   echo "    Verified ${vm_id} serves sandbox commit ${commit}"
                   return 0
