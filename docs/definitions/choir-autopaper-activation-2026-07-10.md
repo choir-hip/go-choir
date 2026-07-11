@@ -1279,6 +1279,23 @@ run_checkpoint_and_resumption_state:
       the next step reacquires the connection within milliseconds, defeating the stated
       foreground-availability boundary. The existing bounded migration is wired; its
       rescheduling primitive, not the migration batch contract, is the root cause.
+    - 774b272d repaired the post-step yield and passed CI run 29145287811. Deploy
+      receipt activation at 08:02:24Z records exact sandbox SHA 774b272d; three health
+      probes during the still-running event migration returned 200 in 0.7-1.2 seconds.
+      Sourcecycled, vmctl, and gateway remained active with NRestarts=0.
+    - Exact-SHA processor run 16214cbf opened and published canonical docs 3d175eb4
+      and 091f31b4, with processor-owned revisions 089e5d49 and f539571e. The batch
+      could not exercise the new reconciler prompt because its cycle
+      cycle_8a955d59aa5f16a0491c53b6 already owned the deterministic per-cycle
+      reconciler identity.
+    - Queue inspection found that cycle_8a955d59aa5f16a0491c53b6 had received eight
+      actual processor runs and retained twelve queued requests while fourteen newer
+      cycles still had zero actual runs. `ListQueuedProcessorRequests` is global FIFO
+      by request creation time and has no cycle-activation fairness. This both violates
+      the observed one-run-per-cycle target and starves never-activated cycles behind
+      repeated activations from one bulk cycle. No source work needs deletion: queued
+      cycles with zero runtime run ids can be ordered ahead of already-activated cycles,
+      preserving FIFO within each class.
   root_cause_clustering_assessment:
     trigger: >-
       Three sourcecycled/runtime lifecycle symptoms were observed in one mission and
@@ -1342,12 +1359,15 @@ run_checkpoint_and_resumption_state:
     - The deferred event migration uses an accumulating ticker rather than a post-step
       delay, so bounded steps can still monopolize the store and make exact-SHA health
       unobservable throughout the deploy verifier window.
-  highest_impact_remaining_uncertainty: foreground availability between bounded migration steps
+    - Global FIFO processor ordering allows one old bulk cycle to consume repeated
+      admissions while never-activated cycles wait, preventing a fair single-cycle proof.
+  highest_impact_remaining_uncertainty: cycle-fair processor admission
   next_executable_probe: >-
-    Replace the accumulating migration ticker with a real delay scheduled after each
-    incomplete step, preserving one-event batches and durable cursor/completion markers.
-    Prove health remains responsive while migration advances, then deploy 99d1fcdf plus
-    the scheduler repair and run a new single-lineage processor/reconciler acceptance.
+    Order queued processor requests from cycles with no prior runtime run ahead of
+    already-activated cycles, preserving every request and FIFO order within each class.
+    Deploy that fairness repair, then require the oldest never-activated singleton cycle
+    to produce at most one processor and its deterministic reconciler-owned Texture
+    revision while sourcecycled and the platform remain healthy.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1383,6 +1403,9 @@ run_checkpoint_and_resumption_state:
       deploy-failures/29144650218-1.json, exact-SHA platform health at 10.200.147.2,
       and guest console timestamps showing immediate event-backfill reacquisition through
       kernel-relative 293 seconds.
+    - CI run 29145287811, exact-SHA 774b272d deploy receipt, responsive migration-time
+      health probes, processor run 16214cbf, docs 3d175eb4/091f31b4, revisions
+      089e5d49/f539571e, and the processor queue/cycle cardinality query at 08:38Z.
   rollback_refs: []
 ```
 
