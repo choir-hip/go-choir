@@ -871,6 +871,37 @@ evidence_ledger:
       Documents the required connection opportunity before patching MemoryStore.
       Reconnect the existing durable Storage substrate, then reproduce and repair any
       remaining terminal-capacity transition against the production implementation.
+  - claim: The remaining staging obstruction is the unfinished legacy event
+      backfill monopolizing the platform computer's embedded Dolt store, not
+      sourcecycled admission capacity or projection batch size.
+    definition_node: single_authoritative_activation
+    evidence_class: exact-SHA deployed staging trace + guest lifecycle logs
+    source: exact-SHA c508ab94 staging window beginning 2026-07-11T01:36:13Z
+    command_or_observation: >-
+      Observe sourcecycled dispatch-state and journal together with vmctl guest
+      console logs after CI run 29134738859 and deploy job 86497123300.
+    artifact_path: internal/store/migration.go + internal/store/store.go
+    result: >-
+      The durable source ledger survived activation and reported queued_count=2,
+      recent_in_flight_count=0, and no reconcilable request. The one-time cold
+      poll still fetched 4,924 items because no durable cursor existed before this
+      release. Its first bounded 100-item projection timed out after five minutes,
+      and a later three-item projection plus processor admission encountered the
+      same store stall. Every guest trace remained in `objectgraph backfill
+      kind=events status=starting`; concurrent processor-count metadata reads were
+      canceled approximately every fifteen seconds for the entire observation.
+      The event migration performs an existence query and individual object write
+      for every legacy SQL event and receives a completion marker only after the
+      whole pass, so guest recycling restarts the expensive pass from its beginning.
+    uncertainty: >-
+      The exact legacy event cardinality and completed-prefix size still need a
+      read-only staging measurement. Existing kind-populated gating was replaced by
+      resumable per-kind completion because it could collapse a partial migration
+      into done; restoring that shortcut would violate the migration contract.
+    promotion_relevance: >-
+      Blocks product-path acceptance despite the sourcecycled repair. Repair must
+      make the event migration incrementally resumable or otherwise bound its store
+      occupancy without weakening completeness; raising submitCap cannot help.
 ```
 
 ## Active Red Mutation Ceremony
