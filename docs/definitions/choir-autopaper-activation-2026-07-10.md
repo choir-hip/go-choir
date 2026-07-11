@@ -1234,6 +1234,14 @@ run_checkpoint_and_resumption_state:
       returned HTTP 200 with exact SHA f1ceba58 shortly afterward. Because every rerun
       refreshes the guest again, rerunning cannot converge while the verifier deadline
       remains shorter than observed store-backed guest startup.
+    - The refresh also passivated processor run 73dacea4 for request
+      processor_00ccb60732afc992c47e25b8. At 06:32Z the runtime reported state=passivated,
+      passivated_reason=runtime_restarted, while its trajectory remained live with 51
+      open work items and processor resolution awaiting 50 source-item decisions.
+      Sourcecycled still projected the request as submitted/submitted and reported
+      in-flight=1, submitCap=0 through later drains. This is distinct from the repaired
+      blocked-state projection: a refreshed live trajectory has neither resumed nor
+      reached a terminal state that releases admission.
   remaining_error_field:
     - The canonical context handoff is repaired and proven in the exact deployed prompt,
       but the first grounded run failed before iteration zero on provider availability.
@@ -1249,7 +1257,10 @@ run_checkpoint_and_resumption_state:
       be resumed by sourcecycled, so a transient provider 429 can freeze all later cycles.
     - The deploy verifier's 60-second sandbox identity window is shorter than the
       repeatedly observed platform guest startup, preventing an admissible f1ceba58 receipt.
-  highest_impact_remaining_uncertainty: active-platform exact-SHA verifier startup window
+    - Runtime refresh can leave a processor passivated while its trajectory remains live;
+      sourcecycled counts that request as in flight indefinitely and has no demonstrated
+      resume or bounded terminal projection for this state.
+  highest_impact_remaining_uncertainty: passivated-live processor recovery after runtime refresh
   next_executable_probe: >-
     Extend only the active sandbox exact-SHA observation window beyond the measured
     store-backed platform startup, retain the same fail-closed identity requirement,
@@ -1278,6 +1289,8 @@ run_checkpoint_and_resumption_state:
     - CI run 29142172894 deploy attempts 1 and 2, failed jobs 86517633591 and
       86518660425, incomplete deploy evidence deploy-failures/29142172894-{1,2}.json,
       and subsequent direct exact-SHA f1ceba58 platform health.
+    - Processor run 73dacea4, request processor_00ccb60732afc992c47e25b8, and the
+      06:32Z runtime status showing passivated/live with 51 open work items.
   rollback_refs: []
 ```
 
