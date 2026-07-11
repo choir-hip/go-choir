@@ -112,9 +112,12 @@ nodes:
     kind: spine
     depends_on:
       - choir-wire-store-conformance-2026-07-11
-    enables: []
+    enables:
+      - choir-run-lifecycle-and-completion-authority-2026-07-11
     sources:
-      - docs/definitions/choir-autopaper-activation-2026-07-10.md
+      - docs/definitions/choir-wire-store-conformance-2026-07-11.md
+      - docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
+      - docs/standing-questions.md
       - docs/definitions/choir-product-completion-2026-07-10.md
       - docs/definitions/choir-seam-repair-2026-07-10.md
       - docs/choir-doctrine.md
@@ -124,3 +127,21 @@ nodes:
       - docs/runtime-invariants.md
       - docs/texture-agentic-invariants-2026-06-13.md
       - docs/source-external-data-publication.md
+  - id: choir-run-lifecycle-and-completion-authority-2026-07-11
+    title: Choir Run Lifecycle and Completion Authority
+    path: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    depends_on:
+      - choir-wire-store-conformance-2026-07-11
+      - choir-autoputer-cli-operability-2026-07-11
+    enables: []
+    sources:
+      - docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
+      - docs/definitions/choir-wire-store-conformance-2026-07-11.md
+      - docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
+      - docs/standing-questions.md
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/runtime-invariants.md

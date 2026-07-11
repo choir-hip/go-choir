@@ -31,10 +31,11 @@ showed its Real Artifact contradicted the settled D-WIRE decision. Its
 evidence ledger remains valid history; do not execute its topology sections.
 Successors:
 [`definitions/choir-wire-store-conformance-2026-07-11.md`](definitions/choir-wire-store-conformance-2026-07-11.md)
-(wire state onto the world-wire store; legacy migration deletion) and
+(wire state onto the world-wire store; legacy migration deletion),
 [`definitions/choir-autoputer-cli-operability-2026-07-11.md`](definitions/choir-autoputer-cli-operability-2026-07-11.md)
-(canonical sequence: audited computer → choir-CLI autoputer → choir-in-choir
-→ autopaper).
+(canonical sequence: audited computer → choir-CLI autoputer → choir-in-choir → autopaper), and
+[`definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`](definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md)
+(unified run status, idempotency/retry, and artifact-verified completion).
 
 [`definitions/documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md)
 is **complete**. It remains in the retained packet as the deletion receipt and
@@ -53,7 +54,11 @@ move wire state to the corpusd-served world-wire store, delete the boot-time
 legacy migration, and decouple `/api/universal-wire/stories` from VM
 lifecycle. It is Phase 0 of the autoputer sequence in
 [`definitions/choir-autoputer-cli-operability-2026-07-11.md`](definitions/choir-autoputer-cli-operability-2026-07-11.md);
-PC-5 (audited computer kernel) follows, and autopaper editorial work waits
+PC-5 (Base exact-byte kernel) and audited-computer candidate-materialization work
+are owned by [`definitions/choir-product-completion-2026-07-10.md`](definitions/choir-product-completion-2026-07-10.md)
+and [`docs/computer-ontology.md`](docs/computer-ontology.md), and
+[`definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`](definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md)
+resolves run lifecycle and completion truth (Phase 3). Autopaper editorial work waits
 for the whole sequence per the restored autoputer-before-autopaper dictum.
 
 Resume product-completion work at PC-2 (Wails token containment) and PC-3 (CLI
