@@ -280,3 +280,74 @@ Only after 1–3 (autoputer + self-development) does the Autopaper mission
 shrink to what it was always supposed to be: 4–6 plus prompts. That is the
 canonical sequence the deleted doctrine encoded, and the twelve attempts are
 the empirical cost of shortcutting it.
+
+## Addendum (2026-07-11): the mission definition contradicts a settled owner decision
+
+Follow-up investigation prompted by the operator ("I thought we fixed this —
+the platform computer no longer uses embedded Dolt but the platform Dolt
+server directly") found that the deepest incorrect cornerstone is
+**definition drift between settled decision documents**, and it subsumes
+C1, C2, C3's worst effects, and C6.
+
+### What "legacy migration" is
+
+`backfillOGFromSQL` (`internal/store/migration.go:33`) runs on every
+`store.Open` — every platform guest boot. It copies historical rows from the
+pre-objectgraph relational tables (agents, runs, events, channel messages,
+worker updates, run acceptances/continuations, browser sessions,
+trajectories, work items, Texture tables) into the object graph so OG-only
+read paths see data written before OG became read authority. The `events`
+kind is large, each step holds the store's single connection, and the
+resulting boot stall past vmctl's 3-minute deadline was the original reboot
+loop. Nine of the run's code commits serviced this migration.
+
+### The contradiction
+
+`docs/definitions/og-dolt-heresy-completion-2026-07-08.md` settles:
+
+- **D-STORES** (2026-07-10): the WORLD-WIRE STORE (platform
+  `ObjectGraphStore`, served by `corpusd`) and the VM-LOCAL EMBEDDED stores
+  are distinct persistence domains that "must never be conflated."
+- **D-WIRE** (owner, 2026-07-08): "The world-wire store moves to sql-server
+  mode now (multi-writer: proxy, runtime, and wire agents share it)." With
+  the explicit migration note: **"NO DATA MIGRATION … the universal-wire/
+  world-wire loop has never worked end-to-end and the current wire-store data
+  is junk. Stand up the sql-server store fresh; discard existing data."** And:
+  "cutover is code-only and cheap; it need not wait for Phase D."
+
+The autopaper activation definition — authored **two days after D-WIRE** —
+hard-codes the opposite topology in its Real Artifact section and forbids
+deviation: sourcecycled → vmctl sandbox proxy → guest runtime → VM-local
+**embedded** Dolt (`/internal/runtime/objectgraph/web-captures`,
+`/internal/runtime/runs`). Every attempt executing that definition therefore
+rebuilt and reinforced the pre-decision topology. The 12-hour run spent most
+of its budget making a VM carefully migrate, on every boot, over one SQL
+connection, under a kill timer, **data the owner had already ruled
+disposable** — a triple violation of D-WIRE (wrong store mode, wrong
+conflated domain, migration of junk explicitly waived).
+
+The corpusd-served Dolt sql-server primary exists and was observed healthy
+during the run (the sourcecycled durable-store repair `c508ab9` already uses
+it at `127.0.0.1:13306`). The autopaper path simply does not point at it.
+
+### Consequence for the cornerstone list
+
+Implementing D-WIRE for the wire path dissolves, rather than repairs, most of
+the list above: C1 (server store is multi-connection by config), C2 (fresh
+wire store, nothing to migrate at boot), the read-path half of C3 (stories no
+longer traverse vmctl/guest lifecycle), and C6 (editions are durable rows
+served without live-substrate fate-sharing). What remains genuinely open is
+C4 (one run-lifecycle authority) and C5 (artifact-verified completion) —
+which apply wherever the processor/reconciler runs execute — plus the
+autoputer stability work for everything that still legitimately lives in
+user VMs.
+
+### Implication for attempt 13
+
+The blocking artifact is not code; it is
+`docs/definitions/choir-autopaper-activation-2026-07-10.md` itself. Its Real
+Artifact, Source Authority Order, and Determined State sections encode the
+embedded-VM topology as settled fact and instruct agents not to deviate. Any
+future attempt must start by reconciling that definition with D-STORES/D-WIRE
+(or explicitly superseding one of them), or agent number 13 will again be
+doctrinally required to rebuild the architecture the owner already rejected.
