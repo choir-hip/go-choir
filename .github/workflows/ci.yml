@@ -651,7 +651,10 @@ jobs:
               local vm_id="$2"
               local expected_commit="$3"
               local commit=""
-              for _ in $(seq 1 60); do
+              # The persistent public-platform guest can spend more than one minute
+              # reopening its store after a refresh. Keep the identity check fail-closed,
+              # but allow the measured startup path to finish before declaring failure.
+              for _ in $(seq 1 120); do
                 commit=$(curl -fsS --max-time 2 "${sandbox_url}/health" 2>/dev/null | jq -r '.build.commit // empty' || true)
                 if [ "$commit" = "$expected_commit" ]; then
                   echo "    Verified ${vm_id} serves sandbox commit ${commit}"
