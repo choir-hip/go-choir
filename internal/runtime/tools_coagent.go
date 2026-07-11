@@ -276,10 +276,36 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 	}
 
 	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, created, sourceEntities)
+	if callerProfile == AgentProfileReconciler {
+		if existing, found, err := rt.existingReconcilerTextureHandoff(ctx, parentRec, doc.DocID); err != nil {
+			return coagentTextureRouteDecision{}, err
+		} else if found {
+			return coagentTextureRouteDecision{
+				DocID:           doc.DocID,
+				Title:           doc.Title,
+				RevisionRunID:   existing.RunID,
+				State:           existing.State,
+				CreatedDocument: false,
+			}, nil
+		}
+	}
+	provenance := map[string]any{
+		"input_origin":                   textureInputOriginForCaller(callerProfile),
+		"requested_by_run_id":            parentRec.RunID,
+		"source_network_cycle_id":        firstNonEmpty(metadataString(parentRec.Metadata, "source_network_cycle_id"), metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id")),
+		"source_network_request_id":      firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_id"), metadataString(parentRec.Metadata, "ingestion_handoff_request_id")),
+		"source_network_request_kind":    firstNonEmpty(metadataString(parentRec.Metadata, "source_network_request_kind"), metadataString(parentRec.Metadata, "ingestion_handoff_request_kind")),
+		"ingestion_handoff_cycle_id":     metadataString(parentRec.Metadata, "ingestion_handoff_cycle_id"),
+		"ingestion_handoff_request_id":   metadataString(parentRec.Metadata, "ingestion_handoff_request_id"),
+		"ingestion_handoff_request_kind": metadataString(parentRec.Metadata, "ingestion_handoff_request_kind"),
+		"reconciler_scope":               metadataString(parentRec.Metadata, runMetadataReconcilerScope),
+	}
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent:         "universal_wire_" + callerProfile + "_article_revision",
-		Prompt:         prompt,
-		SourceEntities: sourceEntities,
+		Intent:           "universal_wire_" + callerProfile + "_article_revision",
+		Prompt:           prompt,
+		SourceEntities:   sourceEntities,
+		RequestedByRunID: parentRec.RunID,
+		Provenance:       provenance,
 	}, 0)
 	if err != nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("start texture article revision: %w", err)
@@ -305,6 +331,118 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 		State:           rec.State,
 		CreatedDocument: created,
 	}, nil
+}
+
+func (rt *Runtime) existingReconcilerTextureHandoff(ctx context.Context, parentRec *types.RunRecord, docID string) (types.RunRecord, bool, error) {
+	if rt == nil || rt.store == nil || parentRec == nil {
+		return types.RunRecord{}, false, nil
+	}
+	runs, err := rt.store.ListRunsByChannel(ctx, parentRec.OwnerID, strings.TrimSpace(docID), 200)
+	if err != nil {
+		return types.RunRecord{}, false, fmt.Errorf("list existing reconciler Texture handoffs: %w", err)
+	}
+	for _, run := range runs {
+		if canonicalAgentProfile(agentProfileForRun(&run)) != AgentProfileTexture ||
+			strings.TrimSpace(run.RequestedByRunID) != strings.TrimSpace(parentRec.RunID) ||
+			metadataStringValue(run.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
+			continue
+		}
+		return run, true, nil
+	}
+	return types.RunRecord{}, false, nil
+}
+
+func (rt *Runtime) verifyRequiredTextureRevisions(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	required := metadataIntValue(rec.Metadata, "required_texture_revisions")
+	if required <= 0 {
+		return nil
+	}
+	runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
+	if err != nil {
+		return fmt.Errorf("verify required Texture revisions: list runs: %w", err)
+	}
+	written := make(map[string]struct{})
+	for _, child := range runs {
+		if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
+			canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileTexture ||
+			metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
+			continue
+		}
+		docID := strings.TrimSpace(firstNonEmpty(metadataStringValue(child.Metadata, "doc_id"), child.ChannelID))
+		if docID == "" {
+			continue
+		}
+		revisions, err := rt.store.ListRevisionsByDoc(ctx, docID, rec.OwnerID, 200)
+		if err != nil {
+			return fmt.Errorf("verify required Texture revisions for doc %s: %w", docID, err)
+		}
+		for _, revision := range revisions {
+			metadata := decodeRevisionMetadata(revision.Metadata)
+			if metadataString(metadata, "loop_id") != child.RunID ||
+				metadataString(metadata, "revision_role") != textureRevisionRoleCanonical ||
+				metadataString(metadata, "input_origin") != textureInputOriginReconcilerHandoff {
+				continue
+			}
+			written[revision.RevisionID] = struct{}{}
+		}
+	}
+	if len(written) < required {
+		return fmt.Errorf("required reconciler Texture revisions missing: wrote %d, require %d", len(written), required)
+	}
+	return nil
+}
+
+func (rt *Runtime) awaitRequiredTextureRevisions(ctx context.Context, rec *types.RunRecord, timeout time.Duration) error {
+	if rec == nil || metadataIntValue(rec.Metadata, "required_texture_revisions") <= 0 {
+		return nil
+	}
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := rt.verifyRequiredTextureRevisions(ctx, rec); err == nil {
+			return nil
+		}
+		runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
+		if err != nil {
+			return fmt.Errorf("await required Texture revisions: list runs: %w", err)
+		}
+		children := 0
+		active := false
+		for _, child := range runs {
+			if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
+				canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileTexture ||
+				metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
+				continue
+			}
+			children++
+			if child.State.Active() {
+				active = true
+			}
+		}
+		if children == 0 {
+			return fmt.Errorf("required reconciler Texture revisions missing: no reconciler-owned Texture handoff")
+		}
+		if !active {
+			return fmt.Errorf("required reconciler Texture revisions missing: all %d Texture handoff(s) terminated without the required canonical write", children)
+		}
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("required reconciler Texture revisions timed out after %s", timeout)
+		}
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func (rt *Runtime) coagentTextureTargetDocument(ctx context.Context, parentRec *types.RunRecord, req coagentTextureRouteRequest, now time.Time, sourceEntities []textureSourceEntity) (types.Document, bool, string, error) {

@@ -28,9 +28,11 @@ import (
 // creates a new canonical revision attributable to the appagent
 // (VAL-ETEXT-003).
 type textureAgentRevisionRequest struct {
-	Intent         string                `json:"intent,omitempty"`
-	Prompt         string                `json:"prompt,omitempty"`
-	SourceEntities []textureSourceEntity `json:"-"`
+	Intent           string                `json:"intent,omitempty"`
+	Prompt           string                `json:"prompt,omitempty"`
+	SourceEntities   []textureSourceEntity `json:"-"`
+	RequestedByRunID string                `json:"-"`
+	Provenance       map[string]any        `json:"-"`
 }
 
 // textureAgentRevisionResponse is the JSON response for agent revision
@@ -458,6 +460,14 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 		if val, ok := metadata[key]; ok && val != nil && val != "" {
 			runMetadata[key] = val
 		}
+	}
+	for key, val := range req.Provenance {
+		if val != nil && val != "" {
+			runMetadata[key] = val
+		}
+	}
+	if requestedByRunID := strings.TrimSpace(req.RequestedByRunID); requestedByRunID != "" {
+		runMetadata["requested_by_run_id"] = requestedByRunID
 	}
 	promoteCanonicalTextureSourcePath(runMetadata, metadata)
 	initialPromptText := metadataString(metadata, "seed_prompt") + " " + req.Prompt

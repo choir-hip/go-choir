@@ -543,18 +543,19 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	rec := &types.RunRecord{
-		RunID:        runID,
-		AgentID:      agentRec.AgentID,
-		ChannelID:    agentRec.ChannelID,
-		AgentProfile: agentRec.Profile,
-		AgentRole:    agentRec.Role,
-		OwnerID:      ownerID,
-		SandboxID:    rt.cfg.SandboxID,
-		State:        types.RunPending,
-		Prompt:       prompt,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata:     metadata,
+		RunID:            runID,
+		AgentID:          agentRec.AgentID,
+		ChannelID:        agentRec.ChannelID,
+		RequestedByRunID: strings.TrimSpace(metadataStringValue(metadata, "requested_by_run_id")),
+		AgentProfile:     agentRec.Profile,
+		AgentRole:        agentRec.Role,
+		OwnerID:          ownerID,
+		SandboxID:        rt.cfg.SandboxID,
+		State:            types.RunPending,
+		Prompt:           prompt,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		Metadata:         metadata,
 	}
 	rt.stampAndMintTrajectory(ctx, rec)
 
@@ -1749,6 +1750,10 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		} else {
 			rt.handleExecutionError(ctx, rec, err)
 		}
+		return
+	}
+	if err := rt.awaitRequiredTextureRevisions(ctx, rec, 5*time.Minute); err != nil {
+		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
 
@@ -3038,6 +3043,9 @@ func (rt *Runtime) buildAppagentRevisionMetadata(ctx context.Context, rec *types
 		}
 		if val, ok := canonicalTextureSourcePathMetadataValue(rec.Metadata); ok {
 			meta[canonicalTextureSourcePathMetadataKey] = val
+		}
+		if requestedByRunID := metadataStringValue(rec.Metadata, "requested_by_run_id"); requestedByRunID != "" {
+			meta["requested_by_run_id"] = requestedByRunID
 		}
 	}
 	promptOnlyInitialModelPrior := promptOnlyInitialModelPriorTextureRevision(rec, meta, consumedThroughSeq)
