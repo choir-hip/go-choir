@@ -222,8 +222,6 @@ func main() {
 			case <-ticker.C:
 			}
 		}
-		migrationTicker := time.NewTicker(100 * time.Millisecond)
-		defer migrationTicker.Stop()
 		for {
 			complete, err := db.BackfillObjectGraphStep(ctx)
 			if err != nil {
@@ -235,15 +233,25 @@ func main() {
 			if complete {
 				return
 			}
-			select {
-			case <-ctx.Done():
+			// Create the delay after the bounded step returns. A long-lived ticker
+			// can accumulate a tick while Dolt is busy, making this wait return
+			// immediately and starving foreground health/runtime queries again.
+			if !waitForObjectGraphBackfillDelay(ctx, time.After(100*time.Millisecond)) {
 				return
-			case <-migrationTicker.C:
 			}
 		}
 	}()
 
 	s.Start()
+}
+
+func waitForObjectGraphBackfillDelay(ctx context.Context, delay <-chan time.Time) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-delay:
+		return true
+	}
 }
 
 // storeDir extracts the directory portion of a file path.
