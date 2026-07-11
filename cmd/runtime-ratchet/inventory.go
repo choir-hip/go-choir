@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"io/fs"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/tools/go/packages"
 	"gopkg.in/yaml.v3"
 )
 
@@ -320,50 +322,180 @@ func scanTypeAwareExportUses(root string, packageDirs map[string]bool) (map[stri
 		append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0"),
 	}
 	for _, environment := range environments {
-		fset := token.NewFileSet()
-		loaded, err := packages.Load(&packages.Config{
-			Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
-				packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo |
-				packages.NeedImports | packages.NeedDeps,
-			Dir:   root,
-			Env:   environment,
-			Fset:  fset,
-			Tests: false,
-		}, patterns...)
+		graph, err := listGoPackages(root, environment, patterns, false)
 		if err != nil {
-			return nil, fmt.Errorf("load production packages for export callers: %w", err)
+			return nil, err
 		}
-		for _, loadedPackage := range loaded {
-			if len(loadedPackage.CompiledGoFiles) == 0 {
+		var selectedPatterns []string
+		for _, listedPackage := range graph {
+			if !isLocalProductionPackage(root, listedPackage) || !dependsOnRuntime(listedPackage) {
 				continue
 			}
-			if len(loadedPackage.Errors) > 0 {
+			relative, relErr := filepath.Rel(root, listedPackage.Dir)
+			if relErr != nil || !packageDirs[filepath.ToSlash(relative)] {
+				continue
+			}
+			selectedPatterns = append(selectedPatterns, "./"+filepath.ToSlash(relative))
+		}
+		sort.Strings(selectedPatterns)
+		listed, err := listGoPackages(root, environment, selectedPatterns, true)
+		if err != nil {
+			return nil, err
+		}
+		exports := make(map[string]string, len(listed))
+		for _, listedPackage := range listed {
+			if listedPackage.Export != "" {
+				exports[listedPackage.ImportPath] = listedPackage.Export
+			}
+		}
+		for _, listedPackage := range listed {
+			if !isLocalProductionPackage(root, listedPackage) || !dependsOnRuntime(listedPackage) {
+				continue
+			}
+			relative, relErr := filepath.Rel(root, listedPackage.Dir)
+			if relErr != nil || !packageDirs[filepath.ToSlash(relative)] {
+				continue
+			}
+			if listedPackage.Error != nil {
 				return nil, fmt.Errorf(
 					"type-check production package %s: %s",
-					loadedPackage.PkgPath, loadedPackage.Errors[0],
+					listedPackage.ImportPath, listedPackage.Error.Err,
 				)
 			}
-			for identifier, object := range loadedPackage.TypesInfo.Uses {
-				if object == nil || object.Pkg() == nil || !object.Exported() {
-					continue
-				}
-				importPath := object.Pkg().Path()
-				if importPath != runtimeImport && !strings.HasPrefix(importPath, runtimeImport+"/") {
-					continue
-				}
-				position := fset.Position(identifier.Pos())
-				if position.Filename == "" || strings.HasSuffix(position.Filename, "_test.go") {
-					continue
-				}
-				key := typeObjectKey(object)
-				if uses[key] == nil {
-					uses[key] = map[string]bool{}
-				}
-				uses[key][slashRel(root, position.Filename)] = true
+			if err := collectTypedUses(root, environment, listedPackage, exports, uses); err != nil {
+				return nil, err
 			}
 		}
 	}
 	return uses, nil
+}
+
+type goListPackage struct {
+	ImportPath string
+	Dir        string
+	GoFiles    []string
+	CgoFiles   []string
+	Deps       []string
+	Export     string
+	Error      *struct {
+		Err string
+	}
+}
+
+func listGoPackages(root string, environment, patterns []string, withExports bool) ([]goListPackage, error) {
+	args := []string{"list", "-e", "-deps", "-json"}
+	if withExports {
+		args = append(args, "-export")
+	}
+	args = append(args, patterns...)
+	command := exec.Command("go", args...)
+	command.Dir = root
+	command.Env = environment
+	output, err := command.Output()
+	if err != nil {
+		return nil, fmt.Errorf("list production packages: %w", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(output))
+	var listed []goListPackage
+	for {
+		var listedPackage goListPackage
+		if err := decoder.Decode(&listedPackage); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("decode go list package graph: %w", err)
+		}
+		listed = append(listed, listedPackage)
+	}
+	return listed, nil
+}
+
+func isLocalProductionPackage(root string, listed goListPackage) bool {
+	if len(listed.GoFiles)+len(listed.CgoFiles) == 0 || listed.Dir == "" {
+		return false
+	}
+	relative, err := filepath.Rel(root, listed.Dir)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func dependsOnRuntime(listed goListPackage) bool {
+	if listed.ImportPath == runtimeImport || strings.HasPrefix(listed.ImportPath, runtimeImport+"/") {
+		return true
+	}
+	for _, dependency := range listed.Deps {
+		if dependency == runtimeImport || strings.HasPrefix(dependency, runtimeImport+"/") {
+			return true
+		}
+	}
+	return false
+}
+func collectTypedUses(root string, environment []string, listed goListPackage, exports map[string]string, uses map[string]map[string]bool) error {
+	fset := token.NewFileSet()
+	names := append(append([]string{}, listed.GoFiles...), listed.CgoFiles...)
+	files := make([]*ast.File, 0, len(names))
+	for _, name := range names {
+		path := filepath.Join(listed.Dir, name)
+		file, err := parser.ParseFile(fset, path, nil, 0)
+		if err != nil {
+			return fmt.Errorf("parse production package %s: %w", listed.ImportPath, err)
+		}
+		files = append(files, file)
+	}
+	lookup := func(importPath string) (io.ReadCloser, error) {
+		exportPath, ok := exports[importPath]
+		if !ok || exportPath == "" {
+			resolve := func(candidateEnvironment []string) (string, error) {
+				command := exec.Command("go", "list", "-export", "-f={{.Export}}", importPath)
+				command.Dir = root
+				command.Env = candidateEnvironment
+				output, err := command.Output()
+				if err != nil {
+					return "", err
+				}
+				return strings.TrimSpace(string(output)), nil
+			}
+			var err error
+			exportPath, err = resolve(environment)
+			if (err != nil || exportPath == "") && environment != nil {
+				exportPath, err = resolve(nil)
+			}
+			if err != nil {
+				return nil, fmt.Errorf("resolve export data for %s: %w", importPath, err)
+			}
+			if exportPath == "" {
+				return nil, fmt.Errorf("missing export data for %s", importPath)
+			}
+			exports[importPath] = exportPath
+		}
+		return os.Open(exportPath)
+	}
+	typeInfo := &types.Info{
+		Uses:       map[*ast.Ident]types.Object{},
+		Selections: map[*ast.SelectorExpr]*types.Selection{},
+	}
+	configuration := &types.Config{
+		GoVersion: "go1.25",
+		Importer:  importer.ForCompiler(fset, "gc", lookup),
+	}
+	if _, err := configuration.Check(listed.ImportPath, fset, files, typeInfo); err != nil {
+		return fmt.Errorf("type-check production package %s: %w", listed.ImportPath, err)
+	}
+	for identifier, object := range typeInfo.Uses {
+		if object == nil || object.Pkg() == nil || !object.Exported() {
+			continue
+		}
+		importPath := object.Pkg().Path()
+		if importPath != runtimeImport && !strings.HasPrefix(importPath, runtimeImport+"/") {
+			continue
+		}
+		position := fset.Position(identifier.Pos())
+		key := typeObjectKey(object)
+		if uses[key] == nil {
+			uses[key] = map[string]bool{}
+		}
+		uses[key][slashRel(root, position.Filename)] = true
+	}
+	return nil
 }
 
 func typeObjectKey(object types.Object) string {
