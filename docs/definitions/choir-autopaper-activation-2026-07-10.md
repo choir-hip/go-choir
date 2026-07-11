@@ -1228,6 +1228,12 @@ run_checkpoint_and_resumption_state:
       remains status=runtime_status=submitted, occupying the one allowed processor
       admission slot while later drains report submitted=0. This is a sourcecycled/runtime
       lifecycle contract gap, not merely provider availability.
+    - f1ceba58 repairs that projection locally, but CI deploy attempts 1 and 2 both
+      failed their active-platform identity probe. Each attempt refreshed the platform
+      guest, waited exactly 60 one-second probes, and recorded HTTP 000; the same URL
+      returned HTTP 200 with exact SHA f1ceba58 shortly afterward. Because every rerun
+      refreshes the guest again, rerunning cannot converge while the verifier deadline
+      remains shorter than observed store-backed guest startup.
   remaining_error_field:
     - The canonical context handoff is repaired and proven in the exact deployed prompt,
       but the first grounded run failed before iteration zero on provider availability.
@@ -1241,13 +1247,15 @@ run_checkpoint_and_resumption_state:
       this terminal failure, so a fresh lineage is currently required for another attempt.
     - A blocked processor cannot currently release sourcecycled admission capacity or
       be resumed by sourcecycled, so a transient provider 429 can freeze all later cycles.
-  highest_impact_remaining_uncertainty: blocked processor lifecycle ownership between sourcecycled and runtime
+    - The deploy verifier's 60-second sandbox identity window is shorter than the
+      repeatedly observed platform guest startup, preventing an admissible f1ceba58 receipt.
+  highest_impact_remaining_uncertainty: active-platform exact-SHA verifier startup window
   next_executable_probe: >-
-    Define and test the sourcecycled projection for a runtime-blocked processor. Because
-    runtime exposes no generic source-run continuation endpoint, release admission without
-    inventing a second run for the blocked cycle, deploy, then require a later fresh
-    single-processor cycle and its one grounded reconciler to complete and produce an
-    inspectable canonical Texture revision.
+    Extend only the active sandbox exact-SHA observation window beyond the measured
+    store-backed platform startup, retain the same fail-closed identity requirement,
+    deploy f1ceba58 through that verifier, then require a later fresh single-processor
+    cycle and its one grounded reconciler to complete and produce an inspectable
+    canonical Texture revision.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1267,6 +1275,9 @@ run_checkpoint_and_resumption_state:
     - CI run 29140336567 attempt 2, successful deploy job 86514067793, exact-SHA
       deploy receipt, processor 3e871ac5, Texture runs 3078e94c/e92df686, documents
       9a50ce65/7302b267, and failed grounded reconciler e289af46.
+    - CI run 29142172894 deploy attempts 1 and 2, failed jobs 86517633591 and
+      86518660425, incomplete deploy evidence deploy-failures/29142172894-{1,2}.json,
+      and subsequent direct exact-SHA f1ceba58 platform health.
   rollback_refs: []
 ```
 
