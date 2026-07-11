@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
+  journal_expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631
   orchestrator_lock:
     holder: Main
     epoch: 3
@@ -792,12 +792,12 @@ run_checkpoint_and_resumption_state:
       subgoal: S0
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 3
-      status: dispatch_intent
+      status: dispatched
       dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
-      dispatch_ref: pending_agent_dispatch
-      agent_session_ref: pending_agent_dispatch
+      dispatch_ref: S0RatchetImplementer
+      agent_session_ref: agent://S0RatchetImplementer
       dispatch_prompt_ref: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md
-      implementer_job_ref: pending_agent_dispatch
+      implementer_job_ref: S0RatchetImplementer
       implementer_output_ref: pending_agent_dispatch
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
@@ -809,10 +809,11 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01
-      expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
+      transition_id: s0-runtime-inventory-ratchet-dispatched-02
+      expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
+        - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-11T23:11:54Z
       mutation_class: yellow
       protected_surfaces: []
@@ -842,8 +843,8 @@ run_checkpoint_and_resumption_state:
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-11T21:11:54Z
-      reconciliation_result: no_prior_matching_dispatch_found
+      last_reconciled_at: 2026-07-11T21:14:41Z
+      reconciliation_result: one_matching_live_agent_job_S0RatchetImplementer
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
