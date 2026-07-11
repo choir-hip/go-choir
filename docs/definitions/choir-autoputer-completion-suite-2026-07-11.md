@@ -685,25 +685,25 @@ evidence_ledger:
 run_checkpoint_and_resumption_state:
   status: working
   suite_authority: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
-  current_subgoal: B0
-  last_completed_subgoal: definition_gate
+  current_subgoal: S0
+  last_completed_subgoal: B0
   definition_gate:
     status: passed
     consensus_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4
+  journal_expected_parent_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   orchestrator_lock:
     holder: Main
-    epoch: 1
-    expires_at: 2026-07-11T22:58:34Z
-    expected_parent_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4
-    lock_transition_id: b0-authority-landing-01
-  suite_authority_sha: ''
+    epoch: 2
+    expires_at: 2026-07-11T23:01:01Z
+    expected_parent_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
+    lock_transition_id: b0-completion-checkpoint-02
+  suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
-    B0: {status: working, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: '', evidence_refs: [docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
-    S0: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [B0]}
+    B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
+    S0: {status: working, started_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, completed_at_sha: '', evidence_refs: [], rollback_refs: [008a7b88cf200119c0f762cc51cfba6be3007445], blockers: []}
     S1: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S0]}
     S2: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S1]}
     S3: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S2]}
@@ -714,12 +714,13 @@ run_checkpoint_and_resumption_state:
     S8: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S7]}
     S9: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S8]}
   active_phase_checkpoint:
-    subgoal: definition_gate
+    subgoal: B0
     status: passed
-    deployed_sha: not_applicable_green_definition_gate
-    ci_ref: not_applicable_green_definition_gate
-    staging_ref: not_applicable_green_definition_gate
+    deployed_sha: not_applicable_green_authority_landing
+    ci_ref: docs_only_workflow_for_008a7b88cf200119c0f762cc51cfba6be3007445
+    staging_ref: not_applicable_green_authority_landing
     product_proof_refs:
+      - 008a7b88cf200119c0f762cc51cfba6be3007445 pushed to origin/main
       - scripts/doccheck -mode live (passed)
       - scripts/doccheck -mode full (report-only, no errors)
       - go test ./cmd/doccheck (passed)
@@ -794,12 +795,13 @@ run_checkpoint_and_resumption_state:
     baseline_ref: ''
     last_verified_ref: ''
   current_artifact_state:
-    suite_definition: validated_pending_B0_authority_landing
+    suite_definition: authority_persisted_at_008a7b88cf200119c0f762cc51cfba6be3007445
     runtime_dissolution: not_started
     autoputer: not_complete
     choir_in_choir: closed
     autopaper: blocked_by_suite
-  what_shipped: []
+  what_shipped:
+    - 008a7b88cf200119c0f762cc51cfba6be3007445 grand-suite authority, registry cutover, subordinate demotions, consensus evidence, and live doccheck packet
   what_was_proven:
     - One suite entrypoint across ACTIVE, mission graph, authority manifest, README, and doccheck live packet
     - Post-repair six-reviewer consensus cleared authority, durability, S1 exception, and S4 boundary findings
@@ -819,7 +821,7 @@ run_checkpoint_and_resumption_state:
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
   highest_impact_remaining_uncertainty: Fresh S0 disposition and caller graph
-  next_executable_probe: Execute B0 authority landing by expected-parent fast-forward CAS; record suite authority SHA before S0.
+  next_executable_probe: Reconcile repository and staging, then establish the S0 runtime inventory, caller graph, citer dispositions, and executable ratchets.
   suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
     - docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md
