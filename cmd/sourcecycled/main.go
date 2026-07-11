@@ -792,7 +792,7 @@ func writeSourceServiceJSON(w http.ResponseWriter, status int, value any) {
 
 func isTerminalRuntimeState(state string) bool {
 	switch strings.ToLower(strings.TrimSpace(state)) {
-	case "completed", "failed", "cancelled":
+	case "completed", "failed", "cancelled", "blocked":
 		return true
 	default:
 		return false
@@ -869,7 +869,7 @@ func processorRunReconcileDecision(run runtimeRunStatusResponse) (verdict, runti
 		switch {
 		case projection == projectionDeferredWithoutStory:
 			verdict = "deferred"
-		case verdict == "" && (strings.EqualFold(run.State, "failed") || strings.EqualFold(run.State, "cancelled")):
+		case verdict == "" && (strings.EqualFold(run.State, "failed") || strings.EqualFold(run.State, "cancelled") || strings.EqualFold(run.State, "blocked")):
 			verdict = "dispatch_failed"
 		}
 	}

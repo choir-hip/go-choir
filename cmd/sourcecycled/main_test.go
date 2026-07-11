@@ -1351,6 +1351,40 @@ func TestIngestionRuntimeDispatcherProjectsExplicitNoStoryTerminalAndReleasesBud
 	}
 }
 
+func TestIngestionRuntimeDispatcherProjectsBlockedRunAndReleasesBudget(t *testing.T) {
+	ctx := context.Background()
+	fx := newDispatcherReconcileFixture(t, "blocked", "submitted")
+
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/runtime/runs/"):
+			writeSourceServiceJSON(w, http.StatusOK, runtimeRunStatusResponse{
+				RunID:   path.Base(r.URL.Path),
+				AgentID: "processor:blocked",
+				State:   "blocked",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{RunID: "run-blocked-queued", State: "pending"})
+		default:
+			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer runtimeServer.Close()
+
+	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
+	if result.ProcessorSubmitted != 1 || result.ProcessorSkipped != 0 {
+		t.Fatalf("unexpected dispatch result: %+v", result)
+	}
+
+	statusByID := fx.requestsByID(t, ctx)
+	if got := statusByID[fx.live.RequestID]; got.Status != "dispatch_failed" || got.RuntimeStatus != "blocked" {
+		t.Fatalf("blocked live request projection wrong: %+v", got)
+	}
+	if got := statusByID[fx.queued.RequestID]; got.Status != "submitted" || got.RuntimeStatus != "submitted" || got.RuntimeRunID != "run-blocked-queued" {
+		t.Fatalf("queued request was not admitted after blocked run: %+v", got)
+	}
+}
+
 func TestIngestionRuntimeDispatcherProjectsSettledTrajectoryWithoutWaitingForRunTree(t *testing.T) {
 	ctx := context.Background()
 	fx := newDispatcherReconcileFixture(t, "settled", "submitted")
