@@ -839,6 +839,38 @@ evidence_ledger:
       Reopens edition visibility. The existing missing-alias bootstrap is the
       intended substrate repair and must also cover a dangling alias target before
       the reconciler debounce and canonical feed can operate.
+  - claim: The retained processor slot is a symptom of the production MemoryStore
+      selection, while the durable sourcecycled Storage replacement remains unwired.
+    definition_node: single_authoritative_activation
+    evidence_class: deployed staging trace + code/history inspection
+    source: exact-SHA 2ebbb682 staging window beginning 2026-07-11T01:11:39Z
+    command_or_observation: >-
+      Deploy the read-only /internal/source-service/dispatch-state diagnostic; observe
+      sourcecycled restart, its first all-source cycle, platform runtime logs, and the
+      production store constructor; inspect commits 3a4afd47 and d5fada6a.
+    artifact_path: cmd/sourcecycled/main.go + internal/cycle/{mem_store.go,storage.go}
+    result: >-
+      Restart erased the entire queue and poll ledger, so the previously retained
+      request/run identity disappeared before it could be read. The empty MemoryStore
+      immediately re-fetched 4,974 items and attempted one monolithic objectgraph
+      projection; it timed out after five minutes while platform-runtime admission
+      queries repeatedly reported canceled objectgraph/Dolt reads. A following
+      five-item Telegram cycle queued two processors, but its first submission then
+      occupied the dispatch call's five-minute timeout behind the same store pressure.
+      Production explicitly constructs NewMemoryStore. The already-implemented
+      cycle.Storage uses the live Node B Dolt SQL server at 127.0.0.1:13306; that
+      server is healthy and the platform database is reachable, but sourcecycled no
+      longer wires it after 3a4afd47 replaced a then-failing relational dependency.
+    uncertainty: >-
+      The exact old retained request cannot survive a sourcecycled diagnostic deploy
+      because MemoryStore is process-local. Shared UpdatedAt verdict/runtime clocks
+      can still renew submitted capacity and require focused regression coverage, but
+      patching that symptom alone preserves queue loss, cursor loss, cold replay, and
+      the inability to inspect state across deployment.
+    promotion_relevance: >-
+      Documents the required connection opportunity before patching MemoryStore.
+      Reconnect the existing durable Storage substrate, then reproduce and repair any
+      remaining terminal-capacity transition against the production implementation.
 ```
 
 ## Active Red Mutation Ceremony
