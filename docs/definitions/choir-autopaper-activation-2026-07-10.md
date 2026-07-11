@@ -1011,6 +1011,9 @@ active_red_mutation:
         revision ids, but its available corpus/source search tools do not resolve those
         handles to Texture content. The deployed reconciler therefore completed without
         reviewing the two documents that triggered it.
+      - Per-cycle reconciler deduplication treats a terminal failed receipt as
+        authoritative, so a provider failure before iteration zero has no same-run
+        retry path and later same-cycle publish batches cannot recover it.
     introduced:
       - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
         SQL remains intact, so the risk is reversible but the completion claim is invalid.
@@ -1123,8 +1126,8 @@ run_checkpoint_and_resumption_state:
     - 20644c66 cycle-correlated, per-cycle-deduplicated publish reconciler activation
       with queue/timer/dispatch lifecycle markers.
     - 949342e2 structurally bounded and durably resumable legacy-event projection.
-    - 60d9b29a canonical Texture context in publish-reconciler handoffs; deployment
-      acceptance remains incomplete.
+    - 60d9b29a canonical Texture context in publish-reconciler handoffs, activated on
+      exact-SHA sandbox/gateway artifacts in CI attempt 2.
   what_was_proven:
     - The loop is platform guest readiness/recovery churn, not a host daemon restart.
     - The guest never reaches cmd/sandbox's post-store runtime-topology log or HTTP listen.
@@ -1220,17 +1223,17 @@ run_checkpoint_and_resumption_state:
       any prior reconciler run as authoritative, including a terminal failed run, so
       the same cycle cannot obtain a second run without violating the one-run contract.
   remaining_error_field:
-    - The reconciler activation prompt identifies canonical documents only by ids that
-      its tools cannot dereference, so a successful run can be editorially empty.
+    - The canonical context handoff is repaired and proven in the exact deployed prompt,
+      but the first grounded run failed before iteration zero on provider availability.
     - The bounded event migration has not yet emitted its durable completion marker;
       intermittent foreground health latency remains while batches continue.
     - Exact-SHA platform reattachment still exposes a short startup interval in which
       vmctl reports the VM active before sandbox health is ready; attempt 2 completed
       its receipt and the runtime has remained healthy afterward.
     - The first grounded reconciler encountered an upstream provider circuit before its
-      first tool iteration; a fresh lineage is required to distinguish transient provider
-      health from a durable reconciler acceptance defect.
-  highest_impact_remaining_uncertainty: grounded reconciler completion under healthy provider routing
+      first tool iteration. The dedupe contract has no same-run recovery semantics for
+      this terminal failure, so a fresh lineage is currently required for another attempt.
+  highest_impact_remaining_uncertainty: failed reconciler same-run recovery semantics
   next_executable_probe: >-
     Keep the exact-SHA platform healthy and observe the next fresh story-producing
     single-processor cycle. Require its one grounded reconciler to complete and produce
