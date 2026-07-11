@@ -100,10 +100,12 @@ C1/C2/C6, C4 and C5 remain the blocking residue on the processor path.
 5. **Naming conformance (owner directive 2026-07-11):** converge code and CI
    vocabulary on the settled doctrine terms — `universal wire` → `world wire`
    (D-WIRE's term; currently zero occurrences in code against 600+
-   `universal wire` occurrences) and `sandbox` → `autoputer` (the autoputer-cli
-   spine's term for the runtime host). Executed iteratively in Phase F with a
-   consensus check adjudicating each sweep's residue until the panel agrees
-   the rename is complete.
+   `universal wire` occurrences), `sandbox` → `autoputer` (the autoputer-cli
+   spine's term for the runtime host), plus the registered discrepancies
+   found in the 2026-07-11 audit: H019 lease-vocabulary purge, `loop.*` →
+   `run.*` event wire strings, and prompt-bar vs run-submission naming.
+   Executed iteratively in Phase F with a consensus check adjudicating each
+   sweep's residue until the panel agrees each rename is complete.
 
 ## Mission Non-Purpose
 
@@ -163,12 +165,16 @@ not to the state assumed when the post-mortem was written:
 - **Blocked-run timeout:**
   - *Default:* `RunBlocked` is auto-cancelled after a configurable timeout (e.g.,
     10 minutes) so it releases capacity and allows a retry.
-- **Running-run lease/timeout:**
-  - *Default:* a `RunRunning` run carries a lease (heartbeat or max-duration
-    bound, default 60 minutes for processor runs). A run whose lease expires is
-    transitioned to `RunFailed` by the runtime sweep and releases capacity.
-    `choir run cancel <id>` is exposed as the operator drain path and follows
-    the same capacity-release semantics.
+- **Running-run progress deadline (activation budget):**
+  - *Default:* a `RunRunning` run carries a progress deadline (heartbeat or
+    max-duration bound, default 60 minutes for processor runs). A run whose
+    deadline expires without progress is transitioned to `RunFailed` by the
+    runtime sweep and releases capacity. `choir run cancel <id>` is exposed as
+    the operator drain path and follows the same capacity-release semantics.
+  - *Vocabulary note (H019):* doctrine rejects "lease" as a control concept;
+    this decision deliberately uses the successor vocabulary (activation
+    budget / progress obligation), and implementation identifiers must not
+    introduce lease terms.
 - **Artifact predicate for the processor:**
   - *Default:* the required artifact is a published world-wire article/story
     route with ingestion lineage in the `corpusd` store. **This predicate is
@@ -181,11 +187,11 @@ not to the state assumed when the post-mortem was written:
   world-wire store (enforced from Phase D onward).
 - `RunBlocked`, `RunFailed`, and `RunCancelled` must not freeze admission
   capacity and must not permanently consume cycle idempotency.
-- A `RunRunning` run must hold a live lease; an expired lease transitions the
-  run to a terminal error state that releases capacity. No run may occupy
-  admission capacity indefinitely without observable progress.
+- A `RunRunning` run must be within its progress deadline; an expired deadline
+  transitions the run to a terminal error state that releases capacity. No run
+  may occupy admission capacity indefinitely without observable progress.
 - Admission capacity is derived from `RunRecord.State` (`RunPending` +
-  `RunRunning` with live lease), not from an in-memory or separately maintained
+  `RunRunning` within deadline), not from an in-memory or separately maintained
   counter, including on the error path (no silent fallback to the in-memory
   map).
 - Two runs with the same cycle/ingestion fingerprint cannot be concurrently
@@ -206,19 +212,20 @@ The mission is `complete` when all of the following are observed on staging:
    summary, work items, and artifact receipt) and matches the single authority.
 4. The four freeze modes (`blocked` with no continuation, `passivated` with
    live trajectory, `completed` with live trajectory, and `running` with an
-   expired lease) are reproduced as regression tests and resolve under the
+   expired progress deadline) are reproduced as regression tests and resolve under the
    single authority.
 5. Duplicate concurrent submissions for an active run are rejected with
    `409 Conflict`, while retries for failed/cancelled runs are accepted and run.
 6. The stuck run on `vm-universal-wire-platform` (documented in
-   `docs/ACTIVE.md` "Remaining Error") is drained via the Phase C cancel/lease
-   path, `running_runs` returns to 0, and the previously bypassed
+   `docs/ACTIVE.md` "Remaining Error") is drained via the Phase C
+   cancel/deadline path, `running_runs` returns to 0, and the previously bypassed
    `Deploy to Staging (Node B)` hot-refresh verifies a new commit on the next
    runtime-package push.
-7. The Phase F naming sweeps terminate with zero non-allowlisted
-   `universal wire` or Choir-host `sandbox` occurrences, a consensus panel
-   concurring the rename is complete, and staging green under the
-   `world-wire` / `autoputer` names.
+7. The Phase F naming sweeps terminate with zero non-allowlisted occurrences
+   of any registered discrepancy (`universal wire`, Choir-host `sandbox`,
+   H019 lease vocabulary, `loop.*` wire strings, prompt-bar submission
+   naming), a consensus panel concurring each rename is complete, and staging
+   green under the `world-wire` / `autoputer` names.
 
 ## Sequencing and Gates
 
@@ -298,16 +305,17 @@ docs-only landing path and must not force the full deploy workflow.
   error state, capacity release, and a successful sourcecycled retry on the
   next poll; a duplicate concurrent submission returns `409`.
 
-### Phase C — Running-run lease and operator drain (red)
+### Phase C — Running-run progress deadline and operator drain (red)
 
 - **Objective:** no run occupies capacity forever; the current stuck run is
   drained.
 - **Changes:**
-  - `internal/runtime/runtime.go`: add the run lease (Open Decisions default:
-    60-minute processor bound) and a sweep that transitions expired-lease
-    `RunRunning` runs to `RunFailed` with capacity release.
+  - `internal/runtime/runtime.go`: add the run progress deadline (Open
+    Decisions default: 60-minute processor bound) and a sweep that transitions
+    deadline-expired `RunRunning` runs to `RunFailed` with capacity release.
+    Identifiers use deadline/budget vocabulary, never lease (H019).
   - `cmd/choir`: add `choir run cancel <id>` calling the same transition.
-- **Local proof:** `go test ./internal/runtime ./cmd/choir -run 'Lease|Cancel|Sweep'`.
+- **Local proof:** `go test ./internal/runtime ./cmd/choir -run 'Deadline|Cancel|Sweep'`.
 - **QA acceptance:** drain the stuck run on `vm-universal-wire-platform` via
   `choir run cancel` (or the sweep); observe `running_runs: 0`, then push a
   runtime-package change and observe `Deploy to Staging (Node B)` hot-refresh
@@ -351,19 +359,63 @@ docs-only landing path and must not force the full deploy workflow.
 ### Phase F — Naming conformance: world-wire and autoputer (red; iterative)
 
 - **Objective:** converge the code, CI, and frontend vocabulary on the settled
-  doctrine terms. Two renames, executed as separate sweeps in this order:
+  doctrine terms. Five renames, executed as separate sweeps in this order:
   1. `universal wire` → `world wire` (all casings: `universal-wire`,
-     `universal_wire`, `UniversalWire`, `universalWire`).
+     `universal_wire`, `UniversalWire`, `universalWire`). Authority: the
+     doctrine naming note of 2026-07-07 (`docs/choir-doctrine.md`), which
+     already renamed the product and marked the code name transitional.
+     `og-dolt-heresy-completion` Phase E listed this as a candidate rename;
+     this phase executes it — record the coordination in both Definitions'
+     evidence ledgers rather than running it twice.
   2. `sandbox` → `autoputer` (all casings), scoped to the Choir runtime host
      meaning of the word only — occurrences meaning OS/browser/test
      sandboxing in general (e.g. `codex --sandbox read-only` in
      `skills/agentic-consensus`) are out of scope and belong on the residue
-     allowlist.
+     allowlist. This owner directive supersedes the earlier deferral
+     ("code/service rename deferred until capsules land",
+     `docs/current-architecture.md` retired-vocabulary note); the sweep must
+     also update that note and the `computer-ontology.md` naming rule
+     ("use sandbox only for existing service/process names") so doctrine and
+     code move together.
+  3. **Lease vocabulary purge (H019):** doctrine explicitly rejects `lease`
+     as a control concept, yet ~89 non-`release` matches survive in
+     `internal/` and `cmd/` — including the worker-VM "lease" tool prose and
+     `workerVMLeaseKey` identifiers in `internal/runtime/tools_vmctl.go`,
+     H019's own named evidence. Rename to the successor vocabulary (worker
+     handle, activation cap/budget, progress deadline, trajectory
+     obligation) using H019's detectors (`lease`, `leased`, `worker lease`,
+     `lease_seconds`) as the sweep pattern. Phase C's new code must be born
+     conformant (see the Open Decisions vocabulary note).
+  4. **Run-event wire strings:** `internal/types/task.go` names its constants
+     `EventRun*` but emits `loop.*` strings (28 occurrences of `"loop.` in
+     Go). Unify on `run.*` wire strings. These are externally observable SSE
+     event kinds — the frontend and any subscriber cut over in the same
+     sweep, with the old strings accepted as read-side aliases until the
+     cutover is staging-proven. Rename `internal/types/task.go` → `run.go`
+     while there (the file holds `RunRecord`/`RunState`; "task" is residue).
+  5. **Prompt-bar vs run submission:** `choir run status` documents itself as
+     fetching "a prompt-bar submission" and calls `/api/prompt-bar/*`
+     (~187 `prompt-bar`/`PromptBar` occurrences). Decide the canonical term —
+     default: keep `prompt-bar` for the UI input surface, but the submission
+     object and its API path become run submissions (`/api/runs/*`), with the
+     old route kept as a serving alias until cutover is staging-proven. This
+     aligns the CLI surface Phase E owns with the single run authority.
+- **Out of scope (registry; allowlist with pointers, do not execute here):**
+  - `continuation`, parent/child run control, unqualified `channel` — owned
+    by `og-dolt-heresy-completion` Phases B/C (H001–H008 deletions).
+  - Browser-as-source-gathering names (H029) — owned by the source/Web Lens
+    cleanup mission.
+  - Terminal/PTY → Super Console copy — owned by the Super Console cleanup
+    mission.
+  - "platform Dolt" → world-wire store: zero Go occurrences remain; the
+    docs-side rename is `og-dolt-heresy-completion` Phase E's.
 - **Baseline (observed 2026-07-11):** `world wire` has zero code occurrences;
   `universal wire` has ~619 non-docs matches concentrated in
   `internal/runtime`, `internal/proxy`, `internal/vmctl`; `sandbox` spans
   `cmd/sandbox`, `internal/sandbox`, ~112 referencing files, and ~77 CI
-  workflow/script references including `deploy-impact-classify` path rules.
+  workflow/script references including `deploy-impact-classify` path rules;
+  `lease` (non-`release`) has ~89 matches in `internal/`+`cmd/`; `"loop.`
+  wire strings have 28 matches; `prompt-bar`/`PromptBar` has ~187 matches.
 - **Compatibility rules (protected surfaces):**
   - The HTTP route `/api/universal-wire/*` gains `/api/world-wire/*` as the
     canonical route with the old path kept as a serving alias until the
@@ -384,10 +436,10 @@ docs-only landing path and must not force the full deploy workflow.
     pointer. Store/database names on `corpusd` follow
     `choir-wire-store-conformance` authority — coordinate, don't duplicate.
 - **Iteration protocol (repeat until complete):**
-  1. Sweep: enumerate remaining occurrences
-     (`grep -riE "universal.?wire"` / `grep -riE "\bsandbox"` over code, CI,
-     frontend, prompts, and skills), classify each as rename / alias /
-     allowlist.
+  1. Sweep: enumerate remaining occurrences of the sweep's detector patterns
+     (`universal.?wire`; `\bsandbox`; H019's lease detectors; `"loop\.`;
+     `prompt.?bar`) over code, CI, frontend, prompts, and skills; classify
+     each as rename / alias / allowlist.
   2. Apply the sweep's renames; run `go build ./...`, `go vet ./...`,
      full `go test ./...`, and the frontend build.
   3. Consensus check: run the agentic-consensus runner on the sweep diff plus
@@ -430,7 +482,7 @@ docs-only landing path and must not force the full deploy workflow.
 - Does not supersede `docs/definitions/choir-product-completion-2026-07-10.md`
   PC-5 or `docs/computer-ontology.md`.
 - Amended 2026-07-11 (post-`d8fe4336`): added Dependency Truth, the fourth
-  freeze mode (`running` with expired lease), the running-run lease/timeout
+  freeze mode (`running` with expired progress deadline), the running-run deadline
   Open Decision, per-phase Sequencing and Gates (consensus → push to main →
   QA acceptance), the phased execution plan A–E with the Phase D gate on
   `choir-wire-store-conformance`, and the autonomous execution contract. The
@@ -447,6 +499,16 @@ docs-only landing path and must not force the full deploy workflow.
   route, same-commit `deploy-impact-classify` updates for path renames, and
   VM-reprovision renames deferred to a follow-on. The renames were not
   previously required by this Definition; they are owner-directed scope.
+- Amended again 2026-07-11 (naming audit): Phase F gains three registered
+  discrepancies — the H019 lease-vocabulary purge (~89 code matches; doctrine
+  rejects lease as a control concept), `loop.*` → `run.*` event wire strings
+  (28 matches; constants already say `EventRun*`), and prompt-bar
+  vs run-submission naming (~187 matches) — plus an out-of-scope registry
+  pointing `continuation`/parent-child/`channel`, Browser (H029),
+  terminal→Super Console, and docs-side "platform Dolt" at their owning
+  missions. This Definition's own Phase C vocabulary was corrected from
+  "lease" to "progress deadline / activation budget" to conform to H019
+  before any code exists.
 
 ## Red-Class Ceremony
 
@@ -490,11 +552,12 @@ docs-only landing path and must not force the full deploy workflow.
     - five run-state projections with no shared authority;
     - at-most-once-ever dedup burning cycles on transient failures;
     - agent completion narrated without a required artifact;
-    - a `running` run with no lease freezing admission and the staging deploy
+    - a `running` run with no progress bound freezing admission and the staging deploy
       indefinitely (the fourth freeze mode; `docs/ACTIVE.md` Remaining Error).
   - `repaired`:
     - one `RunRecord.State` authority with read-only projections;
     - retry semantics that distinguish `succeeded already` from
       `failed before starting`;
-    - a run lease and operator cancel so no run occupies capacity forever;
+    - a run progress deadline and operator cancel so no run occupies capacity
+      forever;
     - terminal completion requires a fetchable artifact in the world-wire store.
