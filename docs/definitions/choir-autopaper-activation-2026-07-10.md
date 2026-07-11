@@ -1090,7 +1090,7 @@ Escalate to the human before implementing changes that:
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: reconciler grounding partial deployment 2026-07-11T04:53Z-05:08Z
+  last_checkpoint: grounded reconciler provider-circuit failure 2026-07-11T05:18Z-05:48Z
   current_artifact_state: >-
     949342e2 is deployed as the exact sandbox/gateway artifact and resumes legacy-event
     projection one legacy event per bounded invocation. The platform remained
@@ -1107,6 +1107,12 @@ run_checkpoint_and_resumption_state:
     exact SHA, but failed acceptance because universal-wire-platform remained registered
     active at an unreachable sandbox URL (10.200.143.2:8085, HTTP 000). No staging
     reconciler proof for 60d9b29a is admissible yet.
+    Deploy rerun attempt 2 subsequently produced an exact-SHA activation receipt and
+    the platform returned healthy. Fresh cycle cycle_e7e5c01f012b267c5a33673c then
+    completed exactly one processor runtime run, published two canonical Texture
+    documents, and dispatched exactly one grounded reconciler. That reconciler failed
+    before tool iteration zero because the DeepSeek gateway circuit was open, so its
+    editorial completion and canonical revision effect remain unproven.
   what_shipped:
     - 94f6c744 completion-aware resumable OG migration with deferred-open support.
     - cb694846 runtime recovery and listener publication before background migration.
@@ -1199,19 +1205,37 @@ run_checkpoint_and_resumption_state:
       10.200.143.2:8085 while direct health returned HTTP 000. The deploy recorded
       incomplete evidence at deploy-failures/29140336567-1.json; exact-SHA platform
       activation and product acceptance are therefore unproven.
+    - CI run 29140336567 attempt 2 and deploy job 86514067793 completed successfully;
+      deploy-receipt.json records sandbox and gateway active on exact SHA 60d9b29a at
+      05:18:59Z. The reattached platform runtime became healthy on the same SHA without
+      vmctl recovery or service restart.
+    - Cycle cycle_e7e5c01f012b267c5a33673c has one actual processor runtime run,
+      3e871ac5; its other two processor requests were superseded before submission.
+      The processor completed and opened canonical documents 9a50ce65 and 7302b267.
+      Their revisions 4bc409ce and cfb7d31b entered one lineage-pure debounce batch,
+      which fired with docs=2 and dispatched one reconciler e289af46.
+    - Reconciler e289af46 failed at iteration zero with `provider deepseek: circuit
+      open (upstream unhealthy)`. It did not crash or OOM, but it did not complete or
+      produce a canonical editorial revision. Existing per-cycle deduplication treats
+      any prior reconciler run as authoritative, including a terminal failed run, so
+      the same cycle cannot obtain a second run without violating the one-run contract.
   remaining_error_field:
     - The reconciler activation prompt identifies canonical documents only by ids that
       its tools cannot dereference, so a successful run can be editorially empty.
     - The bounded event migration has not yet emitted its durable completion marker;
       intermittent foreground health latency remains while batches continue.
-    - The platform VM is again in an active-but-unreachable state during exact-SHA
-      deployment acceptance, preventing a fresh grounded reconciler observation.
-  highest_impact_remaining_uncertainty: platform active-state reachability during deployment
+    - Exact-SHA platform reattachment still exposes a short startup interval in which
+      vmctl reports the VM active before sandbox health is ready; attempt 2 completed
+      its receipt and the runtime has remained healthy afterward.
+    - The first grounded reconciler encountered an upstream provider circuit before its
+      first tool iteration; a fresh lineage is required to distinguish transient provider
+      health from a durable reconciler acceptance defect.
+  highest_impact_remaining_uncertainty: grounded reconciler completion under healthy provider routing
   next_executable_probe: >-
-    Inspect the universal-wire-platform epoch and vmctl lifecycle evidence for the
-    active-but-unreachable 10.200.143.2 registration. Recover through the existing
-    lifecycle path if the registered epoch is stale, verify 60d9b29a exact-SHA health,
-    then observe a fresh cycle-correlated reconciler assess its triggering documents.
+    Keep the exact-SHA platform healthy and observe the next fresh story-producing
+    single-processor cycle. Require its one grounded reconciler to complete and produce
+    an inspectable canonical Texture revision before accepting the mission; if provider
+    circuit failures recur, assess retry/continuation semantics before another patch.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1228,6 +1252,9 @@ run_checkpoint_and_resumption_state:
       and 8a906447; Texture run 2e7feb86; reconciler run 7aba21d6; edition doc 3b9cdc8b.
     - CI run 29140336567, failed deploy job 86512939750, and incomplete deploy evidence
       deploy-failures/29140336567-1.json for 60d9b29a.
+    - CI run 29140336567 attempt 2, successful deploy job 86514067793, exact-SHA
+      deploy receipt, processor 3e871ac5, Texture runs 3078e94c/e92df686, documents
+      9a50ce65/7302b267, and failed grounded reconciler e289af46.
   rollback_refs: []
 ```
 
