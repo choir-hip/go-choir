@@ -109,6 +109,6 @@ func fatal(err error) {
 }
 
 func printCounts(c Counts) {
-	fmt.Printf("counts: go_files=%d production_files=%d test_files=%d production_loc=%d test_loc=%d exports=%d export_caller_edges=%d initial_unused_export_debt=%d routes=%d tools=%d production_importers=%d wrappers=%d compatibility_markers=%d state_writers=%d citers=%d\n",
-		c.GoFiles, c.ProductionFiles, c.TestFiles, c.ProductionLOC, c.TestLOC, c.Exports, c.ExportCallerEdges, c.InitialUnusedExportDebt, c.Routes, c.Tools, c.ProductionImporters, c.Wrappers, c.CompatibilityMarkers, c.StateWriters, c.Citers)
+	fmt.Printf("counts: go_files=%d production_files=%d test_files=%d production_loc=%d test_loc=%d exports=%d export_caller_edges=%d initial_unused_export_debt=%d routes=%d tools=%d production_importers=%d wrappers=%d compatibility_markers=%d state_writers=%d declared_store_reads=%d citers=%d\n",
+		c.GoFiles, c.ProductionFiles, c.TestFiles, c.ProductionLOC, c.TestLOC, c.Exports, c.ExportCallerEdges, c.InitialUnusedExportDebt, c.Routes, c.Tools, c.ProductionImporters, c.Wrappers, c.CompatibilityMarkers, c.StateWriters, c.DeclaredStoreReads, c.Citers)
 }

@@ -133,6 +133,7 @@ func compareInventory(want, got Inventory) error {
 		{"wrappers", want.Wrappers, got.Wrappers, false},
 		{"compatibility_markers", want.CompatibilityMarkers, got.CompatibilityMarkers, false},
 		{"state_writers", want.StateWriters, got.StateWriters, false},
+		{"declared_store_reads", want.DeclaredStoreReads, got.DeclaredStoreReads, false},
 		{"citers", want.Citers, got.Citers, true},
 	}
 	for _, category := range categories {

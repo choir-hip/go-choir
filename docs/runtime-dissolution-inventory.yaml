@@ -1,4 +1,4 @@
-schema: runtime-dissolution-inventory/v3
+schema: runtime-dissolution-inventory/v4
 canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
@@ -16,7 +16,8 @@ counts:
     production_importers: 4
     wrappers: 5
     compatibility_markers: 16
-    state_writers: 122
+    state_writers: 173
+    declared_store_reads: 287
     citers: 151
 files:
     - id: internal/runtime/agent_tools_test.go [test]
@@ -4140,11 +4141,31 @@ state_writers:
       disposition: promotion
     - id: internal/runtime/app_promotion.go:startAppAdoptionVerification:internal/store.method:Store.UpsertAppAdoption
       disposition: promotion
+    - id: internal/runtime/browser.go:HandleBrowserSessionClose:internal/store.method:Store.UpdateBrowserSession
+      disposition: lifecycle
+    - id: internal/runtime/browser.go:HandleBrowserSessionControl:internal/store.method:Store.UpdateBrowserSession
+      disposition: lifecycle
+    - id: internal/runtime/browser.go:HandleBrowserSessionControl:internal/store.method:Store.UpdateBrowserSession#2
+      disposition: lifecycle
+    - id: internal/runtime/browser.go:HandleBrowserSessionNavigate:internal/store.method:Store.UpdateBrowserSession
+      disposition: lifecycle
+    - id: internal/runtime/browser.go:HandleBrowserSessionNavigate:internal/store.method:Store.UpdateBrowserSession#2
+      disposition: lifecycle
+    - id: internal/runtime/browser.go:HandleBrowserSessionNavigate:internal/store.method:Store.UpdateBrowserSession#3
+      disposition: lifecycle
+    - id: internal/runtime/browser.go:HandleBrowserSessionsRoot:internal/store.method:Store.CreateBrowserSession
+      disposition: lifecycle
     - id: internal/runtime/browser.go:emitBrowserSessionEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
+    - id: internal/runtime/candidate_package_intake.go:BindCandidatePackageIntakeAdoptionBoundary:internal/store.method:Store.UpdateCandidatePackageIntakeIfCurrent
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntake:internal/store.method:Store.UpsertCandidatePackageIntake
+      disposition: promotion
     - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertAppAdoption
       disposition: promotion
     - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakePublicationDraft:internal/store.method:Store.UpsertAppChangePackage
+      disposition: promotion
+    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntake:internal/store.method:Store.UpdateCandidatePackageIntakeIfCurrent
       disposition: promotion
     - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntakeAdoption:internal/store.method:Store.UpdateAppAdoptionIfCurrent
       disposition: promotion
@@ -4161,6 +4182,32 @@ state_writers:
     - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertComputerSourceLineage
       disposition: promotion
     - id: internal/runtime/channel_store.go:ChannelCast:internal/store.method:Store.AppendChannelMessage
+      disposition: lifecycle
+    - id: internal/runtime/content.go:HandleContentCreate:internal/store.method:Store.CreateContentItem
+      disposition: wire
+    - id: internal/runtime/content.go:ImportFileContent:internal/store.method:Store.CreateContentItem
+      disposition: wire
+    - id: internal/runtime/content.go:ImportURLContent:internal/store.method:Store.CreateContentItem
+      disposition: wire
+    - id: internal/runtime/content.go:importYouTubeURLContent:internal/store.method:Store.CreateContentItem
+      disposition: wire
+    - id: internal/runtime/content.go:importYouTubeURLContent:internal/store.method:Store.CreateContentItem#2
+      disposition: wire
+    - id: internal/runtime/delegate_worker_update_fallback.go:dispatchDelegateWorkerUpdate:internal/store.method:Store.DispatchWorkerUpdate
+      disposition: lifecycle
+    - id: internal/runtime/delegate_worker_update_fallback.go:enqueueDelegateWorkerSuperContinuation:internal/store.method:Store.DispatchWorkerUpdate
+      disposition: lifecycle
+    - id: internal/runtime/desktop.go:HandleDesktopStateSave:internal/store.method:Store.SaveDesktopStateForSession
+      disposition: lifecycle
+    - id: internal/runtime/media_state.go:HandleMediaProgressPut:internal/store.method:Store.UpsertMediaProgress
+      disposition: lifecycle
+    - id: internal/runtime/media_state.go:HandleMediaRecentsPut:internal/store.method:Store.UpsertMediaRecent
+      disposition: lifecycle
+    - id: internal/runtime/media_state.go:HandleThemePreferencePut:internal/store.method:Store.SaveUserPreference
+      disposition: lifecycle
+    - id: internal/runtime/podcast.go:refreshPodcastSubscription:internal/store.method:Store.UpsertPodcastSubscription
+      disposition: lifecycle
+    - id: internal/runtime/podcast.go:seedPodcastSubscriptionsFromContentItems:internal/store.method:Store.UpsertPodcastSubscription
       disposition: lifecycle
     - id: internal/runtime/product_events.go:EmitProductEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
@@ -4184,12 +4231,16 @@ state_writers:
       disposition: lifecycle
     - id: internal/runtime/runtime.go:SetHealth:internal/store.method:Store.AppendEvent
       disposition: lifecycle
+    - id: internal/runtime/runtime.go:StartCoagentRun:internal/store.method:Store.ClaimCoSuperSlot
+      disposition: lifecycle
     - id: internal/runtime/runtime.go:StartCoagentRun:internal/store.method:Store.CreateRun
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:StartCoagentRun:internal/store.method:Store.ReleaseCoSuperSlotClaim
       disposition: lifecycle
     - id: internal/runtime/runtime.go:StartCoagentRun:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
     - id: internal/runtime/runtime.go:advanceTextureControllerCheckpoint:internal/store.method:Store.UpsertTextureControllerCheckpoint
-      disposition: lifecycle
+      disposition: wire
     - id: internal/runtime/runtime.go:completePromptBarDecisionRun:internal/store.method:Store.CreateRun
       disposition: lifecycle
     - id: internal/runtime/runtime.go:completePromptBarDecisionRun:internal/store.method:Store.UpsertAgent
@@ -4214,7 +4265,15 @@ state_writers:
       disposition: lifecycle
     - id: internal/runtime/runtime.go:handleExecutionError:internal/store.method:Store.CompleteAgentMutation
       disposition: lifecycle
+    - id: internal/runtime/runtime.go:handleExecutionError:internal/store.method:Store.FailAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:handleExecutionError:internal/store.method:Store.FailAgentMutation#2
+      disposition: lifecycle
     - id: internal/runtime/runtime.go:handleRunCompletion:internal/store.method:Store.CompleteAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:handleRunCompletion:internal/store.method:Store.DeferAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:handleRunCompletion:internal/store.method:Store.FailAgentMutation
       disposition: lifecycle
     - id: internal/runtime/runtime.go:markTextureWorkerUpdatesDelivered:internal/store.method:Store.MarkWorkerUpdatesDelivered
       disposition: lifecycle
@@ -4225,6 +4284,14 @@ state_writers:
     - id: internal/runtime/runtime.go:passivateInterruptedActivations:internal/store.method:Store.UpdateRun
       disposition: lifecycle
     - id: internal/runtime/runtime.go:persistEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:recordExplicitInitialTextureDecisionIfNeeded:internal/store.method:Store.CreateTextureDecision
+      disposition: wire
+    - id: internal/runtime/runtime.go:sleepTextureMutationAfterIdle:internal/store.method:Store.DeferAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:sleepTextureMutationAfterIdle:internal/store.method:Store.FailAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime.go:sleepTextureMutationAfterIdle:internal/store.method:Store.SleepAgentMutation
       disposition: lifecycle
     - id: internal/runtime/runtime.go:sweepPassivatedSpawnedCoagentWork:internal/store.method:Store.UpdateRun
       disposition: lifecycle
@@ -4242,6 +4309,8 @@ state_writers:
       disposition: lifecycle
     - id: internal/runtime/texture.go:HandleTextureCreateDocument:internal/store.method:Store.CreateDocument
       disposition: wire
+    - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateContentItem
+      disposition: wire
     - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateDocument
       disposition: wire
     - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateRevision
@@ -4256,6 +4325,8 @@ state_writers:
       disposition: wire
     - id: internal/runtime/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.CreateRevision
       disposition: wire
+    - id: internal/runtime/texture.go:cancelTextureActorForDeletedDocument:internal/store.method:Store.CancelAgentMutation
+      disposition: lifecycle
     - id: internal/runtime/texture.go:canonicalizeAliasedTextureDocumentTitle:internal/store.method:Store.UpdateDocument
       disposition: wire
     - id: internal/runtime/texture.go:createRebasedUserRevision:internal/store.method:Store.CreateRevision
@@ -4266,6 +4337,10 @@ state_writers:
       disposition: wire
     - id: internal/runtime/texture.go:handleTextureUpdateDocument:internal/store.method:Store.UpdateDocument
       disposition: wire
+    - id: internal/runtime/texture_agent_revision.go:HandleTextureCancelAgentRevision:internal/store.method:Store.CancelAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/texture_agent_revision.go:deliverOwnerRevisionToTextureActor:internal/store.method:Store.DispatchWorkerUpdate
+      disposition: lifecycle
     - id: internal/runtime/texture_agent_revision.go:emitTextureAgentEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
     - id: internal/runtime/texture_agent_revision.go:emitTextureDecisionRecordedEvent:internal/store.method:Store.AppendEvent
@@ -4280,12 +4355,22 @@ state_writers:
       disposition: lifecycle
     - id: internal/runtime/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.CreateAgentMutation
       disposition: lifecycle
+    - id: internal/runtime/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.ReactivateAgentMutation
+      disposition: lifecycle
     - id: internal/runtime/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.UpdateRun
       disposition: lifecycle
     - id: internal/runtime/texture_import.go:ensureTextureManifest:internal/store.method:Store.UpsertDocumentAlias
       disposition: wire
+    - id: internal/runtime/texture_import.go:ensureTextureOriginalContentItem:internal/store.method:Store.CreateContentItem
+      disposition: wire
     - id: internal/runtime/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.CreateRevision
       disposition: wire
+    - id: internal/runtime/texture_merge.go:HandleTextureMergePreview:internal/store.method:Store.CreateEvidence
+      disposition: lifecycle
+    - id: internal/runtime/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.CreateEvidence
+      disposition: lifecycle
+    - id: internal/runtime/texture_proposals.go:HandleInternalTextureProposalDelivery:internal/store.method:Store.DispatchWorkerUpdate
+      disposition: lifecycle
     - id: internal/runtime/tools_coagent.go:coagentTextureTargetDocument:internal/store.method:Store.CreateDocument
       disposition: wire
     - id: internal/runtime/tools_coagent.go:coagentTextureTargetDocument:internal/store.method:Store.CreateRevision
@@ -4296,16 +4381,34 @@ state_writers:
       disposition: lifecycle
     - id: internal/runtime/tools_email.go:recordEmailDraftRequest:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
+    - id: internal/runtime/tools_evidence.go:newSaveEvidenceTool:internal/store.method:Store.CreateEvidence
+      disposition: lifecycle
     - id: internal/runtime/tools_researcher.go:emitChannelMessageEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/tools_researcher.go:ensureFindingEvidence:internal/store.method:Store.CreateEvidence
       disposition: lifecycle
     - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.CreateRevisionWithSourceGraph
       disposition: wire
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.FailAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.FailAgentMutation#2
+      disposition: lifecycle
     - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.RecordAgentMutationRevision
       disposition: wire
     - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.UpsertTextureControllerCheckpoint
+      disposition: wire
+    - id: internal/runtime/tools_texture.go:newRecordTextureDecisionTool:internal/store.method:Store.CreateTextureDecision
+      disposition: wire
+    - id: internal/runtime/tools_texture.go:requestPersistentSuperExecution:internal/store.method:Store.DispatchWorkerUpdate
       disposition: lifecycle
     - id: internal/runtime/tools_vmctl.go:mirrorWorkerAppChangePackages:internal/store.method:Store.UpsertAppChangePackage
       disposition: promotion
+    - id: internal/runtime/tools_vmctl.go:mirrorWorkerSubmitUpdates:internal/store.method:Store.DispatchWorkerUpdate
+      disposition: lifecycle
+    - id: internal/runtime/tools_vmctl.go:newForkDesktopTool:internal/store.method:Store.SaveDesktopStateForDesktop
+      disposition: lifecycle
+    - id: internal/runtime/tools_worker_update.go:newUpdateCoagentTool:internal/store.method:Store.DispatchWorkerUpdate
+      disposition: lifecycle
     - id: internal/runtime/trajectory.go:stampAndMintTrajectory:internal/store.method:Store.CreateTrajectoryIfAbsent
       disposition: wire
     - id: internal/runtime/wire_platform_publish.go:persistWirePlatformPublicationRef:internal/store.method:Store.PatchRevisionMetadata
@@ -4352,6 +4455,581 @@ state_writers:
       disposition: wire
     - id: internal/runtime/wire_publication.go:settleWirePublicationTrajectoryIfReady:internal/store.method:Store.UpdateTrajectoryStatus
       disposition: wire
+declared_store_reads:
+    - id: internal/runtime/api.go:HandleChannelMessageList:internal/store.method:Store.ListChannelMessages
+      disposition: core
+    - id: internal/runtime/api.go:HandleInternalRunEvents:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/api.go:HandleInternalRunSubmission:internal/store.method:Store.ListRunsByIngestionHandoff
+      disposition: core
+    - id: internal/runtime/api.go:HandleRunAcceptanceDetail:internal/store.method:Store.GetRunAcceptance
+      disposition: core
+    - id: internal/runtime/api.go:HandleRunAcceptancesRoot:internal/store.method:Store.ListRunAcceptances
+      disposition: core
+    - id: internal/runtime/api.go:HandleRunAcceptancesRoot:internal/store.method:Store.ListRunAcceptancesByTrajectory
+      disposition: core
+    - id: internal/runtime/api.go:HandleRunList:internal/store.method:Store.ListRunsByChannel
+      disposition: core
+    - id: internal/runtime/api.go:runStatusWithTrajectory:internal/store.method:Store.FindWorkItemByFingerprint
+      disposition: core
+    - id: internal/runtime/api_app_promotion.go:HandleAppAdoptionDetail:internal/store.method:Store.GetAppAdoption
+      disposition: core
+    - id: internal/runtime/api_app_promotion.go:HandleAppAdoptionsRoot:internal/store.method:Store.ListAppAdoptions
+      disposition: core
+    - id: internal/runtime/api_app_promotion.go:HandleAppChangePackageDetail:internal/store.method:Store.GetAppChangePackageForViewer
+      disposition: core
+    - id: internal/runtime/api_app_promotion.go:HandleAppChangePackagesRoot:internal/store.method:Store.ListAppChangePackages
+      disposition: core
+    - id: internal/runtime/api_app_promotion.go:HandleInternalAppChangePackageDetail:internal/store.method:Store.GetAppChangePackageForViewer
+      disposition: core
+    - id: internal/runtime/api_app_promotion.go:appAdoptionUIPreviewRoot:internal/store.method:Store.GetAppAdoption
+      disposition: core
+    - id: internal/runtime/api_app_promotion.go:handleAppChangePackageReviewEvidence:internal/store.method:Store.GetAppChangePackageForViewer
+      disposition: core
+    - id: internal/runtime/api_app_promotion.go:handleAppChangePackageReviewEvidence:internal/store.method:Store.GetRunAcceptanceByID
+      disposition: core
+    - id: internal/runtime/api_costs.go:HandleCosts:internal/store.method:Store.ListEventsByOwner
+      disposition: core
+    - id: internal/runtime/api_trajectory.go:HandleTrajectoriesRoot:internal/store.method:Store.ListTrajectoriesByOwner
+      disposition: core
+    - id: internal/runtime/app_promotion.go:CreateAppAdoption:internal/store.method:Store.GetAppChangePackageForViewer
+      disposition: core
+    - id: internal/runtime/app_promotion.go:EnsureComputerSourceLineage:internal/store.method:Store.GetComputerSourceLineage
+      disposition: core
+    - id: internal/runtime/app_promotion.go:loadAdoptionPackageLineage:internal/store.method:Store.GetAppAdoption
+      disposition: core
+    - id: internal/runtime/app_promotion.go:loadAdoptionPackageLineage:internal/store.method:Store.GetAppChangePackageForViewer
+      disposition: core
+    - id: internal/runtime/browser.go:HandleBrowserSessionClose:internal/store.method:Store.GetBrowserSession
+      disposition: core
+    - id: internal/runtime/browser.go:HandleBrowserSessionControl:internal/store.method:Store.GetBrowserSession
+      disposition: core
+    - id: internal/runtime/browser.go:HandleBrowserSessionNavigate:internal/store.method:Store.GetBrowserSession
+      disposition: core
+    - id: internal/runtime/browser.go:HandleBrowserSessionRouter:internal/store.method:Store.GetBrowserSession
+      disposition: core
+    - id: internal/runtime/browser.go:HandleBrowserSessionsRoot:internal/store.method:Store.ListBrowserSessions
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:BindCandidatePackageIntakeAdoptionBoundary:internal/store.method:Store.GetCandidatePackageIntake
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:CandidatePackagePromotionAcceptanceEvidence:internal/store.method:Store.GetAppAdoption
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:CandidatePackagePromotionAcceptanceEvidence:internal/store.method:Store.GetComputerSourceLineage
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakePublicationDraft:internal/store.method:Store.GetAppChangePackage
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakePublicationDraft:internal/store.method:Store.GetCandidatePackageIntake
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:GetCandidatePackageIntake:internal/store.method:Store.GetCandidatePackageIntake
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:ListCandidatePackageIntakes:internal/store.method:Store.ListCandidatePackageIntakes
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntake:internal/store.method:Store.GetCandidatePackageIntake
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntakeAdoption:internal/store.method:Store.GetAppAdoption
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:RollForwardCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetAppAdoption
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:RollForwardCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetComputerSourceLineage
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:RollbackCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetAppAdoption
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:RollbackCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetComputerSourceLineage
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetAppAdoption
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetComputerSourceLineage
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:candidatePackageAdoptionReviewForPackage:internal/store.method:Store.ListAppAdoptions
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:loadCandidatePackagePublicationDraftForAdoptionReview:internal/store.method:Store.GetAppChangePackageForViewer
+      disposition: core
+    - id: internal/runtime/candidate_package_intake.go:loadCandidatePackagePublicationDraftForAdoptionReview:internal/store.method:Store.GetCandidatePackageIntake
+      disposition: core
+    - id: internal/runtime/channel_store.go:ChannelCast:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/channel_store.go:ChannelRead:internal/store.method:Store.ListChannelMessages
+      disposition: core
+    - id: internal/runtime/content.go:HandleContentItem:internal/store.method:Store.GetContentItem
+      disposition: core
+    - id: internal/runtime/content.go:HandleContentList:internal/store.method:Store.ListContentItems
+      disposition: core
+    - id: internal/runtime/content.go:findExistingFileContentItem:internal/store.method:Store.ListContentItems
+      disposition: core
+    - id: internal/runtime/content.go:findExistingURLContentItem:internal/store.method:Store.ListContentItems
+      disposition: core
+    - id: internal/runtime/delegate_worker_update_fallback.go:synthesizeDelegateWorkerUpdateCheckpoint:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/delegate_worker_update_fallback.go:synthesizeDelegateWorkerUpdateOnSuperFailure:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/delegate_worker_update_fallback.go:synthesizeSuperFailureUpdate:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/desktop.go:HandleDesktopStateGet:internal/store.method:Store.GetDesktopStateForSession
+      disposition: core
+    - id: internal/runtime/live_ws.go:HandleLiveWS:internal/store.method:Store.ListEventsByOwnerAfter
+      disposition: core
+    - id: internal/runtime/media_state.go:HandleMediaProgressGet:internal/store.method:Store.GetMediaProgress
+      disposition: core
+    - id: internal/runtime/media_state.go:HandleMediaRecentsGet:internal/store.method:Store.ListMediaRecents
+      disposition: core
+    - id: internal/runtime/media_state.go:HandleThemePreferenceGet:internal/store.method:Store.GetUserPreference
+      disposition: core
+    - id: internal/runtime/podcast.go:listPodcastSubscriptionsWithContent:internal/store.method:Store.GetContentItem
+      disposition: core
+    - id: internal/runtime/podcast.go:listPodcastSubscriptionsWithContent:internal/store.method:Store.ListPodcastSubscriptions
+      disposition: core
+    - id: internal/runtime/podcast.go:listPodcastSubscriptionsWithContent:internal/store.method:Store.ListPodcastSubscriptions#2
+      disposition: core
+    - id: internal/runtime/podcast.go:podcastLibrarySearchFallback:internal/store.method:Store.ListContentItems
+      disposition: core
+    - id: internal/runtime/podcast.go:seedPodcastSubscriptionsFromContentItems:internal/store.method:Store.ListContentItems
+      disposition: core
+    - id: internal/runtime/researcher_checkpoint_fallback.go:synthesizeResearcherUpdateIfMissing:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/run_acceptance.go:SynthesizeRunAcceptance:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/run_acceptance.go:SynthesizeRunAcceptance:internal/store.method:Store.ListEventsByTrajectory
+      disposition: core
+    - id: internal/runtime/run_acceptance.go:SynthesizeRunAcceptance:internal/store.method:Store.ListRunsByOwner
+      disposition: core
+    - id: internal/runtime/run_memory.go:compactIfNeeded:internal/store.method:Store.ListRunMemoryEntries
+      disposition: core
+    - id: internal/runtime/run_memory.go:compactRunEventLedger:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/run_memory.go:contextMessages:internal/store.method:Store.ListRunMemoryEntries
+      disposition: core
+    - id: internal/runtime/run_memory.go:initialize:internal/store.method:Store.ListRunMemoryEntries
+      disposition: core
+    - id: internal/runtime/run_memory.go:seedActorMemorySnapshot:internal/store.method:Store.LatestActorRunMemoryEntries
+      disposition: core
+    - id: internal/runtime/runtime.go:CancelAgent:internal/store.method:Store.GetLatestActiveRunByAgent
+      disposition: core
+    - id: internal/runtime/runtime.go:CancelRun:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.ListActiveRunsByTrajectoryExcluding
+      disposition: core
+    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.ListWorkItemsByTrajectory
+      disposition: core
+    - id: internal/runtime/runtime.go:GetRun:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/runtime.go:ListRunsByOwner:internal/store.method:Store.ListRunsByOwner
+      disposition: core
+    - id: internal/runtime/runtime.go:RunningCountByProfile:internal/store.method:Store.ListRunsByState
+      disposition: core
+    - id: internal/runtime/runtime.go:StartCoagentRun:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/runtime.go:activeCoSuperSlotRun:internal/store.method:Store.ActiveCoSuperSlotRun
+      disposition: core
+    - id: internal/runtime/runtime.go:activeRunByAgent:internal/store.method:Store.GetLatestActiveRunByAgent
+      disposition: core
+    - id: internal/runtime/runtime.go:advanceTextureControllerCheckpoint:internal/store.method:Store.GetTextureControllerCheckpoint
+      disposition: core
+    - id: internal/runtime/runtime.go:buildAppagentRevisionMetadata:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/runtime.go:channelHasGroundedHistory:internal/store.method:Store.ListChannelMessages
+      disposition: core
+    - id: internal/runtime/runtime.go:channelHasGroundedHistory:internal/store.method:Store.ListRunsByChannel
+      disposition: core
+    - id: internal/runtime/runtime.go:createSpawnedCoagentWorkItem:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/runtime.go:enforceCoSuperSlotBudget:internal/store.method:Store.CountActiveCoSuperSlots
+      disposition: core
+    - id: internal/runtime/runtime.go:enforceVSuperVerifierSequencing:internal/store.method:Store.CoSuperSlotRun
+      disposition: core
+    - id: internal/runtime/runtime.go:ensureConductorTextureRoute:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/runtime.go:handleExecutionError:internal/store.method:Store.GetAgentMutationByRun
+      disposition: core
+    - id: internal/runtime/runtime.go:handleRunCompletion:internal/store.method:Store.GetAgentMutationByRun
+      disposition: core
+    - id: internal/runtime/runtime.go:inheritRequesterMetadataFromWorkItem:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/runtime.go:latestActorToolLoopBudgetSpend:internal/store.method:Store.LatestActorRunMemoryEntries
+      disposition: core
+    - id: internal/runtime/runtime.go:latestActorToolLoopBudgetSpend:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/runtime.go:latestTrajectoryCoSuperAppChangePackage:internal/store.method:Store.CoSuperSlotRun
+      disposition: core
+    - id: internal/runtime/runtime.go:latestTrajectoryCoSuperAppChangePackage:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/runtime.go:markTextureWorkerUpdatesDelivered:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: core
+    - id: internal/runtime/runtime.go:maybeWakeTextureOnWorkerMessage:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/runtime.go:maybeWakeTextureOnWorkerMessage:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/runtime.go:passivateInterruptedActivations:internal/store.method:Store.ListRunsByState
+      disposition: core
+    - id: internal/runtime/runtime.go:previousTextureWorkerMetadataSeq:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/runtime.go:previousTextureWorkerMetadataSeq:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/runtime.go:processorRunOccupiesAdmission:internal/store.method:Store.FindWorkItemByFingerprint
+      disposition: core
+    - id: internal/runtime/runtime.go:reconcileAssignedWorkItemActor:internal/store.method:Store.GetAgent
+      disposition: core
+    - id: internal/runtime/runtime.go:recordExplicitInitialTextureDecisionIfNeeded:internal/store.method:Store.ListTextureDecisionsByDocument
+      disposition: core
+    - id: internal/runtime/runtime.go:sleepTextureMutationAfterIdle:internal/store.method:Store.GetAgentMutationByRun
+      disposition: core
+    - id: internal/runtime/runtime.go:sweepOpenWorkItemActors:internal/store.method:Store.ListOpenAssignedWorkItems
+      disposition: core
+    - id: internal/runtime/runtime.go:sweepPassivatedSpawnedCoagentWork:internal/store.method:Store.ListRunsByState
+      disposition: core
+    - id: internal/runtime/runtime.go:sweepPendingUpdateActors:internal/store.method:Store.ListCoagentMailboxBacklogAll
+      disposition: core
+    - id: internal/runtime/runtime.go:textureRunRequestedWorkers:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/runtime.go:textureWorkerUpdateCommitSeq:internal/store.method:Store.GetWorkerUpdate
+      disposition: core
+    - id: internal/runtime/runtime.go:workerUpdateRevisionMetadata:internal/store.method:Store.GetTextureControllerCheckpoint
+      disposition: core
+    - id: internal/runtime/runtime.go:workerUpdateRevisionMetadata:internal/store.method:Store.ListChannelMessages
+      disposition: core
+    - id: internal/runtime/super_controller.go:assignedOpenWorkItemsForAgentTrajectory:internal/store.method:Store.ListWorkItemsByTrajectory
+      disposition: core
+    - id: internal/runtime/super_controller.go:coagentParkWaiter:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: core
+    - id: internal/runtime/super_controller.go:coagentUpdateTurnInjectorWithInitialPhase:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: core
+    - id: internal/runtime/super_controller.go:listAndSettlePersistentSuperBacklog:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: core
+    - id: internal/runtime/super_controller.go:prependInitialCoagentUpdatePackets:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: core
+    - id: internal/runtime/super_controller.go:reconcilePersistentSuperActor:internal/store.method:Store.GetLatestActiveRunByAgent
+      disposition: core
+    - id: internal/runtime/super_controller.go:reconcilePersistentSuperActor:internal/store.method:Store.GetLatestActiveRunByAgent#2
+      disposition: core
+    - id: internal/runtime/super_controller.go:reconcileUpdatedCoagentActor:internal/store.method:Store.GetAgent
+      disposition: core
+    - id: internal/runtime/super_controller.go:reconcileUpdatedCoagentActor:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: core
+    - id: internal/runtime/texture.go:HandleInternalTextureDocument:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleInternalTextureRevision:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTestTextureWorkerUpdate:internal/store.method:Store.GetAgent
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTestTextureWorkerUpdate:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTestTextureWorkerUpdate:internal/store.method:Store.ListRunsByChannel
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureBlame:internal/store.method:Store.GetBlame
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListChannelMessages
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListEventsByOwner
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListEvidenceByAgent
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListRevisionsByDoc
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListRunsByChannel
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListRunsByOwner
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListRunsByOwner#2
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.ListTextureDecisionsByDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.Path
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiagnosis:internal/store.method:Store.TexturePath
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDiff:internal/store.method:Store.GetDiff
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDocumentStream:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDocumentStream:internal/store.method:Store.GetDocument#2
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureDocumentStream:internal/store.method:Store.GetDocument#3
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureEnsureManifest:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureExportDocument:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureExportDocument:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureHistory:internal/store.method:Store.GetHistory
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.GetDocumentAlias
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureListDocuments:internal/store.method:Store.ListDocumentsByOwner
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureOpenFile:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureOpenFile:internal/store.method:Store.GetDocumentAlias
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureRestoreRevision:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureRevision:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture.go:HandleTextureRevision:internal/store.method:Store.GetRevisionUnscoped
+      disposition: core
+    - id: internal/runtime/texture.go:attachTextureSourceGraphObjects:internal/store.method:Store.ListTextureSourceEntitiesForRevision
+      disposition: core
+    - id: internal/runtime/texture.go:attachTextureSourceGraphObjects:internal/store.method:Store.ListTextureSourceRefsForRevision
+      disposition: core
+    - id: internal/runtime/texture.go:canonicalizeAliasedTextureDocumentTitle:internal/store.method:Store.GetDocumentAliasSourcePath
+      disposition: core
+    - id: internal/runtime/texture.go:createRebasedUserRevision:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:createRebasedUserRevision:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture.go:createRebasedUserRevision:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/texture.go:createRebasedUserRevision:internal/store.method:Store.GetRevision#3
+      disposition: core
+    - id: internal/runtime/texture.go:handleTextureCreateRevision:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:handleTextureCreateRevision:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture.go:handleTextureCreateRevision:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/texture.go:handleTextureGetDocument:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:handleTextureListRevisions:internal/store.method:Store.ListRevisionsByDoc
+      disposition: core
+    - id: internal/runtime/texture.go:handleTextureUpdateDocument:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture.go:revisionResponsesFromRecords:internal/store.method:Store.ListTextureSourceGraphForRevisions
+      disposition: core
+    - id: internal/runtime/texture.go:textureDocumentResponse:internal/store.method:Store.CountRevisionsByDoc
+      disposition: core
+    - id: internal/runtime/texture.go:textureDocumentResponse:internal/store.method:Store.CurrentVersionNumberByDoc
+      disposition: core
+    - id: internal/runtime/texture.go:textureDocumentResponse:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:HandleTextureAgentRevision:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:HandleTextureCancelAgentRevision:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:pendingAgentMutationByDoc:internal/store.method:Store.GetPendingAgentMutationByDoc
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:recentWorkerMessages:internal/store.method:Store.ListChannelMessages
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:recentWorkerMessages:internal/store.method:Store.ListRunsByChannel
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:reconcilePendingMutationFromDocumentHead:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:reconcilePendingMutationFromDocumentHead:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.GetDiff
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:submitTextureAgentRevisionRun:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:userRevisionDiffSummaries:internal/store.method:Store.GetDiff
+      disposition: core
+    - id: internal/runtime/texture_agent_revision.go:userRevisionDiffSummaries:internal/store.method:Store.ListRevisionsByDoc
+      disposition: core
+    - id: internal/runtime/texture_controller.go:isEligibleWorkerMessage:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/texture_controller.go:latestEligibleWorkerMessage:internal/store.method:Store.ListChannelMessages
+      disposition: core
+    - id: internal/runtime/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.GetAgentMutationByRun
+      disposition: core
+    - id: internal/runtime/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.GetLatestPassivatedRunByAgent
+      disposition: core
+    - id: internal/runtime/texture_controller.go:reconcileAllTextureDocuments:internal/store.method:Store.ListAllDocuments
+      disposition: core
+    - id: internal/runtime/texture_controller.go:reconcileTextureAgentWake:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture_controller.go:reconcileTextureAgentWake:internal/store.method:Store.GetPendingAgentMutationByDoc
+      disposition: core
+    - id: internal/runtime/texture_controller.go:reconcileTextureAgentWake:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: core
+    - id: internal/runtime/texture_evidence_sources.go:evidenceSourceEntitiesAndRejectionsFromPendingUpdates:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: core
+    - id: internal/runtime/texture_evidence_sources.go:evidenceSourceEntitiesFromWorkerUpdateIDs:internal/store.method:Store.GetWorkerUpdate
+      disposition: core
+    - id: internal/runtime/texture_evidence_sources.go:sourceEntityFromWorkerUpdateRef:internal/store.method:Store.GetContentItem
+      disposition: core
+    - id: internal/runtime/texture_evidence_sources.go:sourceEntityFromWorkerUpdateRef:internal/store.method:Store.GetEvidence
+      disposition: core
+    - id: internal/runtime/texture_import.go:allocateTextureManifestPath:internal/store.method:Store.GetDocumentAlias
+      disposition: core
+    - id: internal/runtime/texture_import.go:ensureTextureManifest:internal/store.method:Store.GetDocumentAliasSourcePath
+      disposition: core
+    - id: internal/runtime/texture_import.go:ensureTextureOriginalContentItem:internal/store.method:Store.ListContentItems
+      disposition: core
+    - id: internal/runtime/texture_lineage.go:resolveMarkdownLineageVersion:internal/store.method:Store.GetContentItem
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureAcceptMerge:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureMergePreview:internal/store.method:Store.GetDiff
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureMergePreview:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureMergePreview:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.GetDiff
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/texture_merge.go:HandleTextureSemanticCompare:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.ListEventsByTrajectory
+      disposition: core
+    - id: internal/runtime/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.ListRevisionsByDoc
+      disposition: core
+    - id: internal/runtime/texture_workflow_verifier.go:VerifyTextureWorkflow:internal/store.method:Store.ListWorkerUpdatesByTrajectory
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:awaitRequiredTextureRevisions:internal/store.method:Store.ListRunsByOwner
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:coagentTextureSourceEntities:internal/store.method:Store.GetContentItem
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:coagentTextureTargetDocument:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:existingReconcilerTextureHandoff:internal/store.method:Store.ListRunsByChannel
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.CoSuperSlotByAgentAndTrajectory
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.GetLatestActiveRunByAgent
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.GetRun
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:verifyRequiredTextureRevisions:internal/store.method:Store.ListRevisionsByDoc
+      disposition: core
+    - id: internal/runtime/tools_coagent.go:verifyRequiredTextureRevisions:internal/store.method:Store.ListRunsByOwner
+      disposition: core
+    - id: internal/runtime/tools_evidence.go:newGetRunMemoryEntryTool:internal/store.method:Store.GetRunMemoryEntry
+      disposition: core
+    - id: internal/runtime/tools_evidence.go:newListEvidenceTool:internal/store.method:Store.ListEvidenceByAgent
+      disposition: core
+    - id: internal/runtime/tools_evidence.go:newReadEvidenceTool:internal/store.method:Store.GetEvidence
+      disposition: core
+    - id: internal/runtime/tools_research.go:newListContentItemSelectorsTool:internal/store.method:Store.GetContentItem
+      disposition: core
+    - id: internal/runtime/tools_research.go:newReadContentItemSelectorTool:internal/store.method:Store.GetContentItem
+      disposition: core
+    - id: internal/runtime/tools_research.go:newReadContentItemTool:internal/store.method:Store.GetContentItem
+      disposition: core
+    - id: internal/runtime/tools_research.go:newSearchWireCorpusTool:internal/store.method:Store.SearchPublishedDocuments
+      disposition: core
+    - id: internal/runtime/tools_research.go:shouldRequireResearchUpdateAfterTool:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/tools_researcher.go:ensureFindingEvidence:internal/store.method:Store.GetEvidence
+      disposition: core
+    - id: internal/runtime/tools_researcher.go:resolveCoagentFindingsTarget:internal/store.method:Store.GetAgent
+      disposition: core
+    - id: internal/runtime/tools_researcher.go:resolveCoagentFindingsTarget:internal/store.method:Store.GetAgent#2
+      disposition: core
+    - id: internal/runtime/tools_researcher.go:resolveResearcherFindingsTarget:internal/store.method:Store.GetAgent
+      disposition: core
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetAgentMutationByRun
+      disposition: core
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/tools_texture.go:commitTextureToolEdit:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/tools_texture.go:findExistingSuperExecutionRequest:internal/store.method:Store.ListChannelMessages
+      disposition: core
+    - id: internal/runtime/tools_texture.go:newRecordTextureDecisionTool:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/tools_texture.go:newRecordTextureDecisionTool:internal/store.method:Store.ListTextureDecisionsByDocument
+      disposition: core
+    - id: internal/runtime/tools_texture.go:textureToolSourceEntityGraphRecord:internal/store.object:BuildTextureSourceEntityCanonicalID
+      disposition: core
+    - id: internal/runtime/tools_texture.go:textureToolSourceEntityGraphRecord:internal/store.object:TextureSourceGraphVersionID
+      disposition: core
+    - id: internal/runtime/tools_texture.go:textureToolSourceRefGraphRecord:internal/store.object:BuildTextureSourceRefCanonicalID
+      disposition: core
+    - id: internal/runtime/tools_vmctl.go:listWorkerToolEventsForCurrentScope:internal/store.method:Store.ListEvents
+      disposition: core
+    - id: internal/runtime/tools_vmctl.go:listWorkerToolEventsForCurrentScope:internal/store.method:Store.ListEventsByTrajectory
+      disposition: core
+    - id: internal/runtime/tools_vmctl.go:newForkDesktopTool:internal/store.method:Store.GetDesktopStateForDesktop
+      disposition: core
+    - id: internal/runtime/tools_vmctl.go:preloadWorkerAppChangePackages:internal/store.method:Store.GetAppChangePackageForViewer
+      disposition: core
+    - id: internal/runtime/tools_worker_update.go:enforceCoagentUpdateAuthority:internal/store.method:Store.CoSuperSlotByAgent
+      disposition: core
+    - id: internal/runtime/tools_worker_update.go:newUpdateCoagentTool:internal/store.method:Store.GetAgent
+      disposition: core
+    - id: internal/runtime/trajectory.go:TrajectoryObligations:internal/store.method:Store.CountPendingWorkerUpdatesByTrajectory
+      disposition: core
+    - id: internal/runtime/trajectory.go:TrajectoryObligations:internal/store.method:Store.GetTrajectory
+      disposition: core
+    - id: internal/runtime/trajectory.go:TrajectoryObligations:internal/store.method:Store.ListWorkItemsByTrajectory
+      disposition: core
+    - id: internal/runtime/universal_wire.go:resolveUniversalWireTextureReadOwner:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/universal_wire.go:resolveUniversalWireTextureReadOwner:internal/store.method:Store.GetDocument#2
+      disposition: core
+    - id: internal/runtime/universal_wire.go:universalWireEditionIncludesDoc:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/universal_wire.go:universalWireEditionIncludesDoc:internal/store.method:Store.GetDocumentAlias
+      disposition: core
+    - id: internal/runtime/universal_wire.go:universalWireEditionIncludesDoc:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetDocument#2
+      disposition: core
+    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetDocumentAlias
+      disposition: core
+    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetRevision#2
+      disposition: core
+    - id: internal/runtime/wire_platform_publish.go:syncWireTextureDocumentToCorpusd:internal/store.method:Store.ListRevisionsByDoc
+      disposition: core
+    - id: internal/runtime/wire_publication.go:completeWireStoryResolutionWorkItem:internal/store.method:Store.FindWorkItemByFingerprint
+      disposition: core
+    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.GetDocumentAlias
+      disposition: core
+    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/wire_publication.go:reconcileWireProcessorRequestResolution:internal/store.method:Store.FindWorkItemByFingerprint
+      disposition: core
+    - id: internal/runtime/wire_publication.go:reconcileWireProcessorRequestResolution:internal/store.method:Store.FindWorkItemByFingerprint#2
+      disposition: core
+    - id: internal/runtime/wire_publication.go:recordWireProcessorDecision:internal/store.method:Store.FindWorkItemByFingerprint
+      disposition: core
+    - id: internal/runtime/wire_publication.go:recordWireProcessorDecision:internal/store.method:Store.FindWorkItemByFingerprint#2
+      disposition: core
+    - id: internal/runtime/wire_publication.go:recordWireProcessorSourceItemDecisions:internal/store.method:Store.FindWorkItemByFingerprint
+      disposition: core
+    - id: internal/runtime/wire_publication.go:validateWireAlreadyCoveredDecision:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/wire_publication.go:validateWireAlreadyCoveredDecision:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/wire_reconciler_debounce.go:dispatchStoryCorpusReconcilerFromPublishBatch:internal/store.method:Store.ListRunsByIngestionHandoff
+      disposition: core
+    - id: internal/runtime/wire_reconciler_debounce.go:wirePublishBatchDocumentContext:internal/store.method:Store.GetDocument
+      disposition: core
+    - id: internal/runtime/wire_reconciler_debounce.go:wirePublishBatchDocumentContext:internal/store.method:Store.GetRevision
+      disposition: core
+    - id: internal/runtime/wire_reconciler_debounce.go:wirePublishBatchDocumentContext:internal/store.method:Store.GetRevision#2
+      disposition: core
 citers:
     - id: .github/scripts/ci-impact-classify-test:assert_output runtime-change $'internal/runtime/engine.go\n' \
       disposition: block

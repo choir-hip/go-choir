@@ -127,6 +127,9 @@ func (*Store) UpdateDocument() {}
 func (*Store) CreateWorkItem() {}
 func (*Store) UpdateTrajectoryStatus() {}
 func (*Store) PatchRevisionMetadata() {}
+func (*Store) ClaimCoSuperSlot() {}
+func (*Store) ReleaseCoSuperSlotClaim() {}
+func (*Store) CancelAgentMutation() {}
 func (*Store) UpsertAppAdoption() {}
 func (*Store) UpsertComputerSourceLineage() {}
 func (*Store) UpsertAppChangePackage() {}
@@ -143,6 +146,9 @@ func writeState(value *store.Store) {
 	value.CreateWorkItem()
 	value.UpdateTrajectoryStatus()
 	value.PatchRevisionMetadata()
+	value.ClaimCoSuperSlot()
+	value.ReleaseCoSuperSlotClaim()
+	value.CancelAgentMutation()
 	value.UpsertAppAdoption()
 	value.UpsertComputerSourceLineage()
 	value.UpsertAppChangePackage()
@@ -157,6 +163,9 @@ func writeState(value *store.Store) {
 		"CreateWorkItem": "wire",
 		"UpdateTrajectoryStatus": "wire",
 		"PatchRevisionMetadata": "wire",
+		"ClaimCoSuperSlot": "lifecycle",
+		"ReleaseCoSuperSlotClaim": "lifecycle",
+		"CancelAgentMutation": "lifecycle",
 		"UpsertAppAdoption": "promotion",
 		"UpsertComputerSourceLineage": "promotion",
 		"UpsertAppChangePackage": "promotion",
@@ -227,6 +236,23 @@ func patchWire() { stateStore.PatchRevisionMetadata() }
 	assertDiagnostic(t, err, "state_writers: added item")
 	assertDiagnostic(t, err, "PatchRevisionMetadata")
 }
+func TestUnknownStoreMethodFailsClosed(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) TransmogrifyState() {}
+`)
+	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+func mutateUnknown() { stateStore.TransmogrifyState() }
+`)
+	_, err := scanRepository(root)
+	assertDiagnostic(t, err, "unclassified internal/store.Store method TransmogrifyState")
+}
+
 
 
 func TestInventoryUsesAuthoritativeFilesAndStableCiterIdentities(t *testing.T) {
