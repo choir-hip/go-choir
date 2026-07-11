@@ -3,8 +3,11 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestWirePublishDebouncerFiresOnCountThreshold(t *testing.T) {
@@ -121,6 +124,88 @@ func TestDispatchStoryCorpusReconcilerCarriesSingleCycleLineage(t *testing.T) {
 		return
 	}
 	t.Fatal("reconciler run not found")
+}
+
+func TestWirePublishBatchDocumentContextIncludesCanonicalRevision(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := universalWirePlatformOwnerID()
+	doc := types.Document{
+		DocID:     "doc-context",
+		OwnerID:   ownerID,
+		Title:     "A canonical wire story",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	rev := types.Revision{
+		RevisionID:  "rev-context",
+		DocID:       doc.DocID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "acceptance",
+		Content:     "# A canonical wire story\n\nThe reviewed claim is grounded here.",
+		CreatedAt:   now,
+	}
+	if err := handler.rt.Store().CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := handler.rt.Store().CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("create revision: %v", err)
+	}
+
+	prompt := handler.rt.wirePublishBatchDocumentContext(ctx, ownerID, wirePublishBatch{
+		DocIDs:      []string{doc.DocID},
+		RevisionIDs: []string{rev.RevisionID},
+	})
+	for _, want := range []string{
+		"Canonical Texture context",
+		"Title: A canonical wire story",
+		"Revision: rev-context",
+		"The reviewed claim is grounded here.",
+		"do not search opaque ids as text",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("reconciler context missing %q: %s", want, prompt)
+		}
+	}
+}
+
+func TestWirePublishBatchDocumentContextTruncatesUTF8Safely(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	ownerID := universalWirePlatformOwnerID()
+	doc := types.Document{
+		DocID:     "doc-utf8-context",
+		OwnerID:   ownerID,
+		Title:     "UTF-8 context",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	rev := types.Revision{
+		RevisionID:  "rev-utf8-context",
+		DocID:       doc.DocID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "acceptance",
+		Content:     strings.Repeat("é", 2401),
+		CreatedAt:   now,
+	}
+	if err := handler.rt.Store().CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := handler.rt.Store().CreateRevision(ctx, rev); err != nil {
+		t.Fatalf("create revision: %v", err)
+	}
+
+	prompt := handler.rt.wirePublishBatchDocumentContext(ctx, ownerID, wirePublishBatch{
+		DocIDs:      []string{doc.DocID},
+		RevisionIDs: []string{rev.RevisionID},
+	})
+	if !strings.Contains(prompt, strings.Repeat("é", 2400)+"…") {
+		t.Fatalf("reconciler context was not truncated on a rune boundary")
+	}
 }
 
 func TestDispatchStoryCorpusReconcilerDeduplicatesOneRunPerCycle(t *testing.T) {

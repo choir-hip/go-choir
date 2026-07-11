@@ -262,6 +262,7 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 	if len(batch.RevisionIDs) > 0 {
 		prompt += "\nPublished revision handles: " + strings.Join(batch.RevisionIDs, ", ")
 	}
+	prompt += rt.wirePublishBatchDocumentContext(ctx, ownerID, batch)
 	metadata := map[string]any{
 		runMetadataAgentProfile:    AgentProfileReconciler,
 		runMetadataAgentRole:       AgentProfileReconciler,
@@ -297,4 +298,42 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 		return
 	}
 	log.Printf("runtime: wire reconciler dispatched run=%s docs=%d cycle=%s request=%s", rec.RunID, len(batch.DocIDs), batch.CycleID, batch.RequestID)
+}
+
+func (rt *Runtime) wirePublishBatchDocumentContext(ctx context.Context, ownerID string, batch wirePublishBatch) string {
+	if rt == nil || rt.store == nil {
+		return ""
+	}
+	var b strings.Builder
+	for i, docID := range batch.DocIDs {
+		doc, err := rt.store.GetDocument(ctx, docID, ownerID)
+		if err != nil {
+			continue
+		}
+		revisionID := strings.TrimSpace(doc.CurrentRevisionID)
+		if i < len(batch.RevisionIDs) && strings.TrimSpace(batch.RevisionIDs[i]) != "" {
+			revisionID = strings.TrimSpace(batch.RevisionIDs[i])
+		}
+		rev, err := rt.store.GetRevision(ctx, revisionID, ownerID)
+		if err != nil || rev.DocID != doc.DocID {
+			rev, err = rt.store.GetRevision(ctx, strings.TrimSpace(doc.CurrentRevisionID), ownerID)
+		}
+		if err != nil || rev.DocID != doc.DocID {
+			continue
+		}
+		content := strings.TrimSpace(rev.Content)
+		const maxContextChars = 2400
+		contentRunes := []rune(content)
+		if len(contentRunes) > maxContextChars {
+			content = strings.TrimSpace(string(contentRunes[:maxContextChars])) + "…"
+		}
+		if b.Len() == 0 {
+			b.WriteString("\n\nCanonical Texture context (authoritative for this review; do not search opaque ids as text):")
+		}
+		fmt.Fprintf(&b, "\n\nDocument %s\nTitle: %s\nRevision: %s\nContent:\n%s", doc.DocID, strings.TrimSpace(doc.Title), rev.RevisionID, content)
+	}
+	if b.Len() > 0 {
+		b.WriteString("\n\nReview the canonical content above directly. Use the listed document id as channel_id when spawning Texture for an update; corpus/source search is for related evidence, not for resolving these ids.")
+	}
+	return b.String()
 }
