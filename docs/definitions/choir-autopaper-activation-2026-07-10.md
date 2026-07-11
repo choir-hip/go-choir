@@ -935,6 +935,36 @@ evidence_ledger:
       Falsifies the one-scan availability conjecture. The next repair must bound
       connection occupancy, retain completion-aware migration semantics, and keep
       submitCap at one.
+  - claim: Closing keyset pages and sleeping one millisecond does not transfer
+      the sole Dolt connection to waiting runtime health requests.
+    definition_node: platform_computer_stability
+    evidence_class: exact-SHA deployed staging trace + direct health sampling
+    source: exact-SHA c4320c8a epoch 8170 beginning 2026-07-11T03:48:52Z
+    command_or_observation: >-
+      Run the full internal/store suite; observe CI run 29138217441 and staging
+      deployment; sample http://10.200.177.2:8085/health fifteen times during the
+      event migration; correlate vmctl health probes and Firecracker resource use.
+    artifact_path: internal/store/migration.go + internal/store/texture.go
+    result: >-
+      The focused pagination regression and full internal/store suite passed, and
+      every standard/race CI lane passed. Epoch 8170 reported the exact c4320c8a
+      sandbox artifact, listened at 03:48:52, and entered the event migration.
+      Fifteen direct health samples from 03:49:33 through 03:50:46 all timed out
+      after three seconds; vmctl independently recorded failures every fifteen
+      seconds through 03:51:02. Firecracker remained alive at about 4.15 GiB RSS
+      and 225% CPU. Keyset pages therefore preserve scan completeness but the
+      close/Gosched/one-millisecond sequence does not provide an enforceable
+      foreground scheduling boundary on the one-connection pool.
+    uncertainty: >-
+      Page duration and database/sql waiter ordering need not be separately guessed:
+      voluntary sleep is not an availability contract. The migration must execute
+      only a bounded unit per invocation and reschedule continuation after returning,
+      or use an explicit store-level priority/lease boundary that foreground health
+      can verify. Completion authority must remain durable across those invocations.
+    promotion_relevance: >-
+      Falsifies c4320c8a as an availability repair. The next implementation must
+      make yielding structural rather than scheduler-advisory before another staging
+      activation attempt.
 ```
 
 ## Active Red Mutation Ceremony
