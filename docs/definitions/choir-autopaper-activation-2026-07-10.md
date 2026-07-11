@@ -1266,6 +1266,19 @@ run_checkpoint_and_resumption_state:
       processor-owned Texture loop ids. Completion item 5 therefore remains false: the
       visible canonical docs were produced by processor-spawned Texture, not reconciler-
       spawned Texture.
+    - 99d1fcdf passed every standard and race gate in CI run 29144650218, but deploy
+      job 86524844627 failed before receipt creation. Incomplete evidence
+      deploy-failures/29144650218-1.json records the exact sandbox artifact installed.
+      The refreshed platform guest became healthy on exact SHA 99d1fcdf at 07:50:37Z,
+      about one minute after the deploy failed.
+    - Guest console evidence shows the runtime spent roughly 293 seconds repeatedly
+      running one-event objectgraph backfill steps before health became responsive.
+      The serving migration is correctly deferred and bounded to one event, but its
+      100ms `time.Ticker` accumulates a tick while each relational-to-OG lookup holds the
+      embedded Dolt connection. The post-step select therefore returns immediately and
+      the next step reacquires the connection within milliseconds, defeating the stated
+      foreground-availability boundary. The existing bounded migration is wired; its
+      rescheduling primitive, not the migration batch contract, is the root cause.
   root_cause_clustering_assessment:
     trigger: >-
       Three sourcecycled/runtime lifecycle symptoms were observed in one mission and
@@ -1326,14 +1339,15 @@ run_checkpoint_and_resumption_state:
     - The grounded reconciler prompt makes canonical revision conditional on its own
       `when warranted` judgment, so a successful review can end narratively without
       producing the reconciler-authored canonical Texture required by completion item 5.
-  highest_impact_remaining_uncertainty: reconciler canonical Texture execution contract
+    - The deferred event migration uses an accumulating ticker rather than a post-step
+      delay, so bounded steps can still monopolize the store and make exact-SHA health
+      unobservable throughout the deploy verifier window.
+  highest_impact_remaining_uncertainty: foreground availability between bounded migration steps
   next_executable_probe: >-
-    Strengthen the publish-batch reconciler prompt so the run must select at least one
-    listed canonical document and spawn exactly one existing-doc Texture revision grounded
-    in the supplied title, revision id, and content. Preserve per-cycle dedupe and lineage,
-    deploy the change, and prove the resulting reconciler-owned canonical revision through
-    platform metadata and authenticated edition visibility. Keep the processor lifecycle
-    authority cluster open as residual substrate work rather than patching another state.
+    Replace the accumulating migration ticker with a real delay scheduled after each
+    incomplete step, preserving one-event batches and durable cursor/completion markers.
+    Prove health remains responsive while migration advances, then deploy 99d1fcdf plus
+    the scheduler repair and run a new single-lineage processor/reconciler acceptance.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1365,6 +1379,10 @@ run_checkpoint_and_resumption_state:
       9d824cd2/3f70e054; processor Texture runs 4926ffc6/7adf7d23; revisions
       473bce95/43088743; edition revision 0ad9f2d9; and the post-reconciler platform
       revision query showing no reconciler-owned canonical write after 07:14Z.
+    - CI run 29144650218, failed deploy job 86524844627, incomplete evidence
+      deploy-failures/29144650218-1.json, exact-SHA platform health at 10.200.147.2,
+      and guest console timestamps showing immediate event-backfill reacquisition through
+      kernel-relative 293 seconds.
   rollback_refs: []
 ```
 
