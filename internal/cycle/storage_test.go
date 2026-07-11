@@ -686,6 +686,88 @@ func TestResetStaleSubmittedProcessorRequestsPreservesProjectedVerdicts(t *testi
 	}
 }
 
+func TestListQueuedProcessorRequestsPrioritizesNeverActivatedCycles(t *testing.T) {
+	ctx := context.Background()
+	store := openTestStorage(t)
+	defer store.Close()
+
+	old := time.Date(2026, 7, 11, 6, 0, 0, 0, time.UTC)
+	requests := []ProcessorRequest{
+		{
+			RequestID:         "processor_old_completed",
+			CycleID:           "cycle_old_activated",
+			ProcessorKey:      "processor:old:completed:rss",
+			Status:            "completed",
+			RuntimeStatus:     "completed",
+			RuntimeRunID:      "run-old",
+			SourceItemIDs:     []string{"srcitem-old-completed"},
+			IngestionEventIDs: []string{"event-old-completed"},
+			CreatedAt:         old,
+			UpdatedAt:         old,
+		},
+		{
+			RequestID:         "processor_old_queued",
+			CycleID:           "cycle_old_activated",
+			ProcessorKey:      "processor:old:queued:rss",
+			Status:            "queued",
+			RuntimeStatus:     "queued",
+			SourceItemIDs:     []string{"srcitem-old-queued"},
+			IngestionEventIDs: []string{"event-old-queued"},
+			CreatedAt:         old.Add(time.Second),
+			UpdatedAt:         old.Add(time.Second),
+		},
+		{
+			RequestID:         "processor_new_first",
+			CycleID:           "cycle_new_first",
+			ProcessorKey:      "processor:new:first:rss",
+			Status:            "queued",
+			RuntimeStatus:     "queued",
+			SourceItemIDs:     []string{"srcitem-new-first"},
+			IngestionEventIDs: []string{"event-new-first"},
+			CreatedAt:         old.Add(2 * time.Second),
+			UpdatedAt:         old.Add(2 * time.Second),
+		},
+		{
+			RequestID:         "processor_new_second",
+			CycleID:           "cycle_new_second",
+			ProcessorKey:      "processor:new:second:rss",
+			Status:            "queued",
+			RuntimeStatus:     "queued",
+			SourceItemIDs:     []string{"srcitem-new-second"},
+			IngestionEventIDs: []string{"event-new-second"},
+			CreatedAt:         old.Add(3 * time.Second),
+			UpdatedAt:         old.Add(3 * time.Second),
+		},
+	}
+	if err := store.SaveProcessorRequests(ctx, requests); err != nil {
+		t.Fatalf("save processor requests: %v", err)
+	}
+	var activatedRunID string
+	if err := store.DB.QueryRowContext(ctx,
+		`SELECT runtime_run_id FROM processor_requests WHERE request_id = ?`,
+		"processor_old_completed",
+	).Scan(&activatedRunID); err != nil {
+		t.Fatalf("read activated request: %v", err)
+	}
+	if activatedRunID != "run-old" {
+		t.Fatalf("activated runtime run id = %q, want run-old", activatedRunID)
+	}
+
+	queued, err := store.ListQueuedProcessorRequests(ctx, 10)
+	if err != nil {
+		t.Fatalf("list queued processor requests: %v", err)
+	}
+	if len(queued) != 3 {
+		t.Fatalf("queued requests = %d, want 3", len(queued))
+	}
+	want := []string{"processor_new_first", "processor_new_second", "processor_old_queued"}
+	for i := range want {
+		if queued[i].RequestID != want[i] {
+			t.Fatalf("queued[%d] = %q, want %q; queue=%+v", i, queued[i].RequestID, want[i], queued)
+		}
+	}
+}
+
 func TestApplySourcePollStatePreservesCursorsAcrossUpsert(t *testing.T) {
 	registry := &sources.Registry{
 		UserAgent: "ChoirTest/1.0",

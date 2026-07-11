@@ -987,8 +987,46 @@ func (s *Storage) ListQueuedProcessorRequests(ctx context.Context, limit int) ([
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	return s.queryProcessorRequests(ctx,
-		` WHERE status = 'queued' AND ingestion_event_ids_json != '[]' ORDER BY created_at ASC, request_id ASC LIMIT ?`, limit)
+	queued, err := s.queryProcessorRequests(ctx,
+		` WHERE status = 'queued' AND ingestion_event_ids_json != '[]' ORDER BY created_at ASC, request_id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT cycle_id FROM processor_requests WHERE runtime_run_id != ''`)
+	if err != nil {
+		return nil, err
+	}
+	activatedCycles := make(map[string]struct{})
+	for rows.Next() {
+		var cycleID string
+		if err := rows.Scan(&cycleID); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		activatedCycles[cycleID] = struct{}{}
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	prioritized := make([]ProcessorRequest, 0, len(queued))
+	for _, req := range queued {
+		if _, activated := activatedCycles[req.CycleID]; !activated {
+			prioritized = append(prioritized, req)
+		}
+	}
+	for _, req := range queued {
+		if _, activated := activatedCycles[req.CycleID]; activated {
+			prioritized = append(prioritized, req)
+		}
+	}
+	if len(prioritized) > limit {
+		prioritized = prioritized[:limit]
+	}
+	return prioritized, nil
 }
 
 func (s *Storage) CountQueuedProcessorRequests(ctx context.Context) (int, error) {
