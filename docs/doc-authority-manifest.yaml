@@ -216,6 +216,14 @@ documents:
     witnesses: [docs/definitions/choir-autopaper-activation-2026-07-10.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md]
     refresh_triggers: []
 
+  - path: docs/standing-questions.md
+    claim_scope: current
+    is_root: [entry]
+    is_evidence: false
+    annotations: {doc_role: agent_preflight, authority: derived_support, lifecycle: living}
+    witnesses: [AGENTS.md, docs/choir-doctrine.md, docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md]
+    refresh_triggers: [doctrine_change, mission_failure_postmortem, operating_contract_change]
+
   - path: docs/definitions/choir-wire-store-conformance-2026-07-11.md
     claim_scope: current
     is_root: []
