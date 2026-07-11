@@ -59,6 +59,18 @@ Non-blocking but retained for adjudication after repair:
 - Git lookup failures can be reported as missing prior authority rather than preserving the underlying diagnostic;
 - the caller graph's module prefix is repository-specific by design.
 
+## Post-Repair Independent Verification
+
+The type-aware store-writer repair raised the baseline from 26 to 121 writers and correctly removed wrapper false positives, but independent micro-verification found one remaining current omission:
+
+### S0-CONS-002 — `PatchRevisionMetadata` Wire writer omitted
+
+**Status:** confirmed; blocking.
+
+`internal/runtime/wire_platform_publish.go` directly calls the underlying `internal/store.Store.PatchRevisionMetadata` mutation. The writer classifier's mutation-prefix set omits `Patch`, so the current Wire mutation is absent from the baseline and a future `Patch*` store writer would not trigger drift. Existing regression coverage introduces only an `UpsertAppAdoption` writer and does not exercise a mutation verb outside the allowlist.
+
+**Required repair:** classify `Patch` store mutations, add `PatchRevisionMetadata` to the Wire baseline with a Wire disposition, and add a focused regression proving a new `Patch*` underlying store mutation cannot bypass disposition.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` / incomplete. The panel majority is not authority; the confirmed state-writer omission is independently reproduced and blocks adjudication. S1 must not start until S0-CONS-001 is repaired, independently reverified, and the post-repair panel is adjudicated.
+S0 remains `consensus_pending` / incomplete. The panel majority is not authority; S0-CONS-001 was repaired, but post-repair independent verification confirmed S0-CONS-002. S1 must not start until S0-CONS-002 is repaired, independently reverified, and the post-repair panel is adjudicated.
