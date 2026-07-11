@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 11c6dff6071555154e60f3a1aea953f802ef8ffc
+  journal_expected_parent_sha: 9319eca895bd49b21199bfbebc59ac1e839cdf76
   orchestrator_lock:
     holder: Main
     epoch: 4
@@ -721,11 +721,11 @@ run_checkpoint_and_resumption_state:
     staging_ref: staging_reconciled_at_6e893d90d8df0655398177e839e5270547472cd7; S0_makes_no_product_behavior_claim
     product_proof_refs:
       - go test ./cmd/runtime-ratchet (passed)
-      - go run ./cmd/runtime-ratchet (passed; 150 files, 48815/55487 LOC, 1208 exports, 610 caller edges, 41 initial debt, 47 routes, 49 tools, 4 importers, 5 wrappers, 16 compatibility markers, 26 state writers, 147 citers)
-      - agent://S0RatchetVerifier final independent verification PASS
+      - go run ./cmd/runtime-ratchet (passed; 150 files, 48815/55487 LOC, 1208 exports, 610 caller edges, 41 initial debt, 47 routes, 49 tools, 4 importers, 5 wrappers, 16 compatibility markers, 460 exact store calls, 151 citers)
+      - agent://S0RatchetVerifier final exact-store-disposition verification PASS
       - CI 29170071123 required test and build gates passed; deploy job is outside S0 acceptance
     consensus_ref: docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md
-    open_findings: [S0-CONS-004_read_prefix_fallback_keeps_store_classifier_fail_open]
+    open_findings: []
     adjudication_ref: docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md#checkpoint-result
   delegation_ledger_schema:
     required_fields:
@@ -792,7 +792,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S0
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 4
-      status: verifying
+      status: consensus
       dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
       dispatch_ref: S0RatchetImplementer
       agent_session_ref: agent://S0RatchetImplementer
@@ -809,8 +809,8 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-exact-store-disposition-returned-20
-      expected_parent_sha: 11c6dff6071555154e60f3a1aea953f802ef8ffc
+      transition_id: s0-runtime-inventory-ratchet-post-repair-consensus-pending-21
+      expected_parent_sha: 9319eca895bd49b21199bfbebc59ac1e839cdf76
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
@@ -832,6 +832,7 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-writer-substrate-repair-returned-18, recorded_at: 2026-07-11T23:21:26Z, actor: Main, expected_parent_sha: 672eb8876fddf57751d9726b3a002484c62193cc, precondition: exhaustive_fail_closed_store_method_classification_integrated_and_local_passed, postcondition: S0_CONS_003_substrate_repaired_pending_independent_verification, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-read-prefix-failed-19, recorded_at: 2026-07-11T23:23:48Z, actor: S0RatchetVerifier, expected_parent_sha: bf16aacf3381dbc09c99fe0e7b9169e4ad02bece, precondition: independent_verification_of_exhaustive_store_call_partition, postcondition: read_prefix_fallback_fail_open_counterexample_recorded, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-exact-store-disposition-returned-20, recorded_at: 2026-07-11T23:33:28Z, actor: Main, expected_parent_sha: 11c6dff6071555154e60f3a1aea953f802ef8ffc, precondition: exact_baseline_authority_for_all_typed_store_calls_integrated_and_local_passed, postcondition: S0_CONS_004_repaired_pending_independent_verification, external_operation_id: not_applicable}
+        - {status: consensus, transition_id: s0-runtime-inventory-ratchet-post-repair-consensus-pending-21, recorded_at: 2026-07-11T23:35:57Z, actor: Main, expected_parent_sha: 9319eca895bd49b21199bfbebc59ac1e839cdf76, precondition: exact_store_call_baseline_authority_and_independent_verifier_PASS, postcondition: post_repair_default_panel_requested_on_exact_repaired_diff, external_operation_id: agentic_consensus_S0_post_repair_20260711_02}
       lock_expires_at: 2026-07-12T00:34:21Z
       mutation_class: yellow
       protected_surfaces: []
@@ -851,25 +852,25 @@ run_checkpoint_and_resumption_state:
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 54e2c308ece93fbedc6a5880bfaa0b3c72506598
       implementation_commit_sha: 54e2c308ece93fbedc6a5880bfaa0b3c72506598
-      push_ref: pending_push_for_exact_store_disposition_reverification
-      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29170071123
+      push_ref: 9319eca895bd49b21199bfbebc59ac1e839cdf76@origin/main
+      ci_run_ref: pending_latest_S0_repair_CI
       deploy_ref: not_applicable_yellow_slice
       deployed_sha: not_applicable_yellow_slice
       acceptance_ref: artifact://326
       acceptance_contract: go_test_cmd_runtime_ratchet_and_baseline_invocation_pass_with_regression_fixtures_failing
       evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md, docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md]
-      open_findings: [S0-CONS-004_read_prefix_fallback_keeps_store_classifier_fail_open]
-      landed_commit_sha: pending_consensus_repair
-      adjudication: S0_CONS_001_confirmed_blocking; canonical_parent_mismatch_rejected_with_stage_history; build_context_and_citer_scope_narrowed_to_declared_authority
-      last_reconciled_at: 2026-07-11T23:33:28Z
-      reconciliation_result: S0_CONS_004_repaired_locally_with_exact_baseline_authority_for_460_store_calls_pending_independent_verification
+      open_findings: []
+      landed_commit_sha: pending_post_repair_consensus_adjudication
+      adjudication: post_repair_consensus_pending_on_exact_store_call_authority
+      last_reconciled_at: 2026-07-11T23:35:57Z
+      reconciliation_result: S0_CONS_001_through_004_repaired_focused_and_independent_verification_PASS_post_repair_panel_pending
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
     path: docs/runtime-dissolution-inventory.yaml
     invocation: go run ./cmd/runtime-ratchet
-    baseline_ref: aacfbbe49124238134966f0a10290aa35181c715
-    last_verified_ref: artifact://227; pending_agent://S0RatchetVerifier
+    baseline_ref: 9319eca895bd49b21199bfbebc59ac1e839cdf76
+    last_verified_ref: artifact://326; agent://S0RatchetVerifier
   current_artifact_state:
     suite_definition: authority_persisted_at_008a7b88cf200119c0f762cc51cfba6be3007445
     runtime_dissolution: not_started

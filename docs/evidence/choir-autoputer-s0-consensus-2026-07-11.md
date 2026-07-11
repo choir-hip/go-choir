@@ -89,6 +89,12 @@ The substrate repair removed the positive writer-verb allowlist, but `storeCallD
 
 **Required repair:** make the baseline itself classify every exact typed store-call identity as `read | lifecycle | wire | promotion`; the scanner must enumerate calls without inferring safety from prefixes. A new method/call is then an undispositioned added item and fails regardless of its name. Equivalent exact method-name authority is acceptable only if unknown names fail closed. Add read-prefixed mutator regressions.
 
+### Final Substrate Repair Verification
+
+The scanner now emits every exact typed production call resolving to `internal/store.Store` without inferring safety from its name. The baseline is the sole disposition authority: all 460 calls are explicitly `read`, `lifecycle`, `wire`, or `promotion`; a novel identity fails before it can be treated as safe. Regressions cover `GetAndDeleteState`, `LoadOrCreateRun`, `TransmogrifyState`, `PatchRevisionMetadata`, and a legitimate exact read that passes only after baseline disposition.
+
+Independent verifier `S0RatchetVerifier` reran the full focused suite and baseline command at `9319eca8` and reported PASS with no blockers. Current Claim/Release/Cancel/Patch/promotion/Wire calls are present; all IDs resolve to underlying store methods rather than runtime wrappers.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` / incomplete. The panel majority is not authority; S0-CONS-001 through S0-CONS-004 expose one fail-open store-call classification substrate. S1 must not start until every exact typed store call is baseline-dispositioned and unknown calls fail closed independent of naming, followed by independent re-verification and post-repair consensus adjudication.
+S0 remains `consensus_pending` until the required post-repair panel adjudicates the exact repaired diff. S0-CONS-001 through S0-CONS-004 are repaired according to focused and independent evidence; S1 remains waiting on the phase checkpoint.
