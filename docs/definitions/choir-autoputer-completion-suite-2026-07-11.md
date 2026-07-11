@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 09d5610f9ccacfc6a585be1032575fcf83792720
+  journal_expected_parent_sha: bdc47dfc98384d62d21941b928db1c35616e7c09
   orchestrator_lock:
     holder: Main
     epoch: 3
@@ -801,7 +801,7 @@ run_checkpoint_and_resumption_state:
       implementer_output_ref: agent://S0RatchetImplementer
       verifier_job_ref: S0RatchetVerifier
       verifier_output_ref: agent://S0RatchetVerifier
-      worktree_or_branch_ref: s0-runtime-inventory-ratchet-01@92aaa5aea9005dacccc81c0ced665be31e3b39bc
+      worktree_or_branch_ref: s0-runtime-inventory-ratchet-01@8653ff896efa41fc7711bf100c45030d347f029d
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -809,8 +809,8 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-debt-gate-failed-09
-      expected_parent_sha: 09d5610f9ccacfc6a585be1032575fcf83792720
+      transition_id: s0-runtime-inventory-ratchet-debt-repair-returned-10
+      expected_parent_sha: bdc47dfc98384d62d21941b928db1c35616e7c09
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
@@ -821,6 +821,7 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-reverify-failed-07, recorded_at: 2026-07-11T21:41:24Z, actor: S0RatchetVerifier, expected_parent_sha: ccbb6c172df996542f959982195a70dd6d560be4, precondition: independent_reverification_of_repaired_caller_gate, postcondition: ordinary_exported_method_call_false_rejection_recorded, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-type-repair-returned-08, recorded_at: 2026-07-11T22:02:29Z, actor: Main, expected_parent_sha: 022174f0a44335ad2332e2d64a7007fad233bd9f, precondition: type_aware_stdlib_only_caller_resolution_integrated_and_local_default_mode_passed, postcondition: S0_RAT_003_repaired_pending_independent_reverification, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-debt-gate-failed-09, recorded_at: 2026-07-11T22:05:28Z, actor: S0RatchetVerifier, expected_parent_sha: 09d5610f9ccacfc6a585be1032575fcf83792720, precondition: final_independent_reverification_including_debt_no_growth, postcondition: mutable_baseline_debt_laundering_blocker_recorded, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s0-runtime-inventory-ratchet-debt-repair-returned-10, recorded_at: 2026-07-11T22:10:16Z, actor: Main, expected_parent_sha: bdc47dfc98384d62d21941b928db1c35616e7c09, precondition: Git_authority_debt_no_growth_repair_integrated_and_local_passed, postcondition: S0_RAT_004_repaired_pending_independent_reverification, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-11T23:11:54Z
       mutation_class: yellow
       protected_surfaces: []
@@ -836,22 +837,22 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref
       receipt_lookup: git_history_and_agent_job_record
       expected_precondition: clean_agent_worktree_at_pre_mutation_sha
-      observed_postcondition: type_aware_repair_92aaa5aea9005dacccc81c0ced665be31e3b39bc_integrated_as_147b2b18_and_022174f0_with_default_vendor_mode_pass
+      observed_postcondition: immutable_debt_repair_8653ff896efa41fc7711bf100c45030d347f029d_integrated_as_bdc47dfc_with_local_pass
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: 92aaa5aea9005dacccc81c0ced665be31e3b39bc
-      implementation_commit_sha: 92aaa5aea9005dacccc81c0ced665be31e3b39bc
-      push_ref: pending_push_for_final_micro_reverification
+      implementation_sha_or_dirty_snapshot: 8653ff896efa41fc7711bf100c45030d347f029d
+      implementation_commit_sha: 8653ff896efa41fc7711bf100c45030d347f029d
+      push_ref: pending_push_for_debt_gate_reverification
       ci_run_ref: not_applicable_until_integration
       deploy_ref: not_applicable_yellow_slice
       deployed_sha: not_applicable_yellow_slice
-      acceptance_ref: artifact://160
+      acceptance_ref: artifact://181
       acceptance_contract: go_test_cmd_runtime_ratchet_and_baseline_invocation_pass_with_regression_fixtures_failing
       evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md]
       open_findings: [S0-RAT-004_initial_unused_export_debt_can_be_laundered_by_manual_baseline_edit]
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-11T22:05:28Z
-      reconciliation_result: type_aware_caller_gate_passed_but_initial_debt_authority_is_mutable_and_blocking
+      last_reconciled_at: 2026-07-11T22:10:16Z
+      reconciliation_result: S0_RAT_004_repaired_locally_with_Git_authority_no_growth_pending_independent_reverification
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
