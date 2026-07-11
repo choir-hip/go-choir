@@ -556,7 +556,7 @@ func writerDomain(name string) (string, bool) {
 	mutating := false
 	for _, prefix := range []string{
 		"Append", "CompareAndSwap", "Complete", "Create", "Delete", "Mark",
-		"Promote", "Publish", "Put", "Record", "Save", "Set", "Transition",
+		"Patch", "Promote", "Publish", "Put", "Record", "Save", "Set", "Transition",
 		"Update", "Upsert",
 	} {
 		if strings.HasPrefix(name, prefix) {

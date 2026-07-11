@@ -16,8 +16,8 @@ counts:
     production_importers: 4
     wrappers: 5
     compatibility_markers: 16
-    state_writers: 121
-    citers: 150
+    state_writers: 122
+    citers: 151
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -4308,6 +4308,8 @@ state_writers:
       disposition: promotion
     - id: internal/runtime/trajectory.go:stampAndMintTrajectory:internal/store.method:Store.CreateTrajectoryIfAbsent
       disposition: wire
+    - id: internal/runtime/wire_platform_publish.go:persistWirePlatformPublicationRef:internal/store.method:Store.PatchRevisionMetadata
+      disposition: wire
     - id: internal/runtime/wire_publication.go:autonomousPublishWireArticleToEdition:internal/store.method:Store.CreateRevision
       disposition: wire
     - id: internal/runtime/wire_publication.go:autonomousPublishWireArticleToEdition:internal/store.method:Store.UpdateDocument
@@ -4614,6 +4616,8 @@ citers:
     - id: 'docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md:- `internal/runtime/app_promotion.go`: `UpsertComputerSourceLineage`, `UpsertAppChangePackage`, and repeated `UpsertAppAdoption` calls;'
       disposition: historical_evidence
     - id: 'docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md:- `internal/runtime/candidate_package_intake.go`: `UpsertAppChangePackage`, `UpsertAppAdoption`, `UpdateAppAdoptionIfCurrent`, and `UpsertComputerSourceLineage`.'
+      disposition: historical_evidence
+    - id: docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md:`internal/runtime/wire_platform_publish.go` directly calls the underlying `internal/store.Store.PatchRevisionMetadata` mutation. The writer classifier's mutation-prefix set omits `Patch`, so the curre… [sha256:31fb5b3923be596464afce864c686f5d5955fb985e579d06f499ea5751b3791d]
       disposition: historical_evidence
     - id: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:2. Inventory every production and test Go file under `internal/runtime`, every exported declaration, every route registration and tool registration owned by that package, every production external imp… [sha256:2709248587ab16a73ed0784dd842b6efcc3b7c75640af1295bb378414feb3d57]
       disposition: historical_evidence

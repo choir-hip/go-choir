@@ -126,6 +126,7 @@ func (*Store) CreateRevision() {}
 func (*Store) UpdateDocument() {}
 func (*Store) CreateWorkItem() {}
 func (*Store) UpdateTrajectoryStatus() {}
+func (*Store) PatchRevisionMetadata() {}
 func (*Store) UpsertAppAdoption() {}
 func (*Store) UpsertComputerSourceLineage() {}
 func (*Store) UpsertAppChangePackage() {}
@@ -141,6 +142,7 @@ func writeState(value *store.Store) {
 	value.UpdateDocument()
 	value.CreateWorkItem()
 	value.UpdateTrajectoryStatus()
+	value.PatchRevisionMetadata()
 	value.UpsertAppAdoption()
 	value.UpsertComputerSourceLineage()
 	value.UpsertAppChangePackage()
@@ -154,6 +156,7 @@ func writeState(value *store.Store) {
 		"UpdateDocument": "wire",
 		"CreateWorkItem": "wire",
 		"UpdateTrajectoryStatus": "wire",
+		"PatchRevisionMetadata": "wire",
 		"UpsertAppAdoption": "promotion",
 		"UpsertComputerSourceLineage": "promotion",
 		"UpsertAppChangePackage": "promotion",
@@ -201,6 +204,30 @@ func writePromotion() { stateStore.UpsertAppAdoption() }
 	assertDiagnostic(t, err, "state_writers: added item")
 	assertDiagnostic(t, err, "UpsertAppAdoption")
 }
+func TestNewPatchWriterRequiresBaselineDisposition(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) PatchRevisionMetadata() {}
+`)
+	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+`)
+	baseline := mustScan(t, root)
+	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+func patchWire() { stateStore.PatchRevisionMetadata() }
+`)
+	err := compareInventory(baseline, mustScan(t, root))
+	assertDiagnostic(t, err, "state_writers: added item")
+	assertDiagnostic(t, err, "PatchRevisionMetadata")
+}
+
 
 func TestInventoryUsesAuthoritativeFilesAndStableCiterIdentities(t *testing.T) {
 	t.Run("ignored generated tree is excluded", func(t *testing.T) {
