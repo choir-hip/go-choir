@@ -71,6 +71,16 @@ The type-aware store-writer repair raised the baseline from 26 to 121 writers an
 
 **Required repair:** classify `Patch` store mutations, add `PatchRevisionMetadata` to the Wire baseline with a Wire disposition, and add a focused regression proving a new `Patch*` underlying store mutation cannot bypass disposition.
 
+### S0-CONS-003 — positive mutation-verb allowlist is the broken substrate
+
+**Status:** confirmed; blocking; root-cause cluster.
+
+After the `Patch` repair, independent verification found current underlying lifecycle mutations still omitted: `Store.ClaimCoSuperSlot`, `Store.ReleaseCoSuperSlotClaim`, and `Store.CancelAgentMutation`. The same positive verb-prefix gate drops `Claim`, `Release`, and `Cancel` before domain classification. S0-CONS-001, S0-CONS-002, and S0-CONS-003 are therefore one substrate bug, not three independent missing words.
+
+**Structural assessment:** the dependency graph is `typed store call -> positive mutation verb allowlist -> domain noun classifier -> baseline`. Type resolution is now authoritative, but the next node throws away real mutations using an indefinitely incomplete vocabulary. Adding more verbs repeats the failure class. The substrate-level repair must remove the open-ended positive mutation-verb allowlist and derive mutability from an authoritative store-method classification that is exhaustive over every called `internal/store.Store` method. Unknown methods must fail closed for disposition, not disappear. Current lifecycle, Wire, and promotion calls must be covered by exact regressions, including Claim/Release/Cancel/Patch.
+
+**Required repair:** replace incremental verb additions with exhaustive typed store-method classification; make every called store method either a declared read or a dispositioned writer, reject unknown methods, and regenerate the baseline.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` / incomplete. The panel majority is not authority; S0-CONS-001 was repaired, but post-repair independent verification confirmed S0-CONS-002. S1 must not start until S0-CONS-002 is repaired, independently reverified, and the post-repair panel is adjudicated.
+S0 remains `consensus_pending` / incomplete. The panel majority is not authority; S0-CONS-001 and S0-CONS-002 exposed S0-CONS-003, a positive-allowlist substrate bug. S1 must not start until the exhaustive store-method classification repair is independently reverified and the post-repair panel is adjudicated.
