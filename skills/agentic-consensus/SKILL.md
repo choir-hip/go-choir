@@ -154,6 +154,9 @@ Notes:
 - `--trust` suppresses headless workspace trust prompts.
 - `--force` automatically approves all commands/permissions.
 - `--approve-mcps` automatically approves all MCP servers.
+- The runner redirects stdin from `/dev/null` so the agent never sees a TTY;
+  without this, Cursor detects an interactive terminal and prompts for command
+  approvals despite `--force`.
 - `--workspace` points Cursor at the review/planning root.
 
 ### opencode CLI
