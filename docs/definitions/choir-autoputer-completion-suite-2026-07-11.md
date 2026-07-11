@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 5cfcdad32c395ec587aae8599306e458204736cb
+  journal_expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
   orchestrator_lock:
     holder: Main
     epoch: 3
@@ -787,7 +787,64 @@ run_checkpoint_and_resumption_state:
       - close_condition
     allowed_statuses: [planned, dispatch_intent, dispatched, implementing, implementation_returned, verifying, committed, pushed, ci_passed, deployed, accepted, consensus, adjudicated, landed, blocked_incomplete, abandoned, rolled_back]
     verifier_independence: implementer_agent_must_differ_from_verifier_agent
-  delegation_ledger: []
+  delegation_ledger:
+    - slice_id: S0-runtime-inventory-ratchet-01
+      subgoal: S0
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 3
+      status: dispatch_intent
+      dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
+      dispatch_ref: pending_agent_dispatch
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_dispatch
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: agent_isolated_worktree_from_1a9a90b63f6541fcb8d96502e85a158b8446d14e
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
+      lock_release_ref: pending_slice_close
+      stage_started_at: 2026-07-11T21:11:54Z
+      transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01
+      expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
+      stage_history:
+        - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-11T23:11:54Z
+      mutation_class: yellow
+      protected_surfaces: []
+      exact_files_packages_routes_state_authorities: [cmd/runtime-ratchet/**, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]
+      authority_edges_locked: [runtime_disposition_inventory, runtime_dissolution_ratchet_baseline]
+      implementer_agent: S0RatchetImplementer
+      verifier_agent: S0RatchetVerifier
+      pre_mutation_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
+      rollback_commit_or_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
+      accepted_slice_dependency_refs: [B0@008a7b88cf200119c0f762cc51cfba6be3007445]
+      external_operation_id: not_applicable_yellow_slice
+      effect_authority: canonical_git_ref
+      receipt_lookup: git_history_and_agent_job_record
+      expected_precondition: clean_agent_worktree_at_pre_mutation_sha
+      observed_postcondition: pending
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending_orchestrator_integration
+      ci_run_ref: not_applicable_until_integration
+      deploy_ref: not_applicable_yellow_slice
+      deployed_sha: not_applicable_yellow_slice
+      acceptance_ref: pending_focused_commands
+      acceptance_contract: go_test_cmd_runtime_ratchet_and_baseline_invocation_pass_with_regression_fixtures_failing
+      evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md]
+      open_findings: []
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-11T21:11:54Z
+      reconciliation_result: no_prior_matching_dispatch_found
+      close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
     path: ''
