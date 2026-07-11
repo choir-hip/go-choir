@@ -118,6 +118,14 @@ type runtimeWebCaptureProjectionResponse struct {
 	SkippedItemCount  int    `json:"skipped_item_count"`
 }
 
+type sourceServiceDispatchStateResponse struct {
+	CheckedAt           time.Time                `json:"checked_at"`
+	QueuedCount         int                      `json:"queued_count"`
+	RecentInFlightCount int                      `json:"recent_in_flight_count"`
+	InFlightWindow      string                   `json:"in_flight_window"`
+	Reconcilable        []cycle.ProcessorRequest `json:"reconcilable"`
+}
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("Starting Choir Universal Wire sourcecycled daemon (V0)")
@@ -453,6 +461,7 @@ func sourceServiceAPIHandler(store cycle.Store) http.Handler {
 	mux.HandleFunc("/internal/source-service/health", handleSourceServiceHealth(store))
 	mux.HandleFunc("/internal/source-service/search", handleSourceServiceSearch(store))
 	mux.HandleFunc("/internal/source-service/ingestion-handoff/latest", handleSourceServiceIngestionHandoffLatest(store))
+	mux.HandleFunc("/internal/source-service/dispatch-state", handleSourceServiceDispatchState(store))
 	mux.HandleFunc("/internal/source-service/items/", handleSourceServiceItem(store))
 	// Top-level liveness and readiness endpoints. Liveness is a cheap
 	// process-alive check; readiness reports the source-service ledger as
@@ -461,6 +470,41 @@ func sourceServiceAPIHandler(store cycle.Store) http.Handler {
 	mux.HandleFunc("/health", health.LivenessHandler("sourcecycled"))
 	mux.HandleFunc("/health/ready", health.ReadinessHandler("sourcecycled", health.NewAggregator("sourcecycled", 5*time.Second)))
 	return server.WithBuildIdentity("sourcecycled", mux)
+}
+
+func handleSourceServiceDispatchState(store cycle.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		window := time.Duration(parsePositiveInt(
+			firstEnv("SOURCE_SERVICE_AGENT_DISPATCH_INFLIGHT_WINDOW_SECONDS", "SOURCECYCLED_INFLIGHT_WINDOW_SECONDS"),
+			int(defaultIngestionProcessorInFlightWindow/time.Second),
+		)) * time.Second
+		queuedCount, err := store.CountQueuedProcessorRequests(r.Context())
+		if err != nil {
+			http.Error(w, "count queued processor requests: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		recentInFlightCount, err := store.CountRecentlySubmittedProcessorRequests(r.Context(), time.Now().UTC().Add(-window))
+		if err != nil {
+			http.Error(w, "count recent in-flight processor requests: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		reconcilable, err := store.ListReconcilableProcessorRequests(r.Context(), 128)
+		if err != nil {
+			http.Error(w, "list reconcilable processor requests: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeSourceServiceJSON(w, http.StatusOK, sourceServiceDispatchStateResponse{
+			CheckedAt:           time.Now().UTC(),
+			QueuedCount:         queuedCount,
+			RecentInFlightCount: recentInFlightCount,
+			InFlightWindow:      window.String(),
+			Reconcilable:        reconcilable,
+		})
+	}
 }
 
 func handleSourceServiceHealth(store cycle.Store) http.HandlerFunc {

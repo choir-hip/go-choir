@@ -378,6 +378,54 @@ func TestSourceServiceAPISearchAndResolveItems(t *testing.T) {
 	}
 }
 
+func TestSourceServiceDispatchStateNamesRetainedProcessorCapacity(t *testing.T) {
+	ctx := context.Background()
+	store := cycle.NewMemoryStore()
+	defer store.Close()
+	now := time.Now().UTC()
+	requests := []cycle.ProcessorRequest{
+		{
+			RequestID:         "processor-retained",
+			CycleID:           "cycle-retained",
+			ProcessorKey:      "processor:news:global:rss",
+			Status:            "completed",
+			RuntimeStatus:     "submitted",
+			RuntimeRunID:      "run-retained",
+			IngestionEventIDs: []string{"event-retained"},
+			UpdatedAt:         now,
+		},
+		{
+			RequestID:         "processor-queued",
+			CycleID:           "cycle-queued",
+			ProcessorKey:      "processor:technology:global:rss",
+			Status:            "queued",
+			RuntimeStatus:     "queued",
+			IngestionEventIDs: []string{"event-queued"},
+			UpdatedAt:         now,
+		},
+	}
+	if err := store.SaveProcessorRequests(ctx, requests); err != nil {
+		t.Fatalf("save processor requests: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/internal/source-service/dispatch-state", nil)
+	rec := httptest.NewRecorder()
+	handleSourceServiceDispatchState(store).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("dispatch state status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var response sourceServiceDispatchStateResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode dispatch state: %v", err)
+	}
+	if response.QueuedCount != 1 || response.RecentInFlightCount != 1 || len(response.Reconcilable) != 1 {
+		t.Fatalf("dispatch state = %+v, want one queued and one retained in-flight request", response)
+	}
+	got := response.Reconcilable[0]
+	if got.RequestID != "processor-retained" || got.RuntimeRunID != "run-retained" {
+		t.Fatalf("retained request = %+v", got)
+	}
+}
+
 func TestSourceServiceAPIHealthReportsLedgerCounts(t *testing.T) {
 	store := newTestCycleStorage(t)
 	defer store.Close()
