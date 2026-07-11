@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -100,7 +101,11 @@ func TestRunOGBackfillStepDoesNotMarkFailedPassComplete(t *testing.T) {
 func TestOGMetadataValueSetLoadsExistingEventIDs(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	for _, eventID := range []string{"event-resume-a", "event-resume-b"} {
+	eventIDs := make([]string, 0, ogMetadataValueScanPageSize+1)
+	for i := 0; i < ogMetadataValueScanPageSize+1; i++ {
+		eventIDs = append(eventIDs, fmt.Sprintf("event-resume-%03d", i))
+	}
+	for _, eventID := range eventIDs {
 		if _, err := s.ogPut(ctx, ogKindEvent, "owner-resume", eventID,
 			map[string]string{"event_id": eventID}, map[string]any{"event_id": eventID}, time.Now().UTC()); err != nil {
 			t.Fatalf("seed event %s: %v", eventID, err)
@@ -111,7 +116,7 @@ func TestOGMetadataValueSetLoadsExistingEventIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load existing event ids: %v", err)
 	}
-	for _, eventID := range []string{"event-resume-a", "event-resume-b"} {
+	for _, eventID := range eventIDs {
 		if _, ok := values[eventID]; !ok {
 			t.Fatalf("existing event id %q missing from value set: %#v", eventID, values)
 		}

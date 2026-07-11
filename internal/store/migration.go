@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+const ogMetadataValueScanPageSize = 256
 
 // backfillOGFromSQL reads all migrated records from the relational SQL tables
 // and writes them into the object graph. This is called on every Open to
@@ -106,37 +109,61 @@ func (s *Store) markOGBackfillMigrationComplete(ctx context.Context, kind object
 	return err
 }
 
-// ogMetadataValueSet scans one object kind once and returns its non-empty
-// metadata values. Large resumable migrations use this instead of issuing one
-// JSON_EXTRACT lookup per legacy row, which becomes quadratic as OG grows.
+// ogMetadataValueSet scans one object kind in bounded keyset pages and returns
+// its non-empty metadata values. The embedded Dolt handle intentionally has one
+// connection, so closing rows between pages lets foreground runtime work make
+// progress while a large resumable migration runs in the background.
 func (s *Store) ogMetadataValueSet(ctx context.Context, kind objectgraph.ObjectKind, jsonPath string) (map[string]struct{}, error) {
 	if s == nil || s.textureHandle() == nil {
 		return nil, fmt.Errorf("store: object graph database not initialized")
 	}
-	rows, err := s.textureHandle().QueryContext(ctx,
-		`SELECT JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?))
-		 FROM og_objects
-		 WHERE object_kind = ? AND JSON_EXTRACT(CAST(metadata AS JSON), ?) IS NOT NULL`,
-		jsonPath, string(kind), jsonPath,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 	values := make(map[string]struct{})
-	for rows.Next() {
-		var value sql.NullString
-		if err := rows.Scan(&value); err != nil {
+	cursor := ""
+	for {
+		rows, err := s.textureHandle().QueryContext(ctx,
+			`SELECT canonical_id, JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?))
+			 FROM og_objects
+			 WHERE object_kind = ? AND canonical_id > ?
+			 ORDER BY canonical_id
+			 LIMIT ?`,
+			jsonPath, string(kind), cursor, ogMetadataValueScanPageSize,
+		)
+		if err != nil {
 			return nil, err
 		}
-		if value.Valid && strings.TrimSpace(value.String) != "" {
-			values[value.String] = struct{}{}
+		pageCount := 0
+		for rows.Next() {
+			var canonicalID string
+			var value sql.NullString
+			if err := rows.Scan(&canonicalID, &value); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			cursor = canonicalID
+			pageCount++
+			if value.Valid && strings.TrimSpace(value.String) != "" {
+				values[value.String] = struct{}{}
+			}
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if err := rows.Close(); err != nil {
+			return nil, err
+		}
+		if pageCount < ogMetadataValueScanPageSize {
+			return values, nil
+		}
+		// Give already-waiting foreground queries a scheduling opportunity
+		// before the migration acquires the sole connection for another page.
+		runtime.Gosched()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Millisecond):
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return values, nil
 }
 
 func (s *Store) backfillAgentsOG(ctx context.Context) error {
