@@ -1007,6 +1007,10 @@ active_red_mutation:
         prove one processor and one reconciler for the same handoff.
       - The sourcecycled MemoryStore can retain one processor as recently submitted
         after terminal runtime state, holding the sole dispatch slot at zero capacity.
+      - The publish-debounced reconciler receives only opaque canonical document and
+        revision ids, but its available corpus/source search tools do not resolve those
+        handles to Texture content. The deployed reconciler therefore completed without
+        reviewing the two documents that triggered it.
     introduced:
       - a3ebc171 temporarily equates a non-empty OG kind with completed migration;
         SQL remains intact, so the risk is reversible but the completion claim is invalid.
@@ -1086,18 +1090,17 @@ Escalate to the human before implementing changes that:
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: exact-SHA reconciler-lineage deploy and blocked trigger 2026-07-11T00:10Z-00:16Z
+  last_checkpoint: exact-SHA bounded migration and deployed publication chain 2026-07-11T04:18Z-04:45Z
   current_artifact_state: >-
-    Completion-aware background migration, listener-first launch ordering, and
-    same-identity VM lifecycle serialization are committed. 83b1f594 passed every
-    standard and race lane and its vmctl host package activated on Node B, but the
-    deployment was initially marked incomplete because the active-computer verifier
-    demanded workflow SHA 83b1f594 from the intentionally unchanged cb694846 sandbox
-    artifact. 838a4799 repaired that boundary and is fully deployed. The platform VM
-    is stable. ce6b6455 repaired stale processor receipt reuse, and 614a3c9a repaired
-    a dangling edition alias. The canonical Texture edition is now visible, but the
-    publish-debounced reconciler has not produced deployed cycle-correlated acceptance
-    evidence because sourcecycled's sole dispatch slot remains occupied in its ledger.
+    949342e2 is deployed as the exact sandbox/gateway artifact and resumes legacy-event
+    projection in durable batches of 64 per bounded invocation. The platform remained
+    on one guest while sourcecycled completed multiple cycles and processor, Texture,
+    and reconciler runs. Sourcecycled released terminal processor capacity with
+    submitCap still fixed at one. Cycle cycle_231bc41ce13fe398f9cbe51b produced
+    processor 8a906447, canonical CDC Texture documents aad3f0d2 and fe6518d2, and one
+    cycle-correlated reconciler 7aba21d6. The authenticated stories route returns both
+    CDC stories from edition 3b9cdc8b. The reconciler completed, but could not resolve
+    its opaque doc/revision handles through corpus/source search and made no review edit.
   what_shipped:
     - 94f6c744 completion-aware resumable OG migration with deferred-open support.
     - cb694846 runtime recovery and listener publication before background migration.
@@ -1107,16 +1110,16 @@ run_checkpoint_and_resumption_state:
     - 614a3c9a dangling Universal Wire edition-alias recovery.
     - 20644c66 cycle-correlated, per-cycle-deduplicated publish reconciler activation
       with queue/timer/dispatch lifecycle markers.
+    - 949342e2 structurally bounded and durably resumable legacy-event projection.
   what_was_proven:
     - The loop is platform guest readiness/recovery churn, not a host daemon restart.
     - The guest never reaches cmd/sandbox's post-store runtime-topology log or HTTP listen.
     - Host memory, CPU, IO, and state-disk pressure did not cause the observed loop.
   unproven_or_partial_claims:
-    - The root cause of the platform/sourcecycled reboot loop.
-    - Platform VM stability for a full source cycle.
-    - Sourcecycled liveness for a full source cycle.
-    - Single authoritative activation under retry/restart.
-    - A cycle-correlated reconciler completion and reconciler-produced canonical story.
+    - Reconciler content review over the canonical documents that triggered its run.
+    - Event-projection migration completion; it remains resumable and bounded while
+      foreground product work proceeds.
+    - Restart-injection proof beyond runtime idempotency and deployed repeated drains.
   belief_state_changes:
     - H1 is supported: repeated guest readiness failure drives VM recovery.
     - A sourcecycled process restart and host pressure/OOM are falsified for the
@@ -1163,19 +1166,35 @@ run_checkpoint_and_resumption_state:
       reported in-flight=1 and submitCap=0. Telegram cycle
       cycle_1881203e0b9e6dadf812e494 queued three processors while the ledger reported
       28 queued/skipped requests and submitted none.
+    - 949342e2 passed all required standard/race CI gates in run 29138998386 and
+      activated on Node B at 04:18:34Z. The platform runtime listened at 04:19:11Z;
+      bounded event batches continued without guest recovery.
+    - Processor 935efe9c completed while migration was active. Sourcecycled reconciled
+      its explicit terminal no-story resolution, logged in-flight=0/submitCap=1 at
+      04:27:36Z, and admitted the next processor without raising the cap.
+    - Processor 8a906447 for cycle_231bc41ce13fe398f9cbe51b opened the CDC story,
+      Texture run 2e7feb86 produced canonical revision 857097b3, and a second canonical
+      CDC document/revision fe6518d2/21195704 joined the same publish batch.
+    - The five-minute debounce fired at 04:42:06Z with mixed_lineage=false and dispatched
+      exactly one reconciler run 7aba21d6 for cycle_231bc41ce13fe398f9cbe51b. It completed
+      at 04:45:04Z without crash or OOM.
+    - Authenticated GET /api/universal-wire/stories returned 200 from
+      universal-wire-edition-texture. Edition doc 3b9cdc8b revision 35427eea includes
+      both CDC canonical docs and reports updated_at 04:40:24Z.
+    - Reconciler 7aba21d6 searched the opaque document/revision handles as corpus/source
+      queries, found no matches, and requested titles/corpus-visible ids instead of
+      assessing consensus, contradiction, or drift. The activation and edition path is
+      proven; the reconciler input contract is not yet sufficient for useful review.
   remaining_error_field:
-    - No deployed cycle-correlated reconciler exists yet; the repaired activation
-      cannot receive a fresh eligible publication while the processor slot is retained.
-    - The retained submitted request/run pair is not exposed by the source-service
-      API, so terminal reconciliation versus continuity refresh is not yet separated.
-    - The visible canonical story was produced by the processor/Texture path, not by
-      a completed cycle-correlated reconciler as required by completion semantics.
-  highest_impact_remaining_uncertainty: sourcecycled in-flight ledger retention
+    - The reconciler activation prompt identifies canonical documents only by ids that
+      its tools cannot dereference, so a successful run can be editorially empty.
+    - The bounded event migration has not yet emitted its durable completion marker;
+      intermittent foreground health latency remains while batches continue.
+  highest_impact_remaining_uncertainty: reconciler canonical-document read context
   next_executable_probe: >-
-    Reproduce the exact MemoryStore sequence of submit, terminal runtime reconciliation,
-    continuity supersession, and backpressure counting, or add a read-only diagnostic
-    that names the retained request/run pair. Release only terminal capacity, then
-    observe one cycle-correlated reconciler through the deployed lifecycle markers.
+    Add canonical title/content context to the publish-batch reconciler handoff (or a
+    direct Texture read tool), prove the prompt from store-backed documents, deploy,
+    and observe a fresh cycle-correlated reconciler assess the triggering documents.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1188,6 +1207,8 @@ run_checkpoint_and_resumption_state:
     - CI run 29129997504, deploy job 86484654190, activation receipt for 614a3c9a,
       Texture run 6f783283, edition doc 3b9cdc8b, and story doc d608c407.
     - CI run 29131530054, deploy job 86488846194, and activation receipt for 20644c66.
+    - CI run 29138998386 and activation receipt for 949342e2; processor runs 935efe9c
+      and 8a906447; Texture run 2e7feb86; reconciler run 7aba21d6; edition doc 3b9cdc8b.
   rollback_refs: []
 ```
 
