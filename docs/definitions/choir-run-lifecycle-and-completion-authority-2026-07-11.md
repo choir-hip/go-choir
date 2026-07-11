@@ -1,23 +1,18 @@
 # Choir Run Lifecycle and Completion Authority
 
-## Harness Invocation Semantics
+## Subordinate Invocation Semantics
+
+This document is the S6 run-truth specification of:
 
 ```text
-/goal docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```
 
-Read this document as executable semantic authority for unifying run lifecycle
-state across the runtime, dispatcher, and trajectory projections, and for
-enforcing artifact-verified completion on the processor path. It is **member 3**
-of `docs/definitions/choir-run-truth-suite-2026-07-11.md` (Correctness) and the
-concrete Phase 3 of the `choir-autoputer-cli-operability` spine (run truth /
-G3 / G4).
-
-**Prerequisites (suite order — do not chain-execute them from here):**
-
-1. `docs/definitions/choir-run-deploy-unblock-2026-07-11.md` complete
-2. `docs/definitions/choir-wire-store-conformance-2026-07-11.md` complete
-
+Do not invoke it independently. The grand-suite orchestrator executes it only
+after S1 Deploy restoration, S2 Wire authority cutover, S3 runtime extinction,
+S4 audited-computer proof, and S5 observation/receipt proof. Its lifecycle
+semantics survive; implementation must target the extracted core boundary, not
+recreate `internal/runtime`.
 ## Why this mission exists
 
 Twelve activation attempts, culminating in the 2026-07-11 post-mortem,
@@ -46,30 +41,24 @@ exposed that processor run completion and retry authority are fragmented.
    duplicate same–Texture-actor-mailbox rewarms cancelled the only mandatory
    canonical write, and the reconciler still narrated success.
 
-After wire-store conformance dissolves C1/C2/C6, C4 and C5 remain the blocking
-residue on the processor path. The fourth freeze mode (`running` forever) is
-owned by suite member 1 (deploy unblock); this mission inherits that repair.
+After S2 dissolves C1/C2/C6 and S3 removes the runtime god package, C4 and C5
+remain the processor-path run-truth subgoal. S1 owns the fourth freeze mode
+(`running` forever); S6 re-verifies it.
 
 ## Source Authority Order
 
-1. This Definition.
-2. `docs/definitions/choir-run-truth-suite-2026-07-11.md` (suite foliation).
+1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
+2. This subordinate Definition within S6 scope.
 3. `docs/definitions/choir-autoputer-cli-operability-2026-07-11.md`
-   (Phase 3 run truth, G3/G4, four-item external operator test, Introspection
-   Contract).
-4. `docs/definitions/choir-wire-store-conformance-2026-07-11.md`
-   (prerequisite: world-wire store, sourcecycled durable ledger, no boot-time
-   migration).
-5. `docs/definitions/choir-run-deploy-unblock-2026-07-11.md`
-   (prerequisite: progress deadline + `choir run cancel` + Deploy restored).
+   (operator test and Introspection Contract).
+4. `docs/definitions/choir-wire-store-conformance-2026-07-11.md`.
+5. `docs/definitions/choir-run-deploy-unblock-2026-07-11.md`.
 6. `docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`
-   (C4/C5 evidence; original three freeze modes — this suite adds the fourth
-   via deploy-unblock).
-7. `docs/standing-questions.md` (Q5, Q6, Q9).
-8. `AGENTS.md`, `docs/choir-doctrine.md`, `docs/runtime-invariants.md`.
-9. Observed source: `internal/types/task.go`, `internal/types/trajectory.go`,
-   `internal/runtime/runtime.go`, `internal/runtime/api.go`,
-   `cmd/sourcecycled/main.go`, `cmd/choir`.
+   as failure evidence.
+7. `docs/standing-questions.md`, `AGENTS.md`, `docs/choir-doctrine.md`,
+   `docs/runtime-invariants.md`.
+8. Observed post-S3 source: extracted lifecycle/core packages,
+   `internal/types`, `cmd/sourcecycled`, and `cmd/choir`.
 
 ## Settled Inputs (do not re-litigate)
 
@@ -84,9 +73,8 @@ owned by suite member 1 (deploy unblock); this mission inherits that repair.
   (C5 / Q6).
 - **Processor path only** for this mission; reconciler/editorial verification
   waits until the one-agent path is stable.
-- **Progress deadline and `choir run cancel`** already exist from suite member 1
-  (or must be completed there before this `/goal`). Do not re-implement unless
-  staging shows regression.
+- **Progress deadline and operator cancel** are inherited from grand S1.
+  Re-verify them here; do not build a second mechanism.
 
 ## Mission Purpose
 
@@ -109,37 +97,34 @@ owned by suite member 1 (deploy unblock); this mission inherits that repair.
 - No PC-5 / audited-computer materialization (product-completion / ontology).
 - No promotion, route-slot, or key-scoping (`autoputer-cli` later phases).
 - No VM reprovisioning.
-- **No naming / rename sweeps** — owned by
-  `choir-vocabulary-cutover-2026-07-11.md` (suite member 4). New code here must
-  still be born in successor vocabulary (no new lease identifiers; speak *run*,
-  not loop-as-product).
-- **No continuation, parent/child, or result-channel deletion** — og-dolt B/C/E.
-  Do not touch `run_continuations` / `/api/continuations` under this Definition.
+- **No naming / rename sweeps** — grand S9 owns vocabulary cutover. New code
+  here is still born in successor vocabulary.
+- **No continuation, parent/child, or result-channel deletion** — grand S3
+  must already have completed those cutovers.
 
 ## Dependency Truth (verified 2026-07-11; refresh at Phase 0)
 
-- Wire-store conformance was **defined but not implemented** at authoring
-  (`a2f110e`). Suite member 2 must complete before Phase D here. **Do not**
-  chain-execute wire-store from this Definition — follow the suite index.
+- Grand S2 Wire conformance and S3 runtime extinction must be complete before
+  this subgoal begins. Return to the suite orchestrator if they are not.
 - `isTerminalRuntimeState` already treats `blocked` as terminal (`f1ceba5`).
   Phase B decides terminal-error vs retryable-dispatch routing.
 - `RunningCountByProfile` already derives from
   `store.ListRunsByState(..., RunRunning, ...)`. Residue: (a) error path falls
   back to in-memory `RunningCount()`; (b) `RunPending` not counted; (c)
   `processorRunOccupiesAdmission` defaults to "occupies" on lookup error.
-- Fourth freeze mode (`running` forever) is repaired by suite member 1.
+- Fourth freeze mode (`running` forever) is inherited from grand S1.
 
 ## Open Decisions (defaults govern; deviations recorded in ledger)
 
-- **Single authority:** `RunRecord.State` in `internal/runtime` is sole writer;
-  other projections are read-only or derived. Re-derive the mission if the
-  owner later selects a different authority.
+- **Single authority:** `RunRecord.State` semantics have one writer in the
+  extracted lifecycle/core package; other projections are read-only or
+  derived. S3 must leave this boundary explicit before S6 begins.
 - **Retry policy:** sourcecycled retries on the next poll, up to **3** attempts
   per cycle. No synchronous immediate retry.
 - **Blocked-run timeout:** `RunBlocked` auto-cancels after **10 minutes** so
   cycle idempotency releases for retry (Phase B sweep). Admission must already
   treat all `blocked` as non-occupying (Phase A).
-- **Progress deadline:** **60 minutes** — owned by suite member 1; inherit.
+- **Progress deadline:** inherited from grand S1; exact mechanism is re-verified.
 - **Artifact predicate:** published world-wire article/story with ingestion
   lineage in the `corpusd` store — only after wire-store conformance.
 
@@ -148,7 +133,7 @@ owned by suite member 1 (deploy unblock); this mission inherits that repair.
 - `RunCompleted` has a fetchable artifact in the world-wire store (from Phase D).
 - `RunBlocked`, `RunFailed`, and `RunCancelled` must not freeze admission and
   must not permanently consume cycle idempotency.
-- `RunRunning` stays within its progress deadline (member 1).
+- Active work stays within the grand S1 progress bound.
 - Admission is derived from `RunRecord.State` (`RunPending` + in-deadline
   `RunRunning`); no silent fallback to the in-memory map on errors.
 - Two runs with the same cycle/ingestion fingerprint cannot be concurrently
@@ -170,21 +155,21 @@ Complete when all are observed on staging:
    - `blocked` with no redispatch/retry path (historical; routing fixed in B)
    - `passivated` with live trajectory
    - `completed` with live trajectory
-   - `running` with expired progress deadline (member 1; re-verify here)
+   - `running` with expired progress bound (grand S1; re-verify here)
 5. Duplicate concurrent submissions → `409 Conflict`; retries after
    failed/cancelled → accepted.
-6. Member 1's Deploy restoration still holds (or is re-proven if regressing).
+6. Grand S1 Deploy restoration still holds.
 
-Naming residue is **not** a completion criterion (suite member 4).
+Vocabulary residue is not an S6 completion criterion; grand S9 owns cutover.
 
 ## Sequencing and Gates
 
-Order: Phase 0 → A → B → C (verify member 1) → D → E.
+Order: Phase 0 → A → B → C (verify grand S1) → D → E.
 
 Every phase:
 
-1. **Consensus** before mutation (`/tmp/choir-run-lifecycle-<phase>-consensus`).
-2. **Local proof** (phase tests + `go build ./...` + `go vet ./...`).
+1. **Consensus checkpoint** through the grand-suite orchestration protocol.
+2. **Focused local proof** on affected packages plus build/vet as required.
 3. **Landing loop** per `AGENTS.md`.
 4. **QA** on staging; record IDs in the evidence ledger.
 5. **Halt-on-red;** repair within phase (documentation-first) or roll back to
@@ -196,12 +181,12 @@ Docs-only commits use the docs-only landing path.
 
 ## Execution Phases
 
-### Phase 0 — Consensus on the plan (green/yellow)
+### Phase 0 — Reconciliation and checkpoint review (green/yellow)
 
-- Confirm suite members 1–2 are complete on staging; if not, stop and point
-  ACTIVE at the blocking member (do not chain-execute).
-- Consensus on this Definition's phases and Open Decision defaults.
-- Record ledger entry. No code mutation.
+- Confirm grand S1–S5 are complete in the suite checkpoint.
+- Reconcile this semantic contract against the extracted S3 boundary.
+- Run agentic consensus through the grand-suite checkpoint protocol.
+- Record the adjudicated ledger entry. No code mutation.
 
 ### Phase A — Authority alignment and derived admission (red)
 
@@ -213,13 +198,14 @@ Docs-only commits use the docs-only landing path.
   - `processorRunOccupiesAdmission` returns `false` for `failed`, `cancelled`,
     and **all** `blocked` runs (blocked is terminal and must not occupy);
     lookup errors surface explicitly instead of defaulting to "occupies".
-- **Local proof:** `go test ./internal/runtime -run 'Admission|RunningCount|Idempotency'`.
+- **Local proof:** run the focused extracted-lifecycle tests matching
+  `Admission|RunningCount|Idempotency`.
 - **QA:** a deliberately blocked run is visible as `blocked` (API or
   `choir run status` if already sufficient), does not occupy admission, and a
   second independent request is admitted.
-- **Rollback path note:** feature-flag retention of the legacy counter is
-  allowed only as emergency rollback after A lands; the forward path removes
-  the silent fallback.
+- **Rollback path:** revert the entire Phase A landing to its recorded
+  pre-phase SHA or fail closed. No feature flag, compatibility counter, or
+  selectable legacy admission path may survive the cutover.
 
 ### Phase B — Retryable ingestion idempotency (red)
 
@@ -229,28 +215,29 @@ Docs-only commits use the docs-only landing path.
   - `cmd/sourcecycled/main.go`: route terminal `blocked`/`failed`/`cancelled`
     to the retryable path with budget **3** per cycle. Implement the **10
     minute** blocked auto-cancel sweep for cycle release / retry eligibility.
-  - `internal/runtime/api.go`: active fingerprint → `409`; resubmission after
-    terminal error → new run.
-- **Local proof:** `go test ./cmd/sourcecycled ./internal/runtime -run 'Terminal|Retry|Dedup|Conflict|BlockedTimeout'`.
+  - Extracted lifecycle/API owner: active fingerprint → `409`; resubmission
+    after terminal error → new run.
+- **Local proof:** run focused `cmd/sourcecycled` and extracted-lifecycle tests
+  matching `Terminal|Retry|Dedup|Conflict|BlockedTimeout`.
 - **QA:** simulated 429 → terminal state, capacity release, successful retry on
   next poll; duplicate concurrent submission → `409`.
 
 ### Phase C — Verify deploy-unblock still holds (yellow/red if regression)
 
-- **Objective:** confirm member 1's deadline/cancel/Deploy proof still holds.
-- **Changes:** none if green; if regressing, repair under member 1's authority
-  (or a minimal patch here) before continuing.
+- **Objective:** confirm grand S1 deadline/cancel/Deploy proof still holds.
+- **Changes:** none if green; if regressing, return the finding to the
+  grand-suite orchestrator for documentation-first repair.
 - **QA:** `running_runs: 0` on the platform VM (or equivalent health) and Deploy
   not blocked by a stuck run.
 
 ### Phase D — Artifact-verified completion (red)
 
-- **Gate:** wire-store conformance completion semantics already observed
-  (suite member 2). If not, **stop** and run that `/goal` from ACTIVE — do not
-  chain-execute from this document.
+- **Gate:** grand S2–S5 completion is recorded. If not, return control to the
+  grand-suite orchestrator; do not invoke another `/goal`.
 - **Changes:** processor `RunCompleted` requires the artifact predicate; clean
   exit without artifact → `RunFailed`.
-- **Local proof:** `go test ./internal/runtime -run 'Artifact|Completion'`.
+- **Local proof:** run focused extracted-lifecycle tests matching
+  `Artifact|Completion`.
 - **QA:** publish → `completed` with fetchable receipt; suppressed publish →
   `failed`.
 
@@ -259,21 +246,21 @@ Docs-only commits use the docs-only landing path.
 - Extend `choir run status <id>` to print unified state (artifact receipt after
   D).
 - Land four freeze-mode regression tests if not already present.
-- Consensus on full mission diff (code-review frame).
-- Deployed acceptance: four-item external operator test from autoputer-cli.
-- Update this Definition's state, `docs/ACTIVE.md`, evidence ledger.
-- Suite then advances to member 4 (vocabulary) — not part of this completion.
+- Run grand-suite agentic consensus on the full S6 diff and evidence.
+- Deployed acceptance: the run-truth slice of the external operator test.
+- Update the grand suite's evidence and resumption state.
+- Return control to the grand-suite orchestrator for S7.
 
 ## Follow-on Missions
 
-- Suite member 4: `choir-vocabulary-cutover-2026-07-11.md`
-- Autoputer-cli later phases (deploy receipts, promotion, keys)
-- Autopaper editorial / reconciler artifact verification
-- og-dolt B/C/E deletion families (continuation, parent/child, H025, …)
+- Grand S9 owns vocabulary cutover and successor handoff.
+- Grand S7–S8 own promotion, contained keys, and Choir-in-Choir.
+- Autopaper editorial/reconciler verification remains a successor mission.
+- Overlapping og-dolt deletion families are absorbed by grand S3.
 
 ## Supersession Record
 
-- Depends on suite members 1–2 and `choir-autoputer-cli-operability`.
+- Subordinate to `choir-autoputer-completion-suite-2026-07-11.md` S6.
 - Investigation basis: autopaper activation attempt report.
 - Amended 2026-07-11: Dependency Truth, fourth freeze mode, gates, phases A–E,
   autonomous contract.
@@ -304,12 +291,12 @@ Docs-only commits use the docs-only landing path.
   - `409` for duplicate active submissions; successful retry after terminal
     failure.
   - No SSH, journalctl, or raw SQL in acceptance.
-- **Rollback path:** revert to pre-phase SHA; emergency feature-flag for legacy
-  admission counter only after A has removed the silent fallback.
+- **Rollback path:** revert to the pre-phase SHA. Do not retain an old admission
+  counter behind a compatibility flag.
 - **Heresy delta:**
   - `discovered`: split projections; at-most-once-ever dedup; narrative
-    completion without artifact; `running` forever (member 1).
-  - `repaired` (this mission): one `RunRecord.State` authority; retry
-    semantics; artifact-gated completion; unified `choir run status`.
-  - `repaired` (member 1): progress deadline + cancel.
-  - Naming repairs are member 4, not here.
+    completion without artifact; `running` forever.
+  - `repaired` (S6): one `RunRecord.State` authority; retry semantics;
+    artifact-gated completion; unified `choir run status`.
+  - `repaired` (grand S1): progress deadline + cancel.
+  - Naming repairs are grand S9.

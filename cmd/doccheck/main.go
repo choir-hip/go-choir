@@ -25,25 +25,25 @@ const (
 )
 
 var highRead = map[string]bool{
-	"README.md":                                                true,
-	"AGENTS.md":                                                true,
-	"docs/README.md":                                           true,
-	"docs/choir-doctrine.md":                                   true,
-	"docs/semantic-registry.md":                                true,
-	"docs/NOW.md":                                              true,
-	"docs/ACTIVE.md":                                           true,
-	"docs/current-architecture.md":                             true,
-	"docs/platform-os-app-state.md":                            true,
-	"docs/conjecture-assertion-ledger-2026-06.md":              true,
-	"docs/heresy-detectors.md":                                 true,
-	"docs/agent-product-doctrine.md":                           true,
-	"docs/choir-prompting-invariants.md":                       true,
-	"docs/memo-problem-documentation-first.md":                 true,
-	"docs/computer-ontology.md":                                true,
-	"docs/runtime-invariants.md":                               true,
-	"docs/texture-agentic-invariants-2026-06-13.md":            true,
-	"docs/source-external-data-publication.md":                 true,
-	"docs/definitions/og-dolt-heresy-completion-2026-07-08.md": true,
+	"README.md":                                     true,
+	"AGENTS.md":                                     true,
+	"docs/README.md":                                true,
+	"docs/choir-doctrine.md":                        true,
+	"docs/semantic-registry.md":                     true,
+	"docs/NOW.md":                                   true,
+	"docs/ACTIVE.md":                                true,
+	"docs/current-architecture.md":                  true,
+	"docs/platform-os-app-state.md":                 true,
+	"docs/conjecture-assertion-ledger-2026-06.md":   true,
+	"docs/heresy-detectors.md":                      true,
+	"docs/agent-product-doctrine.md":                true,
+	"docs/choir-prompting-invariants.md":            true,
+	"docs/memo-problem-documentation-first.md":      true,
+	"docs/computer-ontology.md":                     true,
+	"docs/runtime-invariants.md":                    true,
+	"docs/texture-agentic-invariants-2026-06-13.md": true,
+	"docs/source-external-data-publication.md":      true,
+	"docs/definitions/choir-autoputer-completion-suite-2026-07-11.md": true,
 }
 
 // defaultReadPacket is intentionally small. It includes the docs router plus
@@ -62,7 +62,7 @@ var defaultReadPacket = []string{
 	"docs/runtime-invariants.md",
 	"docs/texture-agentic-invariants-2026-06-13.md",
 	"docs/source-external-data-publication.md",
-	"docs/definitions/og-dolt-heresy-completion-2026-07-08.md",
+	"docs/definitions/choir-autoputer-completion-suite-2026-07-11.md",
 }
 
 type manifestFile struct {

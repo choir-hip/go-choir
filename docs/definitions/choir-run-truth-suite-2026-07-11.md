@@ -1,23 +1,20 @@
 # Choir Run-Truth Suite
 
-## Harness Invocation Semantics
+## Superseded Invocation Semantics
+
+Do not invoke this document with `/goal`. It is retained as the historical
+foliation record that separated correctness, deletion, and rename work.
+
+Its executable successor is:
 
 ```text
-/goal docs/definitions/choir-run-truth-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```
 
-Read this document as the **suite index** for run-truth work. It does not
-authorize code mutation by itself. It sequences member Definitions and forbids
-mixing mission kinds inside one `/goal`.
-
-Member harness entry points (run one at a time, in order):
-
-```text
-/goal docs/definitions/choir-run-deploy-unblock-2026-07-11.md
-/goal docs/definitions/choir-wire-store-conformance-2026-07-11.md
-/goal docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
-/goal docs/definitions/choir-vocabulary-cutover-2026-07-11.md
-```
+The successor is one resumable grand mission suite. It treats the former
+members below as subordinate specifications where still applicable, places
+runtime dissolution inside the broader autoputer sequence, and preserves the
+owner-settled rule that Autoputer precedes Choir-in-Choir and Autopaper.
 
 ## Why this suite exists
 
@@ -31,26 +28,24 @@ tangible staging proof. Foliate by exit receipt:
 | **Deletion** | Heresy detector quiet + net lines down | `og-dolt-heresy-completion` Phases B/C (and related E deletions) — **not** this suite |
 | **Rename cutover** | New names live, aliases drained, staging green | Member 4 (coordinates with og-dolt Phase E; does not delete continuation/parent-child) |
 
-## Suite sequence (strict)
+## Historical suite sequence
 
-1. **Deploy unblock** (`choir-run-deploy-unblock-2026-07-11`) — Correctness.
-   Drain the stuck `running` run; restore `Deploy to Staging (Node B)`.
-   Tangible first win. Executable now.
-2. **Wire-store conformance** (`choir-wire-store-conformance-2026-07-11`) —
-   Correctness. World-wire on corpusd; delete boot migration; no VM fate-share
-   on stories. No rename ceremonies.
-3. **Run lifecycle and completion authority**
-   (`choir-run-lifecycle-and-completion-authority-2026-07-11`) — Correctness.
-   Single `RunRecord.State` authority, retry, artifact-verified completion,
-   `choir run status`. **No naming sweeps.** Depends on members 1–2.
-4. **Vocabulary cutover** (`choir-vocabulary-cutover-2026-07-11`) — Rename.
-   `loop.*`→`run.*`, prompt-bar submission API, and coordinated
-   universal-wire / sandbox / H019 sweeps. Runs only after member 3 is
-   complete. Does not reopen continuation or parent/child deletion.
+This sequence is preserved as evidence, not current execution authority:
 
-**Do not** chain-execute a later member from inside an earlier one. Advance the
-suite by completing the current member's completion semantics, updating
-`docs/ACTIVE.md`, then invoking the next `/goal`.
+1. Deploy unblock.
+2. Wire-store conformance.
+3. Run lifecycle and completion authority.
+4. Vocabulary cutover.
+
+The sequence was incomplete because it jumped from Autoputer Phase 0 directly
+to run truth, left audited-computer and observation phases outside the spine,
+and left runtime business-logic extraction as an unowned external dependency.
+The grand suite repairs those omissions.
+
+Do not chain-execute these members from this document. The grand-suite
+orchestrator reads them as subordinate contracts, delegates their execution
+and micro-verification, runs agentic consensus at phase checkpoints, and
+updates one durable resumption state.
 
 ## Atomic coupling rules
 
@@ -61,21 +56,33 @@ suite by completing the current member's completion semantics, updating
 - Deploy wait + stuck `running` drain stay together (member 1).
 - Wire stories read path + boot-migration deletion stay together (member 2).
 
-## Out of suite (do not absorb)
+## Former out-of-suite boundaries (superseded)
 
-- Continuation deletion (H006–H008) — og-dolt Phase C.
-- Parent/child deletion (H001–H005) — og-dolt Phase B.
-- H025 result-channel API deletion — og-dolt Phase E (deletion), not B/C.
-- Browser / Super Console / docs-only "platform Dolt" renames — their owning
-  missions.
-- Autoputer CLI phases after run truth (deploy receipts, promotion, keys) —
-  `choir-autoputer-cli-operability-2026-07-11`.
+The following exclusions applied only to the former run-truth foliation. Current
+ownership is:
 
-## Suite completion
+- continuation, parent/child, and result-channel production deletion: grand
+  S3, using OG/Dolt detector contracts;
+- surviving acceptance and lifecycle truth: grand S6;
+- audited-computer, operator, self-development, and containment CLI work:
+  grand S4–S8;
+- vocabulary/surface cleanup: grand S9, coordinated with OG/Dolt Phase E.
 
-The suite is complete when members 1–4 each report `complete` on staging under
-their own Definition. Deletion heresies remaining on og-dolt are tracked there;
-they are not suite exit criteria.
+## Historical Completion Criterion
+
+The former suite would have completed when members 1–4 each reported
+`complete`. That criterion is superseded and cannot authorize current
+execution or completion; the grand suite's S0–S9 completion semantics govern.
+
+## Supersession Status
+
+- **Status:** `superseded`.
+- **Successor:** `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
+- **Reason:** owner direction requires one executable, resumable grand suite;
+  runtime dissolution is one subgoal among Deploy, Wire, audited-computer,
+  observation, run truth, self-development, containment, and vocabulary work.
+- **Evidence retained:** correctness/deletion/rename foliation and atomic
+  coupling rules below remain useful constraints.
 
 ## Supersession Record
 

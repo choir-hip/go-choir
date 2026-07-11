@@ -1,29 +1,33 @@
 # Choir Product Completion: CLI, Desktop, Base, and Autopaper
 
-## Harness Invocation Semantics
+## Subordinate And Paused Invocation Semantics
+
+Do not invoke this document while the active grand suite is working:
 
 ```text
-/goal docs/definitions/choir-product-completion-2026-07-10.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```
 
-Read this document as executable semantic authority. Reconcile its determined
-state with current source and staging, execute safe in-bound probes, update the
-definition graph and evidence ledger, and continue until the completion
-semantics are satisfied or an explicit blocker/supersession condition is met.
-A checkpoint is not completion.
+The grand suite consumes this document's PC-5 audited-computer contract in S4.
+Other CLI, desktop, Base, and historical Autopaper work is paused until the
+suite either completes or explicitly supersedes that work into a successor.
+A checkpoint in this document cannot compete with grand-suite authority.
 
 ## Source Authority Order
 
-1. `docs/choir-doctrine.md`
-2. `AGENTS.md`
-3. `docs/computer-ontology.md`
-4. `docs/agent-product-doctrine.md`
-5. this Definition for CLI, Wails desktop, Choir Base, and Autopaper work
-6. `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` for
-   storage/heresy/promotion authority
-7. `docs/runtime-invariants.md`, `docs/source-external-data-publication.md`,
+1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` for
+   active autoputer ordering and PC-5 execution.
+2. `docs/choir-doctrine.md`
+3. `AGENTS.md`
+4. `docs/computer-ontology.md`
+5. `docs/agent-product-doctrine.md`
+6. this Definition for paused CLI, Wails desktop, Choir Base, and historical
+   Autopaper evidence
+7. `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` for
+   storage/heresy/promotion contracts subordinate to the grand suite
+8. `docs/runtime-invariants.md`, `docs/source-external-data-publication.md`,
    and `docs/texture-agentic-invariants-2026-06-13.md`
-8. observed source, tests, CI, and staging evidence
+9. observed source, tests, CI, and staging evidence
 
 This document is a disjoint companion to the OG/Dolt/heresy Definition. It may
 record promotion dependencies and false-success evidence, but it cannot rewrite
@@ -1066,7 +1070,7 @@ SyncService, or one published Texture is not completion.
 
 ```yaml
 run_checkpoint_and_resumption_state:
-  status: working
+  status: superseded
   last_checkpoint: >-
     PC-0/PC-4 staging refresh against activated 944d4d94 (CI 29091595925);
     live re-probe 2026-07-10 confirmed service-scoped identity still serving
@@ -1108,14 +1112,13 @@ run_checkpoint_and_resumption_state:
     - no Base exact-byte two-device proof
     - no served ComputerVersion promotion end-to-end / OG truth-gate settlement
   highest_impact_remaining_uncertainty: >-
-    PC-2 Wails token containment remains the highest open P0 product authority
-    failure on the activated 944d4d94 base.
+    Grand S4 must select only the PC-5 pre-wiring rows needed for audited
+    ComputerVersion construction; other product-completion work remains paused.
   next_executable_probe: >-
-    Resume PC-2 Wails token containment (red): collapse exchange/redeem onto
-    auth-owned HttpOnly session cookies, delete renderer-visible token paths,
-    and prove built-app reload/logout containment. Keep PC-4 open until an
-    admissible promote/rollback package exists under OG authority.
-  suggested_goal_string: "/goal docs/definitions/choir-product-completion-2026-07-10.md"
+    Resume through the grand suite. During S4, consume PC-5 exact durable-state
+    primitives without pulling Wails, Base product wiring, run truth, promotion,
+    rollback, or Autopaper work forward.
+  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
     - docs/definitions/choir-seam-repair-2026-07-10.md

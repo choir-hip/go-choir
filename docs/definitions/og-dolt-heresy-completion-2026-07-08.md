@@ -1,54 +1,43 @@
 # OG / Dolt / Heresy Completion Mission
 
-## Harness Invocation Semantics
+## Subordinate Invocation Semantics
+
+This document supplies storage, promotion, heresy-detector, and deletion
+contracts to:
 
 ```text
-/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```
 
-Read this document as executable semantic authority. Execute autonomously until
-its completion semantics are satisfied with named evidence, or until a sharply
-evidenced escalation, blocker, or supersession condition is met. Do not treat
-this document as a plan, checklist, or summary. Its definitions govern what
-"done," "seam," "repaired," "promoted," and "complete" are allowed to mean.
+Do not invoke it independently while the grand suite is `working`. Runtime,
+Wire, continuation, parent-child, acceptance, promotion, and vocabulary
+mutations execute only through the suite's S2/S3/S6/S7/S9 subgoals. Historical
+conclusions and evidence remain load-bearing; they do not create a second
+orchestrator or resumption state.
 
-This document **supersedes as executable authority**:
-
-- historical source in Git history (the 2026-07-07 program
-  paradoc) — its phases were partially executed and its sequencing was violated
-  in practice (Phase 4 seams landed before Phase 0 foundations); this document
-  absorbs its remaining work and corrects the sequencing.
-- historical source in Git history — its definition graph
-  (heresy, eliminated, detector, registry-close semantics) is imported by
-  reference; its execution state is absorbed here.
-
-Their conclusions are absorbed here. The deleted originals are source material
-in Git history only and are not independent execution targets.
+This document previously superseded the deleted 2026-07-07 program and heresy
+paradocs. Their conclusions remain absorbed here as historical evidence. The
+grand suite now supersedes this document's independent execution authority.
 
 ## Source Authority Order
 
-1. This document (definition graph + determined state + completion semantics).
-2. Owner statements 2026-07-07/08: object graph becomes canonical by hard
+1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` for
+   active execution order, delegation, checkpoints, and resumption.
+2. This document's detector, deletion, and historical evidence contracts.
+3. Owner statements 2026-07-07/08: object graph becomes canonical by hard
    cutover; Dolt version-control features become load-bearing; all named
    heresies eliminated with executable enforcement; candidate computers are
-   capsules over substrate-independent audited computers, not VMs; **one
-   comprehensive mission encompasses the incomplete og-dolt and
-   heresy-eradication runs plus all cleanup/completion debt from past
-   missions** (2026-07-08).
-3. `docs/computer-ontology.md` (ComputerVersion, materializer,
+   capsules over substrate-independent audited computers, not VMs; one
+   comprehensive mission encompasses incomplete cleanup debt.
+4. `docs/computer-ontology.md` (ComputerVersion, materializer,
    route-over-computer-version).
-4. `docs/choir-doctrine.md` heresy registry (H001–H031) — per-heresy authority
-   for bad pattern and blessed replacement.
-5. historical source in Git history — imported definition
-   graph for `heresy`, `eliminated`, detector semantics.
-6. historical source in Git history — phase inventories,
-   deletion inventories, completion criteria (imported, resequenced here).
-7. Pre-purge evidence snapshot at Git commit `8f62fe3b` (completeness
-   percentages, timeout diagnosis, storage-fork analysis).
-8. Agentic-consensus panel reviews 2026-07-08/09 — reviewer evidence class;
-   findings were adjudicated into this document, not authority on their own.
-   Raw panel transcripts are intentionally absent from the worktree.
-9. `AGENTS.md` (repo operating contract, mutation ceremony, Landing Loop).
+5. `docs/choir-doctrine.md` heresy registry (H001–H031).
+6. Historical source in Git history for imported definition graphs, phase
+   inventories, deletion inventories, and completion criteria.
+7. Pre-purge evidence snapshot at Git commit `8f62fe3b`.
+8. Agentic-consensus panel reviews 2026-07-08/09 as adjudicated external
+   second-opinion evidence.
+9. `AGENTS.md`.
 
 Where this document conflicts with older mission docs or ledgers that label
 work "complete" while carrying populated `remaining_error_field` /
@@ -93,9 +82,10 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 
 **Non-purpose:**
 
-- Not a rewrite of `internal/runtime`; business-logic extraction remains an
-  external dependency. This mission deletes dual paths inside what exists and
-  records that extraction as an open dependency.
+- Runtime business-logic extraction is now owned by
+  `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` S3. This
+  Definition supplies subordinate detector/deletion contracts; it is not a
+  competing `/goal` spine.
 - Not the grip/RL research program; that retired narrative remains in Git
   history and its research forks are out of scope.
 - Not new product surface (headless CLI Phase 1.5 verbs, MCP, reader UX
@@ -245,28 +235,25 @@ execution_effect:
   - Work item C6 records this in the docs index; agents must not cite grip narrative as execution authority.
 ```
 
-### D-STORES. Term: Dolt persistence domains — SETTLED (owner constraints + orchestrator + observed, 2026-07-10)
+### D-STORES. Historical term: three-domain Dolt taxonomy — SUPERSEDED IN PART
 
 ```yaml
 id: dolt-store-taxonomy
 kind: term
-status: settled
-source: orchestrator-settled synthesis of owner D-STORE/computer-ontology constraints + observed source audit, 2026-07-10
+status: superseded_by_grand_suite_route_ledger_topology
+source: orchestrator-settled synthesis, unratified; owner two-store directive governs
+superseded_claim: A distinct third Dolt domain owns ComputerVersion route control.
+superseded_by: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md#route-ledger-topology
 term: Dolt store taxonomy
 definition: >-
-  The tree has two product-state Dolt stores and one narrow platform-control
-  Dolt ledger. They must never be conflated: (1) the WORLD-WIRE STORE — the
-  platform ObjectGraphStore
-  (internal/platform/objectgraph_store.go, served by corpusd; HTTP access
-  via internal/objectgraph/http_store.go), ill-named "platform Dolt"; it
-  serves the world-wire system only. (2) VM-LOCAL EMBEDDED STORES — one
-  embedded Dolt per user VM (internal/objectgraph/dolt_store.go: DoltStore
-  is the VM-LOCAL store, not the platform one), shared by all capsules
-  running in that VM. (3) the COMPUTERVERSION ROUTE LEDGER — a distinct,
-  durable, vmctl-owned control ledger containing only route-slot generations,
-  current ComputerVersion values, and immutable transition receipts. It is
-  shared control authority, not user application state and not world-wire
-  state.
+  The live topology has exactly two product-state Dolt stores: (1) the
+  WORLD-WIRE STORE — the platform ObjectGraphStore
+  (`internal/platform/objectgraph_store.go`, served by corpusd; HTTP access via
+  `internal/objectgraph/http_store.go`) serving the world-wire system; and
+  (2) VM-LOCAL EMBEDDED STORES — one embedded Dolt per user VM
+  (`internal/objectgraph/dolt_store.go`), shared by all capsules in that VM.
+  HISTORICAL, NON-EXECUTABLE CLAIM: this node formerly asserted a third,
+  distinct durable vmctl-owned Dolt route-control domain.
   PROMOTION REMAINS AN OPERATION, NOT A WORKSPACE: ComputerVersion
   fork/merge/tag preparation executes against the VM's embedded store
   (DoltPromotionAdapter.WorkspacePath is the filesystem path to that
@@ -282,7 +269,7 @@ forbidden_collapses:
   - sql-server decision for the wire store -> promotion mechanics decided
 execution_effect:
   - Every spec, doc, and work item in this mission must name which persistence domain it means; "platform Dolt" without qualification is vocabulary drift (candidate rename in Phase E alongside World Wire).
-  - Earlier "two-store" language means two product-state stores only. It may not be used to erase the narrow route-control ledger or to smuggle route authority into either product-state store.
+  - The former defense of a third route-control Dolt domain is superseded; owner-settled two-store authority requires route-slot tables on the corpusd sql-server.
   - The proxy reads route decisions through vmctl's route-ledger contract; it never opens any of these Dolt stores directly to decide a route.
 ```
 
@@ -366,21 +353,24 @@ settlement:
   settled_by: evidence
 ```
 
-### D-ROUTE. Boundary: one vmctl-owned ComputerVersion route ledger — SETTLED AUTHORITY / OPEN IMPLEMENTATION
+### D-ROUTE. Boundary: one vmctl-owned ComputerVersion route writer — CAS SEMANTICS SETTLED / THIRD-STORE TOPOLOGY SUPERSEDED
 
 ```yaml
 id: promotion-route-receipt
 kind: boundary
-status: settled (definition) / violated (implementation)
-source: orchestrator-settled synthesis of owner D-STORE/computer-ontology constraints + observed source audit, 2026-07-10
+status: settled_cas_semantics / superseded_third_store_persistence / violated_implementation
+source: CAS/receipt semantics retained; orchestrator-settled third-store synthesis was unratified and is demoted by owner two-store authority
+superseded_claim: A distinct Dolt-backed platform-control ledger is required.
+superseded_by: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md#route-ledger-topology
 authority_object:
   id: computer-version-route-ledger
   name: ComputerVersion route ledger
   owner: vmctl
   persistence: >-
-    A distinct durable Dolt-backed platform-control ledger. It is neither the
-    world-wire store, a VM-local application store, the JSON ownership
-    registry, nor a per-app promotion workspace.
+    Route-slot generations, current ComputerVersion values, and immutable
+    transition receipts are tables on the corpusd world-wire sql-server. vmctl
+    is the sole CAS writer. They are not a third Dolt domain, VM-local
+    application state, JSON ownership registry, or promotion workspace.
 definition: >-
   For each logical served-route slot, the ComputerVersion route ledger is the
   sole authority for the ComputerVersion served to ordinary requests. vmctl is
@@ -466,7 +456,7 @@ construction:
       nil/error/stale receipt paths leave adoption, lineage, UI-visible state,
       Trace, and run acceptance unchanged.
   following_slice:
-    - implement the Dolt-backed ComputerVersion route ledger and vmctl-only CAS/read APIs, including restart recovery and idempotent receipt lookup
+    - implement the ComputerVersion route-slot tables on the corpusd sql-server and vmctl-only CAS/read APIs, including restart recovery and idempotent receipt lookup
     - seed each existing slot through the writer with an explicit bootstrap receipt after materialization preflight
     - cut proxy routing to route-slot read -> ComputerVersion -> vmctl materializer, then delete lineage/hard-coded routing and PROXY_RUNTIME_DB_PATH
     - replace the tag-only adapter with D-PROMO branch preparation while keeping route activation exclusively in the ledger
@@ -523,17 +513,19 @@ definition_correction: >-
   is claimed repaired by this documentation pass.
 ```
 
-### D-STORE. Decision node: all-in on Dolt — SETTLED (owner, applied to route control 2026-07-10)
+### D-STORE. Historical decision node: all-in on Dolt — PRODUCT-STATE SEMANTICS RETAINED / ROUTE-STORE CONSEQUENCE SUPERSEDED
 
 ```yaml
 id: storage-fork
 kind: term
-status: settled
-source: owner authority, all-in on Dolt; route-ledger consequence settled by orchestrator 2026-07-10
+status: settled_product_state / superseded_route_store_consequence
+source: owner all-in-on-Dolt authority for product state; orchestrator-added third route-store consequence was unratified
+superseded_claim: Route control requires a distinct Dolt persistence domain.
+superseded_by: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md#route-ledger-topology
 definition: >-
   Choir commits to Dolt as the load-bearing persistence substrate for durable
-  product state and for the narrow ComputerVersion route-control ledger. Native
-  history/branch features become real where their domains require them.
+  product state. ComputerVersion route-control rows live as tables on the
+  corpusd world-wire sql-server; vmctl remains their sole CAS writer.
   Application-level revision/provenance chains and lifecycle registries remain
   useful indexes, caches, or projections but do not reopen the database choice
   and cannot become route authority.
@@ -543,7 +535,7 @@ non_definition:
   - ComputerSourceLineage can substitute for the ComputerVersion route ledger
 execution_effect:
   - Phase B/C history-read work and Phase D promotion work execute against Dolt.
-  - Phase D implements the D-ROUTE ledger as a distinct Dolt-backed vmctl control domain with atomic route-slot CAS + receipt append; it does not add a promotion workspace.
+  - Phase D implements D-ROUTE as route-slot and receipt tables on the corpusd sql-server with vmctl as sole atomic CAS writer; it adds neither a third Dolt domain nor a promotion workspace.
   - Per-write commit/batching, rollback mechanics, AS OF/DOLT_LOG correctness and latency, throughput, ICU/cgo build friction, and replication/sync are engineering verification axes inside the relevant phases, not decision gates.
   - If evidence exposes an actual feasibility contradiction, document and escalate it; do not silently degrade or re-open the choice by implication.
 settlement:
@@ -773,13 +765,13 @@ determined_state:
     - claim: Texture still parses prompt/document prose after a canonical write and directly executes request_email_draft.
       source: observed (`executeTextureEditTool` → `requiredContinuationAfterTextureEdit` → `extractEmailDraftIntent`, 2026-07-10)
       execution_effect: M3.1b is settled by deletion, inverted tests, CI, Node B identity, and a deployed Texture proof; broader H010/H024/H026 work remains.
-    - claim: D-ROUTE assigns ordinary served-route authority to one distinct, durable, Dolt-backed ComputerVersion route ledger owned by vmctl; vmctl is the sole CAS writer and every adoption/lineage/UI/Trace/acceptance statement is a receipt projection.
-      source: orchestrator synthesis of owner constraints + observed promotion/routing source audit, 2026-07-10
+    - claim: Historical D-ROUTE third-store topology is superseded; retained CAS/receipt semantics assign ordinary served-route authority to corpusd sql-server route-slot tables with vmctl as sole writer.
+      source: owner two-store directive, applied by grand-suite route-ledger-topology adjudication
+      superseded_claim: one distinct durable Dolt-backed ComputerVersion route-control domain
+      superseded_by: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md#route-ledger-topology
       execution_effect: >-
-        The definition/storage contradiction is settled while implementation
-        remains violated. Phase D starts with the fail-closed truth gate and
-        deletion of roll-forward/candidate-intake mutation paths, then builds
-        the ledger and cuts proxy routing to it.
+        Grand S7 owns implementation. Receipt projection, fail-closed truth,
+        idempotency, and sole-writer contracts remain subordinate inputs.
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
@@ -964,12 +956,12 @@ yellow/green auto-proceed rule.
 
 | Open edge | Disposition | Reason / pointer |
 |---|---|---|
-| actor/runtime business-logic extraction | external dependency | Outside og-dolt scope; no live successor Definition currently owns it. |
-| Texture product-loop, transclusion, and durable-thread gaps | external dependencies | Superseded mission chains were deleted; any resumed work requires a new Definition grounded in current code and staging. |
-| source-system follow-ups | external dependency | Superseded mission chain deleted; any resumed work requires a new Definition. |
-| Wire staging and substrate proof | external dependency | Superseded mission chain deleted; any resumed work requires a new Definition. |
-| lifecycle-cutover residues (texture forcing / parent/child) | absorbed: Phase B | og-dolt Phase B heresy kill wave 1 (M3.1 texture forcing, M3.2 parent/child). |
-| lifecycle-cutover residues (continuations / acceptance) | absorbed: Phase C | og-dolt Phase C heresy kill wave 2 (M4 continuation deletion, M3.3 acceptance). |
+| actor/runtime business-logic extraction | absorbed: grand suite S3 | `choir-autoputer-completion-suite-2026-07-11.md` owns the live caller cutovers, ratchets, and final directory extinction. |
+| Texture product-loop, transclusion, and durable-thread gaps | subordinate evidence for grand S3/S6 | Resume only through the grand suite from current code and staging evidence. |
+| source-system follow-ups | external dependency | Requires a fresh Definition if the grand suite does not absorb it. |
+| Wire staging and substrate proof | absorbed: grand suite S2 | D-WIRE conformance is the first runtime-authority cutover. |
+| lifecycle-cutover residues (texture forcing / parent-child) | absorbed: grand suite S3 | This Definition's H009–H012 and H001–H005 detector contracts remain the deletion bar. |
+| lifecycle-cutover residues (continuations / acceptance) | split: grand S3/S6 | S3 deletes continuation/parent-child residue; S6 establishes the surviving acceptance authority. |
 | conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E surface cleanup (H019–H029). |
 | docs truth drift | external: documentation authority Definition | Governed by `documentation-authority-reduction-2026-07-09.md`. |
 | node-B fail-closed auth | external dependency | Platform/auth operations are not og-dolt work. |
@@ -977,12 +969,18 @@ yellow/green auto-proceed rule.
 | SQLite/sourcecycled cleanup | external dependency | Object-graph consolidation remains outside og-dolt scope; no live successor Definition owns it. |
 | node-B retention, news, orchestrator, autoradio, and cross-substrate gaps | external dependencies | Their checkpoint chains were removed; any resumed work requires fresh Definitions from current evidence. |
 | wire-on-settlement | external dependency | Route-switch evidence gate is not og-dolt work. |
-| continuation-deletion sequencing | absorbed: Phase C | og-dolt Phase C continuation deletion (H006–H008). |
+| continuation-deletion sequencing | absorbed: grand suite S3 | H006–H008 deletion executes inside runtime dissolution after zero production callers are verified. |
 
 Phase A exit bar (what the gate panel reviews): detectors reporting in CI;
 timeouts proven in staging; all corrections committed; S1 settled or
 explicitly scoped; triage table full. Then the Phase Gate Protocol runs and,
 on clear, execution continues directly into Phase B.
+
+Grand-suite ownership update (2026-07-11): Phases B/C/E remain authoritative
+detector and deletion specifications, but overlapping runtime, continuation,
+parent-child, acceptance, and vocabulary mutations execute only as grand-suite
+S3/S6/S9 subgoals. A direct `/goal` on this document must not race or duplicate
+those cutovers.
 
 ### Phase B — Heresy kill wave 1 (M3.1, M3.2) + Dolt audit reads
 
@@ -1017,51 +1015,33 @@ bar; continuations code and routes deleted with zero production callers
 verified; every cold entity reading from OG by default in production with
 SQL fallback exercised; detector families for these clusters enforcing.
 
-### Phase D — Hot-path cutover + promotion over ComputerVersion
+### Phase D — Historical promotion contract, executed only by grand S7
 
-Imported from mission-og-dolt Phases 3, 4, 4b, executing against settled
-D-STORE/D-PROMO/D-ROUTE direction and the S1 scope header. This phase includes
-the world-wire store's sql-server migration (D-WIRE, decided): batch-commit
-infrastructure, hot-table cutover with a rollback latency budget **defined
-before cutover**, and storage-growth measurement before victory. Promotion
-starts with D-ROUTE's fail-closed truth gate: delete `RollForwardAppAdoption`,
-the three candidate-intake switch/rollback/roll-forward mutation paths and
-their callers, and every status-only UI/Trace/acceptance activation claim.
-Then rewrite `promotion_protocol.tla` around one route-slot → ComputerVersion
-CAS + immutable receipt (TLC-checked before the Go writer), implement the
-distinct Dolt-backed ledger behind vmctl, and cut proxy routing to
-route-ledger read → ComputerVersion → materializer. Adoption, lineage, UI,
-Trace, and acceptance are receipt projections only. Branch merge/tag remains
-D-PROMO preparation, never activation. Candidate-VM residue elimination
-(vmctl candidate lifecycle, candidate_computer_package*, cmd audits, wire
-platform routing, data.img residue, sandbox→autoputer rename) proceeds under
-the C3-assigned heresy number. H031 closes only when I1's observables are gone.
+Do not execute this phase independently. Grand S7 consumes its retained
+fail-closed truth, sole-writer CAS, immutable receipt, idempotency, failure, and
+projection contracts under the owner-settled topology: route-slot/receipt
+tables on the corpusd sql-server with vmctl as sole writer. The former distinct
+Dolt-backed third-ledger implementation is superseded.
 
-Phase D exit bar: hot entities cut over within the pre-declared rollback
-latency budget with storage growth measured; wire store on sql-server with
-`PROXY_RUNTIME_DB_PATH` and the direct-file-open path deleted; rewritten
-promotion spec TLC-green with the W6 conformance binding green; route-ledger
-concurrency, idempotency, injected-failure, and restart contracts green; one
-staging old-version → new-version → old-version sequence executed through
-ordinary requests with explicit bootstrap/promotion/rollback receipt ids and
-generations; negative staging proof shows a failed writer/materializer creates
-no adoption, lineage, UI, Trace, or acceptance success projection; the deleted
-roll-forward/candidate-switch surfaces have zero callers; I1 observables are
-gone and the H031/candidate-VM detector is enforcing.
+Grand S7 deletes duplicate roll-forward and candidate switch/rollback mutation
+paths with their callers; rewrites `promotion_protocol.tla` around one
+route-slot → ComputerVersion CAS plus immutable receipt; implements vmctl-only
+read/write APIs; cuts proxy routing to route-slot read → ComputerVersion →
+materializer; and proves an old → new → old sequence with explicit receipts and
+generations. Branch merge/tag remains preparation, never activation.
 
-### Phase E — Deletion, doctrine replacement, surface cleanup
+The retained exit contract requires concurrency, idempotency, injected-failure,
+restart, failed-writer/materializer negative projection, and zero-caller
+evidence for deleted mutation surfaces. Only the grand-suite checkpoint can
+mark S7 complete.
 
-Imported from mission-og-dolt Phase 5: drop SQL tables after stability
-window; delete dual-write code and `backfillOGFromSQL`; M5 surface cleanup
-(H019–H029); doctrine shrinks to thesis + invariants + enforcement pointers;
-registry closes with every entry referencing its detector. Plus assessment
-items: **C-RETR** wire retrieval ingestion (search finds its own evidence),
-**C-PAGE** server-side paging on `/api/trajectories`, and the
-Universal→World Wire rename (owner-decided 2026-07-08: **execute**, alongside
-the sandbox→autoputer rename machinery).
+### Phase E — Historical cleanup contract, executed only by grand S9
 
-Phase E exit bar: completion semantics 1–9 (the mission's own completion is
-this phase's gate; the final panel round reviews the full criteria list).
+Do not execute this phase independently. Grand S9 consumes its detector and
+surface-deletion contracts for H019–H029, Universal→World Wire, and
+sandbox→autoputer vocabulary. Any non-rename deletion still owned by grand S3
+must already be complete. Grand S9 owns iteration ordering, staging proof,
+alias removal, consensus, and completion state.
 
 ## Dense Feedback Channels
 
@@ -1443,19 +1423,14 @@ run_checkpoint_and_resumption_state:
   remaining_error_field: see Variant below
   highest_impact_remaining_uncertainty: remaining H009/H010 forcing sites + M3.2 authority residues
   next_executable_probe: >-
-    Reconcile every remaining H009/H010 production hit against existing
-    evidence-driven Texture behavior, identify any already-built replacement
-    that is not wired in, then open the smallest deletion-first conjecture with
-    inverted honest-first-revision and unforced-delegation tests before editing.
+    Return control to grand S0/S3. Reconcile remaining H009/H010 and M3.2
+    detector hits against current production callers before any deletion.
   queued_phase_d_executable_slice: >-
-    Install D-ROUTE's red fail-closed truth gate before its writer: introduce
-    RouteTransitionCommand/Receipt plus a required executor; prevent adoption,
-    lineage, UI, Trace, and run acceptance from advancing without read-back of
-    a durable receipt; delete RollForwardAppAdoption and all three
-    candidate-intake switch/rollback/roll-forward mutators and their callers.
-    Verify nil/error/stale paths leave every projection unchanged. The next
-    slice then implements the vmctl-owned Dolt CAS ledger.
-  suggested_goal_string: "/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md"
+    Grand S7 consumes D-ROUTE's fail-closed truth gate and sole-writer contract.
+    It must prevent adoption, lineage, UI, Trace, and run acceptance from
+    advancing without durable receipt read-back and must delete duplicate
+    roll-forward/switch/rollback mutators atomically.
+  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md"
   evidence_artifact_refs:
     - this Definition's adjudicated evidence ledger
     - https://github.com/choir-hip/go-choir/actions/runs/29072918594
@@ -1472,5 +1447,5 @@ run_checkpoint_and_resumption_state:
 ## Suggested Goal String
 
 ```text
-/goal docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```

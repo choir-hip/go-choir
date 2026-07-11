@@ -1,11 +1,11 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-10 (archive-removal pass; every claim is marked
-**Live**, **Target**, or **Retired**; actor-runtime, capsule,
-candidate-computer, and storage claims are governed by
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)
-as current executable authority. The earlier assessment and hard-cutover
-sources were absorbed into that definition and removed from the worktree.
+**Last updated:** 2026-07-11. Every claim is marked **Live**, **Target**, or
+**Retired**. Current execution authority is
+[docs/definitions/choir-autoputer-completion-suite-2026-07-11.md](definitions/choir-autoputer-completion-suite-2026-07-11.md);
+the OG/Dolt Definition supplies subordinate detector/deletion/history contracts
+only. Earlier assessments and hard-cutover sources remain absorbed historical
+evidence.
 Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
 conjecture vocabulary; see the Ontology section.)
 

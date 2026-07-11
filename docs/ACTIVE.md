@@ -5,17 +5,18 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definitions
 
-[`definitions/choir-product-completion-2026-07-10.md`](definitions/choir-product-completion-2026-07-10.md)
-is the one confirmed active top-level product Definition. It owns Choir CLI,
-Wails desktop, Choir Base, and Autopaper recovery, including auth, data-
-integrity, activation, packaging, and staging evidence. It inherits promotion
-semantics from the OG/Dolt/heresy Definition rather than creating a competing
-protocol.
+[`definitions/choir-autoputer-completion-suite-2026-07-11.md`](definitions/choir-autoputer-completion-suite-2026-07-11.md)
+is the one active top-level product Definition and the only `/goal` entry point
+for current product work. It owns the resumable sequence from Deploy repair
+through Wire cutover, runtime dissolution, audited-computer proof, external
+operator truth, self-development, containment, Choir-in-Choir, and vocabulary
+cutover. The superseded product-completion and run-truth documents supply
+subordinate contracts/evidence only.
 
 [`definitions/og-dolt-heresy-completion-2026-07-08.md`](definitions/og-dolt-heresy-completion-2026-07-08.md)
-is the active spine Definition for the remaining OG/Dolt/heresy completion
-program. It is discoverable and load-bearing for promotion/storage protocol
-authority, but it is not a second top-level product Definition.
+remains load-bearing for storage, promotion, and heresy detector/deletion
+contracts, but overlapping mutations execute as grand-suite subgoals rather
+than through a competing top-level `/goal`.
 
 ## Supporting Maintenance
 
@@ -29,19 +30,14 @@ is **superseded in topology** (2026-07-11): the post-mortem
 [`definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`](definitions/choir-autopaper-activation-attempt-report-2026-07-11.md)
 showed its Real Artifact contradicted the settled D-WIRE decision. Its
 evidence ledger remains valid history; do not execute its topology sections.
-Successors:
+Successor authority:
+[`definitions/choir-autoputer-completion-suite-2026-07-11.md`](definitions/choir-autoputer-completion-suite-2026-07-11.md),
+the single executable and resumable mission suite for Deploy restoration,
+Wire authority cutover, runtime dissolution, audited-computer proof, external
+CLI operability, run truth, self-development, contained Choir-in-Choir
+authority, and the final vocabulary cutover. The former
 [`definitions/choir-run-truth-suite-2026-07-11.md`](definitions/choir-run-truth-suite-2026-07-11.md)
-(run-truth suite index),
-[`definitions/choir-run-deploy-unblock-2026-07-11.md`](definitions/choir-run-deploy-unblock-2026-07-11.md)
-(Deploy restore),
-[`definitions/choir-wire-store-conformance-2026-07-11.md`](definitions/choir-wire-store-conformance-2026-07-11.md)
-(wire state onto the world-wire store; legacy migration deletion),
-[`definitions/choir-autoputer-cli-operability-2026-07-11.md`](definitions/choir-autoputer-cli-operability-2026-07-11.md)
-(canonical sequence: audited computer → choir-CLI autoputer → choir-in-choir → autopaper),
-[`definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`](definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md)
-(unified run status, idempotency/retry, artifact-verified completion), and
-[`definitions/choir-vocabulary-cutover-2026-07-11.md`](definitions/choir-vocabulary-cutover-2026-07-11.md)
-(rename-only vocabulary cutover after correctness).
+is now a subordinate historical foliation record, not a `/goal` entry point.
 
 [`definitions/documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md)
 is **complete**. It remains in the retained packet as the deletion receipt and
@@ -54,36 +50,38 @@ The seam-repair Definition is **settled** after staging acceptance at `944d4d94`
 proved per-service `/health` identity and RouteProfile promotion/rollback on
 `choir.news`.
 
-The next executable focus is member 1 of the run-truth suite —
-[`definitions/choir-run-deploy-unblock-2026-07-11.md`](definitions/choir-run-deploy-unblock-2026-07-11.md):
-drain the stuck `running` run and restore `Deploy to Staging (Node B)`. Suite
-index: [`definitions/choir-run-truth-suite-2026-07-11.md`](definitions/choir-run-truth-suite-2026-07-11.md).
+The next and only suite-level invocation is:
 
-After that, in order:
+```text
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+```
 
-1. [`definitions/choir-wire-store-conformance-2026-07-11.md`](definitions/choir-wire-store-conformance-2026-07-11.md)
-   (wire on corpusd; delete boot migration; no VM fate-share) — also Phase 0 of
-   [`definitions/choir-autoputer-cli-operability-2026-07-11.md`](definitions/choir-autoputer-cli-operability-2026-07-11.md)
-2. [`definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`](definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md)
-   (run authority, retry, artifact-verified completion, `choir run status`)
-3. [`definitions/choir-vocabulary-cutover-2026-07-11.md`](definitions/choir-vocabulary-cutover-2026-07-11.md)
-   (rename-only; after correctness)
+The same command resumes after intentional or accidental interruption. The
+suite orchestrator reconciles durable state and executes these ordered subgoals:
 
-PC-5 / audited-computer materialization remains
-[`definitions/choir-product-completion-2026-07-10.md`](definitions/choir-product-completion-2026-07-10.md)
-and [`docs/computer-ontology.md`](docs/computer-ontology.md). Autopaper editorial
-work waits for the autoputer-before-autopaper sequence.
+1. persist the suite authority, registry cutover, subordinate demotions, and
+   consensus evidence on `origin/main`;
+2. reconcile the suite and install runtime-dissolution ratchets;
+3. restore Deploy by draining the stuck active run;
+4. cut Wire authority to corpusd and delete boot/runtime-local paths;
+5. iteratively dissolve `internal/runtime`, with atomic caller cutover and
+   independent phase verification, until the directory is absent;
+6. prove the audited computer and CLI-visible observation/receipts;
+7. establish run truth and artifact-verified completion on the extracted core;
+8. prove candidate self-development, receipted promotion, and rollback;
+9. prove contained co-super authority and open Choir-in-Choir;
+10. perform the alias-free vocabulary cutover and hand off to a newly defined
+    Autopaper successor, if still wanted.
 
-Resume product-completion work at PC-2 (Wails token containment) and PC-3 (CLI
-request-budget) once Autopaper activation is stable, with Base product wiring
-still gated on the exact-byte stable-identity kernel. Typed Autopaper handoff
-idempotency remains open after projection-triggered activation deletion.
+Member Definitions are subordinate specifications. They are not invoked as
+separate `/goal` runs and cannot reorder the grand suite. Autopaper editorial
+work remains blocked until the suite reports `complete`.
 
-The OG/Dolt/heresy spine still owns Texture semantic-forcing residue removal,
-Dolt history/audit load-bearing reads, and ComputerVersion promotion protocol
-gates. Milestone shorthand in doctrine maps to that Definition as follows:
-M3.1/M3.2 work is Phase B; M4/M3.3 work is Phase C; ComputerVersion promotion is
-Phase D; surface/vocabulary cleanup is Phase E.
+The OG/Dolt/heresy contract supplies Texture semantic-forcing detectors,
+history/audit evidence, promotion CAS/receipt semantics, and deletion gates as
+grand S2/S3/S6/S7/S9 inputs. It does not own execution order or storage
+topology. The owner-settled route topology is corpusd sql-server route-slot
+tables with vmctl as sole CAS writer, never a third Dolt domain.
 
 D-STORE is settled by owner authority: Choir is all-in on Dolt. Storage
 questions about history latency, commit batching, rollback mechanics, ICU/build
@@ -92,10 +90,11 @@ database-choice gate.
 
 ## Unowned External Work
 
-Broader source-system/Wire follow-ups outside Autopaper's single-activation
-slice and actor/runtime extraction have no active successor Definition. Do not
-resume their deleted plans. Any resumed program needs a fresh Definition
-grounded in current code and staging evidence.
+Runtime dissolution and actor/runtime extraction are owned by grand S3.
+Broader source-system/Wire follow-ups outside grand S2/S3/S6/S9 and outside a
+future explicitly authorized Autopaper successor have no active Definition.
+Do not resume deleted plans; any new program must be grounded in current code
+and staging evidence.
 
 ## Graph Rule
 
@@ -116,10 +115,11 @@ Evidence: runs `29154725145` (failed `Deploy` after `f2d0af69`), `29155456035`
 `Deploy` logs show `Timed out waiting for vm-universal-wire-platform` and
 `running_runs: 1` in the diagnostic ownership snapshot.
 
-**Fix:** suite member 1 —
+**Fix:** the grand suite's S1 subgoal, using
 [`definitions/choir-run-deploy-unblock-2026-07-11.md`](definitions/choir-run-deploy-unblock-2026-07-11.md)
-(progress deadline + `choir run cancel` + Deploy proof). Full run-lifecycle
-authority is suite member 3 after wire-store.
+as its bounded subordinate specification. Full run-lifecycle work occurs only
+after Wire cutover, runtime extinction, audited-computer proof, and observation
+receipts.
 
 Note: `skills/*` → sandbox deploy classify was addressed on `main` by
 `d8fe4336` (non-deployed workflow artifact). If a later push reintroduces that

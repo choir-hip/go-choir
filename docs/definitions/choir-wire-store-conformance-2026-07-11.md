@@ -1,17 +1,17 @@
 # Choir Universal Wire: D-WIRE Conformance and Legacy Migration Deletion
 
-## Harness Invocation Semantics
+## Subordinate Invocation Semantics
+
+This document is the S2 subgoal specification of:
 
 ```text
-/goal docs/definitions/choir-wire-store-conformance-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```
 
-Read this document as executable semantic authority for moving the Universal
-Wire product path onto the world-wire store (D-WIRE) and deleting the
-boot-time legacy migration. It supersedes the topology claims of
-`docs/definitions/choir-autopaper-activation-2026-07-10.md`; that document's
-evidence ledger remains a valid historical record, but its Real Artifact and
-Determined State sections must no longer be executed.
+Do not invoke it as an independent mission. The grand-suite orchestrator uses
+it to cut the Universal Wire product path onto the world-wire store, delete
+boot/runtime-local authority, run independent micro-verification and phase
+consensus, and persist one suite checkpoint.
 
 ## Why this mission exists
 
@@ -28,18 +28,19 @@ match the decisions that already exist.
 
 ## Source Authority Order
 
-1. This Definition.
-2. `docs/computer-ontology.md` "Dolt Store Taxonomy" (owner two-store
+1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
+2. This subordinate Definition within S2 and D-WIRE scope.
+3. `docs/computer-ontology.md` "Dolt Store Taxonomy" (owner two-store
    directive: world-wire store + VM-local embedded store, nothing else) and
    **D-WIRE** in `docs/definitions/og-dolt-heresy-completion-2026-07-08.md`
    (world-wire store in sql-server mode, no data migration, code-only
    cutover). The three-domain D-STORES yaml block in that same file is
    orchestrator-settled, unratified, and demoted by this Definition (see
    Settled Inputs).
-3. `AGENTS.md` and `docs/choir-doctrine.md`.
-4. `docs/current-architecture.md` (corpusd publication boundary; D-STORES
+4. `AGENTS.md` and `docs/choir-doctrine.md`.
+5. `docs/current-architecture.md` (corpusd publication boundary; D-STORES
    world-wire vs VM-local split).
-5. Observed source:
+6. Observed source:
    - `internal/platform/objectgraph_store.go` and `internal/platform/store.go`
      (the world-wire store, served by corpusd)
    - `internal/runtime/wire_platform_publish.go` (articles already publish to
@@ -54,8 +55,8 @@ match the decisions that already exist.
      already uses the Node B dolt sql-server)
    - `internal/proxy/handlers.go` (`protectedAPIResolveTarget` routes stories
      into the live VM — the fate-sharing to remove)
-6. `docs/definitions/choir-autopaper-activation-2026-07-10.md` — historical
-   evidence only. Its topology sections are superseded by this Definition.
+7. `docs/definitions/choir-autopaper-activation-2026-07-10.md` — historical
+   evidence only. Its topology sections are superseded.
 
 ## Settled Inputs (do not re-litigate)
 
@@ -122,7 +123,7 @@ match the decisions that already exist.
   artifact-verified completion (C5) beyond what the minimal publish path
   needs; those are named follow-on missions.
 
-## Open Decisions (owner input required before or during execution)
+## Open Decisions (defaults govern unless owner overrides)
 
 - **Scope of migration deletion:** delete `backfillOGFromSQL` for all
   computers (recommended; pre-launch, all junk), or platform-path only?
@@ -163,10 +164,19 @@ The mission is `complete` when all of the following are observed on staging:
    world-wire store (corpusd), with ingestion lineage intact.
 4. `/api/universal-wire/stories` returns that article with the platform VM
    **stopped** — the read path is proven independent of VM lifecycle.
+   Stop and observe the VM through the product/vmctl API or `choir` CLI, never
+   SSH, `systemctl`, raw process inspection, or journal access. If that bounded
+   lifecycle surface does not exist, add only the smallest vmctl/`cmd`-side
+   S2 lifecycle/status control needed for this proof; it must not add an
+   `internal/runtime` surface and it is not S5 observation completion.
 5. A deploy (guest refresh included) occurs after publication, and the same
    stories response is returned unchanged afterward.
 6. The Universal Wire app (`frontend/src/lib/UniversalWireApp.svelte`) renders
    the article for a signed-in human, not only a curl diagnostic.
+7. The grand-suite ratchet report records S2's removed runtime-owned Wire
+   authority, importers, routes/symbols, and applicable file/LOC delta; S2
+   cannot claim dissolution iteration 1 without a mechanically decreasing
+   production ratchet.
 
 Item 4 is the keystone: it is the observable that was structurally impossible
 under the superseded topology.

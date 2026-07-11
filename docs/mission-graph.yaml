@@ -3,25 +3,33 @@ schema_version: 1
 generated: false
 status: current
 description: >-
-  Minimal index of retained active or settled Definitions. Historical mission
-  topology was removed from the retrievable worktree on 2026-07-10; Git history
-  is the forensic source for retired missions.
+  Minimal index of retained active, settled, or superseded Definition
+  tombstones. Full historical topology is absent; Git history is the forensic
+  source for retired mission detail.
 rules:
   - id: definition-owns-state
     text: A Definition owns its current state; this graph supplies discovery only.
   - id: doctrine-apex
     text: The graph inherits docs/choir-doctrine.md and AGENTS.md.
   - id: no-historical-corpus
-    text: Superseded missions, ledgers, evidence, and proposal history do not return to this graph.
+    text: Superseded Definitions may remain only as minimal discovery tombstones; ledgers, evidence, and retired topology do not return to this graph.
+  - id: sole-mission-entrypoint
+    text: Exactly one current mission node may set entrypoint true.
+  - id: suite-order-owned-by-definition
+    text: Dependency and enables edges are discovery hints only; the suite Definition owns phase order.
 node_fields:
   id: stable mission id
   title: human-readable mission title
   path: active Definition path
   ledger: always empty; raw mission ledgers are not retained
-  status: working | blocked | settled | superseded
-  kind: spine | product_completion | docs_truth
-  depends_on: directly active Definition dependencies
-  enables: directly unlocked active Definitions
+  status: working | blocked | settled | superseded; Definition blocked_incomplete maps to graph blocked
+  kind: spine | subordinate_contract | product_completion | docs_truth
+  entrypoint: whether the node accepts direct /goal execution
+  member_of: containing suite id for subordinate contracts
+  suite_phases: containing suite phases that consume this contract
+  execution_mode: suite_orchestrator | subordinate_only
+  depends_on: discovery prerequisite hints only; never suite containment or phase authority
+  enables: discovery successor hints only; never execution authority
   sources: current authority sources only
 nodes:
   - id: og-dolt-heresy-completion-2026-07-08
@@ -29,7 +37,11 @@ nodes:
     path: docs/definitions/og-dolt-heresy-completion-2026-07-08.md
     ledger: ''
     status: working
-    kind: spine
+    kind: subordinate_contract
+    entrypoint: false
+    member_of: choir-autoputer-completion-suite-2026-07-11
+    suite_phases: [S2, S3, S6, S7, S9]
+    execution_mode: subordinate_only
     depends_on: []
     enables: []
     sources:
@@ -43,6 +55,7 @@ nodes:
     ledger: ''
     status: settled
     kind: docs_truth
+    entrypoint: false
     depends_on: []
     enables: []
     sources:
@@ -51,15 +64,17 @@ nodes:
       - docs/README.md
       - cmd/doccheck/main.go
   - id: choir-product-completion-2026-07-10
-    title: Choir Product Completion
+    title: Choir Product Completion (superseded source)
     path: docs/definitions/choir-product-completion-2026-07-10.md
     ledger: ''
-    status: working
+    status: superseded
     kind: product_completion
+    entrypoint: false
     depends_on:
-      - og-dolt-heresy-completion-2026-07-08
+      - choir-autoputer-completion-suite-2026-07-11
     enables: []
     sources:
+      - docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/computer-ontology.md
@@ -70,6 +85,7 @@ nodes:
     ledger: ''
     status: settled
     kind: product_completion
+    entrypoint: false
     depends_on:
       - choir-product-completion-2026-07-10
     enables: []
@@ -85,6 +101,7 @@ nodes:
     ledger: ''
     status: superseded
     kind: product_completion
+    entrypoint: false
     depends_on:
       - choir-product-completion-2026-07-10
       - choir-seam-repair-2026-07-10
@@ -93,18 +110,38 @@ nodes:
       Topology superseded by choir-wire-store-conformance-2026-07-11 after the
       2026-07-11 post-mortem (attempt report) showed it contradicted D-WIRE.
       Its evidence ledger remains valid history.
-  - id: choir-run-truth-suite-2026-07-11
-    title: Choir Run-Truth Suite (index)
-    path: docs/definitions/choir-run-truth-suite-2026-07-11.md
+  - id: choir-autoputer-completion-suite-2026-07-11
+    title: Choir Autoputer Completion Suite
+    path: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
     ledger: ''
     status: working
     kind: spine
+    entrypoint: true
+    execution_mode: suite_orchestrator
     depends_on: []
-    enables:
-      - choir-run-deploy-unblock-2026-07-11
-      - choir-wire-store-conformance-2026-07-11
-      - choir-run-lifecycle-and-completion-authority-2026-07-11
-      - choir-vocabulary-cutover-2026-07-11
+    enables: []
+    note: >-
+      Subordinate discovery is encoded by member_of and suite_phases. The suite
+      document's B0-S9 definition graph is the sole authority for phase order
+      and member reuse.
+    sources:
+      - docs/ACTIVE.md
+      - docs/standing-questions.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
+      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+      - AGENTS.md
+      - docs/choir-doctrine.md
+  - id: choir-run-truth-suite-2026-07-11
+    title: Choir Run-Truth Suite (superseded foliation record)
+    path: docs/definitions/choir-run-truth-suite-2026-07-11.md
+    ledger: ''
+    status: superseded
+    kind: docs_truth
+    entrypoint: false
+    depends_on:
+      - choir-autoputer-completion-suite-2026-07-11
+    enables: []
     sources:
       - docs/ACTIVE.md
       - docs/standing-questions.md
@@ -116,11 +153,12 @@ nodes:
     ledger: ''
     status: working
     kind: product_completion
-    depends_on:
-      - choir-run-truth-suite-2026-07-11
-    enables:
-      - choir-wire-store-conformance-2026-07-11
-      - choir-run-lifecycle-and-completion-authority-2026-07-11
+    entrypoint: false
+    member_of: choir-autoputer-completion-suite-2026-07-11
+    suite_phases: [S1]
+    execution_mode: subordinate_only
+    depends_on: []
+    enables: []
     sources:
       - docs/definitions/choir-run-truth-suite-2026-07-11.md
       - docs/ACTIVE.md
@@ -133,23 +171,24 @@ nodes:
     ledger: ''
     status: working
     kind: product_completion
-    depends_on:
-      - og-dolt-heresy-completion-2026-07-08
-      - choir-product-completion-2026-07-10
-      - choir-run-deploy-unblock-2026-07-11
-    enables:
-      - choir-autoputer-cli-operability-2026-07-11
-      - choir-run-lifecycle-and-completion-authority-2026-07-11
+    entrypoint: false
+    member_of: choir-autoputer-completion-suite-2026-07-11
+    suite_phases: [S2]
+    execution_mode: subordinate_only
+    depends_on: []
+    enables: []
   - id: choir-autoputer-cli-operability-2026-07-11
     title: Autoputer External-CLI Operability Before Choir-in-Choir
     path: docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
     ledger: ''
     status: working
-    kind: spine
-    depends_on:
-      - choir-wire-store-conformance-2026-07-11
-    enables:
-      - choir-run-lifecycle-and-completion-authority-2026-07-11
+    kind: product_completion
+    entrypoint: false
+    member_of: choir-autoputer-completion-suite-2026-07-11
+    suite_phases: [S4, S5, S7, S8]
+    execution_mode: subordinate_only
+    depends_on: []
+    enables: []
     sources:
       - docs/definitions/choir-wire-store-conformance-2026-07-11.md
       - docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
@@ -169,12 +208,12 @@ nodes:
     ledger: ''
     status: working
     kind: product_completion
-    depends_on:
-      - choir-run-deploy-unblock-2026-07-11
-      - choir-wire-store-conformance-2026-07-11
-      - choir-autoputer-cli-operability-2026-07-11
-    enables:
-      - choir-vocabulary-cutover-2026-07-11
+    entrypoint: false
+    member_of: choir-autoputer-completion-suite-2026-07-11
+    suite_phases: [S6]
+    execution_mode: subordinate_only
+    depends_on: []
+    enables: []
     sources:
       - docs/definitions/choir-run-truth-suite-2026-07-11.md
       - docs/definitions/choir-run-deploy-unblock-2026-07-11.md
@@ -191,8 +230,11 @@ nodes:
     ledger: ''
     status: working
     kind: product_completion
-    depends_on:
-      - choir-run-lifecycle-and-completion-authority-2026-07-11
+    entrypoint: false
+    member_of: choir-autoputer-completion-suite-2026-07-11
+    suite_phases: [S9]
+    execution_mode: subordinate_only
+    depends_on: []
     enables: []
     sources:
       - docs/definitions/choir-run-truth-suite-2026-07-11.md

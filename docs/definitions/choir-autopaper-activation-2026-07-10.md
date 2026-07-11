@@ -1,32 +1,31 @@
 # Choir Autopaper: Source-to-Edition Activation and Sourcecycled Stability
 
-## Harness Invocation Semantics
+## Superseded Invocation Semantics
+
+This document is a historical Autopaper attempt record. Resume current product
+work only through:
 
 ```text
-/goal docs/definitions/choir-autopaper-activation-2026-07-10.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```
 
-Read this document as executable semantic authority for getting Autopaper
-working end-to-end in the deployed platform. Reconcile current source and
-staging state, execute the receding-horizon loop below, update the definition
-graph and evidence ledger, and continue until the completion semantics are
-satisfied with named evidence or a hard blocker/supersession condition is
-produced. A checkpoint is not completion.
+Do not execute this topology. Autopaper remains blocked until the grand suite
+completes Autoputer and explicitly authorizes a successor editorial mission.
 
 ## Source Authority Order
 
-1. This Definition.
-2. `AGENTS.md` and `docs/choir-doctrine.md`.
-3. `docs/definitions/choir-product-completion-2026-07-10.md` (PC-6 Autopaper
-   single authoritative activation; this mission is a sub-mission of PC-6).
-4. `docs/computer-ontology.md` (VM, sandbox, candidate-world, promotion,
-   package, and persistent-state behavior).
-5. `docs/agent-product-doctrine.md` (authority boundaries, harness minimalism,
-   Texture control plane, runtime configuration, product-path verification).
-6. `docs/runtime-invariants.md` and `docs/texture-agentic-invariants-2026-06-13.md`.
-7. `docs/source-external-data-publication.md` (source cycle → publication
-   semantics).
-8. Observed source:
+1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` for
+   current execution and successor authority.
+2. This Definition as historical attempt evidence only.
+3. `AGENTS.md` and `docs/choir-doctrine.md`.
+4. `docs/definitions/choir-product-completion-2026-07-10.md` as superseded PC-6
+   source evidence.
+5. `docs/computer-ontology.md`.
+6. `docs/agent-product-doctrine.md`.
+7. `docs/runtime-invariants.md` and
+   `docs/texture-agentic-invariants-2026-06-13.md`.
+8. `docs/source-external-data-publication.md`.
+9. Observed source:
    - `cmd/sourcecycled/main.go` and `cmd/sourcecycled/main_test.go`
    - `internal/cycle/ingestion_handoff.go` and `internal/cycle/cycle.go`
    - `internal/runtime/sourcecycled_web_captures.go`
@@ -1092,7 +1091,7 @@ Escalate to the human before implementing changes that:
 
 ```yaml
 run_checkpoint_and_resumption_state:
-  status: working
+  status: superseded
   last_checkpoint: grounded reconciler provider-circuit failure 2026-07-11T05:18Z-05:48Z
   current_artifact_state: >-
     949342e2 is deployed as the exact sandbox/gateway artifact and resumes legacy-event
@@ -1401,15 +1400,12 @@ run_checkpoint_and_resumption_state:
     - A reconciler can satisfy its prompt-level spawn instruction yet complete after
       the runtime cancels every same-channel Texture rewarm, leaving no descendant
       canonical revision while narrating that the required write was issued.
-  highest_impact_remaining_uncertainty: reconciler-owned same-channel Texture rewarm completion
+  highest_impact_remaining_uncertainty: historical reconciler-owned same-channel Texture rewarm completion
   next_executable_probe: >-
-    Trace the existing same-channel Texture actor rewarm/deduplication path used by
-    reconciler spawn_agent. Connect the mandatory revision request to one durable child
-    run whose successful canonical write is an explicit parent-run completion
-    prerequisite; do not let a returned duplicate handle or context cancellation count
-    as satisfaction. Then run a fresh post-receipt cycle and require a descendant
-    canonical revision before accepting the reconciler.
-  suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
+    None in this Definition. Preserve the evidence and resume only through the
+    grand suite; Autopaper requires an explicitly authorized successor after
+    Autoputer completion.
+  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
     - CI run 29118850649 and Node B deploy job 86450906080 for c6b422bb.
@@ -1461,5 +1457,5 @@ run_checkpoint_and_resumption_state:
 ## Suggested Goal String
 
 ```text
-/goal docs/definitions/choir-autopaper-activation-2026-07-10.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```

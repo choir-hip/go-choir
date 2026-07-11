@@ -1,15 +1,15 @@
 # Choir Vocabulary Cutover
 
-## Harness Invocation Semantics
+## Subordinate Invocation Semantics
+
+This document is the S9 rename specification of:
 
 ```text
-/goal docs/definitions/choir-vocabulary-cutover-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```
 
-Read this document as executable semantic authority for **rename-only**
-cutovers after run-truth correctness is staging-proven. It is **member 4** of
-`docs/definitions/choir-run-truth-suite-2026-07-11.md` (Rename). It must not
-run until suite members 1–3 are complete.
+Do not invoke it independently. It runs only after S1–S8 are complete, so
+rename work cannot preserve code that runtime dissolution should delete.
 
 ## Why this mission exists
 
@@ -27,12 +27,11 @@ under the owning Correctness or Deletion mission, and resume rename later.
 
 ## Source Authority Order
 
-1. This Definition.
-2. `docs/definitions/choir-run-truth-suite-2026-07-11.md`.
-3. `docs/choir-doctrine.md` (H019 and naming notes),
-   `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` Phase E
-   (surface cleanup coordination).
-4. `docs/standing-questions.md` (Q3 citers), `AGENTS.md`.
+1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
+2. This subordinate Definition within S9 scope.
+3. `docs/choir-doctrine.md` and
+   `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` Phase E.
+4. `docs/standing-questions.md`, `AGENTS.md`.
 5. Observed baselines (2026-07-11, refresh at Phase 0):
    - `universal wire` ~619 non-docs matches; `world wire` ~0 in code
    - host `sandbox` packages + ~77 CI refs
@@ -42,15 +41,13 @@ under the owning Correctness or Deletion mission, and resume rename later.
 
 ## Settled Inputs
 
-- Suite members 1–3 complete on staging before this `/goal` starts.
-- og-dolt Phase E already lists Universal→World Wire, sandbox→autoputer, and
-  H019–H029 surface work. **This mission executes the rename sweeps once** and
-  records coordination in both evidence ledgers so E does not redo them.
-- Continuation / parent-child **deletion** remains og-dolt B/C — renaming an
-  event string that contains `continuation` is allowed; deleting continuation
-  machinery is forbidden here.
-- H025 unqualified result-channel deletion is og-dolt E deletion work, not a
-  rename sweep here.
+- Grand S1–S8 are complete on staging before S9 starts.
+- og-dolt Phase E supplies surface-deletion detector contracts. S9 executes
+  each rename once and updates the grand-suite ledger.
+- Continuation, parent-child, and result-channel deletion must already have
+  occurred in S3 where production callers proved it safe.
+- Temporary aliases may survive only as recorded transitional state between S9
+  iterations; no alias may survive S9 completion.
 
 ## Mission Purpose
 
@@ -71,12 +68,12 @@ green under the new names:
 
 ## Mission Non-Purpose
 
-- No run admission, retry, artifact, or Deploy-unblock work (members 1–3).
-- No continuation / parent-child / H025 deletion.
+- No run admission, retry, artifact, or Deploy-unblock work (grand S1/S6).
+- No continuation / parent-child / H025 deletion (grand S3).
 - No VM instance rename requiring reprovision (`vm-universal-wire-platform`
   allowlisted with follow-on pointer).
-- No wire-store behavior changes (member 2 Non-Purpose: no rename ceremonies
-  during conformance — this mission runs *after* that conformance).
+- No wire-store behavior changes (grand S2 forbids rename ceremonies during
+  conformance; S9 runs only after it).
 
 ## Completion Semantics
 
@@ -105,7 +102,8 @@ failure is an accepted outcome.
 
 ## Compatibility rules
 
-- HTTP aliases until staging-proven cutover; remove alias in a later iteration.
+- HTTP aliases may survive one staging-proven transition between S9 iterations;
+  remove every alias before S9 completion.
 - Package/dir renames update `deploy-impact-classify` in the same commit
   without changing classifications.
 - Artifact/unit/systemd renames prove themselves via their own deploy.

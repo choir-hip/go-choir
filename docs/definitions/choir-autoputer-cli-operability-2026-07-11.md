@@ -1,18 +1,18 @@
 # Choir Autoputer: External-CLI Operability Before Choir-in-Choir
 
-## Harness Invocation Semantics
+## Subordinate Invocation Semantics
+
+This document supplies the external-operator, self-development, and containment
+contracts for:
 
 ```text
-/goal docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
 ```
 
-Read this document as executable semantic authority for making the autoputer
-(the persistent Choir computer) fully operable and self-developable by an
-**external** agent through the choir CLI, before any internal agent
-(co-super) is given the same controls. It restores the deleted
-autoputer-before-autopaper doctrine as a standing dictum and sequences the
-work the 2026-07-11 post-mortem showed is prerequisite to every product
-mission.
+Do not invoke it as a separate spine. The grand suite sequences runtime
+dissolution, audited-computer proof, observation, run truth, self-development,
+and contained Choir-in-Choir authority under one orchestrator and one durable
+resumption state.
 
 ## Standing Dictum (owner, restated 2026-07-11)
 
@@ -20,13 +20,13 @@ mission.
 self-development, precedes automatic publication. The canonical sequence
 (owner, reversed/confirmed 2026-07-11) is:
 
-1. **Audited computer works** — computers constructed as functions of state
-   (PC-5 kernel + acceptance matrix, capsule/candidate materialization, real
-   promotion per PC-4). The wire-store conformance mission is the first
-   slice: deleting boot-time migration and evicting wire state is what makes
-   "computer = f(code, state)" well-defined at all. Candidate computers are
-   capsules over substrate-independent audited computers, not VMs (owner,
-   2026-07-08).
+1. **Audited computer works** — grand S4 explicitly unpauses PC-5 pre-wiring
+   rows 572–581 plus the computer-ontology Candidate Contract for
+   `ComputerVersion(CodeRef, ArtifactProgramRef)` materialization. PC-5
+   post-gate service ownership remains paused; grand S7 alone proves real
+   promotion. Wire conformance first removes VM-local Wire state so
+   `computer = f(code, state)` is well-defined. Candidate computers are
+   capsules over substrate-independent audited computers, not VMs.
 2. **Choir-CLI autoputer** — an external agent (e.g. Claude in a harness)
    operates and self-develops the computer through the choir CLI alone.
 3. **Choir-in-choir autoputer** — co-supers using the choir CLI under
@@ -40,24 +40,21 @@ step 2 requires.
 
 Twelve autopaper attempts failed by shortcutting this sequence
 (`docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`).
-`specs/autoputer_lifecycle.tla` still cites the deleted
-`docs/mission-autoputer-before-autopaper-v0.md`; this Definition is that
-doctrine's successor.
+The deleted `docs/mission-autoputer-before-autopaper-v0.md` is historical
+evidence. The grand suite is now the executable successor to that doctrine;
+this document remains its operator-contract specification.
 
 ## Source Authority Order
 
-1. This Definition.
-2. `docs/definitions/choir-wire-store-conformance-2026-07-11.md` (in-flight
-   prerequisite: two-store taxonomy, D-WIRE conformance, legacy-migration
-   deletion, route-ledger demotion to a table).
-3. `AGENTS.md`, `docs/choir-doctrine.md`, `docs/computer-ontology.md`,
+1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
+2. This subordinate operator-contract Definition within S4–S8 scope.
+3. `docs/definitions/choir-wire-store-conformance-2026-07-11.md`.
+4. `AGENTS.md`, `docs/choir-doctrine.md`, `docs/computer-ontology.md`,
    `docs/agent-product-doctrine.md`.
-4. `docs/definitions/choir-product-completion-2026-07-10.md` (PC-3 key
-   coherence, PC-4 promotion truth gate).
-5. Observed source: `cmd/choir` (current verbs: wire, trajectories,
-   trajectory, texture, search, run, api-key, version), `internal/vmctl`,
-   `internal/vmmanager`, `internal/runtime`, deploy workflow scripts.
-6. `docs/NOW.md` implementation-status ceilings.
+5. `docs/definitions/choir-product-completion-2026-07-10.md`.
+6. Observed source: `cmd/choir`, `internal/vmctl`, `internal/vmmanager`,
+   extracted runtime/app boundaries, and deploy workflow scripts.
+7. `docs/NOW.md` implementation-status ceilings.
 
 ## The Test That Defines "Working Autoputer"
 
@@ -118,34 +115,25 @@ is open.
   client timeout vs proxy's 60s bound yields false failures for agent
   operators — timeout coherence is part of the operator contract.
 
-## Execution Order
+## Sequence Context And Owned Phase Mapping
 
-1. **Phase 0 — audited computer groundwork:** wire-store conformance mission
-   completes (bounded boot, two-store taxonomy, migration deleted — the
-   computer's state function becomes well-defined), plus the thin observe
-   slice of G1 (computer status/generation/receipts in the CLI).
-2. **Phase 1 — audited computer proven:** the PC-5 kernel transaction is
-   built and its acceptance matrix passes; candidate materialization and
-   equivalence evidence (`internal/computerversion` + its observation CLIs)
-   are exercised against staging computers, observed through the Phase 0 CLI
-   slice. Exit: a computer is constructed as a function of state and its
-   audit evidence is CLI-visible.
-3. **Phase 2 — observe + receipts:** remainder of G1 + G6. External Claude
-   can watch a computer live and trust deploy receipts.
-4. **Phase 3 — run truth:** G3 + G4. External Claude can run work and trust
-   the answer.
-5. **Phase 4 — self-development:** G5 (+ residual G2), consuming Phase 1:
-   promotion flips routes between audited ComputerVersions with receipts and
-   rollback, via CLI only.
-6. **Phase 5 — containment:** G7. Keys that cannot escalate; then
-   choir-in-choir opens (co-supers get scoped keys and the same four-item
-   test).
-7. **After all of it:** autopaper editorial (reconciler), per the dictum.
+The grand suite owns execution order. S2 and S3 are prerequisite context, not
+phases owned by this subordinate contract:
 
-Each phase's acceptance is the corresponding item of the four-item external
-operator test, executed by an external agent on staging and recorded with
-dated evidence. A phase proven only by unit tests or by SSH observation is
-not complete.
+1. **Grand S2:** Wire-store conformance and thin observation.
+2. **Grand S3:** runtime dissolution to directory extinction; this prerequisite
+   prevents audited-computer/operator work from extending the god package or
+   creating compatibility facades.
+3. **Grand S4 / former Phase 1:** audited computer proven.
+4. **Grand S5 / former Phase 2:** observation and trustworthy receipts.
+5. **Grand S6 / former Phase 3:** run truth.
+6. **Grand S7 / former Phase 4:** self-development.
+7. **Grand S8 / former Phase 5:** contained credentials and Choir-in-Choir.
+
+Autopaper editorial remains a successor mission after the grand suite.
+Acceptance is the corresponding external/co-super operator test on staging,
+recorded in the grand suite. Unit tests or SSH observation alone cannot
+complete a phase.
 
 ## Introspection Contract (safe limit for no-SSH debugging)
 
@@ -179,15 +167,16 @@ The observable set is derived empirically, then bounded by authority scope:
 
 - No autopaper/editorial work rides along.
 - No new services; no capsule wiring; no rename ceremonies.
-- No internal-agent (co-super) key issuance before Phase D.
-- The route-slot table is built in Phase C for promotion; it must not grow
-  into a general control store.
+- No co-super key issuance before grand-suite S8.
+- The route-slot table established for S7 promotion must not grow into a
+  general control store.
 
 ## Supersession Record
 
-- Restores: the deleted autoputer-before-autopaper doctrine (cited by
-  `specs/autoputer_lifecycle.tla`).
-- Depends on: `choir-wire-store-conformance-2026-07-11.md`.
-- Consumes: post-mortem cornerstones C2–C5 from
-  `choir-autopaper-activation-attempt-report-2026-07-11.md` and the
-  follow-on missions named there (this Definition is their execution order).
+- Preserves the external-operator and containment contracts from the restored
+  autoputer-before-autopaper doctrine.
+- Is subordinate to
+  `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
+- Consumes post-mortem cornerstones C2–C5 from
+  `choir-autopaper-activation-attempt-report-2026-07-11.md`; the grand suite,
+  not this document, owns execution order and resumption.
