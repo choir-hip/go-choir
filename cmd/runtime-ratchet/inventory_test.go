@@ -171,22 +171,24 @@ func writeState(value *store.Store) {
 		"UpsertAppChangePackage": "promotion",
 		"UpdateAppAdoptionIfCurrent": "promotion",
 	}
-	for _, writer := range inventory.StateWriters {
-		if !strings.Contains(writer.ID, "internal/store.") {
-			t.Errorf("state writer %q is not an underlying store mutation", writer.ID)
+	for index := range inventory.StoreCalls {
+		call := &inventory.StoreCalls[index]
+		if !strings.Contains(call.ID, "internal/store.") {
+			t.Errorf("store call %q is not an underlying store method", call.ID)
 		}
-	}
-	for name, disposition := range required {
-		found := false
-		for _, writer := range inventory.StateWriters {
-			if strings.Contains(writer.ID, "."+name) && writer.Disposition == disposition {
-				found = true
+		for name, disposition := range required {
+			if strings.Contains(call.ID, "."+name) {
+				call.Disposition = disposition
+				delete(required, name)
 				break
 			}
 		}
-		if !found {
-			t.Errorf("state writers = %+v, missing %s disposition %s", inventory.StateWriters, name, disposition)
-		}
+	}
+	if len(required) > 0 {
+		t.Fatalf("store calls = %+v, missing required calls %+v", inventory.StoreCalls, required)
+	}
+	if problems := validateStoreCalls(inventory.StoreCalls); len(problems) > 0 {
+		t.Fatalf("classified store calls: %v", problems)
 	}
 }
 
@@ -210,7 +212,7 @@ var stateStore *store.Store
 func writePromotion() { stateStore.UpsertAppAdoption() }
 `)
 	err := compareInventory(baseline, mustScan(t, root))
-	assertDiagnostic(t, err, "state_writers: added item")
+	assertDiagnostic(t, err, "store_calls: added item")
 	assertDiagnostic(t, err, "UpsertAppAdoption")
 }
 func TestNewPatchWriterRequiresBaselineDisposition(t *testing.T) {
@@ -233,7 +235,7 @@ var stateStore *store.Store
 func patchWire() { stateStore.PatchRevisionMetadata() }
 `)
 	err := compareInventory(baseline, mustScan(t, root))
-	assertDiagnostic(t, err, "state_writers: added item")
+	assertDiagnostic(t, err, "store_calls: added item")
 	assertDiagnostic(t, err, "PatchRevisionMetadata")
 }
 func TestUnknownStoreMethodFailsClosed(t *testing.T) {
@@ -247,11 +249,58 @@ func (*Store) TransmogrifyState() {}
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
+`)
+	baseline := mustScan(t, root)
+	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
 func mutateUnknown() { stateStore.TransmogrifyState() }
 `)
-	_, err := scanRepository(root)
-	assertDiagnostic(t, err, "unclassified internal/store.Store method TransmogrifyState")
+	err := compareInventory(baseline, mustScan(t, root))
+	assertDiagnostic(t, err, "store_calls: added item")
+	assertDiagnostic(t, err, "TransmogrifyState")
 }
+func TestDeceptiveStoreMethodNamesRequireDisposition(t *testing.T) {
+	for _, method := range []string{"GetAndDeleteState", "LoadOrCreateRun"} {
+		t.Run(method, func(t *testing.T) {
+			root := fixtureRepository(t)
+			writeFixture(t, root, "internal/store/store.go", "package store\n\ntype Store struct{}\nfunc (*Store) "+method+"() {}\n")
+			writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+`)
+			baseline := mustScan(t, root)
+			writeFixture(t, root, "internal/runtime/writer.go", "package runtime\n\nimport \"github.com/yusefmosiah/go-choir/internal/store\"\nvar stateStore *store.Store\nfunc callStore() { stateStore."+method+"() }\n")
+			err := compareInventory(baseline, mustScan(t, root))
+			assertDiagnostic(t, err, "store_calls: added item")
+			assertDiagnostic(t, err, method)
+		})
+	}
+}
+
+func TestExactReadRequiresBaselineDisposition(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) GetDocument() {}
+`)
+	writeFixture(t, root, "internal/runtime/reader.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+func readStore(value *store.Store) { value.GetDocument() }
+`)
+	baseline := mustScan(t, root)
+	current := mustScan(t, root)
+	assertDiagnostic(t, compareInventory(baseline, current), "missing or invalid disposition")
+	baseline.StoreCalls[0].Disposition = "read"
+	if err := compareInventory(baseline, current); err != nil {
+		t.Fatalf("baseline-dispositioned read: %v", err)
+	}
+}
+
 
 
 

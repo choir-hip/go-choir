@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	inventorySchema = "runtime-dissolution-inventory/v4"
+	inventorySchema = "runtime-dissolution-inventory/v5"
 	runtimeImport  = "github.com/yusefmosiah/go-choir/internal/runtime"
 )
 
@@ -43,8 +43,9 @@ type Inventory struct {
 	ProductionImporters  []Entry `yaml:"production_importers"`
 	Wrappers              []Entry `yaml:"wrappers"`
 	CompatibilityMarkers []Entry `yaml:"compatibility_markers"`
-	StateWriters          []Entry `yaml:"state_writers"`
-	DeclaredStoreReads    []Entry `yaml:"declared_store_reads"`
+	StoreCalls            []Entry `yaml:"store_calls"`
+	LegacyStateWriters    []Entry `yaml:"state_writers,omitempty"`
+	LegacyStoreReads      []Entry `yaml:"declared_store_reads,omitempty"`
 	Citers                []Entry `yaml:"citers"`
 }
 
@@ -62,8 +63,9 @@ type Counts struct {
 	ProductionImporters  int `yaml:"production_importers"`
 	Wrappers              int `yaml:"wrappers"`
 	CompatibilityMarkers int `yaml:"compatibility_markers"`
-	StateWriters          int `yaml:"state_writers"`
-	DeclaredStoreReads   int `yaml:"declared_store_reads"`
+	StoreCalls           int `yaml:"store_calls"`
+	LegacyStateWriters   int `yaml:"state_writers,omitempty"`
+	LegacyStoreReads     int `yaml:"declared_store_reads,omitempty"`
 	Citers                int `yaml:"citers"`
 }
 
@@ -95,13 +97,12 @@ func scanRepository(root string) (Inventory, error) {
 	if err := scanTextCiters(root, files, citerOrdinals, &inv); err != nil {
 		return Inventory{}, err
 	}
-	exportUses, stateWriters, storeReads, err := scanTypeAwareInventory(root, typePackages)
+	exportUses, storeCalls, err := scanTypeAwareInventory(root, typePackages)
 	if err != nil {
 		return Inventory{}, err
 	}
 	attachProductionCallers(&inv, exportUses)
-	inv.StateWriters = stateWriters
-	inv.DeclaredStoreReads = storeReads
+	inv.StoreCalls = storeCalls
 	seedUnusedExportDebt(&inv)
 	sortInventory(&inv)
 	setCounts(&inv)
@@ -303,7 +304,7 @@ func runtimeImports(file *ast.File) map[string]string {
 	}
 	return imports
 }
-func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[string]map[string]bool, []Entry, []Entry, error) {
+func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[string]map[string]bool, []Entry, error) {
 	patterns := make([]string, 0, len(packageDirs))
 	for dir := range packageDirs {
 		if dir == "." {
@@ -314,8 +315,7 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 	}
 	sort.Strings(patterns)
 	uses := map[string]map[string]bool{}
-	writers := map[string]Entry{}
-	reads := map[string]Entry{}
+	calls := map[string]Entry{}
 	environments := [][]string{
 		nil,
 		append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0"),
@@ -323,7 +323,7 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 	for _, environment := range environments {
 		graph, err := listGoPackages(root, environment, patterns, false)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		var selectedPatterns []string
 		for _, listedPackage := range graph {
@@ -339,7 +339,7 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 		sort.Strings(selectedPatterns)
 		listed, err := listGoPackages(root, environment, selectedPatterns, true)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 		exports := make(map[string]string, len(listed))
 		for _, listedPackage := range listed {
@@ -356,27 +356,22 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 				continue
 			}
 			if listedPackage.Error != nil {
-				return nil, nil, nil, fmt.Errorf(
+				return nil, nil, fmt.Errorf(
 					"type-check production package %s: %s",
 					listedPackage.ImportPath, listedPackage.Error.Err,
 				)
 			}
-			if err := collectTypedUses(root, environment, listedPackage, exports, uses, writers, reads); err != nil {
-				return nil, nil, nil, err
+			if err := collectTypedUses(root, environment, listedPackage, exports, uses, calls); err != nil {
+				return nil, nil, err
 			}
 		}
 	}
-	stateWriters := make([]Entry, 0, len(writers))
-	for _, writer := range writers {
-		stateWriters = append(stateWriters, writer)
+	storeCalls := make([]Entry, 0, len(calls))
+	for _, call := range calls {
+		storeCalls = append(storeCalls, call)
 	}
-	sort.Slice(stateWriters, func(i, j int) bool { return stateWriters[i].ID < stateWriters[j].ID })
-	storeReads := make([]Entry, 0, len(reads))
-	for _, read := range reads {
-		storeReads = append(storeReads, read)
-	}
-	sort.Slice(storeReads, func(i, j int) bool { return storeReads[i].ID < storeReads[j].ID })
-	return uses, stateWriters, storeReads, nil
+	sort.Slice(storeCalls, func(i, j int) bool { return storeCalls[i].ID < storeCalls[j].ID })
+	return uses, storeCalls, nil
 }
 
 type goListPackage struct {
@@ -438,7 +433,7 @@ func dependsOnRuntime(listed goListPackage) bool {
 	}
 	return false
 }
-func collectTypedUses(root string, environment []string, listed goListPackage, exports map[string]string, uses map[string]map[string]bool, writers, reads map[string]Entry) error {
+func collectTypedUses(root string, environment []string, listed goListPackage, exports map[string]string, uses map[string]map[string]bool, calls map[string]Entry) error {
 	fset := token.NewFileSet()
 	names := append(append([]string{}, listed.GoFiles...), listed.CgoFiles...)
 	files := make([]*ast.File, 0, len(names))
@@ -507,11 +502,7 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 	if listed.ImportPath == runtimeImport || strings.HasPrefix(listed.ImportPath, runtimeImport+"/") {
 		for _, file := range files {
 			ordinals := map[string]int{}
-			var classificationErr error
 			ast.Inspect(file, func(node ast.Node) bool {
-				if classificationErr != nil {
-					return false
-				}
 				call, ok := node.(*ast.CallExpr)
 				if !ok {
 					return true
@@ -521,30 +512,14 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 					function.Pkg().Path() != "github.com/yusefmosiah/go-choir/internal/store" {
 					return true
 				}
-				disposition, classified := storeCallDisposition(function.Name())
 				position := fset.Position(call.Pos())
 				relative := slashRel(root, position.Filename)
-				if !classified {
-					classificationErr = fmt.Errorf(
-						"unclassified internal/store.Store method %s called from %s",
-						function.Name(), relative,
-					)
-					return false
-				}
 				base := relative + ":" + enclosingFunction(file, call.Pos()) + ":" +
 					strings.TrimPrefix(typeObjectKey(function), "github.com/yusefmosiah/go-choir/")
 				id := uniqueID(base, ordinals)
-				entry := Entry{ID: id, Disposition: disposition}
-				if disposition == "core" {
-					reads[id] = entry
-				} else {
-					writers[id] = entry
-				}
+				calls[id] = Entry{ID: id}
 				return true
 			})
-			if classificationErr != nil {
-				return classificationErr
-			}
 		}
 	}
 	return nil
@@ -577,48 +552,6 @@ func calledFunction(call *ast.CallExpr, info *types.Info) *types.Func {
 	return result
 }
 
-func storeCallDisposition(name string) (string, bool) {
-	if name == "BuildTextureSourceEntityCanonicalID" ||
-		name == "BuildTextureSourceRefCanonicalID" || name == "CoSuperSlotRun" ||
-		name == "CoSuperSlotByAgent" || name == "CoSuperSlotByAgentAndTrajectory" ||
-		name == "Path" ||
-		name == "TexturePath" || name == "TextureSourceGraphVersionID" {
-		return "core", true
-	}
-	for _, prefix := range []string{
-		"Active", "Count", "Current", "Find", "Get", "Has", "Is", "Latest",
-		"List", "Load", "Lookup", "Read", "Resolve", "Search",
-	} {
-		if strings.HasPrefix(name, prefix) {
-			return "core", true
-		}
-	}
-	for _, term := range []string{
-		"AppAdoption", "AppChangePackage", "CandidatePackage",
-		"ComputerSourceLineage", "ComputerVersion", "Promotion",
-	} {
-		if strings.Contains(name, term) {
-			return "promotion", true
-		}
-	}
-	for _, term := range []string{
-		"ContentItem", "Document", "Revision", "Texture", "Trajectory", "Wire", "WorkItem",
-	} {
-		if strings.Contains(name, term) {
-			return "wire", true
-		}
-	}
-	for _, term := range []string{
-		"Agent", "BrowserSession", "Channel", "Checkpoint", "CoSuper", "DesktopState",
-		"Event", "Evidence", "Lease", "Media", "Message", "Mutation", "Podcast",
-		"Preference", "Recent", "Run", "Slot", "Theme", "Worker",
-	} {
-		if strings.Contains(name, term) {
-			return "lifecycle", true
-		}
-	}
-	return "", false
-}
 
 
 func attachProductionCallers(inv *Inventory, uses map[string]map[string]bool) {
@@ -879,7 +812,7 @@ func slashRel(root, path string) string {
 }
 
 func sortInventory(inv *Inventory) {
-	lists := []*[]Entry{&inv.Files, &inv.Exports, &inv.UnusedExportDebt, &inv.Routes, &inv.Tools, &inv.ProductionImporters, &inv.Wrappers, &inv.CompatibilityMarkers, &inv.StateWriters, &inv.DeclaredStoreReads, &inv.Citers}
+	lists := []*[]Entry{&inv.Files, &inv.Exports, &inv.UnusedExportDebt, &inv.Routes, &inv.Tools, &inv.ProductionImporters, &inv.Wrappers, &inv.CompatibilityMarkers, &inv.StoreCalls, &inv.Citers}
 	for _, list := range lists {
 		sort.Slice(*list, func(i, j int) bool { return (*list)[i].ID < (*list)[j].ID })
 	}
@@ -922,8 +855,7 @@ func setCounts(inv *Inventory) {
 	c.ProductionImporters = len(inv.ProductionImporters)
 	c.Wrappers = len(inv.Wrappers)
 	c.CompatibilityMarkers = len(inv.CompatibilityMarkers)
-	c.StateWriters = len(inv.StateWriters)
-	c.DeclaredStoreReads = len(inv.DeclaredStoreReads)
+	c.StoreCalls = len(inv.StoreCalls)
 	c.Citers = len(inv.Citers)
 	inv.Counts = c
 }

@@ -132,14 +132,14 @@ func compareInventory(want, got Inventory) error {
 		{"production_importers", want.ProductionImporters, got.ProductionImporters, false},
 		{"wrappers", want.Wrappers, got.Wrappers, false},
 		{"compatibility_markers", want.CompatibilityMarkers, got.CompatibilityMarkers, false},
-		{"state_writers", want.StateWriters, got.StateWriters, false},
-		{"declared_store_reads", want.DeclaredStoreReads, got.DeclaredStoreReads, false},
 		{"citers", want.Citers, got.Citers, true},
 	}
 	for _, category := range categories {
 		problems = append(problems, validateEntries(category.name, category.want, category.citer)...)
 		problems = append(problems, compareEntries(category.name, category.want, category.got)...)
 	}
+	problems = append(problems, validateStoreCalls(want.StoreCalls)...)
+	problems = append(problems, compareEntries("store_calls", want.StoreCalls, got.StoreCalls)...)
 	problems = append(problems, validateEntries("initial_unused_export_debt", want.UnusedExportDebt, false)...)
 	problems = append(problems, validateExportCallerContract(want.Exports, want.UnusedExportDebt)...)
 
@@ -184,6 +184,57 @@ func validateEntries(category string, entries []Entry, citer bool) []string {
 			problems = append(problems, fmt.Sprintf(
 				"%s: deletion_target_reference for %q does not name runtime-package-extinction-target",
 				category, entry.ID,
+			))
+		}
+	}
+	return problems
+}
+
+func validateStoreCalls(entries []Entry) []string {
+	allowed := map[string]bool{
+		"read": true, "lifecycle": true, "wire": true, "promotion": true,
+	}
+	knownWriters := map[string]string{
+		"ClaimCoSuperSlot": "lifecycle",
+		"ReleaseCoSuperSlotClaim": "lifecycle",
+		"CancelAgentMutation": "lifecycle",
+		"PatchRevisionMetadata": "wire",
+		"CreateDocument": "wire",
+		"CreateRevision": "wire",
+		"UpdateDocument": "wire",
+		"CreateWorkItem": "wire",
+		"UpdateTrajectoryStatus": "wire",
+		"UpdateTrajectorySubjectRefs": "wire",
+		"UpsertAppAdoption": "promotion",
+		"UpsertComputerSourceLineage": "promotion",
+		"UpsertAppChangePackage": "promotion",
+		"UpdateAppAdoptionIfCurrent": "promotion",
+	}
+	seen := map[string]bool{}
+	var problems []string
+	for _, entry := range entries {
+		if strings.TrimSpace(entry.ID) == "" {
+			problems = append(problems, "store_calls: empty item id")
+			continue
+		}
+		if seen[entry.ID] {
+			problems = append(problems, fmt.Sprintf("store_calls: duplicate item %q", entry.ID))
+		}
+		seen[entry.ID] = true
+		if !allowed[entry.Disposition] {
+			problems = append(problems, fmt.Sprintf(
+				"store_calls: missing or invalid disposition %q for %q; want read, lifecycle, wire, or promotion",
+				entry.Disposition, entry.ID,
+			))
+		}
+		method := entry.ID[strings.LastIndex(entry.ID, ".")+1:]
+		if ordinal := strings.Index(method, "#"); ordinal >= 0 {
+			method = method[:ordinal]
+		}
+		if expected := knownWriters[method]; expected != "" && entry.Disposition != expected {
+			problems = append(problems, fmt.Sprintf(
+				"store_calls: %s must use %s disposition, got %q",
+				method, expected, entry.Disposition,
 			))
 		}
 	}

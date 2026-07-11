@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func main() {
@@ -29,8 +30,12 @@ func main() {
 	}
 	if *writeBaseline {
 		previous, readErr := readInventory(baselinePath)
-		if readErr == nil && previous.Schema == inventorySchema {
+		if readErr == nil {
 			inventory.UnusedExportDebt = previous.UnusedExportDebt
+			applyPriorStoreDispositions(&inventory, previous)
+		}
+		if problems := validateStoreCalls(inventory.StoreCalls); len(problems) > 0 {
+			fatal(fmt.Errorf("cannot write baseline:\n  - %s", strings.Join(problems, "\n  - ")))
 		}
 		setCounts(&inventory)
 		if err := enforceDebtAuthority(repo, baselinePath, inventory, true, *bootstrapDebt); err != nil {
@@ -56,6 +61,22 @@ func main() {
 	fmt.Println("runtime dissolution inventory: PASS")
 	printCounts(inventory.Counts)
 }
+func applyPriorStoreDispositions(current *Inventory, previous Inventory) {
+	dispositions := map[string]string{}
+	for _, entry := range previous.StoreCalls {
+		dispositions[entry.ID] = entry.Disposition
+	}
+	for _, entry := range previous.LegacyStateWriters {
+		dispositions[entry.ID] = entry.Disposition
+	}
+	for _, entry := range previous.LegacyStoreReads {
+		dispositions[entry.ID] = "read"
+	}
+	for index := range current.StoreCalls {
+		current.StoreCalls[index].Disposition = dispositions[current.StoreCalls[index].ID]
+	}
+}
+
 func enforceDebtAuthority(root, baselinePath string, current Inventory, writing, bootstrap bool) error {
 	prior, exists, err := priorCanonicalInventory(root, baselinePath, writing)
 	if err != nil {
@@ -109,6 +130,6 @@ func fatal(err error) {
 }
 
 func printCounts(c Counts) {
-	fmt.Printf("counts: go_files=%d production_files=%d test_files=%d production_loc=%d test_loc=%d exports=%d export_caller_edges=%d initial_unused_export_debt=%d routes=%d tools=%d production_importers=%d wrappers=%d compatibility_markers=%d state_writers=%d declared_store_reads=%d citers=%d\n",
-		c.GoFiles, c.ProductionFiles, c.TestFiles, c.ProductionLOC, c.TestLOC, c.Exports, c.ExportCallerEdges, c.InitialUnusedExportDebt, c.Routes, c.Tools, c.ProductionImporters, c.Wrappers, c.CompatibilityMarkers, c.StateWriters, c.DeclaredStoreReads, c.Citers)
+	fmt.Printf("counts: go_files=%d production_files=%d test_files=%d production_loc=%d test_loc=%d exports=%d export_caller_edges=%d initial_unused_export_debt=%d routes=%d tools=%d production_importers=%d wrappers=%d compatibility_markers=%d store_calls=%d citers=%d\n",
+		c.GoFiles, c.ProductionFiles, c.TestFiles, c.ProductionLOC, c.TestLOC, c.Exports, c.ExportCallerEdges, c.InitialUnusedExportDebt, c.Routes, c.Tools, c.ProductionImporters, c.Wrappers, c.CompatibilityMarkers, c.StoreCalls, c.Citers)
 }
