@@ -12,6 +12,7 @@ func main() {
 	root := flag.String("root", "", "repository root (defaults to the directory containing go.mod)")
 	baseline := flag.String("baseline", "docs/runtime-dissolution-inventory.yaml", "inventory baseline, relative to root")
 	writeBaseline := flag.Bool("write-baseline", false, "write a new baseline with explicit conservative dispositions")
+	bootstrapDebt := flag.Bool("bootstrap-initial-debt", false, "allow initial debt only when no baseline exists in canonical Git history")
 	flag.Parse()
 
 	repo, err := repositoryRoot(*root)
@@ -32,6 +33,9 @@ func main() {
 			inventory.UnusedExportDebt = previous.UnusedExportDebt
 		}
 		setCounts(&inventory)
+		if err := enforceDebtAuthority(repo, baselinePath, inventory, true, *bootstrapDebt); err != nil {
+			fatal(err)
+		}
 		if err := writeInventory(baselinePath, inventory); err != nil {
 			fatal(err)
 		}
@@ -43,12 +47,34 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	if err := enforceDebtAuthority(repo, baselinePath, want, false, *bootstrapDebt); err != nil {
+		fatal(err)
+	}
 	if err := compareInventory(want, inventory); err != nil {
 		fatal(err)
 	}
 	fmt.Println("runtime dissolution inventory: PASS")
 	printCounts(inventory.Counts)
 }
+func enforceDebtAuthority(root, baselinePath string, current Inventory, writing, bootstrap bool) error {
+	prior, exists, err := priorCanonicalInventory(root, baselinePath, writing)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		if bootstrap {
+			return nil
+		}
+		return fmt.Errorf(
+			"no prior tracked runtime inventory baseline; initial debt requires -bootstrap-initial-debt",
+		)
+	}
+	if bootstrap {
+		return errors.New("-bootstrap-initial-debt is forbidden when prior canonical Git authority exists")
+	}
+	return validateDebtNoGrowth(prior, current)
+}
+
 
 func repositoryRoot(explicit string) (string, error) {
 	if explicit != "" {

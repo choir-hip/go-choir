@@ -265,6 +265,27 @@ func useRuntime(value holder) { value.Start() }
 	})
 }
 
+func TestInitialUnusedExportDebtCannotGrow(t *testing.T) {
+	t.Run("manual debt and count rebase fails", func(t *testing.T) {
+		root := fixtureRepository(t)
+		prior := mustScan(t, root)
+		writeFixture(t, root, "internal/runtime/runtime.go",
+			"package runtime\n\ntype Runtime struct{}\n\nfunc NewlyUnused() {}\n")
+		rebased := mustScan(t, root)
+		err := validateDebtNoGrowth(prior, rebased)
+		assertDiagnostic(t, err, "initial unused export debt grew beyond prior canonical Git authority")
+	})
+
+	t.Run("debt removal passes", func(t *testing.T) {
+		prior := mustScan(t, fixtureRepository(t))
+		current := prior
+		current.UnusedExportDebt = nil
+		if err := validateDebtNoGrowth(prior, current); err != nil {
+			t.Fatalf("debt removal: %v", err)
+		}
+	})
+}
+
 func TestCiterSuffixDriftChangesDigestIdentity(t *testing.T) {
 	root := fixtureRepository(t)
 	prefix := strings.Repeat("long-prefix-", 30)

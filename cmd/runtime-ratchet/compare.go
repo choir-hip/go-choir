@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -31,13 +34,74 @@ func readInventory(path string) (Inventory, error) {
 	if err != nil {
 		return Inventory{}, fmt.Errorf("read baseline: %w", err)
 	}
+	return decodeInventory(data)
+}
+
+func decodeInventory(data []byte) (Inventory, error) {
 	var inv Inventory
-	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&inv); err != nil {
 		return Inventory{}, fmt.Errorf("decode baseline: %w", err)
 	}
 	return inv, nil
+}
+
+func priorCanonicalInventory(root, baselinePath string, writing bool) (Inventory, bool, error) {
+	relative, err := filepath.Rel(root, baselinePath)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return Inventory{}, false, fmt.Errorf("baseline %s is outside repository root", baselinePath)
+	}
+	relative = filepath.ToSlash(relative)
+	show := func(ref string) ([]byte, bool) {
+		command := exec.Command("git", "-C", root, "show", ref+":"+relative)
+		output, showErr := command.Output()
+		return output, showErr == nil
+	}
+	head, headExists := show("HEAD")
+	if !headExists {
+		return Inventory{}, false, nil
+	}
+	priorData := head
+	if !writing {
+		current, readErr := os.ReadFile(baselinePath)
+		if readErr != nil {
+			return Inventory{}, false, fmt.Errorf("read current baseline: %w", readErr)
+		}
+		if bytes.Equal(current, head) {
+			parent, parentExists := show("HEAD^")
+			if !parentExists {
+				return Inventory{}, false, nil
+			}
+			priorData = parent
+		}
+	}
+	prior, decodeErr := decodeInventory(priorData)
+	if decodeErr != nil {
+		return Inventory{}, false, fmt.Errorf("decode prior canonical baseline: %w", decodeErr)
+	}
+	return prior, true, nil
+}
+
+func validateDebtNoGrowth(prior, current Inventory) error {
+	allowed := make(map[string]bool, len(prior.UnusedExportDebt))
+	for _, entry := range prior.UnusedExportDebt {
+		allowed[entry.ID] = true
+	}
+	var additions []string
+	for _, entry := range current.UnusedExportDebt {
+		if !allowed[entry.ID] {
+			additions = append(additions, entry.ID)
+		}
+	}
+	if len(additions) == 0 {
+		return nil
+	}
+	sort.Strings(additions)
+	return fmt.Errorf(
+		"initial unused export debt grew beyond prior canonical Git authority: %s",
+		strings.Join(additions, ", "),
+	)
 }
 
 func compareInventory(want, got Inventory) error {
