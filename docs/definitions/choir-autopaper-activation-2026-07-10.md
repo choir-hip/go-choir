@@ -1242,6 +1242,55 @@ run_checkpoint_and_resumption_state:
       in-flight=1, submitCap=0 through later drains. This is distinct from the repaired
       blocked-state projection: a refreshed live trajectory has neither resumed nor
       reached a terminal state that releases admission.
+    - Forced CI run 29143023440 passed every standard and race gate. Deploy job
+      86520721334 completed in 5m05s, and deploy-receipt.json records exact target
+      5035bfa2 with active host, frontend, and active-computer artifacts at 06:54:00Z.
+      The platform computer was healthy on its refreshed address 10.200.146.2 with
+      exact sandbox SHA 5035bfa2; sourcecycled, vmctl, and gateway were active with
+      NRestarts=0.
+    - The first exact-SHA all-source cycle fetched 3,624 items and reported
+      in-flight=0, submitCap=1, but every bounded submission attempt returned runtime
+      429 `too many active processor runs`. Runtime run 671d7610 was state=completed
+      while its trajectory remained live with two open work items and only 19 of 20
+      source items resolved. Sourcecycled had projected its durable request runtime
+      status to completed, while sandbox health still reported one running processor.
+  root_cause_clustering_assessment:
+    trigger: >-
+      Three sourcecycled/runtime lifecycle symptoms were observed in one mission and
+      one subsystem, so symptom patching stops pending a substrate-level assessment.
+    symptoms:
+      - >-
+        Substrate: runtime state=blocked is deliberately non-terminal in the generic
+        runtime, but sourcecycled has no continuation authority and previously retained
+        the request as submitted indefinitely.
+      - >-
+        Substrate: runtime refresh passivates a live processor trajectory without a
+        sourcecycled resume or terminalization contract, leaving 51 work items open.
+      - >-
+        Substrate: run state=completed can coexist with a live, unresolved processor
+        trajectory; sourcecycled releases its ledger capacity while runtime admission
+        still counts an active processor and rejects the next submission.
+    common_cause: >-
+      Processor completion and admission authority are split across run state,
+      trajectory state, processor-resolution state, sourcecycled request state, and
+      runtime active-run accounting. No single shared projection defines when a
+      source-network processor owns capacity, can resume, or is irrecoverably terminal.
+    replacement_or_alternative_code: >-
+      Existing processor-resolution and trajectory projections already expose the
+      semantic facts needed for a shared decision, and sourcecycled's bounded runtime
+      polling is wired. The missing connection is to runtime admission accounting and
+      restart/passivation recovery; adding more sourcecycled-only terminal cases would
+      preserve the split authority rather than repair it.
+    substrate_vs_symptom: >-
+      All three observed failures are substrate-level lifecycle/authority mismatches,
+      not independent ingestion symptoms. The next behavior change must establish one
+      processor capacity/completion contract across runtime admission and sourcecycled,
+      or explicitly connect an existing shared projection if one is present.
+    deletion_first_assessment: >-
+      Prefer deleting duplicate sourcecycled capacity inference in favor of runtime's
+      semantic processor projection, or making runtime admission consume that same
+      projection. Do not add another isolated state-name exception before tracing the
+      runtime admission counter and recovery path.
   remaining_error_field:
     - The canonical context handoff is repaired and proven in the exact deployed prompt,
       but the first grounded run failed before iteration zero on provider availability.
@@ -1260,13 +1309,15 @@ run_checkpoint_and_resumption_state:
     - Runtime refresh can leave a processor passivated while its trajectory remains live;
       sourcecycled counts that request as in flight indefinitely and has no demonstrated
       resume or bounded terminal projection for this state.
-  highest_impact_remaining_uncertainty: passivated-live processor recovery after runtime refresh
+    - Completed run state can coexist with a live unresolved processor trajectory, so
+      sourcecycled and runtime disagree about capacity and fresh submissions receive 429.
+  highest_impact_remaining_uncertainty: shared processor lifecycle and admission authority
   next_executable_probe: >-
-    Extend only the active sandbox exact-SHA observation window beyond the measured
-    store-backed platform startup, retain the same fail-closed identity requirement,
-    deploy f1ceba58 through that verifier, then require a later fresh single-processor
-    cycle and its one grounded reconciler to complete and produce an inspectable
-    canonical Texture revision.
+    Trace runtime active-processor admission accounting and restart/passivation recovery
+    against the existing trajectory and processor-resolution projection. Identify the
+    smallest substrate-level connection that makes both runtime and sourcecycled derive
+    capacity from one semantic authority; do not add a fourth sourcecycled-only state
+    exception. Then repeat the exact-SHA fresh-cycle acceptance proof.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1291,6 +1342,9 @@ run_checkpoint_and_resumption_state:
       and subsequent direct exact-SHA f1ceba58 platform health.
     - Processor run 73dacea4, request processor_00ccb60732afc992c47e25b8, and the
       06:32Z runtime status showing passivated/live with 51 open work items.
+    - CI run 29143023440, deploy job 86520721334, exact-SHA 5035bfa2 deploy receipt,
+      refreshed platform health at 10.200.146.2, runtime run 671d7610, and the 06:57Z
+      bounded submission attempts rejected by runtime active-processor admission.
   rollback_refs: []
 ```
 
