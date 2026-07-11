@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631
+  journal_expected_parent_sha: eca2f134cca65c85a02971af8f7e1140b7fc7f44
   orchestrator_lock:
     holder: Main
     epoch: 3
@@ -792,16 +792,16 @@ run_checkpoint_and_resumption_state:
       subgoal: S0
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 3
-      status: dispatched
+      status: implementation_returned
       dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
       dispatch_ref: S0RatchetImplementer
       agent_session_ref: agent://S0RatchetImplementer
       dispatch_prompt_ref: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md
       implementer_job_ref: S0RatchetImplementer
-      implementer_output_ref: pending_agent_dispatch
+      implementer_output_ref: agent://S0RatchetImplementer
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: agent_isolated_worktree_from_1a9a90b63f6541fcb8d96502e85a158b8446d14e
+      worktree_or_branch_ref: s0-runtime-inventory-ratchet-01@d2b8dba678d8590afed63b32ac540d8a06034210
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -809,11 +809,12 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-dispatched-02
-      expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631
+      transition_id: s0-runtime-inventory-ratchet-returned-03
+      expected_parent_sha: eca2f134cca65c85a02971af8f7e1140b7fc7f44
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
+        - {status: implementation_returned, transition_id: s0-runtime-inventory-ratchet-returned-03, recorded_at: 2026-07-11T21:23:47Z, actor: Main, expected_parent_sha: eca2f134cca65c85a02971af8f7e1140b7fc7f44, precondition: exactly_one_matching_agent_result_for_dispatch_nonce, postcondition: isolated_commit_recorded_for_integration, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-11T23:11:54Z
       mutation_class: yellow
       protected_surfaces: []
@@ -829,10 +830,10 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref
       receipt_lookup: git_history_and_agent_job_record
       expected_precondition: clean_agent_worktree_at_pre_mutation_sha
-      observed_postcondition: pending
+      observed_postcondition: isolated_commit_d2b8dba678d8590afed63b32ac540d8a06034210_returned_with_focused_pass
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: pending
-      implementation_commit_sha: pending
+      implementation_sha_or_dirty_snapshot: d2b8dba678d8590afed63b32ac540d8a06034210
+      implementation_commit_sha: d2b8dba678d8590afed63b32ac540d8a06034210
       push_ref: pending_orchestrator_integration
       ci_run_ref: not_applicable_until_integration
       deploy_ref: not_applicable_yellow_slice
@@ -843,8 +844,8 @@ run_checkpoint_and_resumption_state:
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-11T21:14:41Z
-      reconciliation_result: one_matching_live_agent_job_S0RatchetImplementer
+      last_reconciled_at: 2026-07-11T21:23:47Z
+      reconciliation_result: exactly_one_matching_result_commit_d2b8dba678d8590afed63b32ac540d8a06034210
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
