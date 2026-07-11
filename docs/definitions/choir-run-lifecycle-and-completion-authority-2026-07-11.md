@@ -122,8 +122,9 @@ not to the state assumed when the post-mortem was written:
 - `choir-wire-store-conformance-2026-07-11.md` is **defined but not
   implemented** (definition commit `a2f110e`; no code commits). Therefore any
   phase whose acceptance requires a fetchable artifact in the `corpusd`
-  world-wire store is **blocked** until that mission's completion semantics are
-  observed. Phases A–C below have no such dependency and are executable now.
+  world-wire store is gated until that mission's completion semantics are
+  observed; the Phase D gate self-resolves by executing that mission first.
+  Phases A–C below have no such dependency and are executable now.
 - `isTerminalRuntimeState` in `cmd/sourcecycled/main.go` **already** treats
   `blocked` as terminal (`f1ceba5`). The remaining work is not adding the case
   but deciding terminal-error vs retryable-dispatch routing (Phase B).
@@ -208,8 +209,9 @@ The mission is `complete` when all of the following are observed on staging:
 ## Sequencing and Gates
 
 Execution order is Phase 0 → A → B → C → D → E. Phases A–C have no dependency
-on `choir-wire-store-conformance`; Phase D is hard-gated on it (see Dependency
-Truth). Every phase lands through the same gate protocol:
+on `choir-wire-store-conformance`; Phase D is gated on it, and the gate
+self-resolves by chain-executing that mission first (see Phase D and
+Dependency Truth). Every phase lands through the same gate protocol:
 
 1. **Consensus gate (before mutation):** run the agentic-consensus runner
    (`skill://agentic-consensus/agentic-consensus-runner.sh`) on the phase's
@@ -297,11 +299,17 @@ docs-only landing path and must not force the full deploy workflow.
   verify the new commit — the first green Deploy since the `d8fe4336` CI
   bypass. Record run IDs and the Deploy run URL.
 
-### Phase D — Artifact-verified completion (red; gated)
+### Phase D — Artifact-verified completion (red; gated, self-resolving)
 
 - **Gate:** `choir-wire-store-conformance-2026-07-11.md` completion semantics
   observed on staging (world-wire store on `corpusd` serving the wire read
-  path). If not yet true, stop here; Phases A–C stand alone as landed value.
+  path). The gate is **self-resolving**: if not yet true when Phase D is
+  reached, the executing agent invokes and completes
+  `docs/definitions/choir-wire-store-conformance-2026-07-11.md` under that
+  Definition's own authority, gates, and red-class ceremony — it is the
+  declared Phase 0 of the autoputer sequence and the confirmed next
+  executable focus in `docs/ACTIVE.md` — then resumes Phase D here. Phases
+  A–C remain landed value regardless of the chained mission's outcome.
 - **Changes:** terminal `RunCompleted` for the processor path requires the
   artifact predicate (published world-wire article with ingestion lineage in
   the `corpusd` store); a run that exits cleanly without the artifact
@@ -354,6 +362,11 @@ docs-only landing path and must not force the full deploy workflow.
   QA acceptance), the phased execution plan A–E with the Phase D gate on
   `choir-wire-store-conformance`, and the autonomous execution contract. The
   original "First Phase" section is superseded by Phases A and B.
+- Amended again 2026-07-11 (owner directive): the mission is fully autonomous.
+  The Phase D gate self-resolves by chain-executing
+  `choir-wire-store-conformance`; consensus-vs-default conflicts are
+  self-adjudicated with a recorded deviation; unrepairable halts end the
+  attempt with a documented failure report instead of an owner pause.
 
 ## Red-Class Ceremony
 
@@ -363,14 +376,22 @@ docs-only landing path and must not force the full deploy workflow.
   red-class ceremony — concretely, the per-phase gate protocol in
   "Sequencing and Gates" (consensus gate → local proof → landing loop → QA
   acceptance → halt-on-red).
-- **Autonomous execution contract:** Phases 0–C and E are executable
-  autonomously under this Definition, taking every Open Decision default as
-  written; the consensus gates are the in-loop review mechanism and require no
-  human turn. Owner escalation is required only when (a) an adjudicated
-  consensus finding contradicts an Open Decision default, (b) a halt condition
-  cannot be repaired within the phase, or (c) the Phase D gate is reached
-  before `choir-wire-store-conformance` is settled — in which case the mission
-  pauses with Phases A–C landed rather than proceeding.
+- **Autonomous execution contract (owner-ratified 2026-07-11):** the entire
+  mission is executable autonomously with no human turn. The consensus gates
+  are the in-loop review mechanism. The former escalation conditions are
+  converted to document-and-proceed rules:
+  - (a) An adjudicated consensus finding that contradicts an Open Decision
+    default is **self-adjudicated**: the executing agent picks the better-
+    evidenced option, records the deviation and rationale in the Supersession
+    Record and evidence ledger, and proceeds. A deviation is not a halt.
+  - (b) A halt condition that cannot be repaired within the phase ends the
+    mission attempt with a **documented failure report** (documentation-first
+    per `AGENTS.md`): pushed SHA, failing gate, diagnosis, rollback refs, and
+    next safe probes recorded in `docs/ACTIVE.md` and the evidence ledger.
+    Failure is an accepted outcome; the record is the learning artifact. Do
+    not leave staging red — roll back to the phase's rollback ref first.
+  - (c) The Phase D gate self-resolves by chain-executing
+    `choir-wire-store-conformance` (see Phase D) instead of pausing.
 - **Protected surfaces:** [run acceptance, canonical writes in the world-wire
   store, sourcecycled dispatch ledger, trajectory/processor state, `choir run`
   CLI surface, external-agent observable set].
