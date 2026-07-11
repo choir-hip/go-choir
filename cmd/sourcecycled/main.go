@@ -33,6 +33,7 @@ const (
 	defaultIngestionQueueDrainInterval      = 1 * time.Minute
 	defaultIngestionProcessorInFlightWindow = 15 * time.Minute
 	defaultObjectGraphBackfillLimit         = 50
+	defaultWebCaptureProjectionBatchSize    = 100
 )
 
 type runtimeRunSubmitRequest struct {
@@ -143,12 +144,21 @@ func main() {
 	}
 	log.Printf("Loaded %d sources from registry", len(registry.Sources))
 
-	// sourcecycled uses an in-memory store — no relational database dependency.
-	// Source items are projected to the object graph via the runtime API; the
-	// queue/cycle state here is ephemeral and lost on restart (acceptable: the
-	// daemon re-fetches sources on restart and the runtime tracks its own run
-	// state).
-	store := cycle.NewMemoryStore()
+	// Keep source poll, cycle, and dispatch state in the platform Dolt store so
+	// deploys do not replay the whole corpus or erase in-flight request history.
+	var store *cycle.Storage
+	var storeErr error
+	for attempt := 1; attempt <= 20; attempt++ {
+		store, storeErr = cycle.NewStorage(sourceServiceDBDSN())
+		if storeErr == nil {
+			break
+		}
+		log.Printf("sourcecycled store: attempt %d/20: %v", attempt, storeErr)
+		time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+	}
+	if storeErr != nil {
+		log.Fatalf("Failed to initialize source service storage: %v", storeErr)
+	}
 	defer store.Close()
 	if err := store.SaveSources(&registry); err != nil {
 		log.Fatalf("Failed to save source registry: %v", err)
@@ -238,6 +248,16 @@ func sourceServiceAddr() string {
 		return addr
 	}
 	return "127.0.0.1:8787"
+}
+
+func sourceServiceDBDSN() string {
+	if dsn := strings.TrimSpace(os.Getenv("SOURCECYCLED_DOLT_DSN")); dsn != "" {
+		return dsn
+	}
+	if dsn := strings.TrimSpace(os.Getenv("SOURCE_SERVICE_DOLT_DSN")); dsn != "" {
+		return dsn
+	}
+	return "root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
 }
 
 func sourceServiceConfigPath() string {
@@ -839,6 +859,7 @@ func processorRunReconcileDecision(run runtimeRunStatusResponse) (verdict, runti
 	switch projection {
 	case projectionPublishedCorpusCoverage, projectionExplicitNoStoryTerminal, projectionPublicationSettled:
 		verdict = "completed"
+		runtimeStatus = "completed"
 	}
 	if processorStoryRouteCompleted(run) {
 		runtimeStatus = "completed"
@@ -1143,6 +1164,27 @@ func (d *ingestionRuntimeDispatcher) runtimeWebCapturesEndpoint() string {
 }
 
 func (d *ingestionRuntimeDispatcher) projectWebCaptures(ctx context.Context, items []sources.Item, now time.Time) (webCaptureProjectionSummary, error) {
+	var total webCaptureProjectionSummary
+	for start := 0; start < len(items); start += defaultWebCaptureProjectionBatchSize {
+		end := start + defaultWebCaptureProjectionBatchSize
+		if end > len(items) {
+			end = len(items)
+		}
+		batch, err := d.projectWebCaptureBatch(ctx, items[start:end], now)
+		if err != nil {
+			return total, fmt.Errorf("project web capture batch %d-%d of %d: %w", start+1, end, len(items), err)
+		}
+		total.Mode = batch.Mode
+		total.Target = batch.Target
+		total.CaptureCount += batch.CaptureCount
+		total.SourceEntityCount += batch.SourceEntityCount
+		total.CapturedFromEdges += batch.CapturedFromEdges
+		total.SkippedItemCount += batch.SkippedItemCount
+	}
+	return total, nil
+}
+
+func (d *ingestionRuntimeDispatcher) projectWebCaptureBatch(ctx context.Context, items []sources.Item, now time.Time) (webCaptureProjectionSummary, error) {
 	if d == nil || d.client == nil {
 		return webCaptureProjectionSummary{}, fmt.Errorf("runtime dispatcher is not configured")
 	}

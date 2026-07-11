@@ -230,6 +230,36 @@ func TestWriteSourceItemsToObjectGraphUsesRuntimeEndpointWhenConfigured(t *testi
 	}
 }
 
+func TestIngestionRuntimeDispatcherProjectsWebCapturesInBoundedBatches(t *testing.T) {
+	var batchSizes []int
+	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload runtimeWebCaptureProjectionRequest
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode projection request: %v", err)
+		}
+		batchSizes = append(batchSizes, len(payload.Items))
+		writeSourceServiceJSON(w, http.StatusCreated, runtimeWebCaptureProjectionResponse{
+			CaptureCount:      len(payload.Items),
+			SourceEntityCount: len(payload.Items),
+			CapturedFromEdges: len(payload.Items),
+		})
+	}))
+	defer runtimeServer.Close()
+
+	items := make([]sources.Item, 205)
+	dispatcher := &ingestionRuntimeDispatcher{baseURL: runtimeServer.URL, ownerID: "owner", client: runtimeServer.Client()}
+	summary, err := dispatcher.projectWebCaptures(context.Background(), items, time.Now())
+	if err != nil {
+		t.Fatalf("project web captures: %v", err)
+	}
+	if got, want := fmt.Sprint(batchSizes), "[100 100 5]"; got != want {
+		t.Fatalf("batch sizes = %s, want %s", got, want)
+	}
+	if summary.CaptureCount != len(items) || summary.SourceEntityCount != len(items) || summary.CapturedFromEdges != len(items) {
+		t.Fatalf("projection summary did not aggregate batches: %+v", summary)
+	}
+}
+
 func TestSourceServiceIngestionHandoffLatestIncludesCycleEvents(t *testing.T) {
 	ctx := context.Background()
 	store := newTestCycleStorage(t)
@@ -1224,7 +1254,7 @@ func TestIngestionRuntimeDispatcherKeepsRuntimeSubmittedRequestsInFlightAfterVer
 	}
 }
 
-func TestIngestionRuntimeDispatcherProjectsPublishedCorpusCoverageWithoutReleasingBudget(t *testing.T) {
+func TestIngestionRuntimeDispatcherProjectsPublishedCorpusCoverageAndReleasesBudget(t *testing.T) {
 	ctx := context.Background()
 	fx := newDispatcherReconcileFixture(t, "coverage", "submitted")
 
@@ -1252,7 +1282,7 @@ func TestIngestionRuntimeDispatcherProjectsPublishedCorpusCoverageWithoutReleasi
 				},
 			})
 		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
-			t.Fatalf("unexpected processor submission while runtime_status submitted still occupies the slot")
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{RunID: "run-coverage-queued", State: "pending"})
 		default:
 			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
 		}
@@ -1260,20 +1290,20 @@ func TestIngestionRuntimeDispatcherProjectsPublishedCorpusCoverageWithoutReleasi
 	defer runtimeServer.Close()
 
 	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
-	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
+	if result.ProcessorSubmitted != 1 || result.ProcessorSkipped != 0 {
 		t.Fatalf("unexpected dispatch result: %+v", result)
 	}
 
 	statusByID := fx.requestsByID(t, ctx)
-	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "submitted" {
+	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "completed" {
 		t.Fatalf("coverage live request projection wrong: %+v", statusByID[fx.live.RequestID])
 	}
-	if statusByID[fx.queued.RequestID].Status != "queued" || statusByID[fx.queued.RequestID].RuntimeStatus != "queued" {
+	if statusByID[fx.queued.RequestID].Status != "submitted" || statusByID[fx.queued.RequestID].RuntimeStatus != "submitted" {
 		t.Fatalf("queued request changed unexpectedly: %+v", statusByID[fx.queued.RequestID])
 	}
 }
 
-func TestIngestionRuntimeDispatcherProjectsExplicitNoStoryTerminalWithoutReleasingBudget(t *testing.T) {
+func TestIngestionRuntimeDispatcherProjectsExplicitNoStoryTerminalAndReleasesBudget(t *testing.T) {
 	ctx := context.Background()
 	fx := newDispatcherReconcileFixture(t, "no_story", "submitted")
 
@@ -1300,7 +1330,7 @@ func TestIngestionRuntimeDispatcherProjectsExplicitNoStoryTerminalWithoutReleasi
 				},
 			})
 		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
-			t.Fatalf("unexpected processor submission while runtime_status submitted still occupies the slot")
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{RunID: "run-no-story-queued", State: "pending"})
 		default:
 			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
 		}
@@ -1308,15 +1338,15 @@ func TestIngestionRuntimeDispatcherProjectsExplicitNoStoryTerminalWithoutReleasi
 	defer runtimeServer.Close()
 
 	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
-	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
+	if result.ProcessorSubmitted != 1 || result.ProcessorSkipped != 0 {
 		t.Fatalf("unexpected dispatch result: %+v", result)
 	}
 
 	statusByID := fx.requestsByID(t, ctx)
-	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "submitted" {
+	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "completed" {
 		t.Fatalf("explicit no-story live request projection wrong: %+v", statusByID[fx.live.RequestID])
 	}
-	if statusByID[fx.queued.RequestID].Status != "queued" || statusByID[fx.queued.RequestID].RuntimeStatus != "queued" {
+	if statusByID[fx.queued.RequestID].Status != "submitted" || statusByID[fx.queued.RequestID].RuntimeStatus != "submitted" {
 		t.Fatalf("queued request changed unexpectedly: %+v", statusByID[fx.queued.RequestID])
 	}
 }
@@ -1341,7 +1371,7 @@ func TestIngestionRuntimeDispatcherProjectsSettledTrajectoryWithoutWaitingForRun
 				},
 			})
 		case r.Method == http.MethodPost && r.URL.Path == "/internal/runtime/runs":
-			t.Fatalf("unexpected processor submission while runtime_status submitted still occupies the slot")
+			writeSourceServiceJSON(w, http.StatusAccepted, runtimeRunStatusResponse{RunID: "run-settled-queued", State: "pending"})
 		default:
 			t.Fatalf("unexpected runtime request %s %s", r.Method, r.URL.Path)
 		}
@@ -1349,15 +1379,15 @@ func TestIngestionRuntimeDispatcherProjectsSettledTrajectoryWithoutWaitingForRun
 	defer runtimeServer.Close()
 
 	result := fx.dispatcher(runtimeServer).dispatch(ctx, fx.store, cycle.IngestionHandoff{})
-	if result.ProcessorSubmitted != 0 || result.ProcessorSkipped != 1 {
+	if result.ProcessorSubmitted != 1 || result.ProcessorSkipped != 0 {
 		t.Fatalf("unexpected dispatch result: %+v", result)
 	}
 
 	statusByID := fx.requestsByID(t, ctx)
-	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "submitted" {
+	if statusByID[fx.live.RequestID].Status != "completed" || statusByID[fx.live.RequestID].RuntimeStatus != "completed" {
 		t.Fatalf("settled live request projection wrong: %+v", statusByID[fx.live.RequestID])
 	}
-	if statusByID[fx.queued.RequestID].Status != "queued" || statusByID[fx.queued.RequestID].RuntimeStatus != "queued" {
+	if statusByID[fx.queued.RequestID].Status != "submitted" || statusByID[fx.queued.RequestID].RuntimeStatus != "submitted" {
 		t.Fatalf("queued request changed unexpectedly: %+v", statusByID[fx.queued.RequestID])
 	}
 }
