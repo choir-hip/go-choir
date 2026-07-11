@@ -902,6 +902,39 @@ evidence_ledger:
       Blocks product-path acceptance despite the sourcecycled repair. Repair must
       make the event migration incrementally resumable or otherwise bound its store
       occupancy without weakening completeness; raising submitCap cannot help.
+  - claim: Replacing per-event existence probes with one unbounded existing-ID scan
+      does not restore platform availability because that scan monopolizes the
+      runtime's single Dolt connection.
+    definition_node: platform_computer
+    evidence_class: exact-SHA deployed staging trace + code inspection
+    source: exact-SHA d376169f staging window beginning 2026-07-11T03:23:39Z
+    command_or_observation: >-
+      Deploy d376169f through CI run 29135912106 attempt 2 and Node B deploy job
+      86505510999; observe the refreshed platform guest, direct runtime health,
+      sourcecycled dispatch-state, and the event migration implementation.
+    artifact_path: internal/store/migration.go + internal/store/texture.go
+    result: >-
+      The refreshed guest reached `runtime: started` and began the event backfill,
+      but remained at `kind=events status=starting` for more than three minutes.
+      Direct `/health` timed out, vmctl reported the VM unhealthy every fifteen
+      seconds, and runtime processor-count queries were repeatedly canceled.
+      `ogMetadataValueSet` streams the entire event kind through one query while
+      the Texture/ObjectGraph handle is intentionally configured with
+      `SetMaxOpenConns(1)`, so the replacement removes quadratic query count but
+      still denies the foreground runtime any turn on the store connection.
+      Sourcecycled remained stable with NRestarts=0 and its durable queue intact;
+      capacity had already returned to one before activation, confirming that
+      submitCap is not the blocker.
+    uncertainty: >-
+      The unbounded scan may eventually finish if the guest survives long enough,
+      but it already violates the required availability and full-cycle stability
+      semantics. The safe next probe is a keyset-paginated scan that closes its
+      rows between bounded pages, allowing foreground work to acquire the single
+      connection while preserving complete existing-ID discovery.
+    promotion_relevance: >-
+      Falsifies the one-scan availability conjecture. The next repair must bound
+      connection occupancy, retain completion-aware migration semantics, and keep
+      submitCap at one.
 ```
 
 ## Active Red Mutation Ceremony
