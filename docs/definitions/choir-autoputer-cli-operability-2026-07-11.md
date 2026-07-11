@@ -147,6 +147,34 @@ operator test, executed by an external agent on staging and recorded with
 dated evidence. A phase proven only by unit tests or by SSH observation is
 not complete.
 
+## Introspection Contract (safe limit for no-SSH debugging)
+
+The observable set is derived empirically, then bounded by authority scope:
+
+- **Demand side:** every SSH observation the 2026-07-10/11 post-mortem run
+  actually needed is a candidate CLI observable — restart counts, lifecycle
+  transitions with reasons, guest boot phase markers, health latency, run/
+  trajectory truth, queue depth and capacity, migration progress, deploy/
+  activation receipts, edition state. The attempt report's evidence ledger is
+  the requirements document.
+- **The safe limit is authority-scoped, not detail-scoped.** Within its own
+  computer, a key may see high-fidelity facts. It may never see: host
+  journald/systemd or shell, raw SQL, provider secrets, host network/tap
+  topology, the existence or state of other computers or owners, or
+  unredacted proxy/platform internals.
+- **Receipts and states, not shells.** All introspection is read-only, typed,
+  owner-scoped projection with bounded cardinality (pagination, time
+  windows). No query language, no eval, no tail -f on host logs.
+- **Introspection must not consume the substrate it observes.** Diagnostics
+  read from projected/receipt state (control tables on the corpusd server,
+  emitted lifecycle events), never live-query a computer's contended store —
+  the 2026-07-11 evidence shows a diagnostic that takes a turn on the store
+  becomes the outage it is measuring.
+- **Escalation ladder instead of shell:** anything receipts cannot answer is
+  served by a `diagnose` verb that has the computer produce a redacted
+  capture bundle as a fetchable artifact. Host SSH remains platform-operator
+  break-glass only and is never part of the product or agent contract.
+
 ## Non-Purpose
 
 - No autopaper/editorial work rides along.
