@@ -1296,6 +1296,15 @@ run_checkpoint_and_resumption_state:
       repeated activations from one bulk cycle. No source work needs deletion: queued
       cycles with zero runtime run ids can be ordered ahead of already-activated cycles,
       preserving FIFO within each class.
+    - 62742eea passed its standard CI gates, but deploy job in run 29146630716 failed
+      before receipt creation. Incomplete evidence records the exact sandbox artifact
+      installed. The refreshed platform became healthy on exact SHA 62742eea at
+      08:56:26Z while bounded event migration continued.
+    - The post-failure health request completed in about three seconds. The deploy
+      verifier cancels every identity probe at `curl --max-time 2`, so its 120 attempts
+      cannot observe a valid exact-SHA response whenever store contention makes the
+      health query exceed two seconds. This is now a per-probe observation-budget bug,
+      not an identity, total-iteration, or migration-yield failure.
   root_cause_clustering_assessment:
     trigger: >-
       Three sourcecycled/runtime lifecycle symptoms were observed in one mission and
@@ -1361,13 +1370,15 @@ run_checkpoint_and_resumption_state:
       unobservable throughout the deploy verifier window.
     - Global FIFO processor ordering allows one old bulk cycle to consume repeated
       admissions while never-activated cycles wait, preventing a fair single-cycle proof.
-  highest_impact_remaining_uncertainty: cycle-fair processor admission
+    - Exact-SHA health is responsive during migration but can exceed the verifier's
+      two-second per-probe deadline, making every otherwise-valid response unobservable.
+  highest_impact_remaining_uncertainty: deploy verifier per-probe health budget
   next_executable_probe: >-
-    Order queued processor requests from cycles with no prior runtime run ahead of
-    already-activated cycles, preserving every request and FIFO order within each class.
-    Deploy that fairness repair, then require the oldest never-activated singleton cycle
-    to produce at most one processor and its deterministic reconciler-owned Texture
-    revision while sourcecycled and the platform remain healthy.
+    Increase only the sandbox identity probe's per-request timeout beyond the observed
+    three-second contended response while preserving 120 bounded attempts and exact SHA
+    equality. Redeploy 62742eea plus that verifier correction, then verify cycle-fair
+    admission selects the oldest never-activated singleton and completes its processor,
+    deterministic reconciler, reconciler-owned Texture revision, and visible edition.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1406,6 +1417,9 @@ run_checkpoint_and_resumption_state:
     - CI run 29145287811, exact-SHA 774b272d deploy receipt, responsive migration-time
       health probes, processor run 16214cbf, docs 3d175eb4/091f31b4, revisions
       089e5d49/f539571e, and the processor queue/cycle cardinality query at 08:38Z.
+    - CI run 29146630716, incomplete evidence deploy-failures/29146630716-1.json,
+      exact-SHA platform health at 10.200.148.2, and the verifier's two-second probe
+      deadline compared with the observed contended health latency.
   rollback_refs: []
 ```
 
