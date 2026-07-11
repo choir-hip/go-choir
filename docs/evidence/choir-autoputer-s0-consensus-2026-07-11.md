@@ -81,6 +81,14 @@ After the `Patch` repair, independent verification found current underlying life
 
 **Required repair:** replace incremental verb additions with exhaustive typed store-method classification; make every called store method either a declared read or a dispositioned writer, reject unknown methods, and regenerate the baseline.
 
+### S0-CONS-004 — read-prefix fallback keeps the classifier fail-open
+
+**Status:** confirmed; blocking; same substrate.
+
+The substrate repair removed the positive writer-verb allowlist, but `storeCallDisposition` still declares any store method beginning with `Active`, `Count`, `Current`, `Find`, `Get`, `Has`, `Is`, `Latest`, `List`, `Load`, `Lookup`, `Read`, `Resolve`, or `Search` to be a read. An unknown mutator such as `GetAndDeleteState` or `LoadOrCreateRun` therefore bypasses the fail-closed branch. The `TransmogrifyState` regression proves only a name outside both allowlists.
+
+**Required repair:** make the baseline itself classify every exact typed store-call identity as `read | lifecycle | wire | promotion`; the scanner must enumerate calls without inferring safety from prefixes. A new method/call is then an undispositioned added item and fails regardless of its name. Equivalent exact method-name authority is acceptable only if unknown names fail closed. Add read-prefixed mutator regressions.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` / incomplete. The panel majority is not authority; S0-CONS-001 and S0-CONS-002 exposed S0-CONS-003, a positive-allowlist substrate bug. S1 must not start until the exhaustive store-method classification repair is independently reverified and the post-repair panel is adjudicated.
+S0 remains `consensus_pending` / incomplete. The panel majority is not authority; S0-CONS-001 through S0-CONS-004 expose one fail-open store-call classification substrate. S1 must not start until every exact typed store call is baseline-dispositioned and unknown calls fail closed independent of naming, followed by independent re-verification and post-repair consensus adjudication.
