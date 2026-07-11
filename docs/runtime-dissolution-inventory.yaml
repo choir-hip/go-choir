@@ -17,7 +17,7 @@ counts:
     wrappers: 5
     compatibility_markers: 16
     state_writers: 121
-    citers: 147
+    citers: 150
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -4609,6 +4609,12 @@ citers:
       disposition: block
     - id: 'docs/doc-authority-manifest.yaml:witnesses: [docs/texture-agentic-invariants-2026-06-13.md, internal/runtime, frontend]'
       disposition: block
+    - id: 'docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md:- `internal/runtime/api_app_promotion.go`: `UpsertAppChangePackage`;'
+      disposition: historical_evidence
+    - id: 'docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md:- `internal/runtime/app_promotion.go`: `UpsertComputerSourceLineage`, `UpsertAppChangePackage`, and repeated `UpsertAppAdoption` calls;'
+      disposition: historical_evidence
+    - id: 'docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md:- `internal/runtime/candidate_package_intake.go`: `UpsertAppChangePackage`, `UpsertAppAdoption`, `UpdateAppAdoptionIfCurrent`, and `UpsertComputerSourceLineage`.'
+      disposition: historical_evidence
     - id: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:2. Inventory every production and test Go file under `internal/runtime`, every exported declaration, every route registration and tool registration owned by that package, every production external imp… [sha256:2709248587ab16a73ed0784dd842b6efcc3b7c75640af1295bb378414feb3d57]
       disposition: historical_evidence
     - id: 'docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:Create the mechanically checkable S0 inventory and ratchet for `internal/runtime`. Exact mutation targets are:'
