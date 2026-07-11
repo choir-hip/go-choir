@@ -29,9 +29,13 @@ match the decisions that already exist.
 ## Source Authority Order
 
 1. This Definition.
-2. `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` — specifically
-   **D-STORES** (three persistence domains, never conflated) and **D-WIRE**
-   (world-wire store in sql-server mode, no data migration, code-only cutover).
+2. `docs/computer-ontology.md` "Dolt Store Taxonomy" (owner two-store
+   directive: world-wire store + VM-local embedded store, nothing else) and
+   **D-WIRE** in `docs/definitions/og-dolt-heresy-completion-2026-07-08.md`
+   (world-wire store in sql-server mode, no data migration, code-only
+   cutover). The three-domain D-STORES yaml block in that same file is
+   orchestrator-settled, unratified, and demoted by this Definition (see
+   Settled Inputs).
 3. `AGENTS.md` and `docs/choir-doctrine.md`.
 4. `docs/current-architecture.md` (corpusd publication boundary; D-STORES
    world-wire vs VM-local split).
@@ -59,9 +63,20 @@ match the decisions that already exist.
   sql-server, multi-writer (proxy, runtime, wire agents). Cutover is
   code-only: TCP DSN, config-governed connection limits. NO DATA MIGRATION —
   existing wire data is junk; stand up fresh.
-- **D-STORES (2026-07-10):** world-wire store ≠ VM-local embedded stores ≠
-  ComputerVersion route ledger. Wire/publication state must not live in a
-  VM-local embedded store.
+- **Two-store taxonomy (owner; `docs/computer-ontology.md` "Dolt Store
+  Taxonomy"):** the Dolt substrate is exactly two stores — the world-wire
+  store (corpusd) and the VM-local embedded store (one per user VM). Wire/
+  publication state must not live in a VM-local embedded store.
+- **Route-ledger demotion (owner, 2026-07-11):** the three-domain D-STORES
+  yaml and D-ROUTE's "vmctl-owned ComputerVersion route ledger" in
+  og-dolt-heresy-completion-2026-07-08.md are ORCHESTRATOR-settled syntheses
+  (their own source lines say so), never owner-ratified, and never
+  implemented. They are not authority. The legitimate need inside D-ROUTE —
+  one durable route-slot record with CAS transitions and receipts — is a
+  table, not a third store; if built, it lives as a platform-control database
+  on the corpusd sql-server (vmctl as sole writer of its tables), conforming
+  to the two-store taxonomy. Any doc segment claiming a third Dolt domain is
+  superseded by this entry pending explicit owner ratification.
 - **Owner, 2026-07-11:** delete the legacy relational→objectgraph boot
   migration ("get rid of the legacy migration — it's all junk data anyway").
   The repo is pre-launch; there is no user data worth a migration ceremony.
@@ -168,6 +183,12 @@ under the superseded topology.
    artifact exists. (C5.)
 4. **Autopaper editorial (reconciler)** — post-publication review, only after
    1–3.
+5. **Decision-provenance hygiene** — the registry currently lets
+   orchestrator-settled syntheses sit beside owner decisions with the same
+   `status: settled`, which is how both the autopaper topology drift and the
+   phantom third store happened. Every settled node needs an explicit
+   `settled_by: owner | orchestrator` field, and orchestrator-settled nodes
+   are proposals until ratified.
 
 ## Supersession Record
 
