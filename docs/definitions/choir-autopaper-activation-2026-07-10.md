@@ -1090,10 +1090,10 @@ Escalate to the human before implementing changes that:
 ```yaml
 run_checkpoint_and_resumption_state:
   status: working
-  last_checkpoint: exact-SHA bounded migration and deployed publication chain 2026-07-11T04:18Z-04:45Z
+  last_checkpoint: reconciler grounding partial deployment 2026-07-11T04:53Z-05:08Z
   current_artifact_state: >-
     949342e2 is deployed as the exact sandbox/gateway artifact and resumes legacy-event
-    projection in durable batches of 64 per bounded invocation. The platform remained
+    projection one legacy event per bounded invocation. The platform remained
     on one guest while sourcecycled completed multiple cycles and processor, Texture,
     and reconciler runs. Sourcecycled released terminal processor capacity with
     submitCap still fixed at one. Cycle cycle_231bc41ce13fe398f9cbe51b produced
@@ -1101,6 +1101,12 @@ run_checkpoint_and_resumption_state:
     cycle-correlated reconciler 7aba21d6. The authenticated stories route returns both
     CDC stories from edition 3b9cdc8b. The reconciler completed, but could not resolve
     its opaque doc/revision handles through corpus/source search and made no review edit.
+    Commit 60d9b29a adds authoritative canonical title/revision/content context to the
+    reconciler handoff and passed local runtime shards, focused race coverage, and all
+    exact-SHA CI gates. Its Node B deploy partially activated the ordinary guest at the
+    exact SHA, but failed acceptance because universal-wire-platform remained registered
+    active at an unreachable sandbox URL (10.200.143.2:8085, HTTP 000). No staging
+    reconciler proof for 60d9b29a is admissible yet.
   what_shipped:
     - 94f6c744 completion-aware resumable OG migration with deferred-open support.
     - cb694846 runtime recovery and listener publication before background migration.
@@ -1111,6 +1117,8 @@ run_checkpoint_and_resumption_state:
     - 20644c66 cycle-correlated, per-cycle-deduplicated publish reconciler activation
       with queue/timer/dispatch lifecycle markers.
     - 949342e2 structurally bounded and durably resumable legacy-event projection.
+    - 60d9b29a canonical Texture context in publish-reconciler handoffs; deployment
+      acceptance remains incomplete.
   what_was_proven:
     - The loop is platform guest readiness/recovery churn, not a host daemon restart.
     - The guest never reaches cmd/sandbox's post-store runtime-topology log or HTTP listen.
@@ -1185,16 +1193,25 @@ run_checkpoint_and_resumption_state:
       queries, found no matches, and requested titles/corpus-visible ids instead of
       assessing consensus, contradiction, or drift. The activation and edition path is
       proven; the reconciler input contract is not yet sufficient for useful review.
+    - 60d9b29a passed all standard and race lanes in CI run 29140336567. Deploy job
+      86512939750 installed the exact SHA on ordinary guest vm-5b0c1bef (health 200),
+      then failed because vmctl still reported universal-wire-platform active at
+      10.200.143.2:8085 while direct health returned HTTP 000. The deploy recorded
+      incomplete evidence at deploy-failures/29140336567-1.json; exact-SHA platform
+      activation and product acceptance are therefore unproven.
   remaining_error_field:
     - The reconciler activation prompt identifies canonical documents only by ids that
       its tools cannot dereference, so a successful run can be editorially empty.
     - The bounded event migration has not yet emitted its durable completion marker;
       intermittent foreground health latency remains while batches continue.
-  highest_impact_remaining_uncertainty: reconciler canonical-document read context
+    - The platform VM is again in an active-but-unreachable state during exact-SHA
+      deployment acceptance, preventing a fresh grounded reconciler observation.
+  highest_impact_remaining_uncertainty: platform active-state reachability during deployment
   next_executable_probe: >-
-    Add canonical title/content context to the publish-batch reconciler handoff (or a
-    direct Texture read tool), prove the prompt from store-backed documents, deploy,
-    and observe a fresh cycle-correlated reconciler assess the triggering documents.
+    Inspect the universal-wire-platform epoch and vmctl lifecycle evidence for the
+    active-but-unreachable 10.200.143.2 registration. Recover through the existing
+    lifecycle path if the registered epoch is stale, verify 60d9b29a exact-SHA health,
+    then observe a fresh cycle-correlated reconciler assess its triggering documents.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1209,6 +1226,8 @@ run_checkpoint_and_resumption_state:
     - CI run 29131530054, deploy job 86488846194, and activation receipt for 20644c66.
     - CI run 29138998386 and activation receipt for 949342e2; processor runs 935efe9c
       and 8a906447; Texture run 2e7feb86; reconciler run 7aba21d6; edition doc 3b9cdc8b.
+    - CI run 29140336567, failed deploy job 86512939750, and incomplete deploy evidence
+      deploy-failures/29140336567-1.json for 60d9b29a.
   rollback_refs: []
 ```
 
