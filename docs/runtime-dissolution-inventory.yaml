@@ -1,4 +1,4 @@
-schema: runtime-dissolution-inventory/v2
+schema: runtime-dissolution-inventory/v3
 canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
@@ -9,8 +9,8 @@ counts:
     production_loc: 48815
     test_loc: 55487
     exports: 1208
-    export_caller_edges: 48
-    initial_unused_export_debt: 278
+    export_caller_edges: 610
+    initial_unused_export_debt: 41
     routes: 47
     tools: 49
     production_importers: 4
@@ -616,46 +616,77 @@ exports:
       disposition: api
       production_callers:
         - internal/apihandler/api.go
+        - internal/runtime/tools_product_api.go
     - id: internal/runtime/api.go:func:RegisterRoutes
       disposition: api
       production_callers:
         - internal/apihandler/api.go
+        - internal/runtime/tools_product_api.go
     - id: internal/runtime/api.go:func:RegisterTextureRoutes
       disposition: api
       production_callers:
         - internal/apihandler/api.go
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleCancel
       disposition: api
     - id: internal/runtime/api.go:method(*APIHandler):HandleChannelMessageList
       disposition: api
     - id: internal/runtime/api.go:method(*APIHandler):HandleHealth
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalChannelCast
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunCancel
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunEvents
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunStatus
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunSubmission
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRuntimeRunRouter
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleModelPolicyResolve
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleModelPolicyRouter
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandlePromptBar
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandlePromptBarSubmission
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptanceDetail
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptanceSynthesize
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptancesRoot
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunList
       disposition: api
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatus
@@ -668,40 +699,90 @@ exports:
       disposition: api
     - id: internal/runtime/api.go:method(*APIHandler):HandleTextureDocumentsRoot
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleTextureRouter
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleTopology
       disposition: api
     - id: internal/runtime/api.go:type:APIHandler
       disposition: api
       production_callers:
         - internal/apihandler/api.go
+        - internal/runtime/api.go
+        - internal/runtime/api_app_promotion.go
+        - internal/runtime/api_candidate_package_intake.go
+        - internal/runtime/api_costs.go
+        - internal/runtime/api_texture_prompt_eval.go
+        - internal/runtime/api_trajectory.go
+        - internal/runtime/browser.go
+        - internal/runtime/content.go
+        - internal/runtime/desktop.go
+        - internal/runtime/live_ws.go
+        - internal/runtime/media_state.go
+        - internal/runtime/podcast.go
+        - internal/runtime/prompts.go
+        - internal/runtime/runtime_refresh.go
+        - internal/runtime/sourcecycled_web_captures.go
+        - internal/runtime/texture.go
+        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/texture_import.go
+        - internal/runtime/texture_lineage.go
+        - internal/runtime/texture_merge.go
+        - internal/runtime/texture_proposals.go
+        - internal/runtime/universal_wire.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionDetail
       disposition: promotion
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionsRoot
       disposition: promotion
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppChangePackageDetail
       disposition: promotion
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppChangePackagesRoot
       disposition: promotion
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleComputersRouter
       disposition: promotion
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleInternalAppChangePackageDetail
       disposition: promotion
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleInternalAppChangePackagesRoot
       disposition: promotion
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_candidate_package_intake.go:func:RegisterCandidatePackageIntakeRoutes
       disposition: candidate_package
     - id: internal/runtime/api_candidate_package_intake.go:func:RegisterCandidatePackageReviewSurfaceRoutes
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageIntakeDetail
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageIntakesRoot
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageReviewSurfaceReadOnly
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/api_costs.go:method(*APIHandler):HandleCosts
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_costs_test.go:func:TestHandleCostsDetailIncludesEntries
       disposition: api
     - id: internal/runtime/api_costs_test.go:func:TestHandleCostsModelsFlagIncludesPricing
@@ -894,28 +975,55 @@ exports:
       disposition: api
     - id: internal/runtime/api_texture_prompt_eval.go:method(*APIHandler):HandleTexturePromptEval
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_trajectory.go:method(*APIHandler):HandleTrajectoriesRoot
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api_trajectory.go:method(*APIHandler):HandleTrajectoryDetail
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):ApproveAppAdoption
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):CreateAppAdoption
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):EnsureComputerSourceLineage
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
+        - internal/runtime/app_promotion.go
+        - internal/runtime/candidate_package_intake.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):PromoteAppAdoption
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):PublishAppChangePackage
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
+        - internal/runtime/tools_shipper.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):RollForwardAppAdoption
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):RollbackAppAdoption
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):StartVerifyAppAdoptionAsync
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):VerifyAppAdoption
       disposition: promotion
+      production_callers:
+        - internal/runtime/api_app_promotion.go
     - id: internal/runtime/app_promotion_build_test.go:func:TestAppAdoptionRequiresActualRecipientBuild
       disposition: promotion
     - id: internal/runtime/app_promotion_build_test.go:func:TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure
@@ -952,18 +1060,32 @@ exports:
       disposition: promotion
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserCapabilities
       disposition: browser
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionClose
       disposition: browser
+      production_callers:
+        - internal/runtime/browser.go
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionControl
       disposition: browser
+      production_callers:
+        - internal/runtime/browser.go
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionNavigate
       disposition: browser
+      production_callers:
+        - internal/runtime/browser.go
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionRouter
       disposition: browser
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionsRoot
       disposition: browser
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/browser.go:method(*Runtime):BrowserCapabilities
       disposition: browser
+      production_callers:
+        - internal/runtime/browser.go
     - id: internal/runtime/browser_live_test.go:func:TestCaptureObscuraCDPScreenshotLive
       disposition: browser
     - id: internal/runtime/browser_live_test.go:func:TestRuntimeControlsObscuraCDPSessionLive
@@ -972,30 +1094,57 @@ exports:
       disposition: browser
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):BindCandidatePackageIntakeAdoptionBoundary
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CandidatePackagePromotionAcceptanceEvidence
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
+        - internal/runtime/candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CandidatePackagePromotionReviewSurface
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntake
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntakeAdoptionReview
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntakePublicationDraft
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):GetCandidatePackageIntake
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ListCandidatePackageIntakes
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ReviewCandidatePackageIntake
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ReviewCandidatePackageIntakeAdoption
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):RollForwardCandidatePackageIntakeAdoptionReview
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):RollbackCandidatePackageIntakeAdoptionReview
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake.go:method(*Runtime):SwitchCandidatePackageIntakeAdoptionReview
       disposition: candidate_package
+      production_callers:
+        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionBoundaryRouteBindsApprovedIntakeWithoutPromotionSideEffects
       disposition: candidate_package
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionBoundaryRouteRejectsUnsafeTransitions
@@ -1046,12 +1195,19 @@ exports:
       disposition: candidate_package
     - id: internal/runtime/channel_store.go:method(*Runtime):ChannelCast
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/channel_store.go
     - id: internal/runtime/channel_store.go:method(*Runtime):ChannelPost
       disposition: lifecycle
     - id: internal/runtime/channel_store.go:method(*Runtime):ChannelRead
       disposition: lifecycle
     - id: internal/runtime/channel_store.go:type:ChannelMessage
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/channel_store.go
+        - internal/runtime/runtime.go
+        - internal/runtime/texture_agent_revision.go
     - id: internal/runtime/coagent_update_packet_test.go:func:TestBuildCoagentUpdateUserMessagesTypedPacket
       disposition: core
     - id: internal/runtime/coagent_update_packet_test.go:func:TestResolveResearcherFindingsTargetRequiresExplicitTextureAgent
@@ -1098,48 +1254,89 @@ exports:
       disposition: core
     - id: internal/runtime/config.go:const:DefaultAppPromotionBuildTimeout
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultAppPromotionRuntimeArtifactPath
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultAppPromotionRuntimeBuildCommand
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultAppPromotionUIArtifactPath
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultAppPromotionUIBuildCommand
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultCorpusdURL
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultOllamaEmbeddingModel
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultOllamaURL
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultPromotionSourceRepo
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultProviderTimeout
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultQdrantDedupThreshold
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultQdrantURL
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultResearcherCount
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultRunMemoryContextThresholdRatio
       disposition: core
+      production_callers:
+        - internal/runtime/run_memory.go
     - id: internal/runtime/config.go:const:DefaultRunMemoryContextThresholdTokens
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultRunMemoryKeepRecentTokens
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultRunMemoryPromptReserveTokens
       disposition: core
+      production_callers:
+        - internal/runtime/run_memory.go
     - id: internal/runtime/config.go:const:DefaultSourceLedgerRepo
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultStorePath
       disposition: core
       production_callers:
         - cmd/sandbox/main.go
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultTextureActorParkIdle
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultTextureWakeDebounce
       disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:func:LoadConfig
       disposition: core
       production_callers:
@@ -1148,6 +1345,11 @@ exports:
       disposition: core
       production_callers:
         - cmd/sandbox/main.go
+        - internal/runtime/config.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/objectgraph_runtime.go
+        - internal/runtime/run_memory.go
+        - internal/runtime/runtime.go
     - id: internal/runtime/config_test.go:func:TestLoadConfigDefaultsPromotionSourceRepoOutsideGitWorktree
       disposition: core
     - id: internal/runtime/config_test.go:func:TestLoadConfigDefaultsResearcherCount
@@ -1162,22 +1364,44 @@ exports:
       disposition: core
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentCreate
       disposition: content
+      production_callers:
+        - internal/runtime/content.go
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentImportFile
       disposition: content
+      production_callers:
+        - internal/runtime/content.go
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentImportURL
       disposition: content
+      production_callers:
+        - internal/runtime/content.go
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentItem
       disposition: content
+      production_callers:
+        - internal/runtime/content.go
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentItemsRoot
       disposition: content
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentList
       disposition: content
+      production_callers:
+        - internal/runtime/content.go
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentRouter
       disposition: content
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/content.go:method(*Runtime):ImportFileContent
       disposition: content
+      production_callers:
+        - internal/runtime/content.go
+        - internal/runtime/tools_research.go
     - id: internal/runtime/content.go:method(*Runtime):ImportURLContent
       disposition: content
+      production_callers:
+        - internal/runtime/content.go
+        - internal/runtime/podcast.go
+        - internal/runtime/texture_media_sources.go
+        - internal/runtime/tools_research.go
     - id: internal/runtime/content_extract_test.go:func:TestExtractDOCXDocumentFallsBackToOOXMLSelectors
       disposition: content
     - id: internal/runtime/content_extract_test.go:func:TestExtractPPTXDocumentCreatesSlideSelectors
@@ -1228,10 +1452,16 @@ exports:
       disposition: core
     - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopState
       disposition: desktop
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopStateGet
       disposition: desktop
+      production_callers:
+        - internal/runtime/desktop.go
     - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopStateSave
       disposition: desktop
+      production_callers:
+        - internal/runtime/desktop.go
     - id: internal/runtime/desktop_test.go:func:TestDesktopStateActiveWindowFollowsTopVisibleZOrder
       disposition: desktop
     - id: internal/runtime/desktop_test.go:func:TestDesktopStateGetEmpty
@@ -1328,28 +1558,48 @@ exports:
       disposition: lifecycle
     - id: internal/runtime/live_ws.go:method(*APIHandler):HandleLiveWS
       disposition: core
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/live_ws_test.go:func:TestLiveWSCatchesUpAfterStreamSeq
       disposition: core
     - id: internal/runtime/live_ws_test.go:func:TestLiveWSPublishesOwnerScopedProductEvents
       disposition: core
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgress
       disposition: media
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgressGet
       disposition: media
+      production_callers:
+        - internal/runtime/media_state.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgressPut
       disposition: media
+      production_callers:
+        - internal/runtime/media_state.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecents
       disposition: media
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecentsGet
       disposition: media
+      production_callers:
+        - internal/runtime/media_state.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecentsPut
       disposition: media
+      production_callers:
+        - internal/runtime/media_state.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreference
       disposition: media
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreferenceGet
       disposition: media
+      production_callers:
+        - internal/runtime/media_state.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreferencePut
       disposition: media
+      production_callers:
+        - internal/runtime/media_state.go
     - id: internal/runtime/media_state_test.go:func:TestMediaProgressAPIStoresAndEmitsEvent
       disposition: media
     - id: internal/runtime/media_state_test.go:func:TestThemePreferenceAPIStoresAndEmitsEvent
@@ -1360,10 +1610,22 @@ exports:
         - cmd/sandbox/main.go
     - id: internal/runtime/model_policy.go:method(ModelPolicy):Resolve
       disposition: model
+      production_callers:
+        - internal/runtime/model_policy.go
+        - internal/runtime/texture_merge.go
+        - internal/runtime/tools_model_verify.go
     - id: internal/runtime/model_policy.go:type:LLMSelection
       disposition: model
+      production_callers:
+        - internal/runtime/model_policy.go
+        - internal/runtime/run_memory.go
+        - internal/runtime/toolloop.go
+        - internal/runtime/tools_model_verify.go
     - id: internal/runtime/model_policy.go:type:ModelPolicy
       disposition: model
+      production_callers:
+        - internal/runtime/model_policy.go
+        - internal/runtime/runtime.go
     - id: internal/runtime/model_policy_test.go:func:TestDefaultModelPolicyUsesChatGPTCutover
       disposition: model
     - id: internal/runtime/model_policy_test.go:func:TestEnsureDefaultModelPolicyCreatesCutoverPolicy
@@ -1394,12 +1656,21 @@ exports:
       disposition: model
     - id: internal/runtime/objectgraph_runtime.go:method(*Runtime):ObjectGraph
       disposition: core
+      production_callers:
+        - internal/runtime/sourcecycled_web_captures.go
+        - internal/runtime/universal_wire.go
     - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSearch
       disposition: podcast
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSubscriptions
       disposition: podcast
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSubscriptionsRefresh
       disposition: podcast
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/podcast_test.go:func:TestPodcastRefreshSeedsExistingRSSContent
       disposition: podcast
     - id: internal/runtime/podcast_test.go:func:TestPodcastSearchFallsBackToLibrary
@@ -1416,6 +1687,9 @@ exports:
       disposition: podcast
     - id: internal/runtime/product_events.go:method(*Runtime):EmitProductEvent
       disposition: core
+      production_callers:
+        - cmd/sandbox/main.go
+        - internal/runtime/product_events.go
     - id: internal/runtime/prompt_bar_unit_test.go:func:TestConductorTextureRouteRecordsExplicitDecisionFromStoredPrompt
       disposition: model
     - id: internal/runtime/prompt_bar_unit_test.go:func:TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture
@@ -1430,28 +1704,52 @@ exports:
       disposition: model
     - id: internal/runtime/prompt_store.go:func:NewPromptStore
       disposition: model
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/prompt_store.go:method(*PromptStore):List
       disposition: model
+      production_callers:
+        - internal/runtime/prompts.go
     - id: internal/runtime/prompt_store.go:method(*PromptStore):Load
       disposition: model
+      production_callers:
+        - internal/runtime/prompt_store.go
+        - internal/runtime/prompts.go
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/prompt_store.go:method(*PromptStore):LoadCore
       disposition: model
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/prompt_store.go:method(*PromptStore):Reset
       disposition: model
+      production_callers:
+        - internal/runtime/prompts.go
     - id: internal/runtime/prompt_store.go:method(*PromptStore):Save
       disposition: model
+      production_callers:
+        - internal/runtime/prompts.go
     - id: internal/runtime/prompt_store.go:type:PromptDescriptor
       disposition: model
+      production_callers:
+        - internal/runtime/prompt_store.go
+        - internal/runtime/prompts.go
     - id: internal/runtime/prompt_store.go:type:PromptStore
       disposition: model
+      production_callers:
+        - internal/runtime/prompt_store.go
+        - internal/runtime/runtime.go
     - id: internal/runtime/prompt_store_test.go:func:TestPromptStoreSeedsDefaults
       disposition: model
     - id: internal/runtime/prompt_store_test.go:func:TestPromptStoreSupportsUserOverridesAndReset
       disposition: model
     - id: internal/runtime/prompts.go:method(*APIHandler):HandlePromptList
       disposition: model
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/prompts.go:method(*APIHandler):HandlePromptRole
       disposition: model
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/prompts_test.go:func:TestHandlePromptListReturnsEffectivePrompts
       disposition: model
     - id: internal/runtime/prompts_test.go:func:TestHandlePromptRoleSupportsSaveAndReset
@@ -1460,6 +1758,7 @@ exports:
       disposition: model
       production_callers:
         - internal/runtime/prompt_store.go
+        - internal/runtime/promptspec/promptspec.go
         - internal/runtime/textureprompts/prompts.go
     - id: internal/runtime/promptspec/promptspec.go:func:ParseAndRender
       disposition: model
@@ -1468,12 +1767,19 @@ exports:
         - internal/runtime/textureprompts/prompts.go
     - id: internal/runtime/promptspec/promptspec.go:method(Document):BodyText
       disposition: model
+      production_callers:
+        - internal/runtime/prompt_store.go
+        - internal/runtime/textureprompts/prompts.go
     - id: internal/runtime/promptspec/promptspec.go:method(Document):MustRender
       disposition: model
     - id: internal/runtime/promptspec/promptspec.go:method(Document):Render
       disposition: model
+      production_callers:
+        - internal/runtime/promptspec/promptspec.go
     - id: internal/runtime/promptspec/promptspec.go:type:Document
       disposition: model
+      production_callers:
+        - internal/runtime/promptspec/promptspec.go
     - id: internal/runtime/promptspec/promptspec_test.go:func:TestParseRequiresVersionAndBody
       disposition: model
     - id: internal/runtime/promptspec/promptspec_test.go:func:TestParseTrimsBody
@@ -1492,22 +1798,41 @@ exports:
       disposition: core
     - id: internal/runtime/provider.go:type:StubProvider
       disposition: core
+      production_callers:
+        - internal/runtime/provider.go
+        - internal/runtime/runtime.go
     - id: internal/runtime/qdrant_runtime.go:const:ProductionQdrantCollection
       disposition: core
+      production_callers:
+        - internal/runtime/qdrant_dedup.go
+        - internal/runtime/qdrant_runtime.go
     - id: internal/runtime/qdrant_runtime.go:method(*Runtime):EnsureProductionQdrantCollection
       disposition: core
+      production_callers:
+        - internal/runtime/qdrant_dedup.go
+        - internal/runtime/runtime.go
     - id: internal/runtime/qdrant_runtime.go:method(*Runtime):QdrantPipeline
       disposition: core
+      production_callers:
+        - internal/runtime/qdrant_dedup.go
+        - internal/runtime/qdrant_runtime.go
+        - internal/runtime/runtime.go
     - id: internal/runtime/run_acceptance.go:method(*Runtime):SynthesizeRunAcceptance
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/run_acceptance_build_identity_test.go:func:TestAcceptanceServingCommitFallsBackForLegacyHealth
       disposition: lifecycle
     - id: internal/runtime/run_acceptance_build_identity_test.go:func:TestAcceptanceServingCommitPrefersCompiledArtifactIdentity
       disposition: lifecycle
     - id: internal/runtime/run_memory.go:var:ErrContextOverflowRecoveryFailed
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/run_memory.go
     - id: internal/runtime/run_memory.go:var:ErrRunMemoryCompactionFailed
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/run_memory.go
     - id: internal/runtime/run_memory_integration_test.go:func:TestChildRunUsesRunMemory
       disposition: lifecycle
     - id: internal/runtime/run_memory_integration_test.go:func:TestRuntimeManualRunMemoryCompaction
@@ -1556,52 +1881,117 @@ exports:
         - internal/actorruntime/adapter.go
     - id: internal/runtime/runtime.go:method(*Runtime):CancelAgent
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/texture.go
     - id: internal/runtime/runtime.go:method(*Runtime):CancelRun
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/runtime.go
+        - internal/runtime/tools_coagent.go
     - id: internal/runtime/runtime.go:method(*Runtime):CancelRunTrajectory
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/texture.go
+        - internal/runtime/texture_agent_revision.go
     - id: internal/runtime/runtime.go:method(*Runtime):CompactRunMemory
       disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):DispatchActorActive
       disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):EnsurePersistentSuperAgent
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/delegate_worker_update_fallback.go
+        - internal/runtime/texture_proposals.go
+        - internal/runtime/tools_texture.go
     - id: internal/runtime/runtime.go:method(*Runtime):EventBus
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/live_ws.go
+        - internal/runtime/texture.go
     - id: internal/runtime/runtime.go:method(*Runtime):ExecuteActivationSync
       disposition: lifecycle
+      production_callers:
+        - internal/actorruntime/handler.go
     - id: internal/runtime/runtime.go:method(*Runtime):GetRun
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/runtime.go
+        - internal/runtime/texture_agent_revision.go
     - id: internal/runtime/runtime.go:method(*Runtime):HealthState
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/runtime.go:method(*Runtime):ListRunsByOwner
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/texture_workflow_verifier.go
     - id: internal/runtime/runtime.go:method(*Runtime):PromptStore
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/prompts.go
     - id: internal/runtime/runtime.go:method(*Runtime):RunningCount
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/runtime.go
     - id: internal/runtime/runtime.go:method(*Runtime):RunningCountByProfile
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/runtime.go:method(*Runtime):SetDispatchActor
       disposition: lifecycle
+      production_callers:
+        - internal/actorruntime/adapter.go
     - id: internal/runtime/runtime.go:method(*Runtime):SetHealth
       disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):Start
       disposition: lifecycle
+      production_callers:
+        - internal/actorruntime/adapter.go
     - id: internal/runtime/runtime.go:method(*Runtime):StartCoagentRun
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/texture.go
+        - internal/runtime/tools_coagent.go
     - id: internal/runtime/runtime.go:method(*Runtime):StartRun
       disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):StartRunWithMetadata
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/runtime.go
+        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/wire_reconciler_debounce.go
     - id: internal/runtime/runtime.go:method(*Runtime):Stop
       disposition: lifecycle
+      production_callers:
+        - internal/actorruntime/adapter.go
     - id: internal/runtime/runtime.go:method(*Runtime):Store
       disposition: lifecycle
+      production_callers:
+        - internal/actorruntime/handler.go
+        - internal/runtime/api.go
+        - internal/runtime/api_costs.go
+        - internal/runtime/browser.go
+        - internal/runtime/content.go
+        - internal/runtime/desktop.go
+        - internal/runtime/live_ws.go
+        - internal/runtime/media_state.go
+        - internal/runtime/podcast.go
+        - internal/runtime/texture.go
+        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/texture_import.go
+        - internal/runtime/texture_lineage.go
+        - internal/runtime/texture_merge.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_research.go
+        - internal/runtime/universal_wire.go
     - id: internal/runtime/runtime.go:method(*Runtime):ToolRegistry
       disposition: lifecycle
-      production_callers:
-        - cmd/sandbox/main.go
     - id: internal/runtime/runtime.go:method(*Runtime):TraceStore
       disposition: lifecycle
     - id: internal/runtime/runtime.go:type:Runtime
@@ -1610,10 +2000,57 @@ exports:
         - internal/actorruntime/adapter.go
         - internal/actorruntime/handler.go
         - internal/apihandler/api.go
+        - internal/runtime/api.go
+        - internal/runtime/api_app_promotion.go
+        - internal/runtime/app_promotion.go
+        - internal/runtime/app_promotion_build.go
+        - internal/runtime/browser.go
+        - internal/runtime/candidate_package_intake.go
+        - internal/runtime/channel_store.go
+        - internal/runtime/content.go
+        - internal/runtime/delegate_worker_update_fallback.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/objectgraph_runtime.go
+        - internal/runtime/product_events.go
+        - internal/runtime/qdrant_dedup.go
+        - internal/runtime/qdrant_runtime.go
+        - internal/runtime/researcher_checkpoint_fallback.go
+        - internal/runtime/run_acceptance.go
+        - internal/runtime/runtime.go
+        - internal/runtime/skill_context.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/texture.go
+        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/texture_controller.go
+        - internal/runtime/texture_evidence_sources.go
+        - internal/runtime/texture_handoff.go
+        - internal/runtime/texture_import.go
+        - internal/runtime/texture_media_sources.go
+        - internal/runtime/texture_merge.go
+        - internal/runtime/texture_workflow_verifier.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_email.go
+        - internal/runtime/tools_evidence.go
+        - internal/runtime/tools_model_verify.go
+        - internal/runtime/tools_product_api.go
+        - internal/runtime/tools_research.go
+        - internal/runtime/tools_researcher.go
+        - internal/runtime/tools_shipper.go
+        - internal/runtime/tools_texture.go
+        - internal/runtime/tools_vmctl.go
+        - internal/runtime/tools_wire_processor.go
+        - internal/runtime/tools_worker_update.go
+        - internal/runtime/trajectory.go
+        - internal/runtime/wire_platform_publish.go
+        - internal/runtime/wire_publication.go
+        - internal/runtime/wire_reconciler_debounce.go
     - id: internal/runtime/runtime.go:type:RuntimeOption
       disposition: lifecycle
       production_callers:
         - internal/actorruntime/adapter.go
+        - internal/runtime/runtime.go
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/runtime_persistence_test.go:func:TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt
       disposition: lifecycle
     - id: internal/runtime/runtime_persistence_test.go:method(*fakeRunSubmissionStore):AppendEvent
@@ -1626,6 +2063,8 @@ exports:
       disposition: lifecycle
     - id: internal/runtime/runtime_refresh.go:method(*APIHandler):HandleInternalRuntimeRefresh
       disposition: lifecycle
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/runtime_refresh_test.go:func:TestHandleInternalRuntimeRefreshRequiresInternalCaller
       disposition: lifecycle
     - id: internal/runtime/runtime_refresh_test.go:func:TestHandleInternalRuntimeRefreshSchedulesServiceRestart
@@ -1751,26 +2190,32 @@ exports:
     - id: internal/runtime/runtimeprompts/prompts.go:type:CoSuperRuntimeOptions
       disposition: model
       production_callers:
+        - internal/runtime/runtimeprompts/prompts.go
         - internal/runtime/tool_profiles.go
     - id: internal/runtime/runtimeprompts/prompts.go:type:ConductorRunOptions
       disposition: model
       production_callers:
+        - internal/runtime/runtimeprompts/prompts.go
         - internal/runtime/tool_profiles.go
     - id: internal/runtime/runtimeprompts/prompts.go:type:RunContextOptions
       disposition: model
       production_callers:
+        - internal/runtime/runtimeprompts/prompts.go
         - internal/runtime/tool_profiles.go
     - id: internal/runtime/runtimeprompts/prompts.go:type:TemporalContextOptions
       disposition: model
       production_callers:
+        - internal/runtime/runtimeprompts/prompts.go
         - internal/runtime/tool_profiles.go
     - id: internal/runtime/runtimeprompts/prompts.go:type:VSuperRuntimeOptions
       disposition: model
       production_callers:
+        - internal/runtime/runtimeprompts/prompts.go
         - internal/runtime/tool_profiles.go
     - id: internal/runtime/runtimeprompts/prompts.go:type:WorkerRepoBootstrapOptions
       disposition: model
       production_callers:
+        - internal/runtime/runtimeprompts/prompts.go
         - internal/runtime/tool_profiles.go
     - id: internal/runtime/runtimeprompts/prompts_test.go:func:TestResearcherRuntimeOverlayIncludesParallelSaturation
       disposition: model
@@ -1784,6 +2229,8 @@ exports:
       disposition: research
     - id: internal/runtime/sourcecycled_web_captures.go:method(*APIHandler):HandleInternalSourcecycledWebCaptures
       disposition: core
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/streaming_test.go:func:TestStreamingCancellationStopsEmission
       disposition: core
     - id: internal/runtime/streaming_test.go:func:TestStreamingCompletesWithProperTermination
@@ -1806,50 +2253,92 @@ exports:
       disposition: core
     - id: internal/runtime/super_controller.go:method(*Runtime):ReconcileCoagentWake
       disposition: core
+      production_callers:
+        - internal/actorruntime/handler.go
     - id: internal/runtime/super_failure_fallback_test.go:func:TestRuntimeSynthesizesTextureBlockerWhenSuperFailsBeforeDelegation
       disposition: core
     - id: internal/runtime/super_failure_fallback_test.go:func:TestRuntimeSynthesizesWorkerDelegationUpdateAfterStartWorkerDelegation
       disposition: core
     - id: internal/runtime/texture.go:method(*APIHandler):HandleInternalTextureDocument
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleInternalTextureRevision
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTestTextureWorkerUpdate
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureBlame
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureCreateDocument
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureDiagnosis
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureDiff
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureDocument
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureDocumentStream
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureEnsureManifest
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureExportDocument
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureHistory
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureImportMarkdownLineage
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureListDocuments
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureOpenFile
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureRestoreRevision
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureRevision
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureRevisions
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture_agent_revision.go:method(*APIHandler):HandleTextureAgentRevision
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture_agent_revision.go:method(*APIHandler):HandleTextureCancelAgentRevision
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture_decision_test.go:func:TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent
       disposition: texture
     - id: internal/runtime/texture_decision_test.go:func:TestTextureDiagnosisAndTraceLogsIncludeDecisionRecords
@@ -1898,10 +2387,16 @@ exports:
       disposition: texture
     - id: internal/runtime/texture_merge.go:method(*APIHandler):HandleTextureAcceptMerge
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture_merge.go:method(*APIHandler):HandleTextureMergePreview
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture_merge.go:method(*APIHandler):HandleTextureSemanticCompare
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture_prompt_unit_test.go:func:TestDefaultTexturePromptUsesDecisionNotesWithoutForcedSemanticSequence
       disposition: texture
     - id: internal/runtime/texture_prompt_unit_test.go:func:TestExplicitNoWorkerDecisionParsesWithoutNarrativeRouteOracle
@@ -1942,6 +2437,8 @@ exports:
       disposition: texture
     - id: internal/runtime/texture_proposals.go:method(*APIHandler):HandleInternalTextureProposalDelivery
       disposition: texture
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/texture_real_llm_test.go:func:TestRealLLMProviderInfo
       disposition: texture
     - id: internal/runtime/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLM
@@ -2324,8 +2821,12 @@ exports:
       disposition: texture
     - id: internal/runtime/texture_workflow_verifier.go:type:TextureWorkflowVerificationOptions
       disposition: texture
+      production_callers:
+        - internal/runtime/texture_workflow_verifier.go
     - id: internal/runtime/texture_workflow_verifier.go:type:TextureWorkflowVerificationReport
       disposition: texture
+      production_callers:
+        - internal/runtime/texture_workflow_verifier.go
     - id: internal/runtime/texture_workflow_verifier_test.go:func:TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic
       disposition: texture
     - id: internal/runtime/texture_workflow_verifier_test.go:func:TestTextureRevisionCausalityAllowsManyRevisionsFromOneLoop
@@ -2360,10 +2861,12 @@ exports:
       disposition: texture
       production_callers:
         - internal/runtime/texture_agent_revision.go
+        - internal/runtime/textureprompts/prompts.go
     - id: internal/runtime/textureprompts/prompts.go:type:RevisionWorkerFindingsOptions
       disposition: texture
       production_callers:
         - internal/runtime/texture_agent_revision.go
+        - internal/runtime/textureprompts/prompts.go
     - id: internal/runtime/textureprompts/prompts_test.go:func:TestDefaultSystemPromptIsNonEmpty
       disposition: texture
     - id: internal/runtime/textureprompts/prompts_test.go:func:TestRevisionPolicyOverlayIncludesPatchExample
@@ -2374,60 +2877,228 @@ exports:
       disposition: texture
     - id: internal/runtime/tool_profiles.go:const:AgentProfileCoSuper
       disposition: tools
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/runtime.go
+        - internal/runtime/skill_context.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/texture.go
+        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/texture_controller.go
+        - internal/runtime/texture_workflow_verifier.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_shipper.go
+        - internal/runtime/tools_vmctl.go
+        - internal/runtime/tools_worker_update.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileConductor
       disposition: tools
       production_callers:
         - cmd/sandbox/main.go
+        - internal/runtime/api.go
+        - internal/runtime/api_texture_prompt_eval.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/prompts.go
+        - internal/runtime/provider.go
+        - internal/runtime/run_acceptance.go
+        - internal/runtime/runtime.go
+        - internal/runtime/skill_context.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/texture_handoff.go
+        - internal/runtime/texture_workflow_verifier.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/trajectory.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileEmail
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools_email.go
+        - internal/runtime/tools_worker_update.go
+        - internal/runtime/trajectory.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileProcessor
       disposition: tools
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/runtime.go
+        - internal/runtime/texture_handoff.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_wire_processor.go
+        - internal/runtime/trajectory.go
+        - internal/runtime/wire_metadata.go
+        - internal/runtime/wire_publication.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileReconciler
       disposition: tools
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/runtime.go
+        - internal/runtime/texture_handoff.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/wire_metadata.go
+        - internal/runtime/wire_reconciler_debounce.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileResearcher
       disposition: tools
       production_callers:
         - cmd/sandbox/main.go
+        - internal/runtime/api.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/researcher_checkpoint_fallback.go
+        - internal/runtime/runtime.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/texture.go
+        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/texture_controller.go
+        - internal/runtime/texture_workflow_verifier.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools.go
+        - internal/runtime/tools_research.go
+        - internal/runtime/tools_researcher.go
+        - internal/runtime/tools_vmctl.go
+        - internal/runtime/tools_worker_update.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileSuper
       disposition: tools
       production_callers:
         - cmd/sandbox/main.go
+        - internal/runtime/delegate_worker_update_fallback.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/runtime.go
+        - internal/runtime/skill_context.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/texture.go
+        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/texture_controller.go
+        - internal/runtime/texture_workflow_verifier.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools.go
+        - internal/runtime/tools_coding.go
+        - internal/runtime/tools_model_verify.go
+        - internal/runtime/tools_product_api.go
+        - internal/runtime/tools_shipper.go
+        - internal/runtime/tools_vmctl.go
+        - internal/runtime/tools_worker_update.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileTexture
       disposition: tools
       production_callers:
         - cmd/sandbox/main.go
+        - internal/runtime/api.go
+        - internal/runtime/api_texture_prompt_eval.go
+        - internal/runtime/content.go
+        - internal/runtime/content_extract.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/prompts.go
+        - internal/runtime/provider.go
+        - internal/runtime/runtime.go
+        - internal/runtime/skill_context.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/texture.go
+        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/texture_handoff.go
+        - internal/runtime/texture_lineage.go
+        - internal/runtime/texture_merge.go
+        - internal/runtime/texture_workflow_verifier.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_email.go
+        - internal/runtime/tools_texture.go
+        - internal/runtime/trajectory.go
+        - internal/runtime/wire_publication.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileVSuper
       disposition: tools
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/model_policy.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/runtime.go
+        - internal/runtime/skill_context.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/texture.go
+        - internal/runtime/texture_controller.go
+        - internal/runtime/texture_workflow_verifier.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_shipper.go
+        - internal/runtime/tools_vmctl.go
     - id: internal/runtime/tool_profiles.go:func:WithToolExecutionContext
       disposition: tools
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/researcher_checkpoint_fallback.go
+        - internal/runtime/runtime.go
+        - internal/runtime/texture.go
     - id: internal/runtime/tool_profiles.go:func:WithToolProfileRegistry
       disposition: tools
     - id: internal/runtime/tool_profiles.go:method(*Runtime):InstallDefaultAgentTools
       disposition: tools
+      production_callers:
+        - cmd/sandbox/main.go
     - id: internal/runtime/tool_profiles.go:method(*Runtime):ToolRegistryForProfile
       disposition: tools
+      production_callers:
+        - cmd/sandbox/main.go
+        - internal/runtime/prompts.go
+        - internal/runtime/texture.go
     - id: internal/runtime/tool_profiles.go:type:AgentRoleSpec
       disposition: tools
+      production_callers:
+        - internal/runtime/prompts.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools_coagent.go
     - id: internal/runtime/toolloop.go:func:RunToolLoop
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:func:WithCompletionGuard
       disposition: tools
     - id: internal/runtime/toolloop.go:func:WithInitialToolChoice
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:func:WithParkWaiter
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:func:WithProviderPreconditionFallbacks
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:func:WithRequiredWriteTools
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:func:WithTerminalToolSuccesses
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:func:WithToolLoopBudget
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:func:WithToolLoopLLMConfig
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:func:WithToolLoopMemoryHooks
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
     - id: internal/runtime/toolloop.go:method(*ToolLoopPassivatedError):Error
       disposition: tools
     - id: internal/runtime/toolloop.go:method(*ToolLoopPassivatedError):Unwrap
@@ -2436,36 +3107,82 @@ exports:
       disposition: tools
     - id: internal/runtime/toolloop.go:type:InjectUserTurnsFunc
       disposition: tools
+      production_callers:
+        - internal/runtime/super_controller.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:TokenUsage
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopBudget
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopCompletionGuardFunc
       disposition: tools
+      production_callers:
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopCompletionGuardResult
       disposition: tools
+      production_callers:
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopCompletionState
       disposition: tools
+      production_callers:
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopMemoryHooks
       disposition: tools
+      production_callers:
+        - internal/runtime/run_memory.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopOption
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopParkResult
       disposition: tools
+      production_callers:
+        - internal/runtime/super_controller.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopParkState
       disposition: tools
+      production_callers:
+        - internal/runtime/super_controller.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopParkWaiterFunc
       disposition: tools
+      production_callers:
+        - internal/runtime/super_controller.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopPassivatedError
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopProvider
       disposition: tools
+      production_callers:
+        - internal/runtime/run_memory.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:type:ToolLoopRequest
       disposition: tools
+      production_callers:
+        - internal/runtime/run_memory.go
+        - internal/runtime/texture_merge.go
+        - internal/runtime/toolloop.go
+        - internal/runtime/tools_model_verify.go
     - id: internal/runtime/toolloop.go:type:ToolLoopResponse
       disposition: tools
+      production_callers:
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop.go:var:ErrToolLoopPassivated
       disposition: tools
+      production_callers:
+        - internal/runtime/runtime.go
+        - internal/runtime/toolloop.go
     - id: internal/runtime/toolloop_test.go:func:TestAsToolLoopProvider
       disposition: tools
     - id: internal/runtime/toolloop_test.go:func:TestBuildAssistantContent
@@ -2600,16 +3317,52 @@ exports:
       disposition: tools
     - id: internal/runtime/tools.go:type:Tool
       disposition: tools
+      production_callers:
+        - internal/runtime/delegate_worker_update_fallback.go
+        - internal/runtime/researcher_checkpoint_fallback.go
+        - internal/runtime/runtime.go
+        - internal/runtime/tools_capsule.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_coding.go
+        - internal/runtime/tools_email.go
+        - internal/runtime/tools_evidence.go
+        - internal/runtime/tools_model_verify.go
+        - internal/runtime/tools_product_api.go
+        - internal/runtime/tools_research.go
+        - internal/runtime/tools_shipper.go
+        - internal/runtime/tools_texture.go
+        - internal/runtime/tools_vmctl.go
+        - internal/runtime/tools_wire_processor.go
+        - internal/runtime/tools_worker_update.go
     - id: internal/runtime/tools.go:type:ToolDefinition
       disposition: tools
+      production_callers:
+        - internal/runtime/toolloop.go
     - id: internal/runtime/tools.go:type:ToolFunc
       disposition: tools
     - id: internal/runtime/tools.go:type:ToolRegistry
       disposition: tools
       production_callers:
         - cmd/sandbox/main.go
+        - internal/runtime/prompts.go
+        - internal/runtime/runtime.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/toolloop.go
+        - internal/runtime/tools.go
+        - internal/runtime/tools_capsule.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_coding.go
+        - internal/runtime/tools_evidence.go
+        - internal/runtime/tools_research.go
+        - internal/runtime/tools_shipper.go
+        - internal/runtime/tools_texture.go
+        - internal/runtime/tools_vmctl.go
+        - internal/runtime/tools_wire_processor.go
+        - internal/runtime/tools_worker_update.go
     - id: internal/runtime/tools.go:var:MustNewToolRegistry
       disposition: tools
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools.go:var:NewToolRegistry
       disposition: tools
     - id: internal/runtime/tools.go:var:NewToolRegistryWithTools
@@ -2622,22 +3375,38 @@ exports:
       disposition: tools
     - id: internal/runtime/tools_capsule.go:type:CapsuleToolCtx
       disposition: tools
+      production_callers:
+        - internal/runtime/tools_capsule.go
     - id: internal/runtime/tools_coagent.go:func:RegisterCoAgentTools
       disposition: tools
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_coagent_idempotency_test.go:func:TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument
       disposition: tools
     - id: internal/runtime/tools_coding.go:func:RegisterCodingTools
       disposition: tools
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_coding.go:func:RegisterFileTools
       disposition: tools
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_coding.go:func:RegisterReadOnlyFileTools
       disposition: tools
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_evidence.go:func:RegisterEvidenceTools
       disposition: evidence
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_evidence.go:func:RegisterModelDiagnosticTools
       disposition: evidence
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_evidence.go:func:RegisterRunMemoryTools
       disposition: evidence
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_model_verify_test.go:func:TestVerifyModelCapabilityExplicitTextOnlyOmitFireworksMaxTokens
       disposition: model
     - id: internal/runtime/tools_model_verify_test.go:func:TestVerifyModelCapabilityRejectsImageForTextOnlyModel
@@ -2662,6 +3431,8 @@ exports:
       disposition: tools
     - id: internal/runtime/tools_research.go:func:RegisterResearchTools
       disposition: research
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):IngestionHandoffLatest
       disposition: research
     - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):ResolveSourceItem
@@ -2670,6 +3441,8 @@ exports:
       disposition: research
     - id: internal/runtime/tools_shipper.go:func:RegisterShipperTools
       disposition: tools
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_test.go:func:TestBuildSystemPromptWithEmptyRegistry
       disposition: tools
     - id: internal/runtime/tools_test.go:func:TestBuildSystemPromptWithNilRegistry
@@ -2772,22 +3545,34 @@ exports:
       disposition: tools
     - id: internal/runtime/tools_texture.go:func:RegisterTextureTools
       disposition: texture
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_texture_provenance_test.go:func:TestBuildStructuredAppagentRevisionProvenanceNoSources
       disposition: texture
     - id: internal/runtime/tools_texture_provenance_test.go:func:TestBuildStructuredAppagentRevisionProvenanceSystemAttributed
       disposition: texture
     - id: internal/runtime/tools_vmctl.go:func:RegisterVMControlTools
       disposition: tools
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_vmctl.go:method(*workerRunPollError):Error
       disposition: tools
     - id: internal/runtime/tools_vmctl.go:method(workerVMLeaseKey):Matches
       disposition: tools
+      production_callers:
+        - internal/runtime/tools_vmctl.go
     - id: internal/runtime/tools_vmctl.go:method(workerVMLeaseKey):Valid
       disposition: tools
+      production_callers:
+        - internal/runtime/tools_vmctl.go
     - id: internal/runtime/tools_wire_processor.go:func:RegisterWireProcessorTools
       disposition: wire
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools_worker_update.go:func:RegisterCoagentUpdateTools
       disposition: tools
+      production_callers:
+        - internal/runtime/tool_profiles.go
     - id: internal/runtime/trace_wiring_test.go:func:TestEmitEventDegradesGracefullyOnTraceStoreFailure
       disposition: core
     - id: internal/runtime/trace_wiring_test.go:func:TestEmitEventProjectsToSQLiteTraceStore
@@ -2816,10 +3601,18 @@ exports:
       disposition: core
     - id: internal/runtime/trajectory.go:func:EvaluateTrajectorySettlement
       disposition: core
+      production_callers:
+        - internal/runtime/trajectory.go
     - id: internal/runtime/trajectory.go:method(*Runtime):TrajectoryObligations
       disposition: core
+      production_callers:
+        - internal/runtime/api.go
+        - internal/runtime/api_trajectory.go
+        - internal/runtime/wire_publication.go
     - id: internal/runtime/trajectory.go:type:TrajectoryObligations
       disposition: core
+      production_callers:
+        - internal/runtime/trajectory.go
     - id: internal/runtime/trajectory_test.go:func:TestCancelRunTrajectoryDrainsMoreThanOneActivePage
       disposition: core
     - id: internal/runtime/trajectory_test.go:func:TestCancelRunTrajectoryPersistsFallbackTrajectoryID
@@ -2834,6 +3627,8 @@ exports:
       disposition: core
     - id: internal/runtime/universal_wire.go:method(*APIHandler):HandleUniversalWireStories
       disposition: wire
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/universal_wire_test.go:func:TestCorpusdReadBaseURLPreservesSiblingDerivationAndDirectCorpusd
       disposition: wire
     - id: internal/runtime/universal_wire_test.go:func:TestHandleInternalSourcecycledWebCapturesProjectsGraphWithoutStartingRuns
@@ -2956,8 +3751,12 @@ exports:
       disposition: wire
     - id: internal/runtime/wire_reconciler_debounce.go:const:WireReconcilerPublishCountThreshold
       disposition: wire
+      production_callers:
+        - internal/runtime/wire_reconciler_debounce.go
     - id: internal/runtime/wire_reconciler_debounce.go:const:WireReconcilerPublishDebounceInterval
       disposition: wire
+      production_callers:
+        - internal/runtime/wire_reconciler_debounce.go
     - id: internal/runtime/wire_reconciler_debounce_test.go:func:TestDispatchStoryCorpusReconcilerCarriesSingleCycleLineage
       disposition: wire
     - id: internal/runtime/wire_reconciler_debounce_test.go:func:TestDispatchStoryCorpusReconcilerDeduplicatesOneRunPerCycle
@@ -2983,34 +3782,6 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/api.go:method(*APIHandler):HandleChannelMessageList
       disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleHealth
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleInternalChannelCast
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunCancel
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunEvents
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunStatus
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunSubmission
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRuntimeRunRouter
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleModelPolicyResolve
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleModelPolicyRouter
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandlePromptBar
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandlePromptBarSubmission
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptanceDetail
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptanceSynthesize
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptancesRoot
-      disposition: delete
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunList
       disposition: delete
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatus
@@ -3021,237 +3792,15 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/api.go:method(*APIHandler):HandleSpawn
       disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleTextureDocumentsRoot
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleTextureRouter
-      disposition: delete
     - id: internal/runtime/api.go:method(*APIHandler):HandleTopology
       disposition: delete
-    - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionDetail
-      disposition: delete
-    - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionsRoot
-      disposition: delete
-    - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppChangePackageDetail
-      disposition: delete
-    - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppChangePackagesRoot
-      disposition: delete
-    - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleComputersRouter
-      disposition: delete
-    - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleInternalAppChangePackageDetail
-      disposition: delete
-    - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleInternalAppChangePackagesRoot
-      disposition: delete
     - id: internal/runtime/api_candidate_package_intake.go:func:RegisterCandidatePackageIntakeRoutes
-      disposition: delete
-    - id: internal/runtime/api_candidate_package_intake.go:func:RegisterCandidatePackageReviewSurfaceRoutes
-      disposition: delete
-    - id: internal/runtime/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageIntakeDetail
-      disposition: delete
-    - id: internal/runtime/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageIntakesRoot
-      disposition: delete
-    - id: internal/runtime/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageReviewSurfaceReadOnly
-      disposition: delete
-    - id: internal/runtime/api_costs.go:method(*APIHandler):HandleCosts
-      disposition: delete
-    - id: internal/runtime/api_texture_prompt_eval.go:method(*APIHandler):HandleTexturePromptEval
-      disposition: delete
-    - id: internal/runtime/api_trajectory.go:method(*APIHandler):HandleTrajectoriesRoot
-      disposition: delete
-    - id: internal/runtime/api_trajectory.go:method(*APIHandler):HandleTrajectoryDetail
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):ApproveAppAdoption
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):CreateAppAdoption
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):EnsureComputerSourceLineage
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):PromoteAppAdoption
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):PublishAppChangePackage
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):RollForwardAppAdoption
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):RollbackAppAdoption
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):StartVerifyAppAdoptionAsync
-      disposition: delete
-    - id: internal/runtime/app_promotion.go:method(*Runtime):VerifyAppAdoption
-      disposition: delete
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserCapabilities
-      disposition: delete
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionClose
-      disposition: delete
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionControl
-      disposition: delete
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionNavigate
-      disposition: delete
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionRouter
-      disposition: delete
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionsRoot
-      disposition: delete
-    - id: internal/runtime/browser.go:method(*Runtime):BrowserCapabilities
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):BindCandidatePackageIntakeAdoptionBoundary
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CandidatePackagePromotionAcceptanceEvidence
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CandidatePackagePromotionReviewSurface
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntake
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntakeAdoptionReview
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntakePublicationDraft
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):GetCandidatePackageIntake
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ListCandidatePackageIntakes
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ReviewCandidatePackageIntake
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ReviewCandidatePackageIntakeAdoption
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):RollForwardCandidatePackageIntakeAdoptionReview
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):RollbackCandidatePackageIntakeAdoptionReview
-      disposition: delete
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):SwitchCandidatePackageIntakeAdoptionReview
-      disposition: delete
-    - id: internal/runtime/channel_store.go:method(*Runtime):ChannelCast
       disposition: delete
     - id: internal/runtime/channel_store.go:method(*Runtime):ChannelPost
       disposition: delete
     - id: internal/runtime/channel_store.go:method(*Runtime):ChannelRead
       disposition: delete
-    - id: internal/runtime/channel_store.go:type:ChannelMessage
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultAppPromotionBuildTimeout
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultAppPromotionRuntimeArtifactPath
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultAppPromotionRuntimeBuildCommand
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultAppPromotionUIArtifactPath
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultAppPromotionUIBuildCommand
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultCorpusdURL
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultOllamaEmbeddingModel
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultOllamaURL
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultPromotionSourceRepo
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultProviderTimeout
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultQdrantDedupThreshold
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultQdrantURL
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultResearcherCount
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultRunMemoryContextThresholdRatio
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultRunMemoryContextThresholdTokens
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultRunMemoryKeepRecentTokens
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultRunMemoryPromptReserveTokens
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultSourceLedgerRepo
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultTextureActorParkIdle
-      disposition: delete
-    - id: internal/runtime/config.go:const:DefaultTextureWakeDebounce
-      disposition: delete
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentCreate
-      disposition: delete
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentImportFile
-      disposition: delete
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentImportURL
-      disposition: delete
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentItem
-      disposition: delete
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentItemsRoot
-      disposition: delete
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentList
-      disposition: delete
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentRouter
-      disposition: delete
-    - id: internal/runtime/content.go:method(*Runtime):ImportFileContent
-      disposition: delete
-    - id: internal/runtime/content.go:method(*Runtime):ImportURLContent
-      disposition: delete
-    - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopState
-      disposition: delete
-    - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopStateGet
-      disposition: delete
-    - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopStateSave
-      disposition: delete
-    - id: internal/runtime/live_ws.go:method(*APIHandler):HandleLiveWS
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgress
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgressGet
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgressPut
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecents
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecentsGet
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecentsPut
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreference
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreferenceGet
-      disposition: delete
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreferencePut
-      disposition: delete
-    - id: internal/runtime/model_policy.go:method(ModelPolicy):Resolve
-      disposition: delete
-    - id: internal/runtime/model_policy.go:type:LLMSelection
-      disposition: delete
-    - id: internal/runtime/model_policy.go:type:ModelPolicy
-      disposition: delete
-    - id: internal/runtime/objectgraph_runtime.go:method(*Runtime):ObjectGraph
-      disposition: delete
-    - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSearch
-      disposition: delete
-    - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSubscriptions
-      disposition: delete
-    - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSubscriptionsRefresh
-      disposition: delete
-    - id: internal/runtime/product_events.go:method(*Runtime):EmitProductEvent
-      disposition: delete
-    - id: internal/runtime/prompt_store.go:func:NewPromptStore
-      disposition: delete
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):List
-      disposition: delete
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):Load
-      disposition: delete
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):LoadCore
-      disposition: delete
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):Reset
-      disposition: delete
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):Save
-      disposition: delete
-    - id: internal/runtime/prompt_store.go:type:PromptDescriptor
-      disposition: delete
-    - id: internal/runtime/prompt_store.go:type:PromptStore
-      disposition: delete
-    - id: internal/runtime/prompts.go:method(*APIHandler):HandlePromptList
-      disposition: delete
-    - id: internal/runtime/prompts.go:method(*APIHandler):HandlePromptRole
-      disposition: delete
-    - id: internal/runtime/promptspec/promptspec.go:method(Document):BodyText
-      disposition: delete
     - id: internal/runtime/promptspec/promptspec.go:method(Document):MustRender
-      disposition: delete
-    - id: internal/runtime/promptspec/promptspec.go:method(Document):Render
-      disposition: delete
-    - id: internal/runtime/promptspec/promptspec.go:type:Document
       disposition: delete
     - id: internal/runtime/provider.go:method(*StubProvider):Execute
       disposition: delete
@@ -3259,173 +3808,31 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/provider.go:method(*StubProvider):RuntimeProviderPolicy
       disposition: delete
-    - id: internal/runtime/provider.go:type:StubProvider
-      disposition: delete
-    - id: internal/runtime/qdrant_runtime.go:const:ProductionQdrantCollection
-      disposition: delete
-    - id: internal/runtime/qdrant_runtime.go:method(*Runtime):EnsureProductionQdrantCollection
-      disposition: delete
-    - id: internal/runtime/qdrant_runtime.go:method(*Runtime):QdrantPipeline
-      disposition: delete
-    - id: internal/runtime/run_acceptance.go:method(*Runtime):SynthesizeRunAcceptance
-      disposition: delete
-    - id: internal/runtime/run_memory.go:var:ErrContextOverflowRecoveryFailed
-      disposition: delete
-    - id: internal/runtime/run_memory.go:var:ErrRunMemoryCompactionFailed
-      disposition: delete
     - id: internal/runtime/runtime.go:func:WithPromotionAdapter
       disposition: delete
     - id: internal/runtime/runtime.go:func:WithToolRegistry
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):CancelAgent
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):CancelRun
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):CancelRunTrajectory
       disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):CompactRunMemory
       disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):DispatchActorActive
       disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):EnsurePersistentSuperAgent
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):EventBus
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):ExecuteActivationSync
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):GetRun
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):HealthState
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):ListRunsByOwner
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):PromptStore
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):RunningCount
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):RunningCountByProfile
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):SetDispatchActor
-      disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):SetHealth
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):Start
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):StartCoagentRun
       disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):StartRun
       disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):StartRunWithMetadata
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):Stop
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):Store
+    - id: internal/runtime/runtime.go:method(*Runtime):ToolRegistry
       disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):TraceStore
       disposition: delete
-    - id: internal/runtime/runtime_refresh.go:method(*APIHandler):HandleInternalRuntimeRefresh
-      disposition: delete
     - id: internal/runtime/search_gateway.go:method(*gatewaySearchClient):Search
-      disposition: delete
-    - id: internal/runtime/sourcecycled_web_captures.go:method(*APIHandler):HandleInternalSourcecycledWebCaptures
-      disposition: delete
-    - id: internal/runtime/super_controller.go:method(*Runtime):ReconcileCoagentWake
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleInternalTextureDocument
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleInternalTextureRevision
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTestTextureWorkerUpdate
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureBlame
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureCreateDocument
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureDiagnosis
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureDiff
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureDocument
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureDocumentStream
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureEnsureManifest
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureExportDocument
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureHistory
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureImportMarkdownLineage
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureListDocuments
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureOpenFile
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureRestoreRevision
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureRevision
-      disposition: delete
-    - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureRevisions
-      disposition: delete
-    - id: internal/runtime/texture_agent_revision.go:method(*APIHandler):HandleTextureAgentRevision
-      disposition: delete
-    - id: internal/runtime/texture_agent_revision.go:method(*APIHandler):HandleTextureCancelAgentRevision
-      disposition: delete
-    - id: internal/runtime/texture_merge.go:method(*APIHandler):HandleTextureAcceptMerge
-      disposition: delete
-    - id: internal/runtime/texture_merge.go:method(*APIHandler):HandleTextureMergePreview
-      disposition: delete
-    - id: internal/runtime/texture_merge.go:method(*APIHandler):HandleTextureSemanticCompare
-      disposition: delete
-    - id: internal/runtime/texture_proposals.go:method(*APIHandler):HandleInternalTextureProposalDelivery
       disposition: delete
     - id: internal/runtime/texture_workflow_verifier.go:method(*Runtime):VerifyTextureWorkflow
       disposition: delete
-    - id: internal/runtime/texture_workflow_verifier.go:type:TextureWorkflowVerificationOptions
-      disposition: delete
-    - id: internal/runtime/texture_workflow_verifier.go:type:TextureWorkflowVerificationReport
-      disposition: delete
     - id: internal/runtime/textureprompts/prompts.go:func:RevisionMediaSourceResearchRequired
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:const:AgentProfileCoSuper
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:const:AgentProfileEmail
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:const:AgentProfileProcessor
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:const:AgentProfileReconciler
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:const:AgentProfileVSuper
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:func:WithToolExecutionContext
       disposition: delete
     - id: internal/runtime/tool_profiles.go:func:WithToolProfileRegistry
       disposition: delete
-    - id: internal/runtime/tool_profiles.go:method(*Runtime):InstallDefaultAgentTools
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:method(*Runtime):ToolRegistryForProfile
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:type:AgentRoleSpec
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:RunToolLoop
-      disposition: delete
     - id: internal/runtime/toolloop.go:func:WithCompletionGuard
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithInitialToolChoice
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithParkWaiter
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithProviderPreconditionFallbacks
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithRequiredWriteTools
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithTerminalToolSuccesses
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithToolLoopBudget
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithToolLoopLLMConfig
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithToolLoopMemoryHooks
       disposition: delete
     - id: internal/runtime/toolloop.go:method(*ToolLoopPassivatedError):Error
       disposition: delete
@@ -3433,45 +3840,7 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/toolloop.go:method(*toolLoopAdapter):CallWithTools
       disposition: delete
-    - id: internal/runtime/toolloop.go:type:InjectUserTurnsFunc
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:TokenUsage
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopBudget
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopCompletionGuardFunc
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopCompletionGuardResult
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopCompletionState
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopMemoryHooks
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopOption
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopParkResult
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopParkState
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopParkWaiterFunc
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopPassivatedError
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopProvider
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopRequest
-      disposition: delete
-    - id: internal/runtime/toolloop.go:type:ToolLoopResponse
-      disposition: delete
-    - id: internal/runtime/toolloop.go:var:ErrToolLoopPassivated
-      disposition: delete
-    - id: internal/runtime/tools.go:type:Tool
-      disposition: delete
-    - id: internal/runtime/tools.go:type:ToolDefinition
-      disposition: delete
     - id: internal/runtime/tools.go:type:ToolFunc
-      disposition: delete
-    - id: internal/runtime/tools.go:var:MustNewToolRegistry
       disposition: delete
     - id: internal/runtime/tools.go:var:NewToolRegistry
       disposition: delete
@@ -3483,57 +3852,13 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/tools_capsule.go:func:WithCapsuleCtx
       disposition: delete
-    - id: internal/runtime/tools_capsule.go:type:CapsuleToolCtx
-      disposition: delete
-    - id: internal/runtime/tools_coagent.go:func:RegisterCoAgentTools
-      disposition: delete
-    - id: internal/runtime/tools_coding.go:func:RegisterCodingTools
-      disposition: delete
-    - id: internal/runtime/tools_coding.go:func:RegisterFileTools
-      disposition: delete
-    - id: internal/runtime/tools_coding.go:func:RegisterReadOnlyFileTools
-      disposition: delete
-    - id: internal/runtime/tools_evidence.go:func:RegisterEvidenceTools
-      disposition: delete
-    - id: internal/runtime/tools_evidence.go:func:RegisterModelDiagnosticTools
-      disposition: delete
-    - id: internal/runtime/tools_evidence.go:func:RegisterRunMemoryTools
-      disposition: delete
-    - id: internal/runtime/tools_research.go:func:RegisterResearchTools
-      disposition: delete
     - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):IngestionHandoffLatest
       disposition: delete
     - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):ResolveSourceItem
       disposition: delete
     - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):SearchSources
       disposition: delete
-    - id: internal/runtime/tools_shipper.go:func:RegisterShipperTools
-      disposition: delete
-    - id: internal/runtime/tools_texture.go:func:RegisterTextureTools
-      disposition: delete
-    - id: internal/runtime/tools_vmctl.go:func:RegisterVMControlTools
-      disposition: delete
     - id: internal/runtime/tools_vmctl.go:method(*workerRunPollError):Error
-      disposition: delete
-    - id: internal/runtime/tools_vmctl.go:method(workerVMLeaseKey):Matches
-      disposition: delete
-    - id: internal/runtime/tools_vmctl.go:method(workerVMLeaseKey):Valid
-      disposition: delete
-    - id: internal/runtime/tools_wire_processor.go:func:RegisterWireProcessorTools
-      disposition: delete
-    - id: internal/runtime/tools_worker_update.go:func:RegisterCoagentUpdateTools
-      disposition: delete
-    - id: internal/runtime/trajectory.go:func:EvaluateTrajectorySettlement
-      disposition: delete
-    - id: internal/runtime/trajectory.go:method(*Runtime):TrajectoryObligations
-      disposition: delete
-    - id: internal/runtime/trajectory.go:type:TrajectoryObligations
-      disposition: delete
-    - id: internal/runtime/universal_wire.go:method(*APIHandler):HandleUniversalWireStories
-      disposition: delete
-    - id: internal/runtime/wire_reconciler_debounce.go:const:WireReconcilerPublishCountThreshold
-      disposition: delete
-    - id: internal/runtime/wire_reconciler_debounce.go:const:WireReconcilerPublishDebounceInterval
       disposition: delete
 routes:
     - id: internal/runtime/api.go:HandleFunc:/api/adoptions/:h.HandleAppAdoptionDetail

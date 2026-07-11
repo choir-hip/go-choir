@@ -148,7 +148,7 @@ func TestRebasedExportRequiresProductionCaller(t *testing.T) {
 		writeFixture(t, root, "internal/runtime/runtime.go",
 			"package runtime\n\ntype Runtime struct{}\n\nfunc UnusedExport() {}\n")
 		rebased := mustScan(t, root)
-		rebased.UnusedExportDebt = original.UnusedExportDebt
+		rebaseInitialDebt(&rebased, original.UnusedExportDebt)
 		err := compareInventory(rebased, mustScan(t, root))
 		assertDiagnostic(t, err, "has no AST-derived non-test production caller")
 	})
@@ -165,9 +165,102 @@ import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
 func useRuntime() { runtime.UsedExport() }
 `)
 		rebased := mustScan(t, root)
-		rebased.UnusedExportDebt = original.UnusedExportDebt
+		rebaseInitialDebt(&rebased, original.UnusedExportDebt)
 		if err := compareInventory(rebased, mustScan(t, root)); err != nil {
 			t.Fatalf("used rebased export: %v", err)
+		}
+	})
+
+	t.Run("typed receiver method call passes", func(t *testing.T) {
+		root := fixtureRepository(t)
+		original := mustScan(t, root)
+		writeFixture(t, root, "internal/runtime/runtime.go", `package runtime
+
+type Runtime struct{}
+func (*Runtime) Start() {}
+`)
+		writeFixture(t, root, "cmd/caller/main.go", `package main
+
+import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+
+func useRuntime(rt *runtime.Runtime) { rt.Start() }
+`)
+		rebased := mustScan(t, root)
+		rebaseInitialDebt(&rebased, original.UnusedExportDebt)
+		if err := compareInventory(rebased, mustScan(t, root)); err != nil {
+			t.Fatalf("typed receiver caller: %v", err)
+		}
+	})
+
+	t.Run("unrelated same-name method does not satisfy", func(t *testing.T) {
+		root := fixtureRepository(t)
+		original := mustScan(t, root)
+		writeFixture(t, root, "internal/runtime/runtime.go", `package runtime
+
+type Runtime struct{}
+func (*Runtime) Start() {}
+`)
+		writeFixture(t, root, "cmd/caller/main.go", `package main
+
+import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+
+type other struct{}
+func (*other) Start() {}
+func useOther(value *other) { value.Start() }
+var _ *runtime.Runtime
+`)
+		rebased := mustScan(t, root)
+		rebaseInitialDebt(&rebased, original.UnusedExportDebt)
+		err := compareInventory(rebased, mustScan(t, root))
+		assertDiagnostic(t, err, "has no AST-derived non-test production caller")
+	})
+
+	t.Run("constructor field flow passes", func(t *testing.T) {
+		root := fixtureRepository(t)
+		original := mustScan(t, root)
+		writeFixture(t, root, "internal/runtime/runtime.go", `package runtime
+
+type Runtime struct{}
+func NewRuntime() *Runtime { return &Runtime{} }
+func (*Runtime) Start() {}
+`)
+		writeFixture(t, root, "cmd/caller/main.go", `package main
+
+import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+
+type holder struct { runtime *runtime.Runtime }
+func useRuntime() {
+	value := holder{runtime: runtime.NewRuntime()}
+	value.runtime.Start()
+}
+`)
+		rebased := mustScan(t, root)
+		rebaseInitialDebt(&rebased, original.UnusedExportDebt)
+		if err := compareInventory(rebased, mustScan(t, root)); err != nil {
+			t.Fatalf("constructor field caller: %v", err)
+		}
+	})
+
+	t.Run("promoted alias receiver flow passes", func(t *testing.T) {
+		root := fixtureRepository(t)
+		original := mustScan(t, root)
+		writeFixture(t, root, "internal/runtime/runtime.go", `package runtime
+
+type Runtime struct{}
+func (*Runtime) Start() {}
+`)
+		writeFixture(t, root, "cmd/caller/main.go", `package main
+
+import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+
+type runtimeAlias = runtime.Runtime
+type holder struct { *runtimeAlias }
+func useRuntime(value holder) { value.Start() }
+`)
+		rebased := mustScan(t, root)
+		rebaseInitialDebt(&rebased, original.UnusedExportDebt)
+		if err := compareInventory(rebased, mustScan(t, root)); err != nil {
+			t.Fatalf("promoted alias caller: %v", err)
 		}
 	})
 }
@@ -185,6 +278,21 @@ func TestCiterSuffixDriftChangesDigestIdentity(t *testing.T) {
 }
 
 
+
+func rebaseInitialDebt(inventory *Inventory, initial []Entry) {
+	current := make(map[string]Entry, len(inventory.Exports))
+	for _, export := range inventory.Exports {
+		current[export.ID] = export
+	}
+	inventory.UnusedExportDebt = nil
+	for _, debt := range initial {
+		export, exists := current[debt.ID]
+		if exists && len(export.ProductionCallers) == 0 {
+			inventory.UnusedExportDebt = append(inventory.UnusedExportDebt, debt)
+		}
+	}
+	setCounts(inventory)
+}
 
 func fixtureRepository(t *testing.T) string {
 	t.Helper()

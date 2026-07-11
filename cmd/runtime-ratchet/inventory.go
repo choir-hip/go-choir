@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -17,11 +18,12 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/tools/go/packages"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	inventorySchema = "runtime-dissolution-inventory/v2"
+	inventorySchema = "runtime-dissolution-inventory/v3"
 	runtimeImport  = "github.com/yusefmosiah/go-choir/internal/runtime"
 )
 
@@ -84,11 +86,15 @@ func scanRepository(root string) (Inventory, error) {
 		return Inventory{}, err
 	}
 	citerOrdinals := map[string]int{}
-	exportUses := map[string]map[string]bool{}
-	if err := scanGo(root, files, citerOrdinals, exportUses, &inv); err != nil {
+	typePackages := map[string]bool{}
+	if err := scanGo(root, files, citerOrdinals, typePackages, &inv); err != nil {
 		return Inventory{}, err
 	}
 	if err := scanTextCiters(root, files, citerOrdinals, &inv); err != nil {
+		return Inventory{}, err
+	}
+	exportUses, err := scanTypeAwareExportUses(root, typePackages)
+	if err != nil {
 		return Inventory{}, err
 	}
 	attachProductionCallers(&inv, exportUses)
@@ -143,7 +149,7 @@ func repositoryFiles(root string) ([]string, error) {
 	return files, err
 }
 
-func scanGo(root string, files []string, citerOrdinals map[string]int, exportUses map[string]map[string]bool, inv *Inventory) error {
+func scanGo(root string, files []string, citerOrdinals map[string]int, typePackages map[string]bool, inv *Inventory) error {
 	fset := token.NewFileSet()
 	for _, path := range files {
 		if filepath.Ext(path) != ".go" {
@@ -169,10 +175,10 @@ func scanGo(root string, files []string, citerOrdinals map[string]int, exportUse
 			inv.Files = append(inv.Files, Entry{ID: rel + " [" + kind + "]", Disposition: domainDisposition(rel), LOC: loc})
 			scanRuntimeAST(rel, file, fset, isTest, inv)
 		}
-		imports := runtimeImports(file)
-		if !isTest && len(imports) > 0 {
-			scanExportUses(rel, file, imports, exportUses)
+		if !isTest {
+			typePackages[filepath.Dir(rel)] = true
 		}
+		imports := runtimeImports(file)
 		if !inRuntime && !isTest && len(imports) > 0 {
 			inv.ProductionImporters = append(inv.ProductionImporters, Entry{ID: rel, Disposition: "delete"})
 			scanWrappers(rel, file, imports, inv)
@@ -298,33 +304,82 @@ func runtimeImports(file *ast.File) map[string]string {
 	}
 	return imports
 }
-func scanExportUses(rel string, file *ast.File, imports map[string]string, uses map[string]map[string]bool) {
-	ast.Inspect(file, func(node ast.Node) bool {
-		selector, ok := node.(*ast.SelectorExpr)
-		if !ok {
-			return true
+func scanTypeAwareExportUses(root string, packageDirs map[string]bool) (map[string]map[string]bool, error) {
+	patterns := make([]string, 0, len(packageDirs))
+	for dir := range packageDirs {
+		if dir == "." {
+			patterns = append(patterns, ".")
+		} else {
+			patterns = append(patterns, "./"+filepath.ToSlash(dir))
 		}
-		var alias *ast.Ident
-		switch receiver := selector.X.(type) {
-		case *ast.Ident:
-			alias = receiver
-		case *ast.SelectorExpr:
-			alias, _ = receiver.X.(*ast.Ident)
+	}
+	sort.Strings(patterns)
+	uses := map[string]map[string]bool{}
+	environments := [][]string{
+		nil,
+		append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0"),
+	}
+	for _, environment := range environments {
+		fset := token.NewFileSet()
+		loaded, err := packages.Load(&packages.Config{
+			Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
+				packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo |
+				packages.NeedImports | packages.NeedDeps,
+			Dir:   root,
+			Env:   environment,
+			Fset:  fset,
+			Tests: false,
+		}, patterns...)
+		if err != nil {
+			return nil, fmt.Errorf("load production packages for export callers: %w", err)
 		}
-		if alias == nil {
-			return true
+		for _, loadedPackage := range loaded {
+			if len(loadedPackage.CompiledGoFiles) == 0 {
+				continue
+			}
+			if len(loadedPackage.Errors) > 0 {
+				return nil, fmt.Errorf(
+					"type-check production package %s: %s",
+					loadedPackage.PkgPath, loadedPackage.Errors[0],
+				)
+			}
+			for identifier, object := range loadedPackage.TypesInfo.Uses {
+				if object == nil || object.Pkg() == nil || !object.Exported() {
+					continue
+				}
+				importPath := object.Pkg().Path()
+				if importPath != runtimeImport && !strings.HasPrefix(importPath, runtimeImport+"/") {
+					continue
+				}
+				position := fset.Position(identifier.Pos())
+				if position.Filename == "" || strings.HasSuffix(position.Filename, "_test.go") {
+					continue
+				}
+				key := typeObjectKey(object)
+				if uses[key] == nil {
+					uses[key] = map[string]bool{}
+				}
+				uses[key][slashRel(root, position.Filename)] = true
+			}
 		}
-		importPath, ok := imports[alias.Name]
-		if !ok {
-			return true
+	}
+	return uses, nil
+}
+
+func typeObjectKey(object types.Object) string {
+	if function, ok := object.(*types.Func); ok {
+		signature, _ := function.Type().(*types.Signature)
+		if signature != nil && signature.Recv() != nil {
+			receiver := types.Unalias(signature.Recv().Type())
+			if pointer, ok := receiver.(*types.Pointer); ok {
+				receiver = types.Unalias(pointer.Elem())
+			}
+			if named, ok := receiver.(*types.Named); ok && named.Obj().Pkg() != nil {
+				return named.Obj().Pkg().Path() + ".method:" + named.Obj().Name() + "." + object.Name()
+			}
 		}
-		key := importPath + "." + selector.Sel.Name
-		if uses[key] == nil {
-			uses[key] = map[string]bool{}
-		}
-		uses[key][rel] = true
-		return true
-	})
+	}
+	return object.Pkg().Path() + ".object:" + object.Name()
 }
 
 func attachProductionCallers(inv *Inventory, uses map[string]map[string]bool) {
@@ -333,13 +388,25 @@ func attachProductionCallers(inv *Inventory, uses map[string]map[string]bool) {
 		entry := &inv.Exports[index]
 		firstColon := strings.Index(entry.ID, ":")
 		lastColon := strings.LastIndex(entry.ID, ":")
-		if firstColon < 0 || lastColon <= firstColon {
+		if firstColon < 0 || lastColon <= firstColon || strings.Contains(entry.ID, "_test.go:") {
 			continue
 		}
 		sourcePath := entry.ID[:firstColon]
+		kind := entry.ID[firstColon+1 : lastColon]
 		symbol := entry.ID[lastColon+1:]
 		importPath := modulePrefix + filepath.ToSlash(filepath.Dir(sourcePath))
-		key := importPath + "." + symbol
+		key := importPath + ".object:" + symbol
+		if strings.HasPrefix(kind, "method(") && strings.HasSuffix(kind, ")") {
+			receiver := strings.TrimSuffix(strings.TrimPrefix(kind, "method("), ")")
+			receiver = strings.TrimPrefix(receiver, "*")
+			if bracket := strings.Index(receiver, "["); bracket >= 0 {
+				receiver = receiver[:bracket]
+			}
+			if dot := strings.LastIndex(receiver, "."); dot >= 0 {
+				receiver = receiver[dot+1:]
+			}
+			key = importPath + ".method:" + receiver + "." + symbol
+		}
 		for caller := range uses[key] {
 			entry.ProductionCallers = append(entry.ProductionCallers, caller)
 		}
