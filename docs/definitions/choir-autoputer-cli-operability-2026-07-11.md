@@ -17,13 +17,26 @@ mission.
 ## Standing Dictum (owner, restated 2026-07-11)
 
 **Autoputer before autopaper.** The automatic computer, with working
-self-development, precedes automatic publication. The canonical operator
-progression is:
+self-development, precedes automatic publication. The canonical sequence
+(owner, reversed/confirmed 2026-07-11) is:
 
-1. A human via the web UI / CLI.
-2. An **external** agent (e.g. Claude in a harness) via the choir CLI.
-3. Internal agents — co-supers using the choir CLI — i.e. **choir-in-choir**.
-4. Only then: autopaper editorial ambitions on top.
+1. **Audited computer works** — computers constructed as functions of state
+   (PC-5 kernel + acceptance matrix, capsule/candidate materialization, real
+   promotion per PC-4). The wire-store conformance mission is the first
+   slice: deleting boot-time migration and evicting wire state is what makes
+   "computer = f(code, state)" well-defined at all. Candidate computers are
+   capsules over substrate-independent audited computers, not VMs (owner,
+   2026-07-08).
+2. **Choir-CLI autoputer** — an external agent (e.g. Claude in a harness)
+   operates and self-develops the computer through the choir CLI alone.
+3. **Choir-in-choir autoputer** — co-supers using the choir CLI under
+   contained keys.
+4. Only then: **autopaper** editorial ambitions on top.
+
+A thin slice of CLI observability (computer status/generation/receipts) is
+pulled into step 1 so the audited-computer staging proofs are CLI-visible
+rather than another SSH forensics campaign — dogfooding the exact surface
+step 2 requires.
 
 Twelve autopaper attempts failed by shortcutting this sequence
 (`docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`).
@@ -107,18 +120,27 @@ is open.
 
 ## Execution Order
 
-1. **Prerequisite:** wire-store conformance mission completes (bounded boot,
-   two-store taxonomy enforced).
-2. **Phase A — observe:** G1 + G6. Lifecycle/product observability and
-   trustworthy receipts. External Claude can watch a computer live.
-3. **Phase B — run truth:** G3 + G4. External Claude can run work and trust
+1. **Phase 0 — audited computer groundwork:** wire-store conformance mission
+   completes (bounded boot, two-store taxonomy, migration deleted — the
+   computer's state function becomes well-defined), plus the thin observe
+   slice of G1 (computer status/generation/receipts in the CLI).
+2. **Phase 1 — audited computer proven:** the PC-5 kernel transaction is
+   built and its acceptance matrix passes; candidate materialization and
+   equivalence evidence (`internal/computerversion` + its observation CLIs)
+   are exercised against staging computers, observed through the Phase 0 CLI
+   slice. Exit: a computer is constructed as a function of state and its
+   audit evidence is CLI-visible.
+3. **Phase 2 — observe + receipts:** remainder of G1 + G6. External Claude
+   can watch a computer live and trust deploy receipts.
+4. **Phase 3 — run truth:** G3 + G4. External Claude can run work and trust
    the answer.
-4. **Phase C — self-development:** G5 (+ residual G2). External Claude can
-   change the computer and roll it back, via CLI only.
-5. **Phase D — containment:** G7. Keys that cannot escalate; then
+5. **Phase 4 — self-development:** G5 (+ residual G2), consuming Phase 1:
+   promotion flips routes between audited ComputerVersions with receipts and
+   rollback, via CLI only.
+6. **Phase 5 — containment:** G7. Keys that cannot escalate; then
    choir-in-choir opens (co-supers get scoped keys and the same four-item
    test).
-6. **After all of it:** autopaper editorial (reconciler), per the dictum.
+7. **After all of it:** autopaper editorial (reconciler), per the dictum.
 
 Each phase's acceptance is the corresponding item of the four-item external
 operator test, executed by an external agent on staging and recorded with
