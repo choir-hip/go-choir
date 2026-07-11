@@ -693,13 +693,13 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
+  journal_expected_parent_sha: 5cfcdad32c395ec587aae8599306e458204736cb
   orchestrator_lock:
     holder: Main
-    epoch: 2
-    expires_at: 2026-07-11T23:01:01Z
-    expected_parent_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
-    lock_transition_id: b0-completion-checkpoint-02
+    epoch: 3
+    expires_at: 2026-07-11T23:11:54Z
+    expected_parent_sha: 5cfcdad32c395ec587aae8599306e458204736cb
+    lock_transition_id: s0-lock-acquisition-03
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
     B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
