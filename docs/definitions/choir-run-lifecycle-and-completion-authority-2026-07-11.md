@@ -106,10 +106,37 @@ C1/C2/C6, C4 and C5 remain the blocking residue on the processor path.
 - No PC-5 / Base exact-byte kernel or audited-computer candidate-materialization
   work. PC-5 is owned by `docs/definitions/choir-product-completion-2026-07-10.md`
   and `docs/computer-ontology.md`.
-- No promotion, route-slot, VM lifecycle, or key-scoping work. Those are later
-  phases of the `autoputer-cli` spine.
+- No promotion, route-slot, or key-scoping work. Those are later phases of the
+  `autoputer-cli` spine. VM provisioning/lifecycle is likewise out of scope,
+  **except** run-level cancel/drain: cancelling a stuck run so that its VM's
+  admission capacity is released is run-lifecycle work and is in scope
+  (see Phase C). Reprovisioning, resizing, or replacing VMs is not.
 - No changes to the `universal-wire` feed UI beyond the read path owned by
   `choir-wire-store-conformance`.
+
+## Dependency Truth (verified 2026-07-11)
+
+Sequencing claims in this Definition are pinned to observed repository state,
+not to the state assumed when the post-mortem was written:
+
+- `choir-wire-store-conformance-2026-07-11.md` is **defined but not
+  implemented** (definition commit `a2f110e`; no code commits). Therefore any
+  phase whose acceptance requires a fetchable artifact in the `corpusd`
+  world-wire store is **blocked** until that mission's completion semantics are
+  observed. Phases A–C below have no such dependency and are executable now.
+- `isTerminalRuntimeState` in `cmd/sourcecycled/main.go` **already** treats
+  `blocked` as terminal (`f1ceba5`). The remaining work is not adding the case
+  but deciding terminal-error vs retryable-dispatch routing (Phase B).
+- `RunningCountByProfile` in `internal/runtime/runtime.go` already derives from
+  `store.ListRunsByState(ctx, types.RunRunning, ...)`. The residue is: (a) the
+  error path falls back to the in-memory `RunningCount()` map; (b) `RunPending`
+  is not counted; (c) `processorRunOccupiesAdmission` defaults to "occupies"
+  on any lookup error. Phase A targets this residue, not a wholesale rewrite.
+- The run that froze `vm-universal-wire-platform` (`running_runs: 1`,
+  documented in `docs/ACTIVE.md` "Remaining Error") is in state **`running`**,
+  not `blocked`. None of the post-mortem's three freeze modes covers a run
+  that stays `running` forever. This Definition adds it as the fourth freeze
+  mode and Phase C repairs it.
 
 ## Open Decisions (owner input required; default if silent)
 
@@ -125,18 +152,31 @@ C1/C2/C6, C4 and C5 remain the blocking residue on the processor path.
 - **Blocked-run timeout:**
   - *Default:* `RunBlocked` is auto-cancelled after a configurable timeout (e.g.,
     10 minutes) so it releases capacity and allows a retry.
+- **Running-run lease/timeout:**
+  - *Default:* a `RunRunning` run carries a lease (heartbeat or max-duration
+    bound, default 60 minutes for processor runs). A run whose lease expires is
+    transitioned to `RunFailed` by the runtime sweep and releases capacity.
+    `choir run cancel <id>` is exposed as the operator drain path and follows
+    the same capacity-release semantics.
 - **Artifact predicate for the processor:**
   - *Default:* the required artifact is a published world-wire article/story
-    route with ingestion lineage in the `corpusd` store.
+    route with ingestion lineage in the `corpusd` store. **This predicate is
+    only enforceable after `choir-wire-store-conformance` is settled**; until
+    then Phase D is gated (see Dependency Truth).
 
 ## Invariants
 
 - A run record in state `RunCompleted` must have a fetchable artifact in the
-  world-wire store.
+  world-wire store (enforced from Phase D onward).
 - `RunBlocked`, `RunFailed`, and `RunCancelled` must not freeze admission
   capacity and must not permanently consume cycle idempotency.
+- A `RunRunning` run must hold a live lease; an expired lease transitions the
+  run to a terminal error state that releases capacity. No run may occupy
+  admission capacity indefinitely without observable progress.
 - Admission capacity is derived from `RunRecord.State` (`RunPending` +
-  `RunRunning`), not from an in-memory or separately maintained counter.
+  `RunRunning` with live lease), not from an in-memory or separately maintained
+  counter, including on the error path (no silent fallback to the in-memory
+  map).
 - Two runs with the same cycle/ingestion fingerprint cannot be concurrently
   active.
 - `choir run status <id>` returns the same state as the single authority.
@@ -153,28 +193,137 @@ The mission is `complete` when all of the following are observed on staging:
    failed state, even if the agent process exits without crash or OOM.
 3. `choir run status <id>` prints the unified state (run state, trajectory
    summary, work items, and artifact receipt) and matches the single authority.
-4. The three freeze modes from the 2026-07-11 post-mortem
-   (`blocked` with no continuation, `passivated` with live trajectory, and
-   `completed` with live trajectory) are reproduced as regression tests and
-   resolve under the single authority.
+4. The four freeze modes (`blocked` with no continuation, `passivated` with
+   live trajectory, `completed` with live trajectory, and `running` with an
+   expired lease) are reproduced as regression tests and resolve under the
+   single authority.
 5. Duplicate concurrent submissions for an active run are rejected with
    `409 Conflict`, while retries for failed/cancelled runs are accepted and run.
+6. The stuck run on `vm-universal-wire-platform` (documented in
+   `docs/ACTIVE.md` "Remaining Error") is drained via the Phase C cancel/lease
+   path, `running_runs` returns to 0, and the previously bypassed
+   `Deploy to Staging (Node B)` hot-refresh verifies a new commit on the next
+   runtime-package push.
 
-## First Phase: Authority Alignment and Projection Cleanup
+## Sequencing and Gates
 
-- **Objective:** Inventory the five projections, choose the single authority, and
-  make the admission counter a derived view of `RunRecord.State`.
+Execution order is Phase 0 → A → B → C → D → E. Phases A–C have no dependency
+on `choir-wire-store-conformance`; Phase D is hard-gated on it (see Dependency
+Truth). Every phase lands through the same gate protocol:
+
+1. **Consensus gate (before mutation):** run the agentic-consensus runner
+   (`skill://agentic-consensus/agentic-consensus-runner.sh`) on the phase's
+   planned diff with the planning/adversarial prompt frames, out-dir
+   `/tmp/choir-run-lifecycle-<phase>-consensus`. Adjudicate findings; a severe
+   blocking finding re-plans the phase and re-runs consensus. Preserve prompt
+   and outputs; record an evidence-ledger entry.
+2. **Local proof:** targeted `go test` packages for the phase, then
+   `go build ./...` and `go vet ./...`.
+3. **Landing loop (per `AGENTS.md`):** commit → push `origin main` → monitor
+   the Actions run for that SHA → monitor the staging deploy → verify staging
+   commit identity via `/health`.
+4. **QA verification (deployed acceptance):** run the phase's acceptance
+   probe against staging and record run/CI IDs, staging identity, and probe
+   output in the evidence ledger. A phase is not complete — and the next phase
+   must not start — until its acceptance is recorded.
+5. **Halt conditions:** a failed consensus adjudication, a red CI run, a
+   staging identity mismatch, or acceptance-probe failure stops the sequence.
+   Diagnose and repair within the phase (documentation-first per `AGENTS.md`)
+   or roll back via the phase's rollback ref; do not advance past a red gate.
+
+Docs-only commits (this Definition, `docs/ACTIVE.md` updates) follow the
+docs-only landing path and must not force the full deploy workflow.
+
+## Execution Phases
+
+### Phase 0 — Consensus on the whole plan (green/yellow)
+
+- Run the agentic-consensus runner on this Definition's full phase plan,
+  invariants, and Open Decision defaults (planning + adversarial frames).
+- Adjudicate. If a severe finding changes the plan or a default decision,
+  update this Definition, note the change in the Supersession Record, and
+  re-run consensus on the changed plan.
+- Record the consensus evidence-ledger entry. No code mutation in this phase.
+
+### Phase A — Authority alignment and derived admission (red)
+
+- **Objective:** make admission capacity a derived view of `RunRecord.State`
+  with no in-memory fallback, per the five-projection inventory.
 - **Changes:**
-  - Update `isTerminalRuntimeState` in `cmd/sourcecycled/main.go` to handle
-    `blocked` deterministically and route it to a terminal error state or a
-    retryable dispatch state.
-  - Replace the in-memory admission counter with a derived query against
-    `RunRecord.State` in `internal/runtime/runtime.go` and
-    `internal/runtime/api.go`.
-  - Ensure `processorRunOccupiesAdmission` is a predicate over the derived view,
-    returning `false` for `failed`, `cancelled`, and timed-out `blocked` runs.
-- **Acceptance:** A deliberately blocked run is visible as `blocked` in
-  `choir run status`, and a second independent request can be admitted.
+  - `internal/runtime/runtime.go` / `internal/runtime/api.go`: remove the
+    silent fallback from `RunningCountByProfile` to the in-memory
+    `RunningCount()` map; surface store errors instead. Count `RunPending`
+    alongside `RunRunning`.
+  - Make `processorRunOccupiesAdmission` a predicate over the derived view
+    returning `false` for `failed`, `cancelled`, and timed-out `blocked` runs;
+    remove the "occupies on any lookup error" default in favor of an explicit
+    error surface.
+- **Local proof:** `go test ./internal/runtime -run 'Admission|RunningCount|Idempotency'`.
+- **QA acceptance:** on staging, a deliberately blocked run is visible as
+  `blocked` in `choir run status`, does not occupy admission, and a second
+  independent request is admitted.
+
+### Phase B — Retryable ingestion idempotency (red)
+
+- **Objective:** dedup distinguishes `succeeded already` from `failed before
+  starting`; terminal-error runs release cycle idempotency.
+- **Changes:**
+  - `cmd/sourcecycled/main.go`: route terminal `blocked`/`failed`/`cancelled`
+    dispatch states to the retryable path with the bounded retry budget
+    (default 3 attempts per cycle; Open Decisions). `isTerminalRuntimeState`
+    already classifies `blocked` as terminal (`f1ceba5`); this phase decides
+    what terminal means for redispatch.
+  - `internal/runtime/api.go`: duplicate submission for a concurrently active
+    fingerprint returns `409 Conflict`; resubmission after a terminal error is
+    admitted as a new run.
+- **Local proof:** `go test ./cmd/sourcecycled ./internal/runtime -run 'Terminal|Retry|Dedup|Conflict'`.
+- **QA acceptance:** on staging, a simulated provider 429 produces a terminal
+  error state, capacity release, and a successful sourcecycled retry on the
+  next poll; a duplicate concurrent submission returns `409`.
+
+### Phase C — Running-run lease and operator drain (red)
+
+- **Objective:** no run occupies capacity forever; the current stuck run is
+  drained.
+- **Changes:**
+  - `internal/runtime/runtime.go`: add the run lease (Open Decisions default:
+    60-minute processor bound) and a sweep that transitions expired-lease
+    `RunRunning` runs to `RunFailed` with capacity release.
+  - `cmd/choir`: add `choir run cancel <id>` calling the same transition.
+- **Local proof:** `go test ./internal/runtime ./cmd/choir -run 'Lease|Cancel|Sweep'`.
+- **QA acceptance:** drain the stuck run on `vm-universal-wire-platform` via
+  `choir run cancel` (or the sweep); observe `running_runs: 0`, then push a
+  runtime-package change and observe `Deploy to Staging (Node B)` hot-refresh
+  verify the new commit — the first green Deploy since the `d8fe4336` CI
+  bypass. Record run IDs and the Deploy run URL.
+
+### Phase D — Artifact-verified completion (red; gated)
+
+- **Gate:** `choir-wire-store-conformance-2026-07-11.md` completion semantics
+  observed on staging (world-wire store on `corpusd` serving the wire read
+  path). If not yet true, stop here; Phases A–C stand alone as landed value.
+- **Changes:** terminal `RunCompleted` for the processor path requires the
+  artifact predicate (published world-wire article with ingestion lineage in
+  the `corpusd` store); a run that exits cleanly without the artifact
+  terminates `RunFailed`.
+- **Local proof:** `go test ./internal/runtime -run 'Artifact|Completion'`.
+- **QA acceptance:** on staging, a processor run that publishes is
+  `completed` with a fetchable artifact receipt; a processor run whose
+  publication is suppressed terminates `failed`.
+
+### Phase E — Unified `choir run status` truth and final proof (red)
+
+- **Changes:** extend `choir run status <id>` (`cmd/choir/main.go`) to print
+  the unified state: run state from the single authority, trajectory summary,
+  work items, and artifact receipt (receipt only after Phase D).
+- Add the four freeze-mode regression tests if not already landed in A–C.
+- **Final consensus gate:** run the agentic-consensus runner on the full
+  mission diff (code-review frame).
+- **Landing:** full landing loop, then the four-item external operator test
+  from the `autoputer-cli` spine as the deployed acceptance proof.
+- Update this Definition's state, `docs/ACTIVE.md` (including removing the
+  "Remaining Error" section once Phase C's acceptance holds), and the
+  evidence ledger.
 
 ## Follow-on Missions
 
@@ -199,13 +348,29 @@ The mission is `complete` when all of the following are observed on staging:
   `docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`.
 - Does not supersede `docs/definitions/choir-product-completion-2026-07-10.md`
   PC-5 or `docs/computer-ontology.md`.
+- Amended 2026-07-11 (post-`d8fe4336`): added Dependency Truth, the fourth
+  freeze mode (`running` with expired lease), the running-run lease/timeout
+  Open Decision, per-phase Sequencing and Gates (consensus → push to main →
+  QA acceptance), the phased execution plan A–E with the Phase D gate on
+  `choir-wire-store-conformance`, and the autonomous execution contract. The
+  original "First Phase" section is superseded by Phases A and B.
 
 ## Red-Class Ceremony
 
 - **Mutation class:** Green/yellow for this document; the code changes this
   Definition authorizes touch red surfaces (run acceptance, canonical writes,
   sourcecycled ledger, CLI command surface) and must be executed with full
-  red-class ceremony.
+  red-class ceremony — concretely, the per-phase gate protocol in
+  "Sequencing and Gates" (consensus gate → local proof → landing loop → QA
+  acceptance → halt-on-red).
+- **Autonomous execution contract:** Phases 0–C and E are executable
+  autonomously under this Definition, taking every Open Decision default as
+  written; the consensus gates are the in-loop review mechanism and require no
+  human turn. Owner escalation is required only when (a) an adjudicated
+  consensus finding contradicts an Open Decision default, (b) a halt condition
+  cannot be repaired within the phase, or (c) the Phase D gate is reached
+  before `choir-wire-store-conformance` is settled — in which case the mission
+  pauses with Phases A–C landed rather than proceeding.
 - **Protected surfaces:** [run acceptance, canonical writes in the world-wire
   store, sourcecycled dispatch ledger, trajectory/processor state, `choir run`
   CLI surface, external-agent observable set].
@@ -223,9 +388,12 @@ The mission is `complete` when all of the following are observed on staging:
   - `discovered`:
     - five run-state projections with no shared authority;
     - at-most-once-ever dedup burning cycles on transient failures;
-    - agent completion narrated without a required artifact.
+    - agent completion narrated without a required artifact;
+    - a `running` run with no lease freezing admission and the staging deploy
+      indefinitely (the fourth freeze mode; `docs/ACTIVE.md` Remaining Error).
   - `repaired`:
     - one `RunRecord.State` authority with read-only projections;
     - retry semantics that distinguish `succeeded already` from
       `failed before starting`;
+    - a run lease and operator cancel so no run occupies capacity forever;
     - terminal completion requires a fetchable artifact in the world-wire store.
