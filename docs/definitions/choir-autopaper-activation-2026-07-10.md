@@ -1305,6 +1305,32 @@ run_checkpoint_and_resumption_state:
       cannot observe a valid exact-SHA response whenever store contention makes the
       health query exceed two seconds. This is now a per-probe observation-budget bug,
       not an identity, total-iteration, or migration-yield failure.
+    - Forced CI run 29146984044 passed every standard and race gate. Deploy job
+      86531210064 published the exact 6e893d90 activation receipt at 09:19:40Z for
+      sourcecycled, vmctl, gateway, sandbox-backed active computers, and the other
+      selected artifacts. The platform VM remained active and healthy on exact SHA
+      6e893d90 with sourcecycled, vmctl, and gateway NRestarts=0.
+    - Cycle cycle_7327b116c3b6423ceb6b0c19 started at 09:24:06Z after that receipt.
+      Cycle-fair admission selected exactly one processor request,
+      processor_20b7f9a60e89b1be51c34bb2, with runtime run 1720b530. It completed
+      without crash or OOM and opened canonical story document 4d1bc12a. Authenticated
+      `/api/universal-wire/stories` returned the document from
+      `universal-wire-edition-texture` in edition revision 3c96faec.
+    - The lineage-pure publish debounce fired once with docs=1 and dispatched exactly
+      one reconciler run, aabf0e75, for the same cycle and processor request. The run
+      carried required_texture_revisions=1 and completed without crash or OOM.
+    - The reconciler requested an existing-document revision on 4d1bc12a, but the
+      runtime returned two same-channel Texture rewarm handles. Run 266cd978 entered
+      the requested reconciler prompt and run 0ff5c93d was cancelled as the duplicate;
+      the retained run was then also cancelled with `context canceled`. No revision
+      descended from reconciler aabf0e75 was committed. The latest canonical revision,
+      d7e64359, instead belongs to earlier processor-Texture worker-update rewarm
+      697a6f53. The reconciler narrated success despite the absent required canonical
+      write, so completion item 5 remains false.
+    - This is a substrate failure in same-channel actor scheduling and completion
+      authority, not an editorial prompt failure: the mandatory prompt issued the
+      existing-document request, but duplicate rewarm allocation plus cancellation
+      erased the only admissible write while the parent reconciler still completed.
   root_cause_clustering_assessment:
     trigger: >-
       Three sourcecycled/runtime lifecycle symptoms were observed in one mission and
@@ -1372,13 +1398,17 @@ run_checkpoint_and_resumption_state:
       admissions while never-activated cycles wait, preventing a fair single-cycle proof.
     - Exact-SHA health is responsive during migration but can exceed the verifier's
       two-second per-probe deadline, making every otherwise-valid response unobservable.
-  highest_impact_remaining_uncertainty: deploy verifier per-probe health budget
+    - A reconciler can satisfy its prompt-level spawn instruction yet complete after
+      the runtime cancels every same-channel Texture rewarm, leaving no descendant
+      canonical revision while narrating that the required write was issued.
+  highest_impact_remaining_uncertainty: reconciler-owned same-channel Texture rewarm completion
   next_executable_probe: >-
-    Increase only the sandbox identity probe's per-request timeout beyond the observed
-    three-second contended response while preserving 120 bounded attempts and exact SHA
-    equality. Redeploy 62742eea plus that verifier correction, then verify cycle-fair
-    admission selects the oldest never-activated singleton and completes its processor,
-    deterministic reconciler, reconciler-owned Texture revision, and visible edition.
+    Trace the existing same-channel Texture actor rewarm/deduplication path used by
+    reconciler spawn_agent. Connect the mandatory revision request to one durable child
+    run whose successful canonical write is an explicit parent-run completion
+    prerequisite; do not let a returned duplicate handle or context cancellation count
+    as satisfaction. Then run a fresh post-receipt cycle and require a descendant
+    canonical revision before accepting the reconciler.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1420,6 +1450,11 @@ run_checkpoint_and_resumption_state:
     - CI run 29146630716, incomplete evidence deploy-failures/29146630716-1.json,
       exact-SHA platform health at 10.200.148.2, and the verifier's two-second probe
       deadline compared with the observed contended health latency.
+    - CI run 29146984044, deploy job 86531210064, exact-SHA 6e893d90 receipt, cycle
+      cycle_7327b116c3b6423ceb6b0c19, processor request processor_20b7f9a60e89b1be51c34bb2
+      and run 1720b530, document 4d1bc12a, processor revisions 89da3f65/d7e64359,
+      edition revision 3c96faec, reconciler aabf0e75, and cancelled reconciler-requested
+      Texture rewarms 266cd978/0ff5c93d.
   rollback_refs: []
 ```
 
