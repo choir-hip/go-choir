@@ -93,6 +93,40 @@ nodes:
       Topology superseded by choir-wire-store-conformance-2026-07-11 after the
       2026-07-11 post-mortem (attempt report) showed it contradicted D-WIRE.
       Its evidence ledger remains valid history.
+  - id: choir-run-truth-suite-2026-07-11
+    title: Choir Run-Truth Suite (index)
+    path: docs/definitions/choir-run-truth-suite-2026-07-11.md
+    ledger: ''
+    status: working
+    kind: spine
+    depends_on: []
+    enables:
+      - choir-run-deploy-unblock-2026-07-11
+      - choir-wire-store-conformance-2026-07-11
+      - choir-run-lifecycle-and-completion-authority-2026-07-11
+      - choir-vocabulary-cutover-2026-07-11
+    sources:
+      - docs/ACTIVE.md
+      - docs/standing-questions.md
+      - AGENTS.md
+      - docs/choir-doctrine.md
+  - id: choir-run-deploy-unblock-2026-07-11
+    title: Choir Run Deploy Unblock
+    path: docs/definitions/choir-run-deploy-unblock-2026-07-11.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    depends_on:
+      - choir-run-truth-suite-2026-07-11
+    enables:
+      - choir-wire-store-conformance-2026-07-11
+      - choir-run-lifecycle-and-completion-authority-2026-07-11
+    sources:
+      - docs/definitions/choir-run-truth-suite-2026-07-11.md
+      - docs/ACTIVE.md
+      - docs/standing-questions.md
+      - AGENTS.md
+      - docs/choir-doctrine.md
   - id: choir-wire-store-conformance-2026-07-11
     title: Universal Wire D-WIRE Conformance and Legacy Migration Deletion
     path: docs/definitions/choir-wire-store-conformance-2026-07-11.md
@@ -102,8 +136,10 @@ nodes:
     depends_on:
       - og-dolt-heresy-completion-2026-07-08
       - choir-product-completion-2026-07-10
+      - choir-run-deploy-unblock-2026-07-11
     enables:
       - choir-autoputer-cli-operability-2026-07-11
+      - choir-run-lifecycle-and-completion-authority-2026-07-11
   - id: choir-autoputer-cli-operability-2026-07-11
     title: Autoputer External-CLI Operability Before Choir-in-Choir
     path: docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
@@ -134,10 +170,14 @@ nodes:
     status: working
     kind: product_completion
     depends_on:
+      - choir-run-deploy-unblock-2026-07-11
       - choir-wire-store-conformance-2026-07-11
       - choir-autoputer-cli-operability-2026-07-11
-    enables: []
+    enables:
+      - choir-vocabulary-cutover-2026-07-11
     sources:
+      - docs/definitions/choir-run-truth-suite-2026-07-11.md
+      - docs/definitions/choir-run-deploy-unblock-2026-07-11.md
       - docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
       - docs/definitions/choir-wire-store-conformance-2026-07-11.md
       - docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md
@@ -145,3 +185,18 @@ nodes:
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/runtime-invariants.md
+  - id: choir-vocabulary-cutover-2026-07-11
+    title: Choir Vocabulary Cutover
+    path: docs/definitions/choir-vocabulary-cutover-2026-07-11.md
+    ledger: ''
+    status: working
+    kind: product_completion
+    depends_on:
+      - choir-run-lifecycle-and-completion-authority-2026-07-11
+    enables: []
+    sources:
+      - docs/definitions/choir-run-truth-suite-2026-07-11.md
+      - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
+      - docs/choir-doctrine.md
+      - AGENTS.md
+      - docs/standing-questions.md
