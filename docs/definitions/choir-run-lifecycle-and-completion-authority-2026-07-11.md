@@ -97,6 +97,13 @@ C1/C2/C6, C4 and C5 remain the blocking residue on the processor path.
    article with intact ingestion lineage) in the `corpusd` world-wire store.
 4. **Expose `choir run status <id>`** as the CLI-visible, substrate-neutral truth
    for the run state, trajectory summary, and artifact receipt.
+5. **Naming conformance (owner directive 2026-07-11):** converge code and CI
+   vocabulary on the settled doctrine terms — `universal wire` → `world wire`
+   (D-WIRE's term; currently zero occurrences in code against 600+
+   `universal wire` occurrences) and `sandbox` → `autoputer` (the autoputer-cli
+   spine's term for the runtime host). Executed iteratively in Phase F with a
+   consensus check adjudicating each sweep's residue until the panel agrees
+   the rename is complete.
 
 ## Mission Non-Purpose
 
@@ -110,7 +117,10 @@ C1/C2/C6, C4 and C5 remain the blocking residue on the processor path.
   `autoputer-cli` spine. VM provisioning/lifecycle is likewise out of scope,
   **except** run-level cancel/drain: cancelling a stuck run so that its VM's
   admission capacity is released is run-lifecycle work and is in scope
-  (see Phase C). Reprovisioning, resizing, or replacing VMs is not.
+  (see Phase C). Reprovisioning, resizing, or replacing VMs is not — this
+  also bounds Phase F: renames that would require VM reprovisioning (e.g.
+  the `vm-universal-wire-platform` instance name) go on the residue
+  allowlist with a follow-on pointer instead of being executed here.
 - No changes to the `universal-wire` feed UI beyond the read path owned by
   `choir-wire-store-conformance`.
 
@@ -205,13 +215,18 @@ The mission is `complete` when all of the following are observed on staging:
    path, `running_runs` returns to 0, and the previously bypassed
    `Deploy to Staging (Node B)` hot-refresh verifies a new commit on the next
    runtime-package push.
+7. The Phase F naming sweeps terminate with zero non-allowlisted
+   `universal wire` or Choir-host `sandbox` occurrences, a consensus panel
+   concurring the rename is complete, and staging green under the
+   `world-wire` / `autoputer` names.
 
 ## Sequencing and Gates
 
-Execution order is Phase 0 → A → B → C → D → E. Phases A–C have no dependency
-on `choir-wire-store-conformance`; Phase D is gated on it, and the gate
-self-resolves by chain-executing that mission first (see Phase D and
-Dependency Truth). Every phase lands through the same gate protocol:
+Execution order is Phase 0 → A → B → C → D → E → F. Phases A–C have no
+dependency on `choir-wire-store-conformance`; Phase D is gated on it, and the
+gate self-resolves by chain-executing that mission first (see Phase D and
+Dependency Truth). Phase F (naming conformance) runs last so the wide-surface
+rename cannot destabilize the lifecycle work while it lands. Every phase lands through the same gate protocol:
 
 1. **Consensus gate (before mutation):** run the agentic-consensus runner
    (`skill://agentic-consensus/agentic-consensus-runner.sh`) on the phase's
@@ -333,6 +348,64 @@ docs-only landing path and must not force the full deploy workflow.
   "Remaining Error" section once Phase C's acceptance holds), and the
   evidence ledger.
 
+### Phase F — Naming conformance: world-wire and autoputer (red; iterative)
+
+- **Objective:** converge the code, CI, and frontend vocabulary on the settled
+  doctrine terms. Two renames, executed as separate sweeps in this order:
+  1. `universal wire` → `world wire` (all casings: `universal-wire`,
+     `universal_wire`, `UniversalWire`, `universalWire`).
+  2. `sandbox` → `autoputer` (all casings), scoped to the Choir runtime host
+     meaning of the word only — occurrences meaning OS/browser/test
+     sandboxing in general (e.g. `codex --sandbox read-only` in
+     `skills/agentic-consensus`) are out of scope and belong on the residue
+     allowlist.
+- **Baseline (observed 2026-07-11):** `world wire` has zero code occurrences;
+  `universal wire` has ~619 non-docs matches concentrated in
+  `internal/runtime`, `internal/proxy`, `internal/vmctl`; `sandbox` spans
+  `cmd/sandbox`, `internal/sandbox`, ~112 referencing files, and ~77 CI
+  workflow/script references including `deploy-impact-classify` path rules.
+- **Compatibility rules (protected surfaces):**
+  - The HTTP route `/api/universal-wire/*` gains `/api/world-wire/*` as the
+    canonical route with the old path kept as a serving alias until the
+    frontend and any external consumers are cut over and staging-proven;
+    remove the alias in a later sweep iteration, not the first.
+  - Package/dir renames (`cmd/sandbox` → `cmd/autoputer`,
+    `internal/sandbox` → `internal/autoputer`) must update
+    `.github/scripts/deploy-impact-classify` path rules **in the same
+    commit**, preserving each path's existing deploy classification —
+    a rename must not silently change what deploys.
+  - Shipped artifact and unit names (`choir-sandbox-runtime.tar`,
+    `sandbox-binary`, `sandbox-proxy`, systemd/service identity) are renamed
+    with the deploy scripts updated in the same commit; the deploy for that
+    commit is itself the acceptance probe.
+  - The VM instance name `vm-universal-wire-platform` and any rename
+    requiring VM reprovisioning are **out of scope** (Non-Purpose: VM
+    provisioning); record them on the residue allowlist with a follow-on
+    pointer. Store/database names on `corpusd` follow
+    `choir-wire-store-conformance` authority — coordinate, don't duplicate.
+- **Iteration protocol (repeat until complete):**
+  1. Sweep: enumerate remaining occurrences
+     (`grep -riE "universal.?wire"` / `grep -riE "\bsandbox"` over code, CI,
+     frontend, prompts, and skills), classify each as rename / alias /
+     allowlist.
+  2. Apply the sweep's renames; run `go build ./...`, `go vet ./...`,
+     full `go test ./...`, and the frontend build.
+  3. Consensus check: run the agentic-consensus runner on the sweep diff plus
+     the residue list (out-dir
+     `/tmp/choir-run-lifecycle-f<iteration>-consensus`), asking the panel to
+     (a) find behavior changes hiding in the rename and (b) adjudicate
+     whether every residue entry is legitimately allowlisted.
+  4. Land through the standard gate protocol (landing loop + staging QA:
+     deployed `/health`, wire read path, and a processor run end-to-end under
+     the new names).
+  5. Terminate when an iteration's sweep finds zero non-allowlisted
+     occurrences **and** the consensus panel concurs the rename is complete;
+     record the final residue allowlist in the evidence ledger.
+- **QA acceptance:** staging serves `/api/world-wire/*`, deploys and health
+  checks pass under the `autoputer` names, a full processor run completes
+  end-to-end, and the recorded allowlist is the only surviving legacy
+  vocabulary.
+
 ## Follow-on Missions
 
 - **Audited computer / candidate materialization** — `autoputer-cli` Phase 1;
@@ -367,6 +440,13 @@ docs-only landing path and must not force the full deploy workflow.
   `choir-wire-store-conformance`; consensus-vs-default conflicts are
   self-adjudicated with a recorded deviation; unrepairable halts end the
   attempt with a documented failure report instead of an owner pause.
+- Amended again 2026-07-11 (owner directive): added Phase F — iterative
+  naming conformance (`universal wire` → `world wire`, Choir-host `sandbox`
+  → `autoputer`) with a per-iteration consensus check adjudicating the
+  residue allowlist, compatibility aliases for the `/api/universal-wire/*`
+  route, same-commit `deploy-impact-classify` updates for path renames, and
+  VM-reprovision renames deferred to a follow-on. The renames were not
+  previously required by this Definition; they are owner-directed scope.
 
 ## Red-Class Ceremony
 
