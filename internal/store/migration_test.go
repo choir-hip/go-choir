@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestOpenWithOptionsDefersBackfillUntilExplicitResume(t *testing.T) {
@@ -98,27 +100,60 @@ func TestRunOGBackfillStepDoesNotMarkFailedPassComplete(t *testing.T) {
 	}
 }
 
-func TestOGMetadataValueSetLoadsExistingEventIDs(t *testing.T) {
+func TestEventBackfillPersistsCursorBetweenBoundedSteps(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
-	eventIDs := make([]string, 0, ogMetadataValueScanPageSize+1)
-	for i := 0; i < ogMetadataValueScanPageSize+1; i++ {
+	if _, err := s.textureHandle().ExecContext(ctx, `DELETE FROM og_migrations WHERE migration_id = ?`, ogBackfillMigrationID(ogKindEvent)); err != nil {
+		t.Fatalf("clear event migration marker: %v", err)
+	}
+	eventIDs := make([]string, 0, ogEventBackfillBatchSize+1)
+	for i := 0; i < ogEventBackfillBatchSize+1; i++ {
 		eventIDs = append(eventIDs, fmt.Sprintf("event-resume-%03d", i))
 	}
-	for _, eventID := range eventIDs {
-		if _, err := s.ogPut(ctx, ogKindEvent, "owner-resume", eventID,
-			map[string]string{"event_id": eventID}, map[string]any{"event_id": eventID}, time.Now().UTC()); err != nil {
-			t.Fatalf("seed event %s: %v", eventID, err)
+	for i, eventID := range eventIDs {
+		if _, err := s.db.ExecContext(ctx,
+			`INSERT INTO events (event_id, owner_id, seq, ts, kind, payload_json) VALUES (?, ?, ?, ?, ?, ?)`,
+			eventID, "owner-resume", i+1, time.Now().UTC(), types.EventRunStarted, `{}`); err != nil {
+			t.Fatalf("seed legacy event %s: %v", eventID, err)
 		}
 	}
 
-	values, err := s.ogMetadataValueSet(ctx, ogKindEvent, "$.event_id")
+	if err := s.runOGBackfillStep(ctx, "events", ogKindEvent, s.backfillEventsOG); !errors.Is(err, errOGBackfillIncomplete) {
+		t.Fatalf("first event backfill error = %v, want incomplete", err)
+	}
+	cursor, err := s.ogBackfillCursor(ctx, ogKindEvent)
 	if err != nil {
-		t.Fatalf("load existing event ids: %v", err)
+		t.Fatalf("load event cursor: %v", err)
+	}
+	if want := eventIDs[ogEventBackfillBatchSize-1]; cursor != want {
+		t.Fatalf("event cursor = %q, want %q", cursor, want)
+	}
+	complete, err := s.ogBackfillMigrationComplete(ctx, ogKindEvent)
+	if err != nil {
+		t.Fatalf("inspect incomplete event migration: %v", err)
+	}
+	if complete {
+		t.Fatal("bounded event batch marked migration complete")
+	}
+
+	if err := s.runOGBackfillStep(ctx, "events", ogKindEvent, s.backfillEventsOG); !errors.Is(err, errOGBackfillIncomplete) {
+		t.Fatalf("second event backfill error = %v, want incomplete", err)
+	}
+	if err := s.runOGBackfillStep(ctx, "events", ogKindEvent, s.backfillEventsOG); err != nil {
+		t.Fatalf("complete event backfill: %v", err)
+	}
+	complete, err = s.ogBackfillMigrationComplete(ctx, ogKindEvent)
+	if err != nil || !complete {
+		t.Fatalf("completed event migration = %v, err = %v", complete, err)
+	}
+	cursor, err = s.ogBackfillCursor(ctx, ogKindEvent)
+	if err != nil || cursor != "" {
+		t.Fatalf("completed event cursor = %q, err = %v", cursor, err)
 	}
 	for _, eventID := range eventIDs {
-		if _, ok := values[eventID]; !ok {
-			t.Fatalf("existing event id %q missing from value set: %#v", eventID, values)
+		exists, err := s.ogExistsByKey(ctx, ogKindEvent, "event_id", eventID)
+		if err != nil || !exists {
+			t.Fatalf("migrated event %q exists = %v, err = %v", eventID, exists, err)
 		}
 	}
 }

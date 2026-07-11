@@ -733,17 +733,40 @@ func OpenWithOptions(dbPath string, opts OpenOptions) (*Store, error) {
 	return s, nil
 }
 
-// BackfillObjectGraph resumes SQL-to-OG migration kind by kind. Each kind is
-// idempotent and receives a durable completion marker only after its entire
-// pass succeeds, so interruption never collapses partial population into done.
-func (s *Store) BackfillObjectGraph(ctx context.Context) error {
+// BackfillObjectGraphStep performs at most one bounded unit of SQL-to-OG
+// migration. The bool reports whether every kind is complete. Returning between
+// incomplete steps is the availability boundary for the single embedded-Dolt
+// connection; callers serving foreground traffic must reschedule another step.
+func (s *Store) BackfillObjectGraphStep(ctx context.Context) (bool, error) {
 	log.Printf("store: open phase=objectgraph-backfill status=starting")
 	if err := s.backfillOGFromSQL(ctx); err != nil {
-		return fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
+		if errors.Is(err, errOGBackfillIncomplete) {
+			return false, nil
+		}
+		return false, fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
 	}
 	log.Printf("store: open phase=objectgraph-backfill status=complete")
 	s.markDoltHistoryDirty()
-	return nil
+	return true, nil
+}
+
+// BackfillObjectGraph runs every bounded step synchronously. This is used by
+// non-serving startup and tests; deployed runtime startup uses
+// BackfillObjectGraphStep so foreground requests receive the connection between
+// steps.
+func (s *Store) BackfillObjectGraph(ctx context.Context) error {
+	for {
+		complete, err := s.BackfillObjectGraphStep(ctx)
+		if err != nil {
+			return err
+		}
+		if complete {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 }
 
 // bootstrap applies the schema DDL to the database.

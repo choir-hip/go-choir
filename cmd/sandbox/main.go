@@ -222,8 +222,24 @@ func main() {
 			case <-ticker.C:
 			}
 		}
-		if err := db.BackfillObjectGraph(ctx); err != nil && ctx.Err() == nil {
-			log.Printf("sandbox: objectgraph backfill failed: %v", err)
+		migrationTicker := time.NewTicker(100 * time.Millisecond)
+		defer migrationTicker.Stop()
+		for {
+			complete, err := db.BackfillObjectGraphStep(ctx)
+			if err != nil {
+				if ctx.Err() == nil {
+					log.Printf("sandbox: objectgraph backfill failed: %v", err)
+				}
+				return
+			}
+			if complete {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-migrationTicker.C:
+			}
 		}
 	}()
 

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -18,7 +17,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-const ogMetadataValueScanPageSize = 256
+// A legacy event lookup is a JSON metadata scan on the historical OG table.
+// One event is the enforceable upper bound for a serving migration step; the
+// sandbox returns to foreground work before scheduling another lookup/write.
+const ogEventBackfillBatchSize = 1
+
+var errOGBackfillIncomplete = errors.New("object graph backfill incomplete")
 
 // backfillOGFromSQL reads all migrated records from the relational SQL tables
 // and writes them into the object graph. This is called on every Open to
@@ -68,6 +72,9 @@ func (s *Store) runOGBackfillStep(ctx context.Context, name string, kind objectg
 	}
 	log.Printf("store: objectgraph backfill kind=%s status=starting", name)
 	if err := run(ctx); err != nil {
+		if errors.Is(err, errOGBackfillIncomplete) {
+			log.Printf("store: objectgraph backfill kind=%s status=deferred reason=bounded-batch", name)
+		}
 		return err
 	}
 	if kind != "" {
@@ -77,6 +84,42 @@ func (s *Store) runOGBackfillStep(ctx context.Context, name string, kind objectg
 	}
 	log.Printf("store: objectgraph backfill kind=%s status=complete", name)
 	return nil
+}
+
+func (s *Store) ogBackfillCursor(ctx context.Context, kind objectgraph.ObjectKind) (string, error) {
+	if s == nil || s.textureHandle() == nil {
+		return "", fmt.Errorf("store: object graph database not initialized")
+	}
+	var cursor string
+	err := s.textureHandle().QueryRowContext(ctx,
+		`SELECT cursor_value FROM og_migration_progress WHERE migration_id = ?`,
+		ogBackfillMigrationID(kind),
+	).Scan(&cursor)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return cursor, err
+}
+
+func (s *Store) setOGBackfillCursor(ctx context.Context, kind objectgraph.ObjectKind, cursor string) error {
+	if s == nil || s.textureHandle() == nil {
+		return fmt.Errorf("store: object graph database not initialized")
+	}
+	_, err := s.textureHandle().ExecContext(ctx,
+		`INSERT INTO og_migration_progress (migration_id, cursor_value, updated_at) VALUES (?, ?, ?)
+		 ON DUPLICATE KEY UPDATE cursor_value = VALUES(cursor_value), updated_at = VALUES(updated_at)`,
+		ogBackfillMigrationID(kind), cursor, time.Now().UTC(),
+	)
+	return err
+}
+
+func (s *Store) clearOGBackfillCursor(ctx context.Context, kind objectgraph.ObjectKind) error {
+	if s == nil || s.textureHandle() == nil {
+		return fmt.Errorf("store: object graph database not initialized")
+	}
+	_, err := s.textureHandle().ExecContext(ctx,
+		`DELETE FROM og_migration_progress WHERE migration_id = ?`, ogBackfillMigrationID(kind))
+	return err
 }
 
 func ogBackfillMigrationID(kind objectgraph.ObjectKind) string {
@@ -106,64 +149,10 @@ func (s *Store) markOGBackfillMigrationComplete(ctx context.Context, kind object
 		 ON DUPLICATE KEY UPDATE completed_at = VALUES(completed_at)`,
 		ogBackfillMigrationID(kind), time.Now().UTC(),
 	)
-	return err
-}
-
-// ogMetadataValueSet scans one object kind in bounded keyset pages and returns
-// its non-empty metadata values. The embedded Dolt handle intentionally has one
-// connection, so closing rows between pages lets foreground runtime work make
-// progress while a large resumable migration runs in the background.
-func (s *Store) ogMetadataValueSet(ctx context.Context, kind objectgraph.ObjectKind, jsonPath string) (map[string]struct{}, error) {
-	if s == nil || s.textureHandle() == nil {
-		return nil, fmt.Errorf("store: object graph database not initialized")
+	if err != nil {
+		return err
 	}
-	values := make(map[string]struct{})
-	cursor := ""
-	for {
-		rows, err := s.textureHandle().QueryContext(ctx,
-			`SELECT canonical_id, JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?))
-			 FROM og_objects
-			 WHERE object_kind = ? AND canonical_id > ?
-			 ORDER BY canonical_id
-			 LIMIT ?`,
-			jsonPath, string(kind), cursor, ogMetadataValueScanPageSize,
-		)
-		if err != nil {
-			return nil, err
-		}
-		pageCount := 0
-		for rows.Next() {
-			var canonicalID string
-			var value sql.NullString
-			if err := rows.Scan(&canonicalID, &value); err != nil {
-				_ = rows.Close()
-				return nil, err
-			}
-			cursor = canonicalID
-			pageCount++
-			if value.Valid && strings.TrimSpace(value.String) != "" {
-				values[value.String] = struct{}{}
-			}
-		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return nil, err
-		}
-		if err := rows.Close(); err != nil {
-			return nil, err
-		}
-		if pageCount < ogMetadataValueScanPageSize {
-			return values, nil
-		}
-		// Give already-waiting foreground queries a scheduling opportunity
-		// before the migration acquires the sole connection for another page.
-		runtime.Gosched()
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(time.Millisecond):
-		}
-	}
+	return s.clearOGBackfillCursor(ctx, kind)
 }
 
 func (s *Store) backfillAgentsOG(ctx context.Context) error {
@@ -251,7 +240,12 @@ func (s *Store) backfillRunsOG(ctx context.Context) error {
 }
 
 func (s *Store) backfillEventsOG(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json FROM events`)
+	cursor, err := s.ogBackfillCursor(ctx, ogKindEvent)
+	if err != nil {
+		return fmt.Errorf("backfill OG events: load cursor: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT event_id, loop_id, agent_id, channel_id, owner_id, trajectory_id, seq, stream_seq, ts, kind, phase, payload_json
+		FROM events WHERE event_id > ? ORDER BY event_id LIMIT ?`, cursor, ogEventBackfillBatchSize)
 	if err != nil {
 		return fmt.Errorf("backfill OG events: query: %w", err)
 	}
@@ -268,13 +262,13 @@ func (s *Store) backfillEventsOG(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("backfill OG events: iterate: %w", err)
 	}
-	existingEventIDs, err := s.ogMetadataValueSet(ctx, ogKindEvent, "$.event_id")
-	if err != nil {
-		return fmt.Errorf("backfill OG events: load existing event ids: %w", err)
-	}
 	for i := range records {
 		// Put-if-absent: skip if OG already has this event.
-		if _, exists := existingEventIDs[records[i].EventID]; exists {
+		exists, err := s.ogExistsByKey(ctx, ogKindEvent, "event_id", records[i].EventID)
+		if err != nil {
+			return fmt.Errorf("backfill OG events: check %s: %w", records[i].EventID, err)
+		}
+		if exists {
 			continue
 		}
 		// OG requires a non-empty owner_id. Synthesize a system owner
@@ -285,9 +279,14 @@ func (s *Store) backfillEventsOG(ctx context.Context) error {
 		if err := s.AppendEventOG(ctx, &records[i]); err != nil {
 			return fmt.Errorf("backfill OG events: put %s: %w", records[i].EventID, err)
 		}
-		existingEventIDs[records[i].EventID] = struct{}{}
 	}
-	return nil
+	if len(records) == 0 {
+		return nil
+	}
+	if err := s.setOGBackfillCursor(ctx, ogKindEvent, records[len(records)-1].EventID); err != nil {
+		return fmt.Errorf("backfill OG events: save cursor: %w", err)
+	}
+	return errOGBackfillIncomplete
 }
 
 func (s *Store) backfillChannelMessagesOG(ctx context.Context) error {

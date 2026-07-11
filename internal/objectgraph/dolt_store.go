@@ -44,6 +44,12 @@ CREATE TABLE IF NOT EXISTS og_migrations (
 	migration_id VARCHAR(255) NOT NULL PRIMARY KEY,
 	completed_at DATETIME NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS og_migration_progress (
+	migration_id VARCHAR(255) NOT NULL PRIMARY KEY,
+	cursor_value LONGTEXT NOT NULL,
+	updated_at   DATETIME NOT NULL
+);
 `
 
 // DoltStore is a Store backed by an embedded Dolt *sql.DB. It is the
