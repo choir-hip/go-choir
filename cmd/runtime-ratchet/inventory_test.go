@@ -1,0 +1,157 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestInventoryBaselineAndRegressions(t *testing.T) {
+	t.Run("clean baseline", func(t *testing.T) {
+		root := fixtureRepository(t)
+		baseline := mustScan(t, root)
+		current := mustScan(t, root)
+		if err := compareInventory(baseline, current); err != nil {
+			t.Fatalf("clean baseline: %v", err)
+		}
+	})
+
+	tests := []struct {
+		name       string
+		mutate     func(*testing.T, string)
+		diagnostic string
+	}{
+		{
+			name: "added production file",
+			mutate: func(t *testing.T, root string) {
+				writeFixture(t, root, "internal/runtime/added.go", "package runtime\n\nfunc added() {}\n")
+			},
+			diagnostic: `files: added item "internal/runtime/added.go [production]"`,
+		},
+		{
+			name: "added export",
+			mutate: func(t *testing.T, root string) {
+				writeFixture(t, root, "internal/runtime/runtime.go", "package runtime\n\ntype Runtime struct{}\n\nfunc NewRuntime() *Runtime { return &Runtime{} }\n")
+			},
+			diagnostic: "new production exports also require a production caller",
+		},
+		{
+			name: "added production importer",
+			mutate: func(t *testing.T, root string) {
+				writeFixture(t, root, "cmd/newcaller/main.go", "package main\n\nimport runtime \"github.com/yusefmosiah/go-choir/internal/runtime\"\n\nvar _ *runtime.Runtime\n")
+			},
+			diagnostic: `production_importers: added item "cmd/newcaller/main.go"`,
+		},
+		{
+			name: "added citer",
+			mutate: func(t *testing.T, root string) {
+				writeFixture(t, root, "docs/new-contract.md", "Active dependency: internal/runtime must remain.\n")
+			},
+			diagnostic: `citers: added item "docs/new-contract.md:1:Active dependency: internal/runtime must remain."`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := fixtureRepository(t)
+			baseline := mustScan(t, root)
+			tc.mutate(t, root)
+			err := compareInventory(baseline, mustScan(t, root))
+			assertDiagnostic(t, err, tc.diagnostic)
+		})
+	}
+}
+
+func TestInventoryRejectsDispositionErrors(t *testing.T) {
+	t.Run("undispositioned item", func(t *testing.T) {
+		root := fixtureRepository(t)
+		baseline := mustScan(t, root)
+		baseline.Files[0].Disposition = ""
+		err := compareInventory(baseline, mustScan(t, root))
+		assertDiagnostic(t, err, "undispositioned item")
+	})
+
+	t.Run("invalid item disposition", func(t *testing.T) {
+		root := fixtureRepository(t)
+		baseline := mustScan(t, root)
+		baseline.Exports[0].Disposition = "later"
+		err := compareInventory(baseline, mustScan(t, root))
+		assertDiagnostic(t, err, `invalid disposition "later"`)
+	})
+
+	t.Run("invalid citer disposition", func(t *testing.T) {
+		root := fixtureRepository(t)
+		baseline := mustScan(t, root)
+		baseline.Citers[0].Disposition = "core"
+		err := compareInventory(baseline, mustScan(t, root))
+		assertDiagnostic(t, err, `invalid disposition "core"`)
+	})
+}
+
+func TestSyntaxAwareInventory(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/runtime/registration.go", `package runtime
+
+func register(s interface{ HandleFunc(string, any) }, r interface{ Register(any) error }) {
+	s.HandleFunc("/api/example", handler)
+	_ = r.Register(Tool{Name: "example_tool"})
+}
+
+var handler any
+type Tool struct { Name string }
+`)
+	writeFixture(t, root, "cmd/string-only/main.go", `package main
+
+const notAnImport = "github.com/yusefmosiah/go-choir/internal/runtime"
+`)
+	inv := mustScan(t, root)
+	if len(inv.Routes) != 1 || !strings.Contains(inv.Routes[0].ID, "/api/example") {
+		t.Fatalf("routes = %+v, want syntax-derived /api/example registration", inv.Routes)
+	}
+	if len(inv.Tools) != 1 || !strings.Contains(inv.Tools[0].ID, "example_tool") {
+		t.Fatalf("tools = %+v, want syntax-derived example_tool registration", inv.Tools)
+	}
+	if len(inv.ProductionImporters) != 0 {
+		t.Fatalf("production importers = %+v, string literal must not count as import", inv.ProductionImporters)
+	}
+}
+
+func fixtureRepository(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeFixture(t, root, "go.mod", "module github.com/yusefmosiah/go-choir\n\ngo 1.25.6\n")
+	writeFixture(t, root, "internal/runtime/runtime.go", "package runtime\n\ntype Runtime struct{}\n")
+	writeFixture(t, root, "internal/runtime/runtime_test.go", "package runtime\n\nfunc ExampleRuntime() {}\n")
+	writeFixture(t, root, "docs/evidence/history.md", "Removed dependency: internal/runtime.\n")
+	return root
+}
+
+func writeFixture(t *testing.T, root, rel, content string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustScan(t *testing.T, root string) Inventory {
+	t.Helper()
+	inv, err := scanRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inv
+}
+
+func assertDiagnostic(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("compareInventory error = nil, want diagnostic containing %q", want)
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("compareInventory error = %q, want diagnostic containing %q", err, want)
+	}
+}
