@@ -121,6 +121,20 @@ func TestDispatchStoryCorpusReconcilerCarriesSingleCycleLineage(t *testing.T) {
 		if got := metadataStringValue(run.Metadata, "source_network_request_id"); got != "processor-1" {
 			t.Fatalf("source request id = %q, want processor-1", got)
 		}
+		if got := metadataIntValue(run.Metadata, "required_texture_revisions"); got != 1 {
+			t.Fatalf("required texture revisions = %d, want 1", got)
+		}
+		for _, want := range []string{
+			"must produce one reconciler-owned canonical Texture revision",
+			"call spawn_agent exactly once with role=texture",
+			"channel_id set to that document id",
+			"Do not create a new document",
+			"end without the required existing-document Texture revision",
+		} {
+			if !strings.Contains(run.Prompt, want) {
+				t.Fatalf("reconciler prompt missing %q: %s", want, run.Prompt)
+			}
+		}
 		return
 	}
 	t.Fatal("reconciler run not found")

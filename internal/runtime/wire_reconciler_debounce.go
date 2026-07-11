@@ -255,7 +255,7 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 	}
 	ownerID := universalWirePlatformOwnerID()
 	prompt := fmt.Sprintf(
-		"Reconciler story-corpus: review the wire corpus after %d eligible platform publish(es). Note consensus, contradictions, drift, and candidate Texture updates on existing platform documents. Spawn Texture on existing doc ids when an edition revision is warranted.",
+		"Reconciler story-corpus: review the wire corpus after %d eligible platform publish(es). Note consensus, contradictions, drift, and editorial changes needed on the listed existing platform documents. This activation must produce one reconciler-owned canonical Texture revision: select exactly one listed document, call spawn_agent exactly once with role=texture and channel_id set to that document id, and direct the Texture agent to revise the existing canonical article using this review. Do not create a new document, spawn more than one Texture agent, merely summarize the review, or end without the required existing-document Texture revision.",
 		len(batch.DocIDs),
 	)
 	prompt += "\n\nPublished document handles: " + strings.Join(batch.DocIDs, ", ")
@@ -264,13 +264,14 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 	}
 	prompt += rt.wirePublishBatchDocumentContext(ctx, ownerID, batch)
 	metadata := map[string]any{
-		runMetadataAgentProfile:    AgentProfileReconciler,
-		runMetadataAgentRole:       AgentProfileReconciler,
-		runMetadataReconcilerScope: "story-corpus",
-		"activation_origin":        "publish_batch",
-		"request_source":           "wire_publish_debouncer",
-		"published_doc_ids":        batch.DocIDs,
-		"published_revision_ids":   batch.RevisionIDs,
+		runMetadataAgentProfile:      AgentProfileReconciler,
+		runMetadataAgentRole:         AgentProfileReconciler,
+		runMetadataReconcilerScope:   "story-corpus",
+		"activation_origin":          "publish_batch",
+		"request_source":             "wire_publish_debouncer",
+		"published_doc_ids":          batch.DocIDs,
+		"published_revision_ids":     batch.RevisionIDs,
+		"required_texture_revisions": 1,
 	}
 	if !batch.MixedLineage && strings.TrimSpace(batch.CycleID) != "" {
 		reconcilerRequestID := wirePublishReconcilerRequestID(batch.CycleID)
