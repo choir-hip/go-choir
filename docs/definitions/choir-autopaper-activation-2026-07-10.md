@@ -1254,6 +1254,18 @@ run_checkpoint_and_resumption_state:
       while its trajectory remained live with two open work items and only 19 of 20
       source items resolved. Sourcecycled had projected its durable request runtime
       status to completed, while sandbox health still reported one running processor.
+    - After capacity released, cycle cycle_865b8c07e12f746f4581139b admitted processor
+      run 0f6db0fe. It opened canonical Texture docs 9d824cd2 and 3f70e054; their
+      processor-owned Texture runs 4926ffc6 and 7adf7d23 produced canonical revisions
+      473bce95 and 43088743. Authenticated `/api/universal-wire/stories` returned 200
+      from `universal-wire-edition-texture`, edition revision 0ad9f2d9, with both docs.
+    - Publish-debounced reconciler activity ran through the grounded 20-tool prompt and
+      completed without crash/OOM, but no reconciler-owned Texture revision was created.
+      The platform revision ledger has no revision after 07:14Z; both visible docs retain
+      `input_origin=processor_handoff`, their processor cycle/request provenance, and
+      processor-owned Texture loop ids. Completion item 5 therefore remains false: the
+      visible canonical docs were produced by processor-spawned Texture, not reconciler-
+      spawned Texture.
   root_cause_clustering_assessment:
     trigger: >-
       Three sourcecycled/runtime lifecycle symptoms were observed in one mission and
@@ -1311,13 +1323,17 @@ run_checkpoint_and_resumption_state:
       resume or bounded terminal projection for this state.
     - Completed run state can coexist with a live unresolved processor trajectory, so
       sourcecycled and runtime disagree about capacity and fresh submissions receive 429.
-  highest_impact_remaining_uncertainty: shared processor lifecycle and admission authority
+    - The grounded reconciler prompt makes canonical revision conditional on its own
+      `when warranted` judgment, so a successful review can end narratively without
+      producing the reconciler-authored canonical Texture required by completion item 5.
+  highest_impact_remaining_uncertainty: reconciler canonical Texture execution contract
   next_executable_probe: >-
-    Trace runtime active-processor admission accounting and restart/passivation recovery
-    against the existing trajectory and processor-resolution projection. Identify the
-    smallest substrate-level connection that makes both runtime and sourcecycled derive
-    capacity from one semantic authority; do not add a fourth sourcecycled-only state
-    exception. Then repeat the exact-SHA fresh-cycle acceptance proof.
+    Strengthen the publish-batch reconciler prompt so the run must select at least one
+    listed canonical document and spawn exactly one existing-doc Texture revision grounded
+    in the supplied title, revision id, and content. Preserve per-cycle dedupe and lineage,
+    deploy the change, and prove the resulting reconciler-owned canonical revision through
+    platform metadata and authenticated edition visibility. Keep the processor lifecycle
+    authority cluster open as residual substrate work rather than patching another state.
   suggested_goal_string: /goal docs/definitions/choir-autopaper-activation-2026-07-10.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
@@ -1345,6 +1361,10 @@ run_checkpoint_and_resumption_state:
     - CI run 29143023440, deploy job 86520721334, exact-SHA 5035bfa2 deploy receipt,
       refreshed platform health at 10.200.146.2, runtime run 671d7610, and the 06:57Z
       bounded submission attempts rejected by runtime active-processor admission.
+    - Cycle cycle_865b8c07e12f746f4581139b; processor run 0f6db0fe; documents
+      9d824cd2/3f70e054; processor Texture runs 4926ffc6/7adf7d23; revisions
+      473bce95/43088743; edition revision 0ad9f2d9; and the post-reconciler platform
+      revision query showing no reconciler-owned canonical write after 07:14Z.
   rollback_refs: []
 ```
 
