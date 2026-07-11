@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -20,7 +21,7 @@ import (
 )
 
 const (
-	inventorySchema = "runtime-dissolution-inventory/v1"
+	inventorySchema = "runtime-dissolution-inventory/v2"
 	runtimeImport  = "github.com/yusefmosiah/go-choir/internal/runtime"
 )
 
@@ -32,6 +33,7 @@ type Inventory struct {
 	Counts               Counts `yaml:"counts"`
 	Files                []Entry `yaml:"files"`
 	Exports              []Entry `yaml:"exports"`
+	UnusedExportDebt     []Entry `yaml:"initial_unused_export_debt"`
 	Routes               []Entry `yaml:"routes"`
 	Tools                 []Entry `yaml:"tools"`
 	ProductionImporters  []Entry `yaml:"production_importers"`
@@ -48,6 +50,8 @@ type Counts struct {
 	ProductionLOC        int `yaml:"production_loc"`
 	TestLOC              int `yaml:"test_loc"`
 	Exports              int `yaml:"exports"`
+	ExportCallerEdges    int `yaml:"export_caller_edges"`
+	InitialUnusedExportDebt int `yaml:"initial_unused_export_debt"`
 	Routes               int `yaml:"routes"`
 	Tools                int `yaml:"tools"`
 	ProductionImporters  int `yaml:"production_importers"`
@@ -61,6 +65,7 @@ type Entry struct {
 	ID          string `yaml:"id"`
 	Disposition string `yaml:"disposition"`
 	LOC         int    `yaml:"loc,omitempty"`
+	ProductionCallers []string `yaml:"production_callers,omitempty"`
 }
 
 var compatibilityRE = regexp.MustCompile(`(?i)\b(deprecated|compatib(?:ility|le)|legacy|old runtime|new runtime)\b`)
@@ -79,12 +84,15 @@ func scanRepository(root string) (Inventory, error) {
 		return Inventory{}, err
 	}
 	citerOrdinals := map[string]int{}
-	if err := scanGo(root, files, citerOrdinals, &inv); err != nil {
+	exportUses := map[string]map[string]bool{}
+	if err := scanGo(root, files, citerOrdinals, exportUses, &inv); err != nil {
 		return Inventory{}, err
 	}
 	if err := scanTextCiters(root, files, citerOrdinals, &inv); err != nil {
 		return Inventory{}, err
 	}
+	attachProductionCallers(&inv, exportUses)
+	seedUnusedExportDebt(&inv)
 	sortInventory(&inv)
 	setCounts(&inv)
 	return inv, nil
@@ -135,7 +143,7 @@ func repositoryFiles(root string) ([]string, error) {
 	return files, err
 }
 
-func scanGo(root string, files []string, citerOrdinals map[string]int, inv *Inventory) error {
+func scanGo(root string, files []string, citerOrdinals map[string]int, exportUses map[string]map[string]bool, inv *Inventory) error {
 	fset := token.NewFileSet()
 	for _, path := range files {
 		if filepath.Ext(path) != ".go" {
@@ -161,10 +169,13 @@ func scanGo(root string, files []string, citerOrdinals map[string]int, inv *Inve
 			inv.Files = append(inv.Files, Entry{ID: rel + " [" + kind + "]", Disposition: domainDisposition(rel), LOC: loc})
 			scanRuntimeAST(rel, file, fset, isTest, inv)
 		}
-		aliases := runtimeAliases(file)
-		if !inRuntime && !isTest && len(aliases) > 0 {
+		imports := runtimeImports(file)
+		if !isTest && len(imports) > 0 {
+			scanExportUses(rel, file, imports, exportUses)
+		}
+		if !inRuntime && !isTest && len(imports) > 0 {
 			inv.ProductionImporters = append(inv.ProductionImporters, Entry{ID: rel, Disposition: "delete"})
-			scanWrappers(rel, file, aliases, inv)
+			scanWrappers(rel, file, imports, inv)
 		}
 		scanGoCommentCiters(rel, file, citerOrdinals, inv)
 	}
@@ -244,7 +255,7 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 	}
 }
 
-func scanWrappers(rel string, file *ast.File, aliases map[string]bool, inv *Inventory) {
+func scanWrappers(rel string, file *ast.File, aliases map[string]string, inv *Inventory) {
 	ordinals := map[string]int{}
 	ast.Inspect(file, func(n ast.Node) bool {
 		var typ ast.Expr
@@ -270,8 +281,8 @@ func scanWrappers(rel string, file *ast.File, aliases map[string]bool, inv *Inve
 	})
 }
 
-func runtimeAliases(file *ast.File) map[string]bool {
-	aliases := map[string]bool{}
+func runtimeImports(file *ast.File) map[string]string {
+	imports := map[string]string{}
 	for _, imp := range file.Imports {
 		path, err := strconv.Unquote(imp.Path.Value)
 		if err != nil || (path != runtimeImport && !strings.HasPrefix(path, runtimeImport+"/")) {
@@ -282,19 +293,72 @@ func runtimeAliases(file *ast.File) map[string]bool {
 			name = imp.Name.Name
 		}
 		if name != "_" && name != "." {
-			aliases[name] = true
+			imports[name] = path
 		}
 	}
-	return aliases
+	return imports
+}
+func scanExportUses(rel string, file *ast.File, imports map[string]string, uses map[string]map[string]bool) {
+	ast.Inspect(file, func(node ast.Node) bool {
+		selector, ok := node.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		var alias *ast.Ident
+		switch receiver := selector.X.(type) {
+		case *ast.Ident:
+			alias = receiver
+		case *ast.SelectorExpr:
+			alias, _ = receiver.X.(*ast.Ident)
+		}
+		if alias == nil {
+			return true
+		}
+		importPath, ok := imports[alias.Name]
+		if !ok {
+			return true
+		}
+		key := importPath + "." + selector.Sel.Name
+		if uses[key] == nil {
+			uses[key] = map[string]bool{}
+		}
+		uses[key][rel] = true
+		return true
+	})
 }
 
-func runtimeSurfaceType(expr ast.Expr, aliases map[string]bool) string {
+func attachProductionCallers(inv *Inventory, uses map[string]map[string]bool) {
+	const modulePrefix = "github.com/yusefmosiah/go-choir/"
+	for index := range inv.Exports {
+		entry := &inv.Exports[index]
+		firstColon := strings.Index(entry.ID, ":")
+		lastColon := strings.LastIndex(entry.ID, ":")
+		if firstColon < 0 || lastColon <= firstColon {
+			continue
+		}
+		sourcePath := entry.ID[:firstColon]
+		symbol := entry.ID[lastColon+1:]
+		importPath := modulePrefix + filepath.ToSlash(filepath.Dir(sourcePath))
+		key := importPath + "." + symbol
+		for caller := range uses[key] {
+			entry.ProductionCallers = append(entry.ProductionCallers, caller)
+		}
+		sort.Strings(entry.ProductionCallers)
+	}
+}
+
+
+func runtimeSurfaceType(expr ast.Expr, aliases map[string]string) string {
 	switch x := expr.(type) {
 	case *ast.StarExpr:
 		return runtimeSurfaceType(x.X, aliases)
 	case *ast.SelectorExpr:
 		id, ok := x.X.(*ast.Ident)
-		if ok && aliases[id.Name] && (x.Sel.Name == "Runtime" || x.Sel.Name == "APIHandler") {
+		if !ok {
+			return ""
+		}
+		_, imported := aliases[id.Name]
+		if imported && (x.Sel.Name == "Runtime" || x.Sel.Name == "APIHandler") {
 			return id.Name + "." + x.Sel.Name
 		}
 	}
@@ -494,11 +558,13 @@ func countLines(data []byte) int {
 }
 
 func oneLine(s string) string {
-	s = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\r", " "))
-	if len(s) > 240 {
-		s = s[:240]
+	normalized := strings.Join(strings.Fields(s), " ")
+	runes := []rune(normalized)
+	if len(runes) <= 240 {
+		return normalized
 	}
-	return s
+	digest := sha256.Sum256([]byte(normalized))
+	return string(runes[:200]) + "… [sha256:" + fmt.Sprintf("%x", digest) + "]"
 }
 
 func slashRel(root, path string) string {
@@ -507,11 +573,26 @@ func slashRel(root, path string) string {
 }
 
 func sortInventory(inv *Inventory) {
-	lists := []*[]Entry{&inv.Files, &inv.Exports, &inv.Routes, &inv.Tools, &inv.ProductionImporters, &inv.Wrappers, &inv.CompatibilityMarkers, &inv.StateWriters, &inv.Citers}
+	lists := []*[]Entry{&inv.Files, &inv.Exports, &inv.UnusedExportDebt, &inv.Routes, &inv.Tools, &inv.ProductionImporters, &inv.Wrappers, &inv.CompatibilityMarkers, &inv.StateWriters, &inv.Citers}
 	for _, list := range lists {
 		sort.Slice(*list, func(i, j int) bool { return (*list)[i].ID < (*list)[j].ID })
 	}
 }
+func seedUnusedExportDebt(inv *Inventory) {
+	for _, export := range inv.Exports {
+		if strings.Contains(export.ID, "_test.go:") || len(export.ProductionCallers) > 0 {
+			continue
+		}
+		inv.UnusedExportDebt = append(inv.UnusedExportDebt, Entry{
+			ID:          export.ID,
+			Disposition: "delete",
+		})
+	}
+	sort.Slice(inv.UnusedExportDebt, func(i, j int) bool {
+		return inv.UnusedExportDebt[i].ID < inv.UnusedExportDebt[j].ID
+	})
+}
+
 
 func setCounts(inv *Inventory) {
 	var c Counts
@@ -526,6 +607,10 @@ func setCounts(inv *Inventory) {
 		}
 	}
 	c.Exports = len(inv.Exports)
+	c.InitialUnusedExportDebt = len(inv.UnusedExportDebt)
+	for _, item := range inv.Exports {
+		c.ExportCallerEdges += len(item.ProductionCallers)
+	}
 	c.Routes = len(inv.Routes)
 	c.Tools = len(inv.Tools)
 	c.ProductionImporters = len(inv.ProductionImporters)

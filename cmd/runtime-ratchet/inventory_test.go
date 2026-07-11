@@ -141,6 +141,49 @@ func TestInventoryUsesAuthoritativeFilesAndStableCiterIdentities(t *testing.T) {
 		}
 	})
 }
+func TestRebasedExportRequiresProductionCaller(t *testing.T) {
+	t.Run("unused export fails after baseline rebase", func(t *testing.T) {
+		root := fixtureRepository(t)
+		original := mustScan(t, root)
+		writeFixture(t, root, "internal/runtime/runtime.go",
+			"package runtime\n\ntype Runtime struct{}\n\nfunc UnusedExport() {}\n")
+		rebased := mustScan(t, root)
+		rebased.UnusedExportDebt = original.UnusedExportDebt
+		err := compareInventory(rebased, mustScan(t, root))
+		assertDiagnostic(t, err, "has no AST-derived non-test production caller")
+	})
+
+	t.Run("used export passes after baseline rebase", func(t *testing.T) {
+		root := fixtureRepository(t)
+		original := mustScan(t, root)
+		writeFixture(t, root, "internal/runtime/runtime.go",
+			"package runtime\n\ntype Runtime struct{}\n\nfunc UsedExport() {}\n")
+		writeFixture(t, root, "cmd/caller/main.go", `package main
+
+import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+
+func useRuntime() { runtime.UsedExport() }
+`)
+		rebased := mustScan(t, root)
+		rebased.UnusedExportDebt = original.UnusedExportDebt
+		if err := compareInventory(rebased, mustScan(t, root)); err != nil {
+			t.Fatalf("used rebased export: %v", err)
+		}
+	})
+}
+
+func TestCiterSuffixDriftChangesDigestIdentity(t *testing.T) {
+	root := fixtureRepository(t)
+	prefix := strings.Repeat("long-prefix-", 30)
+	writeFixture(t, root, "docs/evidence/long.md",
+		prefix+" internal/runtime retained suffix-one\n")
+	baseline := mustScan(t, root)
+	writeFixture(t, root, "docs/evidence/long.md",
+		prefix+" internal/runtime retained suffix-two\n")
+	err := compareInventory(baseline, mustScan(t, root))
+	assertDiagnostic(t, err, "citers: added item")
+}
+
 
 
 func fixtureRepository(t *testing.T) string {

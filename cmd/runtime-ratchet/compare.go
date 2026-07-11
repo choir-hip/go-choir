@@ -75,6 +75,8 @@ func compareInventory(want, got Inventory) error {
 		problems = append(problems, validateEntries(category.name, category.want, category.citer)...)
 		problems = append(problems, compareEntries(category.name, category.want, category.got)...)
 	}
+	problems = append(problems, validateEntries("initial_unused_export_debt", want.UnusedExportDebt, false)...)
+	problems = append(problems, validateExportCallerContract(want.Exports, want.UnusedExportDebt)...)
 
 	declared := want
 	setCounts(&declared)
@@ -137,7 +139,7 @@ func compareEntries(category string, want, got []Entry) []string {
 		baseline, ok := wantByID[id]
 		if !ok {
 			detail := fmt.Sprintf("%s: added item %q is not in the baseline", category, id)
-			if category == "exports" && strings.Contains(id, " [test]") == false {
+			if category == "exports" && !strings.Contains(id, "_test.go:") {
 				detail += "; new production exports also require a production caller"
 			}
 			problems = append(problems, detail)
@@ -145,6 +147,12 @@ func compareEntries(category string, want, got []Entry) []string {
 		}
 		if category == "files" && baseline.LOC != current.LOC {
 			problems = append(problems, fmt.Sprintf("files: LOC drift for %q: baseline %d, current %d", id, baseline.LOC, current.LOC))
+		}
+		if category == "exports" && !reflect.DeepEqual(baseline.ProductionCallers, current.ProductionCallers) {
+			problems = append(problems, fmt.Sprintf(
+				"exports: production caller drift for %q: baseline %v, current %v",
+				id, baseline.ProductionCallers, current.ProductionCallers,
+			))
 		}
 	}
 	for id := range wantByID {
@@ -154,3 +162,45 @@ func compareEntries(category string, want, got []Entry) []string {
 	}
 	return problems
 }
+func validateExportCallerContract(exports, debt []Entry) []string {
+	exportByID := make(map[string]Entry, len(exports))
+	for _, entry := range exports {
+		exportByID[entry.ID] = entry
+	}
+	debtByID := make(map[string]bool, len(debt))
+	var problems []string
+	for _, entry := range debt {
+		if entry.Disposition != "delete" {
+			problems = append(problems, fmt.Sprintf(
+				"initial_unused_export_debt: %q must use delete disposition, got %q",
+				entry.ID, entry.Disposition,
+			))
+		}
+		debtByID[entry.ID] = true
+		export, ok := exportByID[entry.ID]
+		if !ok {
+			problems = append(problems, fmt.Sprintf(
+				"initial_unused_export_debt: %q does not name a current export",
+				entry.ID,
+			))
+			continue
+		}
+		if len(export.ProductionCallers) > 0 {
+			problems = append(problems, fmt.Sprintf(
+				"initial_unused_export_debt: %q now has production callers and must leave debt",
+				entry.ID,
+			))
+		}
+	}
+	for _, entry := range exports {
+		if strings.Contains(entry.ID, "_test.go:") || len(entry.ProductionCallers) > 0 || debtByID[entry.ID] {
+			continue
+		}
+		problems = append(problems, fmt.Sprintf(
+			"exports: %q has no AST-derived non-test production caller and is not canonical initial debt",
+			entry.ID,
+		))
+	}
+	return problems
+}
+
