@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -281,7 +282,7 @@ func TestNewToolRegistryWithTools(t *testing.T) {
 		},
 	}
 
-	registry, err := NewToolRegistryWithTools(tools...)
+	registry, err := toolregistry.NewToolRegistryWithTools(tools...)
 	if err != nil {
 		t.Fatalf("new with tools: %v", err)
 	}
