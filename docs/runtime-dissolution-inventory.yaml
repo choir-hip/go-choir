@@ -7,7 +7,7 @@ counts:
     production_files: 77
     test_files: 70
     production_loc: 45272
-    test_loc: 50232
+    test_loc: 50278
     exports: 1062
     export_caller_edges: 559
     initial_unused_export_debt: 19
@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 13
     store_calls: 443
     interface_candidates: 4
-    citers: 226
+    citers: 227
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -349,7 +349,7 @@ files:
       loc: 698
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
-      loc: 364
+      loc: 410
     - id: internal/runtime/toolloopvalidation_test.go [test]
       disposition: tools
       loc: 928
@@ -4972,6 +4972,8 @@ citers:
     - id: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md:- `internal/runtime/toolloop.go` and directly affected runtime callers/tests;
       disposition: historical_evidence
     - id: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md:- `internal/runtime/toolloop.go` is deleted or contains no tool-loop engine declarations;
+      disposition: historical_evidence
+    - id: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md:- `internal/runtime/toolloop.go` moved to authoritative `internal/toolregistry/toolloop.go`; behavioral coverage moved to `internal/toolregistry/toolloop_test.go`.
       disposition: historical_evidence
     - id: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md:Extract the complete storage-independent tool-loop engine from `internal/runtime/toolloop.go` into `internal/toolregistry`, including its behavioral tests and private helpers. Migrate every production… [sha256:f3126a7562a82cbaffa4921fed9fd4f5fb4d5adacb312c90e9856499d3e0f3f9]
       disposition: historical_evidence

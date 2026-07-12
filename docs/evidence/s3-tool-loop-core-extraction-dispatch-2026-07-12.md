@@ -83,3 +83,10 @@ Forbidden:
 - Extraction-induced comprehensive-tag compile failures prove three runtime test helpers were deleted with the migrated unit suite while comprehensive runtime tests still consume them: `rawMessagesForTest`, `extractLastUserMessage`, and `extractTextFromContent`.
 - The post-receipt inventory is also stale by one historical-evidence citer (`226 -> 227`).
 - Smallest repair: retain the three helpers as test-only runtime integration helpers, regenerate the final inventory, then rerun comprehensive compilation, focused tests, ratchet, and independent verification. No production correction or behavior change is required.
+
+## S3-I9 Verifier Blocker Repair
+
+- Retained the three runtime-consumed helpers in `internal/runtime/toolloop_test.go`; they remain test-only and create no production alias or execution path.
+- Comprehensive-tag runtime compilation now reproduces only the pre-existing `prompts_test.go` and `texture_test.go` drift; every extraction-induced undefined helper is gone.
+- Regenerated the final inventory at `227` citers. Ratchet executable and focused ratchet tests pass.
+- Focused toolregistry/provider/gatewayruntime, runtime loop/executor/memory, and integration-tag provider checks all pass after repair.

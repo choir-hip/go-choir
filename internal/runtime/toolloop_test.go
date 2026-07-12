@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -361,4 +362,49 @@ func waitForStoredRunTerminalState(t *testing.T, s *store.Store, runID string, t
 	}
 	t.Fatalf("timeout waiting for task %s (state=%s)", runID[:8], rec.State)
 	return types.RunRecord{}
+}
+
+func rawMessagesForTest(messages []json.RawMessage) string {
+	parts := make([][]byte, 0, len(messages))
+	for _, msg := range messages {
+		parts = append(parts, []byte(msg))
+	}
+	return string(bytes.Join(parts, []byte("\n")))
+}
+
+func extractLastUserMessage(messages []json.RawMessage) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		var msg struct {
+			Role    string `json:"role"`
+			Content any    `json:"content"`
+		}
+		if err := json.Unmarshal(messages[i], &msg); err != nil {
+			continue
+		}
+		if msg.Role == "user" {
+			return extractTextFromContent(msg.Content)
+		}
+	}
+	return ""
+}
+
+func extractTextFromContent(content any) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []any:
+		var text string
+		for _, item := range v {
+			if block, ok := item.(map[string]any); ok {
+				if blockType, _ := block["type"].(string); blockType == "text" {
+					if value, _ := block["text"].(string); value != "" {
+						text += value
+					}
+				}
+			}
+		}
+		return text
+	default:
+		return ""
+	}
 }
