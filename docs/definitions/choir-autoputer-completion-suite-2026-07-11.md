@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: e9de3b98
+  journal_expected_parent_sha: f4962ece
   orchestrator_lock:
     holder: Main
     epoch: 18
     expires_at: 2026-07-13T01:24:10Z
-    expected_parent_sha: e9de3b98
+    expected_parent_sha: f4962ece
     lock_transition_id: s3-lock-renewal-192
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1829,15 +1829,15 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 18
-      status: committed
+      status: verifying
       dispatch_nonce: s3-runtime-dissolution-i11-nonce-01
       dispatch_ref: S3I11Implementer
       agent_session_ref: agent://S3I11Implementer
       dispatch_prompt_ref: docs/evidence/s3-actorruntime-embedding-removal-dispatch-2026-07-12.md#exact-mutation-lock
       implementer_job_ref: S3I11Implementer
       implementer_output_ref: agent://S3I11Implementer
-      verifier_job_ref: pending_independent_verification
-      verifier_output_ref: pending_independent_verification
+      verifier_job_ref: S3I11Verifier
+      verifier_output_ref: pending_S3I11Verifier
       worktree_or_branch_ref: agent/s3-i11-runtime-core@9fae2d61f677a260671a814d673dde758ffb568d
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
@@ -1847,12 +1847,13 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I11_landing
       stage_started_at: 2026-07-12T23:24:10Z
       transition_id: s3-i11-dispatch-intent-193
-      expected_parent_sha: e9de3b98
+      expected_parent_sha: f4962ece
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i11-dispatch-intent-193, recorded_at: 2026-07-12T23:24:10Z, actor: Main, expected_parent_sha: ccc5c91a, precondition: S3_I10_landed_step2_continuation_authorized, postcondition: exact_actorruntime_embedding_removal_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i11-dispatched-194, recorded_at: 2026-07-12T23:25:41Z, actor: Main, expected_parent_sha: 72bcbbde, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_18, postcondition: S3I11Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s3-i11-ratchet-blocker-195, recorded_at: 2026-07-12T23:34:52Z, actor: Main, expected_parent_sha: cfccd608, precondition: isolated_embedding_removal_returned_and_focused_tests_PASS, postcondition: wrapper_count_5_to_6_failure_documented_before_repair, external_operation_id: not_applicable}
         - {status: committed, transition_id: s3-i11-ratchet-repaired-196, recorded_at: 2026-07-12T23:41:24Z, actor: Main, expected_parent_sha: e9de3b98, precondition: blocker_documented_canonically, postcondition: single_result_constructor_explicit_named_nonanonymous_runtime_field_focused_tests_and_ratchet_PASS, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s3-i11-verifier-dispatched-197, recorded_at: 2026-07-12T23:42:34Z, actor: Main, expected_parent_sha: f4962ece, precondition: canonical_repaired_source_focused_tests_and_ratchet_PASS, postcondition: independent_S3I11Verifier_authorized, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T01:24:10Z
       mutation_class: orange
       protected_surfaces: []
@@ -1860,7 +1861,7 @@ run_checkpoint_and_resumption_state:
       forbidden_targets: [forwarding_methods, accessors, aliases, interfaces, optional_or_fallback_cores, second_runtime_instance, API_config_bootstrap_ownership, apihandler_removal, direct_sandbox_runtime_import_removal, tools, routes, state, models, apps, step3]
       authority_edges_locked: [one_existing_runtime_core_instance, actor_dispatch_and_lifecycle_owned_by_actorruntime, runtime_business_behavior_unchanged, sandbox_routes_tools_state_unchanged]
       implementer_agent: S3I11Implementer
-      verifier_agent: pending_independent_verifier
+      verifier_agent: S3I11Verifier
       pre_mutation_sha: ccc5c91a
       rollback_commit_or_ref: ccc5c91a
       accepted_slice_dependency_refs: [S3-I10@7b294b83]
@@ -1872,7 +1873,7 @@ run_checkpoint_and_resumption_state:
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: e9de3b98
       implementation_commit_sha: e9de3b98
-      push_ref: pending
+      push_ref: e9de3b98
       ci_run_ref: pending
       deploy_ref: pending
       deployed_sha: pending
@@ -1882,8 +1883,8 @@ run_checkpoint_and_resumption_state:
       open_findings: []
       landed_commit_sha: pending
       adjudication: source_repair_PASS_independent_verification_pending
-      last_reconciled_at: 2026-07-12T23:41:24Z
-      reconciliation_result: repaired_isolated_commit_integrated_as_e9de3b98_focused_tests_and_ratchet_PASS
+      last_reconciled_at: 2026-07-12T23:42:34Z
+      reconciliation_result: canonical_repaired_source_ready_for_independent_verification
       close_condition: embedding_removed_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_nonincreasing
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
