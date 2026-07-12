@@ -475,6 +475,8 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 		return os.Open(exportPath)
 	}
 	typeInfo := &types.Info{
+		Types:      map[ast.Expr]types.TypeAndValue{},
+		Defs:       map[*ast.Ident]types.Object{},
 		Uses:       map[*ast.Ident]types.Object{},
 		Selections: map[*ast.SelectorExpr]*types.Selection{},
 	}
@@ -490,6 +492,7 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 	if err != nil {
 		return fmt.Errorf("load internal/store.Store methods: %w", err)
 	}
+	storeBackedInterfaces := storeBackedInterfaceTypes(files, typeInfo)
 	for identifier, object := range typeInfo.Uses {
 		if object == nil || object.Pkg() == nil || !object.Exported() {
 			continue
@@ -521,7 +524,7 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 				if !ok {
 					return true
 				}
-				key, storeBacked := storeSelectionKey(selection, function, storeMethods)
+				key, storeBacked := storeSelectionKey(selection, function, storeMethods, storeBackedInterfaces)
 				if !storeBacked {
 					return true
 				}
@@ -577,7 +580,112 @@ func importedStoreMethods(typeImporter types.Importer) (map[string]*types.Func, 
 	return methods, nil
 }
 
-func storeSelectionKey(selection *types.Selection, function *types.Func, storeMethods map[string]*types.Func) (string, bool) {
+func storeBackedInterfaceTypes(files []*ast.File, info *types.Info) map[*types.Named]bool {
+	backed := map[*types.Named]bool{}
+	edges := map[*types.Named]map[*types.Named]bool{}
+	addFlow := func(source, target types.Type) {
+		targetInterface := namedInterfaceType(target)
+		if targetInterface == nil {
+			return
+		}
+		if isConcreteStoreType(source) {
+			backed[targetInterface] = true
+			return
+		}
+		sourceInterface := namedInterfaceType(source)
+		if sourceInterface == nil {
+			return
+		}
+		if edges[sourceInterface] == nil {
+			edges[sourceInterface] = map[*types.Named]bool{}
+		}
+		edges[sourceInterface][targetInterface] = true
+	}
+	for _, file := range files {
+		ast.Inspect(file, func(node ast.Node) bool {
+			switch current := node.(type) {
+			case *ast.AssignStmt:
+				if len(current.Lhs) == len(current.Rhs) {
+					for index := range current.Lhs {
+						addFlow(info.TypeOf(current.Rhs[index]), info.TypeOf(current.Lhs[index]))
+					}
+				}
+			case *ast.ValueSpec:
+				if len(current.Names) == len(current.Values) {
+					for index := range current.Names {
+						target := info.Defs[current.Names[index]]
+						if target != nil {
+							addFlow(info.TypeOf(current.Values[index]), target.Type())
+						}
+					}
+				}
+			case *ast.CallExpr:
+				signature, _ := info.TypeOf(current.Fun).(*types.Signature)
+				if signature == nil {
+					return true
+				}
+				limit := len(current.Args)
+				if signature.Params().Len() < limit {
+					limit = signature.Params().Len()
+				}
+				for index := range limit {
+					addFlow(info.TypeOf(current.Args[index]), signature.Params().At(index).Type())
+				}
+			}
+			return true
+		})
+	}
+	changed := true
+	for changed {
+		changed = false
+		for source, targets := range edges {
+			if !backed[source] {
+				continue
+			}
+			for target := range targets {
+				if !backed[target] {
+					backed[target] = true
+					changed = true
+				}
+			}
+		}
+	}
+	return backed
+}
+
+func namedInterfaceType(value types.Type) *types.Named {
+	if value == nil {
+		return nil
+	}
+	value = types.Unalias(value)
+	if pointer, ok := value.(*types.Pointer); ok {
+		value = types.Unalias(pointer.Elem())
+	}
+	named, ok := value.(*types.Named)
+	if !ok {
+		return nil
+	}
+	if _, ok := named.Underlying().(*types.Interface); !ok {
+		return nil
+	}
+	return named
+}
+
+func isConcreteStoreType(value types.Type) bool {
+	if value == nil {
+		return false
+	}
+	value = types.Unalias(value)
+	if pointer, ok := value.(*types.Pointer); ok {
+		value = types.Unalias(pointer.Elem())
+	}
+	named, ok := value.(*types.Named)
+	return ok && named.Obj().Pkg() != nil &&
+		named.Obj().Pkg().Path() == "github.com/yusefmosiah/go-choir/internal/store" &&
+		named.Obj().Name() == "Store"
+}
+
+func storeSelectionKey(selection *types.Selection, function *types.Func, storeMethods map[string]*types.Func, storeBackedInterfaces map[*types.Named]bool) (string, bool) {
 	if isConcreteStoreMethod(function) {
 		return "internal/store.method:Store." + function.Name(), true
 	}
@@ -586,9 +694,7 @@ func storeSelectionKey(selection *types.Selection, function *types.Func, storeMe
 		receiver = types.Unalias(pointer.Elem())
 	}
 	namedReceiver, ok := receiver.(*types.Named)
-	if !ok || namedReceiver.Obj().Pkg() == nil ||
-		(namedReceiver.Obj().Pkg().Path() != runtimeImport &&
-			!strings.HasPrefix(namedReceiver.Obj().Pkg().Path(), runtimeImport+"/")) {
+	if !ok || !storeBackedInterfaces[namedReceiver] {
 		return "", false
 	}
 	if _, ok := namedReceiver.Underlying().(*types.Interface); !ok {

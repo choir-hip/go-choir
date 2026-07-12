@@ -363,15 +363,18 @@ func (*Store) SaveDesktopState() {}
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 type persistence interface { SaveDesktopState() }
-var backing persistence = &store.Store{}
+func adapt(source persistence) { persist(source) }
+func persist(target persistence) {}
+func begin(state *store.Store) { adapt(state) }
 `)
 	baseline := mustScan(t, root)
 	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 type persistence interface { SaveDesktopState() }
-var backing persistence = &store.Store{}
-func persist() { backing.SaveDesktopState() }
+func adapt(source persistence) { persist(source) }
+func persist(target persistence) { target.SaveDesktopState() }
+func begin(state *store.Store) { adapt(state) }
 `)
 	current := mustScan(t, root)
 	err := compareInventory(baseline, current)
@@ -380,6 +383,29 @@ func persist() { backing.SaveDesktopState() }
 	current.StoreCalls[0].Disposition = "lifecycle"
 	if problems := validateStoreCalls(current.StoreCalls); len(problems) > 0 {
 		t.Fatalf("store-backed interface disposition: %v", problems)
+	}
+}
+
+func TestSameNameFakeInterfaceIsExcludedWithoutStoreFlow(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) GetRun() {}
+`)
+	writeFixture(t, root, "internal/runtime/reporter.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+type reporter interface { GetRun() }
+type fakeReporter struct{}
+func (fakeReporter) GetRun() {}
+var activeReporter reporter = fakeReporter{}
+var _ *store.Store
+func report() { activeReporter.GetRun() }
+`)
+	inventory := mustScan(t, root)
+	if len(inventory.StoreCalls) != 0 {
+		t.Fatalf("fake-only same-name interface produced store calls: %+v", inventory.StoreCalls)
 	}
 }
 
