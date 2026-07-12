@@ -244,44 +244,9 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 	s.og = objectgraph.NewService(objectgraph.Config{
 		Durable: ogDoltStore,
 	})
-	// Backfill existing SQL texture rows into the object graph. Durable
-	// per-kind completion markers make interruption resumable without treating
-	// partial population as completion.
-	if err := s.backfillTextureTablesOG(context.Background()); err != nil {
-		_ = s.Close()
-		return nil, fmt.Errorf("texture workspace: backfill OG: %w", err)
-	}
-	s.markDoltHistoryDirty()
 	return s, nil
 }
 
-// backfillTextureTablesOG backfills texture-specific SQL tables into OG.
-// It is called from both Open and OpenTextureWorkspace. Each record uses
-// put-if-absent semantics to avoid overwriting newer OG state.
-func (s *Store) backfillTextureTablesOG(ctx context.Context) error {
-	if s.og == nil {
-		return nil
-	}
-	steps := []struct {
-		name string
-		kind objectgraph.ObjectKind
-		run  func(context.Context) error
-	}{
-		{"texture-documents", ogKindTexDoc, s.backfillTextureDocumentsOG},
-		{"texture-revisions", ogKindTexRev, s.backfillTextureRevisionsOG},
-		{"texture-decisions", ogKindTexDecision, s.backfillTextureDecisionsOG},
-		{"content-items", ogKindContentItem, s.backfillContentItemsOG},
-		{"podcast-subscriptions", ogKindPodcastSub, s.backfillPodcastSubscriptionsOG},
-		{"texture-source-entities", TextureSourceEntityObjectKind, s.backfillTextureSourceEntitiesOG},
-		{"texture-source-refs", TextureSourceRefObjectKind, s.backfillTextureSourceRefsOG},
-	}
-	for _, step := range steps {
-		if err := s.runOGBackfillStep(ctx, step.name, step.kind, step.run); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
 func deriveTextureWorkspacePath(path string) string {
 	if path == "" {
@@ -809,36 +774,6 @@ func (s *Store) DeleteDocument(ctx context.Context, docID, ownerID string) error
 		docID, ownerID,
 	)
 
-	// Delete legacy SQL rows so backfillTextureTablesOG doesn't
-	// recreate the document on next open. These tables are read-only
-	// after cutover; deleting here prevents resurrection. Propagate
-	// errors from the texture_documents delete (the root table) before
-	// deleting the OG object, so a stale SQL row can't resurrect the
-	// document on the next open.
-	if _, err := s.textureHandle().ExecContext(ctx,
-		`DELETE FROM texture_source_refs WHERE doc_id = ? AND owner_id = ?`,
-		docID, ownerID,
-	); err != nil {
-		return fmt.Errorf("delete texture document: cleanup source refs: %w", err)
-	}
-	if _, err := s.textureHandle().ExecContext(ctx,
-		`DELETE FROM texture_decisions WHERE doc_id = ? AND owner_id = ?`,
-		docID, ownerID,
-	); err != nil {
-		return fmt.Errorf("delete texture document: cleanup decisions: %w", err)
-	}
-	if _, err := s.textureHandle().ExecContext(ctx,
-		`DELETE FROM texture_revisions WHERE doc_id = ? AND owner_id = ?`,
-		docID, ownerID,
-	); err != nil {
-		return fmt.Errorf("delete texture document: cleanup revisions: %w", err)
-	}
-	if _, err := s.textureHandle().ExecContext(ctx,
-		`DELETE FROM texture_documents WHERE doc_id = ? AND owner_id = ?`,
-		docID, ownerID,
-	); err != nil {
-		return fmt.Errorf("delete texture document: cleanup document: %w", err)
-	}
 
 	// Delete the document from OG.
 	docObj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", docID)

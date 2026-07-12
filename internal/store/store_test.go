@@ -116,7 +116,7 @@ WHERE table_schema = DATABASE()
 	return count > 0
 }
 
-func TestOpenImportsLegacySQLiteRuntimeState(t *testing.T) {
+func TestOpenImportsLegacySQLiteRowsWithoutObjectGraphReplay(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)
 	t.Cleanup(func() { cleanupTestStorePath(path) })
@@ -197,26 +197,29 @@ func TestOpenImportsLegacySQLiteRuntimeState(t *testing.T) {
 	}
 	defer func() { _ = s.Close() }()
 
-	got, err := s.GetRun(context.Background(), "legacy-run")
-	if err != nil {
-		t.Fatalf("get migrated run: %v", err)
+	var (
+		ownerID string
+		prompt  string
+	)
+	if err := s.db.QueryRowContext(context.Background(),
+		`SELECT owner_id, prompt FROM runs WHERE loop_id = ?`, "legacy-run",
+	).Scan(&ownerID, &prompt); err != nil {
+		t.Fatalf("query imported relational run: %v", err)
 	}
-	if got.OwnerID != "user-legacy" || got.Prompt != "migrate me" || got.Metadata["source"] != "sqlite" {
-		t.Fatalf("migrated run = %+v", got)
+	if ownerID != "user-legacy" || prompt != "migrate me" {
+		t.Fatalf("imported relational run owner=%q prompt=%q", ownerID, prompt)
 	}
-	events, err := s.ListEvents(context.Background(), "legacy-run", 10)
-	if err != nil {
-		t.Fatalf("list migrated events: %v", err)
+	var streamSeq int64
+	if err := s.db.QueryRowContext(context.Background(),
+		`SELECT stream_seq FROM events WHERE event_id = ?`, "legacy-event",
+	).Scan(&streamSeq); err != nil {
+		t.Fatalf("query imported relational event: %v", err)
 	}
-	if len(events) != 1 || events[0].EventID != "legacy-event" || events[0].StreamSeq != 7 {
-		t.Fatalf("migrated events = %+v", events)
+	if streamSeq != 7 {
+		t.Fatalf("imported relational event stream_seq = %d, want 7", streamSeq)
 	}
-	desktop, err := s.GetDesktopState(context.Background(), "user-legacy")
-	if err != nil {
-		t.Fatalf("get migrated desktop state: %v", err)
-	}
-	if desktop.ActiveWindowID != "win-legacy" || len(desktop.Windows) != 1 || desktop.Windows[0].WindowID != "win-legacy" {
-		t.Fatalf("migrated desktop = %+v", desktop)
+	if _, err := s.GetRun(context.Background(), "legacy-run"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("canonical object graph run lookup error = %v, want %v", err, ErrNotFound)
 	}
 	if info, err := os.Stat(path); err != nil || info.Size() == 0 {
 		t.Fatalf("legacy sqlite rollback file was not preserved: info=%+v err=%v", info, err)

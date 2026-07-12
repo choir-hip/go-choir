@@ -71,9 +71,7 @@ func main() {
 	log.Printf("sandbox: startup phase=dolt-maintenance status=complete")
 
 	log.Printf("sandbox: startup phase=runtime-store-open status=starting")
-	db, err := store.OpenWithOptions(rtCfg.StorePath, store.OpenOptions{
-		DeferObjectGraphBackfill: true,
-	})
+	db, err := store.Open(rtCfg.StorePath)
 	if err != nil {
 		log.Fatalf("sandbox: open runtime store: %v", err)
 	}
@@ -209,49 +207,7 @@ func main() {
 	log.Printf("sandbox: orchestration topology (super=1, researchers=%d)", rtCfg.ResearcherCount)
 	rt.Start(ctx)
 
-	// Backfill can be much larger than vmctl's guest-readiness window and shares
-	// the embedded Dolt handle with synchronous runtime recovery. Wait until
-	// recovery is complete and the TCP listener is published before resuming it.
-	go func() {
-		ticker := time.NewTicker(10 * time.Millisecond)
-		defer ticker.Stop()
-		for s.Addr() == "" {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-		for {
-			complete, err := db.BackfillObjectGraphStep(ctx)
-			if err != nil {
-				if ctx.Err() == nil {
-					log.Printf("sandbox: objectgraph backfill failed: %v", err)
-				}
-				return
-			}
-			if complete {
-				return
-			}
-			// Create the delay after the bounded step returns. A long-lived ticker
-			// can accumulate a tick while Dolt is busy, making this wait return
-			// immediately and starving foreground health/runtime queries again.
-			if !waitForObjectGraphBackfillDelay(ctx, time.After(100*time.Millisecond)) {
-				return
-			}
-		}
-	}()
-
 	s.Start()
-}
-
-func waitForObjectGraphBackfillDelay(ctx context.Context, delay <-chan time.Time) bool {
-	select {
-	case <-ctx.Done():
-		return false
-	case <-delay:
-		return true
-	}
 }
 
 // storeDir extracts the directory portion of a file path.

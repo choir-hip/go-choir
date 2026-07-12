@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -144,37 +143,7 @@ func (s *Store) ogListByOwnerAndBody(ctx context.Context, kind objectgraph.Objec
 	return store.ListObjectsByOwnerAndBody(ctx, string(kind), ownerID, matches, limit)
 }
 
-// ogIsEmpty reports whether the object graph has any objects at all.
-// Used to gate SQL-to-OG backfill so it only runs on the first open,
-// not on every restart (which would replay stale SQL over newer OG state).
-func (s *Store) ogIsEmpty(ctx context.Context) (bool, error) {
-	store := s.ogReadStore
-	if store == nil {
-		store = s.ogStore
-	}
-	if store == nil {
-		return true, nil
-	}
-	objs, err := store.ListObjects(ctx, objectgraph.ListFilter{Limit: 1})
-	if err != nil {
-		return false, err
-	}
-	return len(objs) == 0, nil
-}
 
-// ogExistsByKey reports whether an object of the given kind exists with
-// the specified metadata field value. Used for put-if-absent semantics
-// in backfill methods.
-func (s *Store) ogExistsByKey(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string) (bool, error) {
-	_, err := s.ogGetByKey(ctx, kind, metadataField, value)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, objectgraph.ErrNotFound) {
-		return false, nil
-	}
-	return false, err
-}
 
 // ogPutEdge creates an edge between two objects.
 func (s *Store) ogPutEdge(ctx context.Context, fromID, toID string, kind objectgraph.EdgeKind, metadata any) error {
@@ -1316,10 +1285,7 @@ func (s *Store) ListTextureDocumentsByOwnerOG(ctx context.Context, ownerID strin
 	if limit <= 0 {
 		limit = 100
 	}
-	// Fetch a large window since ListObjects orders by og_objects.updated_at
-	// which may differ from Document.UpdatedAt (e.g. after backfill where
-	// the OG timestamp comes from CreatedAt). We sort by Document.UpdatedAt
-	// and then apply the caller's limit.
+	// Sort decoded document timestamps before applying the caller's limit.
 	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
 		Kind:    ogKindTexDoc,
 		OwnerID: ownerID,
@@ -1349,10 +1315,7 @@ func (s *Store) ListAllTextureDocumentsOG(ctx context.Context, limit int) ([]typ
 	if limit <= 0 {
 		limit = 500
 	}
-	// Fetch a large window since ListObjects orders by og_objects.updated_at
-	// which may differ from Document.UpdatedAt (e.g. after backfill where
-	// object updated_at comes from creation time). We sort by Document.UpdatedAt
-	// and then apply the caller's limit.
+	// Sort decoded document timestamps before applying the caller's limit.
 	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
 		Kind:  ogKindTexDoc,
 		Limit: 100000,

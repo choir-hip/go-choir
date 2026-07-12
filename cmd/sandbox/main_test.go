@@ -1,38 +1,12 @@
 package main
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 )
-
-func TestWaitForObjectGraphBackfillDelayRequiresPostStepSignal(t *testing.T) {
-	delay := make(chan time.Time, 1)
-	result := make(chan bool, 1)
-	go func() {
-		result <- waitForObjectGraphBackfillDelay(t.Context(), delay)
-	}()
-
-	select {
-	case got := <-result:
-		t.Fatalf("delay returned before post-step signal: %t", got)
-	default:
-	}
-
-	delay <- time.Now()
-	if got := <-result; !got {
-		t.Fatal("delay signal did not admit the next bounded step")
-	}
-
-	cancelled, cancel := context.WithCancel(t.Context())
-	cancel()
-	if waitForObjectGraphBackfillDelay(cancelled, make(chan time.Time)) {
-		t.Fatal("cancelled migration admitted another bounded step")
-	}
-}
 
 func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 	cfg := sandbox.Config{

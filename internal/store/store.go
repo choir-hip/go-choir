@@ -626,25 +626,11 @@ CREATE INDEX IF NOT EXISTS idx_desktop_app_instances_stack ON desktop_app_instan
 CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_window_placements(owner_id, desktop_id, app_instance_id, updated_at);
 `
 
-// OpenOptions controls startup-only store behavior.
-type OpenOptions struct {
-	// DeferObjectGraphBackfill returns after schemas and legacy SQLite import
-	// are ready. The caller must invoke BackfillObjectGraph under its process
-	// context. This lets lifecycle health bind before a large resumable legacy
-	// replay without weakening the migration completion contract.
-	DeferObjectGraphBackfill bool
-}
-
 // Open opens (or creates) the unified embedded Dolt workspace derived from
 // dbPath and applies the runtime and texture schemas. If dbPath points at a
 // legacy runtime SQLite database, its rows are imported into Dolt once and the
 // SQLite file is left in place as a rollback source.
 func Open(dbPath string) (*Store, error) {
-	return OpenWithOptions(dbPath, OpenOptions{})
-}
-
-// OpenWithOptions opens the unified store with explicit startup behavior.
-func OpenWithOptions(dbPath string, opts OpenOptions) (*Store, error) {
 	log.Printf("store: open phase=prepare-path status=starting")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return nil, fmt.Errorf("runtime store: create directory: %w", err)
@@ -678,10 +664,7 @@ func OpenWithOptions(dbPath string, opts OpenOptions) (*Store, error) {
 	}
 	log.Printf("store: open phase=runtime-schema status=complete")
 
-	// Initialize the object graph service on the same Dolt workspace.
-	// The og_objects/og_edges tables coexist with the relational tables
-	// during the Phase 3 migration; converted methods use the object
-	// graph while unconverted methods continue using SQL.
+	// Initialize object-graph persistence on the same private Dolt workspace.
 	ogDoltStore := objectgraph.NewDoltStore(db)
 	log.Printf("store: open phase=objectgraph-schema status=starting")
 	if err := ogDoltStore.EnsureSchema(context.Background()); err != nil {
@@ -714,15 +697,6 @@ func OpenWithOptions(dbPath string, opts OpenOptions) (*Store, error) {
 	}
 	log.Printf("store: open phase=legacy-import status=complete")
 
-	if !opts.DeferObjectGraphBackfill {
-		if err := s.BackfillObjectGraph(context.Background()); err != nil {
-			_ = s.Close()
-			return nil, err
-		}
-	} else {
-		log.Printf("store: open phase=objectgraph-backfill status=deferred")
-	}
-
 	if freshStore {
 		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {
 			_ = s.Close()
@@ -731,42 +705,6 @@ func OpenWithOptions(dbPath string, opts OpenOptions) (*Store, error) {
 	}
 
 	return s, nil
-}
-
-// BackfillObjectGraphStep performs at most one bounded unit of SQL-to-OG
-// migration. The bool reports whether every kind is complete. Returning between
-// incomplete steps is the availability boundary for the single embedded-Dolt
-// connection; callers serving foreground traffic must reschedule another step.
-func (s *Store) BackfillObjectGraphStep(ctx context.Context) (bool, error) {
-	log.Printf("store: open phase=objectgraph-backfill status=starting")
-	if err := s.backfillOGFromSQL(ctx); err != nil {
-		if errors.Is(err, errOGBackfillIncomplete) {
-			return false, nil
-		}
-		return false, fmt.Errorf("runtime store: backfill OG from SQL: %w", err)
-	}
-	log.Printf("store: open phase=objectgraph-backfill status=complete")
-	s.markDoltHistoryDirty()
-	return true, nil
-}
-
-// BackfillObjectGraph runs every bounded step synchronously. This is used by
-// non-serving startup and tests; deployed runtime startup uses
-// BackfillObjectGraphStep so foreground requests receive the connection between
-// steps.
-func (s *Store) BackfillObjectGraph(ctx context.Context) error {
-	for {
-		complete, err := s.BackfillObjectGraphStep(ctx)
-		if err != nil {
-			return err
-		}
-		if complete {
-			return nil
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-	}
 }
 
 // bootstrap applies the schema DDL to the database.
