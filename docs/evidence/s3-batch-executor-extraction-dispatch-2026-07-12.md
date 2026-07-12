@@ -52,3 +52,9 @@ Forbidden:
 - Focused owner executor/context, runtime integration, provider, gateway/gatewayruntime, and integration-tag provider checks pass. Comprehensive-tag runtime compilation reproduces only the pre-existing `prompts_test.go`/`texture_test.go` drift.
 - Residual runtime executor/context seam searches return no old declarations, aliases, forwarders, duplicate keys, or replacement paths.
 - Ratchet passed: production LOC `45272 -> 44681`, exports `1062 -> 1061`, and caller edges `559 -> 549`; routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, and initial unused-export debt remain flat.
+
+## S3-I10 Independent Verification Blocker
+
+- Independent `S3I10Verifier` returned `BLOCKING` at confidence `0.99`.
+- Although every caller now supplies the same authoritative executor, `RunToolLoop` still exposes `ToolBatchExecutorFunc` as an arbitrary callback parameter. That public injection seam violates sole executor ownership and permits a second execution policy.
+- Smallest repair: delete `ToolBatchExecutorFunc`, remove the parameter from `RunToolLoop`, call `ExecuteToolBatch` directly inside the loop, and update every caller mechanically. No policy or behavior change is required.
