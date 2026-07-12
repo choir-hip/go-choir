@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 443
     interface_candidates: 4
-    citers: 208
+    citers: 209
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5205,6 +5205,8 @@ citers:
     - id: docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:- `internal/runtime/trace_wiring_test.go`;
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:Allowed production file: `internal/runtime/runtime.go`, deleting exactly the three in-scope wrappers and attached comments. `(*Runtime).StartRun` is forbidden in this iteration.'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md:- Exact diff: `internal/runtime/toolloop.go` and `internal/runtime/toolloop_test.go`, `3` insertions and `11` deletions.'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md:- `internal/runtime/toolloop.go`: delete exactly `WithCompletionGuard` and its attached comment.'
       disposition: historical_evidence
