@@ -61,7 +61,6 @@ func (rt *Runtime) maybeAutonomousPublishWireArticle(ctx context.Context, doc ty
 	rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID, rec)
 }
 
-
 func (rt *Runtime) recordWirePublicationTrajectoryRef(ctx context.Context, rec *types.RunRecord, key, value string) error {
 	if rt == nil || rt.store == nil || rec == nil {
 		return nil

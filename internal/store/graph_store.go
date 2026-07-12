@@ -143,8 +143,6 @@ func (s *Store) ogListByOwnerAndBody(ctx context.Context, kind objectgraph.Objec
 	return store.ListObjectsByOwnerAndBody(ctx, string(kind), ownerID, matches, limit)
 }
 
-
-
 // ogPutEdge creates an edge between two objects.
 func (s *Store) ogPutEdge(ctx context.Context, fromID, toID string, kind objectgraph.EdgeKind, metadata any) error {
 	if s.og == nil {

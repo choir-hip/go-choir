@@ -69,14 +69,14 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		ObjectKind:  "choir.publication_proposal",
 		OwnerID:     params.OwnerID,
 		ContentHash: objectgraph.ContentHash("choir.publication_proposal", nil, mustJSONRaw(map[string]any{
-			"source_doc_id":         params.SourceDocID,
-			"source_revision_id":    params.SourceRevisionID,
-			"source_revision_hash":  params.SourceRevisionHash,
-			"projection_hash":       params.ProjectionHash,
-			"title":                 params.Title,
-			"state":                 "published",
-			"created_by":            params.RequestedBy,
-			"created_trace_id":      params.SourceTraceID,
+			"source_doc_id":        params.SourceDocID,
+			"source_revision_id":   params.SourceRevisionID,
+			"source_revision_hash": params.SourceRevisionHash,
+			"projection_hash":      params.ProjectionHash,
+			"title":                params.Title,
+			"state":                "published",
+			"created_by":           params.RequestedBy,
+			"created_trace_id":     params.SourceTraceID,
 		})),
 		Metadata: mustJSONRaw(map[string]any{
 			"source_doc_id":        params.SourceDocID,
@@ -104,9 +104,9 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		OwnerID:     params.OwnerID,
 		VersionID:   params.PublicationVersionID,
 		ContentHash: objectgraph.ContentHash("choir.publication", nil, mustJSONRaw(map[string]any{
-			"slug":    params.Slug,
-			"title":   params.Title,
-			"state":   "published",
+			"slug":  params.Slug,
+			"title": params.Title,
+			"state": "published",
 		})),
 		Metadata:  mustJSONRaw(map[string]any{"handle": "", "publication_id": params.PublicationID, "slug": params.Slug, "title": params.Title, "state": "published", "latest_version_id": params.PublicationVersionID}),
 		CreatedAt: now,
@@ -258,11 +258,11 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		OwnerID:     params.OwnerID,
 		ContentHash: params.ContentHash,
 		Metadata: mustJSONRaw(map[string]any{
-			"source_id":      params.RetrievalSourceID,
-			"source_kind":    "publication_version",
-			"canonical_uri":  params.PublicURI,
-			"visibility":     "public",
-			"state":          "active",
+			"source_id":     params.RetrievalSourceID,
+			"source_kind":   "publication_version",
+			"canonical_uri": params.PublicURI,
+			"visibility":    "public",
+			"state":         "active",
 		}),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -327,10 +327,10 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		OwnerID:     params.OwnerID,
 		ContentHash: params.SourceRevisionHash,
 		Metadata: mustJSONRaw(map[string]any{
-			"entity_kind":    "private_texture_revision",
-			"canonical_uri":  "choir-private:texture/" + params.SourceDocID + "/revisions/" + params.SourceRevisionID,
-			"visibility":     "private",
-			"projection":     "hash_only",
+			"entity_kind":   "private_texture_revision",
+			"canonical_uri": "choir-private:texture/" + params.SourceDocID + "/revisions/" + params.SourceRevisionID,
+			"visibility":    "private",
+			"projection":    "hash_only",
 		}),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -406,14 +406,14 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 		return fmt.Errorf("publication graph: attestation id: %w", err)
 	}
 	attestationMeta := mustJSONRaw(map[string]any{
-		"target_kind":      "publication_version",
-		"target_id":        params.PublicationVersionID,
-		"verifier_id":      "corpusd",
-		"verifier_kind":    "service",
-		"result":           "passed",
-		"predicate_type":   "choir.platform.publish_texture.v0",
-		"subject_digest":   params.ContentHash,
-		"route_path":       params.RoutePath,
+		"target_kind":          "publication_version",
+		"target_id":            params.PublicationVersionID,
+		"verifier_id":          "corpusd",
+		"verifier_kind":        "service",
+		"result":               "passed",
+		"predicate_type":       "choir.platform.publish_texture.v0",
+		"subject_digest":       params.ContentHash,
+		"route_path":           params.RoutePath,
 		"source_revision_hash": params.SourceRevisionHash,
 	})
 	batch.Objects = append(batch.Objects, objectgraph.Object{
@@ -497,13 +497,13 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			ContentHash: tr.ContentHash,
 			Body:        []byte(tr.SnapshotText),
 			Metadata: mustJSONRaw(map[string]any{
-				"source_entity_id":        tr.SourceEntityID,
-				"host_selector_json":      string(tr.HostSelector),
-				"source_selector_json":    string(tr.SourceSelector),
-				"relation_type":           tr.RelationType,
-				"default_display_mode":    tr.DefaultDisplayMode,
-				"access_policy_json":      string(params.AccessPolicy),
-				"export_policy_json":      string(params.ExportPolicy),
+				"source_entity_id":     tr.SourceEntityID,
+				"host_selector_json":   string(tr.HostSelector),
+				"source_selector_json": string(tr.SourceSelector),
+				"relation_type":        tr.RelationType,
+				"default_display_mode": tr.DefaultDisplayMode,
+				"access_policy_json":   string(params.AccessPolicy),
+				"export_policy_json":   string(params.ExportPolicy),
 			}),
 			CreatedAt: now,
 			UpdatedAt: now,
@@ -578,47 +578,47 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 // object graph. It mirrors the logical data that Service.PublishTexture
 // writes to relational tables.
 type PublishGraphParams struct {
-	OwnerID              string
-	RequestedBy          string
-	SourceDocID          string
-	SourceRevisionID     string
-	SourceRevisionHash   string
-	SourceTraceID        string
-	Title                string
-	Slug                 string
-	Content              string
-	ContentHash          string
-	ContentSize          int
-	ProjectionHash       string
-	BodyDoc              json.RawMessage
-	WholeSelector        string
-	PublicURI            string
-	RoutePath            string
-	StorageRef           string
-	ManifestJSON         []byte
-	ManifestHash         string
-	TokenCount           int
-	SelectedRefsJSON     json.RawMessage
+	OwnerID            string
+	RequestedBy        string
+	SourceDocID        string
+	SourceRevisionID   string
+	SourceRevisionHash string
+	SourceTraceID      string
+	Title              string
+	Slug               string
+	Content            string
+	ContentHash        string
+	ContentSize        int
+	ProjectionHash     string
+	BodyDoc            json.RawMessage
+	WholeSelector      string
+	PublicURI          string
+	RoutePath          string
+	StorageRef         string
+	ManifestJSON       []byte
+	ManifestHash       string
+	TokenCount         int
+	SelectedRefsJSON   json.RawMessage
 
 	// IDs (generated by the caller, same as the relational path)
-	PublicationID           string
-	ProposalID              string
-	PublicationVersionID    string
-	ArtifactManifestID      string
-	ConsentID               string
-	ReviewID                string
-	RetrievalSourceID       string
-	RetrievalSpanID         string
-	RetrievalManifestID     string
-	ActivityID              string
-	AttestationID           string
+	PublicationID        string
+	ProposalID           string
+	PublicationVersionID string
+	ArtifactManifestID   string
+	ConsentID            string
+	ReviewID             string
+	RetrievalSourceID    string
+	RetrievalSpanID      string
+	RetrievalManifestID  string
+	ActivityID           string
+	AttestationID        string
 
 	// Attestation evidence
 	AttestationEvidenceJSON json.RawMessage
 
 	// Policies
-	AccessPolicy  json.RawMessage
-	ExportPolicy  json.RawMessage
+	AccessPolicy json.RawMessage
+	ExportPolicy json.RawMessage
 
 	// Source entities
 	SourceEntities []GraphSourceEntity
@@ -645,25 +645,25 @@ type GraphSourceEntity struct {
 
 // GraphTransclusion is a transclusion embedded in a publication.
 type GraphTransclusion struct {
-	SourceEntityID      string
-	HostSelector        json.RawMessage
-	SourceSelector      json.RawMessage
-	RelationType        string
-	DefaultDisplayMode  string
-	SnapshotText        string
-	ContentHash         string
-	EntityJSON          []byte
+	SourceEntityID     string
+	HostSelector       json.RawMessage
+	SourceSelector     json.RawMessage
+	RelationType       string
+	DefaultDisplayMode string
+	SnapshotText       string
+	ContentHash        string
+	EntityJSON         []byte
 }
 
 // GraphCitation is a citation edge from a publication version to a target.
 type GraphCitation struct {
-	ToID          string
-	RelationType  string
-	FromSelector  string
-	ToSelector    string
-	State         string
-	EvidenceRef   string
-	Confidence    float64
+	ToID         string
+	RelationType string
+	FromSelector string
+	ToSelector   string
+	State        string
+	EvidenceRef  string
+	Confidence   float64
 }
 
 func makeEdge(fromID, toID string, kind objectgraph.EdgeKind, now time.Time, metadata json.RawMessage) objectgraph.Edge {
@@ -700,8 +700,8 @@ func (p *PublicationGraphStore) SubmitProposalToGraph(ctx context.Context, param
 		ObjectKind:  "choir.subject",
 		OwnerID:     params.SubmitterID,
 		ContentHash: objectgraph.ContentHash("choir.subject", nil, mustJSONRaw(map[string]any{
-			"subject_kind":  "user",
-			"display_name":  params.SubmitterID,
+			"subject_kind": "user",
+			"display_name": params.SubmitterID,
 		})),
 		Metadata:  mustJSONRaw(map[string]any{"subject_kind": "user", "display_name": params.SubmitterID}),
 		CreatedAt: now,
@@ -718,22 +718,22 @@ func (p *PublicationGraphStore) SubmitProposalToGraph(ctx context.Context, param
 		ContentHash: params.ContentHash,
 		Body:        []byte(params.Content),
 		Metadata: mustJSONRaw(map[string]any{
-			"proposal_id":                  params.ProposalID,
-			"publication_id":               params.PublicationID,
-			"publication_version_id":       params.PublicationVersionID,
-			"source_owner_id":              params.SourceOwnerID,
-			"submitter_id":                 params.SubmitterID,
-			"submitter_doc_id":             params.SubmitterDocID,
-			"submitter_revision_id":        params.SubmitterRevisionID,
-			"submitter_revision_hash":      params.ProposalRevisionHash,
-			"content_hash":                 params.ContentHash,
-			"projection_hash":              params.ProjectionHash,
-			"artifact_manifest_id":         params.ArtifactManifestID,
-			"title":                        params.Title,
-			"state":                        "proposed",
-			"delivery_id":                  params.DeliveryID,
-			"delivery_state":               "recorded_for_author",
-			"delivery_ref":                 params.DeliveryRef,
+			"proposal_id":             params.ProposalID,
+			"publication_id":          params.PublicationID,
+			"publication_version_id":  params.PublicationVersionID,
+			"source_owner_id":         params.SourceOwnerID,
+			"submitter_id":            params.SubmitterID,
+			"submitter_doc_id":        params.SubmitterDocID,
+			"submitter_revision_id":   params.SubmitterRevisionID,
+			"submitter_revision_hash": params.ProposalRevisionHash,
+			"content_hash":            params.ContentHash,
+			"projection_hash":         params.ProjectionHash,
+			"artifact_manifest_id":    params.ArtifactManifestID,
+			"title":                   params.Title,
+			"state":                   "proposed",
+			"delivery_id":             params.DeliveryID,
+			"delivery_state":          "recorded_for_author",
+			"delivery_ref":            params.DeliveryRef,
 		}),
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -749,9 +749,9 @@ func (p *PublicationGraphStore) SubmitProposalToGraph(ctx context.Context, param
 		ContentHash: params.ManifestHash,
 		Body:        params.ManifestJSON,
 		Metadata: mustJSONRaw(map[string]any{
-			"subject_kind": "publication_version_proposal",
-			"subject_id":   params.ProposalID,
-			"media_type":   "text/plain",
+			"subject_kind":  "publication_version_proposal",
+			"subject_id":    params.ProposalID,
+			"media_type":    "text/plain",
 			"manifest_hash": params.ManifestHash,
 		}),
 		CreatedAt: now,
@@ -786,9 +786,9 @@ func (p *PublicationGraphStore) SubmitProposalToGraph(ctx context.Context, param
 		OwnerID:     params.SubmitterID,
 		ContentHash: params.SourceVersionContentHash,
 		Metadata: mustJSONRaw(map[string]any{
-			"entity_kind":   "publication_version",
-			"canonical_uri": "choir:publication/" + params.PublicationID + "/versions/" + params.PublicationVersionID,
-			"publication_id": params.PublicationID,
+			"entity_kind":            "publication_version",
+			"canonical_uri":          "choir:publication/" + params.PublicationID + "/versions/" + params.PublicationVersionID,
+			"publication_id":         params.PublicationID,
 			"publication_version_id": params.PublicationVersionID,
 		}),
 		CreatedAt: now,
@@ -863,13 +863,13 @@ func (p *PublicationGraphStore) SubmitProposalToGraph(ctx context.Context, param
 		OwnerID:     "corpusd",
 		ContentHash: params.ContentHash,
 		Metadata: mustJSONRaw(map[string]any{
-			"target_kind":      "publication_version_proposal",
-			"target_id":        params.ProposalID,
-			"verifier_id":      "corpusd",
-			"verifier_kind":    "service",
-			"result":           "passed",
-			"predicate_type":   "choir.platform.reader_proposal.v0",
-			"subject_digest":   params.ContentHash,
+			"target_kind":                   "publication_version_proposal",
+			"target_id":                     params.ProposalID,
+			"verifier_id":                   "corpusd",
+			"verifier_kind":                 "service",
+			"result":                        "passed",
+			"predicate_type":                "choir.platform.reader_proposal.v0",
+			"subject_digest":                params.ContentHash,
 			"source_publication_id":         params.PublicationID,
 			"source_publication_version_id": params.PublicationVersionID,
 		}),
@@ -900,12 +900,12 @@ func (p *PublicationGraphStore) SubmitProposalToGraph(ctx context.Context, param
 	// --- Transclusion edges ---
 	for _, tr := range params.TransclusionEdges {
 		batch.Edges = append(batch.Edges, makeEdge(proposalID, tr.ToID, "transcludes", now, mustJSONRaw(map[string]any{
-			"to_kind":        tr.ToKind,
-			"to_selector":    tr.Selector,
-			"state":          "proposed",
-			"proposed_by":    params.SubmitterID,
-			"evidence_ref":   tr.EvidenceRef,
-			"confidence":     "0.9",
+			"to_kind":      tr.ToKind,
+			"to_selector":  tr.Selector,
+			"state":        "proposed",
+			"proposed_by":  params.SubmitterID,
+			"evidence_ref": tr.EvidenceRef,
+			"confidence":   "0.9",
 		})))
 	}
 
@@ -951,42 +951,42 @@ func (p *PublicationGraphStore) UpdateProposalDeliveryState(ctx context.Context,
 // ProposalGraphParams holds parameters for writing a publication proposal
 // to the object graph.
 type ProposalGraphParams struct {
-	ProposalID              string
-	PublicationID           string
-	PublicationVersionID    string
-	SourceOwnerID           string
-	SubmitterID             string
-	SubmitterDocID          string
-	SubmitterRevisionID     string
-	ProposalRevisionHash    string
-	Content                 string
-	ContentHash             string
-	ContentSize             int
-	ProjectionHash          string
-	Title                   string
-	ArtifactManifestID      string
-	ManifestJSON            []byte
-	ManifestHash            string
-	StorageRef              string
-	DeliveryID              string
-	DeliveryRef             string
-	ActivityID              string
-	AttestationID           string
+	ProposalID               string
+	PublicationID            string
+	PublicationVersionID     string
+	SourceOwnerID            string
+	SubmitterID              string
+	SubmitterDocID           string
+	SubmitterRevisionID      string
+	ProposalRevisionHash     string
+	Content                  string
+	ContentHash              string
+	ContentSize              int
+	ProjectionHash           string
+	Title                    string
+	ArtifactManifestID       string
+	ManifestJSON             []byte
+	ManifestHash             string
+	StorageRef               string
+	DeliveryID               string
+	DeliveryRef              string
+	ActivityID               string
+	AttestationID            string
 	SourceVersionContentHash string
-	TransclusionEdges       []ProposalTransclusionEdge
-	CitationEdges           []ProposalCitationEdge
-	Now                     time.Time
+	TransclusionEdges        []ProposalTransclusionEdge
+	CitationEdges            []ProposalCitationEdge
+	Now                      time.Time
 }
 
 type ProposalTransclusionEdge struct {
-	ToID       string
-	ToKind     string
-	Selector   string
+	ToID        string
+	ToKind      string
+	Selector    string
 	EvidenceRef string
 }
 
 type ProposalCitationEdge struct {
-	ToID       string
+	ToID        string
 	EvidenceRef string
 }
 

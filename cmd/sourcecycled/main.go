@@ -104,7 +104,6 @@ type webCaptureProjectionSummary struct {
 	SkippedItemCount  int
 }
 
-
 type sourceServiceDispatchStateResponse struct {
 	CheckedAt           time.Time                `json:"checked_at"`
 	QueuedCount         int                      `json:"queued_count"`
@@ -1165,7 +1164,6 @@ func (d *ingestionRuntimeDispatcher) runtimeRunsEndpoint() string {
 	}
 	return d.baseURL + "/internal/runtime/runs"
 }
-
 
 func (d *ingestionRuntimeDispatcher) submitOnce(ctx context.Context, payload runtimeRunSubmitRequest) (runtimeRunStatusResponse, error) {
 	body, err := json.Marshal(payload)

@@ -3,29 +3,29 @@ canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 150
-    production_files: 80
+    go_files: 148
+    production_files: 78
     test_files: 70
-    production_loc: 48892
-    test_loc: 55707
-    exports: 1215
-    export_caller_edges: 613
+    production_loc: 47446
+    test_loc: 54535
+    exports: 1198
+    export_caller_edges: 606
     initial_unused_export_debt: 39
-    routes: 49
+    routes: 47
     tools: 49
     production_importers: 4
     wrappers: 5
     compatibility_markers: 16
-    store_calls: 462
+    store_calls: 448
     interface_candidates: 4
-    citers: 165
+    citers: 175
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
       loc: 6773
     - id: internal/runtime/api.go [production]
       disposition: api
-      loc: 1776
+      loc: 1774
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
       loc: 858
@@ -43,7 +43,7 @@ files:
       loc: 457
     - id: internal/runtime/api_test.go [test]
       disposition: api
-      loc: 4074
+      loc: 4075
     - id: internal/runtime/api_texture_prompt_eval.go [production]
       disposition: texture
       loc: 129
@@ -149,9 +149,6 @@ files:
     - id: internal/runtime/model_policy_test.go [test]
       disposition: model
       loc: 545
-    - id: internal/runtime/objectgraph_runtime.go [production]
-      disposition: core
-      loc: 85
     - id: internal/runtime/objective_fingerprint.go [production]
       disposition: core
       loc: 46
@@ -217,7 +214,7 @@ files:
       loc: 441
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3728
+      loc: 3723
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -248,9 +245,6 @@ files:
     - id: internal/runtime/skill_context.go [production]
       disposition: core
       loc: 127
-    - id: internal/runtime/sourcecycled_web_captures.go [production]
-      disposition: core
-      loc: 104
     - id: internal/runtime/store_open_test.go [test]
       disposition: core
       loc: 79
@@ -265,7 +259,7 @@ files:
       loc: 194
     - id: internal/runtime/test_helpers_test.go [test]
       disposition: core
-      loc: 336
+      loc: 333
     - id: internal/runtime/texture.go [production]
       disposition: texture
       loc: 2209
@@ -427,7 +421,7 @@ files:
       loc: 259
     - id: internal/runtime/trace_wiring_test.go [test]
       disposition: core
-      loc: 347
+      loc: 345
     - id: internal/runtime/trajectory.go [production]
       disposition: core
       loc: 142
@@ -436,10 +430,10 @@ files:
       loc: 332
     - id: internal/runtime/universal_wire.go [production]
       disposition: wire
-      loc: 1189
+      loc: 109
     - id: internal/runtime/universal_wire_test.go [test]
       disposition: wire
-      loc: 922
+      loc: 25
     - id: internal/runtime/update_coagent_cutover_test.go [test]
       disposition: core
       loc: 2308
@@ -460,10 +454,10 @@ files:
       loc: 510
     - id: internal/runtime/wire_publication.go [production]
       disposition: wire
-      loc: 827
+      loc: 657
     - id: internal/runtime/wire_publication_test.go [test]
       disposition: wire
-      loc: 439
+      loc: 168
     - id: internal/runtime/wire_reconciler_debounce.go [production]
       disposition: wire
       loc: 340
@@ -730,7 +724,6 @@ exports:
         - internal/runtime/podcast.go
         - internal/runtime/prompts.go
         - internal/runtime/runtime_refresh.go
-        - internal/runtime/sourcecycled_web_captures.go
         - internal/runtime/texture.go
         - internal/runtime/texture_agent_revision.go
         - internal/runtime/texture_import.go
@@ -1356,7 +1349,6 @@ exports:
         - cmd/sandbox/main.go
         - internal/runtime/config.go
         - internal/runtime/model_policy.go
-        - internal/runtime/objectgraph_runtime.go
         - internal/runtime/run_memory.go
         - internal/runtime/runtime.go
     - id: internal/runtime/config_test.go:func:TestActivationBudgetProgressDeadlineTerminalizesAndReleases
@@ -1675,11 +1667,6 @@ exports:
       disposition: model
     - id: internal/runtime/model_policy_test.go:func:TestStartCoagentRunResolvesModelPolicyOverlayIntoRunMetadata
       disposition: model
-    - id: internal/runtime/objectgraph_runtime.go:method(*Runtime):ObjectGraph
-      disposition: core
-      production_callers:
-        - internal/runtime/sourcecycled_web_captures.go
-        - internal/runtime/universal_wire.go
     - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSearch
       disposition: podcast
       production_callers:
@@ -2031,7 +2018,6 @@ exports:
         - internal/runtime/content.go
         - internal/runtime/delegate_worker_update_fallback.go
         - internal/runtime/model_policy.go
-        - internal/runtime/objectgraph_runtime.go
         - internal/runtime/product_events.go
         - internal/runtime/qdrant_dedup.go
         - internal/runtime/qdrant_runtime.go
@@ -2248,10 +2234,6 @@ exports:
       disposition: research
     - id: internal/runtime/search_gateway_test.go:func:TestGatewaySearchClientParsesSearchOutage
       disposition: research
-    - id: internal/runtime/sourcecycled_web_captures.go:method(*APIHandler):HandleInternalSourcecycledWebCaptures
-      disposition: core
-      production_callers:
-        - internal/runtime/api.go
     - id: internal/runtime/streaming_test.go:func:TestStreamingCancellationStopsEmission
       disposition: core
     - id: internal/runtime/streaming_test.go:func:TestStreamingCompletesWithProperTermination
@@ -3646,33 +3628,7 @@ exports:
       disposition: core
     - id: internal/runtime/trajectory_test.go:func:TestTrajectoryObligationsAnswersWaitingOn
       disposition: core
-    - id: internal/runtime/universal_wire.go:method(*APIHandler):HandleUniversalWireStories
-      disposition: wire
-      production_callers:
-        - internal/runtime/api.go
-    - id: internal/runtime/universal_wire_test.go:func:TestCorpusdReadBaseURLPreservesSiblingDerivationAndDirectCorpusd
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleInternalSourcecycledWebCapturesProjectsGraphWithoutStartingRuns
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesCarriesCapturedFromSourceEntityContext
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesDiagnosticsForFilteredGraphCaptureCandidates
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesDoesNotIndexUntranscludedPlatformTextures
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesDoesNotPublishGraphBackedWebCapturesAsArticles
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesIndexesEditionTranscludedTextureHeads
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesRequiresAuth
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesReturnsHonestEmptyState
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesSkipsTranscludedUnpublishedPlatformTextures
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestHandleUniversalWireStoriesUsesVisibleSourceEntitiesForSourceNetworkManifest
-      disposition: wire
-    - id: internal/runtime/universal_wire_test.go:func:TestResolveUniversalWireTextureReadOwnerAllowsEditionTranscludedPlatformDoc
+    - id: internal/runtime/universal_wire_test.go:func:TestRuntimeDoesNotRegisterUniversalWireStories
       disposition: wire
     - id: internal/runtime/update_coagent_cutover_test.go:func:TestCoagentRewarmIgnoresBlockedHistoricalActivation
       disposition: core
@@ -3760,15 +3716,9 @@ exports:
       disposition: wire
     - id: internal/runtime/wire_processor_decision_test.go:func:TestRecordWireProcessorDecisionToolRejectsAlreadyCoveredWithoutPublishedDoc
       disposition: wire
-    - id: internal/runtime/wire_publication_test.go:func:TestEnsureUniversalWireEditionRepairsDanglingAlias
+    - id: internal/runtime/wire_publication_test.go:func:TestWirePublicationDoesNotBootstrapLocalEdition
       disposition: wire
-    - id: internal/runtime/wire_publication_test.go:func:TestWireAutonomousPublishBootstrapsEditionWhenAliasMissing
-      disposition: wire
-    - id: internal/runtime/wire_publication_test.go:func:TestWireAutonomousPublishTranscludesEditionAndDebounces
-      disposition: wire
-    - id: internal/runtime/wire_publication_test.go:func:TestWireInputRevisionDoesNotAutonomousPublish
-      disposition: wire
-    - id: internal/runtime/wire_publication_test.go:func:TestWirePlatformPublishFailsClosedWithoutEditionWhenCorpusdFails
+    - id: internal/runtime/wire_publication_test.go:func:TestWirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition
       disposition: wire
     - id: internal/runtime/wire_reconciler_debounce.go:const:WireReconcilerPublishCountThreshold
       disposition: wire
@@ -3946,8 +3896,6 @@ routes:
       disposition: api
     - id: internal/runtime/api.go:HandleFunc:/api/trajectories:h.HandleTrajectoriesRoot
       disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/universal-wire/stories:h.HandleUniversalWireStories
-      disposition: api
     - id: internal/runtime/api.go:HandleFunc:/api/ws:h.HandleLiveWS
       disposition: api
     - id: internal/runtime/api.go:HandleFunc:/internal/runtime/app-change-packages/:h.HandleInternalAppChangePackageDetail
@@ -3955,8 +3903,6 @@ routes:
     - id: internal/runtime/api.go:HandleFunc:/internal/runtime/app-change-packages:h.HandleInternalAppChangePackagesRoot
       disposition: api
     - id: internal/runtime/api.go:HandleFunc:/internal/runtime/channel-casts:h.HandleInternalChannelCast
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/runtime/objectgraph/web-captures:h.HandleInternalSourcecycledWebCaptures
       disposition: api
     - id: internal/runtime/api.go:HandleFunc:/internal/runtime/refresh:h.HandleInternalRuntimeRefresh
       disposition: api
@@ -4108,9 +4054,9 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/config.go:30:DefaultStorePath is the local marker/legacy-import path used to derive the
       disposition: delete
-    - id: internal/runtime/runtime.go:101:New creates a new Runtime with the given config, store, event bus, and
+    - id: internal/runtime/runtime.go:1999:This is the legacy execution path used when no tool registry is configured
       disposition: delete
-    - id: internal/runtime/runtime.go:2004:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:97:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
     - id: internal/runtime/tool_profiles.go:18:Re-exported from internal/agentprofile for backward compatibility.
       disposition: delete
@@ -4124,9 +4070,9 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/tools_texture.go:1588:source_ref display_mode enum after the hard cutover. Legacy expanded
       disposition: delete
-    - id: internal/runtime/universal_wire.go:1132:Accept both the new "corpusd_route_path" key and the legacy
+    - id: internal/runtime/universal_wire.go:93:Accept both the new "corpusd_route_path" key and the legacy
       disposition: delete
-    - id: internal/runtime/universal_wire.go:1133:"platformd_route_path" key for backward compatibility with existing
+    - id: internal/runtime/universal_wire.go:94:"platformd_route_path" key for backward compatibility with existing
       disposition: delete
 store_calls:
     - id: internal/runtime/api.go:HandleChannelMessageList:internal/store.method:Store.ListChannelMessages
@@ -4967,24 +4913,10 @@ store_calls:
       disposition: read
     - id: internal/runtime/universal_wire.go:universalWireEditionIncludesDoc:internal/store.method:Store.GetRevision
       disposition: read
-    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetDocument#2
-      disposition: read
-    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetDocumentAlias
-      disposition: read
-    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/runtime/universal_wire.go:universalWireEditionTextureStories:internal/store.method:Store.GetRevision#2
-      disposition: read
     - id: internal/runtime/wire_platform_publish.go:persistWirePlatformPublicationRef:internal/store.method:Store.PatchRevisionMetadata
       disposition: wire
     - id: internal/runtime/wire_platform_publish.go:syncWireTextureDocumentToCorpusd:internal/store.method:Store.ListRevisionsByDoc
       disposition: read
-    - id: internal/runtime/wire_publication.go:autonomousPublishWireArticleToEdition:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/runtime/wire_publication.go:autonomousPublishWireArticleToEdition:internal/store.method:Store.UpdateDocument
-      disposition: wire
     - id: internal/runtime/wire_publication.go:beginWireProcessorDecisionWorkItem:internal/store.method:Store.CreateWorkItem
       disposition: wire
     - id: internal/runtime/wire_publication.go:beginWireProcessorSourceDecisionWorkItems:internal/store.method:Store.CreateWorkItem
@@ -4998,20 +4930,6 @@ store_calls:
     - id: internal/runtime/wire_publication.go:completeWireStoryResolutionWorkItem:internal/store.method:Store.FindWorkItemByFingerprint
       disposition: read
     - id: internal/runtime/wire_publication.go:completeWireStoryResolutionWorkItem:internal/store.method:Store.UpdateWorkItemStatus
-      disposition: wire
-    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.CreateDocument
-      disposition: wire
-    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.CreateRevision
-      disposition: wire
-    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.GetDocumentAlias
-      disposition: read
-    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.GetRevision
-      disposition: read
-    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.UpdateDocument
-      disposition: wire
-    - id: internal/runtime/wire_publication.go:ensureUniversalWireEdition:internal/store.method:Store.UpsertDocumentAlias
       disposition: wire
     - id: internal/runtime/wire_publication.go:reconcileWireProcessorRequestResolution:internal/store.method:Store.FindWorkItemByFingerprint
       disposition: read
@@ -5259,6 +5177,10 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:deletion_target_reference: internal/runtime'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sourcecycled, internal/cycle/web_capture_graph.go, internal/proxy/platform_objectgraph.go, internal/platform/objectgraph_handlers.go, internal/runti… [sha256:2549ae29a8205c9d40642e75fdb52d0a57ffd8ba620d7d73bc89ef3463077988]'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/platform, internal/proxy, internal/runtime/universal_wire.go, internal/runtime/wire_publication.go, /api/universal-wire/stories, docs/runtime-dissolution-inventory.yaml]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/provideriface/provider.go, internal/runtime/config.go, internal/runtime/config_test.go, internal/runtime/runtime.go, internal/runtime/runtime_t… [sha256:6687142f5f443a6b310a9f2e13c056a098144518f9b1b26089320ac72c8da3d5]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
@@ -5362,6 +5284,22 @@ citers:
     - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:At canonical `e649ee28`, `S1DeployVerifier` reported **BLOCKING**. Focused runtime/CLI tests and `go test ./cmd/runtime-ratchet` passed. The required default ratchet invocation failed because the rege… [sha256:346b662f5c9ed210b14ba921c84c4cace85290a2abb4e5f1849b75f42e9dd860]
       disposition: historical_evidence
     - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:Focused lifecycle tests passed across `internal/runtime` and `cmd/choir`.
+      disposition: historical_evidence
+    - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:- `internal/runtime/objectgraph_runtime.go`: shared capture publication handler inside a user computer.'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:- `internal/runtime/universal_wire.go`: runtime-local story read model and `/api/universal-wire/stories` registration.'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:- `internal/runtime/wire_publication.go`: VM-local edition bootstrap/advance and edition settlement reference.'
+      disposition: historical_evidence
+    - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:1. `internal/runtime/universal_wire.go` serves `/api/universal-wire/stories` from VM-local Texture documents and an edition alias, while corpusd already owns published public objects.
+      disposition: historical_evidence
+    - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:2. `internal/runtime/wire_publication.go` publishes the article to corpusd and then creates and advances a second VM-local `Wire.texture` edition as feed authority.
+      disposition: historical_evidence
+    - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:3. `cmd/sourcecycled/main.go` projects durable web captures through `/internal/runtime/objectgraph/web-captures`, forcing the shared world-wire write through a user-computer runtime even though corpus… [sha256:5db5b93175746e9915a49c973a13ef27c24437c4147505176a579d24314375d3]
+      disposition: historical_evidence
+    - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:Allowed paths: `internal/platform/**`, `internal/proxy/**`, `internal/runtime/universal_wire.go`, `internal/runtime/wire_publication.go`, their focused tests, route/config registries, and runtime ratchet inventory.'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:Change: replace the sourcecycled runtime projection target with the existing corpusd object-graph HTTP service through the host service/proxy path; remove `/internal/runtime/objectgraph/web-captures` … [sha256:ead26837bfd20889d399cdb596ce7458eb284f39d02654aac64744a9df79e153]'
       disposition: historical_evidence
     - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
       disposition: block

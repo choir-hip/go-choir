@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -288,11 +287,4 @@ type Config struct {
 	// default), no trace store is mounted and events are not projected into the
 	// observability schema. Enabled via RUNTIME_TRACE_PERSISTENCE_ENABLED.
 	TracePersistenceEnabled bool
-
-	// ObjectGraphStore is a test-only override for the runtime objectgraph
-	// durable store. When set, the runtime uses it directly instead of
-	// constructing an HTTPStore from CorpusdURL. Production configs leave
-	// this nil so the runtime queries corpusd via corpusd over HTTP. The
-	// json:"-" tag keeps it out of any serialized config.
-	ObjectGraphStore objectgraph.Store `json:"-"`
 }

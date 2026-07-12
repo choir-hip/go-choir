@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/qdrant"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -73,9 +72,6 @@ type Runtime struct {
 	browserCDP            map[string]*browserCDPSession
 	modelPolicyMu         sync.Mutex
 	modelPolicies         map[string]ModelPolicy
-	objectGraphMu         sync.Mutex
-	objectGraph           *objectgraph.Service
-	objectGraphInitErr    error
 	qdrantPipelineMu      sync.Mutex
 	qdrantPipeline        *qdrant.Pipeline
 	qdrantPipelineInitErr error
@@ -489,7 +485,6 @@ func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Contex
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
 	rt.closeAllBrowserCDPSessions()
-	rt.closeObjectGraph()
 	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()
@@ -1109,7 +1104,7 @@ func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.Run
 func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 	return rt.terminalizeRun(ctx, runID, ownerID, "run cancelled")
 }
- 
+
 // terminalizeRun persists cancellation before releasing admission or signalling
 // the resident activation. The shared lifecycle lock orders this transition
 // against activation state writes, so a late provider return cannot replace it.

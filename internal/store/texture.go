@@ -247,7 +247,6 @@ func OpenTextureWorkspace(path string) (*Store, error) {
 	return s, nil
 }
 
-
 func deriveTextureWorkspacePath(path string) string {
 	if path == "" {
 		return filepath.Join(os.TempDir(), defaultTextureWorkspaceDir)
@@ -773,7 +772,6 @@ func (s *Store) DeleteDocument(ctx context.Context, docID, ownerID string) error
 		`DELETE FROM texture_document_aliases WHERE doc_id = ? AND owner_id = ?`,
 		docID, ownerID,
 	)
-
 
 	// Delete the document from OG.
 	docObj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", docID)

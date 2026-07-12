@@ -120,15 +120,15 @@ type Handler struct {
 	reverseProxy    *httputil.ReverseProxy
 	upgrader        websocket.Upgrader
 	dialer          *websocket.Dialer
-	corpusd       *http.Client
+	corpusd         *http.Client
 	maild           *http.Client
 	sandboxHTTP     *http.Client
 	sandboxURL      *url.URL      // parsed sandbox URL for WS dial derivation
 	vmctlClient     *vmctl.Client // optional vmctl client for VM-backed routing
 	lifecycle       *lifecycleRecorder
 	recoveries      *computeRecoveryTracker
-	apiKeyValidator APIKeyValidator // optional: enables Bearer token (API key) auth
-	authStore       *auth.Store     // optional: owned auth store for API key validation
+	apiKeyValidator APIKeyValidator       // optional: enables Bearer token (API key) auth
+	authStore       *auth.Store           // optional: owned auth store for API key validation
 	routeResolver   PlatformRouteResolver // optional: route-over-ComputerVersion resolver
 }
 
@@ -272,7 +272,7 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 			},
 		},
 		dialer:      websocket.DefaultDialer,
-		corpusd:   &http.Client{Timeout: 30 * time.Second},
+		corpusd:     &http.Client{Timeout: 30 * time.Second},
 		maild:       &http.Client{Timeout: 30 * time.Second},
 		sandboxHTTP: &http.Client{Timeout: 30 * time.Second},
 		sandboxURL:  sandboxURL,
@@ -964,7 +964,6 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 	u.RawQuery = rawQuery
 	return u.String()
 }
-
 
 // resolveSandboxURL resolves the sandbox URL for an authenticated user.
 // It consults the vmctl ownership registry to route the user to their

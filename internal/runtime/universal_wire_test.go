@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
-
 )
 
 func runtimeTestTextureBodyDoc(t *testing.T, docID, revisionID, content string) json.RawMessage {

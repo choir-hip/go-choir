@@ -3019,7 +3019,6 @@ func TestVMctlRouting_SameUserPinnedToSameVM(t *testing.T) {
 	}
 }
 
-
 func TestIsPlatformTextureReadRequest(t *testing.T) {
 	// Positive cases — read-only Texture reads with read_owner param.
 	cases := []struct {

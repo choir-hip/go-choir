@@ -19,9 +19,9 @@ const universalWireStoryLimit = 100
 // Universal Wire app. corpusd derives it exclusively from active, public
 // publication objects in the shared world-wire object graph.
 type UniversalWireStoriesResponse struct {
-	Stories      []types.WireStory            `json:"stories"`
-	StyleSources []types.WireStyleSource      `json:"style_sources"`
-	Source       string                       `json:"source"`
+	Stories      []types.WireStory             `json:"stories"`
+	StyleSources []types.WireStyleSource       `json:"style_sources"`
+	Source       string                        `json:"source"`
 	Edition      *UniversalWireEditionResponse `json:"edition,omitempty"`
 	Diagnostics  *UniversalWireFeedDiagnostics `json:"diagnostics,omitempty"`
 }
@@ -36,8 +36,8 @@ type UniversalWireEditionResponse struct {
 }
 
 type UniversalWireFeedDiagnostics struct {
-	Status     string                                `json:"status"`
-	Summary    string                                `json:"summary"`
+	Status     string                                 `json:"status"`
+	Summary    string                                 `json:"summary"`
 	Substrates []UniversalWireFeedSubstrateDiagnostic `json:"substrates"`
 }
 

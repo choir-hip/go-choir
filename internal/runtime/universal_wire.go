@@ -2,15 +2,14 @@ package runtime
 
 import (
 	"context"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"regexp"
 	"strings"
-	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 const universalWireEditionSourcePath = "universal-wire/Wire.texture"
 
 var textureTransclusionRefRE = regexp.MustCompile(`texture:([A-Za-z0-9_.:-]{1,160})`)
-
 
 func universalWireEditionIncludedDocIDs(content, editionDocID string) []string {
 	seen := map[string]bool{}
@@ -108,4 +107,3 @@ func wirePlatformRoutePath(meta map[string]any) string {
 	}
 	return ""
 }
-
