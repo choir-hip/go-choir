@@ -21,7 +21,7 @@ type Config struct {
 	// validation responses. It proves which sandbox instance handled a request.
 	SandboxID string
 
-	// StorePath is the path to the SQLite database for runtime state.
+	// StorePath is the marker path used to derive the embedded Dolt workspace.
 	// If empty, the runtime package default is used.
 	StorePath string
 }
