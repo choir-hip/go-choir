@@ -51,15 +51,6 @@ func (d Document) Render(data any) (string, error) {
 	return strings.TrimSpace(b.String()), nil
 }
 
-// MustRender executes a template and panics on failure.
-func (d Document) MustRender(data any) string {
-	out, err := d.Render(data)
-	if err != nil {
-		panic(err)
-	}
-	return out
-}
-
 // ParseAndRender decodes YAML and renders the body template in one step.
 func ParseAndRender(data []byte, vars any) (string, error) {
 	doc, err := Parse(data)

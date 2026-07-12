@@ -1373,11 +1373,6 @@ func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.
 	return true
 }
 
-// ToolRegistry returns the runtime's tool registry, or nil if none is configured.
-func (rt *Runtime) ToolRegistry() *ToolRegistry {
-	return rt.toolRegistry
-}
-
 // passivateInterruptedActivations releases runs that were active in a previous
 // process without converting the durable agent's work into a failure. A later
 // update_coagent send or trajectory sweep may re-warm the actor.

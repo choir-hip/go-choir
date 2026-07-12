@@ -515,19 +515,6 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	return b.String(), nil
 }
 
-// WithToolProfileRegistry registers a profile-specific tool registry on the runtime.
-func WithToolProfileRegistry(profile string, registry *ToolRegistry) RuntimeOption {
-	return func(rt *Runtime) {
-		if strings.TrimSpace(profile) == "" || registry == nil {
-			return
-		}
-		if rt.toolProfiles == nil {
-			rt.toolProfiles = make(map[string]*ToolRegistry)
-		}
-		rt.toolProfiles[strings.TrimSpace(profile)] = registry
-	}
-}
-
 func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client) (*ToolRegistry, error) {
 	registry := MustNewToolRegistry()
 	if spec.AllowWritableFiles {
