@@ -40,3 +40,11 @@ After implementation, regenerate `docs/runtime-dissolution-inventory.yaml`. Acce
 
 - Independent `S3I6Verifier` returned procedural `BLOCKING`: source scope, caller absence, authoritative type preservation, and default compilation pass, but this implementation receipt added one historical-evidence citer after the prior baseline.
 - Smallest repair: regenerate the inventory so `citers=214`, then rerun the executable ratchet and request final independent reverification. No source correction is required.
+
+## S3-I6 Final Verification, CI, Deploy, and Acceptance
+
+- Independent `S3I6Verifier` final recheck returned `PASS` at confidence `1.0` with no findings on canonical `e22644a1`; executable ratchet, ratchet tests, and default runtime compilation passed with `citers=214`.
+- GitHub Actions run `29202509590`, attempt `2`, passed every selected normal/race gate and deployed checkpoint `626400430bcf4bd04cccbb8a8bf60f7b83d110e6`.
+- Deployment job `86677607396` published the activation receipt at `2026-07-12T18:02:35Z`; sandbox and gateway artifacts were active at `626400430bcf4bd04cccbb8a8bf60f7b83d110e6`.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`, proving the registered run-list product path remained live after alias deletion.
+- Residual risk: pre-existing comprehensive-tag `prompts_test.go`/`texture_test.go` drift remains outside S3-I6; no in-slice residual risk.
