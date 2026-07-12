@@ -81,3 +81,13 @@ The S2 phase does not pass until independent verification and a post-implementat
 At canonical `97dc05f7`, independent verifier `S2IndependentVerifier` found a blocking retained authority in `internal/runtime/universal_wire.go:40-89`. Although S2-B deleted local edition advancement, `resolveUniversalWireTextureReadOwner` still authorized cross-owner Texture document and revision reads only when the platform document appeared in the VM-local `universal-wire/Wire.texture` alias and current revision. New corpusd publications can never satisfy that stale gate, so runtime Texture reads return not-found and the VM-local store remains shared-wire read authority.
 
 Classification: substrate authority-routing regression. The existing canonical public publication route is proxy/corpusd; runtime Texture endpoints are private working-state surfaces. The repair is therefore deletion-first: remove the cross-owner runtime read exception and edition parser/gate, make runtime Texture reads owner-scoped only, and leave public article/feed reads exclusively on proxy/corpusd. Do not add a corpusd fallback inside runtime Texture handlers.
+
+### S2-VER-001 Repair Receipt
+
+Commit `08803bb2` deletes `resolveUniversalWireTextureReadOwner`, `universalWireEditionIncludesDoc`, the local edition parser and source-path constant, and all cross-owner fallbacks from runtime Texture document, revision, revision-list, history, and stream handlers. Runtime Texture reads now use only the authenticated owner's VM-local private store. `TestRuntimeTextureReadsRemainOwnerScopedAfterWireCutover` seeds a platform-owned local document/revision and proves every retained runtime Texture read surface returns not-found to another owner. Canonical public article and feed reads remain exclusively on proxy/corpusd.
+
+Focused proof passed:
+
+- `go test ./internal/runtime -run 'Test(RuntimeTextureReadsRemainOwnerScopedAfterWireCutover|RuntimeDoesNotRegisterUniversalWireStories|WirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition|WirePublicationDoesNotBootstrapLocalEdition)$' -count=1`
+- `go run ./cmd/runtime-ratchet`
+- `go test ./cmd/runtime-ratchet`

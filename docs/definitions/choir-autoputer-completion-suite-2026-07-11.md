@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 5d056d90674505ed241b2cd281202611bc105d0c
+  journal_expected_parent_sha: 08803bb2
   orchestrator_lock:
     holder: Main
     epoch: 8
     expires_at: 2026-07-12T07:15:00Z
-    expected_parent_sha: 5d056d90674505ed241b2cd281202611bc105d0c
+    expected_parent_sha: 08803bb2
     lock_transition_id: s2-lock-acquisition-49
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -721,7 +721,7 @@ run_checkpoint_and_resumption_state:
     staging_ref: pending
     product_proof_refs: []
     consensus_ref: pending
-    open_findings: [S2_implementation_and_product_acceptance_pending]
+    open_findings: [S2_VER_001_repaired_independent_reverification_and_deployed_acceptance_pending]
     adjudication_ref: pending
   delegation_ledger_schema:
     required_fields:
@@ -959,8 +959,8 @@ run_checkpoint_and_resumption_state:
       dispatch_prompt_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-a--delete-boot-time-retired-sql-replay
       implementer_job_ref: S2MigrationDelete
       implementer_output_ref: agent://S2MigrationDelete
-      verifier_job_ref: S2IndependentVerifier
-      verifier_output_ref: pending_independent_verification
+      verifier_job_ref: S2RepairVerifier
+      verifier_output_ref: pending_reverification
       worktree_or_branch_ref: s2-a-delete-replay@9fcfc978d14f5e5a9eafa216ec86609d877b6145
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
@@ -985,7 +985,7 @@ run_checkpoint_and_resumption_state:
       forbidden_targets: [migration_shim, compatibility_alias, feature_flag, corpusd_state, production_deploy_before_atomic_S2_landing]
       authority_edges_locked: [VM_local_private_state_only, no_boot_time_retired_SQL_replay]
       implementer_agent: S2MigrationDelete
-      verifier_agent: pending_independent_verification
+      verifier_agent: S2RepairVerifier
       pre_mutation_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
       rollback_commit_or_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
       accepted_slice_dependency_refs: [S1@9dff3690]
@@ -1021,8 +1021,8 @@ run_checkpoint_and_resumption_state:
       dispatch_prompt_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-b--make-corpusd-the-only-public-wire-read-and-edition-authority
       implementer_job_ref: S2CorpusdWireAuthority
       implementer_output_ref: agent://S2CorpusdWireAuthority
-      verifier_job_ref: S2IndependentVerifier
-      verifier_output_ref: pending_independent_verification
+      verifier_job_ref: S2RepairVerifier
+      verifier_output_ref: pending_reverification
       worktree_or_branch_ref: s2-b-corpusd-wire@b3da23bba9b5c4b9b7a343d4f26dc0c72173bcd4
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
@@ -1040,6 +1040,9 @@ run_checkpoint_and_resumption_state:
         - {status: committed, transition_id: s2-b-committed-53, recorded_at: 2026-07-12T06:26:17Z, actor: Main, expected_parent_sha: e96655a82e6aa32088200c16ab91960492b89ffa, precondition: integrated_atomic_S2_and_final_ratchet_PASS, postcondition: canonical_code_ready_for_push_and_independent_verification, external_operation_id: not_applicable}
         - {status: pushed, transition_id: s2-b-pushed-54, recorded_at: 2026-07-12T06:28:54Z, actor: Main, expected_parent_sha: 5d056d90674505ed241b2cd281202611bc105d0c, precondition: integrated_atomic_S2_doccheck_and_ratchet_PASS, postcondition: origin_main_contains_S2_implementation, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s2-b-verifying-55, recorded_at: 2026-07-12T06:28:54Z, actor: Main, expected_parent_sha: 5d056d90674505ed241b2cd281202611bc105d0c, precondition: pushed_S2_implementation_and_exact_verifier_contract, postcondition: independent_S2IndependentVerifier_authorized, external_operation_id: not_applicable}
+        - {status: blocked_incomplete, transition_id: s2-b-verification-failed-56, recorded_at: 2026-07-12T06:33:00Z, actor: S2IndependentVerifier, expected_parent_sha: 97dc05f7, precondition: independent_source_authority_review, postcondition: S2_VER_001_retained_VM_local_edition_read_gate_documented, external_operation_id: agent_S2IndependentVerifier}
+        - {status: committed, transition_id: s2-b-read-authority-repaired-57, recorded_at: 2026-07-12T06:50:00Z, actor: Main, expected_parent_sha: 08803bb2, precondition: S2_VER_001_documented_before_fix, postcondition: cross_owner_runtime_read_exception_deleted_owner_scope_regression_and_ratchet_PASS, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s2-b-reverifying-58, recorded_at: 2026-07-12T06:50:00Z, actor: Main, expected_parent_sha: 08803bb2, precondition: repair_pushed_focused_tests_and_ratchet_PASS, postcondition: independent_S2RepairVerifier_authorized, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T07:15:00Z
       mutation_class: red
       protected_surfaces: [corpusd_canonical_writes, public_wire_reads, runtime_publication_settlement, proxy_routing]
@@ -1047,7 +1050,7 @@ run_checkpoint_and_resumption_state:
       forbidden_targets: [dual_read, dual_write, backfill, runtime_fallback, compatibility_alias, third_store]
       authority_edges_locked: [corpusd_only_world_wire_authority, user_computer_private_working_state_only]
       implementer_agent: S2CorpusdWireAuthority
-      verifier_agent: pending_independent_verification
+      verifier_agent: S2RepairVerifier
       pre_mutation_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
       rollback_commit_or_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
       accepted_slice_dependency_refs: [S1@9dff3690]
@@ -1083,8 +1086,8 @@ run_checkpoint_and_resumption_state:
       dispatch_prompt_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-c--publish-source-captures-directly-to-corpusd
       implementer_job_ref: S2SourceCaptureCutover
       implementer_output_ref: agent://S2SourceCaptureCutover
-      verifier_job_ref: S2IndependentVerifier
-      verifier_output_ref: pending_independent_verification
+      verifier_job_ref: S2RepairVerifier
+      verifier_output_ref: pending_reverification
       worktree_or_branch_ref: s2-c-source-capture@6c31805830d6596c9a1bf6fd9f5bea76d9d79e78
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
@@ -1109,7 +1112,7 @@ run_checkpoint_and_resumption_state:
       forbidden_targets: [VM_boot_for_capture_write, local_fallback, dual_path, third_store, processor_activation_rearchitecture]
       authority_edges_locked: [corpusd_only_shared_capture_authority, runtime_processor_activation_separate_from_capture_persistence]
       implementer_agent: S2SourceCaptureCutover
-      verifier_agent: pending_independent_verification
+      verifier_agent: S2RepairVerifier
       pre_mutation_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
       rollback_commit_or_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
       accepted_slice_dependency_refs: [S1@9dff3690]
