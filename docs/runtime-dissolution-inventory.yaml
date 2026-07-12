@@ -1,4 +1,4 @@
-schema: runtime-dissolution-inventory/v5
+schema: runtime-dissolution-inventory/v6
 canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
@@ -17,6 +17,7 @@ counts:
     wrappers: 5
     compatibility_markers: 16
     store_calls: 461
+    interface_candidates: 4
     citers: 151
 files:
     - id: internal/runtime/agent_tools_test.go [test]
@@ -5030,6 +5031,15 @@ store_calls:
       disposition: read
     - id: internal/runtime/wire_reconciler_debounce.go:wirePublishBatchDocumentContext:internal/store.method:Store.GetRevision#2
       disposition: read
+interface_candidates:
+    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.AppendEvent
+      disposition: store_backed
+    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.CreateAgentMutation
+      disposition: store_backed
+    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.CreateRun
+      disposition: store_backed
+    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.UpsertAgent
+      disposition: store_backed
 citers:
     - id: .github/scripts/ci-impact-classify-test:assert_output runtime-change $'internal/runtime/engine.go\n' \
       disposition: block

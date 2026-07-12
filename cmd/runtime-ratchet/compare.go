@@ -105,6 +105,8 @@ func validateDebtNoGrowth(prior, current Inventory) error {
 }
 
 func compareInventory(want, got Inventory) error {
+	applyInterfaceCandidateAuthority(&got, want)
+	setCounts(&got)
 	var problems []string
 	if want.Schema != inventorySchema {
 		problems = append(problems, fmt.Sprintf("schema = %q, want %q", want.Schema, inventorySchema))
@@ -138,6 +140,9 @@ func compareInventory(want, got Inventory) error {
 		problems = append(problems, validateEntries(category.name, category.want, category.citer)...)
 		problems = append(problems, compareEntries(category.name, category.want, category.got)...)
 	}
+	problems = append(problems, validateInterfaceCandidates(want.InterfaceCandidates)...)
+	problems = append(problems, validateInterfaceCandidateAuthority(want)...)
+	problems = append(problems, compareEntries("interface_candidates", want.InterfaceCandidates, got.InterfaceCandidates)...)
 	problems = append(problems, validateStoreCalls(want.StoreCalls)...)
 	problems = append(problems, compareEntries("store_calls", want.StoreCalls, got.StoreCalls)...)
 	problems = append(problems, validateEntries("initial_unused_export_debt", want.UnusedExportDebt, false)...)
@@ -185,6 +190,56 @@ func validateEntries(category string, entries []Entry, citer bool) []string {
 				"%s: deletion_target_reference for %q does not name runtime-package-extinction-target",
 				category, entry.ID,
 			))
+		}
+	}
+	return problems
+}
+
+func validateInterfaceCandidates(entries []Entry) []string {
+	allowed := map[string]bool{"store_backed": true, "non_store": true}
+	seen := map[string]bool{}
+	var problems []string
+	for _, entry := range entries {
+		if strings.TrimSpace(entry.ID) == "" {
+			problems = append(problems, "interface_candidates: empty item id")
+			continue
+		}
+		if seen[entry.ID] {
+			problems = append(problems, fmt.Sprintf("interface_candidates: duplicate item %q", entry.ID))
+		}
+		seen[entry.ID] = true
+		if !allowed[entry.Disposition] {
+			problems = append(problems, fmt.Sprintf(
+				"interface_candidates: missing or invalid disposition %q for %q; want store_backed or non_store",
+				entry.Disposition, entry.ID,
+			))
+		}
+	}
+	return problems
+}
+
+func validateInterfaceCandidateAuthority(inventory Inventory) []string {
+	storeCalls := map[string]bool{}
+	for _, entry := range inventory.StoreCalls {
+		storeCalls[entry.ID] = true
+	}
+	var problems []string
+	for _, candidate := range inventory.InterfaceCandidates {
+		switch candidate.Disposition {
+		case "store_backed":
+			if !storeCalls[candidate.ID] {
+				problems = append(problems, fmt.Sprintf(
+					"interface_candidates: store_backed candidate %q is missing from store_calls authority",
+					candidate.ID,
+				))
+			}
+		case "non_store":
+			if storeCalls[candidate.ID] {
+				problems = append(problems, fmt.Sprintf(
+					"interface_candidates: non_store candidate %q must not appear in store_calls authority",
+					candidate.ID,
+				))
+			}
 		}
 	}
 	return problems

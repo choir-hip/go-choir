@@ -26,7 +26,7 @@ import (
 )
 
 const (
-	inventorySchema = "runtime-dissolution-inventory/v5"
+	inventorySchema = "runtime-dissolution-inventory/v6"
 	runtimeImport  = "github.com/yusefmosiah/go-choir/internal/runtime"
 )
 
@@ -45,6 +45,7 @@ type Inventory struct {
 	Wrappers              []Entry `yaml:"wrappers"`
 	CompatibilityMarkers []Entry `yaml:"compatibility_markers"`
 	StoreCalls            []Entry `yaml:"store_calls"`
+	InterfaceCandidates  []Entry `yaml:"interface_candidates"`
 	LegacyStateWriters    []Entry `yaml:"state_writers,omitempty"`
 	LegacyStoreReads      []Entry `yaml:"declared_store_reads,omitempty"`
 	Citers                []Entry `yaml:"citers"`
@@ -65,6 +66,7 @@ type Counts struct {
 	Wrappers              int `yaml:"wrappers"`
 	CompatibilityMarkers int `yaml:"compatibility_markers"`
 	StoreCalls           int `yaml:"store_calls"`
+	InterfaceCandidates  int `yaml:"interface_candidates"`
 	LegacyStateWriters   int `yaml:"state_writers,omitempty"`
 	LegacyStoreReads     int `yaml:"declared_store_reads,omitempty"`
 	Citers                int `yaml:"citers"`
@@ -98,12 +100,13 @@ func scanRepository(root string) (Inventory, error) {
 	if err := scanTextCiters(root, files, citerOrdinals, &inv); err != nil {
 		return Inventory{}, err
 	}
-	exportUses, storeCalls, err := scanTypeAwareInventory(root, typePackages)
+	exportUses, storeCalls, interfaceCandidates, err := scanTypeAwareInventory(root, typePackages)
 	if err != nil {
 		return Inventory{}, err
 	}
 	attachProductionCallers(&inv, exportUses)
 	inv.StoreCalls = storeCalls
+	inv.InterfaceCandidates = interfaceCandidates
 	seedUnusedExportDebt(&inv)
 	sortInventory(&inv)
 	setCounts(&inv)
@@ -305,7 +308,7 @@ func runtimeImports(file *ast.File) map[string]string {
 	}
 	return imports
 }
-func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[string]map[string]bool, []Entry, error) {
+func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[string]map[string]bool, []Entry, []Entry, error) {
 	patterns := make([]string, 0, len(packageDirs))
 	for dir := range packageDirs {
 		if dir == "." {
@@ -317,6 +320,7 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 	sort.Strings(patterns)
 	uses := map[string]map[string]bool{}
 	calls := map[string]Entry{}
+	candidates := map[string]Entry{}
 	environments := [][]string{
 		nil,
 		append(os.Environ(), "GOOS=linux", "CGO_ENABLED=0"),
@@ -324,7 +328,7 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 	for _, environment := range environments {
 		graph, err := listGoPackages(root, environment, patterns, false)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		var selectedPatterns []string
 		for _, listedPackage := range graph {
@@ -340,7 +344,7 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 		sort.Strings(selectedPatterns)
 		listed, err := listGoPackages(root, environment, selectedPatterns, true)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		exports := make(map[string]string, len(listed))
 		for _, listedPackage := range listed {
@@ -357,13 +361,13 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 				continue
 			}
 			if listedPackage.Error != nil {
-				return nil, nil, fmt.Errorf(
+				return nil, nil, nil, fmt.Errorf(
 					"type-check production package %s: %s",
 					listedPackage.ImportPath, listedPackage.Error.Err,
 				)
 			}
-			if err := collectTypedUses(root, environment, listedPackage, exports, uses, calls); err != nil {
-				return nil, nil, err
+			if err := collectTypedUses(root, environment, listedPackage, exports, uses, calls, candidates); err != nil {
+				return nil, nil, nil, err
 			}
 		}
 	}
@@ -372,7 +376,14 @@ func scanTypeAwareInventory(root string, packageDirs map[string]bool) (map[strin
 		storeCalls = append(storeCalls, call)
 	}
 	sort.Slice(storeCalls, func(i, j int) bool { return storeCalls[i].ID < storeCalls[j].ID })
-	return uses, storeCalls, nil
+	interfaceCandidates := make([]Entry, 0, len(candidates))
+	for _, candidate := range candidates {
+		interfaceCandidates = append(interfaceCandidates, candidate)
+	}
+	sort.Slice(interfaceCandidates, func(i, j int) bool {
+		return interfaceCandidates[i].ID < interfaceCandidates[j].ID
+	})
+	return uses, storeCalls, interfaceCandidates, nil
 }
 
 type goListPackage struct {
@@ -434,7 +445,7 @@ func dependsOnRuntime(listed goListPackage) bool {
 	}
 	return false
 }
-func collectTypedUses(root string, environment []string, listed goListPackage, exports map[string]string, uses map[string]map[string]bool, calls map[string]Entry) error {
+func collectTypedUses(root string, environment []string, listed goListPackage, exports map[string]string, uses map[string]map[string]bool, calls, candidates map[string]Entry) error {
 	fset := token.NewFileSet()
 	names := append(append([]string{}, listed.GoFiles...), listed.CgoFiles...)
 	files := make([]*ast.File, 0, len(names))
@@ -475,8 +486,6 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 		return os.Open(exportPath)
 	}
 	typeInfo := &types.Info{
-		Types:      map[ast.Expr]types.TypeAndValue{},
-		Defs:       map[*ast.Ident]types.Object{},
 		Uses:       map[*ast.Ident]types.Object{},
 		Selections: map[*ast.SelectorExpr]*types.Selection{},
 	}
@@ -492,7 +501,6 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 	if err != nil {
 		return fmt.Errorf("load internal/store.Store methods: %w", err)
 	}
-	storeBackedInterfaces := storeBackedInterfaceTypes(files, typeInfo)
 	for identifier, object := range typeInfo.Uses {
 		if object == nil || object.Pkg() == nil || !object.Exported() {
 			continue
@@ -524,7 +532,7 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 				if !ok {
 					return true
 				}
-				key, storeBacked := storeSelectionKey(selection, function, storeMethods, storeBackedInterfaces)
+				key, storeBacked := storeSelectionKey(selection, function, storeMethods)
 				if !storeBacked {
 					return true
 				}
@@ -532,7 +540,12 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 				relative := slashRel(root, position.Filename)
 				base := relative + ":" + enclosingFunction(file, selector.Pos()) + ":" + key
 				id := uniqueID(base, ordinals)
-				calls[id] = Entry{ID: id}
+				entry := Entry{ID: id}
+				if strings.HasPrefix(key, "internal/store.interface:") {
+					candidates[id] = entry
+				} else {
+					calls[id] = entry
+				}
 				return true
 			})
 		}
@@ -580,112 +593,7 @@ func importedStoreMethods(typeImporter types.Importer) (map[string]*types.Func, 
 	return methods, nil
 }
 
-func storeBackedInterfaceTypes(files []*ast.File, info *types.Info) map[*types.Named]bool {
-	backed := map[*types.Named]bool{}
-	edges := map[*types.Named]map[*types.Named]bool{}
-	addFlow := func(source, target types.Type) {
-		targetInterface := namedInterfaceType(target)
-		if targetInterface == nil {
-			return
-		}
-		if isConcreteStoreType(source) {
-			backed[targetInterface] = true
-			return
-		}
-		sourceInterface := namedInterfaceType(source)
-		if sourceInterface == nil {
-			return
-		}
-		if edges[sourceInterface] == nil {
-			edges[sourceInterface] = map[*types.Named]bool{}
-		}
-		edges[sourceInterface][targetInterface] = true
-	}
-	for _, file := range files {
-		ast.Inspect(file, func(node ast.Node) bool {
-			switch current := node.(type) {
-			case *ast.AssignStmt:
-				if len(current.Lhs) == len(current.Rhs) {
-					for index := range current.Lhs {
-						addFlow(info.TypeOf(current.Rhs[index]), info.TypeOf(current.Lhs[index]))
-					}
-				}
-			case *ast.ValueSpec:
-				if len(current.Names) == len(current.Values) {
-					for index := range current.Names {
-						target := info.Defs[current.Names[index]]
-						if target != nil {
-							addFlow(info.TypeOf(current.Values[index]), target.Type())
-						}
-					}
-				}
-			case *ast.CallExpr:
-				signature, _ := info.TypeOf(current.Fun).(*types.Signature)
-				if signature == nil {
-					return true
-				}
-				limit := len(current.Args)
-				if signature.Params().Len() < limit {
-					limit = signature.Params().Len()
-				}
-				for index := range limit {
-					addFlow(info.TypeOf(current.Args[index]), signature.Params().At(index).Type())
-				}
-			}
-			return true
-		})
-	}
-	changed := true
-	for changed {
-		changed = false
-		for source, targets := range edges {
-			if !backed[source] {
-				continue
-			}
-			for target := range targets {
-				if !backed[target] {
-					backed[target] = true
-					changed = true
-				}
-			}
-		}
-	}
-	return backed
-}
-
-func namedInterfaceType(value types.Type) *types.Named {
-	if value == nil {
-		return nil
-	}
-	value = types.Unalias(value)
-	if pointer, ok := value.(*types.Pointer); ok {
-		value = types.Unalias(pointer.Elem())
-	}
-	named, ok := value.(*types.Named)
-	if !ok {
-		return nil
-	}
-	if _, ok := named.Underlying().(*types.Interface); !ok {
-		return nil
-	}
-	return named
-}
-
-func isConcreteStoreType(value types.Type) bool {
-	if value == nil {
-		return false
-	}
-	value = types.Unalias(value)
-	if pointer, ok := value.(*types.Pointer); ok {
-		value = types.Unalias(pointer.Elem())
-	}
-	named, ok := value.(*types.Named)
-	return ok && named.Obj().Pkg() != nil &&
-		named.Obj().Pkg().Path() == "github.com/yusefmosiah/go-choir/internal/store" &&
-		named.Obj().Name() == "Store"
-}
-
-func storeSelectionKey(selection *types.Selection, function *types.Func, storeMethods map[string]*types.Func, storeBackedInterfaces map[*types.Named]bool) (string, bool) {
+func storeSelectionKey(selection *types.Selection, function *types.Func, storeMethods map[string]*types.Func) (string, bool) {
 	if isConcreteStoreMethod(function) {
 		return "internal/store.method:Store." + function.Name(), true
 	}
@@ -694,7 +602,9 @@ func storeSelectionKey(selection *types.Selection, function *types.Func, storeMe
 		receiver = types.Unalias(pointer.Elem())
 	}
 	namedReceiver, ok := receiver.(*types.Named)
-	if !ok || !storeBackedInterfaces[namedReceiver] {
+	if !ok || namedReceiver.Obj().Pkg() == nil ||
+		(namedReceiver.Obj().Pkg().Path() != runtimeImport &&
+			!strings.HasPrefix(namedReceiver.Obj().Pkg().Path(), runtimeImport+"/")) {
 		return "", false
 	}
 	if _, ok := namedReceiver.Underlying().(*types.Interface); !ok {
@@ -996,7 +906,7 @@ func slashRel(root, path string) string {
 }
 
 func sortInventory(inv *Inventory) {
-	lists := []*[]Entry{&inv.Files, &inv.Exports, &inv.UnusedExportDebt, &inv.Routes, &inv.Tools, &inv.ProductionImporters, &inv.Wrappers, &inv.CompatibilityMarkers, &inv.StoreCalls, &inv.Citers}
+	lists := []*[]Entry{&inv.Files, &inv.Exports, &inv.UnusedExportDebt, &inv.Routes, &inv.Tools, &inv.ProductionImporters, &inv.Wrappers, &inv.CompatibilityMarkers, &inv.StoreCalls, &inv.InterfaceCandidates, &inv.Citers}
 	for _, list := range lists {
 		sort.Slice(*list, func(i, j int) bool { return (*list)[i].ID < (*list)[j].ID })
 	}
@@ -1040,6 +950,7 @@ func setCounts(inv *Inventory) {
 	c.Wrappers = len(inv.Wrappers)
 	c.CompatibilityMarkers = len(inv.CompatibilityMarkers)
 	c.StoreCalls = len(inv.StoreCalls)
+	c.InterfaceCandidates = len(inv.InterfaceCandidates)
 	c.Citers = len(inv.Citers)
 	inv.Counts = c
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -378,11 +379,62 @@ func begin(state *store.Store) { adapt(state) }
 `)
 	current := mustScan(t, root)
 	err := compareInventory(baseline, current)
-	assertDiagnostic(t, err, "store_calls: added item")
+	assertDiagnostic(t, err, "interface_candidates: added item")
 	assertDiagnostic(t, err, "store.interface:")
+	current.InterfaceCandidates[0].Disposition = "store_backed"
+	applyInterfaceCandidateAuthority(&current, current)
 	current.StoreCalls[0].Disposition = "lifecycle"
+	if problems := validateInterfaceCandidates(current.InterfaceCandidates); len(problems) > 0 {
+		t.Fatalf("store-backed candidate disposition: %v", problems)
+	}
+	if problems := validateInterfaceCandidateAuthority(current); len(problems) > 0 {
+		t.Fatalf("store-backed candidate authority: %v", problems)
+	}
 	if problems := validateStoreCalls(current.StoreCalls); len(problems) > 0 {
-		t.Fatalf("store-backed interface disposition: %v", problems)
+		t.Fatalf("store-backed call disposition: %v", problems)
+	}
+}
+
+func TestInterfaceCandidateAuthorityCoversFlowShapes(t *testing.T) {
+	flows := map[string]string{
+		"return": `func source(state *store.Store) persistence { return state }
+func use() { source(&store.Store{}).SaveDesktopState() }`,
+		"conversion": `func use() { persistence(&store.Store{}).SaveDesktopState() }`,
+		"composite": `type holder struct { state persistence }
+func use() { holder{state: &store.Store{}}.state.SaveDesktopState() }`,
+		"closure": `func use() { (func() persistence { return &store.Store{} })().SaveDesktopState() }`,
+	}
+	for name, flow := range flows {
+		t.Run(name, func(t *testing.T) {
+			root := fixtureRepository(t)
+			writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) SaveDesktopState() {}
+`)
+			writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+type persistence interface { SaveDesktopState() }
+`+flow)
+			inventory := mustScan(t, root)
+			if len(inventory.InterfaceCandidates) != 1 {
+				t.Fatalf("interface candidates = %+v, want one", inventory.InterfaceCandidates)
+			}
+			if len(inventory.StoreCalls) != 0 {
+				t.Fatalf("candidate became Store authority before disposition: %+v", inventory.StoreCalls)
+			}
+			inventory.InterfaceCandidates[0].Disposition = "store_backed"
+			applyInterfaceCandidateAuthority(&inventory, inventory)
+			if len(inventory.StoreCalls) != 1 {
+				t.Fatalf("store-backed candidate calls = %+v, want one", inventory.StoreCalls)
+			}
+			assertDiagnostic(t, errors.New(strings.Join(validateStoreCalls(inventory.StoreCalls), "\n")), "missing or invalid disposition")
+			inventory.StoreCalls[0].Disposition = "lifecycle"
+			if problems := validateInterfaceCandidateAuthority(inventory); len(problems) > 0 {
+				t.Fatalf("candidate authority: %v", problems)
+			}
+		})
 	}
 }
 
@@ -404,6 +456,16 @@ var _ *store.Store
 func report() { activeReporter.GetRun() }
 `)
 	inventory := mustScan(t, root)
+	if len(inventory.InterfaceCandidates) != 1 {
+		t.Fatalf("fake-only same-name interface candidates = %+v, want one", inventory.InterfaceCandidates)
+	}
+	inventory.InterfaceCandidates[0].Disposition = "later"
+	assertDiagnostic(t, errors.New(strings.Join(validateInterfaceCandidates(inventory.InterfaceCandidates), "\n")), `missing or invalid disposition "later"`)
+	inventory.InterfaceCandidates[0].Disposition = "non_store"
+	applyInterfaceCandidateAuthority(&inventory, inventory)
+	if problems := validateInterfaceCandidateAuthority(inventory); len(problems) > 0 {
+		t.Fatalf("fake-only non_store authority: %v", problems)
+	}
 	if len(inventory.StoreCalls) != 0 {
 		t.Fatalf("fake-only same-name interface produced store calls: %+v", inventory.StoreCalls)
 	}

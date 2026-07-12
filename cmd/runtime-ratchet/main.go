@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -32,7 +33,12 @@ func main() {
 		previous, readErr := readInventory(baselinePath)
 		if readErr == nil {
 			inventory.UnusedExportDebt = previous.UnusedExportDebt
+			applyPriorInterfaceCandidateDispositions(&inventory, previous)
+			applyInterfaceCandidateAuthority(&inventory, inventory)
 			applyPriorStoreDispositions(&inventory, previous)
+		}
+		if problems := validateInterfaceCandidates(inventory.InterfaceCandidates); len(problems) > 0 {
+			fatal(fmt.Errorf("cannot write baseline:\n  - %s", strings.Join(problems, "\n  - ")))
 		}
 		if problems := validateStoreCalls(inventory.StoreCalls); len(problems) > 0 {
 			fatal(fmt.Errorf("cannot write baseline:\n  - %s", strings.Join(problems, "\n  - ")))
@@ -52,6 +58,8 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	applyInterfaceCandidateAuthority(&inventory, want)
+	setCounts(&inventory)
 	if err := enforceDebtAuthority(repo, baselinePath, want, false, *bootstrapDebt); err != nil {
 		fatal(err)
 	}
@@ -61,6 +69,44 @@ func main() {
 	fmt.Println("runtime dissolution inventory: PASS")
 	printCounts(inventory.Counts)
 }
+func applyPriorInterfaceCandidateDispositions(current *Inventory, previous Inventory) {
+	dispositions := map[string]string{}
+	for _, entry := range previous.InterfaceCandidates {
+		dispositions[entry.ID] = entry.Disposition
+	}
+	for index := range current.InterfaceCandidates {
+		entry := &current.InterfaceCandidates[index]
+		entry.Disposition = dispositions[entry.ID]
+		if entry.Disposition == "" {
+			if strings.Contains(entry.ID, "runSubmissionStore.") {
+				entry.Disposition = "store_backed"
+			} else if len(previous.InterfaceCandidates) == 0 {
+				entry.Disposition = "non_store"
+			}
+		}
+	}
+}
+
+func applyInterfaceCandidateAuthority(current *Inventory, authority Inventory) {
+	dispositions := map[string]string{}
+	for _, entry := range authority.InterfaceCandidates {
+		dispositions[entry.ID] = entry.Disposition
+	}
+	existing := map[string]bool{}
+	for _, entry := range current.StoreCalls {
+		existing[entry.ID] = true
+	}
+	for _, candidate := range current.InterfaceCandidates {
+		if dispositions[candidate.ID] == "store_backed" && !existing[candidate.ID] {
+			current.StoreCalls = append(current.StoreCalls, Entry{ID: candidate.ID})
+			existing[candidate.ID] = true
+		}
+	}
+	sort.Slice(current.StoreCalls, func(i, j int) bool {
+		return current.StoreCalls[i].ID < current.StoreCalls[j].ID
+	})
+}
+
 func applyPriorStoreDispositions(current *Inventory, previous Inventory) {
 	dispositions := map[string]string{}
 	byMethod := map[string]string{}
@@ -156,6 +202,6 @@ func fatal(err error) {
 }
 
 func printCounts(c Counts) {
-	fmt.Printf("counts: go_files=%d production_files=%d test_files=%d production_loc=%d test_loc=%d exports=%d export_caller_edges=%d initial_unused_export_debt=%d routes=%d tools=%d production_importers=%d wrappers=%d compatibility_markers=%d store_calls=%d citers=%d\n",
-		c.GoFiles, c.ProductionFiles, c.TestFiles, c.ProductionLOC, c.TestLOC, c.Exports, c.ExportCallerEdges, c.InitialUnusedExportDebt, c.Routes, c.Tools, c.ProductionImporters, c.Wrappers, c.CompatibilityMarkers, c.StoreCalls, c.Citers)
+	fmt.Printf("counts: go_files=%d production_files=%d test_files=%d production_loc=%d test_loc=%d exports=%d export_caller_edges=%d initial_unused_export_debt=%d routes=%d tools=%d production_importers=%d wrappers=%d compatibility_markers=%d store_calls=%d interface_candidates=%d citers=%d\n",
+		c.GoFiles, c.ProductionFiles, c.TestFiles, c.ProductionLOC, c.TestLOC, c.Exports, c.ExportCallerEdges, c.InitialUnusedExportDebt, c.Routes, c.Tools, c.ProductionImporters, c.Wrappers, c.CompatibilityMarkers, c.StoreCalls, c.InterfaceCandidates, c.Citers)
 }
