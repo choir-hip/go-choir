@@ -7,8 +7,8 @@ counts:
     production_files: 78
     test_files: 70
     production_loc: 46949
-    test_loc: 52991
-    exports: 1144
+    test_loc: 53035
+    exports: 1145
     export_caller_edges: 601
     initial_unused_export_debt: 27
     routes: 47
@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 443
     interface_candidates: 4
-    citers: 197
+    citers: 198
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -208,7 +208,7 @@ files:
       loc: 1302
     - id: internal/runtime/run_memory_integration_test.go [test]
       disposition: lifecycle
-      loc: 408
+      loc: 452
     - id: internal/runtime/run_memory_test.go [test]
       disposition: lifecycle
       loc: 441
@@ -1743,6 +1743,8 @@ exports:
       production_callers:
         - internal/runtime/run_memory.go
     - id: internal/runtime/run_memory_integration_test.go:func:TestChildRunUsesRunMemory
+      disposition: lifecycle
+    - id: internal/runtime/run_memory_integration_test.go:func:TestRuntimeManualRunMemoryCompaction
       disposition: lifecycle
     - id: internal/runtime/run_memory_integration_test.go:func:TestRuntimeRunMemoryOverflowFailureBlocksRun
       disposition: lifecycle
@@ -5187,6 +5189,8 @@ citers:
     - id: 'docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md:Allowed paths: `internal/runtime/api.go`, `internal/runtime/test_helpers_test.go`, directly dependent focused runtime tests, and `docs/runtime-dissolution-inventory.yaml` after implementation proof. N… [sha256:842d0137cc8c2412cc653a62892369ab08471f2441e165199e8d7641e30cee02]'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md:The ratchet marks these `internal/runtime/api.go` methods `disposition: delete`:'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:- Reproducer: `git diff --unified=8 ce0cc940..883cec57 -G''StartRun'' -- internal/runtime` shows that deleting the wrapper-only manual-compaction test also deleted one existing `rt.StartRun(...)` caller.'
       disposition: historical_evidence
     - id: docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:- `internal/runtime/run_memory_integration_test.go`.
       disposition: historical_evidence
