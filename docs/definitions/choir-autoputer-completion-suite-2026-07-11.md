@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: bc1419fc
+  journal_expected_parent_sha: 691bbf1d
   orchestrator_lock:
     holder: Main
     epoch: 13
     expires_at: 2026-07-12T17:25:09Z
-    expected_parent_sha: bc1419fc
+    expected_parent_sha: 691bbf1d
     lock_transition_id: s3-lock-renewal-106
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1358,13 +1358,13 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 13
-      status: dispatch_intent
+      status: dispatched
       dispatch_nonce: s3-runtime-dissolution-i4-nonce-01
-      dispatch_ref: pending_agent_dispatch
-      agent_session_ref: pending_agent_dispatch
+      dispatch_ref: S3I4Implementer
+      agent_session_ref: agent://S3I4Implementer
       dispatch_prompt_ref: docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md#exact-mutation-lock
-      implementer_job_ref: pending_agent_dispatch
-      implementer_output_ref: pending_agent_dispatch
+      implementer_job_ref: S3I4Implementer
+      implementer_output_ref: pending_agent_return
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
       worktree_or_branch_ref: pending_isolated_worktree_or_patch
@@ -1372,24 +1372,25 @@ run_checkpoint_and_resumption_state:
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
       direct_shared_worktree_justification: not_applicable
-      lock_acquired_ref: bc1419fc
+      lock_acquired_ref: 691bbf1d
       lock_release_ref: pending_S3_I4_landing
       stage_started_at: 2026-07-12T15:41:43Z
       transition_id: s3-i4-dispatch-intent-111
-      expected_parent_sha: bc1419fc
+      expected_parent_sha: 691bbf1d
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i4-dispatch-intent-111, recorded_at: 2026-07-12T15:41:43Z, actor: Main, expected_parent_sha: bc1419fc, precondition: S3_I3_landed_ratchet_PASS_three_declaration_only_exports_confirmed, postcondition: exact_declaration_only_deletion_slice_is_canonical, external_operation_id: not_applicable}
+        - {status: dispatched, transition_id: s3-i4-dispatched-112, recorded_at: 2026-07-12T15:44:07Z, actor: Main, expected_parent_sha: 691bbf1d, precondition: canonical_intent_and_live_lock_epoch_13, postcondition: S3I4Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T17:25:09Z
       mutation_class: orange
       protected_surfaces: []
       exact_files_packages_routes_state_authorities: [internal/runtime/channel_store.go, internal/runtime/textureprompts/prompts.go, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [replacement_helpers, aliases, forwarding_methods, exported_test_seams, active_overlays_templates, ChannelCast, owner_scoped_store_queries, actor_message_delivery, routes, tool_registrations, state_authorities, unrelated_cleanup]
       authority_edges_locked: [ChannelCast_unchanged, owner_scoped_reads_unchanged, actor_delivery_unchanged, overlays_templates_unchanged, routes_tools_state_authorities_unchanged]
-      implementer_agent: pending_agent_dispatch
+      implementer_agent: S3I4Implementer
       verifier_agent: pending_independent_verification
-      pre_mutation_sha: bc1419fc
-      rollback_commit_or_ref: bc1419fc
-      accepted_slice_dependency_refs: [S3-I3@e7dd780d]
+      pre_mutation_sha: 691bbf1d
+      rollback_commit_or_ref: 691bbf1d
+      accepted_slice_dependency_refs: [S3-I3@bc1419fc]
       external_operation_id: not_applicable
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
@@ -1408,8 +1409,8 @@ run_checkpoint_and_resumption_state:
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-12T15:41:43Z
-      reconciliation_result: no_prior_matching_dispatch_found
+      last_reconciled_at: 2026-07-12T15:44:07Z
+      reconciliation_result: one_matching_live_agent_job_S3I4Implementer
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
