@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 52c6532b
+  journal_expected_parent_sha: ca5ff39a
   orchestrator_lock:
     holder: Main
     epoch: 16
     expires_at: 2026-07-12T22:00:00Z
-    expected_parent_sha: 52c6532b
+    expected_parent_sha: ca5ff39a
     lock_transition_id: s3-lock-renewal-156
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1691,7 +1691,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 16
-      status: verifying
+      status: blocked_incomplete
       dispatch_nonce: s3-runtime-dissolution-i9-nonce-01
       dispatch_ref: S3I9Implementer
       agent_session_ref: agent://S3I9Implementer
@@ -1709,7 +1709,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I9_landing
       stage_started_at: 2026-07-12T20:05:09Z
       transition_id: s3-i9-dispatch-intent-165
-      expected_parent_sha: 52c6532b
+      expected_parent_sha: ca5ff39a
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i9-dispatch-intent-165, recorded_at: 2026-07-12T20:05:09Z, actor: Main, expected_parent_sha: a28b590a, precondition: S3_I8_landed_step1_complete, postcondition: exact_tool_loop_core_extraction_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i9-dispatched-166, recorded_at: 2026-07-12T20:11:57Z, actor: Main, expected_parent_sha: dd9724fc, precondition: canonical_intent_and_live_lock_epoch_16, postcondition: S3I9Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
@@ -1721,6 +1721,7 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s3-i9-verifier-dispatched-172, recorded_at: 2026-07-12T20:36:35Z, actor: Main, expected_parent_sha: 765f5c5f, precondition: verifier_intent_canonical, postcondition: independent_S3I9Verifier_active, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s3-i9-verifier-blocking-173, recorded_at: 2026-07-12T20:43:27Z, actor: S3I9Verifier, expected_parent_sha: 012c36f5, precondition: independent_source_tag_and_ratchet_verification, postcondition: comprehensive_test_helpers_and_inventory_citer_blockers_documented_before_repair, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i9-verifier-blockers-repaired-174, recorded_at: 2026-07-12T20:47:43Z, actor: Main, expected_parent_sha: 52c6532b, precondition: blockers_documented_canonically, postcondition: test_helpers_restored_comprehensive_only_pre_existing_drift_ratchet_227_PASS_reverification_required, external_operation_id: not_applicable}
+        - {status: blocked_incomplete, transition_id: s3-i9-repair-receipt-ordering-175, recorded_at: 2026-07-12T20:53:08Z, actor: S3I9Verifier, expected_parent_sha: ca5ff39a, precondition: repaired_source_and_inventory_rechecked, postcondition: repair_receipt_added_after_inventory_regeneration_documented_before_final_regeneration, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T22:00:00Z
       mutation_class: orange
       protected_surfaces: []
@@ -1747,11 +1748,11 @@ run_checkpoint_and_resumption_state:
       acceptance_ref: pending
       acceptance_contract: storage_independent_tool_loop_extracted_to_toolregistry_required_narrow_executor_contract_no_runtime_alias_no_fallback_behavior_preserved
       evidence_refs: [docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md, agent://S3I9Implementer, agent://S3I9Verifier]
-      open_findings: [batch_executor_policy_remains_runtime_owned_for_later_step2_slice]
+      open_findings: [inventory_must_regenerate_after_complete_repair_receipt, batch_executor_policy_remains_runtime_owned_for_later_step2_slice]
       landed_commit_sha: pending
-      adjudication: verifier_blockers_repaired_final_reverification_pending
-      last_reconciled_at: 2026-07-12T20:47:43Z
-      reconciliation_result: source_repair_and_ratchet_PASS_ready_for_S3I9Verifier_recheck
+      adjudication: source_PASS_receipt_ordering_ratchet_BLOCKING
+      last_reconciled_at: 2026-07-12T20:53:08Z
+      reconciliation_result: verifier_recheck_source_PASS_ratchet_baseline_227_current_228_final_regeneration_required
       close_condition: extraction_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

@@ -90,3 +90,8 @@ Forbidden:
 - Comprehensive-tag runtime compilation now reproduces only the pre-existing `prompts_test.go` and `texture_test.go` drift; every extraction-induced undefined helper is gone.
 - Regenerated the final inventory at `227` citers. Ratchet executable and focused ratchet tests pass.
 - Focused toolregistry/provider/gatewayruntime, runtime loop/executor/memory, and integration-tag provider checks all pass after repair.
+
+## S3-I9 Repair Receipt Ordering Blocker
+
+- Final verifier recheck found the repair receipt itself was added after inventory regeneration: baseline `227`, current `228`.
+- Smallest fix: keep the complete durable receipt canonical, then regenerate the inventory as the final mutation and rerun the ratchet. Source and behavioral verification remain green.
