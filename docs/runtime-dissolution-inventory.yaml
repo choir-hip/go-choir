@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 444
     interface_candidates: 4
-    citers: 178
+    citers: 181
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5173,6 +5173,8 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/provideriface/provider.go, internal/runtime/config.go, internal/runtime/config_test.go, internal/runtime/runtime.go, internal/runtime/runtime_t… [sha256:6687142f5f443a6b310a9f2e13c056a098144518f9b1b26089320ac72c8da3d5]'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/api.go, internal/runtime/test_helpers_test.go, docs/runtime-dissolution-inventory.yaml]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:result: approximately 40K live app lines move, 6K-8K core moves, internal/runtime deleted'
@@ -5296,6 +5298,10 @@ citers:
     - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:Change: replace the sourcecycled runtime projection target with the existing corpusd object-graph HTTP service through the host service/proxy path; remove `/internal/runtime/objectgraph/web-captures` … [sha256:ead26837bfd20889d399cdb596ce7458eb284f39d02654aac64744a9df79e153]'
       disposition: historical_evidence
     - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:The Codex finding was concrete and was repaired rather than outvoted. Commits `981bd74a` and `b7b1262e` remove the stale import/runtime-store claims from `internal/store/store.go`, `internal/runtime/c… [sha256:ab07aa27be75e130458a6a85cf9f02f8c68c2f08e5df6df6ba86b2cefd918419]
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md:Allowed paths: `internal/runtime/api.go`, `internal/runtime/test_helpers_test.go`, directly dependent focused runtime tests, and `docs/runtime-dissolution-inventory.yaml` after implementation proof. N… [sha256:842d0137cc8c2412cc653a62892369ab08471f2441e165199e8d7641e30cee02]'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md:The ratchet marks these `internal/runtime/api.go` methods `disposition: delete`:'
       disposition: historical_evidence
     - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
       disposition: block
