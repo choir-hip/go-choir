@@ -129,6 +129,12 @@ The interface repair matches any named runtime interface method by name/signatur
 
 **Required repair:** interface-mediated inventory must require concrete Store provenance. At minimum, prove a Store value is passed/assigned to the interface receiver path; merely satisfying the interface or sharing a method signature is insufficient. Add same-name fake-interface and real Store-passed-interface regressions.
 
+### Final Interface-Provenance Verification
+
+The repair now seeds interface provenance only from concrete `*store.Store` arguments or assignments and propagates that provenance through runtime-local interface argument/assignment edges. Independent verification at `0a391d08` passed: fake-only same-signature interfaces are excluded; direct and transitive Store-backed interfaces are included; novel interface mutations fail until disposition; method values remain covered; package helpers and unrelated interfaces remain excluded. The baseline contains four provenance-backed `runSubmissionStore` identities and 457 concrete Store selections, 461 total.
+
+Per owner instruction and observed panel behavior, subsequent panels exclude the stalled Devin member rather than allowing one zero-output process to halt the run. Cursor remains included because both completed panels recorded Cursor `ok`.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` / incomplete. S0-POST-001 and S0-POST-002 are repaired in shape, but independent verification confirmed S0-POST-003: interface matching lacks concrete Store provenance. S1 remains waiting until provenance-aware interface inventory passes independent verification and checkpoint adjudication.
+S0 remains `consensus_pending` only for the final post-repair panel. S0-POST-001 through S0-POST-003 are repaired according to focused and independent evidence; S1 remains waiting until the six-member non-stalled panel is adjudicated.
