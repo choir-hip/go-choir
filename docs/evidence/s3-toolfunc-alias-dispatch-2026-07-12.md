@@ -27,3 +27,11 @@ Only `internal/runtime/tools.go` may change in source:
 - tests need no source edits because there is no caller.
 
 After implementation, regenerate `docs/runtime-dissolution-inventory.yaml`. Acceptance requires source/default compilation, executable ratchet decrease without gated growth, independent verification, full CI, staging identity/product smoke, consensus, and adjudication.
+
+## S3-I6 Implementation Receipt
+
+- Integrated implementation: `5736341f` (isolated commit `be27ca99782624dd57d1f024a00d3ca60419dc59`).
+- Exact source diff: one deletion in `internal/runtime/tools.go`; `ToolFunc = toolregistry.ToolFunc` was removed and every surrounding byte remained unchanged.
+- Pre/post all-Go-source and build-tag-aware scans found no caller; after deletion only authoritative `internal/toolregistry.ToolFunc` remains.
+- Default runtime compilation passed. Comprehensive-tag compilation has identical pre/post unrelated failures in `prompts_test.go` and `texture_test.go`; this is documented residual drift outside S3-I6.
+- Ratchet passed after removing the fulfilled debt row: production LOC `46934 -> 46933`, exports `1143 -> 1142`, initial unused-export debt `25 -> 24`; test LOC, caller edges, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, and citers remained gated.

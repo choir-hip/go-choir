@@ -6,11 +6,11 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 46934
+    production_loc: 46933
     test_loc: 53037
-    exports: 1143
+    exports: 1142
     export_caller_edges: 601
-    initial_unused_export_debt: 25
+    initial_unused_export_debt: 24
     routes: 47
     tools: 49
     production_importers: 4
@@ -358,7 +358,7 @@ files:
       loc: 922
     - id: internal/runtime/tools.go [production]
       disposition: tools
-      loc: 641
+      loc: 640
     - id: internal/runtime/tools_capsule.go [production]
       disposition: tools
       loc: 546
@@ -3224,8 +3224,6 @@ exports:
       disposition: tools
       production_callers:
         - internal/runtime/toolloop.go
-    - id: internal/runtime/tools.go:type:ToolFunc
-      disposition: tools
     - id: internal/runtime/tools.go:type:ToolRegistry
       disposition: tools
       production_callers:
@@ -3663,8 +3661,6 @@ initial_unused_export_debt:
     - id: internal/runtime/toolloop.go:method(*ToolLoopPassivatedError):Unwrap
       disposition: delete
     - id: internal/runtime/toolloop.go:method(*toolLoopAdapter):CallWithTools
-      disposition: delete
-    - id: internal/runtime/tools.go:type:ToolFunc
       disposition: delete
     - id: internal/runtime/tools.go:var:NewToolRegistry
       disposition: delete
