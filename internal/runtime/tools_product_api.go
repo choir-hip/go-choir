@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 const productAPIToolMaxBodyBytes = 1 << 20
@@ -38,10 +39,10 @@ func newProductAPIRequestTool(rt *Runtime) Tool {
 			if rt == nil {
 				return "", fmt.Errorf("product_api_request missing runtime")
 			}
-			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
 				return "", fmt.Errorf("product_api_request is only available to foreground super")
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("product_api_request missing owner context")
 			}
@@ -66,7 +67,7 @@ func newProductAPIRequestTool(rt *Runtime) Tool {
 			req := httptest.NewRequest(method, path, body)
 			req = req.WithContext(ctx)
 			req.Header.Set("X-Authenticated-User", ownerID)
-			if ownerEmail := stringFromToolContext(ctx, toolCtxOwnerEmail); ownerEmail != "" {
+			if ownerEmail := toolregistry.ExecutionContextFrom(ctx).OwnerEmail; ownerEmail != "" {
 				req.Header.Set("X-Authenticated-Email", ownerEmail)
 			}
 			if body != nil {

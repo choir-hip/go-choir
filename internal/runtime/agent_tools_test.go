@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func toolSchemaStringEnum(schema map[string]any, property string) []string {
@@ -288,10 +289,10 @@ func TestForegroundSuperMutationGuardBlocksWritableTools(t *testing.T) {
 		t.Fatalf("start super run: %v", err)
 	}
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	if _, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superRun), "bash", json.RawMessage(`{"command":"touch should-not-exist"}`)); err == nil || !strings.Contains(err.Error(), "blocked for foreground super") {
+	if _, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "bash", json.RawMessage(`{"command":"touch should-not-exist"}`)); err == nil || !strings.Contains(err.Error(), "blocked for foreground super") {
 		t.Fatalf("super bash error = %v, want foreground mutation guard", err)
 	}
-	if _, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superRun), "write_file", json.RawMessage(`{"path":"should-not-exist.txt","content":"blocked"}`)); err == nil || !strings.Contains(err.Error(), "blocked for foreground super") {
+	if _, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "write_file", json.RawMessage(`{"path":"should-not-exist.txt","content":"blocked"}`)); err == nil || !strings.Contains(err.Error(), "blocked for foreground super") {
 		t.Fatalf("super write_file error = %v, want foreground mutation guard", err)
 	}
 
@@ -304,7 +305,7 @@ func TestForegroundSuperMutationGuardBlocksWritableTools(t *testing.T) {
 		t.Fatalf("start worker run: %v", err)
 	}
 	workerRegistry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
-	if _, err := workerRegistry.Execute(WithToolExecutionContext(context.Background(), workerRun), "write_file", json.RawMessage(`{"path":"worker-ok.txt","content":"allowed"}`)); err != nil {
+	if _, err := workerRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(workerRun)), "write_file", json.RawMessage(`{"path":"worker-ok.txt","content":"allowed"}`)); err != nil {
 		t.Fatalf("co-super write_file should be allowed: %v", err)
 	}
 }
@@ -325,7 +326,7 @@ func TestPersistentSuperInboxBashRequiresCoagentUpdate(t *testing.T) {
 			"request_source":        "update_coagent",
 		},
 	}
-	raw, err := newBashTool("").Func(WithToolExecutionContext(context.Background(), run), json.RawMessage(`{"command":"printf durable"}`))
+	raw, err := newBashTool("").Func(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), json.RawMessage(`{"command":"printf durable"}`))
 	if err != nil {
 		t.Fatalf("bash: %v", err)
 	}
@@ -358,7 +359,7 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	spawnRaw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), parent), "spawn_agent", json.RawMessage(`{
+	spawnRaw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)), "spawn_agent", json.RawMessage(`{
 		"objective":"research the codebase and report back",
 		"role":"researcher",
 		"channel_id":"shared-work"
@@ -394,7 +395,7 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	}
 
 	postRaw, err := superRegistry.Execute(
-		WithToolExecutionContext(context.Background(), parent),
+		toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)),
 		"update_coagent",
 		json.RawMessage(fmt.Sprintf(`{
 		"schema_version":"coagent_source_packet.v1",
@@ -521,7 +522,7 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 		t.Fatalf("claim co-super slot: got claimed=false, want true")
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	toolCtx := WithToolExecutionContext(ctx, &superRun)
+	toolCtx := toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&superRun))
 	_, err := registry.Execute(toolCtx, "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"agent-cosuper-skip",
@@ -578,7 +579,7 @@ func TestChannelCastDoesNotCreateWakeDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start parent run: %v", err)
 	}
-	ctx := WithToolExecutionContext(context.Background(), parent)
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent))
 
 	for i := 0; i < 2; i++ {
 		if _, err := rt.ChannelCast(ctx, "doc-repeat-work", "agent-super-user-alice", "", "texture", "user", "please run the same candidate-world probe"); err != nil {
@@ -632,11 +633,11 @@ func TestRequestSuperExecutionDedupesSameTextureRun(t *testing.T) {
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
 	rawArgs := json.RawMessage(`{"objective":"Run exactly one bounded candidate-world probe.","channel_id":"doc-super-dedupe","model":"gpt-5-codex"}`)
-	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", rawArgs)
+	firstRaw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", rawArgs)
 	if err != nil {
 		t.Fatalf("first request_super_execution: %v", err)
 	}
-	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", rawArgs)
+	secondRaw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", rawArgs)
 	if err != nil {
 		t.Fatalf("second request_super_execution: %v", err)
 	}
@@ -696,14 +697,14 @@ func TestRequestSuperExecutionDedupesDifferentObjectivesInSameTextureRun(t *test
 		t.Fatalf("start texture run: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", json.RawMessage(`{
+	firstRaw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
 		"objective":"Run one bounded candidate-world probe for onboarding copy.",
 		"channel_id":"doc-super-turn-dedupe"
 	}`))
 	if err != nil {
 		t.Fatalf("first request_super_execution: %v", err)
 	}
-	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", json.RawMessage(`{
+	secondRaw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
 		"objective":"Also run a second candidate-world probe for prompt bar layout.",
 		"channel_id":"doc-super-turn-dedupe"
 	}`))
@@ -791,7 +792,7 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 	if err != nil {
 		t.Fatalf("start first texture run: %v", err)
 	}
-	firstRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), firstTexture), "request_super_execution", json.RawMessage(`{
+	firstRaw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(firstTexture)), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the liquid package lane.",
 		"channel_id":"doc-liquid"
 	}`))
@@ -820,7 +821,7 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 	if err != nil {
 		t.Fatalf("start second texture run: %v", err)
 	}
-	secondRaw, err := registry.Execute(WithToolExecutionContext(context.Background(), secondTexture), "request_super_execution", json.RawMessage(`{
+	secondRaw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(secondTexture)), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the python package lane.",
 		"channel_id":"doc-python"
 	}`))
@@ -910,7 +911,7 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 	if err != nil {
 		t.Fatalf("start texture run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(context.Background(), textureRun), "request_super_execution", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the fresh Universal Wire product API handoff.",
 		"channel_id":"doc-fresh-super"
 	}`))
@@ -1005,7 +1006,7 @@ func TestRequestSuperExecutionFreshTextureChannelBypassesOldActorCursor(t *testi
 	if err != nil {
 		t.Fatalf("start texture run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, textureRun), "request_super_execution", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the fresh O5 product-path handoff.",
 		"channel_id":"new-doc"
 	}`))
@@ -1061,7 +1062,7 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	if _, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "spawn_agent", json.RawMessage(`{
+	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"handle execution-heavy follow-up",
 		"role":"super",
 		"channel_id":"doc-exec-work"
@@ -1069,7 +1070,7 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 		t.Fatalf("texture should not be allowed to spawn super")
 	}
 
-	superRequestRaw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "request_super_execution", json.RawMessage(`{
+	superRequestRaw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureTask)), "request_super_execution", json.RawMessage(`{
 		"objective":"handle execution-heavy follow-up",
 		"channel_id":"doc-exec-work"
 	}`))
@@ -1096,7 +1097,7 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	coSuperRaw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "spawn_agent", json.RawMessage(`{
+	coSuperRaw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"handle execution subtree",
 		"role":"co-super"
 	}`))
@@ -1119,7 +1120,7 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 		t.Fatalf("get co-super task: %v", err)
 	}
 	coSuperRegistry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
-	if _, err := coSuperRegistry.Execute(WithToolExecutionContext(context.Background(), &child), "spawn_agent", json.RawMessage(`{
+	if _, err := coSuperRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&child)), "spawn_agent", json.RawMessage(`{
 		"objective":"try to escape supervision",
 		"role":"super"
 	}`)); err == nil {
@@ -1134,7 +1135,7 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 		t.Fatalf("submit researcher task: %v", err)
 	}
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	saveRaw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "save_evidence", json.RawMessage(`{
+	saveRaw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "save_evidence", json.RawMessage(`{
 		"kind":"web_page",
 		"source_uri":"https://example.com",
 		"title":"Example",
@@ -1219,7 +1220,7 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "fork_desktop", json.RawMessage(`{
+	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "fork_desktop", json.RawMessage(`{
 		"desktop_id":"branch-a"
 	}`))
 	if err != nil {
@@ -1288,7 +1289,7 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 		t.Fatalf("branch active_window_id = %q, want win-texture", branchState.ActiveWindowID)
 	}
 
-	publishRaw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "publish_desktop", json.RawMessage(`{
+	publishRaw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "publish_desktop", json.RawMessage(`{
 		"desktop_id":"branch-a"
 	}`))
 	if err != nil {
@@ -1344,7 +1345,7 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "request_worker_vm", json.RawMessage(`{
+	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "request_worker_vm", json.RawMessage(`{
 		"purpose":"Run background coding task",
 		"machine_class":"worker-medium"
 	}`))
@@ -1454,7 +1455,7 @@ func TestSuperRequestWorkerVMNormalizesStandardMachineClass(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "request_worker_vm", json.RawMessage(`{
+	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "request_worker_vm", json.RawMessage(`{
 		"purpose":"Run background coding task",
 		"machine_class":"standard"
 	}`))
@@ -1511,7 +1512,7 @@ func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	request := func(raw json.RawMessage) string {
 		t.Helper()
-		out, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "request_worker_vm", raw)
+		out, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "request_worker_vm", raw)
 		if err != nil {
 			t.Fatalf("request_worker_vm: %v", err)
 		}
@@ -1572,7 +1573,7 @@ func TestSuperRequestWorkerVMDedupesSameRunByMachineClass(t *testing.T) {
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
 	request := func(raw json.RawMessage) (string, bool) {
 		t.Helper()
-		out, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superTask), "request_worker_vm", raw)
+		out, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "request_worker_vm", raw)
 		if err != nil {
 			t.Fatalf("request_worker_vm: %v", err)
 		}
@@ -1638,7 +1639,7 @@ func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *tes
 		t.Fatalf("submit super task: %v", err)
 	}
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	toolCtx := WithToolExecutionContext(context.Background(), superTask)
+	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask))
 
 	requestRaw := json.RawMessage(`{"purpose":"repair mobile UX substrate","machine_class":"worker-small"}`)
 	firstRaw, err := superRegistry.Execute(toolCtx, "request_worker_vm", requestRaw)
@@ -1735,7 +1736,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 	appendRuntimeToolResult(t, s, *superTask, "delegate_worker_vm", existing)
 
 	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superTask), "delegate_worker_vm", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "delegate_worker_vm", json.RawMessage(`{
 		"worker_sandbox_url": "http://worker-duplicate.test",
 		"worker_id": "worker-duplicate",
 		"vm_id": "vm-duplicate",
@@ -1810,7 +1811,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns(t *testing.T
 		t.Fatalf("submit second super task: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), secondRun), "start_worker_delegation", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(secondRun)), "start_worker_delegation", json.RawMessage(`{
 		"worker_sandbox_url": "http://worker-trajectory.test",
 		"worker_id": "worker-trajectory",
 		"vm_id": "vm-trajectory",
@@ -1861,7 +1862,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	} else if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileTexture {
 		t.Fatalf("conductor spawn_agent role enum = %#v, want only %q", got, AgentProfileTexture)
 	}
-	if _, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
+	if _, err := conductorRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(conductorTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"research should be owned by texture, not conductor",
 		"role":"researcher"
 	}`)); err == nil {
@@ -1870,7 +1871,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	// Conductor spawn_agent role=texture without channel_id materializes a new
 	// document route (the conductor user-prompt handoff owns document
 	// creation; channel_id is only meaningful for revising existing docs).
-	textureSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
+	textureSpawnRaw, err := conductorRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(conductorTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
 		"role":"texture"
 	}`))
@@ -1911,7 +1912,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	// A repeat conductor legacy role=texture spawn on the same conductor run must
 	// dedupe to the already-materialized Texture document instead of opening a
 	// second route.
-	repeatSpawnRaw, err := conductorRegistry.Execute(WithToolExecutionContext(context.Background(), conductorTask), "spawn_agent", json.RawMessage(`{
+	repeatSpawnRaw, err := conductorRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(conductorTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"create v0 and own the document",
 		"role":"texture",
 		"channel_id":"doc-work"
@@ -1981,7 +1982,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 		t.Fatalf("start texture run for delegation: %v", err)
 	}
 	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	researchSpawnRaw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "spawn_agent", json.RawMessage(`{
+	researchSpawnRaw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"research background facts for the document",
 		"role":"researcher",
 		"channel_id":"`+textureSpawn.ChannelID+`"
@@ -2019,7 +2020,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 		t.Fatalf("research open work items = %+v, want %s", researchObligations.OpenWorkItems, researchWorkItemIDs[0])
 	}
 
-	researchAliasSpawnRaw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "spawn_agent", json.RawMessage(`{
+	researchAliasSpawnRaw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"research current facts for the document",
 		"role":"research",
 		"channel_id":"`+textureSpawn.ChannelID+`"
@@ -2038,7 +2039,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 		t.Fatalf("research alias spawn = role %q profile %q, want researcher/researcher", researchAliasSpawn.Role, researchAliasSpawn.Profile)
 	}
 
-	noisyResearchSpawnRaw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureTask), "spawn_agent", json.RawMessage(`{
+	noisyResearchSpawnRaw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"research current facts despite provider wrapper noise",
 		"role":"researcher</parameter> </invoke>",
 		"channel_id":"`+textureSpawn.ChannelID+`"
@@ -2107,14 +2108,14 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	}
 
 	processorRegistry := rt.ToolRegistryForProfile(AgentProfileProcessor)
-	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+	if _, err := processorRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(processorRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"verify the strongest claims in this source batch",
 		"role":"researcher"
 	}`)); err == nil {
 		t.Fatal("processor should not be allowed to spawn researcher")
 	}
 
-	spawnTextureRaw, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+	spawnTextureRaw, err := processorRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(processorRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"write a source-grounded article from this processor brief about Fed rates and inflation",
 		"role":"texture",
 		"channel_id":"universal-wire-story-candidate"
@@ -2286,7 +2287,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		t.Fatalf("marshal texture edit args: %v", err)
 	}
 	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	if _, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), textureRun), "patch_texture", editArgs); err != nil {
+	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "patch_texture", editArgs); err != nil {
 		t.Fatalf("texture article patch: %v", err)
 	}
 	articleDoc, err := rt.Store().GetDocument(context.Background(), textureSpawn.DocID, "user-alice")
@@ -2330,7 +2331,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if _, ok := articleMeta["source_ref_normalization"]; ok {
 		t.Fatalf("texture-owned article revision retained legacy source_ref_normalization: %#v", articleMeta)
 	}
-	if _, err := processorRegistry.Execute(WithToolExecutionContext(context.Background(), processorRun), "spawn_agent", json.RawMessage(`{
+	if _, err := processorRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(processorRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"mutate code",
 		"role":"co-super"
 	}`)); err == nil {
@@ -2352,7 +2353,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		t.Fatalf("reconciler agent id = %q", reconcilerRun.AgentID)
 	}
 	reconcilerRegistry := rt.ToolRegistryForProfile(AgentProfileReconciler)
-	reconcilerTextureRaw, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+	reconcilerTextureRaw, err := reconcilerRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(reconcilerRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"draft a correction/update Texture from this corpus reconciliation",
 		"role":"texture",
 		"channel_id":"`+textureSpawn.DocID+`"
@@ -2384,19 +2385,19 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if reconcilerTextureRun.AgentID != "texture:"+textureSpawn.DocID || reconcilerTextureRun.ChannelID != textureSpawn.DocID || metadataString(reconcilerTextureRun.Metadata, "type") != textureAgentRevisionTaskType {
 		t.Fatalf("reconciler texture run is not a Texture revision run: %+v", reconcilerTextureRun)
 	}
-	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+	if _, err := reconcilerRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(reconcilerRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"verify claims independently",
 		"role":"researcher"
 	}`)); err == nil {
 		t.Fatal("reconciler should not be allowed to spawn researcher")
 	}
-	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+	if _, err := reconcilerRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(reconcilerRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"draft a corpus-wide new article without a target doc",
 		"role":"texture"
 	}`)); err == nil {
 		t.Fatal("reconciler corpus_wake should require existing channel_id")
 	}
-	if _, err := reconcilerRegistry.Execute(WithToolExecutionContext(context.Background(), reconcilerRun), "spawn_agent", json.RawMessage(`{
+	if _, err := reconcilerRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(reconcilerRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"privileged mutation",
 		"role":"super"
 	}`)); err == nil {
@@ -2443,7 +2444,7 @@ func TestConcurrentConductorTextureSpawnsShareRoute(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			results[idx], errs[idx] = registry.Execute(WithToolExecutionContext(ctx, conductorTask), "spawn_agent", rawArgs)
+			results[idx], errs[idx] = registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(conductorTask)), "spawn_agent", rawArgs)
 		}(i)
 	}
 	wg.Wait()
@@ -2669,7 +2670,7 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	_, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+	_, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "spawn_agent", json.RawMessage(`{
 		"objective":"verify before implementation",
 		"role":"co-super",
 		"slot":"verifier"
@@ -2708,7 +2709,7 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 		t.Fatalf("claim active implementation slot: got claimed=false, want true")
 	}
 
-	_, err = registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+	_, err = registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "spawn_agent", json.RawMessage(`{
 		"objective":"verify while implementation is still active",
 		"role":"co-super",
 		"slot":"verifier"
@@ -2725,7 +2726,7 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 		t.Fatalf("complete implementation child: %v", err)
 	}
 
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "spawn_agent", json.RawMessage(`{
 		"objective":"verify implementation commit abc123 and saved evidence",
 		"role":"co-super",
 		"slot":"verifier"
@@ -2807,7 +2808,7 @@ func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "spawn_agent", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "spawn_agent", json.RawMessage(`{
 		"objective":"start another implementation co-super for the same candidate checkout",
 		"role":"co-super",
 		"slot":"implementation"
@@ -2934,7 +2935,7 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "cancel_agent", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "cancel_agent", json.RawMessage(`{
 		"agent_id":"agent-exported-child"
 	}`))
 	if err != nil {
@@ -2995,7 +2996,7 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 	} else if !claimed {
 		t.Fatalf("claim cancellable child slot: got claimed=false, want true")
 	}
-	raw, err = registry.Execute(WithToolExecutionContext(ctx, &parent), "cancel_agent", json.RawMessage(`{
+	raw, err = registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "cancel_agent", json.RawMessage(`{
 		"agent_id":"agent-cancellable-child"
 	}`))
 	if err != nil {
@@ -3055,7 +3056,7 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		"package_manifest_sha256": "other-trajectory-manifest-sha",
 	})
 
-	raw, err = registry.Execute(WithToolExecutionContext(ctx, &parent), "cancel_agent", json.RawMessage(`{
+	raw, err = registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "cancel_agent", json.RawMessage(`{
 		"agent_id":"agent-exported-other-trajectory"
 	}`))
 	if err == nil {
@@ -3175,7 +3176,7 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 	})
 
 	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, &parent), "publish_app_change_package", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "publish_app_change_package", json.RawMessage(`{
 		"repo_path":"does-not-exist",
 		"base_sha":"base-sha"
 	}`))
@@ -3222,7 +3223,7 @@ func TestVerifierCoSuperCannotPublishAppChangePackage(t *testing.T) {
 		},
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
-	_, err := registry.Execute(WithToolExecutionContext(context.Background(), run), "publish_app_change_package", json.RawMessage(`{
+	_, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), "publish_app_change_package", json.RawMessage(`{
 		"repo_path":".",
 		"base_sha":"base"
 	}`))
@@ -3281,7 +3282,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
+	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "update_coagent", json.RawMessage(`{
 		"agent_id":"texture:doc-1",
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
@@ -3329,7 +3330,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 		t.Fatalf("unexpected coagent update role/kind: %+v", finding)
 	}
 
-	rawAgain, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "update_coagent", json.RawMessage(`{
+	rawAgain, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "update_coagent", json.RawMessage(`{
 		"agent_id":"texture:doc-1",
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
@@ -3422,7 +3423,7 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "read_content_item", json.RawMessage(`{
+	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "read_content_item", json.RawMessage(`{
 		"content_id":"content-transcript-1",
 		"max_text_chars":12,
 		"max_segments":1
@@ -3496,7 +3497,7 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	rawImport, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "import_document_content", json.RawMessage(`{
+	rawImport, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "import_document_content", json.RawMessage(`{
 		"file_path":"imports/deck.pptx"
 	}`))
 	if err != nil {
@@ -3518,7 +3519,7 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 		t.Fatalf("selector_count = %#v", imported["selector_count"])
 	}
 
-	rawList, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "list_content_item_selectors", json.RawMessage(`{
+	rawList, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "list_content_item_selectors", json.RawMessage(`{
 		"content_id":"`+contentID+`"
 	}`))
 	if err != nil {
@@ -3528,7 +3529,7 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 		t.Fatalf("selector list = %s", rawList)
 	}
 
-	rawRead, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "read_content_item_selector", json.RawMessage(`{
+	rawRead, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "read_content_item_selector", json.RawMessage(`{
 		"content_id":"`+contentID+`",
 		"selector_id":"slide-2"
 	}`))
@@ -3601,7 +3602,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		"questions":["Should mutation rate be user-adjustable in the UI?"],
 		"notes":["This is a structured worker update, not a document patch.","Expose generation count, population, and mean fitness as visible controls."]
 	}`)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
+	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", rawArgs)
 	if err != nil {
 		t.Fatalf("update_coagent: %v", err)
 	}
@@ -3674,7 +3675,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("trajectory updates = %+v", updates)
 	}
 
-	rawAgain, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
+	rawAgain, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", rawArgs)
 	if err != nil {
 		t.Fatalf("repeat update_coagent: %v", err)
 	}
@@ -3696,7 +3697,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("repeat submit should not duplicate messages, got %+v", messages)
 	}
 
-	rawDifferent, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
+	rawDifferent, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"texture:doc-structured-worker-update",
 		"kind":"execution_result",
@@ -3764,7 +3765,7 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
+	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"texture:doc-authoritative-channel",
 		"channel_id":"not-the-texture-doc-channel",
@@ -3870,7 +3871,7 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
+	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"researcher:decoy",
 		"kind":"execution_result",
@@ -3977,7 +3978,7 @@ func TestSubmitWorkerUpdateUsesTextureRequesterOverExplicitAgent(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
+	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"researcher:decoy-requester",
 		"kind":"execution_result",
@@ -4036,7 +4037,7 @@ func TestSubmitWorkerUpdateUsesTextureRequesterMetadataWhenAgentMissing(t *testi
 	}
 
 	vSuperRegistry := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	raw, err := vSuperRegistry.Execute(WithToolExecutionContext(ctx, workerRun), "update_coagent", json.RawMessage(`{
+	raw, err := vSuperRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(workerRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"execution_result",
 		"summary":"remote worker update",
@@ -4113,7 +4114,7 @@ func TestSubmitWorkerUpdateFallsBackToTextureChannelWhenExplicitTargetMissing(t 
 					"summary":"Worker canceled after terminal evidence failed to publish (%s).",
 					"claims":[{"text":"update_coagent should route to the Texture channel when the explicit target is stale."}]
 				}`, tc.explicitAgentID, tc.updateID))
-			raw, err := superRegistry.Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", rawArgs)
+			raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", rawArgs)
 			if err != nil {
 				t.Fatalf("update_coagent: %v", err)
 			}
@@ -4319,7 +4320,7 @@ func TestResearcherWebSearchRoutesThroughGateway(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "web_search", json.RawMessage(`{
+	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "web_search", json.RawMessage(`{
 		"query":"latest model releases",
 		"max_results":3
 	}`))
@@ -4339,8 +4340,11 @@ func TestResearcherWebSearchRoutesThroughGateway(t *testing.T) {
 
 	// web_search now returns a tool-output projection envelope; the
 	// model-visible payload carries the gateway provider and result cards.
-	projection := parseToolOutputProjection(raw)
-	if projection == nil {
+	var projection struct {
+		Sentinel   bool            `json:"__choir_tool_projection"`
+		ModelOutput json.RawMessage `json:"model_output"`
+	}
+	if err := json.Unmarshal([]byte(raw), &projection); err != nil || !projection.Sentinel || len(projection.ModelOutput) == 0 {
 		t.Fatalf("web_search output is not a tool projection: %s", raw)
 	}
 	var resp struct {
@@ -4349,7 +4353,7 @@ func TestResearcherWebSearchRoutesThroughGateway(t *testing.T) {
 			URL string `json:"url"`
 		} `json:"results"`
 	}
-	if err := json.Unmarshal([]byte(projection.ModelOutput), &resp); err != nil {
+	if err := json.Unmarshal(projection.ModelOutput, &resp); err != nil {
 		t.Fatalf("decode web_search model output: %v", err)
 	}
 	if resp.Provider != "mock-gateway" {
@@ -4390,7 +4394,7 @@ func TestResearcherWebSearchFallsBackToProxyGatewayURL(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "web_search", json.RawMessage(`{
+	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "web_search", json.RawMessage(`{
 		"query":"latest model releases"
 	}`))
 	if err != nil {
@@ -4401,14 +4405,17 @@ func TestResearcherWebSearchFallsBackToProxyGatewayURL(t *testing.T) {
 		t.Fatalf("proxy gateway search path = %q, want /provider/v1/search", gotPath)
 	}
 
-	projection := parseToolOutputProjection(raw)
-	if projection == nil {
+	var projection struct {
+		Sentinel   bool            `json:"__choir_tool_projection"`
+		ModelOutput json.RawMessage `json:"model_output"`
+	}
+	if err := json.Unmarshal([]byte(raw), &projection); err != nil || !projection.Sentinel || len(projection.ModelOutput) == 0 {
 		t.Fatalf("web_search output is not a tool projection: %s", raw)
 	}
 	var resp struct {
 		Provider string `json:"provider"`
 	}
-	if err := json.Unmarshal([]byte(projection.ModelOutput), &resp); err != nil {
+	if err := json.Unmarshal(projection.ModelOutput, &resp); err != nil {
 		t.Fatalf("decode web_search model output: %v", err)
 	}
 	if resp.Provider != "proxy-gateway" {
@@ -4438,7 +4445,7 @@ func TestResearcherWebSearchWithoutGatewayIsUnavailable(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	_, err = researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherTask), "web_search", json.RawMessage(`{
+	_, err = researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "web_search", json.RawMessage(`{
 		"query":"latest model releases"
 	}`))
 	if err == nil || !strings.Contains(err.Error(), "search client not configured") {
@@ -4482,7 +4489,7 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 		t.Fatalf("start co-super run: %v", err)
 	}
 	registry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "publish_app_change_package", json.RawMessage(fmt.Sprintf(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "publish_app_change_package", json.RawMessage(fmt.Sprintf(`{
 			"repo_path": "repo",
 			"base_sha": %q,
 			"candidate_source_ref": "refs/heads/candidate/package-proof",
@@ -4647,7 +4654,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-proof",
 		"vm_id": "vm-worker-proof",
@@ -4778,7 +4785,7 @@ func TestStartWorkerDelegationPreloadsReferencedAppChangePackage(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := registry.Execute(WithToolExecutionContext(context.Background(), superRun), "start_worker_delegation", json.RawMessage(fmt.Sprintf(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "start_worker_delegation", json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-preload",
 		"vm_id": "vm-preload",
@@ -4901,7 +4908,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-submit-mirror",
 		"vm_id": "vm-worker-submit-mirror",
@@ -5173,7 +5180,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-child-follow",
 		"vm_id": "vm-child-follow",
@@ -5297,7 +5304,7 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-child-incomplete",
 		"vm_id": "vm-child-incomplete",
@@ -5395,7 +5402,7 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-package-required-no-package",
 		"vm_id": "vm-package-required-no-package",
@@ -5500,7 +5507,7 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-bootstrap",
 		"vm_id": "vm-worker-bootstrap",
@@ -5809,7 +5816,7 @@ func TestDelegateWorkerVMReportsFailedWorkerRunWithoutSynchronousRetry(t *testin
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-retry",
 		"vm_id": "vm-worker-retry",
@@ -5921,7 +5928,7 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-failed",
 		"vm_id": "vm-worker-failed",
@@ -6059,7 +6066,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	toolCtx := WithToolExecutionContext(context.Background(), superRun)
+	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun))
 	startRaw, err := registry.Execute(toolCtx, "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-timeout",
@@ -6235,7 +6242,7 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	toolCtx := WithToolExecutionContext(context.Background(), superRun)
+	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun))
 	raw, err := registry.Execute(toolCtx, "finish_worker_delegation", mustJSON(t, map[string]any{
 		"worker_sandbox_url": srv.URL,
 		"worker_run_id":      "worker-run-active",
@@ -6349,7 +6356,7 @@ func TestDelegateWorkerVMReturnsSubmitFailureEvidence(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-submit-failed",
 		"vm_id": "vm-worker-submit-failed",
@@ -6489,7 +6496,7 @@ func TestDelegateWorkerVMRefusesSameRuntimeWithoutIsolation(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	_, err = registry.Execute(WithToolExecutionContext(context.Background(), superRun), "delegate_worker_vm", json.RawMessage(`{
+	_, err = registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "delegate_worker_vm", json.RawMessage(`{
 		"worker_sandbox_url": "http://127.0.0.1:8085",
 		"worker_id": "worker-local",
 		"vm_id": "vm-local",
@@ -6609,7 +6616,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := executeWorkerDelegationUntilSettled(t, registry, WithToolExecutionContext(context.Background(), superRun), json.RawMessage(fmt.Sprintf(`{
+	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-local-worktree",
 		"vm_id": "vm-local-worktree",

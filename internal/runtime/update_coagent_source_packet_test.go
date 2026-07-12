@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) {
@@ -30,7 +31,7 @@ func TestUpdateCoagentAcceptsResearcherEvidenceUpdateSourcePacket(t *testing.T) 
 		t.Fatalf("upsert texture agent: %v", err)
 	}
 	researcherRun := d9CoagentRun("run-d9-researcher", ownerID, "researcher:d9", AgentProfileResearcher, docID, "")
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, researcherRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"official source is ready",
@@ -80,7 +81,7 @@ func TestUpdateCoagentRejectsLegacyFieldsAndExecutionRequestWithoutActions(t *te
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"legacy","evidence_ids":["ev-old"]}`),
 		json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"execution_request","summary":"missing actions","notes":["not executable"]}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", raw); err == nil {
 			t.Fatalf("update_coagent unexpectedly accepted %s", string(raw))
 		}
 	}
@@ -132,7 +133,7 @@ func TestUpdateCoagentRejectsMalformedExecutionRequestPackets(t *testing.T) {
 			"actions":[{"type":"run_command","objective":"Run the requested command.",` + validSafety + `}]
 		}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", raw); err == nil {
 			t.Fatalf("%s: update_coagent unexpectedly accepted malformed execution_request", name)
 		}
 	}
@@ -165,7 +166,7 @@ func TestUpdateCoagentRejectsUnsupportedSourceAndSelectorKinds(t *testing.T) {
 			"actions":[{"type":"request_worker","objective":"Return impossible evidence.","expected_sources":[{"kind":"magic_oracle","required":true}],"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}}]
 		}`),
 	} {
-		if _, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, run), "update_coagent", raw); err == nil {
+		if _, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "update_coagent", raw); err == nil {
 			t.Fatalf("%s: update_coagent unexpectedly accepted unsupported source vocabulary", name)
 		}
 	}
@@ -191,7 +192,7 @@ func TestUpdateCoagentCanonicalizesSourceContractAliases(t *testing.T) {
 		t.Fatalf("upsert texture agent: %v", err)
 	}
 	run := d9CoagentRun("run-d9-source-alias", ownerID, "researcher:d9-source-alias", AgentProfileResearcher, docID, "")
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, run), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"source aliases normalize",
@@ -253,7 +254,7 @@ func TestPersistentSuperIgnoresNonExecutionRequestUpdatePackets(t *testing.T) {
 		t.Fatalf("ensure persistent super: %v", err)
 	}
 	coSuperRun := d9CoagentRun("run-d9-super-ignore", ownerID, "cosuper:d9-super-ignore", AgentProfileCoSuper, "", "")
-	raw, err := rt.ToolRegistryForProfile(AgentProfileCoSuper).Execute(WithToolExecutionContext(ctx, coSuperRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileCoSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(coSuperRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"status evidence for Super, not an execution request",
@@ -339,7 +340,7 @@ func TestUpdateCoagentAcceptsSuperExecutionResultSourcesAndTextureCollatesPacket
 	docID := "doc-d9-super-result"
 	textureAgentID := currentTextureAgentID(docID)
 	superRun := d9CoagentRun("run-d9-super-result", ownerID, "super:d9-result", AgentProfileSuper, docID, textureAgentID)
-	raw, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"execution_result",
 		"summary":"command, diff, and tests completed",
@@ -379,7 +380,7 @@ func TestRequestSuperExecutionAppendsExecutionRequestPacketWithActions(t *testin
 	ownerID := "user-d9-super-request"
 	docID := "doc-d9-super-request"
 	textureRun := d9CoagentRun("run-d9-texture-request", ownerID, currentTextureAgentID(docID), AgentProfileTexture, docID, "")
-	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, textureRun), "request_super_execution", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
 		"objective":"Run a bounded verification command and report command_output plus test_run sources back to Texture.",
 		"channel_id":"doc-d9-super-request"
 	}`))

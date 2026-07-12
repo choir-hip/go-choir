@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 type researchFindingEvidenceInput struct {
@@ -25,9 +26,9 @@ type researchFindingEvidenceInput struct {
 }
 
 func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
-	profile := stringFromToolContext(ctx, toolCtxProfile)
+	profile := toolregistry.ExecutionContextFrom(ctx).Profile
 	if profile == "" {
-		if runRec := ctxRunRecord(ctx); runRec != nil {
+		if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil {
 			profile = agentProfileForRun(runRec)
 		}
 	}
@@ -65,7 +66,7 @@ func resolveResearcherFindingsTarget(ctx context.Context, rt *Runtime, explicitA
 }
 
 func resolveCoagentFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
-	runRec := ctxRunRecord(ctx)
+	runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 
 	if runRec != nil && isTextureProfileValue(metadataStringValue(runRec.Metadata, "requested_by_profile")) {
 		requesterAgentID := metadataStringValue(runRec.Metadata, "requested_by_agent_id")

@@ -17,6 +17,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 type requestEmailDraftArgs struct {
@@ -75,10 +76,10 @@ func newRequestEmailDraftTool(rt *Runtime) Tool {
 			"approval_mode":       map[string]any{"type": "string", "enum": []string{"owner_click", "owner_click_or_email_reply"}, "description": "How the owner may approve this exact draft version."},
 		}, []string{"doc_id", "revision_id", "to_addresses", "subject", "body_text"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)) != AgentProfileTexture {
+			if canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile) != AgentProfileTexture {
 				return "", fmt.Errorf("request_email_draft is only available to texture agents")
 			}
-			rec := ctxRunRecord(ctx)
+			rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 			if rec == nil {
 				return "", fmt.Errorf("request_email_draft requires a run context")
 			}
@@ -123,7 +124,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	}
 	ownerEmail := strings.TrimSpace(metadataString(parent.Metadata, runMetadataOwnerEmail))
 	if ownerEmail == "" {
-		ownerEmail = stringFromToolContext(ctx, toolCtxOwnerEmail)
+		ownerEmail = toolregistry.ExecutionContextFrom(ctx).OwnerEmail
 	}
 	approvalMode := strings.TrimSpace(in.ApprovalMode)
 	if approvalMode == "" {

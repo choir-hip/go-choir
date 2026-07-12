@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 type capturingModelVerifyProvider struct {
@@ -40,12 +41,12 @@ func TestVerifyModelCapabilityExplicitTextOnlyOmitFireworksMaxTokens(t *testing.
 	provider := &capturingModelVerifyProvider{}
 	rt := New(Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-text",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
 		AgentRole:    AgentProfileSuper,
-	})
+	}))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{
 		"role":"verifier",
@@ -78,11 +79,11 @@ func TestVerifyModelCapabilityRejectsImageForTextOnlyModel(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
 	rt := New(Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-image-blocker",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
-	})
+	}))
 
 	_, err := tool.Func(ctx, json.RawMessage(`{
 		"provider":"fireworks",
@@ -106,11 +107,11 @@ func TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier(t *testing.T) {
 		ModelPolicyPath: filepath.Join(dir, "System", "model-policy.toml"),
 	}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-text-policy",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
-	})
+	}))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{
 		"role":"verifier",
@@ -138,11 +139,11 @@ func TestVerifyModelCapabilityUsesPolicyForMiMoImage(t *testing.T) {
 		ModelPolicyPath: filepath.Join(dir, "System", "model-policy.toml"),
 	}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-mimo",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
-	})
+	}))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{
 		"role":"verifier_multimodal",
@@ -175,11 +176,11 @@ func TestVerifyModelCapabilityUsesDeterministicImageFixture(t *testing.T) {
 		ModelPolicyPath: filepath.Join(dir, "System", "model-policy.toml"),
 	}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-mimo-fixture",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
-	})
+	}))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{
 		"role":"verifier_multimodal",
@@ -207,11 +208,11 @@ func TestVerifyModelCapabilityRejectsMalformedImageInput(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
 	rt := New(Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-bad-image",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
-	})
+	}))
 
 	_, err := tool.Func(ctx, json.RawMessage(`{
 		"role":"verifier_multimodal",

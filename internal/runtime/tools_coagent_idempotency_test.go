@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) {
@@ -59,11 +60,11 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 		"role":"texture",
 		"channel_id":"doc-reconciler-idempotent"
 	}`)
-	firstRaw, err := registry.Execute(WithToolExecutionContext(ctx, parent), "spawn_agent", args)
+	firstRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(parent)), "spawn_agent", args)
 	if err != nil {
 		t.Fatalf("first reconciler Texture handoff: %v", err)
 	}
-	secondRaw, err := registry.Execute(WithToolExecutionContext(ctx, parent), "spawn_agent", args)
+	secondRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(parent)), "spawn_agent", args)
 	if err != nil {
 		t.Fatalf("second reconciler Texture handoff: %v", err)
 	}

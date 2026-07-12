@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) {
@@ -93,7 +94,7 @@ func TestTextureRequestEmailDraftCreatesTraceVisibleEmailAgentRun(t *testing.T) 
 		t.Fatalf("create texture parent: %v", err)
 	}
 
-	raw, err := textureRegistry.Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
+	raw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":        "doc-email-1",
 		"revision_id":   "rev-email-1",
 		"from_alias":    "000@choir.news",
@@ -190,7 +191,7 @@ func TestTextureRequestEmailDraftDropsUnsupportedFromAliasBeforeMaild(t *testing
 	if err != nil {
 		t.Fatalf("create texture parent: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":              "doc-email-clean-alias",
 		"revision_id":         "rev-email-clean-alias",
 		"source_content_hash": "sha256:clean-alias",
@@ -283,7 +284,7 @@ func TestCoagentCastCannotAddressEmailAppagentDirectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create super run: %v", err)
 	}
-	_, err = rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(context.Background(), superRun), "update_coagent", mustJSON(t, map[string]any{
+	_, err = rt.ToolRegistryForProfile(AgentProfileSuper).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "update_coagent", mustJSON(t, map[string]any{
 		"schema_version": types.CoagentSourcePacketSchemaV1,
 		"agent_id":       persistentEmailAgentID("user-alice"),
 		"kind":           "evidence_update",
@@ -363,7 +364,7 @@ func TestEditTextureEmailProseDoesNotForceEmailAppagentContinuation(t *testing.T
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	editRaw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-email-continuation",
 		"base_revision_id":"rev-user-email-continuation",
 		"rationale":"owner requested a full email draft artifact",
@@ -437,7 +438,7 @@ func TestGroundedEmailArtifactDoesNotForceEmailAppagentContinuation(t *testing.T
 	if err != nil {
 		t.Fatalf("start research run: %v", err)
 	}
-	if _, err := rt.ChannelCast(WithToolExecutionContext(ctx, researchRun), doc.DocID, "texture:"+doc.DocID, "", "researcher-1", AgentProfileResearcher, "Evidence: the official page title is Example Domain."); err != nil {
+	if _, err := rt.ChannelCast(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researchRun)), doc.DocID, "texture:"+doc.DocID, "", "researcher-1", AgentProfileResearcher, "Evidence: the official page title is Example Domain."); err != nil {
 		t.Fatalf("post grounded worker message: %v", err)
 	}
 	run := types.RunRecord{
@@ -477,7 +478,7 @@ func TestGroundedEmailArtifactDoesNotForceEmailAppagentContinuation(t *testing.T
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	editRaw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-grounded-email-continuation",
 		"base_revision_id":"rev-grounded-initial-email-continuation",
 		"rationale":"owner requested a full email draft artifact",
@@ -555,7 +556,7 @@ func TestRequestEmailDraftBlocksSuspiciousPromptInjectionContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create texture parent: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(context.Background(), parent), "request_email_draft", mustJSON(t, map[string]any{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)), "request_email_draft", mustJSON(t, map[string]any{
 		"doc_id":              "doc-risk",
 		"revision_id":         "rev-risk",
 		"source_content_hash": "sha256:risk",

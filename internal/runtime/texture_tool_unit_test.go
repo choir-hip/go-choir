@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 type semanticMergeTestProvider struct {
@@ -675,7 +676,7 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 	if err != nil {
 		t.Fatalf("marshal patch args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, run), "patch_texture", rawArgs); err != nil {
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err != nil {
 		t.Fatalf("patch_texture: %v", err)
 	}
 	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10)
@@ -763,7 +764,7 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 			t.Fatalf("metadata retained legacy source key %q: %#v", key, meta)
 		}
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, run), "patch_texture", rawArgs); err == nil ||
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err == nil ||
 		!strings.Contains(err.Error(), "stale") {
 		t.Fatalf("stale base err = %v, want stale rejection", err)
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func textureAPISetup(t *testing.T) (*APIHandler, *store.Store) {
@@ -3896,7 +3897,7 @@ func TestTextureSeededStochasticWorkflowContracts(t *testing.T) {
 	var userRevisionIDs []string
 	postWorkerUpdate := func(run *types.RunRecord, from, role, content string) {
 		t.Helper()
-		seq, err := rt.ChannelCast(WithToolExecutionContext(context.Background(), run), decision.DocID, "texture:"+decision.DocID, "", from, role, content)
+		seq, err := rt.ChannelCast(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), decision.DocID, "texture:"+decision.DocID, "", from, role, content)
 		if err != nil {
 			t.Fatalf("post worker update %q: %v", content, err)
 		}
@@ -4104,11 +4105,11 @@ func TestTextureWorkerMessageAutoWakeCreatesFollowUpRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start noise run: %v", err)
 	}
-	skippedSeq, err := rt.ChannelCast(WithToolExecutionContext(context.Background(), noiseRun), docID, "texture:"+docID, "", "auditor-1", "auditor", "This addressed note is not a worker update and must not drive synthesis.")
+	skippedSeq, err := rt.ChannelCast(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(noiseRun)), docID, "texture:"+docID, "", "auditor-1", "auditor", "This addressed note is not a worker update and must not drive synthesis.")
 	if err != nil {
 		t.Fatalf("post non-worker message: %v", err)
 	}
-	workerSeq, err := rt.ChannelCast(WithToolExecutionContext(context.Background(), researchRun), docID, "texture:"+docID, "", "researcher-1", "researcher", "Evidence: the latest public model releases shipped this week with stronger reasoning and tool use.")
+	workerSeq, err := rt.ChannelCast(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researchRun)), docID, "texture:"+docID, "", "researcher-1", "researcher", "Evidence: the latest public model releases shipped this week with stronger reasoning and tool use.")
 	if err != nil {
 		t.Fatalf("post worker message: %v", err)
 	}
@@ -4208,7 +4209,7 @@ func TestTextureWorkerMessageAutoWakeBatchesRapidMessages(t *testing.T) {
 	}
 	postWorkerMessage := func(content string) uint64 {
 		t.Helper()
-		seq, err := rt.ChannelCast(WithToolExecutionContext(context.Background(), researchRun), docID, "texture:"+docID, "", "researcher-1", "researcher", content)
+		seq, err := rt.ChannelCast(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researchRun)), docID, "texture:"+docID, "", "researcher-1", "researcher", content)
 		if err != nil {
 			t.Fatalf("post worker message %q: %v", content, err)
 		}
@@ -4289,7 +4290,7 @@ func TestTextureWorkerMessageDebounceUsesFakeClock(t *testing.T) {
 	}
 	postWorkerMessage := func(content string) uint64 {
 		t.Helper()
-		seq, err := rt.ChannelCast(WithToolExecutionContext(context.Background(), researchRun), docID, "texture:"+docID, "", "researcher-1", "researcher", content)
+		seq, err := rt.ChannelCast(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researchRun)), docID, "texture:"+docID, "", "researcher-1", "researcher", content)
 		if err != nil {
 			t.Fatalf("post worker message %q: %v", content, err)
 		}
@@ -4363,7 +4364,7 @@ func TestTextureWorkerWakeRequeuesWhileMutationPending(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start research run: %v", err)
 	}
-	if _, err := rt.ChannelCast(WithToolExecutionContext(context.Background(), researchRun), docID, "texture:"+docID, "", "researcher-1", "researcher", "Evidence while a previous Texture mutation is still pending."); err != nil {
+	if _, err := rt.ChannelCast(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researchRun)), docID, "texture:"+docID, "", "researcher-1", "researcher", "Evidence while a previous Texture mutation is still pending."); err != nil {
 		t.Fatalf("post worker message: %v", err)
 	}
 
@@ -4447,7 +4448,7 @@ func TestResearcherUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), researcherRun), "update_coagent", json.RawMessage(`{
+	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"finding stream 001",
@@ -4637,7 +4638,7 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 	if err := s.CreateRun(ctx, researcherRun); err != nil {
 		t.Fatalf("create researcher run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, &researcherRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"parked finding 001",
@@ -4758,7 +4759,7 @@ func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 	if err := s.CreateRun(ctx, researcherRun); err != nil {
 		t.Fatalf("create researcher run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, &researcherRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"idle resume finding",
@@ -4978,7 +4979,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 
 	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
-	raw, err := superRegistry.Execute(WithToolExecutionContext(context.Background(), superRun), "update_coagent", json.RawMessage(`{
+	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"execution_result",
 		"summary":"super artifact 001",
@@ -5097,7 +5098,7 @@ func TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp(t *test
 	if err != nil {
 		t.Fatalf("start research run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(context.Background(), researchRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researchRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"late finding",
@@ -8355,7 +8356,7 @@ func TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal edit args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, run), "patch_texture", rawArgs); err != nil {
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err != nil {
 		t.Fatalf("patch_texture: %v", err)
 	}
 	got, err := s.GetDocument(ctx, doc.DocID, doc.OwnerID)
@@ -8479,10 +8480,10 @@ func TestTextureAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal rewrite_texture args: %v", err)
 	}
-	if _, err := textureRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "rewrite_texture", rawArgs); err != nil {
+	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(taskRec)), "rewrite_texture", rawArgs); err != nil {
 		t.Fatalf("first rewrite_texture: %v", err)
 	}
-	if _, err := textureRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "rewrite_texture", rawArgs); err == nil {
+	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(taskRec)), "rewrite_texture", rawArgs); err == nil {
 		t.Fatal("duplicate rewrite_texture against the stale base revision should be rejected")
 	}
 
@@ -8503,7 +8504,7 @@ func TestTextureAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal second rewrite args: %v", err)
 	}
-	if _, err := textureRegistry.Execute(WithToolExecutionContext(ctx, taskRec), "patch_texture", secondArgs); err != nil {
+	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(taskRec)), "patch_texture", secondArgs); err != nil {
 		t.Fatalf("second same-run patch_texture: %v", err)
 	}
 
@@ -8592,7 +8593,7 @@ func TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-initial-continuation",
 		"base_revision_id":"rev-user-continuation",
 		"rationale":"test whole-document replacement",
@@ -8609,7 +8610,7 @@ func TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *
 		t.Fatalf("rewrite_texture must not smuggle a required continuation; result=%s", editRaw)
 	}
 
-	spawnRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "spawn_agent", json.RawMessage(`{
+	spawnRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "spawn_agent", json.RawMessage(`{
 		"objective":"Research the user's NBA update request and send initial findings quickly.",
 		"role":"researcher",
 		"channel_id":"doc-initial-continuation"
@@ -8746,7 +8747,7 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal no-op patch: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, textureRun), "patch_texture", rawArgs); err == nil ||
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "patch_texture", rawArgs); err == nil ||
 		!strings.Contains(err.Error(), "worker update revision must change Texture content") {
 		t.Fatalf("no-op worker update patch err = %v, want worker-update no-op guard", err)
 	}
@@ -8864,7 +8865,7 @@ func TestInitialTextureRevisionRejectsNoOpPromptCopy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal initial no-op patch: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, textureRun), "patch_texture", rawArgs); err == nil ||
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "patch_texture", rawArgs); err == nil ||
 		!strings.Contains(err.Error(), "initial model-prior Texture revision must change prompt content") {
 		t.Fatalf("no-op initial patch err = %v, want model-prior no-op guard", err)
 	}
@@ -9011,7 +9012,7 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation(t *testing.T
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-continuation",
 		"base_revision_id":"rev-user-explicit-researcher",
 		"rationale":"test whole-document replacement",
@@ -9100,7 +9101,7 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-after-super",
 		"base_revision_id":"rev-super-explicit-researcher",
 		"rationale":"test whole-document replacement",
@@ -9182,7 +9183,7 @@ func TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPromp
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-base-content",
 		"base_revision_id":"rev-user-explicit-researcher-base-content",
 		"rationale":"test whole-document replacement",
@@ -9267,7 +9268,7 @@ func TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent(t *tes
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-seed-prompt",
 		"base_revision_id":"rev-user-explicit-researcher-seed-prompt",
 		"rationale":"test whole-document replacement",
@@ -9374,7 +9375,7 @@ func TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher(t *test
 	}
 
 	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
-	editRaw, err := registry.Execute(WithToolExecutionContext(ctx, &run), "rewrite_texture", json.RawMessage(`{
+	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-existing",
 		"base_revision_id":"rev-user-explicit-researcher-existing",
 		"rationale":"test whole-document replacement",

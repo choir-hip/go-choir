@@ -33,7 +33,7 @@ func TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdic
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, run), "record_wire_processor_decision", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "record_wire_processor_decision", json.RawMessage(`{
 		"decision":"already_covered",
 		"summary":"Existing article already covers this source batch.",
 		"covered_by_doc_id":"`+coveredByDocID+`"
@@ -123,7 +123,7 @@ func TestRecordWireProcessorDecisionToolRejectsAlreadyCoveredWithoutPublishedDoc
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
-	_, err = registry.Execute(WithToolExecutionContext(ctx, run), "record_wire_processor_decision", json.RawMessage(`{
+	_, err = registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "record_wire_processor_decision", json.RawMessage(`{
 		"decision":"already_covered",
 		"summary":"Existing draft allegedly covers this source batch.",
 		"covered_by_doc_id":"doc-unpublished-coverage"
@@ -154,7 +154,7 @@ func TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch(t *
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, run), "record_wire_processor_decision", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "record_wire_processor_decision", json.RawMessage(`{
 		"decision":"not_newsworthy",
 		"summary":"The batch does not justify a publication route."
 	}`))
@@ -216,7 +216,7 @@ func TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen(t *testing.T) {
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, run), "record_wire_processor_decision", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "record_wire_processor_decision", json.RawMessage(`{
 		"decision":"deferred",
 		"summary":"Hold this batch pending stronger corpus evidence."
 	}`))
@@ -322,7 +322,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 		t.Fatalf("register wire processor tools: %v", err)
 	}
 	coveredByDocID := seedPublishedCoverageDoc(t, s, "user-alice", "wire-existing-coverage-2")
-	_, err = registry.Execute(WithToolExecutionContext(ctx, run), "record_wire_processor_decision", json.RawMessage(`{
+	_, err = registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "record_wire_processor_decision", json.RawMessage(`{
 		"decision":"already_covered",
 		"summary":"Second source item is already covered by the existing article.",
 		"source_item_ids":["source-item-2"],

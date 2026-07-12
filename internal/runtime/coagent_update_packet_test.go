@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
@@ -90,14 +91,14 @@ func TestRunSupportsCoagentUpdateInjectionIncludesTexture(t *testing.T) {
 func TestResolveResearcherFindingsTargetRequiresExplicitTextureAgent(t *testing.T) {
 	t.Parallel()
 	rt, _ := testRuntimeWithProviderAndRegistry(t, NewStubProvider(0), nil)
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		Metadata: map[string]any{
 			runMetadataAgentProfile: AgentProfileResearcher,
 			"requested_by_profile":  AgentProfileTexture,
 			"requested_by_agent_id": "texture:doc-target",
 			runMetadataChannelID:    "doc-target",
 		},
-	})
+	}))
 	if _, _, err := resolveFindingsTarget(ctx, rt, ""); err == nil || !strings.Contains(err.Error(), "requires agent_id") {
 		t.Fatalf("missing agent_id err = %v, want requires agent_id", err)
 	}

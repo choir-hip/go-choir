@@ -8,6 +8,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec *types.RunRecord, runErr error) error {
@@ -49,11 +50,12 @@ func (rt *Runtime) synthesizeResearcherUpdateIfMissing(ctx context.Context, rec 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
 		rt.emitEvent(ctx, rec, kind, events.CauseSupervisorRecovery, payload)
 	}
-	result := executeOneTool(WithToolExecutionContext(ctx, rec), registry, types.ToolCall{
+	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), registry, []types.ToolCall{{
 		ID:        "runtime-fallback-submit-coagent-update",
 		Name:      "update_coagent",
 		Arguments: rawArgs,
-	}, "", emit)
+	}}, emit)
+	result := results[0]
 	if result.IsError {
 		return fmt.Errorf("fallback update_coagent: %s", result.Output)
 	}

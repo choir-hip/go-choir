@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func RegisterTextureTools(registry *ToolRegistry, rt *Runtime) error {
@@ -157,10 +158,10 @@ func newRewriteTextureTool(rt *Runtime) Tool {
 }
 
 func (rt *Runtime) executeTextureEditTool(ctx context.Context, toolName string, in editTextureArgs) (string, error) {
-	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileTexture {
+	if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileTexture {
 		return "", fmt.Errorf("%s is only available to Texture agents", toolName)
 	}
-	rec := ctxRunRecord(ctx)
+	rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 	if rec == nil || !isTextureAgentRevisionTaskType(metadataStringValue(rec.Metadata, "type")) {
 		return "", fmt.Errorf("%s requires a Texture agent revision run", toolName)
 	}
@@ -222,10 +223,10 @@ func newRecordTextureDecisionTool(rt *Runtime) Tool {
 			},
 		}, []string{"decision_kind", "reason"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileTexture {
+			if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileTexture {
 				return "", fmt.Errorf("record_texture_decision is only available to Texture agents")
 			}
-			rec := ctxRunRecord(ctx)
+			rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 			if rec == nil {
 				return "", fmt.Errorf("record_texture_decision missing run context")
 			}
@@ -324,7 +325,7 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			"model":      map[string]any{"type": "string"},
 		}, []string{"objective"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileTexture {
+			if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileTexture {
 				return "", fmt.Errorf("request_super_execution is only available to texture agents")
 			}
 			var in args
@@ -335,15 +336,15 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			if objective == "" {
 				return "", fmt.Errorf("objective must not be empty")
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("request_super_execution missing owner context")
 			}
-			requesterRunID := stringFromToolContext(ctx, toolCtxRunID)
-			requesterAgentID := stringFromToolContext(ctx, toolCtxAgentID)
+			requesterRunID := toolregistry.ExecutionContextFrom(ctx).RunID
+			requesterAgentID := toolregistry.ExecutionContextFrom(ctx).AgentID
 			channelID := strings.TrimSpace(in.ChannelID)
 			if channelID == "" {
-				channelID = stringFromToolContext(ctx, toolCtxChannelID)
+				channelID = toolregistry.ExecutionContextFrom(ctx).ChannelID
 			}
 			result, err := rt.requestPersistentSuperExecution(ctx, ownerID, channelID, requesterRunID, requesterAgentID, objective, in.Model)
 			if err != nil {
@@ -408,7 +409,7 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 	}
 	now := time.Now().UTC()
 	trajectoryID := ""
-	if runRec := ctxRunRecord(ctx); runRec != nil {
+	if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil {
 		trajectoryID = trajectoryIDForRun(runRec)
 	}
 	update := types.CoagentSourcePacket{

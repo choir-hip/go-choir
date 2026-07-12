@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func RegisterWireProcessorTools(registry *ToolRegistry, rt *Runtime) error {
@@ -51,7 +53,7 @@ func newRecordWireProcessorDecisionTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode record_wire_processor_decision args: %w", err)
 			}
-			runRec := ctxRunRecord(ctx)
+			runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 			if runRec == nil {
 				return "", fmt.Errorf("record_wire_processor_decision missing run context")
 			}

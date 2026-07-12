@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
@@ -667,7 +668,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 			"profile":            AgentProfileCoSuper,
 			"timeout_seconds":    10,
 		})
-		delegateRaw, err := executeWorkerDelegationUntilSettled(t, superRegistry, WithToolExecutionContext(context.Background(), superRun), delegateArgs)
+		delegateRaw, err := executeWorkerDelegationUntilSettled(t, superRegistry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), delegateArgs)
 		if err != nil {
 			t.Fatalf("delegate_worker_vm: %v", err)
 		}
@@ -697,11 +698,11 @@ func executeVerifierTools(t *testing.T, rt *Runtime, run *types.RunRecord, regis
 	if registry == nil {
 		t.Fatal("tool registry is nil")
 	}
-	toolCtx := WithToolExecutionContext(context.Background(), run)
+	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run))
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
 		rt.emitEvent(context.Background(), run, kind, events.CauseToolExecution, payload)
 	}
-	results := executeTools(toolCtx, registry, calls, emit)
+	results := toolregistry.ExecuteToolBatch(toolCtx, registry, calls, emit)
 	for _, result := range results {
 		if result.IsError {
 			t.Fatalf("tool %s failed: %s", result.CallID, result.Output)

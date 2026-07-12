@@ -37,6 +37,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 var (
@@ -2149,7 +2150,7 @@ func (h *APIHandler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *htt
 		return
 	}
 
-	raw, err := registry.Execute(WithToolExecutionContext(r.Context(), workerRun), "update_coagent", rawArgs)
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(r.Context(), toolExecutionContextForRun(workerRun)), "update_coagent", rawArgs)
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 // RegisterEvidenceTools installs the researcher-owned evidence-gathering tools.
@@ -58,7 +59,7 @@ func newGetRunMemoryEntryTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode get_run_memory_entry args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("get_run_memory_entry missing owner context")
 			}
@@ -111,8 +112,8 @@ func newSaveEvidenceTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode save_evidence args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
-			agentID := stringFromToolContext(ctx, toolCtxAgentID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
+			agentID := toolregistry.ExecutionContextFrom(ctx).AgentID
 			if ownerID == "" || agentID == "" {
 				return "", fmt.Errorf("save_evidence missing owner or agent context")
 			}
@@ -166,7 +167,7 @@ func newReadEvidenceTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode read_evidence args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("read_evidence missing owner context")
 			}
@@ -206,13 +207,13 @@ func newListEvidenceTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode list_evidence args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("list_evidence missing owner context")
 			}
 			agentID := strings.TrimSpace(in.AgentID)
 			if agentID == "" {
-				agentID = stringFromToolContext(ctx, toolCtxAgentID)
+				agentID = toolregistry.ExecutionContextFrom(ctx).AgentID
 			}
 			recs, err := rt.store.ListEvidenceByAgent(ctx, ownerID, agentID, in.Limit)
 			if err != nil {

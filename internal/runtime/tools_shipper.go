@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 type publishPackageHumanProofInput struct {
@@ -86,12 +88,12 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			"behavior_contract":           map[string]any{"type": "string"},
 		}, []string{"repo_path", "base_sha"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			profile := stringFromToolContext(ctx, toolCtxProfile)
+			profile := toolregistry.ExecutionContextFrom(ctx).Profile
 			if profile != AgentProfileSuper && profile != AgentProfileCoSuper && profile != AgentProfileVSuper {
 				return "", fmt.Errorf("publish_app_change_package is only available to super, co-super, and vsuper agents")
 			}
 			if profile == AgentProfileCoSuper {
-				if rec := ctxRunRecord(ctx); rec != nil {
+				if rec := toolregistry.ExecutionContextFrom(ctx).RunRecord; rec != nil {
 					if slot := normalizeVSuperCoSuperSlot(metadataStringValue(rec.Metadata, runMetadataCoSuperSlot)); slot == "verifier" {
 						return "", fmt.Errorf("verifier co-super cannot publish_app_change_package; verifiers may write scratch tests/evidence and must report pass/fail to the implementation worker or vsuper")
 					}
@@ -104,9 +106,9 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode publish_app_change_package args: %w", err)
 			}
-			runID := stringFromToolContext(ctx, toolCtxRunID)
+			runID := toolregistry.ExecutionContextFrom(ctx).RunID
 			if profile == AgentProfileVSuper && rt != nil && runID != "" {
-				if reusedPackage, found, err := rt.latestTrajectoryCoSuperAppChangePackage(ctx, ctxRunRecord(ctx)); err != nil {
+				if reusedPackage, found, err := rt.latestTrajectoryCoSuperAppChangePackage(ctx, toolregistry.ExecutionContextFrom(ctx).RunRecord); err != nil {
 					return "", err
 				} else if found {
 					reusedPackage["requested_by_run_id"] = runID
@@ -124,7 +126,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				return "", fmt.Errorf("base_sha is required")
 			}
 			traceID := runID
-			if rec := ctxRunRecord(ctx); rec != nil && rec.Metadata != nil {
+			if rec := toolregistry.ExecutionContextFrom(ctx).RunRecord; rec != nil && rec.Metadata != nil {
 				if id, _ := rec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {
 					traceID = strings.TrimSpace(id)
 				}
@@ -147,7 +149,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			if strings.TrimSpace(runtimeDelta) == "" && strings.TrimSpace(uiDelta) == "" {
 				return "", fmt.Errorf("no source delta found between %s and HEAD", baseSHA)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("publish_app_change_package requires owner context")
 			}
@@ -156,8 +158,8 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 			}
 			sourceComputerID := firstNonEmpty(
 				strings.TrimSpace(in.SourceComputerID),
-				stringFromToolContext(ctx, toolCtxDesktopID),
-				stringFromToolContext(ctx, toolCtxSandboxID),
+				toolregistry.ExecutionContextFrom(ctx).DesktopID,
+				toolregistry.ExecutionContextFrom(ctx).SandboxID,
 				"candidate-computer",
 			)
 			sourceCandidateID := firstNonEmpty(strings.TrimSpace(in.SourceCandidateID), runID, sanitizeExportPart(headSHA))
@@ -264,7 +266,7 @@ func explicitAppChangePackageVisibility(ctx context.Context) string {
 }
 
 func appChangePackageRunPrompt(ctx context.Context) string {
-	if rec := ctxRunRecord(ctx); rec != nil {
+	if rec := toolregistry.ExecutionContextFrom(ctx).RunRecord; rec != nil {
 		return rec.Prompt
 	}
 	return ""

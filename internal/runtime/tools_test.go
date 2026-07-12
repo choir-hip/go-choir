@@ -384,7 +384,7 @@ func TestToolDefinition(t *testing.T) {
 	}
 }
 
-// --- executeTools Tests ---
+// --- Batch executor contract tests ---
 
 func TestExecuteTools(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
@@ -408,7 +408,7 @@ func TestExecuteTools(t *testing.T) {
 		emittedKinds = append(emittedKinds, kind)
 	}
 
-	results := executeTools(context.Background(), registry, calls, emit)
+	results := toolregistry.ExecuteToolBatch(context.Background(), registry, calls, emit)
 
 	if len(results) != 1 {
 		t.Fatalf("results: got %d, want 1", len(results))
@@ -454,7 +454,7 @@ func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 		AgentProfile: AgentProfileTexture,
 		AgentRole:    AgentProfileTexture,
 	}
-	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
+	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
 		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1"}`)},
 		{ID: "call-edit-2", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"again"}`)},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
@@ -495,7 +495,7 @@ func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
 		AgentProfile: AgentProfileTexture,
 		AgentRole:    AgentProfileTexture,
 	}
-	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
+	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
 		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"bad"}`)},
 		{ID: "call-edit-2", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"good"}`)},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
@@ -540,7 +540,7 @@ func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T
 		AgentProfile: AgentProfileTexture,
 		AgentRole:    AgentProfileTexture,
 	}
-	results := executeTools(WithToolExecutionContext(context.Background(), run), registry, []types.ToolCall{
+	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
 		{ID: "research-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research current scores"}`)},
 		{ID: "research-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research   current   scores"}`)},
 		{ID: "research-3", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research injury notes"}`)},
@@ -579,7 +579,7 @@ func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t
 	}
 
 	var resultPayload map[string]any
-	results := executeTools(context.Background(), registry, []types.ToolCall{
+	results := toolregistry.ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
 		{ID: "call-projected", Name: "projected", Arguments: json.RawMessage(`{}`)},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {
 		if kind != types.EventToolResult {
@@ -684,7 +684,7 @@ func TestShouldRequireResearchUpdateAfterResearchToolBatches(t *testing.T) {
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileResearcher,
 	}
-	toolCtx := WithToolExecutionContext(ctx, rec)
+	toolCtx := toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
 	if !shouldRequireResearchUpdateAfterTool(toolCtx, rt) {
 		t.Fatalf("first researcher search should require a findings checkpoint")
 	}
@@ -693,7 +693,7 @@ func TestShouldRequireResearchUpdateAfterResearchToolBatches(t *testing.T) {
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
 	}
-	if shouldRequireResearchUpdateAfterTool(WithToolExecutionContext(ctx, superRec), rt) {
+	if shouldRequireResearchUpdateAfterTool(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRec)), rt) {
 		t.Fatalf("super search should not require update_coagent")
 	}
 
@@ -787,7 +787,7 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 		AgentProfile: AgentProfileResearcher,
 		AgentRole:    AgentProfileResearcher,
 	}
-	raw, err := researcherRegistry.Execute(WithToolExecutionContext(ctx, rec), "source_search", json.RawMessage(`{
+	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), "source_search", json.RawMessage(`{
 		"query": "rates",
 		"max_results": 5
 	}`))
@@ -869,11 +869,11 @@ func TestResearcherSourceSearchWithoutConfiguredAPIIsUnavailable(t *testing.T) {
 		t.Fatalf("install tools: %v", err)
 	}
 	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	_, err := researcherRegistry.Execute(WithToolExecutionContext(context.Background(), &types.RunRecord{
+	_, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "researcher-source-search-unconfigured",
 		OwnerID:      "owner-source-search",
 		AgentProfile: AgentProfileResearcher,
-	}), "source_search", json.RawMessage(`{"query":"rates"}`))
+	})), "source_search", json.RawMessage(`{"query":"rates"}`))
 	if err == nil || !strings.Contains(err.Error(), "source search client not configured") {
 		t.Fatalf("source_search err = %v, want source search client not configured", err)
 	}
@@ -1168,7 +1168,7 @@ func TestExecuteToolsParallel(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	results := executeTools(context.Background(), registry, calls, emit)
+	results := toolregistry.ExecuteToolBatch(context.Background(), registry, calls, emit)
 
 	// Results should be in the same order as the calls.
 	if results[0].CallID != "call-1" {
@@ -1210,7 +1210,7 @@ func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 	register("bash")
 	register("read_file")
 
-	results := executeTools(context.Background(), registry, []types.ToolCall{
+	results := toolregistry.ExecuteToolBatch(context.Background(), registry, []types.ToolCall{
 		{ID: "call-1", Name: "bash", Arguments: json.RawMessage(`{}`)},
 		{ID: "call-2", Name: "read_file", Arguments: json.RawMessage(`{}`)},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
@@ -1243,7 +1243,7 @@ func TestExecuteToolsError(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	results := executeTools(context.Background(), registry, calls, emit)
+	results := toolregistry.ExecuteToolBatch(context.Background(), registry, calls, emit)
 
 	if !results[0].IsError {
 		t.Error("expected error result")
@@ -1277,7 +1277,7 @@ func TestExecuteToolsOutputTruncation(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	results := executeTools(context.Background(), registry, calls, emit)
+	results := toolregistry.ExecuteToolBatch(context.Background(), registry, calls, emit)
 
 	// Output should be truncated to ~100KB + truncation notice.
 	if len(results[0].Output) > 110*1024 {
@@ -1304,17 +1304,17 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "conductor-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileConductor,
-	})
+	}))
 	calls := []types.ToolCall{
 		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","objective":"research"}`)},
 		{ID: "texture", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"texture","objective":"open document","initial_content":"# Draft"}`)},
 	}
 
-	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	if len(executed) != 1 || executed[0] != AgentProfileTexture {
 		t.Fatalf("executed = %#v, want only texture", executed)
@@ -1349,11 +1349,11 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	registerCountingTool("update_coagent")
 	registerCountingTool("publish_app_change_package")
 
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "vsuper-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileVSuper,
-	})
+	}))
 	calls := []types.ToolCall{
 		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
 		{ID: "spawn-implementation-2", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement again"}`)},
@@ -1364,7 +1364,7 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		{ID: "export-2", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
 	}
 
-	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	mu.Lock()
 	gotCounts := map[string]int{
@@ -1403,13 +1403,13 @@ func TestExecuteToolsSuperSkipsDuplicateDelegateWorkerVM(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("register delegate_worker_vm: %v", err)
 	}
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
-	})
+	}))
 	args := json.RawMessage(`{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","objective":"publish exactly one package","profile":"vsuper"}`)
-	results := executeTools(ctx, registry, []types.ToolCall{
+	results := toolregistry.ExecuteToolBatch(ctx, registry, []types.ToolCall{
 		{ID: "delegate-1", Name: "delegate_worker_vm", Arguments: args},
 		{ID: "delegate-2", Name: "delegate_worker_vm", Arguments: args},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
@@ -1443,13 +1443,13 @@ func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("register start_worker_delegation: %v", err)
 	}
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
-	})
+	}))
 	args := json.RawMessage(`{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","objective":"run harmless worker proof","profile":"vsuper"}`)
-	results := executeTools(ctx, registry, []types.ToolCall{
+	results := toolregistry.ExecuteToolBatch(ctx, registry, []types.ToolCall{
 		{ID: "start-1", Name: "start_worker_delegation", Arguments: args},
 		{ID: "start-2", Name: "start_worker_delegation", Arguments: args},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
@@ -1469,12 +1469,12 @@ func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
 }
 
 func TestExplicitAppChangePackageConstraintsFromRunPrompt(t *testing.T) {
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "worker-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileVSuper,
 		Prompt:       `Use app_id "human-proof-chyron-chyron-seq-123", visibility "unlisted", and include marker "chyron-seq-123".`,
-	})
+	}))
 	if got := explicitAppChangePackageAppID(ctx); got != "human-proof-chyron-chyron-seq-123" {
 		t.Fatalf("explicit app_id = %q", got)
 	}
@@ -1530,17 +1530,17 @@ func TestExecuteToolsCoSuperSkipsDuplicateAppChangePackagePublish(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("register publish_app_change_package: %v", err)
 	}
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "cosuper-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileCoSuper,
-	})
+	}))
 	calls := []types.ToolCall{
 		{ID: "export-1", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
 		{ID: "export-2", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
 	}
 
-	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	mu.Lock()
 	gotPublishes := publishes
@@ -1571,17 +1571,17 @@ func TestExecuteToolsCoSuperSkipsDuplicateBashCommand(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("register bash: %v", err)
 	}
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "cosuper-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileCoSuper,
-	})
+	}))
 	calls := []types.ToolCall{
 		{ID: "bash-1", Name: "bash", Arguments: json.RawMessage(`{"command":"go test ./internal/platform","timeout_ms":60000}`)},
 		{ID: "bash-2", Name: "bash", Arguments: json.RawMessage(`{"command":"go test ./internal/platform","timeout_ms":60000}`)},
 	}
 
-	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	mu.Lock()
 	gotExecutions := executions
@@ -1681,18 +1681,18 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 		t.Fatalf("register fetch_url: %v", err)
 	}
 
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "researcher-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileResearcher,
-	})
+	}))
 	calls := []types.ToolCall{
 		{ID: "search-1", Name: "web_search", Arguments: json.RawMessage(`{"query":"ai news may 2026"}`)},
 		{ID: "search-2", Name: "web_search", Arguments: json.RawMessage(`{"query":"openai may 2026"}`)},
 		{ID: "search-3", Name: "web_search", Arguments: json.RawMessage(`{"query":"google ai may 2026"}`)},
 	}
 
-	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
+	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	if got := atomic.LoadInt32(&searches); got != 3 {
 		t.Fatalf("searches = %d, want 3", got)
@@ -1725,18 +1725,18 @@ func TestExecuteToolsDoesNotHiddenChainWorkerDelegation(t *testing.T) {
 		t.Fatalf("register start_worker_delegation: %v", err)
 	}
 
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
 		Prompt:       "Full sweep objective goes here.",
-	})
+	}))
 	var emitted []string
 	calls := []types.ToolCall{
 		{ID: "lease", Name: "request_worker_vm", Arguments: json.RawMessage(`{"purpose":"tiny UX copy edit"}`)},
 	}
 
-	results := executeTools(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {
+	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {
 		if kind != types.EventToolResult {
 			return
 		}
@@ -1785,13 +1785,13 @@ func TestExecuteToolsDoesNotPropagateHiddenWorkerDelegationBlocker(t *testing.T)
 		t.Fatalf("register start_worker_delegation: %v", err)
 	}
 
-	ctx := WithToolExecutionContext(context.Background(), &types.RunRecord{
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
 		AgentProfile: AgentProfileSuper,
 		Prompt:       "Publish exactly one AppChangePackage.",
-	})
-	results := executeTools(ctx, registry, []types.ToolCall{
+	}))
+	results := toolregistry.ExecuteToolBatch(ctx, registry, []types.ToolCall{
 		{ID: "lease", Name: "request_worker_vm", Arguments: json.RawMessage(`{"purpose":"package experiment"}`)},
 	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 	if len(results) != 1 || results[0].IsError {

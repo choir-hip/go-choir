@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func TestProductAPIRequestToolUsesRunOwnerForAllowedProductRoute(t *testing.T) {
@@ -21,7 +22,7 @@ func TestProductAPIRequestToolUsesRunOwnerForAllowedProductRoute(t *testing.T) {
 		AgentRole:    AgentProfileSuper,
 	}
 
-	raw, err := tool.Func(WithToolExecutionContext(context.Background(), run), json.RawMessage(`{
+	raw, err := tool.Func(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), json.RawMessage(`{
 		"method":"POST",
 		"path":"/api/texture/documents",
 		"body":{"title":"Product API tool owner proof"}
@@ -59,7 +60,7 @@ func TestProductAPIRequestToolRefusesInternalAndNonSuperCalls(t *testing.T) {
 		AgentProfile: AgentProfileSuper,
 		AgentRole:    AgentProfileSuper,
 	}
-	if _, err := tool.Func(WithToolExecutionContext(context.Background(), superRun), json.RawMessage(`{
+	if _, err := tool.Func(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(`{
 		"method":"GET",
 		"path":"/internal/runtime/runs/run-1"
 	}`)); err == nil || !strings.Contains(err.Error(), "refuses non-product route") {
@@ -73,7 +74,7 @@ func TestProductAPIRequestToolRefusesInternalAndNonSuperCalls(t *testing.T) {
 		AgentProfile: AgentProfileCoSuper,
 		AgentRole:    AgentProfileCoSuper,
 	}
-	if _, err := tool.Func(WithToolExecutionContext(context.Background(), workerRun), json.RawMessage(`{
+	if _, err := tool.Func(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(workerRun)), json.RawMessage(`{
 		"method":"GET",
 		"path":"/api/universal-wire/stories"
 	}`)); err == nil || !strings.Contains(err.Error(), "only available to foreground super") {

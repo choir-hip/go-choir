@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func TestHandlePromptBarTextureRouteCompletesConductorSynchronously(t *testing.T) {
@@ -99,7 +100,7 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithTexture(t *testing.T
 		}
 	}
 
-	requestCtx := WithToolExecutionContext(context.Background(), initialRun)
+	requestCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(initialRun))
 	superResult, err := rt.requestPersistentSuperExecution(requestCtx, "user-alice", decision.DocID, initialRun.RunID, initialRun.AgentID, "Run the Universal Wire verification steps and report evidence back to Texture.", "")
 	if err != nil {
 		t.Fatalf("texture request super execution: %v", err)
@@ -263,7 +264,7 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticS
 		}
 	}
 
-	requestCtx := WithToolExecutionContext(context.Background(), initialRun)
+	requestCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(initialRun))
 	superResult, err := rt.requestPersistentSuperExecution(requestCtx, "user-alice", decision.DocID, initialRun.RunID, initialRun.AgentID, "Create artifacts/m32_control_plane_exec_test.txt and report evidence back to Texture.", "")
 	if err != nil {
 		t.Fatalf("texture request super execution: %v", err)

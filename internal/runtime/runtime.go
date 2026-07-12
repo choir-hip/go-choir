@@ -1680,7 +1680,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		rt.handleExecutionError(ctx, rec, err)
 		return
 	}
-	ctx = WithToolExecutionContext(ctx, rec)
+	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
 	reactivateExistingMemory := metadataBoolValue(rec.Metadata, "actor_reactivate_existing_memory")
 	appendInitialMailboxTurns := shouldAppendInitialCoagentMailboxTurns(rec)
 	if !reactivateExistingMemory && !appendInitialMailboxTurns {
@@ -1764,7 +1764,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 
 	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry,
-	executeTools, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
+	toolregistry.ExecuteToolBatch, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)

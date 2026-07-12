@@ -9,28 +9,46 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// ExecuteToolBatch executes independent tool calls concurrently and returns
-// their results in provider call order. Runtime callers with app-specific batch
-// policy must supply their policy executor instead.
+// ExecuteToolBatch executes a provider batch under the authoritative tool
+// execution policy and returns results in provider call order.
 func ExecuteToolBatch(ctx context.Context, registry *ToolRegistry, calls []types.ToolCall, emit provideriface.EventEmitFunc) []types.ToolResult {
 	results := make([]types.ToolResult, len(calls))
+	skipped := plannedToolSkips(ctx, calls)
+
+	if shouldExecuteToolsSequentially(calls) {
+		profile := ExecutionContextFrom(ctx).Profile
+		successfulTextureEditCallID := ""
+		for i, call := range calls {
+			skipReason := skipped[i]
+			if skipReason == "" && profile == agentprofile.Texture && isTextureWriteToolName(call.Name) && successfulTextureEditCallID != "" {
+				skipReason = fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, successfulTextureEditCallID)
+			}
+			results[i] = executeOneTool(ctx, registry, call, skipReason, emit)
+			if skipReason == "" && profile == agentprofile.Texture && isTextureWriteToolName(call.Name) && !results[i].IsError && IsStructuredToolSuccess(results[i].Output) {
+				successfulTextureEditCallID = call.ID
+			}
+		}
+		return results
+	}
+
 	var wg sync.WaitGroup
 	for i, call := range calls {
 		wg.Add(1)
 		go func(index int, call types.ToolCall) {
 			defer wg.Done()
-			results[index] = executeOneTool(ctx, registry, call, emit)
+			results[index] = executeOneTool(ctx, registry, call, skipped[index], emit)
 		}(i, call)
 	}
 	wg.Wait()
 	return results
 }
 
-func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.ToolCall, emit provideriface.EventEmitFunc) types.ToolResult {
+func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.ToolCall, skipReason string, emit provideriface.EventEmitFunc) types.ToolResult {
 	args := json.RawMessage(strings.TrimSpace(string(call.Arguments)))
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
@@ -42,10 +60,21 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 	})
 	emit(types.EventToolInvoked, "tool_call", invokedPayload)
 
-	output, err := registry.Execute(ctx, call.Name, call.Arguments)
-	isError := err != nil
-	if err != nil {
-		output = fmt.Sprintf("tool_error: %v", err)
+	isError := false
+	output := skipReason
+	if skipReason != "" {
+		if strings.HasPrefix(skipReason, "tool_notice:") {
+			output = strings.TrimSpace(strings.TrimPrefix(skipReason, "tool_notice:"))
+		} else {
+			isError = true
+		}
+	} else {
+		var err error
+		output, err = registry.Execute(ctx, call.Name, call.Arguments)
+		if err != nil {
+			output = fmt.Sprintf("tool_error: %v", err)
+			isError = true
+		}
 	}
 
 	visibleOutput := output
@@ -79,6 +108,288 @@ func executeOneTool(ctx context.Context, registry *ToolRegistry, call types.Tool
 	return types.ToolResult{CallID: call.ID, Output: visibleOutput, IsError: isError}
 }
 
+func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
+	for _, call := range calls {
+		if toolRequiresSequentialTurnExecution(call.Name) {
+			return true
+		}
+	}
+	return false
+}
+
+func toolRequiresSequentialTurnExecution(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "request_worker_vm", "product_api_request", "delegate_worker_vm", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "publish_app_change_package", "update_coagent", "save_evidence":
+		return true
+	default:
+		return false
+	}
+}
+
+func isTextureWriteToolName(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "patch_texture", "rewrite_texture":
+		return true
+	default:
+		return false
+	}
+}
+
+func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]string {
+	profile := ExecutionContextFrom(ctx).Profile
+	if profile == "" || len(calls) == 0 {
+		return nil
+	}
+	skipped := make(map[int]string)
+	setSkip := func(index int, reason string) {
+		if _, exists := skipped[index]; !exists {
+			skipped[index] = reason
+		}
+	}
+
+	if profile == agentprofile.Conductor {
+		firstTexture := -1
+		for i, call := range calls {
+			if call.Name != "spawn_agent" {
+				continue
+			}
+			if toolCallSpawnProfile(call) == agentprofile.Texture {
+				if firstTexture == -1 {
+					firstTexture = i
+				} else {
+					setSkip(i, "tool_notice: conductor already routed this prompt to texture; duplicate texture route skipped")
+				}
+			}
+		}
+		if firstTexture != -1 {
+			for i, call := range calls {
+				if i == firstTexture || call.Name != "spawn_agent" {
+					continue
+				}
+				setSkip(i, "tool_notice: conductor routed this prompt to texture; texture owns downstream researcher/super requests")
+			}
+		}
+	}
+	planSideEffectToolSkips(profile, calls, setSkip)
+	if len(skipped) == 0 {
+		return nil
+	}
+	return skipped
+}
+
+func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip func(index int, reason string)) {
+	seenVSuperSpawn := map[string]int{}
+	seenCoagentUpdate := map[string]int{}
+	seenExport := map[string]int{}
+	seenBash := map[string]int{}
+	seenDelegateWorker := map[string]int{}
+	seenTextureResearcherSpawn := map[string]int{}
+
+	for i, call := range calls {
+		switch call.Name {
+		case "patch_texture", "rewrite_texture":
+		case "bash":
+			if profile != agentprofile.Super && profile != agentprofile.VSuper && profile != agentprofile.CoSuper {
+				continue
+			}
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenBash[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate bash command already planned in this turn at call %s; wait for the first result instead of running it twice", calls[previous].ID))
+				continue
+			}
+			seenBash[key] = i
+		case "spawn_agent":
+			switch profile {
+			case agentprofile.Texture:
+				key, ok := toolCallTextureResearcherSpawnKey(call)
+				if !ok {
+					continue
+				}
+				if previous, exists := seenTextureResearcherSpawn[key]; exists {
+					setSkip(i, fmt.Sprintf("tool_notice: duplicate texture researcher spawn for %s already planned in this turn at call %s; one worker for this exact objective is enough", key, calls[previous].ID))
+					continue
+				}
+				seenTextureResearcherSpawn[key] = i
+			case agentprofile.VSuper:
+				key, ok := toolCallVSuperCoSuperSpawnKey(call)
+				if !ok {
+					continue
+				}
+				if previous, exists := seenVSuperSpawn[key]; exists {
+					setSkip(i, fmt.Sprintf("tool_error: duplicate spawn_agent for %s already planned in this turn at call %s; reuse that child instead of launching or reusing it again", key, calls[previous].ID))
+					continue
+				}
+				seenVSuperSpawn[key] = i
+			}
+		case "publish_app_change_package":
+			if profile != agentprofile.Super && profile != agentprofile.VSuper && profile != agentprofile.CoSuper {
+				continue
+			}
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenExport[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate publish_app_change_package payload already planned in this turn at call %s; one package publication attempt per candidate state is allowed", calls[previous].ID))
+				continue
+			}
+			seenExport[key] = i
+		case "update_coagent":
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenCoagentUpdate[key]; exists {
+				setSkip(i, fmt.Sprintf("tool_error: duplicate update_coagent payload already planned in this turn at call %s; one addressed durable update is enough", calls[previous].ID))
+				continue
+			}
+			seenCoagentUpdate[key] = i
+		case "delegate_worker_vm", "start_worker_delegation":
+			if profile != agentprofile.Super {
+				continue
+			}
+			key := normalizedToolCallArgs(call)
+			if key == "" {
+				continue
+			}
+			if previous, exists := seenDelegateWorker[key]; exists {
+				if call.Name == "start_worker_delegation" {
+					notice, _ := json.Marshal(map[string]any{
+						"status": "duplicate_start_ignored", "state": "pending", "deduped": true,
+						"dedupe_reason": "start_worker_delegation_already_planned_in_turn", "previous_call_id": calls[previous].ID,
+						"next_tools": []string{"observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation"},
+					})
+					setSkip(i, "tool_notice:"+string(notice))
+					continue
+				}
+				setSkip(i, fmt.Sprintf("tool_error: duplicate %s payload already planned in this turn at call %s; wait for the first worker result instead of starting the same worker delegation twice", call.Name, calls[previous].ID))
+				continue
+			}
+			seenDelegateWorker[key] = i
+		}
+	}
+}
+
+func toolCallVSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
+	var in struct {
+		Role string `json:"role"`
+		Profile string `json:"profile"`
+		Slot string `json:"slot"`
+		ChannelID string `json:"channel_id"`
+	}
+	if err := json.Unmarshal(call.Arguments, &in); err != nil {
+		return "", false
+	}
+	profile := canonicalAgentProfile(in.Profile)
+	if profile == "" {
+		profile = canonicalAgentProfile(in.Role)
+	}
+	if profile != agentprofile.CoSuper {
+		return "", false
+	}
+	slot := normalizeVSuperCoSuperSlot(in.Slot)
+	if slot == "" {
+		return "", false
+	}
+	return profile + ":" + slot + ":" + strings.TrimSpace(in.ChannelID), true
+}
+
+func toolCallTextureResearcherSpawnKey(call types.ToolCall) (string, bool) {
+	var in struct {
+		Role string `json:"role"`
+		Profile string `json:"profile"`
+		ChannelID string `json:"channel_id"`
+		Objective string `json:"objective"`
+	}
+	if err := json.Unmarshal(call.Arguments, &in); err != nil {
+		return "", false
+	}
+	profile := canonicalAgentProfile(in.Profile)
+	if profile == "" {
+		profile = canonicalAgentProfile(in.Role)
+	}
+	if profile != agentprofile.Researcher {
+		return "", false
+	}
+	channelID := strings.TrimSpace(in.ChannelID)
+	objective := strings.Join(strings.Fields(strings.TrimSpace(in.Objective)), " ")
+	if objective == "" {
+		return "", false
+	}
+	return profile + ":" + channelID + ":" + objective, true
+}
+
+func normalizedToolCallArgs(call types.ToolCall) string {
+	raw := strings.TrimSpace(string(call.Arguments))
+	if raw == "" {
+		return "{}"
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		return raw
+	}
+	encoded, err := json.Marshal(decoded)
+	if err != nil {
+		return raw
+	}
+	return string(encoded)
+}
+
+func toolCallSpawnProfile(call types.ToolCall) string {
+	var in struct {
+		Role string `json:"role"`
+		Profile string `json:"profile"`
+	}
+	if err := json.Unmarshal(call.Arguments, &in); err != nil {
+		return ""
+	}
+	profile := canonicalAgentProfile(in.Profile)
+	if profile == "" {
+		profile = canonicalAgentProfile(in.Role)
+	}
+	return profile
+}
+
+func canonicalAgentProfile(profile string) string {
+	normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(profile), "_", "-"))
+	switch normalized {
+	case "researcher", "researchers", "research", "research-agent", "research-worker", "web-research", "web-researcher":
+		return agentprofile.Researcher
+	case "cosuper", "co-super", "coagent", "co-agent":
+		return agentprofile.CoSuper
+	case "vsuper", "v-super", "virtual-super", "vm-super", "candidate-super":
+		return agentprofile.VSuper
+	case "texture", "texture-agent", "document-agent":
+		return agentprofile.Texture
+	case "processor", "news-processor", "source-processor", "universal-wire-processor":
+		return agentprofile.Processor
+	case "reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "universal-wire-reconciler":
+		return agentprofile.Reconciler
+	case "email", "email-agent", "email-appagent", "mail", "mail-agent":
+		return agentprofile.Email
+	case agentprofile.Super:
+		return agentprofile.Super
+	case agentprofile.Conductor:
+		return agentprofile.Conductor
+	default:
+		return normalized
+	}
+}
+
+func normalizeVSuperCoSuperSlot(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "implementation", "implementer", "worker", "writer", "builder":
+		return "implementation"
+	case "verifier", "verification", "reviewer", "review", "checker", "tester":
+		return "verifier"
+	default:
+		return ""
+	}
+}
+
 func capToolOutput(output string) string {
 	const maxToolOutput = 100 * 1024
 	if len(output) <= maxToolOutput {
@@ -88,9 +399,9 @@ func capToolOutput(output string) string {
 }
 
 type toolOutputProjection struct {
-	ModelOutput   string
+	ModelOutput string
 	DurableOutput string
-	Metadata      map[string]any
+	Metadata map[string]any
 }
 
 func parseToolOutputProjection(output string) *toolOutputProjection {

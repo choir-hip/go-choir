@@ -59,11 +59,11 @@ func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapa
 	if prompt == "" {
 		return "", fmt.Errorf("prompt must not be empty")
 	}
-	role := normalizeModelPolicyRole(nonEmpty(in.Role, stringFromToolContext(ctx, toolCtxRole)))
+	role := normalizeModelPolicyRole(nonEmpty(in.Role, toolregistry.ExecutionContextFrom(ctx).Role))
 	if role == "" {
 		role = AgentProfileSuper
 	}
-	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	selection, policySource, err := rt.resolveToolModelSelection(ctx, ownerID, role, in)
 	if err != nil {
 		return "", err

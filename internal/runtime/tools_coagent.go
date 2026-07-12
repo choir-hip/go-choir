@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -75,8 +76,8 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode spawn_agent args: %w", err)
 			}
-			parentID := stringFromToolContext(ctx, toolCtxRunID)
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			parentID := toolregistry.ExecutionContextFrom(ctx).RunID
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if parentID == "" || ownerID == "" {
 				return "", fmt.Errorf("spawn_agent missing run context")
 			}
@@ -84,7 +85,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if role == "" {
 				return "", fmt.Errorf("role must not be empty")
 			}
-			callerProfile := stringFromToolContext(ctx, toolCtxProfile)
+			callerProfile := toolregistry.ExecutionContextFrom(ctx).Profile
 			profile := normalizeDelegateTargetValue(in.Profile, allowedTargets)
 			if profile == "" {
 				profile = role
@@ -118,15 +119,15 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if (callerProfile == AgentProfileConductor ||
 				callerProfile == AgentProfileProcessor ||
 				callerProfile == AgentProfileReconciler) && profile == AgentProfileTexture {
-				parentRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
+				parentRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 				if parentRec == nil {
 					parentRec = &types.RunRecord{
 						RunID:        parentID,
 						OwnerID:      ownerID,
-						AgentID:      stringFromToolContext(ctx, toolCtxAgentID),
+						AgentID:      toolregistry.ExecutionContextFrom(ctx).AgentID,
 						AgentProfile: callerProfile,
-						AgentRole:    stringFromToolContext(ctx, toolCtxRole),
-						ChannelID:    stringFromToolContext(ctx, toolCtxChannelID),
+						AgentRole:    toolregistry.ExecutionContextFrom(ctx).Role,
+						ChannelID:    toolregistry.ExecutionContextFrom(ctx).ChannelID,
 					}
 				}
 				// ensureCoagentTextureRevisionRoute owns source-item validation
@@ -987,15 +988,15 @@ func newCancelAgentTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode cancel_agent args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("cancel_agent missing owner context")
 			}
 			agentID := strings.TrimSpace(in.AgentID)
 			var target types.RunRecord
 			targetFromCallerSlot := false
-			if stringFromToolContext(ctx, toolCtxProfile) == AgentProfileVSuper {
-				callerTrajectoryID := trajectoryIDForRun(ctxRunRecord(ctx))
+			if toolregistry.ExecutionContextFrom(ctx).Profile == AgentProfileVSuper {
+				callerTrajectoryID := trajectoryIDForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)
 				slot, found, err := rt.store.CoSuperSlotByAgentAndTrajectory(ctx, ownerID, callerTrajectoryID, agentID)
 				if err != nil {
 					return "", fmt.Errorf("lookup co-super slot before cancel: %w", err)

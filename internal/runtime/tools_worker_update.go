@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func RegisterCoagentUpdateTools(registry *ToolRegistry, rt *Runtime) error {
@@ -165,10 +166,10 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			if err := validateCoagentSourcePacketPayload(packet); err != nil {
 				return "", err
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
-			agentID := stringFromToolContext(ctx, toolCtxAgentID)
-			runID := stringFromToolContext(ctx, toolCtxRunID)
-			role := stringFromToolContext(ctx, toolCtxRole)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
+			agentID := toolregistry.ExecutionContextFrom(ctx).AgentID
+			runID := toolregistry.ExecutionContextFrom(ctx).RunID
+			role := toolregistry.ExecutionContextFrom(ctx).Role
 			if ownerID == "" || agentID == "" || runID == "" {
 				return "", fmt.Errorf("update_coagent missing coagent context")
 			}
@@ -176,7 +177,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			update := types.CoagentSourcePacket{
 				OwnerID:   ownerID,
 				AgentID:   agentID,
-				Role:      nonEmpty(role, configuredAgentProfileForRun(ctxRunRecord(ctx))),
+				Role:      nonEmpty(role, configuredAgentProfileForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)),
 				Packet:    packet,
 				CreatedAt: time.Now().UTC(),
 			}
@@ -184,7 +185,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			if canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)) == AgentProfileResearcher {
+			if canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile) == AgentProfileResearcher {
 				if explicitChannel := strings.TrimSpace(in.ChannelID); explicitChannel != "" && explicitChannel != targetChannelID {
 					return "", fmt.Errorf("update_coagent channel_id %q does not match Texture coagent %q channel %q", explicitChannel, targetAgentID, targetChannelID)
 				}
@@ -192,19 +193,19 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			if target, err := rt.store.GetAgent(ctx, targetAgentID); err == nil {
 				targetProfile := canonicalAgentProfile(target.Profile)
 				if targetProfile == AgentProfileEmail {
-					return "", fmt.Errorf("%s cannot send arbitrary coagent updates to Email appagent %s; use a Texture-owned request_email_draft artifact handoff", canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)), target.AgentID)
+					return "", fmt.Errorf("%s cannot send arbitrary coagent updates to Email appagent %s; use a Texture-owned request_email_draft artifact handoff", canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile), target.AgentID)
 				}
 				if err := enforceCoagentUpdateAuthority(ctx, rt, target, targetProfile); err != nil {
 					return "", err
 				}
 			}
-			channelID := authoritativeDeliveryChannelID(targetChannelID, in.ChannelID, stringFromToolContext(ctx, toolCtxChannelID))
+			channelID := authoritativeDeliveryChannelID(targetChannelID, in.ChannelID, toolregistry.ExecutionContextFrom(ctx).ChannelID)
 			if channelID == "" {
 				return "", fmt.Errorf("update_coagent could not resolve channel_id")
 			}
 
 			trajectoryID := ""
-			if runRec := ctxRunRecord(ctx); runRec != nil && runRec.Metadata != nil {
+			if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil && runRec.Metadata != nil {
 				if id, _ := runRec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {
 					trajectoryID = strings.TrimSpace(id)
 				}
@@ -256,10 +257,10 @@ func enforceCoagentUpdateAuthority(ctx context.Context, rt *Runtime, target type
 	if rt == nil || rt.store == nil {
 		return nil
 	}
-	if canonicalAgentProfile(stringFromToolContext(ctx, toolCtxProfile)) != AgentProfileSuper || targetProfile != AgentProfileCoSuper {
+	if canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile) != AgentProfileSuper || targetProfile != AgentProfileCoSuper {
 		return nil
 	}
-	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	if ownerID == "" {
 		return nil
 	}
@@ -284,10 +285,6 @@ func stringArraySchema() map[string]any {
 	}
 }
 
-func ctxRunRecord(ctx context.Context) *types.RunRecord {
-	runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord)
-	return runRec
-}
 
 func workerUpdateEmpty(update types.CoagentSourcePacket) bool {
 	return coagentPacketPayloadEmpty(update.Packet)

@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func TestEvidenceRecordToSourceEntity_ContentIDYieldsWholeResourceByDefault(t *testing.T) {
@@ -696,7 +697,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	if err != nil {
 		t.Fatalf("marshal texture edit args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(WithToolExecutionContext(ctx, rec), "patch_texture", editArgs); err != nil {
+	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), "patch_texture", editArgs); err != nil {
 		t.Fatalf("patch_texture should accept whole_resource source citation: %v", err)
 	}
 	updated, err := s.GetDocument(ctx, docID, ownerID)

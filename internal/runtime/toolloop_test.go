@@ -143,10 +143,10 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 		AgentRole:    AgentProfileTexture,
 	}
 	text, _, err := toolregistry.RunToolLoop(
-		WithToolExecutionContext(context.Background(), run),
+		toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)),
 		provider,
 		registry,
-		executeTools,
+		toolregistry.ExecuteToolBatch,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"write v1"}`)},
 		"You are a Texture appagent.",
 		0,

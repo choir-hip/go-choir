@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 type webSearchClient interface {
@@ -268,7 +269,7 @@ func newImportDocumentContentTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode import_document_content args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("import_document_content missing owner context")
 			}
@@ -368,7 +369,7 @@ func newImportURLContentTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode import_url_content args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("import_url_content missing owner context")
 			}
@@ -416,7 +417,7 @@ func newReadContentItemTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode read_content_item args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("read_content_item missing owner context")
 			}
@@ -502,7 +503,7 @@ func newListContentItemSelectorsTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode list_content_item_selectors args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("list_content_item_selectors missing owner context")
 			}
@@ -556,7 +557,7 @@ func newReadContentItemSelectorTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode read_content_item_selector args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("read_content_item_selector missing owner context")
 			}
@@ -700,13 +701,13 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 }
 
 func shouldRequireResearchUpdateAfterTool(ctx context.Context, rt *Runtime) bool {
-	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileResearcher {
+	if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileResearcher {
 		return false
 	}
 	if rt == nil || rt.store == nil {
 		return false
 	}
-	runID := stringFromToolContext(ctx, toolCtxRunID)
+	runID := toolregistry.ExecutionContextFrom(ctx).RunID
 	if runID == "" {
 		return false
 	}

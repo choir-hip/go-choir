@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/runtime/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -52,46 +52,26 @@ const (
 	runMetadataExplicitResearcher  = "explicit_researcher_request"
 )
 
-type toolContextKey string
-
-const (
-	toolCtxRunID      toolContextKey = "loop_id"
-	toolCtxAgentID    toolContextKey = "agent_id"
-	toolCtxOwnerID    toolContextKey = "owner_id"
-	toolCtxProfile    toolContextKey = "agent_profile"
-	toolCtxRole       toolContextKey = "agent_role"
-	toolCtxChannelID  toolContextKey = "channel_id"
-	toolCtxSandboxID  toolContextKey = "sandbox_id"
-	toolCtxDesktopID  toolContextKey = "desktop_id"
-	toolCtxOwnerEmail toolContextKey = "owner_email"
-	toolCtxRunRecord  toolContextKey = "run_record"
-	toolCtxWorkingDir toolContextKey = "tool_cwd"
-)
-
-func WithToolExecutionContext(ctx context.Context, rec *types.RunRecord) context.Context {
-	ctx = context.WithValue(ctx, toolCtxRunID, rec.RunID)
-	ctx = context.WithValue(ctx, toolCtxAgentID, agentIDForRun(rec))
-	ctx = context.WithValue(ctx, toolCtxOwnerID, rec.OwnerID)
-	ctx = context.WithValue(ctx, toolCtxProfile, configuredAgentProfileForRun(rec))
-	ctx = context.WithValue(ctx, toolCtxRole, agentRoleForRun(rec))
-	ctx = context.WithValue(ctx, toolCtxChannelID, channelIDForRun(rec))
-	ctx = context.WithValue(ctx, toolCtxSandboxID, rec.SandboxID)
-	ctx = context.WithValue(ctx, toolCtxDesktopID, desktopIDForRun(rec))
-	ctx = context.WithValue(ctx, toolCtxRunRecord, rec)
-	if rec.Metadata != nil {
-		if cwd, _ := rec.Metadata[runMetadataToolCWD].(string); strings.TrimSpace(cwd) != "" {
-			ctx = context.WithValue(ctx, toolCtxWorkingDir, strings.TrimSpace(cwd))
-		}
-		if ownerEmail, _ := rec.Metadata[runMetadataOwnerEmail].(string); strings.TrimSpace(ownerEmail) != "" {
-			ctx = context.WithValue(ctx, toolCtxOwnerEmail, strings.TrimSpace(ownerEmail))
-		}
+func toolExecutionContextForRun(rec *types.RunRecord) toolregistry.ExecutionContext {
+	if rec == nil {
+		return toolregistry.ExecutionContext{}
 	}
-	return ctx
-}
-
-func stringFromToolContext(ctx context.Context, key toolContextKey) string {
-	value, _ := ctx.Value(key).(string)
-	return strings.TrimSpace(value)
+	execution := toolregistry.ExecutionContext{
+		RunID:     rec.RunID,
+		AgentID:   agentIDForRun(rec),
+		OwnerID:   rec.OwnerID,
+		Profile:   configuredAgentProfileForRun(rec),
+		Role:      agentRoleForRun(rec),
+		ChannelID: channelIDForRun(rec),
+		SandboxID: rec.SandboxID,
+		DesktopID: desktopIDForRun(rec),
+		RunRecord: rec,
+	}
+	if rec.Metadata != nil {
+		execution.WorkingDir, _ = rec.Metadata[runMetadataToolCWD].(string)
+		execution.OwnerEmail, _ = rec.Metadata[runMetadataOwnerEmail].(string)
+	}
+	return execution
 }
 
 func configuredAgentProfileForRun(rec *types.RunRecord) string {

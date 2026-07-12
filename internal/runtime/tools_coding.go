@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func RegisterFileTools(registry *ToolRegistry, cwd string) error {
@@ -399,7 +401,7 @@ func newBashTool(cwd string) Tool {
 				"exit_code": exitCode,
 				"output":    strings.TrimSpace(output),
 			}
-			if isPersistentSuperInboxRun(ctxRunRecord(ctx)) {
+			if isPersistentSuperInboxRun(toolregistry.ExecutionContextFrom(ctx).RunRecord) {
 				result["next_instruction"] = "Report this command result to the addressed Texture document before running more commands or ending the run. Include the command, exit code, stdout/stderr or error summary, and any blocker so Texture can consume the evidence."
 			}
 			return toolResultJSON(result)
@@ -465,7 +467,7 @@ func newGitDiffTool(cwd string) Tool {
 
 func effectiveToolCWD(ctx context.Context, defaultCWD string) string {
 	if ctx != nil {
-		if override := stringFromToolContext(ctx, toolCtxWorkingDir); override != "" {
+		if override := toolregistry.ExecutionContextFrom(ctx).WorkingDir; override != "" {
 			if filepath.IsAbs(override) {
 				return filepath.Clean(override)
 			}
@@ -569,10 +571,10 @@ func guardForegroundSuperMutation(ctx context.Context, tool string) error {
 	if strings.ToLower(strings.TrimSpace(os.Getenv("RUNTIME_SUPER_FOREGROUND_MUTATION_MODE"))) != "worker_only" {
 		return nil
 	}
-	if stringFromToolContext(ctx, toolCtxProfile) != AgentProfileSuper {
+	if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileSuper {
 		return nil
 	}
-	if stringFromToolContext(ctx, toolCtxWorkingDir) != "" {
+	if toolregistry.ExecutionContextFrom(ctx).WorkingDir != "" {
 		return nil
 	}
 	return fmt.Errorf("%s blocked for foreground super; delegate mutable work to a worker VM", tool)

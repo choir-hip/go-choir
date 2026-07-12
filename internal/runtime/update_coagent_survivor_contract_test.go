@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 // This file pins the E1 survivor contract for the source-centric
@@ -73,7 +74,7 @@ func TestSurvivorContract_AcceptsCanonicalSurface(t *testing.T) {
 		t.Fatalf("upsert texture agent: %v", err)
 	}
 	researcherRun := d9CoagentRun("run-survivor-canonical", ownerID, "researcher:survivor", AgentProfileResearcher, docID, "")
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, researcherRun), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(validEvidenceUpdatePacket))
 	if err != nil {
 		t.Fatalf("update_coagent canonical surface rejected: %v", err)
 	}
@@ -126,7 +127,7 @@ func TestSurvivorContract_RejectsEveryLegacyTopLevelField(t *testing.T) {
 			"channel_id":"doc-survivor-reject",
 			"` + field + `":["legacy-value"]
 		}`)
-		_, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", raw)
+		_, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", raw)
 		if err == nil {
 			t.Fatalf("update_coagent accepted legacy field %q", field)
 		}
@@ -153,7 +154,7 @@ func TestSurvivorContract_RejectsUnknownTopLevelField(t *testing.T) {
 		"channel_id":"doc-survivor-unknown",
 		"secret平行surface":["should be rejected"]
 	}`)
-	if _, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(WithToolExecutionContext(ctx, superRun), "update_coagent", raw); err == nil {
+	if _, err := rt.ToolRegistryForProfile(AgentProfileSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", raw); err == nil {
 		t.Fatalf("update_coagent accepted unknown top-level field (parallel surface reintroduction risk)")
 	}
 }
@@ -188,7 +189,7 @@ func TestSurvivorContract_TextureCollatesOnlyPacketSources(t *testing.T) {
 	// must NOT be scraped: an http URL in notes, a "[Source: foo]" style
 	// label in summary, and a bare command_output: URI in claims.text. Only
 	// the single typed packet.sources entry may become an entity.
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, researcherRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"Summary references [Source: prose-only] and should not be scraped.",
@@ -239,7 +240,7 @@ func TestSurvivorContract_SuperExecutesOnlyExecutionRequestPackets(t *testing.T)
 	}
 	// evidence_update addressed to persistent Super: must NOT be executable.
 	coSuperRun := d9CoagentRun("run-survivor-super-gate", ownerID, "cosuper:survivor-gate", AgentProfileCoSuper, "", "")
-	raw, err := rt.ToolRegistryForProfile(AgentProfileCoSuper).Execute(WithToolExecutionContext(ctx, coSuperRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileCoSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(coSuperRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"non-execution packet for Super",
@@ -322,7 +323,7 @@ func TestSurvivorContract_RejectedSourcesAreReported(t *testing.T) {
 	// A packet.source with an unsupported kind that cannot materialize. The
 	// current behavior silently drops it. The survivor contract requires the
 	// drop be reported.
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(WithToolExecutionContext(ctx, researcherRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"packet with a source that cannot materialize",
@@ -375,7 +376,7 @@ func TestSurvivorContract_SuperSettlesNonExecutionRequestPackets(t *testing.T) {
 	}
 
 	coSuperRun := d9CoagentRun("run-survivor-settle-cosuper", ownerID, "cosuper:survivor-settle", AgentProfileCoSuper, "", "")
-	raw, err := rt.ToolRegistryForProfile(AgentProfileCoSuper).Execute(WithToolExecutionContext(ctx, coSuperRun), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(AgentProfileCoSuper).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(coSuperRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"non-execution packet to be settled",

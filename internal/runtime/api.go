@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 // apiError is a JSON error envelope for API responses.
@@ -938,7 +939,7 @@ func (h *APIHandler) HandleInternalChannelCast(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "owner_id, channel_id, and content are required"})
 		return
 	}
-	runCtx := WithToolExecutionContext(r.Context(), &types.RunRecord{
+	runCtx := toolregistry.WithExecutionContext(r.Context(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        strings.TrimSpace(req.FromRunID),
 		AgentID:      firstNonEmpty(strings.TrimSpace(req.FromAgentID), strings.TrimSpace(req.From)),
 		ChannelID:    req.ChannelID,
@@ -949,7 +950,7 @@ func (h *APIHandler) HandleInternalChannelCast(w http.ResponseWriter, r *http.Re
 			runMetadataAgentProfile: strings.TrimSpace(req.Role),
 			runMetadataAgentRole:    strings.TrimSpace(req.Role),
 		},
-	})
+	}))
 	targetAgentID := strings.TrimSpace(req.ToAgentID)
 	if targetAgentID != "" || strings.TrimSpace(req.ToRunID) != "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "addressed internal channel casts are disabled; use update_coagent for agent-to-agent wake delivery"})

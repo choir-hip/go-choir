@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -67,8 +68,8 @@ func newForkDesktopTool(rt *Runtime) Tool {
 				return "", fmt.Errorf("fork_desktop requires runtime vmctl configuration")
 			}
 
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
-			sourceDesktopID := strings.TrimSpace(stringFromToolContext(ctx, toolCtxDesktopID))
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
+			sourceDesktopID := strings.TrimSpace(toolregistry.ExecutionContextFrom(ctx).DesktopID)
 			if ownerID == "" {
 				return "", fmt.Errorf("fork_desktop missing owner context")
 			}
@@ -132,7 +133,7 @@ func newPublishDesktopTool(rt *Runtime) Tool {
 			if strings.TrimSpace(rt.cfg.VmctlURL) == "" {
 				return "", fmt.Errorf("publish_desktop requires runtime vmctl configuration")
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("publish_desktop missing owner context")
 			}
@@ -183,9 +184,9 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 				return "", fmt.Errorf("request_worker_vm requires runtime vmctl configuration")
 			}
 
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
-			desktopID := strings.TrimSpace(stringFromToolContext(ctx, toolCtxDesktopID))
-			parentAgentID := stringFromToolContext(ctx, toolCtxAgentID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
+			desktopID := strings.TrimSpace(toolregistry.ExecutionContextFrom(ctx).DesktopID)
+			parentAgentID := toolregistry.ExecutionContextFrom(ctx).AgentID
 			if ownerID == "" {
 				return "", fmt.Errorf("request_worker_vm missing owner context")
 			}
@@ -195,10 +196,10 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 			if parentAgentID == "" {
 				return "", fmt.Errorf("request_worker_vm missing parent agent context")
 			}
-			parentRunID := stringFromToolContext(ctx, toolCtxRunID)
+			parentRunID := toolregistry.ExecutionContextFrom(ctx).RunID
 
 			var trajectoryID string
-			if runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord); runRec != nil && runRec.Metadata != nil {
+			if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil && runRec.Metadata != nil {
 				if id, _ := runRec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {
 					trajectoryID = strings.TrimSpace(id)
 				}
@@ -459,7 +460,7 @@ func (rt *Runtime) listWorkerToolEventsForCurrentScope(ctx context.Context, runI
 	if limit <= 0 {
 		limit = 500
 	}
-	if rec := ctxRunRecord(ctx); rec != nil {
+	if rec := toolregistry.ExecutionContextFrom(ctx).RunRecord; rec != nil {
 		ownerID := strings.TrimSpace(rec.OwnerID)
 		trajectoryID := metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
 		if ownerID != "" && trajectoryID != "" {
@@ -655,7 +656,7 @@ func newStartWorkerDelegationToolNamed(name, description string, rt *Runtime, cw
 }
 
 func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw json.RawMessage) (string, error) {
-	if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+	if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
 		return "", fmt.Errorf("start_worker_delegation is only available to super agents")
 	}
 	if rt == nil {
@@ -665,7 +666,7 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 	if err := json.Unmarshal(raw, &in); err != nil {
 		return "", fmt.Errorf("decode start_worker_delegation args: %w", err)
 	}
-	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	if ownerID == "" {
 		return "", fmt.Errorf("start_worker_delegation missing owner context")
 	}
@@ -690,15 +691,15 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	runID := stringFromToolContext(ctx, toolCtxRunID)
-	agentID := stringFromToolContext(ctx, toolCtxAgentID)
+	runID := toolregistry.ExecutionContextFrom(ctx).RunID
+	agentID := toolregistry.ExecutionContextFrom(ctx).AgentID
 	if cached, ok, err := rt.findExistingWorkerVMDelegation(ctx, runID, in, profile); err != nil {
 		return "", err
 	} else if ok {
 		return markToolResultDeduped(cached, "super_run_already_started_worker_delegation")
 	}
 	trajectoryID := ""
-	if rec := ctxRunRecord(ctx); rec != nil && rec.Metadata != nil {
+	if rec := toolregistry.ExecutionContextFrom(ctx).RunRecord; rec != nil && rec.Metadata != nil {
 		trajectoryID = metadataStringValue(rec.Metadata, runMetadataTrajectoryID)
 	}
 	metadata := map[string]any{
@@ -710,19 +711,19 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 		"delegated_by_profile":  AgentProfileSuper,
 		"worker_id":             strings.TrimSpace(in.WorkerID),
 		"worker_vm_id":          strings.TrimSpace(in.VMID),
-		"parent_sandbox_id":     stringFromToolContext(ctx, toolCtxSandboxID),
+		"parent_sandbox_id":     toolregistry.ExecutionContextFrom(ctx).SandboxID,
 	}
-	if rec := ctxRunRecord(ctx); rec != nil && rec.Metadata != nil {
+	if rec := toolregistry.ExecutionContextFrom(ctx).RunRecord; rec != nil && rec.Metadata != nil {
 		for _, key := range []string{"requested_by_profile", "requested_by_agent_id", "requested_by_run_id", runMetadataDesktopID} {
 			if value := metadataStringValue(rec.Metadata, key); value != "" {
 				metadata[key] = value
 			}
 		}
 	}
-	if channelID := stringFromToolContext(ctx, toolCtxChannelID); channelID != "" {
+	if channelID := toolregistry.ExecutionContextFrom(ctx).ChannelID; channelID != "" {
 		metadata[runMetadataChannelID] = channelID
 	}
-	if desktopID := stringFromToolContext(ctx, toolCtxDesktopID); desktopID != "" {
+	if desktopID := toolregistry.ExecutionContextFrom(ctx).DesktopID; desktopID != "" {
 		metadata[runMetadataDesktopID] = desktopID
 	}
 	if trajectoryID != "" {
@@ -924,7 +925,7 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher}},
 		}, []string{"worker_sandbox_url"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
 				return "", fmt.Errorf("observe_worker_delegation is only available to super agents")
 			}
 			if rt == nil {
@@ -934,7 +935,7 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode observe_worker_delegation args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("observe_worker_delegation missing owner context")
 			}
@@ -966,12 +967,12 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 			result["state"] = status.State
 			result["result"] = status.Result
 			result["error"] = status.Error
-			rt.applyAsyncWorkerEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, status.State.Terminal() || status.State == types.RunBlocked, ctxRunRecord(ctx), result)
+			rt.applyAsyncWorkerEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, status.State.Terminal() || status.State == types.RunBlocked, toolregistry.ExecutionContextFrom(ctx).RunRecord, result)
 			updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if intMapValue(result, "mirrored_worker_update_count") > 0 {
 				result["worker_update_checkpoint"] = "worker_submit_update_mirrored"
-			} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_observe"); err != nil {
+			} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, toolregistry.ExecutionContextFrom(ctx).RunRecord, result, "async_observe"); err != nil {
 				result["worker_update_error"] = err.Error()
 			} else {
 				result["worker_update_checkpoint"] = "submitted_or_existing"
@@ -1006,7 +1007,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			"timeout_seconds":    map[string]any{"type": "integer"},
 		}, []string{"worker_sandbox_url"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
 				return "", fmt.Errorf("finish_worker_delegation is only available to super agents")
 			}
 			if rt == nil {
@@ -1016,7 +1017,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode finish_worker_delegation args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("finish_worker_delegation missing owner context")
 			}
@@ -1067,14 +1068,14 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			if !status.State.Terminal() && status.State != types.RunBlocked {
 				result["status"] = "worker_run_active"
 				result["finish_ready"] = false
-				rt.applyAsyncWorkerEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, false, ctxRunRecord(ctx), result)
+				rt.applyAsyncWorkerEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, false, toolregistry.ExecutionContextFrom(ctx).RunRecord, result)
 				updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if intMapValue(result, "mirrored_worker_update_count") > 0 {
 					result["worker_update_checkpoint"] = "worker_submit_update_mirrored"
 				} else if !shouldCheckpointActiveWorkerFinish(result) {
 					result["worker_update_checkpoint"] = "active_evidence_deferred"
-				} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_finish_active"); err != nil {
+				} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, toolregistry.ExecutionContextFrom(ctx).RunRecord, result, "async_finish_active"); err != nil {
 					result["worker_update_error"] = err.Error()
 				} else {
 					result["worker_update_checkpoint"] = "submitted_or_existing"
@@ -1096,7 +1097,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 				if profile == AgentProfileVSuper && status.State == types.RunCompleted {
 					evidence = followWorkerChildRuns(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, evidence, timeout)
 				}
-				rt.applyWorkerEvidenceToResult(ctx, client, in.WorkerSandboxURL, ownerID, evidence, true, ctxRunRecord(ctx), result)
+				rt.applyWorkerEvidenceToResult(ctx, client, in.WorkerSandboxURL, ownerID, evidence, true, toolregistry.ExecutionContextFrom(ctx).RunRecord, result)
 			}
 			if status.State != types.RunCompleted {
 				result["terminal_error"] = strings.TrimSpace(fmt.Sprintf("worker run %s ended in state %s: %s", workerRunID, status.State, strings.TrimSpace(status.Error)))
@@ -1110,7 +1111,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			defer cancel()
 			if intMapValue(result, "mirrored_worker_update_count") > 0 {
 				result["worker_update_checkpoint"] = "worker_submit_update_mirrored"
-			} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, ctxRunRecord(ctx), result, "async_finish"); err != nil {
+			} else if err := rt.synthesizeDelegateWorkerUpdateCheckpoint(updateCtx, toolregistry.ExecutionContextFrom(ctx).RunRecord, result, "async_finish"); err != nil {
 				result["worker_update_error"] = err.Error()
 			} else {
 				result["worker_update_checkpoint"] = "submitted_or_existing"
@@ -1388,14 +1389,14 @@ func newCancelWorkerDelegationTool(rt *Runtime) Tool {
 			"reason":             map[string]any{"type": "string"},
 		}, []string{"worker_sandbox_url"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if profile := stringFromToolContext(ctx, toolCtxProfile); profile != AgentProfileSuper {
+			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
 				return "", fmt.Errorf("cancel_worker_delegation is only available to super agents")
 			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode cancel_worker_delegation args: %w", err)
 			}
-			ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("cancel_worker_delegation missing owner context")
 			}

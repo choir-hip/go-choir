@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	choirruntime "github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -171,7 +172,11 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	}
 
 	textureRegistry := rt.ToolRegistryForProfile(choirruntime.AgentProfileTexture)
-	superRequestRaw, err := textureRegistry.Execute(choirruntime.WithToolExecutionContext(context.Background(), initialTextureRun), "request_super_execution", json.RawMessage(fmt.Sprintf(`{
+	superRequestRaw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: initialTextureRun.RunID, AgentID: initialTextureRun.AgentID, OwnerID: initialTextureRun.OwnerID,
+		Profile: initialTextureRun.AgentProfile, Role: initialTextureRun.AgentRole, ChannelID: initialTextureRun.ChannelID,
+		SandboxID: initialTextureRun.SandboxID, RunRecord: initialTextureRun,
+	}), "request_super_execution", json.RawMessage(fmt.Sprintf(`{
 		"objective":%q,
 		"channel_id":%q,
 		"model":%q

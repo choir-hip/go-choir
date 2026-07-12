@@ -2666,7 +2666,7 @@ func TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch(t *tes
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
-	if _, err := registry.Execute(WithToolExecutionContext(context.Background(), rec), "record_wire_processor_decision", json.RawMessage(`{
+	if _, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(rec)), "record_wire_processor_decision", json.RawMessage(`{
 		"decision":"already_covered",
 		"summary":"Published coverage already satisfies this source item.",
 		"covered_by_doc_id":"`+coveredByDocID+`"
@@ -2727,7 +2727,7 @@ func TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch(t *testing
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
-	if _, err := registry.Execute(WithToolExecutionContext(context.Background(), rec), "record_wire_processor_decision", json.RawMessage(`{
+	if _, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(rec)), "record_wire_processor_decision", json.RawMessage(`{
 		"decision":"not_newsworthy",
 		"summary":"The batch does not justify a publication route."
 	}`)); err != nil {

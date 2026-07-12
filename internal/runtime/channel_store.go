@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -26,15 +27,15 @@ func (rt *Runtime) ChannelPost(ctx context.Context, channelID, from, role, conte
 // (actor messages); channel messages remain the audit/replay surface.
 func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunID, from, role, content string) (uint64, error) {
 	trajectoryID := ""
-	if runRec, _ := ctx.Value(toolCtxRunRecord).(*types.RunRecord); runRec != nil && runRec.Metadata != nil {
+	if runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord; runRec != nil && runRec.Metadata != nil {
 		if id, _ := runRec.Metadata[runMetadataTrajectoryID].(string); strings.TrimSpace(id) != "" {
 			trajectoryID = strings.TrimSpace(id)
 		}
 	}
 	message := ChannelMessage{
 		ChannelID:    channelID,
-		FromAgentID:  stringFromToolContext(ctx, toolCtxAgentID),
-		FromRunID:    stringFromToolContext(ctx, toolCtxRunID),
+		FromAgentID:  toolregistry.ExecutionContextFrom(ctx).AgentID,
+		FromRunID:    toolregistry.ExecutionContextFrom(ctx).RunID,
 		ToAgentID:    strings.TrimSpace(toAgentID),
 		ToRunID:      strings.TrimSpace(toRunID),
 		TrajectoryID: trajectoryID,
@@ -43,7 +44,7 @@ func (rt *Runtime) ChannelCast(ctx context.Context, channelID, toAgentID, toRunI
 		Content:      content,
 		Timestamp:    time.Now().UTC(),
 	}
-	ownerID := stringFromToolContext(ctx, toolCtxOwnerID)
+	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	if ownerID == "" && message.FromRunID != "" {
 		if rec, err := rt.store.GetRun(context.Background(), message.FromRunID); err == nil {
 			ownerID = rec.OwnerID

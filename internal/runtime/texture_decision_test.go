@@ -31,7 +31,7 @@ func TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {
 	if err := RegisterTextureTools(registry, rt); err != nil {
 		t.Fatalf("register texture tools: %v", err)
 	}
-	raw, err := registry.Execute(WithToolExecutionContext(ctx, run), "record_texture_decision", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "record_texture_decision", json.RawMessage(`{
 		"decision_kind":"delegation_skipped",
 		"reason":"The owner supplied the source excerpt, so this revision can proceed without researcher.",
 		"evidence_refs":["rev-owner-source","source:owner-excerpt"],
