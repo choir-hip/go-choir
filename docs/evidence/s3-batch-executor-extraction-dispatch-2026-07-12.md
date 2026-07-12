@@ -65,3 +65,11 @@ Forbidden:
 - Mechanically removed the callback argument from all `48` callers. Residual callback/seam search is empty.
 - Focused owner loop/executor/context, runtime integration, provider, gateway/gatewayruntime, integration-tag compilation, and ratchet checks pass after repair.
 - Ratchet now records production LOC `44680` and test LOC `50266`; gated authority counts remain non-increasing.
+
+## S3-I10 Final Verification, CI, Deploy, and Acceptance
+
+- Independent `S3I10Verifier` returned final `PASS` at confidence `0.99` with no findings on canonical `88706171`, source repair `7b294b83`.
+- Full GitHub Actions run `29211989048`, attempt `2`, passed every default, integration, race, ratchet, SBOM, and deploy gate.
+- Deploy job `86702255399` deployed source identity `7b294b83a010741ab1ada5e719b68fd23e8c0bc9`.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
+- Residual risk: pre-existing comprehensive-tag `prompts_test.go`/`texture_test.go` drift remains outside S3-I10; no in-slice residual risk.
