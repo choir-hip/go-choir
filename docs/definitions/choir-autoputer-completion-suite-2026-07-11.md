@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: d8508bf1
+  journal_expected_parent_sha: 7b294b83
   orchestrator_lock:
     holder: Main
     epoch: 17
     expires_at: 2026-07-13T00:00:00Z
-    expected_parent_sha: d8508bf1
+    expected_parent_sha: 7b294b83
     lock_transition_id: s3-lock-renewal-178
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1780,7 +1780,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I10_landing
       stage_started_at: 2026-07-12T22:01:04Z
       transition_id: s3-i10-dispatch-intent-181
-      expected_parent_sha: d8508bf1
+      expected_parent_sha: 7b294b83
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i10-dispatch-intent-181, recorded_at: 2026-07-12T22:01:04Z, actor: Main, expected_parent_sha: 5b532da2, precondition: S3_I9_landed_tool_loop_toolregistry_owned_batch_policy_explicitly_deferred, postcondition: exact_batch_executor_and_typed_context_extraction_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i10-dispatched-182, recorded_at: 2026-07-12T22:04:48Z, actor: Main, expected_parent_sha: dec83ffb, precondition: canonical_intent_and_live_lock_epoch_17, postcondition: S3I10Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
@@ -1789,6 +1789,7 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s3-i10-verifier-dispatched-185, recorded_at: 2026-07-12T22:30:52Z, actor: Main, expected_parent_sha: 88999dc0, precondition: verifier_intent_canonical, postcondition: independent_S3I10Verifier_active, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s3-i10-verifier-blocking-186, recorded_at: 2026-07-12T22:32:45Z, actor: S3I10Verifier, expected_parent_sha: 8c6dffed, precondition: independent_authority_and_seam_verification, postcondition: arbitrary_batch_executor_callback_seam_documented_before_repair, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i10-verifier-blocker-repaired-187, recorded_at: 2026-07-12T22:38:20Z, actor: Main, expected_parent_sha: d8508bf1, precondition: blocker_documented_canonically, postcondition: executor_callback_type_parameter_nil_guard_and_test_deleted_48_callers_migrated_ratchet_PASS_reverification_required, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s3-i10-canonical-repair-checkpoint-188, recorded_at: 2026-07-12T22:40:52Z, actor: Main, expected_parent_sha: 7b294b83, precondition: callback_seam_repair_committed_and_formatted, postcondition: canonical_repair_focused_tests_and_ratchet_PASS_ready_for_same_verifier_recheck, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T00:00:00Z
       mutation_class: orange
       protected_surfaces: []
@@ -1806,9 +1807,9 @@ run_checkpoint_and_resumption_state:
       expected_precondition: tool_loop_toolregistry_owned_batch_executor_runtime_owned_with_private_context
       observed_postcondition: toolregistry_sole_batch_executor_and_typed_context_old_runtime_paths_deleted_ratchet_PASS
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: 23b65818_plus_canonical_callback_seam_repair
-      implementation_commit_sha: pending_repair_commit
-      push_ref: 01920229
+      implementation_sha_or_dirty_snapshot: 7b294b83
+      implementation_commit_sha: 7b294b83
+      push_ref: 7b294b83
       ci_run_ref: pending
       deploy_ref: pending
       deployed_sha: pending
@@ -1818,8 +1819,8 @@ run_checkpoint_and_resumption_state:
       open_findings: []
       landed_commit_sha: pending
       adjudication: verifier_callback_blocker_repaired_final_reverification_pending
-      last_reconciled_at: 2026-07-12T22:38:20Z
-      reconciliation_result: callback_seam_deleted_focused_tests_and_ratchet_PASS_ready_for_S3I10Verifier_recheck
+      last_reconciled_at: 2026-07-12T22:40:52Z
+      reconciliation_result: canonical_repair_7b294b83_ready_for_S3I10Verifier_recheck
       close_condition: extraction_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
