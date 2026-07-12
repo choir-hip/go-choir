@@ -157,6 +157,34 @@ The repair removes the bespoke provenance graph. Every runtime named-interface m
 
 Independent verification at `56ef34ce` passed all focused tests, including return/conversion/composite/closure candidates, fake-only `non_store`, novel candidate drift, method values, direct calls, and package-helper exclusion. Default invocation passed with 461 Store calls, four explicit interface candidates, and 151 citers. The residual risk is visible policy authority: a reviewer can misclassify a genuinely Store-backed candidate as `non_store`; this is reviewable baseline policy rather than silent detector inference.
 
+## Post-Substrate Six-Member Panel
+
+Run: `/tmp/choir-s0-post-substrate-consensus-20260712`. All six selected members completed; Cursor completed `ok`; no member stalled. Cursor and OMP GLM reported PASS with residual risks. Codex, opencode, OMP GPT-5.5, and OMP Gemini reported blocking findings. Reproduced false passes govern.
+
+### S0-FINAL-002 — `non_store` is an unverifiable negative authority
+
+**Status:** confirmed; blocking; same authority-boundary substrate.
+
+The candidate scanner intentionally discards provenance, then asks the baseline to assert that a candidate is `non_store`. If source flow later changes from fake-backed to Store-backed without changing the named-interface identity, the scanner has no independent signal with which to reject the stale `non_store` claim. Codex, opencode, and OMP GPT-5.5 reproduced this classification-mismatch false pass.
+
+**Required repair:** remove `non_store`. Every exact Store-signature interface candidate is conservatively a potential Store call and must receive the Store method's semantic disposition. An unrelated fake `GetRun` candidate is still ratcheted as potential `read`; it is never silently absent. This trades a small explicit conservative surface for complete fail-closed authority.
+
+### S0-FINAL-003 — current Store writer dispositions can be laundered
+
+**Status:** confirmed; blocking.
+
+OMP Gemini reproduced changing active Store writers including `CreateBrowserSession`, `UpdateBrowserSession`, `UpsertPodcastSubscription`, `UpsertMediaProgress`, `UpsertMediaRecent`, `SaveUserPreference`, `UpsertDocumentAlias`, and `DeleteDocument` to `read` while the checker passed. The current `knownWriters` map is incomplete and generated inventory inherits baseline dispositions before comparison.
+
+**Required repair:** make current Store method semantic authority exhaustive and exact. At minimum the listed active writers must have enforced lifecycle/Wire dispositions, all call and interface-candidate identities must agree with method authority, and focused laundering regressions must fail. Baseline generation must not bless a changed disposition for an already-authorized Store method.
+
+### S0-FINAL-004 — promoted embedded-interface selections bypass candidate identity
+
+**Status:** confirmed by inspection; blocking under the declared named-interface contract.
+
+Cursor found that a struct embedding a named Store-shaped interface receives a promoted method selection whose receiver is the outer struct. Candidate detection that checks only the immediate receiver can miss it even though the selected method is declared by the named interface.
+
+**Required repair:** resolve the selected method's declaring named interface, not only the immediate receiver, and add a promoted embedded-interface regression.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` only for a final six-member post-substrate panel. S0-FINAL-001 is repaired according to focused and independent evidence; S1 remains waiting until checkpoint adjudication.
+S0 remains `consensus_pending` / incomplete. S0-FINAL-002 through S0-FINAL-004 require one authority-boundary repair; S1 remains waiting for independent verification and checkpoint adjudication.

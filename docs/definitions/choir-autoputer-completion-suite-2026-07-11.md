@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 56ef34cec6ee02bbf77883c6b0f7831abc82fb7e
+  journal_expected_parent_sha: 63b55b4e4f8675fd1fa20c17b56870ae734ba37a
   orchestrator_lock:
     holder: Main
     epoch: 5
@@ -725,7 +725,7 @@ run_checkpoint_and_resumption_state:
       - agent://S0RatchetVerifier conservative interface-candidate authority verification PASS
       - CI 29170071123 required test and build gates passed; deploy job is outside S0 acceptance
     consensus_ref: docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md
-    open_findings: []
+    open_findings: [S0-FINAL-002_non_store_negative_authority, S0-FINAL-003_store_writer_disposition_laundering, S0-FINAL-004_promoted_embedded_interface_bypass]
     adjudication_ref: docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md#checkpoint-result
   delegation_ledger_schema:
     required_fields:
@@ -809,8 +809,8 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-post-substrate-panel-pending-30
-      expected_parent_sha: 56ef34cec6ee02bbf77883c6b0f7831abc82fb7e
+      transition_id: s0-runtime-inventory-ratchet-post-substrate-blocked-31
+      expected_parent_sha: 63b55b4e4f8675fd1fa20c17b56870ae734ba37a
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
@@ -842,6 +842,7 @@ run_checkpoint_and_resumption_state:
         - {status: consensus, transition_id: s0-runtime-inventory-ratchet-final-panel-blocked-28, recorded_at: 2026-07-12T01:21:57Z, actor: Main, expected_parent_sha: 8caab0c153dad6d8b6aff25727f187d8101ea531, precondition: six_non_stalled_panel_members_completed_with_Cursor_ok, postcondition: return_conversion_composite_interface_bypasses_clustered_to_bespoke_provenance_substrate_and_candidate_authority_selected, external_operation_id: agentic_consensus_S0_final_20260712_03}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-candidate-authority-returned-29, recorded_at: 2026-07-12T01:36:47Z, actor: Main, expected_parent_sha: e50bff04f3cdf537cd52f40b38ecab395dd9822a, precondition: conservative_candidate_authority_repair_integrated, postcondition: local_focused_and_baseline_PASS_with_461_store_calls_4_interface_candidates_151_citers_pending_independent_verification, external_operation_id: not_applicable}
         - {status: consensus, transition_id: s0-runtime-inventory-ratchet-post-substrate-panel-pending-30, recorded_at: 2026-07-12T01:41:17Z, actor: Main, expected_parent_sha: 56ef34cec6ee02bbf77883c6b0f7831abc82fb7e, precondition: candidate_authority_focused_and_independent_verification_PASS, postcondition: final_six_member_non_stalled_post_substrate_panel_requested, external_operation_id: agentic_consensus_S0_post_substrate_20260712_04}
+        - {status: consensus, transition_id: s0-runtime-inventory-ratchet-post-substrate-blocked-31, recorded_at: 2026-07-12T01:56:34Z, actor: Main, expected_parent_sha: 63b55b4e4f8675fd1fa20c17b56870ae734ba37a, precondition: six_non_stalled_members_completed_with_Cursor_ok, postcondition: non_store_negative_authority_writer_laundering_and_promoted_interface_bypass_recorded_for_single_authority_repair, external_operation_id: agentic_consensus_S0_post_substrate_20260712_04}
       lock_expires_at: 2026-07-12T02:38:32Z
       mutation_class: yellow
       protected_surfaces: []
@@ -868,11 +869,11 @@ run_checkpoint_and_resumption_state:
       acceptance_ref: artifact://395
       acceptance_contract: go_test_cmd_runtime_ratchet_and_baseline_invocation_pass_with_regression_fixtures_failing
       evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md, docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md]
-      open_findings: []
-      landed_commit_sha: pending_post_substrate_panel_adjudication
-      adjudication: final_six_member_post_substrate_panel_pending
-      last_reconciled_at: 2026-07-12T01:41:17Z
-      reconciliation_result: S0_FINAL_001_repaired_focused_and_independent_verification_PASS_post_substrate_panel_pending
+      open_findings: [S0-FINAL-002_non_store_negative_authority, S0-FINAL-003_store_writer_disposition_laundering, S0-FINAL-004_promoted_embedded_interface_bypass]
+      landed_commit_sha: pending_final_authority_repair
+      adjudication: post_substrate_panel_4_blocking_2_pass; reproduced_negative_authority_and_writer_laundering_govern; promoted_interface_residual_promoted_to_contract_blocker
+      last_reconciled_at: 2026-07-12T01:56:34Z
+      reconciliation_result: six_member_post_substrate_panel_complete_no_stalls_Cursor_ok_three_authority_findings_recorded
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
