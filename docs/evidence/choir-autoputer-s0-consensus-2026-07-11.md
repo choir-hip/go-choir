@@ -191,6 +191,12 @@ The repair removes `non_store`; every exact Store-signature named-interface cand
 
 Independent verification at `45f25ac9` passed disposition-laundering, fake-to-Store transition, promoted embedded-interface, candidate drift, all prior flow-shape, deceptive/unknown method, method-value, and direct-call regressions. Default invocation passed with 461 Store calls, four conservative interface candidates, and 151 citers. The intended residual is fail-closed evolution: a legitimate new Store method requires an explicit compiled-authority update.
 
+## Final Post-Authority Panel
+
+Run: `/tmp/choir-s0-final-authority-consensus-20260712`. All six selected processes exited successfully and Cursor completed `ok`; no process stalled. Codex, Cursor, OMP GPT-5.5, and OMP GLM returned substantive PASS verdicts with no blocking findings. OMP Gemini emitted startup/tool text without a verdict; opencode ended during an auto-rejected external-directory probe without a verdict or reproduced blocker. Per the established non-stall rule, incomplete output is not a vote and does not override four independent completed verdicts plus the independent verifier.
+
+The completed reviewers exercised direct calls, method values/expressions, nested and promoted interface embedding, candidate additions/removals, fake-to-Store transitions, disposition laundering, unknown methods, baseline regeneration, candidate/call disagreement, and exact counts. No S0 blocker was reproduced. Residuals are explicit: compiled semantic policy requires review, anonymous interfaces are outside the named-interface contract, and S1/S3 claims remain unopened.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` only for the final post-authority six-member panel. S0-FINAL-002 through S0-FINAL-004 are repaired according to focused and independent evidence; S1 remains waiting for checkpoint adjudication.
+S0 is adjudicated **PASS** and complete. The inventory and executable ratchets are durable, mechanically checkable, independently verified, and accepted by the final checkpoint. S1 may start.
