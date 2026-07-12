@@ -151,6 +151,12 @@ Cursor, opencode, OMP GPT-5.5, and OMP Gemini reproduced Store-backed interface 
 
 **Required repair:** add the explicit interface-candidate authority, remove the bespoke provenance graph, migrate current `runSubmissionStore` calls to `store_backed`, classify any current unrelated candidates `non_store`, and add return/conversion/composite/fake-only candidate regressions. No candidate may disappear based on unmodeled flow.
 
+### S0-FINAL-001 Substrate Repair Verification
+
+The repair removes the bespoke provenance graph. Every runtime named-interface method selection with an exact Store name and callable signature is now an explicit candidate independent of return, conversion, composite, closure, or container flow. Baseline schema v6 requires `store_backed | non_store`; `store_backed` candidates become exact Store calls and require `read | lifecycle | wire | promotion`, while `non_store` remains ratcheted but cannot silently become a Store call.
+
+Independent verification at `56ef34ce` passed all focused tests, including return/conversion/composite/closure candidates, fake-only `non_store`, novel candidate drift, method values, direct calls, and package-helper exclusion. Default invocation passed with 461 Store calls, four explicit interface candidates, and 151 citers. The residual risk is visible policy authority: a reviewer can misclassify a genuinely Store-backed candidate as `non_store`; this is reviewable baseline policy rather than silent detector inference.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` / incomplete. The final panel confirmed S0-FINAL-001; S1 remains waiting until conservative interface-candidate authority replaces incomplete provenance analysis, passes independent verification, and the final checkpoint is adjudicated.
+S0 remains `consensus_pending` only for a final six-member post-substrate panel. S0-FINAL-001 is repaired according to focused and independent evidence; S1 remains waiting until checkpoint adjudication.
