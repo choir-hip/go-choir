@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 13723800
+  journal_expected_parent_sha: e0b9729f
   orchestrator_lock:
     holder: Main
     epoch: 13
     expires_at: 2026-07-12T17:25:09Z
-    expected_parent_sha: 13723800
+    expected_parent_sha: e0b9729f
     lock_transition_id: s3-lock-renewal-106
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1366,7 +1366,7 @@ run_checkpoint_and_resumption_state:
       implementer_job_ref: S3I4Implementer
       implementer_output_ref: agent://S3I4Implementer
       verifier_job_ref: S3I4Verifier
-      verifier_output_ref: pending_independent_verification
+      verifier_output_ref: agent://S3I4Verifier
       worktree_or_branch_ref: agent/s3-i4-declaration-only@4888b0775f5bfb34baa07aefa663696dfa36b8fd
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
@@ -1376,7 +1376,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I4_landing
       stage_started_at: 2026-07-12T15:41:43Z
       transition_id: s3-i4-dispatch-intent-111
-      expected_parent_sha: 13723800
+      expected_parent_sha: e0b9729f
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i4-dispatch-intent-111, recorded_at: 2026-07-12T15:41:43Z, actor: Main, expected_parent_sha: bc1419fc, precondition: S3_I3_landed_ratchet_PASS_three_declaration_only_exports_confirmed, postcondition: exact_declaration_only_deletion_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i4-dispatched-112, recorded_at: 2026-07-12T15:44:07Z, actor: Main, expected_parent_sha: 691bbf1d, precondition: canonical_intent_and_live_lock_epoch_13, postcondition: S3I4Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
@@ -1384,6 +1384,8 @@ run_checkpoint_and_resumption_state:
         - {status: committed, transition_id: s3-i4-implementation-returned-114, recorded_at: 2026-07-12T15:52:34Z, actor: Main, expected_parent_sha: e0bc8156, precondition: amended_prompt_only_scope_and_isolated_commit_returned, postcondition: integrated_710d2046_ratchet_PASS_ready_for_independent_verification, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i4-verifier-intent-115, recorded_at: 2026-07-12T15:53:44Z, actor: Main, expected_parent_sha: fe4a1bc4, precondition: implementation_and_ratchet_checkpoint_pushed, postcondition: independent_verifier_dispatch_authorized, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i4-verifier-dispatched-116, recorded_at: 2026-07-12T15:54:56Z, actor: Main, expected_parent_sha: 13723800, precondition: verifier_intent_canonical, postcondition: independent_S3I4Verifier_active, external_operation_id: not_applicable}
+        - {status: blocked_incomplete, transition_id: s3-i4-verifier-blocked-117, recorded_at: 2026-07-12T15:59:17Z, actor: S3I4Verifier, expected_parent_sha: e0b9729f, precondition: independent_source_and_ratchet_verification, postcondition: source_PASS_inventory_citer_refresh_required, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s3-i4-ratchet-repair-118, recorded_at: 2026-07-12T15:59:17Z, actor: Main, expected_parent_sha: e0b9729f, precondition: verifier_procedural_blocker_recorded, postcondition: inventory_refreshed_citers_204_ratchet_PASS_final_reverification_required, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T17:25:09Z
       mutation_class: orange
       protected_surfaces: []
@@ -1409,12 +1411,12 @@ run_checkpoint_and_resumption_state:
       deployed_sha: pending
       acceptance_ref: pending
       acceptance_contract: one_declaration_only_prompt_export_deleted_channel_APIs_and_active_overlays_unchanged
-      evidence_refs: [docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md, agent://S3I4Implementer]
-      open_findings: [ChannelPost_ChannelRead_15_comprehensive_callers_deferred_to_caller_complete_slice]
+      evidence_refs: [docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md, agent://S3I4Implementer, agent://S3I4Verifier]
+      open_findings: [final_independent_reverification_pending, ChannelPost_ChannelRead_15_comprehensive_callers_deferred_to_caller_complete_slice]
       landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-12T15:54:56Z
-      reconciliation_result: one_matching_independent_verifier_job_S3I4Verifier
+      adjudication: verifier_procedural_blocker_repaired_final_reverification_pending
+      last_reconciled_at: 2026-07-12T15:59:17Z
+      reconciliation_result: source_PASS_inventory_refreshed_ratchet_PASS
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

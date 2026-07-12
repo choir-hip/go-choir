@@ -45,3 +45,8 @@ Forbidden: `ChannelPost`, `ChannelRead`, every channel caller, replacement helpe
 - `ChannelPost`, `ChannelRead`, `channel_store.go`, all callers, tests, embedded overlay YAML, wildcard embedding, and generic renderer remain unchanged.
 - `go test ./internal/runtime/textureprompts -count=1` and default runtime package compilation passed.
 - Ratchet passed: production LOC `46949 -> 46944`, exports `1145 -> 1144`, and initial unused-export debt `27 -> 26`; test LOC, caller edges, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, and citers remained gated.
+
+## S3-I4 Independent Verification Repair
+
+- `S3I4Verifier` confirmed the source deletion, channel preservation, focused tests, and default compilation, but returned procedural `BLOCKING` because the implementation receipt added two historical-evidence citers after the prior baseline.
+- The inventory was regenerated; ratchet and ratchet unit tests pass with `citers=204`. No source correction was required.

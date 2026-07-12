@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 443
     interface_candidates: 4
-    citers: 202
+    citers: 204
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5177,6 +5177,10 @@ citers:
     - id: docs/evidence/s3-runtime-dead-helper-dispatch-2026-07-12.md:- `internal/runtime/tool_profiles.go` — delete `WithToolProfileRegistry` only;
       disposition: historical_evidence
     - id: docs/evidence/s3-runtime-dead-helper-dispatch-2026-07-12.md:2. focused package compilation/tests for `internal/runtime/promptspec` and default `internal/runtime` pass;
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:- Exact production diff: `internal/runtime/textureprompts/prompts.go`, five deletions, no insertions.'
+      disposition: historical_evidence
+    - id: docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:- `go test ./internal/runtime/textureprompts -count=1` and default runtime package compilation passed.
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:- `internal/runtime/textureprompts/prompts.go`: delete exactly `RevisionMediaSourceResearchRequired` and its attached comment.'
       disposition: historical_evidence
