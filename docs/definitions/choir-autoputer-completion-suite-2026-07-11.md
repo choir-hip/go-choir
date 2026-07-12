@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 5f981886
+  journal_expected_parent_sha: ce0cc940
   orchestrator_lock:
     holder: Main
     epoch: 12
     expires_at: 2026-07-12T15:35:02Z
-    expected_parent_sha: 5f981886
+    expected_parent_sha: ce0cc940
     lock_transition_id: s3-lock-renewal-88
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1304,29 +1304,30 @@ run_checkpoint_and_resumption_state:
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
       direct_shared_worktree_justification: not_applicable
-      lock_acquired_ref: 5f981886
+      lock_acquired_ref: ce0cc940
       lock_release_ref: pending_S3_I3_landing
       stage_started_at: 2026-07-12T14:10:09Z
       transition_id: s3-i3-dispatch-intent-98
-      expected_parent_sha: 5f981886
+      expected_parent_sha: ce0cc940
       stage_history:
-        - {status: dispatch_intent, transition_id: s3-i3-dispatch-intent-98, recorded_at: 2026-07-12T14:10:09Z, actor: Main, expected_parent_sha: 5f981886, precondition: S3_I2_landed_ratchet_PASS_four_test_only_wrappers_confirmed, postcondition: exact_wrapper_deletion_and_test_rewrite_slice_is_canonical, external_operation_id: not_applicable}
+        - {status: dispatch_intent, transition_id: s3-i3-dispatch-intent-98, recorded_at: 2026-07-12T14:10:09Z, actor: Main, expected_parent_sha: 5f981886, precondition: S3_I2_landed_ratchet_PASS_initial_four_wrapper_hypothesis, postcondition: initial_wrapper_deletion_and_test_rewrite_scope_is_canonical, external_operation_id: not_applicable}
+        - {status: dispatch_intent, transition_id: s3-i3-scope-amended-99, recorded_at: 2026-07-12T14:15:29Z, actor: Main, expected_parent_sha: ce0cc940, precondition: implementation_reconciliation_found_48_plus_StartRun_test_callers_outside_lock, postcondition: StartRun_deferred_and_three_wrapper_exact_scope_canonical_before_commit, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T15:35:02Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [internal/runtime/runtime.go, internal/runtime/toolloop_test.go, internal/runtime/trace_wiring_test.go, internal/runtime/config_test.go, internal/runtime/toolloopvalidation_test.go, internal/runtime/run_memory_integration_test.go, docs/runtime-dissolution-inventory.yaml]
-      forbidden_targets: [replacement_production_helpers, aliases, forwarding_methods, exported_test_seams, routes, tool_registrations, state_authorities, live_core_move, Browser_extraction, promotion_candidate_mutation]
+      exact_files_packages_routes_state_authorities: [internal/runtime/runtime.go, internal/runtime/toolloop_test.go, internal/runtime/trace_wiring_test.go, internal/runtime/run_memory_integration_test.go, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [StartRun_and_all_callers, replacement_production_helpers, aliases, forwarding_methods, exported_test_seams, routes, tool_registrations, state_authorities, live_core_move, Browser_extraction, promotion_candidate_mutation]
       authority_edges_locked: [meaningful_behavior_tests_preserved, registered_routes_unchanged, tool_registrations_unchanged, state_authorities_unchanged]
       implementer_agent: pending_agent_dispatch
       verifier_agent: pending_independent_verification
-      pre_mutation_sha: 5f981886
-      rollback_commit_or_ref: 5f981886
+      pre_mutation_sha: ce0cc940
+      rollback_commit_or_ref: ce0cc940
       accepted_slice_dependency_refs: [S3-I2@8146b7d201b09ac05cfc162a06e1fe6378602c28]
       external_operation_id: not_applicable
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
-      expected_precondition: four_exports_have_no_production_callers_and_tests_can_use_canonical_paths
-      observed_postcondition: pending_implementation
+      expected_precondition: three_in_scope_exports_have_no_production_callers_and_tests_can_use_direct_setup
+      observed_postcondition: pending_implementation_StartRun_deferred_with_caller_graph_recorded
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: pending
       implementation_commit_sha: pending
@@ -1335,13 +1336,13 @@ run_checkpoint_and_resumption_state:
       deploy_ref: pending
       deployed_sha: pending
       acceptance_ref: pending
-      acceptance_contract: four_test_only_wrappers_deleted_meaningful_runtime_behavior_coverage_preserved
+      acceptance_contract: three_test_only_wrappers_deleted_StartRun_unchanged_meaningful_runtime_behavior_coverage_preserved
       evidence_refs: [docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md]
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-12T14:10:09Z
-      reconciliation_result: no_prior_matching_dispatch_found
+      last_reconciled_at: 2026-07-12T14:15:29Z
+      reconciliation_result: one_live_implementer_scope_narrowed_before_commit
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
