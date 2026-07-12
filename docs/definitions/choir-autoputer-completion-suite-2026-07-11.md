@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: c78ece1e
+  journal_expected_parent_sha: 405a97bc
   orchestrator_lock:
     holder: Main
     epoch: 10
     expires_at: 2026-07-12T12:13:27Z
-    expected_parent_sha: c78ece1e
+    expected_parent_sha: 405a97bc
     lock_transition_id: s3-lock-acquisition-60
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1144,14 +1144,14 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 10
-      status: committed
+      status: verifying
       dispatch_nonce: s3-runtime-dissolution-i1-nonce-01
       dispatch_ref: S3I1Implementer
       agent_session_ref: agent://S3I1Implementer
       dispatch_prompt_ref: docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md#s3-i1--delete-unregistered-runtime-api-handlers
       implementer_job_ref: S3I1Implementer
       implementer_output_ref: agent://S3I1Implementer
-      verifier_job_ref: pending_independent_verification
+      verifier_job_ref: pending_S3I1Verifier_dispatch_after_canonical_intent
       verifier_output_ref: pending_independent_verification
       worktree_or_branch_ref: agent/s3-i1-dead-api@d3d1b59a2878c2a3b060271e4d8e5aedfdae3beb
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
@@ -1162,12 +1162,14 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I1_landing
       stage_started_at: 2026-07-12T10:34:34Z
       transition_id: s3-i1-dispatch-intent-62
-      expected_parent_sha: c78ece1e
+      expected_parent_sha: 405a97bc
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i1-dispatch-intent-62, recorded_at: 2026-07-12T10:34:34Z, actor: Main, expected_parent_sha: b1cc1e55, precondition: S2_complete_S3_working_ratchet_PASS_gopls_dead_callers_confirmed, postcondition: exact_deletion_only_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i1-dispatched-63, recorded_at: 2026-07-12T10:48:11Z, actor: Main, expected_parent_sha: c4173c6d, precondition: canonical_dispatch_intent_and_live_lock_epoch_10, postcondition: S3I1Implementer_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
         - {status: implementation_returned, transition_id: s3-i1-implementation-returned-64, recorded_at: 2026-07-12T11:15:05Z, actor: S3I1Implementer, expected_parent_sha: c4173c6d, precondition: isolated_branch_and_exact_deletion_lock, postcondition: corrected_deletion_commit_returned_with_non_HTTP_behavior_tests_preserved, external_operation_id: not_applicable}
         - {status: committed, transition_id: s3-i1-committed-65, recorded_at: 2026-07-12T11:15:05Z, actor: Main, expected_parent_sha: c78ece1e, precondition: focused_runtime_smoke_PASS_and_ratchet_rebased_to_lower_counts, postcondition: implementation_integrated_locally_and_durable_ledger_ready_for_push, external_operation_id: not_applicable}
+        - {status: pushed, transition_id: s3-i1-pushed-66, recorded_at: 2026-07-12T11:16:28Z, actor: Main, expected_parent_sha: 405a97bc, precondition: implementation_and_ratchet_checkpoint_committed, postcondition: canonical_main_contains_c78ece1e_and_405a97bc, external_operation_id: git_push_origin_main}
+        - {status: verifier_dispatch_intent, transition_id: s3-i1-verifier-intent-67, recorded_at: 2026-07-12T11:16:28Z, actor: Main, expected_parent_sha: 405a97bc, precondition: canonical_implementation_and_lower_ratchet_baseline, postcondition: independent_verifier_scope_and_identity_ready_for_dispatch, external_operation_id: pending_S3I1Verifier}
       lock_expires_at: 2026-07-12T12:13:27Z
       mutation_class: orange
       protected_surfaces: [runtime_API_package_surface]
@@ -1175,7 +1177,7 @@ run_checkpoint_and_resumption_state:
       forbidden_targets: [replacement_routes, wrappers, aliases, new_packages, Browser_extraction, live_execution_core, API_bootstrap]
       authority_edges_locked: [registered_product_routes_unchanged, test_helpers_do_not_keep_dead_production_APIs_alive]
       implementer_agent: S3I1Implementer
-      verifier_agent: pending_independent_verification
+      verifier_agent: pending_S3I1Verifier_dispatch_after_canonical_intent
       pre_mutation_sha: c4173c6d
       rollback_commit_or_ref: c4173c6d
       accepted_slice_dependency_refs: [S2@b7b1262e455a779ca00c8d968ef28b3fa6af9b50]
@@ -1187,7 +1189,7 @@ run_checkpoint_and_resumption_state:
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: c78ece1e
       implementation_commit_sha: c78ece1e
-      push_ref: pending
+      push_ref: 405a97bc
       ci_run_ref: pending
       deploy_ref: pending
       deployed_sha: pending
@@ -1197,8 +1199,8 @@ run_checkpoint_and_resumption_state:
       open_findings: [pre_existing_comprehensive_test_drift_prompt_provideriface_and_texture_AuthorKind_AuthorLabel]
       landed_commit_sha: pending
       adjudication: pending_independent_verification
-      last_reconciled_at: 2026-07-12T11:15:05Z
-      reconciliation_result: one_matching_isolated_commit_corrected_then_integrated_as_c78ece1e
+      last_reconciled_at: 2026-07-12T11:16:28Z
+      reconciliation_result: canonical_main_contains_implementation_and_ratchet_checkpoint_verifier_intent_persisting
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
