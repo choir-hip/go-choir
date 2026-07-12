@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -28,7 +29,7 @@ func TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdic
 		t.Fatalf("start processor run: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestRecordWireProcessorDecisionToolRejectsAlreadyCoveredWithoutPublishedDoc
 		t.Fatalf("start processor run: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch(t *
 		t.Fatalf("start processor run: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
@@ -211,7 +212,7 @@ func TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen(t *testing.T) {
 		t.Fatalf("start processor run: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
@@ -316,7 +317,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 		t.Fatalf("request item after partial route = %+v", requestItem)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}

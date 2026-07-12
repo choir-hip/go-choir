@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -3260,7 +3261,7 @@ func parseJSONMapFromProviderTextForTest(t *testing.T, text string) map[string]a
 
 func runLiveProviderToolLoop(t *testing.T, p Provider, selection runtime.LLMSelection, initialToolChoice, marker string) (string, runtime.TokenUsage, error) {
 	t.Helper()
-	registry := runtime.NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(runtime.Tool{
 		Name:        "record_status",
 		Description: "Record a provider conformance status.",

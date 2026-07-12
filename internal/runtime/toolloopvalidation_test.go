@@ -12,6 +12,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -77,7 +78,7 @@ func fileReadTool(baseDir string) Tool {
 // TestToolLoopFileReadRegistered validates that the file_read tool can be
 // registered in the ToolRegistry and is available for tool-calling.
 func TestToolLoopFileReadRegistered(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	tmpDir := t.TempDir()
 	tool := fileReadTool(tmpDir)
@@ -129,7 +130,7 @@ func TestToolLoopFileReadExecution(t *testing.T) {
 		t.Fatalf("write test file: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestToolLoopFileReadExecution(t *testing.T) {
 // for non-existent files.
 func TestToolLoopFileReadError(t *testing.T) {
 	tmpDir := t.TempDir()
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -182,7 +183,7 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 		t.Fatalf("write test file: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
 		t.Fatalf("register file_read: %v", err)
 	}
@@ -342,7 +343,7 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 // TestToolLoopToolUseResponse validates VAL-LLM-010: An LLM request with
 // tool definitions can return a tool_use stop reason with tool calls.
 func TestToolLoopToolUseResponse(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(fileReadTool(t.TempDir())); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -442,7 +443,7 @@ func TestToolLoopToolResultFedBack(t *testing.T) {
 		t.Fatalf("write test file: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -548,7 +549,7 @@ func TestToolLoopMultiToolSequential(t *testing.T) {
 		t.Fatalf("write file B: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -660,7 +661,7 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 		t.Fatalf("write version file: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
 		t.Fatalf("register file_read: %v", err)
 	}
@@ -743,7 +744,7 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 func TestToolLoopWithMultipleToolsRegistered(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	// Register file_read tool.
 	if err := registry.Register(fileReadTool(tmpDir)); err != nil {
@@ -835,7 +836,7 @@ func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
 	_, _, err := RunToolLoop(
 		context.Background(),
 		provider,
-		NewToolRegistry(),
+		toolregistry.NewToolRegistry(),
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,

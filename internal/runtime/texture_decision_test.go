@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -26,7 +27,7 @@ func TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {
 		t.Fatalf("create texture run: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := RegisterTextureTools(registry, rt); err != nil {
 		t.Fatalf("register texture tools: %v", err)
 	}

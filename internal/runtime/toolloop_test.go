@@ -17,6 +17,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -145,7 +146,7 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 }
 
 func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "patch_texture",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -205,7 +206,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 }
 
 func TestRunToolLoopRequiredNextToolSatisfiedInSameBatchDoesNotRetry(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "request_worker_vm",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -338,7 +339,7 @@ func TestRunToolLoopEmitsResponseTextAndToolCallNames(t *testing.T) {
 			Model:      "test-model",
 		},
 	)
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "echo",
 		Description: "Echo a message.",
@@ -388,7 +389,7 @@ func TestRunToolLoopEmitsResponseTextAndToolCallNames(t *testing.T) {
 }
 
 func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "record_status",
 		Description: "Record status.",
@@ -453,7 +454,7 @@ func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
 }
 
 func TestRunToolLoopCompletionGuardRetriesEndTurn(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var recorded int
 	if err := registry.Register(Tool{
 		Name:        "record_status",
@@ -541,7 +542,7 @@ func TestRunToolLoopCompletionGuardRetriesEndTurn(t *testing.T) {
 }
 
 func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var edited, recorded int
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
@@ -642,7 +643,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 }
 
 func TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var edited int
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
@@ -749,7 +750,7 @@ func TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool(t *testing.T
 }
 
 func TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var edited int
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
@@ -855,7 +856,7 @@ func TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool(t *testing.T
 }
 
 func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var edited int
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
@@ -937,7 +938,7 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 }
 
 func TestRunToolLoopCarriesAssistantReasoningContent(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "record_status",
 		Description: "Record status.",
@@ -1020,7 +1021,7 @@ func rawMessagesForTest(messages []json.RawMessage) string {
 }
 
 func TestRunToolLoopRequiredToolTurnRetriesMissingToolWithoutArtificialBudget(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "record_status",
 		Description: "Record status.",
@@ -1098,7 +1099,7 @@ func TestRunToolLoopRequiredToolTurnRetriesMissingToolWithoutArtificialBudget(t 
 
 func TestRunToolLoopRequiredNextToolUsesRequiredChoice(t *testing.T) {
 	var calls []string
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "request_worker_vm",
 		Description: "Request worker.",
@@ -1193,7 +1194,7 @@ func TestRunToolLoopRequiredNextToolUsesRequiredChoice(t *testing.T) {
 }
 
 func TestRunToolLoopRequiredNextToolGetsFiniteBudgetWhenPolicyOmitsMaxTokens(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "request_worker_vm",
 		Description: "Request worker.",
@@ -1271,7 +1272,7 @@ func TestRunToolLoopRequiredNextToolGetsFiniteBudgetWhenPolicyOmitsMaxTokens(t *
 }
 
 func TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "request_worker_vm",
 		Description: "Request worker.",
@@ -1344,7 +1345,7 @@ func TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries(t *testing
 }
 
 func TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "request_worker_vm",
 		Description: "Request worker.",
@@ -1436,7 +1437,7 @@ func TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool(t *testing.T) {
 }
 
 func TestRunToolLoopIgnoresSemanticRequiredNextToolFromUntrustedProducer(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "web_search",
 		Description: "Search.",
@@ -1725,7 +1726,7 @@ func (p *providerErrorsThenToolProvider) CallWithTools(ctx context.Context, req 
 
 func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *testing.T) {
 	provider := &exactToolChoicePreconditionThenToolProvider{}
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
 		Description: "Edit the Texture document.",
@@ -1826,7 +1827,7 @@ func (p *deepSeekToolChoicePreconditionThenToolProvider) CallWithTools(ctx conte
 
 func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoiceError(t *testing.T) {
 	provider := &deepSeekToolChoicePreconditionThenToolProvider{}
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
 		Description: "Edit the Texture document.",
@@ -1876,7 +1877,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoice
 
 func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *testing.T) {
 	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 2}
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
 		Description: "Edit the Texture document.",
@@ -1971,7 +1972,7 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 
 func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 3}
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
 		Description: "Edit the Texture document.",
@@ -2060,7 +2061,7 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 		fmt.Errorf("gateway call failed: fireworks: status 412 Precondition Failed (sanitized)"),
 		fmt.Errorf("gateway call failed: deepseek: status 402 Payment Required (sanitized)"),
 	}}
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
 		Description: "Edit the Texture document.",
@@ -2153,7 +2154,7 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 
 func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testing.T) {
 	provider := &providerPreconditionThenToolProvider{failuresBeforeSuccess: 1}
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "patch_texture",
 		Description: "Edit the Texture document.",
@@ -2262,7 +2263,7 @@ func TestRunToolLoopRetriesProviderRateLimit(t *testing.T) {
 
 func TestRunToolLoopWithToolUse(t *testing.T) {
 	// LLM first returns tool_use, then end_turn after seeing tool result.
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "calculator",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -2344,7 +2345,7 @@ func TestRunToolLoopWithToolUse(t *testing.T) {
 
 func TestRunToolLoopMultipleToolIterations(t *testing.T) {
 	// LLM uses tools twice before returning end_turn.
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	if err := registry.Register(Tool{
 		Name: "search",
@@ -2414,7 +2415,7 @@ func TestRunToolLoopMultipleToolIterations(t *testing.T) {
 
 func TestRunToolLoopMaxIterations(t *testing.T) {
 	// LLM keeps requesting tool_use, hitting the iteration limit.
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "loop_tool",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -2460,7 +2461,7 @@ func TestRunToolLoopMaxIterations(t *testing.T) {
 }
 
 func TestRunToolLoopBudgetLimitsProviderCalls(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "loop_tool",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -2518,7 +2519,7 @@ func TestRunToolLoopBudgetLimitsProviderCalls(t *testing.T) {
 }
 
 func TestRunToolLoopBudgetCountsPriorProviderCalls(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "loop_tool",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -2878,7 +2879,7 @@ func TestRunToolLoopToolUseWithoutCalls(t *testing.T) {
 	_, _, err := RunToolLoop(
 		context.Background(),
 		provider,
-		NewToolRegistry(),
+		toolregistry.NewToolRegistry(),
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
@@ -2937,7 +2938,7 @@ func TestAsToolLoopProvider(t *testing.T) {
 func TestRuntimeWithToolRegistryUsesToolLoop(t *testing.T) {
 	// When a tool registry is configured, the runtime should use the
 	// tool-calling loop path instead of the simple Provider.Execute path.
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "test_tool",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -2989,7 +2990,7 @@ func TestRuntimeWithToolRegistryUsesToolLoop(t *testing.T) {
 func TestRuntimeWithToolRegistryEmitsToolEvents(t *testing.T) {
 	// Runtime with tool registry should emit tool.invoked and tool.result
 	// events when tools are used.
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "read_file",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {

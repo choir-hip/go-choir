@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -2661,7 +2662,7 @@ func TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch(t *tes
 		t.Fatalf("start processor run: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}
@@ -2722,7 +2723,7 @@ func TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch(t *testing
 		t.Fatalf("start processor run: %v", err)
 	}
 
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := RegisterWireProcessorTools(registry, rt); err != nil {
 		t.Fatalf("register wire processor tools: %v", err)
 	}

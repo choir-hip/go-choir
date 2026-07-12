@@ -35,7 +35,7 @@ func TestNormalizeDelegateTargetValueAllowsSingleNoisyAllowedTarget(t *testing.T
 // --- Tool Registry Tests ---
 
 func TestToolRegistryRegister(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	tool := Tool{
 		Name:        "read_file",
@@ -55,7 +55,7 @@ func TestToolRegistryRegister(t *testing.T) {
 }
 
 func TestToolRegistryRegisterDuplicate(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	tool := Tool{
 		Name: "duplicate",
@@ -74,7 +74,7 @@ func TestToolRegistryRegisterDuplicate(t *testing.T) {
 }
 
 func TestToolRegistryRegisterValidateNoName(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	tool := Tool{
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -88,7 +88,7 @@ func TestToolRegistryRegisterValidateNoName(t *testing.T) {
 }
 
 func TestToolRegistryRegisterValidateNilFunc(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	tool := Tool{
 		Name: "nil_func",
@@ -100,7 +100,7 @@ func TestToolRegistryRegisterValidateNilFunc(t *testing.T) {
 }
 
 func TestToolRegistryExecute(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	echoTool := Tool{
 		Name:        "echo",
@@ -125,7 +125,7 @@ func TestToolRegistryExecute(t *testing.T) {
 }
 
 func TestToolRegistryExecuteNotFound(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	_, err := registry.Execute(context.Background(), "nonexistent", nil)
 	if err == nil {
@@ -134,7 +134,7 @@ func TestToolRegistryExecuteNotFound(t *testing.T) {
 }
 
 func TestToolRegistryExecuteError(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	failTool := Tool{
 		Name: "fail",
@@ -154,7 +154,7 @@ func TestToolRegistryExecuteError(t *testing.T) {
 }
 
 func TestToolRegistryLookup(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	tool := Tool{
 		Name: "findme",
@@ -182,7 +182,7 @@ func TestToolRegistryLookup(t *testing.T) {
 }
 
 func TestToolRegistryCatalog(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	tools := []Tool{
 		{
@@ -218,7 +218,7 @@ func TestToolRegistryCatalog(t *testing.T) {
 }
 
 func TestToolRegistryDefinitions(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	tool := Tool{
 		Name:        "test_tool",
@@ -249,7 +249,7 @@ func TestToolRegistryDefinitions(t *testing.T) {
 }
 
 func TestToolRegistryDefaultParameters(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	// Tool without parameters should get a default empty object schema.
 	tool := Tool{
@@ -304,7 +304,7 @@ func TestMustNewToolRegistryPanics(t *testing.T) {
 }
 
 func TestToolRegistryToolsSorted(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	// Register in non-alphabetical order.
 	names := []string{"z_tool", "a_tool", "m_tool"}
@@ -387,7 +387,7 @@ func TestToolDefinition(t *testing.T) {
 // --- executeTools Tests ---
 
 func TestExecuteTools(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	echoTool := Tool{
 		Name: "echo",
@@ -436,7 +436,7 @@ func TestExecuteTools(t *testing.T) {
 }
 
 func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var executed int
 	if err := registry.Register(Tool{
 		Name: "patch_texture",
@@ -474,7 +474,7 @@ func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 }
 
 func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var executed int
 	if err := registry.Register(Tool{
 		Name: "patch_texture",
@@ -515,7 +515,7 @@ func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
 }
 
 func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var executed []string
 	if err := registry.Register(Tool{
 		Name: "spawn_agent",
@@ -564,7 +564,7 @@ func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T
 }
 
 func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "projected",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
@@ -1140,7 +1140,7 @@ func TestResearcherCompletionSynthesizesCheckpointAfterSavedEvidence(t *testing.
 }
 
 func TestExecuteToolsParallel(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	slowTool := Tool{
 		Name: "slow",
@@ -1186,7 +1186,7 @@ func TestExecuteToolsParallel(t *testing.T) {
 }
 
 func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	var order []string
 	register := func(name string) {
@@ -1225,7 +1225,7 @@ func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 }
 
 func TestExecuteToolsError(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	failTool := Tool{
 		Name: "fail",
@@ -1254,7 +1254,7 @@ func TestExecuteToolsError(t *testing.T) {
 }
 
 func TestExecuteToolsOutputTruncation(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 
 	bigTool := Tool{
 		Name: "big_output",
@@ -1286,7 +1286,7 @@ func TestExecuteToolsOutputTruncation(t *testing.T) {
 }
 
 func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	executed := []string{}
 	if err := registry.Register(Tool{
 		Name: "spawn_agent",
@@ -1328,7 +1328,7 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 }
 
 func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	counts := map[string]int{}
 	registerCountingTool := func(name string) {
@@ -1389,7 +1389,7 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 }
 
 func TestExecuteToolsSuperSkipsDuplicateDelegateWorkerVM(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	executions := 0
 	if err := registry.Register(Tool{
@@ -1429,7 +1429,7 @@ func TestExecuteToolsSuperSkipsDuplicateDelegateWorkerVM(t *testing.T) {
 }
 
 func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	executions := 0
 	if err := registry.Register(Tool{
@@ -1516,7 +1516,7 @@ func TestDelegateRequiresAppChangePackageHonorsExplicitNegativeInstruction(t *te
 }
 
 func TestExecuteToolsCoSuperSkipsDuplicateAppChangePackagePublish(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	publishes := 0
 	if err := registry.Register(Tool{
@@ -1557,7 +1557,7 @@ func TestExecuteToolsCoSuperSkipsDuplicateAppChangePackagePublish(t *testing.T) 
 }
 
 func TestExecuteToolsCoSuperSkipsDuplicateBashCommand(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	executions := 0
 	if err := registry.Register(Tool{
@@ -1661,7 +1661,7 @@ func envValue(env []string, key string) string {
 }
 
 func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	var searches int32
 	if err := registry.Register(Tool{
 		Name: "web_search",
@@ -1705,7 +1705,7 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 }
 
 func TestExecuteToolsDoesNotHiddenChainWorkerDelegation(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	delegated := false
 	if err := registry.Register(Tool{
 		Name: "request_worker_vm",
@@ -1765,7 +1765,7 @@ func TestExecuteToolsDoesNotHiddenChainWorkerDelegation(t *testing.T) {
 }
 
 func TestExecuteToolsDoesNotPropagateHiddenWorkerDelegationBlocker(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	delegated := false
 	if err := registry.Register(Tool{
 		Name: "request_worker_vm",
@@ -1849,7 +1849,7 @@ func TestWorkerRunEventSummaryExposesSpawnAndChannelEvidence(t *testing.T) {
 // --- buildSystemPromptWithTools Tests ---
 
 func TestBuildSystemPromptWithTools(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name:        "test_tool",
 		Description: "A test tool for the prompt",
@@ -1875,7 +1875,7 @@ func TestBuildSystemPromptWithNilRegistry(t *testing.T) {
 }
 
 func TestBuildSystemPromptWithEmptyRegistry(t *testing.T) {
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	result := buildSystemPromptWithTools("Base prompt.", registry)
 	if result != "Base prompt." {
 		t.Errorf("empty registry should return base prompt unchanged, got %q", result)

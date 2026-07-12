@@ -25,7 +25,6 @@ type (
 )
 
 var (
-	NewToolRegistry          = toolregistry.NewToolRegistry
 	MustNewToolRegistry      = toolregistry.MustNewToolRegistry
 )
 

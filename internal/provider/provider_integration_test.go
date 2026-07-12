@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -128,7 +129,7 @@ func TestFireworksRuntimeToolLoopPreservesReasoningContentThroughAdapter(t *test
 		httpClient: server.Client(),
 		baseURL:    server.URL,
 	}
-	registry := runtime.NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(runtime.Tool{
 		Name:        "record_status",
 		Description: "Record status.",
@@ -211,7 +212,7 @@ func TestIntegrationFireworksRuntimeToolLoopLive(t *testing.T) {
 			if err != nil {
 				t.Fatalf("fireworks provider: %v", err)
 			}
-			registry := runtime.NewToolRegistry()
+			registry := toolregistry.NewToolRegistry()
 			if err := registry.Register(runtime.Tool{
 				Name:        "record_status",
 				Description: "Record status.",
@@ -264,7 +265,7 @@ func TestIntegrationFireworksRuntimeToolLoopTextureShapedLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fireworks provider: %v", err)
 	}
-	registry := runtime.NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(runtime.Tool{
 		Name:        "record_status",
 		Description: strings.Repeat("Record status for a Texture-shaped harness proof. ", 20),

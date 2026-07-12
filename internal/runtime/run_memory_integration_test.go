@@ -14,6 +14,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -243,7 +244,7 @@ func TestChildRunUsesRunMemory(t *testing.T) {
 
 func TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry(t *testing.T) {
 	t.Parallel()
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	provider := &runMemoryOverflowRetrievalProvider{
 		sentinel: "RAW_ENTRY_SENTINEL_6b8c1f0e_exact",
 	}
@@ -415,7 +416,7 @@ func (p *runtimeOverflowProvider) CallWithTools(ctx context.Context, req ToolLoo
 
 func testRunMemoryRegistry(t *testing.T) *ToolRegistry {
 	t.Helper()
-	registry := NewToolRegistry()
+	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{
 		Name: "echo",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
