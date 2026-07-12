@@ -16,15 +16,21 @@ This is substrate boundary debt, not an app symptom. Adding forwarding methods w
 
 ## Exact Mutation Lock
 
-Replace the anonymous `*runtime.Runtime` embed in `internal/actorruntime.Adapter` with one named private field. Update all adapter internals, handler construction, options, tests, and `cmd/sandbox` callers to use that field or an already-existing adapter-owned lifecycle method. Do not add accessors, forwarding methods, aliases, interfaces, optional/fallback cores, or a second runtime instance.
+Replace the anonymous `*runtime.Runtime` embed in `internal/actorruntime.Adapter` with one explicit named field. Update all adapter internals, handler construction, options, tests, and `cmd/sandbox` callers to use that field or an already-existing adapter-owned lifecycle method. Do not add accessors, forwarding methods, aliases, interfaces, optional/fallback cores, a constructor result edge, or a second runtime instance.
 
 Preserve runtime construction, ActorBridge dispatch wiring, trace option application, Start/Stop/Drain order, actor log durability/recovery, API route wiring, tool installation/profile lookup, product-event emission, and every existing sandbox behavior. Do not move API/config/bootstrap ownership, delete `apihandler`, remove direct sandbox runtime imports, modify tools/routes/state/models/apps, or begin step 3.
 
 ## Acceptance
 
 - `Adapter` contains no anonymous `*runtime.Runtime` field and no promoted runtime method set;
-- one named private core points at the existing runtime instance;
-- production/test callers use the explicit core boundary without new wrappers or compatibility seams;
+- one explicit named core field points at the existing runtime instance;
+- production/test callers use that boundary without a new accessor, forwarder, callback, interface, constructor result, or compatibility seam;
 - focused actorruntime and sandbox build/tests pass;
-- ratchet wrapper count decreases and every other gated authority count is non-increasing;
+- every ratchet authority count is non-increasing;
 - independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
+
+## S3-I11 Ratchet Blocker
+
+The first isolated implementation removed anonymous embedding with `core *runtime.Runtime` but changed `New` to return `(*Adapter, *runtime.Runtime)`. The executable inventory correctly counted both the named field and the constructor result as runtime wrapper edges, increasing `wrappers` from `5` to `6`; the slice therefore fails its ratchet and cannot land as returned.
+
+Smallest repair: retain one explicit named `Runtime *runtime.Runtime` field and the original single-result constructor. This keeps exactly one mechanically visible transitional runtime edge, removes method promotion, avoids an accessor/forwarder/callback/interface/second instance, and keeps the wrapper count flat at `5`. The slice does not claim step-2 completion: later extraction must delete this explicit field together with the remaining runtime dependency. The acceptance condition is corrected from “private core and wrapper count decreases” to “one explicit named non-anonymous core edge, no promoted method set, and all ratchet counts non-increasing.”
