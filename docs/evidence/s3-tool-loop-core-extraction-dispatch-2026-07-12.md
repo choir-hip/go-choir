@@ -95,3 +95,11 @@ Forbidden:
 
 - Final verifier recheck found the repair receipt itself was added after inventory regeneration: baseline `227`, current `228`.
 - Smallest fix: keep the complete durable receipt canonical, then regenerate the inventory as the final mutation and rerun the ratchet. Source and behavioral verification remain green.
+
+## S3-I9 Final Verification, CI, Deploy, and Acceptance
+
+- Independent `S3I9Verifier` returned final `PASS` at confidence `1.0` with no findings on canonical `b8c239d0`; complete canonical repair is `ca5ff39a` plus inventory-only `b8c239d0`.
+- Full behavior CI run `29207997195`, attempt `3`, passed after retrying one timed-out non-runtime race shard; the same shard passed independently in run `29208430145`.
+- Staging deploy job `86695441577` published activation receipt `896b35e286ceaa8191070bf39c3013ec58e1f162` for ordinary guest, Playwright guest, sandbox, active computers, and gateway.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
+- Residual risk: pre-existing comprehensive-tag `prompts_test.go`/`texture_test.go` drift and the explicitly deferred batch-executor policy extraction remain outside S3-I9.

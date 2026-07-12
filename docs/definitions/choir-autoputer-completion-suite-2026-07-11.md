@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: ca5ff39a
+  journal_expected_parent_sha: b8c239d0
   orchestrator_lock:
     holder: Main
     epoch: 16
     expires_at: 2026-07-12T22:00:00Z
-    expected_parent_sha: ca5ff39a
+    expected_parent_sha: b8c239d0
     lock_transition_id: s3-lock-renewal-156
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1691,7 +1691,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 16
-      status: blocked_incomplete
+      status: consensus
       dispatch_nonce: s3-runtime-dissolution-i9-nonce-01
       dispatch_ref: S3I9Implementer
       agent_session_ref: agent://S3I9Implementer
@@ -1709,7 +1709,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I9_landing
       stage_started_at: 2026-07-12T20:05:09Z
       transition_id: s3-i9-dispatch-intent-165
-      expected_parent_sha: ca5ff39a
+      expected_parent_sha: b8c239d0
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i9-dispatch-intent-165, recorded_at: 2026-07-12T20:05:09Z, actor: Main, expected_parent_sha: a28b590a, precondition: S3_I8_landed_step1_complete, postcondition: exact_tool_loop_core_extraction_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i9-dispatched-166, recorded_at: 2026-07-12T20:11:57Z, actor: Main, expected_parent_sha: dd9724fc, precondition: canonical_intent_and_live_lock_epoch_16, postcondition: S3I9Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
@@ -1722,6 +1722,8 @@ run_checkpoint_and_resumption_state:
         - {status: blocked_incomplete, transition_id: s3-i9-verifier-blocking-173, recorded_at: 2026-07-12T20:43:27Z, actor: S3I9Verifier, expected_parent_sha: 012c36f5, precondition: independent_source_tag_and_ratchet_verification, postcondition: comprehensive_test_helpers_and_inventory_citer_blockers_documented_before_repair, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i9-verifier-blockers-repaired-174, recorded_at: 2026-07-12T20:47:43Z, actor: Main, expected_parent_sha: 52c6532b, precondition: blockers_documented_canonically, postcondition: test_helpers_restored_comprehensive_only_pre_existing_drift_ratchet_227_PASS_reverification_required, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s3-i9-repair-receipt-ordering-175, recorded_at: 2026-07-12T20:53:08Z, actor: S3I9Verifier, expected_parent_sha: ca5ff39a, precondition: repaired_source_and_inventory_rechecked, postcondition: repair_receipt_added_after_inventory_regeneration_documented_before_final_regeneration, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s3-i9-final-verifier-pass-176, recorded_at: 2026-07-12T21:46:29Z, actor: S3I9Verifier, expected_parent_sha: b8c239d0, precondition: receipt_complete_inventory_regenerated_last, postcondition: independent_PASS_confidence_1_0_no_findings, external_operation_id: not_applicable}
+        - {status: accepted, transition_id: s3-i9-ci-deploy-accepted-177, recorded_at: 2026-07-12T21:46:29Z, actor: Main, expected_parent_sha: b8c239d0, precondition: full_CI_attempt_3_deploy_receipt_and_product_smoke_complete, postcondition: deployed_896b35e2_staging_health_and_authenticated_run_list_200_consensus_pending, external_operation_id: github_actions_29207997195_attempt_3}
       lock_expires_at: 2026-07-12T22:00:00Z
       mutation_class: orange
       protected_surfaces: []
@@ -1742,17 +1744,17 @@ run_checkpoint_and_resumption_state:
       implementation_sha_or_dirty_snapshot: 820fa74d
       implementation_commit_sha: 820fa74d
       push_ref: 896b35e2
-      ci_run_ref: pending
-      deploy_ref: pending
-      deployed_sha: pending
-      acceptance_ref: pending
+      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29207997195#attempt-3
+      deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/29207997195#job-86695441577
+      deployed_sha: 896b35e286ceaa8191070bf39c3013ec58e1f162
+      acceptance_ref: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md#s3-i9-final-verification-ci-deploy-and-acceptance
       acceptance_contract: storage_independent_tool_loop_extracted_to_toolregistry_required_narrow_executor_contract_no_runtime_alias_no_fallback_behavior_preserved
-      evidence_refs: [docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md, agent://S3I9Implementer, agent://S3I9Verifier]
-      open_findings: [inventory_must_regenerate_after_complete_repair_receipt, batch_executor_policy_remains_runtime_owned_for_later_step2_slice]
+      evidence_refs: [docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md, agent://S3I9Implementer, agent://S3I9Verifier, https://github.com/choir-hip/go-choir/actions/runs/29207997195#attempt-3]
+      open_findings: [batch_executor_policy_remains_runtime_owned_for_later_step2_slice]
       landed_commit_sha: pending
-      adjudication: source_PASS_receipt_ordering_ratchet_BLOCKING
-      last_reconciled_at: 2026-07-12T20:53:08Z
-      reconciliation_result: verifier_recheck_source_PASS_ratchet_baseline_227_current_228_final_regeneration_required
+      adjudication: independent_PASS_deployed_accepted_final_consensus_pending
+      last_reconciled_at: 2026-07-12T21:46:29Z
+      reconciliation_result: verifier_PASS_CI_PASS_deployed_896b35e2_staging_product_accepted_consensus_pending
       close_condition: extraction_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
