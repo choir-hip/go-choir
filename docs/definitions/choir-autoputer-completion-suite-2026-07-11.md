@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 2327fcef4716aef070eb4b819296f01b44267364
+  journal_expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
   orchestrator_lock:
     holder: Main
     epoch: 6
@@ -875,7 +875,70 @@ run_checkpoint_and_resumption_state:
       last_reconciled_at: 2026-07-12T02:37:02Z
       reconciliation_result: S0_complete_S1_working
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
-  s1_runtime_exception_disposition: []
+    - slice_id: S1-deploy-unblock-01
+      subgoal: S1
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 6
+      status: dispatch_intent
+      dispatch_nonce: s1-deploy-unblock-01-nonce-01
+      dispatch_ref: S1DeployImplementer
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_dispatch
+      verifier_job_ref: S1DeployVerifier_pending_dispatch
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
+      lock_release_ref: pending_slice_close
+      stage_started_at: 2026-07-12T02:47:34Z
+      transition_id: s1-deploy-unblock-dispatch-intent-36
+      expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
+      stage_history:
+        - {status: dispatch_intent, transition_id: s1-deploy-unblock-dispatch-intent-36, recorded_at: 2026-07-12T02:47:34Z, actor: Main, expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31, precondition: S0_complete_S1_working_lock_epoch_6_held_and_red_ceremony_recorded, postcondition: exact_mutation_lock_existing_replacement_connection_and_acceptance_contract_are_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-12T04:37:02Z
+      mutation_class: red
+      protected_surfaces: [run_acceptance, admission_occupancy, owner_scoped_cancellation, choir_run_CLI, staging_hot_refresh_deploy]
+      exact_files_packages_routes_state_authorities: [internal/provideriface/provider.go, internal/runtime/config.go, internal/runtime/config_test.go, internal/runtime/runtime.go, internal/runtime/runtime_test.go, internal/runtime/api.go, internal/runtime/api_test.go, cmd/choir/main.go, cmd/choir/main_test.go, docs/runtime-dissolution-inventory.yaml, RunRecord.State, Runtime.CancelRun, /api/agent/loops, /api/agent/cancel]
+      forbidden_targets: [second_lifecycle_state_machine, admission_counter_rewrite, retry_policy, VM_reprovisioning, Wire_authority, promotion_authority, deployment_configuration]
+      authority_edges_locked: [RunRecord.State_single_lifecycle_authority, Runtime.CancelRun_owner_scoped_transition, S0_runtime_ratchets]
+      implementer_agent: S1DeployImplementer
+      verifier_agent: S1DeployVerifier
+      pre_mutation_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
+      rollback_commit_or_ref: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
+      accepted_slice_dependency_refs: [S0@2327fcef4716aef070eb4b819296f01b44267364]
+      external_operation_id: not_applicable_before_staging_drain
+      effect_authority: canonical_git_ref_then_staging_product_API
+      receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
+      expected_precondition: existing_cancel_and_list_handlers_unwired_active_execution_unbounded_staging_deployed_at_6e893d90
+      observed_postcondition: pending_implementation
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending
+      ci_run_ref: pending
+      deploy_ref: pending
+      deployed_sha: pending
+      acceptance_ref: pending
+      acceptance_contract: owner_scoped_product_CLI_cancel_and_60m_activation_budget_terminalize_runs_release_admission_and_restore_hot_refresh
+      evidence_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md]
+      open_findings: []
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-12T02:47:34Z
+      reconciliation_result: no_prior_matching_dispatch_implementation_not_started
+      close_condition: staging_running_runs_zero_or_authoritative_equivalent_green_deployed_commit_cancel_deadline_regressions_independent_verification_and_consensus_adjudication
+  s1_runtime_exception_disposition:
+    - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
+    - {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}
+    - {path: internal/runtime/api.go, symbols: [RegisterRoutes], routes: [/api/agent/loops, /api/agent/cancel], disposition: core, reason: connect_existing_owner_scoped_operator_handlers}
+    - {path: internal/runtime/config_test.go, disposition: test, reason: activation_budget_configuration_regression}
+    - {path: internal/runtime/runtime_test.go, disposition: test, reason: deadline_and_terminal_cancel_regressions}
+    - {path: internal/runtime/api_test.go, disposition: test, reason: registered_owner_scoped_routes}
   ratchet_artifact:
     path: docs/runtime-dissolution-inventory.yaml
     baseline_ref: 7994dfa62e3e9ba8420a5bb4810aae9be87a4ae1
