@@ -43,3 +43,12 @@ Forbidden:
 - all-source/build-tag caller paths compile;
 - ratchet decreases production LOC/runtime-owned symbols without growth in routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, or caller edges;
 - independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
+
+## S3-I10 Implementation Receipt
+
+- Integrated implementation: `23b65818` (isolated commit `6e9b7267e1defe0a799a8856570c90b6c066a106`).
+- Toolregistry now owns the complete batch execution policy and sole typed `ExecutionContext`; runtime computes run-derived values once and installs that object.
+- Production `RunToolLoop` and supervisor-recovery callers use `toolregistry.ExecuteToolBatch` directly. Old runtime executor functions, per-field context keys/accessors, callback path, no-op transition hook, and callerless hidden delegation helpers are deleted.
+- Focused owner executor/context, runtime integration, provider, gateway/gatewayruntime, and integration-tag provider checks pass. Comprehensive-tag runtime compilation reproduces only the pre-existing `prompts_test.go`/`texture_test.go` drift.
+- Residual runtime executor/context seam searches return no old declarations, aliases, forwarders, duplicate keys, or replacement paths.
+- Ratchet passed: production LOC `45272 -> 44681`, exports `1062 -> 1061`, and caller edges `559 -> 549`; routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, and initial unused-export debt remain flat.

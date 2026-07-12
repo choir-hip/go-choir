@@ -6,10 +6,10 @@ counts:
     go_files: 147
     production_files: 77
     test_files: 70
-    production_loc: 45272
-    test_loc: 50278
-    exports: 1062
-    export_caller_edges: 559
+    production_loc: 44681
+    test_loc: 50302
+    exports: 1061
+    export_caller_edges: 549
     initial_unused_export_debt: 19
     routes: 47
     tools: 49
@@ -18,14 +18,14 @@ counts:
     compatibility_markers: 13
     store_calls: 443
     interface_candidates: 4
-    citers: 228
+    citers: 232
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
-      loc: 6773
+      loc: 6780
     - id: internal/runtime/api.go [production]
       disposition: api
-      loc: 1467
+      loc: 1468
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
       loc: 858
@@ -79,13 +79,13 @@ files:
       loc: 3419
     - id: internal/runtime/channel_store.go [production]
       disposition: lifecycle
-      loc: 75
+      loc: 76
     - id: internal/runtime/coagent_update_packet.go [production]
       disposition: core
       loc: 145
     - id: internal/runtime/coagent_update_packet_test.go [test]
       disposition: core
-      loc: 114
+      loc: 115
     - id: internal/runtime/concurrent_workers_test.go [test]
       disposition: core
       loc: 1249
@@ -121,7 +121,7 @@ files:
       loc: 582
     - id: internal/runtime/email_appagent_tools_test.go [test]
       disposition: tools
-      loc: 616
+      loc: 617
     - id: internal/runtime/failure_isolation_test.go [test]
       disposition: core
       loc: 1139
@@ -166,7 +166,7 @@ files:
       loc: 60
     - id: internal/runtime/prompt_bar_unit_test.go [test]
       disposition: model
-      loc: 399
+      loc: 400
     - id: internal/runtime/prompt_store.go [production]
       disposition: model
       loc: 235
@@ -196,7 +196,7 @@ files:
       loc: 70
     - id: internal/runtime/researcher_checkpoint_fallback.go [production]
       disposition: research
-      loc: 261
+      loc: 263
     - id: internal/runtime/run_acceptance.go [production]
       disposition: lifecycle
       loc: 1300
@@ -262,7 +262,7 @@ files:
       loc: 329
     - id: internal/runtime/texture.go [production]
       disposition: texture
-      loc: 2166
+      loc: 2167
     - id: internal/runtime/texture_agent_revision.go [production]
       disposition: texture
       loc: 1281
@@ -280,7 +280,7 @@ files:
       loc: 825
     - id: internal/runtime/texture_evidence_sources_test.go [test]
       disposition: texture
-      loc: 782
+      loc: 783
     - id: internal/runtime/texture_handoff.go [production]
       disposition: texture
       loc: 108
@@ -301,7 +301,7 @@ files:
       loc: 65
     - id: internal/runtime/texture_live_llm_workflow_test.go [test]
       disposition: texture
-      loc: 495
+      loc: 500
     - id: internal/runtime/texture_media_sources.go [production]
       disposition: texture
       loc: 890
@@ -328,16 +328,16 @@ files:
       loc: 16
     - id: internal/runtime/texture_test.go [test]
       disposition: texture
-      loc: 9815
+      loc: 9816
     - id: internal/runtime/texture_tool_unit_test.go [test]
       disposition: texture
-      loc: 1060
+      loc: 1061
     - id: internal/runtime/texture_workflow_verifier.go [production]
       disposition: texture
       loc: 615
     - id: internal/runtime/texture_workflow_verifier_test.go [test]
       disposition: texture
-      loc: 741
+      loc: 742
     - id: internal/runtime/textureprompts/prompts.go [production]
       disposition: texture
       loc: 79
@@ -346,7 +346,7 @@ files:
       loc: 57
     - id: internal/runtime/tool_profiles.go [production]
       disposition: tools
-      loc: 698
+      loc: 678
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
       loc: 410
@@ -355,64 +355,64 @@ files:
       loc: 928
     - id: internal/runtime/tools.go [production]
       disposition: tools
-      loc: 635
+      loc: 48
     - id: internal/runtime/tools_capsule.go [production]
       disposition: tools
       loc: 546
     - id: internal/runtime/tools_coagent.go [production]
       disposition: tools
-      loc: 1056
+      loc: 1057
     - id: internal/runtime/tools_coagent_idempotency_test.go [test]
       disposition: tools
-      loc: 128
+      loc: 129
     - id: internal/runtime/tools_coding.go [production]
       disposition: tools
-      loc: 643
+      loc: 645
     - id: internal/runtime/tools_email.go [production]
       disposition: tools
-      loc: 612
+      loc: 613
     - id: internal/runtime/tools_evidence.go [production]
       disposition: evidence
-      loc: 238
+      loc: 239
     - id: internal/runtime/tools_model_verify.go [production]
       disposition: model
       loc: 245
     - id: internal/runtime/tools_model_verify_test.go [test]
       disposition: model
-      loc: 229
+      loc: 230
     - id: internal/runtime/tools_product_api.go [production]
       disposition: tools
-      loc: 179
+      loc: 180
     - id: internal/runtime/tools_product_api_test.go [test]
       disposition: tools
-      loc: 82
+      loc: 83
     - id: internal/runtime/tools_research.go [production]
       disposition: research
-      loc: 1126
+      loc: 1127
     - id: internal/runtime/tools_researcher.go [production]
       disposition: research
-      loc: 266
+      loc: 267
     - id: internal/runtime/tools_shipper.go [production]
       disposition: tools
-      loc: 360
+      loc: 362
     - id: internal/runtime/tools_test.go [test]
       disposition: tools
       loc: 1898
     - id: internal/runtime/tools_texture.go [production]
       disposition: texture
-      loc: 1881
+      loc: 1882
     - id: internal/runtime/tools_texture_provenance_test.go [test]
       disposition: texture
       loc: 66
     - id: internal/runtime/tools_vmctl.go [production]
       disposition: tools
-      loc: 2520
+      loc: 2521
     - id: internal/runtime/tools_wire_processor.go [production]
       disposition: wire
-      loc: 95
+      loc: 97
     - id: internal/runtime/tools_worker_update.go [production]
       disposition: tools
-      loc: 1002
+      loc: 999
     - id: internal/runtime/trace_helpers.go [production]
       disposition: core
       loc: 259
@@ -436,10 +436,10 @@ files:
       loc: 2309
     - id: internal/runtime/update_coagent_source_packet_test.go [test]
       disposition: core
-      loc: 497
+      loc: 498
     - id: internal/runtime/update_coagent_survivor_contract_test.go [test]
       disposition: core
-      loc: 606
+      loc: 607
     - id: internal/runtime/wire_metadata.go [production]
       disposition: wire
       loc: 39
@@ -2775,7 +2775,6 @@ exports:
         - internal/runtime/texture_controller.go
         - internal/runtime/texture_workflow_verifier.go
         - internal/runtime/tool_profiles.go
-        - internal/runtime/tools.go
         - internal/runtime/tools_coagent.go
         - internal/runtime/tools_shipper.go
         - internal/runtime/tools_vmctl.go
@@ -2797,7 +2796,6 @@ exports:
         - internal/runtime/texture_handoff.go
         - internal/runtime/texture_workflow_verifier.go
         - internal/runtime/tool_profiles.go
-        - internal/runtime/tools.go
         - internal/runtime/tools_coagent.go
         - internal/runtime/trajectory.go
     - id: internal/runtime/tool_profiles.go:const:AgentProfileEmail
@@ -2850,7 +2848,6 @@ exports:
         - internal/runtime/texture_controller.go
         - internal/runtime/texture_workflow_verifier.go
         - internal/runtime/tool_profiles.go
-        - internal/runtime/tools.go
         - internal/runtime/tools_research.go
         - internal/runtime/tools_researcher.go
         - internal/runtime/tools_vmctl.go
@@ -2870,7 +2867,6 @@ exports:
         - internal/runtime/texture_controller.go
         - internal/runtime/texture_workflow_verifier.go
         - internal/runtime/tool_profiles.go
-        - internal/runtime/tools.go
         - internal/runtime/tools_coding.go
         - internal/runtime/tools_model_verify.go
         - internal/runtime/tools_product_api.go
@@ -2899,7 +2895,6 @@ exports:
         - internal/runtime/texture_merge.go
         - internal/runtime/texture_workflow_verifier.go
         - internal/runtime/tool_profiles.go
-        - internal/runtime/tools.go
         - internal/runtime/tools_coagent.go
         - internal/runtime/tools_email.go
         - internal/runtime/tools_texture.go
@@ -2918,17 +2913,9 @@ exports:
         - internal/runtime/texture_controller.go
         - internal/runtime/texture_workflow_verifier.go
         - internal/runtime/tool_profiles.go
-        - internal/runtime/tools.go
         - internal/runtime/tools_coagent.go
         - internal/runtime/tools_shipper.go
         - internal/runtime/tools_vmctl.go
-    - id: internal/runtime/tool_profiles.go:func:WithToolExecutionContext
-      disposition: tools
-      production_callers:
-        - internal/runtime/api.go
-        - internal/runtime/researcher_checkpoint_fallback.go
-        - internal/runtime/runtime.go
-        - internal/runtime/texture.go
     - id: internal/runtime/tool_profiles.go:method(*Runtime):InstallDefaultAgentTools
       disposition: tools
       production_callers:
@@ -3654,9 +3641,9 @@ wrappers:
     - id: internal/apihandler/api.go:field:runtime.Runtime
       disposition: delete
 compatibility_markers:
-    - id: 'internal/runtime/api.go:1240:Deprecated: use apihandler.RegisterRoutes from internal/apihandler. This'
+    - id: 'internal/runtime/api.go:1241:Deprecated: use apihandler.RegisterRoutes from internal/apihandler. This'
       disposition: delete
-    - id: 'internal/runtime/api.go:285:Deprecated: use apihandler.NewAPIHandler from internal/apihandler. This'
+    - id: 'internal/runtime/api.go:286:Deprecated: use apihandler.NewAPIHandler from internal/apihandler. This'
       disposition: delete
     - id: internal/runtime/app_promotion.go:462:Legacy records without the captured base skip the check.
       disposition: delete
@@ -3670,11 +3657,11 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/tool_profiles.go:18:Re-exported from internal/agentprofile for backward compatibility.
       disposition: delete
-    - id: internal/runtime/tools.go:17:Re-exported from internal/toolregistry for backward compatibility.
+    - id: internal/runtime/tools.go:5:Re-exported from internal/toolregistry for backward compatibility.
       disposition: delete
     - id: internal/runtime/tools_capsule.go:305:This preserves backward compatibility with existing callers.
       disposition: delete
-    - id: internal/runtime/tools_texture.go:1588:source_ref display_mode enum after the hard cutover. Legacy expanded
+    - id: internal/runtime/tools_texture.go:1589:source_ref display_mode enum after the hard cutover. Legacy expanded
       disposition: delete
     - id: internal/runtime/universal_wire.go:14:Accept both the new "corpusd_route_path" key and the legacy
       disposition: delete
@@ -4795,6 +4782,8 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools.go, internal/runtime/*_test.go, internal/provider/*_test.go, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools.go, internal/runtime/tool_profiles.go, direct_executor_context_consumers_and_tests, internal/toolregistry, internal/agentprofile,… [sha256:d29cc66975e00209d4439b91e2bd145b4d743cd4ea6bfab84715c3c9124da6d1]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools.go, internal/runtime/tools_test.go, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
@@ -4920,6 +4909,12 @@ citers:
     - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:Change: replace the sourcecycled runtime projection target with the existing corpusd object-graph HTTP service through the host service/proxy path; remove `/internal/runtime/objectgraph/web-captures` … [sha256:ead26837bfd20889d399cdb596ce7458eb284f39d02654aac64744a9df79e153]'
       disposition: historical_evidence
     - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:The Codex finding was concrete and was repaired rather than outvoted. Commits `981bd74a` and `b7b1262e` remove the stale import/runtime-store claims from `internal/store/store.go`, `internal/runtime/c… [sha256:ab07aa27be75e130458a6a85cf9f02f8c68c2f08e5df6df6ba86b2cefd918419]
+      disposition: historical_evidence
+    - id: docs/evidence/s3-batch-executor-extraction-dispatch-2026-07-12.md:- `internal/runtime/tools.go`, `tool_profiles.go`, and direct executor/context consumers/tests;
+      disposition: historical_evidence
+    - id: docs/evidence/s3-batch-executor-extraction-dispatch-2026-07-12.md:Move the complete live batch execution policy from `internal/runtime/tools.go` into `internal/toolregistry`. Move the tool-execution context values needed by that policy to one typed context object ow… [sha256:ae8dadc58d450d766268da6d2bca9c337c18cfa73d223552cf7d173348cd52a3]
+      disposition: historical_evidence
+    - id: docs/evidence/s3-batch-executor-extraction-dispatch-2026-07-12.md:S3-I9 moved the storage-independent provider/tool-loop state machine into `internal/toolregistry`, but `internal/runtime/tools.go` still owns the required batch executor supplied to that loop. The rem… [sha256:eef64c0e6125bee89e23e39607b7394ed03516dcacb992c494ea17747335d1eb]
       disposition: historical_evidence
     - id: 'docs/evidence/s3-new-tool-registry-test-callers-dispatch-2026-07-12.md:Allowed source paths: `internal/runtime/tools.go` and only test files containing a `NewToolRegistry()` caller under `internal/runtime` or `internal/provider`.'
       disposition: historical_evidence
