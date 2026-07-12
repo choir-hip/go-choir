@@ -58,3 +58,10 @@ Forbidden: replacement production helper, alias, forwarding method, exported tes
 - Reproducer: `git diff --unified=8 ce0cc940..883cec57 -G'StartRun' -- internal/runtime` shows that deleting the wrapper-only manual-compaction test also deleted one existing `rt.StartRun(...)` caller.
 - This violates the amended invariant that `StartRun` and every caller remain unchanged. The smallest repair is to restore that test setup and caller while invoking the same unexported same-package compaction machinery directly; no production helper is restored.
 - All other verifier checks passed. Comprehensive-tag compilation remains blocked by the documented pre-existing `prompt.provideriface` and `AuthorKind`/`AuthorLabel` drift.
+
+## S3-I3 Caller-Preservation Repair
+
+- Repair commit: `0d393019`.
+- Restored `TestRuntimeManualRunMemoryCompaction` and its original `rt.StartRun(...)` caller; replaced only the deleted exported wrapper invocation with direct same-package `runMemoryManager.compactIfNeeded(..., "manual_test", true)` setup.
+- Isolated comprehensive proof passed after removing only the three unrelated pre-existing failing test files from a detached temporary worktree: `go test -tags comprehensive ./internal/runtime -run '^TestRuntimeManualRunMemoryCompaction$' -count=1`.
+- Default runtime compile, runtime-ratchet tests, and the runtime ratchet pass. Current ratchet: production LOC `46949`, test LOC `53035`, exports `1145`, caller edges `601`, unused debt `27`, routes `47`, tools `49`, wrappers `5`, citers `198`.
