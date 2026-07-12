@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
+  journal_expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b
   orchestrator_lock:
     holder: Main
     epoch: 6
@@ -879,13 +879,13 @@ run_checkpoint_and_resumption_state:
       subgoal: S1
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 6
-      status: dispatch_intent
+      status: dispatched
       dispatch_nonce: s1-deploy-unblock-01-nonce-01
       dispatch_ref: S1DeployImplementer
-      agent_session_ref: pending_agent_dispatch
+      agent_session_ref: agent://S1DeployImplementer
       dispatch_prompt_ref: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
-      implementer_job_ref: pending_agent_dispatch
-      implementer_output_ref: pending_agent_dispatch
+      implementer_job_ref: S1DeployImplementer
+      implementer_output_ref: pending_agent_output
       verifier_job_ref: S1DeployVerifier_pending_dispatch
       verifier_output_ref: pending_independent_verification
       worktree_or_branch_ref: pending_isolated_worktree_or_patch
@@ -896,10 +896,11 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-12T02:47:34Z
-      transition_id: s1-deploy-unblock-dispatch-intent-36
-      expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
+      transition_id: s1-deploy-unblock-dispatched-37
+      expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b
       stage_history:
         - {status: dispatch_intent, transition_id: s1-deploy-unblock-dispatch-intent-36, recorded_at: 2026-07-12T02:47:34Z, actor: Main, expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31, precondition: S0_complete_S1_working_lock_epoch_6_held_and_red_ceremony_recorded, postcondition: exact_mutation_lock_existing_replacement_connection_and_acceptance_contract_are_canonical, external_operation_id: not_applicable}
+        - {status: dispatched, transition_id: s1-deploy-unblock-dispatched-37, recorded_at: 2026-07-12T02:49:53Z, actor: Main, expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b, precondition: canonical_dispatch_intent_and_live_lock_epoch_6, postcondition: S1DeployImplementer_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T04:37:02Z
       mutation_class: red
       protected_surfaces: [run_acceptance, admission_occupancy, owner_scoped_cancellation, choir_run_CLI, staging_hot_refresh_deploy]
@@ -929,8 +930,8 @@ run_checkpoint_and_resumption_state:
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-12T02:47:34Z
-      reconciliation_result: no_prior_matching_dispatch_implementation_not_started
+      last_reconciled_at: 2026-07-12T02:49:53Z
+      reconciliation_result: one_matching_live_agent_job_S1DeployImplementer
       close_condition: staging_running_runs_zero_or_authoritative_equivalent_green_deployed_commit_cancel_deadline_regressions_independent_verification_and_consensus_adjudication
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
