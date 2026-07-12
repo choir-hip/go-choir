@@ -76,3 +76,10 @@ Forbidden:
 - Residual runtime-qualified tool-loop surface search returned empty.
 - Ratchet passed: Go files `148 -> 147`, production files `78 -> 77`, production LOC `46931 -> 45272`, test LOC `53044 -> 50232`, exports `1140 -> 1062`, caller edges `601 -> 559`, compatibility markers `15 -> 13`, and initial unused-export debt `22 -> 19`; every other gated authority count remained flat.
 - The remaining app/profile-aware batch execution policy is explicit later step-2 work, not hidden completion of runtime dissolution.
+
+## S3-I9 Independent Verification Blockers
+
+- Independent `S3I9Verifier` returned `BLOCKING` at confidence `0.99`.
+- Extraction-induced comprehensive-tag compile failures prove three runtime test helpers were deleted with the migrated unit suite while comprehensive runtime tests still consume them: `rawMessagesForTest`, `extractLastUserMessage`, and `extractTextFromContent`.
+- The post-receipt inventory is also stale by one historical-evidence citer (`226 -> 227`).
+- Smallest repair: retain the three helpers as test-only runtime integration helpers, regenerate the final inventory, then rerun comprehensive compilation, focused tests, ratchet, and independent verification. No production correction or behavior change is required.
