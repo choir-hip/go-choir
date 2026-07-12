@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 444
     interface_candidates: 4
-    citers: 177
+    citers: 178
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5294,6 +5294,8 @@ citers:
     - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:At canonical `97dc05f7`, independent verifier `S2IndependentVerifier` found a blocking retained authority in `internal/runtime/universal_wire.go:40-89`. Although S2-B deleted local edition advancement… [sha256:1193dc8c5bfb9f50f15f87a437c6a14d8db0bd32e26df2f80ae83addc34e56a7]
       disposition: historical_evidence
     - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:Change: replace the sourcecycled runtime projection target with the existing corpusd object-graph HTTP service through the host service/proxy path; remove `/internal/runtime/objectgraph/web-captures` … [sha256:ead26837bfd20889d399cdb596ce7458eb284f39d02654aac64744a9df79e153]'
+      disposition: historical_evidence
+    - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:The Codex finding was concrete and was repaired rather than outvoted. Commits `981bd74a` and `b7b1262e` remove the stale import/runtime-store claims from `internal/store/store.go`, `internal/runtime/c… [sha256:ab07aa27be75e130458a6a85cf9f02f8c68c2f08e5df6df6ba86b2cefd918419]
       disposition: historical_evidence
     - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
       disposition: block
