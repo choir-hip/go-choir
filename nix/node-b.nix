@@ -439,6 +439,7 @@ in
       EnvironmentFile = [
         "-/var/lib/go-choir/deploy.env"
       ];
+      # Shared captures publish through the host proxy to corpusd; user VMs are never the durable target.
       Environment = [
         "SOURCE_SERVICE_ADDR=0.0.0.0:8787"
         "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/configs/sources.json"
