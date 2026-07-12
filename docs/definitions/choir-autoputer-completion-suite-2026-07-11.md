@@ -693,18 +693,18 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 76a26022d90554c6f4c43bd2fceb7eaf8abc6d86
+  journal_expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab
   orchestrator_lock:
     holder: Main
-    epoch: 6
-    expires_at: 2026-07-12T04:37:02Z
-    expected_parent_sha: 2327fcef4716aef070eb4b819296f01b44267364
-    lock_transition_id: s1-lock-acquisition-35
+    epoch: 7
+    expires_at: 2026-07-12T06:51:11Z
+    expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab
+    lock_transition_id: s1-lock-renewal-44
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
     B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
     S0: {status: complete, started_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, completed_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md, docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md, agent://S0RatchetVerifier, artifact://461, https://github.com/choir-hip/go-choir/actions/runs/29176500535], rollback_refs: [008a7b88cf200119c0f762cc51cfba6be3007445], blockers: []}
-    S1: {status: blocked_incomplete, started_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, completed_at_sha: '', evidence_refs: [docs/definitions/choir-run-deploy-unblock-2026-07-11.md, docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md], rollback_refs: [2327fcef4716aef070eb4b819296f01b44267364], blockers: [S1-CONS-001_passivation_can_overwrite_terminal_state]}
+    S1: {status: checkpoint_incomplete, started_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, completed_at_sha: '', evidence_refs: [docs/definitions/choir-run-deploy-unblock-2026-07-11.md, docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372], rollback_refs: [2327fcef4716aef070eb4b819296f01b44267364], blockers: []}
     S2: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S1]}
     S3: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S2]}
     S4: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S3]}
@@ -715,14 +715,14 @@ run_checkpoint_and_resumption_state:
     S9: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S8]}
   active_phase_checkpoint:
     subgoal: S1
-    status: blocked_incomplete
-    deployed_sha: 26d7aa2accda63e20daa19c42381d13aec14baed
-    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29178010201/attempts/3
-    staging_ref: activation_receipt_29178010201_attempt_3_at_2026-07-12T03:54:15Z
-    product_proof_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md#deployed-acceptance-receipt, run:8d203e02-29b7-4f6b-a7e2-bfb95434cf9d]
-    consensus_ref: /tmp/choir-s1-final-consensus-20260712
-    open_findings: [S1-CONS-001_passivation_can_overwrite_terminal_state]
-    adjudication_ref: codex_blocker_confirmed_pending_full_panel_and_repair
+    status: consensus_pending
+    deployed_sha: 4973ee40570382c25398ea50e15148569cf351ab
+    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29179656372
+    staging_ref: activation_receipt_29179656372_attempt_1_at_2026-07-12T04:37:20Z
+    product_proof_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md#s1-cons-001-repair-receipt, run:2d37e688-7fa5-4034-859e-b98b3a445e01, run:7b0cb532-b4d1-4c85-9a9d-062beab82197]
+    consensus_ref: /tmp/choir-s1-post-repair-consensus-20260712
+    open_findings: []
+    adjudication_ref: pending_post_repair_panel
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -878,8 +878,8 @@ run_checkpoint_and_resumption_state:
     - slice_id: S1-deploy-unblock-01
       subgoal: S1
       suite_run_id: choir-autoputer-completion-2026-07-11-01
-      orchestrator_lock_epoch: 6
-      status: blocked_incomplete
+      orchestrator_lock_epoch: 7
+      status: consensus
       dispatch_nonce: s1-deploy-unblock-01-nonce-01
       dispatch_ref: S1DeployImplementer
       agent_session_ref: agent://S1DeployImplementer
@@ -896,8 +896,8 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-12T02:47:34Z
-      transition_id: s1-final-consensus-blocked-43
-      expected_parent_sha: 76a26022d90554c6f4c43bd2fceb7eaf8abc6d86
+      transition_id: s1-post-repair-consensus-open-47
+      expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab
       stage_history:
         - {status: dispatch_intent, transition_id: s1-deploy-unblock-dispatch-intent-36, recorded_at: 2026-07-12T02:47:34Z, actor: Main, expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31, precondition: S0_complete_S1_working_lock_epoch_6_held_and_red_ceremony_recorded, postcondition: exact_mutation_lock_existing_replacement_connection_and_acceptance_contract_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s1-deploy-unblock-dispatched-37, recorded_at: 2026-07-12T02:49:53Z, actor: Main, expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b, precondition: canonical_dispatch_intent_and_live_lock_epoch_6, postcondition: S1DeployImplementer_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
@@ -910,7 +910,11 @@ run_checkpoint_and_resumption_state:
         - {status: deployed, transition_id: s1-deploy-unblock-deployed-41a, recorded_at: 2026-07-12T03:54:15Z, actor: GitHub_Actions, expected_parent_sha: 26d7aa2accda63e20daa19c42381d13aec14baed, precondition: full_CI_gates_green_and_stale_runs_passivated, postcondition: activation_receipt_records_ordinary_guest_sandbox_active_computers_and_gateway_at_S1_commit, external_operation_id: github_actions_run_29178010201_attempt_3}
         - {status: accepted, transition_id: s1-deploy-unblock-accepted-42, recorded_at: 2026-07-12T03:57:52Z, actor: Main, expected_parent_sha: 210800a0eb56b1f7e7fd9a424d1d8c1d2a4591f0, precondition: green_deploy_identity_and_owner_scoped_product_routes, postcondition: list_observed_active_run_cancel_returned_200_and_durable_state_cancelled_with_finished_at, external_operation_id: run_8d203e02-29b7-4f6b-a7e2-bfb95434cf9d}
         - {status: blocked_incomplete, transition_id: s1-final-consensus-blocked-43, recorded_at: 2026-07-12T04:04:00Z, actor: Codex_consensus_reviewer, expected_parent_sha: 76a26022d90554c6f4c43bd2fceb7eaf8abc6d86, precondition: deployed_acceptance_and_final_S1_checkpoint_panel, postcondition: S1_CONS_001_confirmed_passivation_direct_write_can_overwrite_cancelled_or_failed_terminal_state, external_operation_id: consensus_dir_tmp_choir_s1_final_consensus_20260712}
-      lock_expires_at: 2026-07-12T04:37:02Z
+        - {status: committed, transition_id: s1-consensus-race-repaired-45, recorded_at: 2026-07-12T04:24:23Z, actor: Main, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: S1_CONS_001_documented_and_reproduced, postcondition: idle_passivation_uses_stored_terminal_wins_guard_regression_and_ratchet_PASS_independent_verifier_PASS, external_operation_id: not_applicable}
+        - {status: deployed, transition_id: s1-consensus-race-repair-deployed-46, recorded_at: 2026-07-12T04:37:20Z, actor: GitHub_Actions, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: full_CI_and_race_shards_green, postcondition: sandbox_and_gateway_activation_receipt_at_repair_commit, external_operation_id: github_actions_run_29179656372}
+        - {status: accepted, transition_id: s1-consensus-race-repair-accepted-46a, recorded_at: 2026-07-12T04:49:30Z, actor: Main, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: repair_deployed_and_product_CLI_available, postcondition: actual_choir_run_cancel_returned_cancelled_for_two_active_runs, external_operation_id: runs_2d37e688_and_7b0cb532}
+        - {status: consensus, transition_id: s1-post-repair-consensus-open-47, recorded_at: 2026-07-12T04:51:11Z, actor: Main, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: repaired_green_deployed_independently_verified_and_CLI_accepted, postcondition: six_member_post_repair_panel_running, external_operation_id: consensus_dir_tmp_choir_s1_post_repair_consensus_20260712}
+      lock_expires_at: 2026-07-12T06:51:11Z
       mutation_class: red
       protected_surfaces: [run_acceptance, admission_occupancy, owner_scoped_cancellation, choir_run_CLI, staging_hot_refresh_deploy]
       exact_files_packages_routes_state_authorities: [internal/provideriface/provider.go, internal/runtime/config.go, internal/runtime/config_test.go, internal/runtime/runtime.go, internal/runtime/runtime_test.go, internal/runtime/api.go, internal/runtime/api_test.go, cmd/choir/main.go, cmd/choir/main_test.go, docs/runtime-dissolution-inventory.yaml, RunRecord.State, Runtime.CancelRun, /api/agent/loops, /api/agent/cancel]
@@ -929,18 +933,18 @@ run_checkpoint_and_resumption_state:
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 47abce2a4de850a64cd121f63a24d8048eca7bc9
       implementation_commit_sha: 47abce2a4de850a64cd121f63a24d8048eca7bc9
-      push_ref: 26d7aa2a96e8748b63afcd4074636eb8b563994e@origin/main
-      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29178010201/attempts/3
-      deploy_ref: activation_receipt_29178010201_attempt_3_at_2026-07-12T03:54:15Z
-      deployed_sha: 26d7aa2accda63e20daa19c42381d13aec14baed
-      acceptance_ref: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md#deployed-acceptance-receipt
+      push_ref: 4973ee40570382c25398ea50e15148569cf351ab@origin/main
+      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29179656372
+      deploy_ref: activation_receipt_29179656372_attempt_1_at_2026-07-12T04:37:20Z
+      deployed_sha: 4973ee40570382c25398ea50e15148569cf351ab
+      acceptance_ref: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md#s1-cons-001-repair-receipt
       acceptance_contract: owner_scoped_product_CLI_cancel_and_60m_activation_budget_terminalize_runs_release_admission_and_restore_hot_refresh
-      evidence_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29178010201/attempts/3]
-      open_findings: [S1-CONS-001_passivation_can_overwrite_terminal_state]
-      landed_commit_sha: pending_consensus_repair
-      adjudication: blocked_confirmed_S1_CONS_001_passivation_write_bypasses_stored_terminal_wins_guard
-      last_reconciled_at: 2026-07-12T04:04:00Z
-      reconciliation_result: deployed_acceptance_valid_but_narrow_cancel_or_deadline_vs_passivation_race_requires_repair_and_regression
+      evidence_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372, /tmp/choir-s1-final-consensus-20260712]
+      open_findings: []
+      landed_commit_sha: pending_post_repair_consensus
+      adjudication: S1_CONS_001_repaired_focused_ratchet_independent_CI_deploy_and_direct_CLI_proof_PASS_post_repair_consensus_pending
+      last_reconciled_at: 2026-07-12T04:51:11Z
+      reconciliation_result: one_consensus_blocker_repaired_and_all_pre_panel_gates_green
       close_condition: staging_running_runs_zero_or_authoritative_equivalent_green_deployed_commit_cancel_deadline_regressions_independent_verification_and_consensus_adjudication
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

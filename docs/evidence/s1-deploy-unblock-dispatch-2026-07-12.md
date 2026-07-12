@@ -102,3 +102,30 @@ stored-terminal-wins authority as all other post-provider lifecycle writes, and
 a deterministic cancellation/deadline-versus-passivation regression must fail
 before the repair and pass afterward. The deployed acceptance remains valid
 for the route it exercised but does not disprove this narrower race.
+
+## S1-CONS-001 Repair Receipt
+
+Commit `4973ee40570382c25398ea50e15148569cf351ab` routes idle passivation through
+`persistActivationState`, so the shared lifecycle lock reloads durable state and
+stored terminal authority wins. The reproduced regression
+`TestIdlePassivationCannotOverwriteCancelledRun` failed before the repair with
+`state "passivated" finished_at <nil>` and passes after it. The false persistence
+result returns before emitting a passivation event or reconciling Texture.
+
+Focused lifecycle tests passed across `internal/runtime` and `cmd/choir`.
+`go test ./cmd/runtime-ratchet && go run ./cmd/runtime-ratchet` passed with 150
+Go files, 48,892 production LOC, 55,707 test LOC, 1,215 exports, 462 exact store
+calls, four interface candidates, and 164 citers. `S1DeployVerifier`
+independently returned PASS on the repair and exact regression.
+
+GitHub Actions run `29179656372` passed all selected build, test, race, ratchet,
+SBOM, and deploy gates. Its activation receipt records `sandbox` and `gateway`
+active at `4973ee40570382c25398ea50e15148569cf351ab` at
+`2026-07-12T04:37:20Z`.
+
+Post-deploy, the actual product CLI command
+`choir run cancel 2d37e688-7fa5-4034-859e-b98b3a445e01` returned
+`state: cancelled`; the second active probe
+`7b0cb532-b4d1-4c85-9a9d-062beab82197` was also cancelled through the CLI.
+This closes the earlier non-blocking evidence gap between the authenticated API
+and the CLI wrapper.
