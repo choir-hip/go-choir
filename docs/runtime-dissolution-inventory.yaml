@@ -6,11 +6,11 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 47017
+    production_loc: 46990
     test_loc: 53028
-    exports: 1151
-    export_caller_edges: 603
-    initial_unused_export_debt: 33
+    exports: 1148
+    export_caller_edges: 602
+    initial_unused_export_debt: 30
     routes: 47
     tools: 49
     production_importers: 4
@@ -181,7 +181,7 @@ files:
       loc: 121
     - id: internal/runtime/promptspec/promptspec.go [production]
       disposition: model
-      loc: 70
+      loc: 61
     - id: internal/runtime/promptspec/promptspec_test.go [test]
       disposition: model
       loc: 47
@@ -214,7 +214,7 @@ files:
       loc: 441
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3723
+      loc: 3718
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -346,7 +346,7 @@ files:
       loc: 57
     - id: internal/runtime/tool_profiles.go [production]
       disposition: tools
-      loc: 711
+      loc: 698
     - id: internal/runtime/toolloop.go [production]
       disposition: tools
       loc: 1673
@@ -1681,8 +1681,6 @@ exports:
       production_callers:
         - internal/runtime/prompt_store.go
         - internal/runtime/textureprompts/prompts.go
-    - id: internal/runtime/promptspec/promptspec.go:method(Document):MustRender
-      disposition: model
     - id: internal/runtime/promptspec/promptspec.go:method(Document):Render
       disposition: model
       production_callers:
@@ -1899,8 +1897,6 @@ exports:
         - internal/runtime/texture_merge.go
         - internal/runtime/tools_coagent.go
         - internal/runtime/tools_research.go
-    - id: internal/runtime/runtime.go:method(*Runtime):ToolRegistry
-      disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):TraceStore
       disposition: lifecycle
     - id: internal/runtime/runtime.go:type:Runtime
@@ -1958,7 +1954,6 @@ exports:
       production_callers:
         - internal/actorruntime/adapter.go
         - internal/runtime/runtime.go
-        - internal/runtime/tool_profiles.go
     - id: internal/runtime/runtime_persistence_test.go:func:TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt
       disposition: lifecycle
     - id: internal/runtime/runtime_persistence_test.go:method(*fakeRunSubmissionStore):AppendEvent
@@ -2947,8 +2942,6 @@ exports:
         - internal/runtime/researcher_checkpoint_fallback.go
         - internal/runtime/runtime.go
         - internal/runtime/texture.go
-    - id: internal/runtime/tool_profiles.go:func:WithToolProfileRegistry
-      disposition: tools
     - id: internal/runtime/tool_profiles.go:method(*Runtime):InstallDefaultAgentTools
       disposition: tools
       production_callers:
@@ -3658,8 +3651,6 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/channel_store.go:method(*Runtime):ChannelRead
       disposition: delete
-    - id: internal/runtime/promptspec/promptspec.go:method(Document):MustRender
-      disposition: delete
     - id: internal/runtime/provider.go:method(*StubProvider):Execute
       disposition: delete
     - id: internal/runtime/provider.go:method(*StubProvider):ProviderName
@@ -3678,8 +3669,6 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):StartRun
       disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):ToolRegistry
-      disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):TraceStore
       disposition: delete
     - id: internal/runtime/search_gateway.go:method(*gatewaySearchClient):Search
@@ -3687,8 +3676,6 @@ initial_unused_export_debt:
     - id: internal/runtime/texture_workflow_verifier.go:method(*Runtime):VerifyTextureWorkflow
       disposition: delete
     - id: internal/runtime/textureprompts/prompts.go:func:RevisionMediaSourceResearchRequired
-      disposition: delete
-    - id: internal/runtime/tool_profiles.go:func:WithToolProfileRegistry
       disposition: delete
     - id: internal/runtime/toolloop.go:func:WithCompletionGuard
       disposition: delete
@@ -3943,7 +3930,7 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/config.go:26:Re-exported from internal/provideriface for backward compatibility.
       disposition: delete
-    - id: internal/runtime/runtime.go:1999:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1994:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/runtime.go:97:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
