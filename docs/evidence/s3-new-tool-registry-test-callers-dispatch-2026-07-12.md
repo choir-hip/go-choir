@@ -35,3 +35,11 @@ Acceptance requires zero residual runtime constructor alias/callers, focused tes
 - Ten-file exact cutover: `86` legacy test calls became direct `toolregistry.NewToolRegistry()` calls; the runtime alias was deleted; no production caller or replacement seam remains.
 - Default runtime/provider tests and compilation passed; integration-tag provider compilation passed. Comprehensive-tag runtime compilation reproduces identical pre-existing `prompts_test.go`/`texture_test.go` errors at the canonical parent.
 - Ratchet passed after removing the fulfilled export/debt rows: production LOC `46932 -> 46931`, test LOC `53038 -> 53044`, exports `1141 -> 1140`, initial unused-export debt `23 -> 22`; caller edges and every gated authority count remained flat.
+
+## S3-I8 Final Verification, CI, Deploy, and Acceptance
+
+- Independent `S3I8Verifier` returned `PASS` at confidence `0.97` with no findings on canonical `e88b2727`.
+- GitHub Actions run `29205831071`, attempt `2`, passed every selected normal/race gate and deployed checkpoint `331ad4834aa5fcd5489d15aeddc8c7e4cfc9e148`.
+- Deployment job `86686164550` published the activation receipt at `2026-07-12T19:43:07Z`; sandbox and gateway artifacts were active at `331ad4834aa5fcd5489d15aeddc8c7e4cfc9e148`.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
+- Residual risk: pre-existing comprehensive-tag test drift remains outside S3-I8; no in-slice residual risk.
