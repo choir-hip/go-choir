@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: ce0cc940
+  journal_expected_parent_sha: 9ee6e45b
   orchestrator_lock:
     holder: Main
     epoch: 12
     expires_at: 2026-07-12T15:35:02Z
-    expected_parent_sha: ce0cc940
+    expected_parent_sha: 9ee6e45b
     lock_transition_id: s3-lock-renewal-88
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1290,13 +1290,13 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 12
-      status: dispatch_intent
+      status: dispatched
       dispatch_nonce: s3-runtime-dissolution-i3-nonce-01
-      dispatch_ref: pending_agent_dispatch
-      agent_session_ref: pending_agent_dispatch
+      dispatch_ref: S3I3Implementer
+      agent_session_ref: agent://S3I3Implementer
       dispatch_prompt_ref: docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md#exact-mutation-lock
-      implementer_job_ref: pending_agent_dispatch
-      implementer_output_ref: pending_agent_dispatch
+      implementer_job_ref: S3I3Implementer
+      implementer_output_ref: pending_agent_return
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
       worktree_or_branch_ref: pending_isolated_worktree_or_patch
@@ -1304,21 +1304,22 @@ run_checkpoint_and_resumption_state:
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
       direct_shared_worktree_justification: not_applicable
-      lock_acquired_ref: ce0cc940
+      lock_acquired_ref: 9ee6e45b
       lock_release_ref: pending_S3_I3_landing
       stage_started_at: 2026-07-12T14:10:09Z
       transition_id: s3-i3-dispatch-intent-98
-      expected_parent_sha: ce0cc940
+      expected_parent_sha: 9ee6e45b
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i3-dispatch-intent-98, recorded_at: 2026-07-12T14:10:09Z, actor: Main, expected_parent_sha: 5f981886, precondition: S3_I2_landed_ratchet_PASS_initial_four_wrapper_hypothesis, postcondition: initial_wrapper_deletion_and_test_rewrite_scope_is_canonical, external_operation_id: not_applicable}
         - {status: dispatch_intent, transition_id: s3-i3-scope-amended-99, recorded_at: 2026-07-12T14:15:29Z, actor: Main, expected_parent_sha: ce0cc940, precondition: implementation_reconciliation_found_48_plus_StartRun_test_callers_outside_lock, postcondition: StartRun_deferred_and_three_wrapper_exact_scope_canonical_before_commit, external_operation_id: not_applicable}
+        - {status: dispatched, transition_id: s3-i3-dispatched-100, recorded_at: 2026-07-12T14:18:25Z, actor: Main, expected_parent_sha: 9ee6e45b, precondition: amended_scope_canonical_and_live_lock_epoch_12, postcondition: S3I3Implementer_authorized_to_commit_three_wrapper_slice, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T15:35:02Z
       mutation_class: orange
       protected_surfaces: []
       exact_files_packages_routes_state_authorities: [internal/runtime/runtime.go, internal/runtime/toolloop_test.go, internal/runtime/trace_wiring_test.go, internal/runtime/run_memory_integration_test.go, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [StartRun_and_all_callers, replacement_production_helpers, aliases, forwarding_methods, exported_test_seams, routes, tool_registrations, state_authorities, live_core_move, Browser_extraction, promotion_candidate_mutation]
       authority_edges_locked: [meaningful_behavior_tests_preserved, registered_routes_unchanged, tool_registrations_unchanged, state_authorities_unchanged]
-      implementer_agent: pending_agent_dispatch
+      implementer_agent: S3I3Implementer
       verifier_agent: pending_independent_verification
       pre_mutation_sha: ce0cc940
       rollback_commit_or_ref: ce0cc940
@@ -1341,8 +1342,8 @@ run_checkpoint_and_resumption_state:
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-12T14:15:29Z
-      reconciliation_result: one_live_implementer_scope_narrowed_before_commit
+      last_reconciled_at: 2026-07-12T14:18:25Z
+      reconciliation_result: one_matching_live_agent_authorized_under_amended_scope
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
