@@ -34,3 +34,11 @@ Preserve runtime construction, ActorBridge dispatch wiring, trace option applica
 The first isolated implementation removed anonymous embedding with `core *runtime.Runtime` but changed `New` to return `(*Adapter, *runtime.Runtime)`. The executable inventory correctly counted both the named field and the constructor result as runtime wrapper edges, increasing `wrappers` from `5` to `6`; the slice therefore fails its ratchet and cannot land as returned.
 
 Smallest repair: retain one explicit named `Runtime *runtime.Runtime` field and the original single-result constructor. This keeps exactly one mechanically visible transitional runtime edge, removes method promotion, avoids an accessor/forwarder/callback/interface/second instance, and keeps the wrapper count flat at `5`. The slice does not claim step-2 completion: later extraction must delete this explicit field together with the remaining runtime dependency. The acceptance condition is corrected from “private core and wrapper count decreases” to “one explicit named non-anonymous core edge, no promoted method set, and all ratchet counts non-increasing.”
+
+## S3-I11 Repair Receipt
+
+- Repaired isolated commit `9fae2d61f677a260671a814d673dde758ffb568d`, integrated as `e9de3b98`.
+- `Adapter` now has exactly one explicit named non-anonymous `Runtime *runtime.Runtime` field; `New` remains single-result and constructs one runtime instance.
+- No constructor result edge, accessor, forwarder, callback, interface, fallback, duplicate core, or promoted runtime method remains.
+- `go test ./internal/actorruntime ./cmd/sandbox -count=1` passes.
+- The canonical runtime ratchet passes with wrappers flat at `5`; every gated authority count is non-increasing.
