@@ -60,3 +60,28 @@ At canonical `e649ee28`, `S1DeployVerifier` reported **BLOCKING**. Focused runti
 **Classification:** verification-order drift, not a lifecycle behavior failure. Route registration, owner scope, CLI shapes, immediate terminal cancellation, deadline terminalization, admission release, and late-completion resistance passed independent review.
 
 **Required repair:** regenerate the inventory against the final canonical suite state, preserving all S1 code identities and explicit dispositions while removing only the two nonexistent citations; then rerun focused and default ratchet proof and independent verification.
+
+## Deployed Acceptance Receipt
+
+GitHub Actions run `29178010201`, attempt 3, completed successfully after the
+first retry had passivated the stale pre-S1 runs. The deploy activation receipt
+records target `26d7aa2accda63e20daa19c42381d13aec14baed` with `ordinary_guest`,
+`sandbox`, `active_computers`, and `gateway` active. The full rerun passed all
+selected build, test, race, ratchet, health, and deploy gates.
+
+The deployed product CLI then proved the owner-scoped surfaces:
+
+- `choir run list` returned current lifecycle records and exposed an active
+  Texture child run.
+- A dedicated API/CLI-equivalent probe submitted prompt-bar activation
+  `77da11b4-d4ed-488e-846d-9f060d5a9b07`, observed child run
+  `8d203e02-29b7-4f6b-a7e2-bfb95434cf9d` in `running`, cancelled it through
+  `POST /api/agent/cancel`, received HTTP 200 with `state: cancelled`, and read
+  the same durable terminal state back with
+  `finished_at: 2026-07-12T03:57:52.141Z`.
+
+This is staging product-path evidence for list routing, active-run
+cancellation, immediate durable terminalization, and admission release. The
+60-minute production activation budget and late-completion overwrite guard
+remain covered by focused runtime tests and independent verification; waiting
+60 minutes is not required for the staging cancellation transition.

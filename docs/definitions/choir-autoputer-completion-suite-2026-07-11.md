@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: e649ee28c4661071a07526637c82585b7a7a9b9f
+  journal_expected_parent_sha: 210800a0eb56b1f7e7fd9a424d1d8c1d2a4591f0
   orchestrator_lock:
     holder: Main
     epoch: 6
@@ -715,13 +715,13 @@ run_checkpoint_and_resumption_state:
     S9: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S8]}
   active_phase_checkpoint:
     subgoal: S1
-    status: checkpoint_incomplete
-    deployed_sha: pending
-    ci_ref: pending
-    staging_ref: pending_reconciliation
-    product_proof_refs: []
+    status: consensus_pending
+    deployed_sha: 26d7aa2accda63e20daa19c42381d13aec14baed
+    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29178010201/attempts/3
+    staging_ref: activation_receipt_29178010201_attempt_3_at_2026-07-12T03:54:15Z
+    product_proof_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md#deployed-acceptance-receipt, run:8d203e02-29b7-4f6b-a7e2-bfb95434cf9d]
     consensus_ref: pending_post_acceptance
-    open_findings: [S1-VER-001_stale_prospective_citer_baseline]
+    open_findings: []
     adjudication_ref: pending_post_acceptance
   delegation_ledger_schema:
     required_fields:
@@ -879,7 +879,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S1
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 6
-      status: blocked_incomplete
+      status: consensus_pending
       dispatch_nonce: s1-deploy-unblock-01-nonce-01
       dispatch_ref: S1DeployImplementer
       agent_session_ref: agent://S1DeployImplementer
@@ -896,8 +896,8 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-12T02:47:34Z
-      transition_id: s1-deploy-unblock-verification-failed-40
-      expected_parent_sha: e649ee28c4661071a07526637c82585b7a7a9b9f
+      transition_id: s1-deploy-unblock-accepted-42
+      expected_parent_sha: 210800a0eb56b1f7e7fd9a424d1d8c1d2a4591f0
       stage_history:
         - {status: dispatch_intent, transition_id: s1-deploy-unblock-dispatch-intent-36, recorded_at: 2026-07-12T02:47:34Z, actor: Main, expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31, precondition: S0_complete_S1_working_lock_epoch_6_held_and_red_ceremony_recorded, postcondition: exact_mutation_lock_existing_replacement_connection_and_acceptance_contract_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s1-deploy-unblock-dispatched-37, recorded_at: 2026-07-12T02:49:53Z, actor: Main, expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b, precondition: canonical_dispatch_intent_and_live_lock_epoch_6, postcondition: S1DeployImplementer_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
@@ -906,6 +906,9 @@ run_checkpoint_and_resumption_state:
         - {status: pushed, transition_id: s1-deploy-unblock-pushed-39a, recorded_at: 2026-07-12T03:17:32Z, actor: Main, expected_parent_sha: 26d7aa2a96e8748b63afcd4074636eb8b563994e, precondition: canonical_commit_and_doccheck_PASS, postcondition: origin_main_contains_S1_implementation_and_verifier_intent_can_dispatch, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s1-deploy-unblock-verifying-39, recorded_at: 2026-07-12T03:17:32Z, actor: Main, expected_parent_sha: 26d7aa2a96e8748b63afcd4074636eb8b563994e, precondition: pushed_S1_implementation_and_exact_verifier_contract, postcondition: independent_S1DeployVerifier_started, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s1-deploy-unblock-verification-failed-40, recorded_at: 2026-07-12T03:21:53Z, actor: S1DeployVerifier, expected_parent_sha: e649ee28c4661071a07526637c82585b7a7a9b9f, precondition: independent_read_only_verification_of_canonical_S1, postcondition: stale_two_prospective_citer_entries_make_default_ratchet_fail_165_vs_163_while_lifecycle_behavior_passes, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s1-ratchet-baseline-repaired-41, recorded_at: 2026-07-12T03:25:20Z, actor: Main, expected_parent_sha: 210800a0eb56b1f7e7fd9a424d1d8c1d2a4591f0, precondition: S1_VER_001_reproduced_and_documented, postcondition: final_canonical_inventory_regenerated_default_ratchet_PASS_and_independent_reverification_PASS, external_operation_id: not_applicable}
+        - {status: deployed, transition_id: s1-deploy-unblock-deployed-41a, recorded_at: 2026-07-12T03:54:15Z, actor: GitHub_Actions, expected_parent_sha: 26d7aa2accda63e20daa19c42381d13aec14baed, precondition: full_CI_gates_green_and_stale_runs_passivated, postcondition: activation_receipt_records_ordinary_guest_sandbox_active_computers_and_gateway_at_S1_commit, external_operation_id: github_actions_run_29178010201_attempt_3}
+        - {status: accepted, transition_id: s1-deploy-unblock-accepted-42, recorded_at: 2026-07-12T03:57:52Z, actor: Main, expected_parent_sha: 210800a0eb56b1f7e7fd9a424d1d8c1d2a4591f0, precondition: green_deploy_identity_and_owner_scoped_product_routes, postcondition: list_observed_active_run_cancel_returned_200_and_durable_state_cancelled_with_finished_at, external_operation_id: run_8d203e02-29b7-4f6b-a7e2-bfb95434cf9d}
       lock_expires_at: 2026-07-12T04:37:02Z
       mutation_class: red
       protected_surfaces: [run_acceptance, admission_occupancy, owner_scoped_cancellation, choir_run_CLI, staging_hot_refresh_deploy]
@@ -926,17 +929,17 @@ run_checkpoint_and_resumption_state:
       implementation_sha_or_dirty_snapshot: 47abce2a4de850a64cd121f63a24d8048eca7bc9
       implementation_commit_sha: 47abce2a4de850a64cd121f63a24d8048eca7bc9
       push_ref: 26d7aa2a96e8748b63afcd4074636eb8b563994e@origin/main
-      ci_run_ref: pending
-      deploy_ref: pending
-      deployed_sha: pending
-      acceptance_ref: artifact://524; artifact://526
+      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29178010201/attempts/3
+      deploy_ref: activation_receipt_29178010201_attempt_3_at_2026-07-12T03:54:15Z
+      deployed_sha: 26d7aa2accda63e20daa19c42381d13aec14baed
+      acceptance_ref: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md#deployed-acceptance-receipt
       acceptance_contract: owner_scoped_product_CLI_cancel_and_60m_activation_budget_terminalize_runs_release_admission_and_restore_hot_refresh
-      evidence_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md]
-      open_findings: [S1-VER-001_stale_prospective_citer_baseline]
-      landed_commit_sha: pending
-      adjudication: independent_verifier_BLOCKING_on_default_ratchet_only_lifecycle_behavior_PASS
-      last_reconciled_at: 2026-07-12T03:21:53Z
-      reconciliation_result: one_reproduced_ratchet_baseline_drift_requires_regeneration_after_final_suite_state
+      evidence_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29178010201/attempts/3]
+      open_findings: []
+      landed_commit_sha: 26d7aa2accda63e20daa19c42381d13aec14baed
+      adjudication: focused_and_default_ratchet_PASS_independent_verifier_PASS_green_deploy_and_staging_cancel_acceptance_PASS_consensus_pending
+      last_reconciled_at: 2026-07-12T03:58:21Z
+      reconciliation_result: S1_VER_001_repaired_deploy_attempt_3_green_active_run_cancelled_and_durable_terminal_state_read_back
       close_condition: staging_running_runs_zero_or_authoritative_equivalent_green_deployed_commit_cancel_deadline_regressions_independent_verification_and_consensus_adjudication
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
