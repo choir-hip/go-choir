@@ -134,7 +134,7 @@ func (p *PublicationGraphStore) PublishTextureToGraph(ctx context.Context, param
 			"source_revision_hash":   params.SourceRevisionHash,
 			"projection_hash":        params.ProjectionHash,
 			"artifact_manifest_id":   params.ArtifactManifestID,
-			"published_at":           now.Format(time.RFC3339),
+			"published_at":           now.Format(time.RFC3339Nano),
 			"supersedes_version_id":  "",
 		}),
 		CreatedAt: now,

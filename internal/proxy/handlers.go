@@ -579,14 +579,12 @@ func (h *Handler) HandleProtectedAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve the sandbox URL for this user. Universal Wire stories read the
-	// platform computer's embedded store, not the caller's personal computer.
+	// Resolve only the authenticated user's sandbox for VM-owned APIs.
 	desktopID := requestDesktopID(r)
-	resolveOwnerID, resolveDesktopID := h.protectedAPIResolveTarget(r, authResult.UserID, desktopID)
 	resolveStarted := time.Now()
-	sandboxURL, err := h.resolveSandboxURL(r.Context(), resolveOwnerID, resolveDesktopID)
+	sandboxURL, err := h.resolveSandboxURL(r.Context(), authResult.UserID, desktopID)
 	if err != nil {
-		log.Printf("proxy: failed to resolve sandbox for owner %s desktop %s (caller %s): %v", resolveOwnerID, resolveDesktopID, authResult.UserID, err)
+		log.Printf("proxy: failed to resolve sandbox for owner %s desktop %s: %v", authResult.UserID, desktopID, err)
 		writeResolveError(w, err)
 		h.lifecycle.record(stagePrefix+".resolve", "error", time.Since(resolveStarted))
 		h.lifecycle.record(stagePrefix+".total", "resolve_error", time.Since(started))
@@ -650,6 +648,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		h.HandleSuperConsoleWS(w, r)
 	case path == "/api/terminal/ws":
 		writeJSON(w, http.StatusGone, errorResponse{Error: "terminal app has been replaced by Super Console"})
+		return
+	case path == "/api/universal-wire/stories":
+		h.HandleUniversalWireStories(w, r)
 		return
 	case path == "/api/platform/texture/publications":
 		h.HandleTexturePublication(w, r)
@@ -964,25 +965,6 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 	return u.String()
 }
 
-// protectedAPIResolveTarget chooses which computer sandbox should serve an
-// authenticated /api/* request. Universal Wire edition state lives on the
-// always-on platform computer.
-//
-// Route-over-ComputerVersion: if the handler has a PlatformRouteResolver,
-// the platform route resolves through the promotion protocol's lineage
-// state instead of hard-coded VM identity constants. If the resolver is
-// nil or fails, the handler falls back to the hard-coded constants
-// (UniversalWirePlatformOwnerID/UniversalWirePlatformDesktopID).
-func (h *Handler) protectedAPIResolveTarget(r *http.Request, userID, desktopID string) (ownerID, resolvedDesktopID string) {
-	if r == nil || r.URL == nil {
-		return userID, desktopID
-	}
-	path := r.URL.Path
-	if path == "/api/universal-wire/stories" {
-		return h.resolvePlatformTarget(r.Context())
-	}
-	return userID, desktopID
-}
 
 // resolveSandboxURL resolves the sandbox URL for an authenticated user.
 // It consults the vmctl ownership registry to route the user to their

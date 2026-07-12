@@ -149,6 +149,24 @@ func (h *Handler) HandleInternalRetrievalSearch(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, resp)
 }
 
+func (h *Handler) HandleInternalUniversalWireStories(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if r.Header.Get("X-Internal-Caller") != "true" {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		return
+	}
+	resp, err := h.service.ListUniversalWireStories(r.Context())
+	if err != nil {
+		log.Printf("corpusd: list universal wire stories: %v", err)
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list universal wire stories"})
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (h *Handler) HandleInternalPublicationProposal(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -322,6 +340,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)
 	s.HandleFunc("/internal/platform/retrieval/search", h.HandleInternalRetrievalSearch)
+	s.HandleFunc("/internal/platform/universal-wire/stories", h.HandleInternalUniversalWireStories)
 	s.HandleFunc("/internal/platform/proposal-deliveries/state", h.HandleInternalProposalDeliveryState)
 	s.HandleFunc("/internal/platform/publications/", h.HandleInternalPublicationProposal)
 	s.HandleFunc("/internal/platform/texture/sync", h.HandleInternalSyncTextureDocument)
