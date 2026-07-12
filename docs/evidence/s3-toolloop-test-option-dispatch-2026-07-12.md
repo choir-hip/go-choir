@@ -49,3 +49,11 @@ Forbidden: completion-guard field/type/behavior deletion, replacement production
 
 - `S3I5Verifier` confirmed the source diff, behavior equivalence, focused test, default compilation, and ratchet unit tests, but returned procedural `BLOCKING` because the implementation receipt added one historical-evidence citer after the prior baseline.
 - The inventory is regenerated after this receipt; no source correction is required.
+
+## S3-I5 Final Verification, CI, Deploy, and Acceptance
+
+- Independent `S3I5Verifier` final recheck returned `PASS` at confidence `0.99` with no findings on canonical `6e59e9d5`.
+- GitHub Actions run `29200746590`, attempt `2`, passed every selected normal/race gate and deployed checkpoint `67dbeadfce9a1ac78309cfdcba483a2530af3e38`.
+- Deployment job `86673108137` published the activation receipt at `2026-07-12T17:06:44Z`; sandbox and gateway artifacts were active at `67dbeadfce9a1ac78309cfdcba483a2530af3e38`.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`, proving the registered run-list product path remained live after option-wrapper deletion.
+- Residual risk: none within S3-I5; later ordered S3 deletion work remains.

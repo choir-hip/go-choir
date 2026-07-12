@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: fbc7987a
+  journal_expected_parent_sha: 6e59e9d5
   orchestrator_lock:
     holder: Main
     epoch: 14
     expires_at: 2026-07-12T18:35:00Z
-    expected_parent_sha: fbc7987a
+    expected_parent_sha: 6e59e9d5
     lock_transition_id: s3-lock-renewal-123
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1426,7 +1426,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 14
-      status: verifying
+      status: consensus
       dispatch_nonce: s3-runtime-dissolution-i5-nonce-01
       dispatch_ref: S3I5Implementer
       agent_session_ref: agent://S3I5Implementer
@@ -1444,7 +1444,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I5_landing
       stage_started_at: 2026-07-12T16:35:00Z
       transition_id: s3-i5-dispatch-intent-123
-      expected_parent_sha: fbc7987a
+      expected_parent_sha: 6e59e9d5
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i5-dispatch-intent-123, recorded_at: 2026-07-12T16:35:00Z, actor: Main, expected_parent_sha: b1e2d214, precondition: S3_I4_landed_ratchet_PASS_one_test_only_option_wrapper_confirmed, postcondition: exact_toolloop_option_deletion_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i5-dispatched-124, recorded_at: 2026-07-12T16:39:44Z, actor: Main, expected_parent_sha: e299ab97, precondition: canonical_intent_and_live_lock_epoch_14, postcondition: S3I5Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
@@ -1453,6 +1453,8 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s3-i5-verifier-dispatched-127, recorded_at: 2026-07-12T16:47:42Z, actor: Main, expected_parent_sha: db31868d, precondition: verifier_intent_canonical, postcondition: independent_S3I5Verifier_active, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s3-i5-verifier-blocked-128, recorded_at: 2026-07-12T16:51:12Z, actor: S3I5Verifier, expected_parent_sha: fbc7987a, precondition: independent_source_and_ratchet_verification, postcondition: source_PASS_inventory_citer_refresh_required, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i5-ratchet-repair-129, recorded_at: 2026-07-12T16:51:12Z, actor: Main, expected_parent_sha: fbc7987a, precondition: verifier_procedural_blocker_recorded, postcondition: inventory_refreshed_citers_209_ratchet_PASS_final_reverification_required, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s3-i5-verifier-pass-130, recorded_at: 2026-07-12T17:19:01Z, actor: S3I5Verifier, expected_parent_sha: 6e59e9d5, precondition: inventory_refresh_canonical, postcondition: independent_PASS_confidence_0_99_no_findings, external_operation_id: not_applicable}
+        - {status: accepted, transition_id: s3-i5-ci-deploy-accepted-131, recorded_at: 2026-07-12T17:19:01Z, actor: Main, expected_parent_sha: 6e59e9d5, precondition: full_CI_attempt_2_and_deploy_receipt_complete, postcondition: staging_health_and_authenticated_run_list_200_consensus_pending, external_operation_id: github_actions_29200746590_attempt_2}
       lock_expires_at: 2026-07-12T18:35:00Z
       mutation_class: orange
       protected_surfaces: []
@@ -1472,18 +1474,18 @@ run_checkpoint_and_resumption_state:
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: bf3815da
       implementation_commit_sha: bf3815da
-      push_ref: pending
-      ci_run_ref: pending
-      deploy_ref: pending
-      deployed_sha: pending
-      acceptance_ref: pending
+      push_ref: 6e59e9d5
+      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29200746590#attempt-2
+      deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/29200746590#job-86673108137
+      deployed_sha: 67dbeadfce9a1ac78309cfdcba483a2530af3e38
+      acceptance_ref: docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md#s3-i5-final-verification-ci-deploy-and-acceptance
       acceptance_contract: test_only_option_wrapper_deleted_completion_guard_behavior_preserved
-      evidence_refs: [docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md, agent://S3I5Implementer, agent://S3I5Verifier]
-      open_findings: [final_independent_reverification_pending]
+      evidence_refs: [docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md, agent://S3I5Implementer, agent://S3I5Verifier, https://github.com/choir-hip/go-choir/actions/runs/29200746590#attempt-2]
+      open_findings: []
       landed_commit_sha: pending
-      adjudication: verifier_procedural_blocker_repaired_final_reverification_pending
-      last_reconciled_at: 2026-07-12T16:51:12Z
-      reconciliation_result: source_PASS_inventory_refreshed_ratchet_PASS
+      adjudication: independent_PASS_deployed_accepted_final_consensus_pending
+      last_reconciled_at: 2026-07-12T17:19:01Z
+      reconciliation_result: verifier_PASS_CI_PASS_deployed_67dbeadf_staging_product_accepted_consensus_pending
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
