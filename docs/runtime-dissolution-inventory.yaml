@@ -6,17 +6,17 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 47324
-    test_loc: 54583
-    exports: 1199
-    export_caller_edges: 604
-    initial_unused_export_debt: 39
+    production_loc: 47018
+    test_loc: 53028
+    exports: 1151
+    export_caller_edges: 603
+    initial_unused_export_debt: 33
     routes: 47
     tools: 49
     production_importers: 4
     wrappers: 5
     compatibility_markers: 15
-    store_calls: 444
+    store_calls: 443
     interface_candidates: 4
     citers: 181
 files:
@@ -25,7 +25,7 @@ files:
       loc: 6773
     - id: internal/runtime/api.go [production]
       disposition: api
-      loc: 1774
+      loc: 1468
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
       loc: 858
@@ -40,10 +40,10 @@ files:
       loc: 257
     - id: internal/runtime/api_spawn_test.go [test]
       disposition: api
-      loc: 457
+      loc: 20
     - id: internal/runtime/api_test.go [test]
       disposition: api
-      loc: 4075
+      loc: 3182
     - id: internal/runtime/api_texture_prompt_eval.go [production]
       disposition: texture
       loc: 129
@@ -88,7 +88,7 @@ files:
       loc: 114
     - id: internal/runtime/concurrent_workers_test.go [test]
       disposition: core
-      loc: 1388
+      loc: 1249
     - id: internal/runtime/config.go [production]
       disposition: core
       loc: 342
@@ -124,7 +124,7 @@ files:
       loc: 616
     - id: internal/runtime/failure_isolation_test.go [test]
       disposition: core
-      loc: 1212
+      loc: 1139
     - id: internal/runtime/internal_run_event_api_test.go [test]
       disposition: lifecycle
       loc: 93
@@ -259,7 +259,7 @@ files:
       loc: 194
     - id: internal/runtime/test_helpers_test.go [test]
       disposition: core
-      loc: 333
+      loc: 329
     - id: internal/runtime/texture.go [production]
       disposition: texture
       loc: 2166
@@ -316,7 +316,7 @@ files:
       loc: 128
     - id: internal/runtime/texture_real_llm_test.go [test]
       disposition: texture
-      loc: 969
+      loc: 960
     - id: internal/runtime/texture_structure.go [production]
       disposition: texture
       loc: 358
@@ -626,8 +626,6 @@ exports:
       disposition: api
       production_callers:
         - internal/runtime/api.go
-    - id: internal/runtime/api.go:method(*APIHandler):HandleChannelMessageList
-      disposition: api
     - id: internal/runtime/api.go:method(*APIHandler):HandleHealth
       disposition: api
       production_callers:
@@ -688,14 +686,6 @@ exports:
       disposition: api
       production_callers:
         - internal/runtime/api.go
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatus
-      disposition: api
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatusByID
-      disposition: api
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunSubmission
-      disposition: api
-    - id: internal/runtime/api.go:method(*APIHandler):HandleSpawn
-      disposition: api
     - id: internal/runtime/api.go:method(*APIHandler):HandleTextureDocumentsRoot
       disposition: api
       production_callers:
@@ -704,8 +694,6 @@ exports:
       disposition: api
       production_callers:
         - internal/runtime/api.go
-    - id: internal/runtime/api.go:method(*APIHandler):HandleTopology
-      disposition: api
     - id: internal/runtime/api.go:type:APIHandler
       disposition: api
       production_callers:
@@ -796,37 +784,7 @@ exports:
       disposition: api
     - id: internal/runtime/api_costs_test.go:func:TestLLMCostPackageIntegration
       disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnAuthGated
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnChildCarriesParentMetadata
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnChildMetadataAndTaskConsistent
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnCreatesChildTask
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnCreatesRuntimeTask
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnEmptyObjectiveRejected
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnInheritsOwnerFromAuth
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnInvalidBody
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnListedByRequester
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnMethodNotAllowed
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnMultipleChildrenFromSameParent
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnNonexistentRequester
-      disposition: api
     - id: internal/runtime/api_spawn_test.go:func:TestSpawnRouteNotBrowserRegistered
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnWithConstraints
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnWithoutObjectiveFails
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnWithoutRequesterRunIDFails
       disposition: api
     - id: internal/runtime/api_test.go:func:TestAuthenticateUserMissing
       disposition: api
@@ -856,8 +814,6 @@ exports:
       disposition: api
     - id: internal/runtime/api_test.go:func:TestBrowserSessionsNavigateThroughOwnerScopedBackendSnapshot
       disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleChannelMessageListOwnerScoped
-      disposition: api
     - id: internal/runtime/api_test.go:func:TestHandleHealthDegraded
       disposition: api
     - id: internal/runtime/api_test.go:func:TestHandleHealthFailed
@@ -884,59 +840,11 @@ exports:
       disposition: api
     - id: internal/runtime/api_test.go:func:TestHandleRunListOwnerScoped
       disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusAuthGated
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDAuthGated
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDCallerScoped
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDCompletedResult
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDFailedOutcome
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDMethodNotAllowed
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDNotFound
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDReturnsTaskRecord
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDSpawnedCoagentTask
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusByIDStateTransitions
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusCallerScoped
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusFailedOutcome
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusMissingRunID
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusNotFound
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusPublicIncludesTrajectoryEvidence
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunStatusReturnsCorrelatedHandle
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunSubmissionAuthGated
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunSubmissionEmptyPrompt
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunSubmissionInjectsDesktopIDFromRequest
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunSubmissionInvalidBody
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunSubmissionMethodNotAllowed
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunSubmissionPreservesMetadata
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleRunSubmissionReturnsStableHandle
-      disposition: api
     - id: internal/runtime/api_test.go:func:TestHandleTextureDocumentsRootUsesTextureRoutes
       disposition: api
     - id: internal/runtime/api_test.go:func:TestHandleTexturePromptEvalPinsOverlayAcrossTextureRoute
       disposition: api
     - id: internal/runtime/api_test.go:func:TestHandleTexturePromptEvalRejectsMissingOverlay
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestHandleTopologyReportsOrchestrationShape
       disposition: api
     - id: internal/runtime/api_test.go:func:TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles
       disposition: api
@@ -1241,8 +1149,6 @@ exports:
       disposition: core
     - id: internal/runtime/concurrent_workers_test.go:func:TestConcurrentWorkers_SpawnWithSlowProvider_HighConcurrency
       disposition: core
-    - id: internal/runtime/concurrent_workers_test.go:func:TestConcurrentWorkers_StatusAPIReturnsCorrectState
-      disposition: core
     - id: internal/runtime/concurrent_workers_test.go:func:TestConcurrentWorkers_TasksActuallyRunConcurrently
       disposition: core
     - id: internal/runtime/concurrent_workers_test.go:method(*conditionalFailProvider):Execute
@@ -1525,8 +1431,6 @@ exports:
     - id: internal/runtime/failure_isolation_test.go:func:TestCancellation_CancelledTaskNoResult
       disposition: core
     - id: internal/runtime/failure_isolation_test.go:func:TestCancellation_SiblingUnaffectedByCancel
-      disposition: core
-    - id: internal/runtime/failure_isolation_test.go:func:TestFailureIsolation_APIStatusReturnsFailedState
       disposition: core
     - id: internal/runtime/failure_isolation_test.go:func:TestFailureIsolation_ChildRunUpdatedOnFailure
       disposition: core
@@ -1961,7 +1865,6 @@ exports:
     - id: internal/runtime/runtime.go:method(*Runtime):StartCoagentRun
       disposition: lifecycle
       production_callers:
-        - internal/runtime/api.go
         - internal/runtime/texture.go
         - internal/runtime/tools_coagent.go
     - id: internal/runtime/runtime.go:method(*Runtime):StartRun
@@ -3749,18 +3652,6 @@ exports:
     - id: internal/runtime/wire_reconciler_debounce_test.go:func:TestWirePublishDebouncerPreservesSingleCycleLineage
       disposition: wire
 initial_unused_export_debt:
-    - id: internal/runtime/api.go:method(*APIHandler):HandleChannelMessageList
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatus
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatusByID
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunSubmission
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleSpawn
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleTopology
-      disposition: delete
     - id: internal/runtime/api_candidate_package_intake.go:func:RegisterCandidatePackageIntakeRoutes
       disposition: delete
     - id: internal/runtime/channel_store.go:method(*Runtime):ChannelPost
@@ -4042,9 +3933,9 @@ wrappers:
     - id: internal/apihandler/api.go:field:runtime.Runtime
       disposition: delete
 compatibility_markers:
-    - id: 'internal/runtime/api.go:1547:Deprecated: use apihandler.RegisterRoutes from internal/apihandler. This'
+    - id: 'internal/runtime/api.go:1241:Deprecated: use apihandler.RegisterRoutes from internal/apihandler. This'
       disposition: delete
-    - id: 'internal/runtime/api.go:345:Deprecated: use apihandler.NewAPIHandler from internal/apihandler. This'
+    - id: 'internal/runtime/api.go:286:Deprecated: use apihandler.NewAPIHandler from internal/apihandler. This'
       disposition: delete
     - id: internal/runtime/app_promotion.go:462:Legacy records without the captured base skip the check.
       disposition: delete
@@ -4073,8 +3964,6 @@ compatibility_markers:
     - id: internal/runtime/universal_wire.go:15:"platformd_route_path" key for backward compatibility with existing
       disposition: delete
 store_calls:
-    - id: internal/runtime/api.go:HandleChannelMessageList:internal/store.method:Store.ListChannelMessages
-      disposition: read
     - id: internal/runtime/api.go:HandleInternalRunEvents:internal/store.method:Store.ListEvents
       disposition: read
     - id: internal/runtime/api.go:HandleInternalRunSubmission:internal/store.method:Store.ListRunsByIngestionHandoff

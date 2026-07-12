@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: c4173c6d
+  journal_expected_parent_sha: c78ece1e
   orchestrator_lock:
     holder: Main
     epoch: 10
     expires_at: 2026-07-12T12:13:27Z
-    expected_parent_sha: c4173c6d
+    expected_parent_sha: c78ece1e
     lock_transition_id: s3-lock-acquisition-60
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1144,16 +1144,16 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 10
-      status: dispatched
+      status: committed
       dispatch_nonce: s3-runtime-dissolution-i1-nonce-01
       dispatch_ref: S3I1Implementer
       agent_session_ref: agent://S3I1Implementer
       dispatch_prompt_ref: docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md#s3-i1--delete-unregistered-runtime-api-handlers
       implementer_job_ref: S3I1Implementer
-      implementer_output_ref: pending_agent_return
+      implementer_output_ref: agent://S3I1Implementer
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      worktree_or_branch_ref: agent/s3-i1-dead-api@d3d1b59a2878c2a3b060271e4d8e5aedfdae3beb
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -1162,14 +1162,16 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I1_landing
       stage_started_at: 2026-07-12T10:34:34Z
       transition_id: s3-i1-dispatch-intent-62
-      expected_parent_sha: c4173c6d
+      expected_parent_sha: c78ece1e
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i1-dispatch-intent-62, recorded_at: 2026-07-12T10:34:34Z, actor: Main, expected_parent_sha: b1cc1e55, precondition: S2_complete_S3_working_ratchet_PASS_gopls_dead_callers_confirmed, postcondition: exact_deletion_only_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i1-dispatched-63, recorded_at: 2026-07-12T10:48:11Z, actor: Main, expected_parent_sha: c4173c6d, precondition: canonical_dispatch_intent_and_live_lock_epoch_10, postcondition: S3I1Implementer_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
+        - {status: implementation_returned, transition_id: s3-i1-implementation-returned-64, recorded_at: 2026-07-12T11:15:05Z, actor: S3I1Implementer, expected_parent_sha: c4173c6d, precondition: isolated_branch_and_exact_deletion_lock, postcondition: corrected_deletion_commit_returned_with_non_HTTP_behavior_tests_preserved, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s3-i1-committed-65, recorded_at: 2026-07-12T11:15:05Z, actor: Main, expected_parent_sha: c78ece1e, precondition: focused_runtime_smoke_PASS_and_ratchet_rebased_to_lower_counts, postcondition: implementation_integrated_locally_and_durable_ledger_ready_for_push, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T12:13:27Z
       mutation_class: orange
       protected_surfaces: [runtime_API_package_surface]
-      exact_files_packages_routes_state_authorities: [internal/runtime/api.go, internal/runtime/test_helpers_test.go, docs/runtime-dissolution-inventory.yaml]
+      exact_files_packages_routes_state_authorities: [internal/runtime/api.go, internal/runtime/api_spawn_test.go, internal/runtime/api_test.go, internal/runtime/concurrent_workers_test.go, internal/runtime/failure_isolation_test.go, internal/runtime/test_helpers_test.go, internal/runtime/texture_real_llm_test.go, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [replacement_routes, wrappers, aliases, new_packages, Browser_extraction, live_execution_core, API_bootstrap]
       authority_edges_locked: [registered_product_routes_unchanged, test_helpers_do_not_keep_dead_production_APIs_alive]
       implementer_agent: S3I1Implementer
@@ -1181,22 +1183,22 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: six_unregistered_exported_API_handlers_have_no_production_callers
-      observed_postcondition: pending_implementation
+      observed_postcondition: six_unregistered_handlers_and_handler_only_tests_deleted_registered_routes_byte_identical_non_HTTP_behavior_tests_preserved
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: pending
-      implementation_commit_sha: pending
+      implementation_sha_or_dirty_snapshot: c78ece1e
+      implementation_commit_sha: c78ece1e
       push_ref: pending
       ci_run_ref: pending
       deploy_ref: pending
       deployed_sha: pending
       acceptance_ref: pending
       acceptance_contract: six_dead_handlers_deleted_registered_run_and_prompt_surfaces_unchanged
-      evidence_refs: [docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md]
-      open_findings: []
+      evidence_refs: [docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md, agent://S3I1Implementer]
+      open_findings: [pre_existing_comprehensive_test_drift_prompt_provideriface_and_texture_AuthorKind_AuthorLabel]
       landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-12T10:34:34Z
-      reconciliation_result: dispatch_intent_persisted
+      adjudication: pending_independent_verification
+      last_reconciled_at: 2026-07-12T11:15:05Z
+      reconciliation_result: one_matching_isolated_commit_corrected_then_integrated_as_c78ece1e
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
