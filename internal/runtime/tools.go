@@ -21,7 +21,6 @@ type ToolDefinition = provideriface.ToolDefinition
 // New code should import internal/toolregistry directly.
 type (
 	Tool         = toolregistry.Tool
-	ToolFunc     = toolregistry.ToolFunc
 	ToolRegistry = toolregistry.ToolRegistry
 )
 
