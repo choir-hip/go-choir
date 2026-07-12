@@ -317,7 +317,7 @@ func textureRealLLMRequest(t *testing.T, method, path string, body interface{}) 
 //
 // Fulfills: VAL-LLM-013, VAL-LLM-014
 func TestTextureAgentRevisionRealLLM(t *testing.T) {
-	h, s, _, providerName := textureRealLLMSetup(t)
+	h, s, rt, providerName := textureRealLLMSetup(t)
 	ctx := context.Background()
 
 	t.Logf("Testing with provider: %s", providerName)
@@ -387,27 +387,20 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 	// Step 4: Wait for the task to complete.
 	state := waitForTaskCompletion(t, h, agentResp.RunID, 60*time.Second)
 	if state != types.RunCompleted {
-		statusReq := textureRealLLMRequest(t, http.MethodGet,
-			"/api/agent/status?loop_id="+agentResp.RunID, nil)
-		statusW := httptest.NewRecorder()
-		h.HandleRunStatus(statusW, statusReq)
-		var statusResp runStatusResponse
-		_ = json.NewDecoder(statusW.Body).Decode(&statusResp)
-		t.Fatalf("task state = %q, want completed; error: %s", state, statusResp.Error)
+		statusRec, err := rt.GetRun(ctx, agentResp.RunID, "user-real-llm")
+		if err != nil {
+			t.Fatalf("get task after unexpected state %q: %v", state, err)
+		}
+		t.Fatalf("task state = %q, want completed; error: %s", state, statusRec.Error)
 	}
 
-	// Get the task result.
-	statusReq := textureRealLLMRequest(t, http.MethodGet,
-		"/api/agent/status?loop_id="+agentResp.RunID, nil)
-	statusW := httptest.NewRecorder()
-	h.HandleRunStatus(statusW, statusReq)
-	var statusResp runStatusResponse
-	if err := json.NewDecoder(statusW.Body).Decode(&statusResp); err != nil {
-		t.Fatalf("decode status response: %v", err)
+	statusRec, err := rt.GetRun(ctx, agentResp.RunID, "user-real-llm")
+	if err != nil {
+		t.Fatalf("get completed task: %v", err)
 	}
-	t.Logf("Task completed with result length: %d", len(statusResp.Result))
+	t.Logf("Task completed with result length: %d", len(statusRec.Result))
 
-	if statusResp.Result == "" {
+	if statusRec.Result == "" {
 		t.Error("task result should not be empty for real LLM call")
 	}
 
@@ -793,7 +786,7 @@ func TestTextureAgentRevisionRealLLMStreamingDeltas(t *testing.T) {
 // TestTextureAgentRevisionRealLLMProviderMetadata validates that task
 // metadata captures provider information.
 func TestTextureAgentRevisionRealLLMProviderMetadata(t *testing.T) {
-	h, _, _, providerName := textureRealLLMSetup(t)
+	h, _, rt, providerName := textureRealLLMSetup(t)
 
 	t.Logf("Testing provider metadata with provider: %s", providerName)
 
@@ -828,28 +821,26 @@ func TestTextureAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 	}
 
 	// Check metadata.
-	statusReq := textureRealLLMRequest(t, http.MethodGet,
-		"/api/agent/status?loop_id="+agentResp.RunID, nil)
-	statusW := httptest.NewRecorder()
-	h.HandleRunStatus(statusW, statusReq)
-	var statusResp runStatusResponse
-	_ = json.NewDecoder(statusW.Body).Decode(&statusResp)
+	statusRec, err := rt.GetRun(context.Background(), agentResp.RunID, "user-real-llm")
+	if err != nil {
+		t.Fatalf("get completed task: %v", err)
+	}
 
-	if statusResp.Metadata == nil {
+	if statusRec.Metadata == nil {
 		t.Fatal("task metadata should not be nil")
 	}
-	taskType, _ := statusResp.Metadata["type"].(string)
+	taskType, _ := statusRec.Metadata["type"].(string)
 	if taskType != textureAgentRevisionTaskType {
 		t.Errorf("metadata.type = %q, want %q", taskType, textureAgentRevisionTaskType)
 	}
 
-	metadataDocID, _ := statusResp.Metadata["doc_id"].(string)
+	metadataDocID, _ := statusRec.Metadata["doc_id"].(string)
 	if metadataDocID != docResp.DocID {
 		t.Errorf("metadata.doc_id = %q, want %q", metadataDocID, docResp.DocID)
 	}
 
 	t.Logf("✓ Provider metadata validated: type=%s, doc_id=%s", taskType, metadataDocID)
-	t.Logf("  Task result length: %d", len(statusResp.Result))
+	t.Logf("  Task result length: %d", len(statusRec.Result))
 }
 
 // TestTextureAgentRevisionRealLLMFullHistory validates a sequence of

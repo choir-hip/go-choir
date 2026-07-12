@@ -442,55 +442,6 @@ func TestFailureIsolation_ChildRunUpdatedOnFailure(t *testing.T) {
 	}
 }
 
-// TestFailureIsolation_APIStatusReturnsFailedState verifies that the status
-// API returns the failed state with error details for a failed worker
-// (VAL-CHOIR-009, verification steps).
-func TestFailureIsolation_APIStatusReturnsFailedState(t *testing.T) {
-	t.Parallel()
-	provider := &StubProvider{
-		Delay:   10 * time.Millisecond,
-		FailErr: fmt.Errorf("api status test failure"),
-	}
-	rt, handler, parentID := failureIsolationSetup(t, provider)
-
-	// Spawn a child that will fail.
-	body := fmt.Sprintf(`{"requested_by":"%s","objective":"execute invalid command"}`, parentID)
-	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
-	w := httptest.NewRecorder()
-	handler.HandleSpawn(w, req)
-
-	var spawnResp spawnResponse
-	if err := json.NewDecoder(w.Body).Decode(&spawnResp); err != nil {
-		t.Fatalf("decode spawn response: %v", err)
-	}
-
-	// Wait for the async child run to reach a terminal state before checking
-	// the status API. CI can be slow enough that a fixed short sleep leaves the
-	// run visible as "running" even though failure propagation is working.
-	waitForTaskState(t, rt, spawnResp.RunID, 2*time.Second)
-
-	// Check status via API.
-	req = authenticatedRequest(http.MethodGet, "/api/agent/status?loop_id="+spawnResp.RunID, "", "user-alice")
-	w = httptest.NewRecorder()
-	handler.HandleRunStatus(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status API: got %d, want 200", w.Code)
-	}
-
-	var statusResp runStatusResponse
-	if err := json.NewDecoder(w.Body).Decode(&statusResp); err != nil {
-		t.Fatalf("decode status response: %v", err)
-	}
-
-	if statusResp.State != types.RunFailed {
-		t.Errorf("task state: got %q, want failed", statusResp.State)
-	}
-	if statusResp.Error == "" {
-		t.Error("task error should not be empty")
-	}
-}
-
 // TestFailureIsolation_HealthEndpointRemainsHealthy verifies that the /health
 // endpoint reports ready/degraded status after a worker failure, not failed
 // (VAL-CHOIR-009 pass condition).
@@ -500,32 +451,23 @@ func TestFailureIsolation_HealthEndpointRemainsHealthy(t *testing.T) {
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("health endpoint failure test"),
 	}
-	_, handler, parentID := failureIsolationSetup(t, provider)
+	rt, handler, parentID := failureIsolationSetup(t, provider)
+	child, err := rt.StartCoagentRun(context.Background(), parentID, "fail for health", "user-alice", nil)
+	if err != nil {
+		t.Fatalf("spawn failing child: %v", err)
+	}
+	waitForTaskState(t, rt, child.RunID, 2*time.Second)
 
-	// Spawn a failing child via API.
-	body := fmt.Sprintf(`{"requested_by":"%s","objective":"fail for health"}`, parentID)
-	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
-	handler.HandleSpawn(w, req)
-
-	// Wait for failure.
-	time.Sleep(200 * time.Millisecond)
-
-	// Check health endpoint.
-	req = httptest.NewRequest(http.MethodGet, "/health", nil)
-	w = httptest.NewRecorder()
 	handler.HandleHealth(w, req)
-
-	// Health should not be 503 (Service Unavailable).
 	if w.Code == http.StatusServiceUnavailable {
 		t.Error("health endpoint should not return 503 after a single worker failure")
 	}
-
 	var resp runtimeHealthResponse
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode health response: %v", err)
 	}
-
 	if resp.Status == "failed" {
 		t.Error("runtime status should not be 'failed' after a single worker failure")
 	}
@@ -922,44 +864,29 @@ func TestCancellation_SiblingUnaffectedByCancel(t *testing.T) {
 func TestCancellation_CancelViaAPI(t *testing.T) {
 	t.Parallel()
 	provider := NewStubProvider(5 * time.Second)
-	_, handler, parentID := failureIsolationSetup(t, provider)
-
-	// Spawn a child via API.
-	body := fmt.Sprintf(`{"requested_by":"%s","objective":"cancellable via api"}`, parentID)
-	req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
-	w := httptest.NewRecorder()
-	handler.HandleSpawn(w, req)
-
-	var spawnResp spawnResponse
-	if err := json.NewDecoder(w.Body).Decode(&spawnResp); err != nil {
-		t.Fatalf("decode spawn response: %v", err)
+	rt, handler, parentID := failureIsolationSetup(t, provider)
+	child, err := rt.StartCoagentRun(context.Background(), parentID, "cancellable via api", "user-alice", nil)
+	if err != nil {
+		t.Fatalf("spawn cancellable child: %v", err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
-
-	// Cancel via API.
-	cancelBody := fmt.Sprintf(`{"loop_id":"%s"}`, spawnResp.RunID)
-	req = authenticatedRequest(http.MethodPost, "/api/agent/cancel", cancelBody, "user-alice")
-	w = httptest.NewRecorder()
-	handler.HandleCancel(w, req)
-
+	w := registeredRuntimeRequest(
+		t,
+		handler,
+		http.MethodPost,
+		"/api/agent/cancel",
+		fmt.Sprintf(`{"loop_id":"%s"}`, child.RunID),
+		"user-alice",
+	)
 	if w.Code != http.StatusOK {
 		t.Fatalf("cancel API status: got %d, want 200; body: %s", w.Code, w.Body.String())
 	}
-
-	// Verify the task is cancelled via status API.
-	time.Sleep(200 * time.Millisecond)
-	req = authenticatedRequest(http.MethodGet, "/api/agent/status?loop_id="+spawnResp.RunID, "", "user-alice")
-	w = httptest.NewRecorder()
-	handler.HandleRunStatus(w, req)
-
-	var statusResp runStatusResponse
-	if err := json.NewDecoder(w.Body).Decode(&statusResp); err != nil {
-		t.Fatalf("decode status response: %v", err)
+	cancelled, err := rt.GetRun(context.Background(), child.RunID, "user-alice")
+	if err != nil {
+		t.Fatalf("get cancelled child: %v", err)
 	}
-
-	if statusResp.State != types.RunCancelled {
-		t.Errorf("task state after cancel: got %q, want cancelled", statusResp.State)
+	if cancelled.State != types.RunCancelled {
+		t.Errorf("task state after cancel: got %q, want cancelled", cancelled.State)
 	}
 }
 

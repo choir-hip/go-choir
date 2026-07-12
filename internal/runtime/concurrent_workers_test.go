@@ -80,31 +80,17 @@ func testConcurrentSetup(t *testing.T) (*Runtime, *APIHandler, string) {
 // (VAL-CHOIR-008, expected behavior #1).
 func TestConcurrentWorkers_Spawn3WithoutWaiting(t *testing.T) {
 	t.Parallel()
-	_, handler, parentID := testConcurrentSetup(t)
-
+	rt, _, parentID := testConcurrentSetup(t)
+	ctx := context.Background()
 	childIDs := make([]string, 3)
-
-	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"requested_by":"%s","objective":"worker task %d"}`, parentID, i)
-		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
-		w := httptest.NewRecorder()
-		handler.HandleSpawn(w, req)
-
-		if w.Code != http.StatusAccepted {
-			t.Fatalf("spawn %d: status got %d, want %d; body: %s",
-				i, w.Code, http.StatusAccepted, w.Body.String())
+	for i := range childIDs {
+		rec, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("worker task %d", i), "user-alice", nil)
+		if err != nil {
+			t.Fatalf("spawn child %d: %v", i, err)
 		}
-
-		var resp spawnResponse
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("spawn %d: decode response: %v", i, err)
-		}
-
-		childIDs[i] = resp.RunID
+		childIDs[i] = rec.RunID
 	}
-
-	// All child IDs should be unique.
-	seen := make(map[string]bool)
+	seen := make(map[string]bool, len(childIDs))
 	for i, id := range childIDs {
 		if seen[id] {
 			t.Errorf("child %d has duplicate ID %q", i, id)
@@ -117,60 +103,37 @@ func TestConcurrentWorkers_Spawn3WithoutWaiting(t *testing.T) {
 // multiple workers, all are in running state at the same time (not serialized)
 // (VAL-CHOIR-008, expected behavior #2).
 func TestConcurrentWorkers_AllRunningSimultaneously(t *testing.T) {
-	rt, handler, parentID := testConcurrentSetup(t)
-
-	// Spawn 3 workers rapidly.
-	childIDs := make([]string, 3)
-	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"requested_by":"%s","objective":"concurrent task %d"}`, parentID, i)
-		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
-		w := httptest.NewRecorder()
-		handler.HandleSpawn(w, req)
-
-		var resp spawnResponse
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("spawn %d: decode: %v", i, err)
-		}
-		childIDs[i] = resp.RunID
-	}
-
-	// Poll until all runs have transitioned to running, with a generous timeout.
+	rt, _, parentID := testConcurrentSetup(t)
 	ctx := context.Background()
-	deadline := time.After(5 * time.Second)
-	var runningChildren int
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timeout waiting for children to reach running state; only %d of 3 running", runningChildren)
-		default:
+	childIDs := make([]string, 3)
+	for i := range childIDs {
+		rec, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("concurrent task %d", i), "user-alice", nil)
+		if err != nil {
+			t.Fatalf("spawn child %d: %v", i, err)
 		}
-
-		runningChildren = 0
+		childIDs[i] = rec.RunID
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		running := 0
 		for _, id := range childIDs {
-			task, err := rt.Store().GetRun(ctx, id)
+			rec, err := rt.GetRun(ctx, id, "user-alice")
 			if err != nil {
-				t.Fatalf("get task %s: %v", id, err)
+				t.Fatalf("get child %s: %v", id, err)
 			}
-			if task.State == types.RunRunning {
-				runningChildren++
+			if rec.State == types.RunRunning {
+				running++
 			}
 		}
-
-		if runningChildren >= 3 {
-			break
+		if running == len(childIDs) {
+			if got := rt.RunningCount(); got < len(childIDs) {
+				t.Fatalf("running count = %d, want at least %d", got, len(childIDs))
+			}
+			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-
-	// Check that the runtime reports multiple running runs.
-	runningCount := rt.RunningCount()
-	if runningCount < 3 {
-		t.Errorf("running runs: got %d, want at least 3 (parent + 3 children or just 3 children)", runningCount)
-	}
-
-	if runningChildren < 3 {
-		t.Errorf("running children: got %d, want 3 (all children should be running simultaneously)", runningChildren)
-	}
+	t.Fatal("timeout waiting for all children to run simultaneously")
 }
 
 // TestConcurrentWorkers_EachCompletesIndependently verifies that each worker
@@ -507,46 +470,30 @@ func TestConcurrentWorkers_ChildRunsReachCompletedState(t *testing.T) {
 // endpoint reports the correct number of running runs during concurrent
 // execution (VAL-CHOIR-008).
 func TestConcurrentWorkers_HealthReportsRunningCount(t *testing.T) {
-	_, handler, parentID := testConcurrentSetup(t)
-
-	// Spawn 3 children.
-	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"requested_by":"%s","objective":"health check task %d"}`, parentID, i)
-		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
-		w := httptest.NewRecorder()
-		handler.HandleSpawn(w, req)
-	}
-
-	// Poll until the health endpoint reports at least 3 running runs.
-	deadline := time.After(5 * time.Second)
-	var lastRunningTasks int
-	for {
-		select {
-		case <-deadline:
-			t.Fatalf("timeout waiting for health to report >= 3 running runs; last reported %d", lastRunningTasks)
-		default:
+	rt, handler, parentID := testConcurrentSetup(t)
+	ctx := context.Background()
+	for i := range 3 {
+		if _, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("health check task %d", i), "user-alice", nil); err != nil {
+			t.Fatalf("spawn child %d: %v", i, err)
 		}
-
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
 		req := httptest.NewRequest(http.MethodGet, "/health", nil)
 		w := httptest.NewRecorder()
 		handler.HandleHealth(w, req)
-
-		if w.Code != http.StatusOK {
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-
-		var resp runtimeHealthResponse
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("decode health response: %v", err)
-		}
-		lastRunningTasks = resp.RunningRuns
-
-		if resp.RunningRuns >= 3 {
-			break
+		if w.Code == http.StatusOK {
+			var resp runtimeHealthResponse
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode health response: %v", err)
+			}
+			if resp.RunningRuns >= 3 {
+				return
+			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	t.Fatal("timeout waiting for health to report at least 3 running runs")
 }
 
 // TestConcurrentWorkers_5ConcurrentWorkers verifies spawning and completing
@@ -554,78 +501,41 @@ func TestConcurrentWorkers_HealthReportsRunningCount(t *testing.T) {
 // uses 5 runs.
 func TestConcurrentWorkers_5ConcurrentWorkers(t *testing.T) {
 	t.Parallel()
-	rt, handler, parentID := testConcurrentSetup(t)
+	rt, _, parentID := testConcurrentSetup(t)
 	ctx := context.Background()
-
 	childIDs := make([]string, 5)
-
-	// Submit 5 runs rapidly.
-	for i := 0; i < 5; i++ {
-		body := fmt.Sprintf(`{"requested_by":"%s","objective":"Analyze Go features - part %d"}`, parentID, i)
-		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
-		w := httptest.NewRecorder()
-		handler.HandleSpawn(w, req)
-
-		if w.Code != http.StatusAccepted {
-			t.Fatalf("spawn %d: status got %d, want %d", i, w.Code, http.StatusAccepted)
+	for i := range childIDs {
+		rec, err := rt.StartCoagentRun(ctx, parentID, fmt.Sprintf("Analyze Go features - part %d", i), "user-alice", nil)
+		if err != nil {
+			t.Fatalf("spawn child %d: %v", i, err)
 		}
-
-		var resp spawnResponse
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("spawn %d: decode: %v", i, err)
-		}
-		childIDs[i] = resp.RunID
+		childIDs[i] = rec.RunID
 	}
-
-	// All 5 should have unique IDs.
-	seen := make(map[string]bool)
+	seen := make(map[string]bool, len(childIDs))
 	for _, id := range childIDs {
 		if seen[id] {
-			t.Errorf("duplicate task ID: %s", id)
+			t.Fatalf("duplicate task ID: %s", id)
 		}
 		seen[id] = true
 	}
-
-	// Wait for all to complete.
-	deadline := time.After(10 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("timeout waiting for 5 workers to complete")
-		default:
-		}
-
-		allDone := true
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		completed := 0
 		for _, id := range childIDs {
-			task, _ := rt.Store().GetRun(ctx, id)
-			if !task.State.Terminal() {
-				allDone = false
-				break
+			rec, err := rt.GetRun(ctx, id, "user-alice")
+			if err != nil {
+				t.Fatalf("get child %s: %v", id, err)
+			}
+			if rec.State == types.RunCompleted {
+				completed++
 			}
 		}
-		if allDone {
-			break
+		if completed == len(childIDs) {
+			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-
-	// All 5 should be completed with correct results.
-	completedCount := 0
-	for i, id := range childIDs {
-		task, err := rt.Store().GetRun(ctx, id)
-		if err != nil {
-			t.Fatalf("get task %s: %v", id, err)
-		}
-		if task.State == types.RunCompleted {
-			completedCount++
-		} else {
-			t.Errorf("task %d (%s): state got %q, want completed", i, id[:8], task.State)
-		}
-	}
-
-	if completedCount != 5 {
-		t.Errorf("completed count: got %d, want 5", completedCount)
-	}
+	t.Fatal("timeout waiting for 5 workers to complete")
 }
 
 // --- Race condition stress test ---
@@ -931,55 +841,6 @@ func TestConcurrentWorkers_FailedChildPostsErrorToParentChannel(t *testing.T) {
 			}
 		}
 		time.Sleep(50 * time.Millisecond)
-	}
-}
-
-// TestConcurrentWorkers_StatusAPIReturnsCorrectState verifies that the status
-// API returns correct state for each concurrent worker
-// (VAL-CHOIR-008, verification step).
-func TestConcurrentWorkers_StatusAPIReturnsCorrectState(t *testing.T) {
-	t.Parallel()
-	_, handler, parentID := testConcurrentSetup(t)
-
-	// Spawn 3 workers.
-	childIDs := make([]string, 3)
-	for i := 0; i < 3; i++ {
-		body := fmt.Sprintf(`{"requested_by":"%s","objective":"status check task %d"}`, parentID, i)
-		req := authenticatedRequest(http.MethodPost, "/api/agent/spawn", body, "user-alice")
-		w := httptest.NewRecorder()
-		handler.HandleSpawn(w, req)
-
-		var resp spawnResponse
-		json.NewDecoder(w.Body).Decode(&resp)
-		childIDs[i] = resp.RunID
-	}
-
-	// Check each child's status via the status API.
-	for i, id := range childIDs {
-		req := authenticatedRequest(http.MethodGet, "/api/agent/status?loop_id="+id, "", "user-alice")
-		w := httptest.NewRecorder()
-		handler.HandleRunStatus(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Fatalf("status for child %d: got %d, want 200", i, w.Code)
-		}
-
-		var resp runStatusResponse
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("decode status response: %v", err)
-		}
-
-		if resp.RunID != id {
-			t.Errorf("child %d: loop_id got %q, want %q", i, resp.RunID, id)
-		}
-		if resp.OwnerID != "user-alice" {
-			t.Errorf("child %d: owner_id got %q, want user-alice", i, resp.OwnerID)
-		}
-		// State may already be completed if the worker finished before the
-		// status request was served.
-		if resp.State != types.RunPending && resp.State != types.RunRunning && resp.State != types.RunCompleted {
-			t.Errorf("child %d: state got %q, want pending, running, or completed", i, resp.State)
-		}
 	}
 }
 

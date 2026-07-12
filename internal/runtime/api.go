@@ -45,12 +45,6 @@ type internalChannelCastResponse struct {
 	Cursor uint64 `json:"cursor"`
 }
 
-// runSubmitRequest is the JSON payload for POST /api/agent/loop.
-type runSubmitRequest struct {
-	Prompt   string         `json:"prompt"`
-	Metadata map[string]any `json:"metadata,omitempty"`
-}
-
 // internalRunSubmitRequest is the service-to-service payload for starting a
 // run inside another sandbox runtime, such as a background worker VM. It is not
 // registered under /api/* and must never become browser-public.
@@ -181,27 +175,6 @@ type runAcceptanceListResponse struct {
 	Acceptances []types.RunAcceptanceRecord `json:"acceptances"`
 }
 
-// spawnRequest is the JSON payload for POST /api/agent/spawn.
-// It starts a coagent run and records the requesting run as provenance, with an
-// objective and optional constraints (VAL-CHOIR-001).
-type spawnRequest struct {
-	RequesterRunID string         `json:"requested_by"`
-	Objective      string         `json:"objective"`
-	Constraints    map[string]any `json:"constraints,omitempty"`
-}
-
-// spawnResponse is the JSON response for POST /api/agent/spawn.
-// It returns the coagent run handle with the requester provenance.
-type spawnResponse struct {
-	AgentID        string         `json:"agent_id"`
-	RunID          string         `json:"loop_id"`
-	ChannelID      string         `json:"channel_id,omitempty"`
-	RequesterRunID string         `json:"requested_by"`
-	State          types.RunState `json:"state"`
-	OwnerID        string         `json:"owner_id"`
-	CreatedAt      string         `json:"created_at"`
-}
-
 // cancelRequest is the JSON payload for POST /api/agent/cancel.
 // It cancels a running or pending run (VAL-CHOIR-010).
 type cancelRequest struct {
@@ -212,18 +185,6 @@ type cancelRequest struct {
 type cancelResponse struct {
 	RunID string         `json:"loop_id"`
 	State types.RunState `json:"state"`
-}
-
-// runSubmitResponse is the JSON response for POST /api/agent/loop.
-// It returns the stable run handle and initial lifecycle state
-// (VAL-RUNTIME-003).
-type runSubmitResponse struct {
-	AgentID   string         `json:"agent_id"`
-	RunID     string         `json:"loop_id"`
-	ChannelID string         `json:"channel_id,omitempty"`
-	State     types.RunState `json:"state"`
-	OwnerID   string         `json:"owner_id"`
-	CreatedAt string         `json:"created_at"`
 }
 
 // runStatusResponse is the JSON response for GET /api/agent/status.
@@ -297,12 +258,6 @@ type internalRunEventAppendResponse struct {
 	Kind    types.EventKind `json:"kind"`
 }
 
-// channelMessageListResponse is the JSON response for GET /api/agent/channel-messages.
-// It returns durable channel message bodies for a specific coordination channel.
-type channelMessageListResponse struct {
-	Messages []types.ChannelMessage `json:"messages"`
-}
-
 // runtimeHealthResponse is the JSON structure returned by GET /health.
 // It reports runtime readiness for real run handling, and surfaces
 // degraded state rather than hiding it behind a generic healthy response
@@ -319,20 +274,6 @@ type runtimeHealthResponse struct {
 	ActiveProvider       string                   `json:"active_provider"`
 	PersistentDisk       *persistentdisk.Status   `json:"persistent_disk,omitempty"`
 	Build                buildinfo.Info           `json:"build"`
-}
-
-// runtimeTopologyResponse is the JSON structure returned by GET /api/agent/topology.
-// It surfaces the configured orchestration shape so operators and UI surfaces
-// can see how many researchers the microVM expects and what the current runtime
-// fan-out looks like.
-type runtimeTopologyResponse struct {
-	SandboxID            string `json:"sandbox_id"`
-	ResearcherCount      int    `json:"researcher_count"`
-	RunningRuns          int    `json:"running_runs"`
-	RunningProcessorRuns int    `json:"running_processor_runs"`
-	ChannelCount         int    `json:"channel_count"`
-	RuntimeHealth        string `json:"runtime_health"`
-	ActiveProvider       string `json:"active_provider"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
@@ -767,107 +708,6 @@ func (h *APIHandler) HandleRunAcceptanceDetail(w http.ResponseWriter, r *http.Re
 	writeAPIJSON(w, http.StatusOK, rec)
 }
 
-// HandleRunSubmission handles POST /api/agent/loop.
-// It accepts work only through the authenticated same-origin proxy path and
-// denies missing or invalid auth before runtime work starts
-// (VAL-RUNTIME-002). Returns a stable run handle (VAL-RUNTIME-003).
-func (h *APIHandler) HandleRunSubmission(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	var req runSubmitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-
-	if strings.TrimSpace(req.Prompt) == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "prompt is required"})
-		return
-	}
-	if req.Metadata == nil {
-		req.Metadata = make(map[string]any)
-	}
-	req.Metadata[runMetadataDesktopID] = requestDesktopID(r)
-	rec, err := h.rt.StartRunWithMetadata(r.Context(), req.Prompt, ownerID, req.Metadata)
-	if err != nil {
-		log.Printf("runtime api: submit run: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit run"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusAccepted, runSubmitResponse{
-		AgentID:   rec.AgentID,
-		RunID:     rec.RunID,
-		ChannelID: rec.ChannelID,
-		State:     rec.State,
-		OwnerID:   rec.OwnerID,
-		CreatedAt: rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-	})
-}
-
-// HandleSpawn handles POST /api/agent/spawn.
-// It creates a child run linked to the given parent. The child run inherits
-// the owner from the authenticated user context and begins in pending state.
-func (h *APIHandler) HandleSpawn(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	var req spawnRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-
-	if strings.TrimSpace(req.RequesterRunID) == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "requested_by is required"})
-		return
-	}
-
-	if strings.TrimSpace(req.Objective) == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "objective is required"})
-		return
-	}
-
-	rec, err := h.rt.StartCoagentRun(r.Context(), req.RequesterRunID, req.Objective, ownerID, req.Constraints)
-	if err != nil {
-		// Check if the requesting run was not found.
-		if strings.Contains(err.Error(), "requester run not found") {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "requester run not found"})
-			return
-		}
-		log.Printf("runtime api: start coagent run: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to start coagent run"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusAccepted, spawnResponse{
-		AgentID:        rec.AgentID,
-		RunID:          rec.RunID,
-		ChannelID:      rec.ChannelID,
-		RequesterRunID: req.RequesterRunID,
-		State:          rec.State,
-		OwnerID:        rec.OwnerID,
-		CreatedAt:      rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-	})
-}
-
 // HandleInternalRunSubmission handles POST /internal/runtime/runs.
 // This is a service-to-service worker VM bridge: platform/runtime components
 // can start a constrained run inside a sandbox without exposing raw run control
@@ -1286,40 +1126,6 @@ func (h *APIHandler) HandleCancel(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleRunStatus handles GET /api/agent/status.
-// It is exposed through the authenticated same-origin proxy path, accepts or
-// returns a stable correlation to the run handle from submission, and exposes
-// machine-readable lifecycle state including non-happy-path outcomes
-// (VAL-RUNTIME-004, VAL-RUNTIME-006).
-func (h *APIHandler) HandleRunStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	runID := r.URL.Query().Get("loop_id")
-	if runID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "loop_id query parameter is required"})
-		return
-	}
-
-	rec, err := h.rt.GetRun(r.Context(), runID, ownerID)
-	if err != nil {
-		// ErrNotFound covers both "run doesn't exist" and "run belongs to
-		// another user" so callers cannot probe for other users' runs.
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusOK, h.runStatusWithTrajectory(r.Context(), rec))
-}
-
 // HandleRunList handles GET /api/agent/loops.
 // It returns recent owner-scoped runs in reverse chronological order so
 // debugging and orchestration surfaces can inspect current work and run
@@ -1384,118 +1190,6 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
-}
-
-// HandleChannelMessageList handles GET /api/agent/channel-messages.
-// It returns persisted message bodies for a specific owner-scoped coordination channel.
-func (h *APIHandler) HandleChannelMessageList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	channelID := strings.TrimSpace(r.URL.Query().Get("channel_id"))
-	if channelID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "channel_id is required"})
-		return
-	}
-
-	limit := 200
-	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 1000 {
-			limit = n
-		}
-	}
-
-	afterSeq := int64(0)
-	if raw := strings.TrimSpace(r.URL.Query().Get("after_seq")); raw != "" {
-		if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n >= 0 {
-			afterSeq = n
-		}
-	}
-
-	messages, err := h.rt.Store().ListChannelMessages(r.Context(), ownerID, channelID, afterSeq, limit)
-	if err != nil {
-		log.Printf("runtime api: list channel messages: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list channel messages"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusOK, channelMessageListResponse{Messages: messages})
-}
-
-// HandleRunStatusByID handles GET /api/agent/{id}/status.
-// It returns the full run record for the run identified by the URL path
-// parameter {id}. The response includes state, result (if complete), error
-// (if failed), and timestamps (VAL-CHOIR-002, VAL-CHOIR-005).
-// Access is scoped to the authenticated owner — a request for a run owned
-// by a different user returns 404 to prevent IDOR probing. State updates
-// are visible immediately after change.
-func (h *APIHandler) HandleRunStatusByID(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	// Extract run ID from URL path: /api/agent/{id}/status
-	// Expected prefix: /api/agent/  and suffix: /status
-	path := r.URL.Path
-	prefix := "/api/agent/"
-	suffix := "/status"
-	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid status path"})
-		return
-	}
-	runID := strings.TrimPrefix(path, prefix)
-	runID = strings.TrimSuffix(runID, suffix)
-	if runID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "run ID is required"})
-		return
-	}
-
-	rec, err := h.rt.GetRun(r.Context(), runID, ownerID)
-	if err != nil {
-		// ErrNotFound covers both "run doesn't exist" and "run belongs to
-		// another user" so callers cannot probe for other users' runs.
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusOK, h.runStatusWithTrajectory(r.Context(), rec))
-}
-
-// HandleTopology handles GET /api/agent/topology.
-// It exposes the runtime's orchestration shape for operator/UI inspection:
-// researcher count, current running run count, and the number of active
-// coordination channels.
-func (h *APIHandler) HandleTopology(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(runtimeTopologyResponse{
-		SandboxID:       h.rt.cfg.SandboxID,
-		ResearcherCount: h.rt.cfg.ResearcherCount,
-		RunningRuns:     h.rt.RunningCount(),
-		ChannelCount:    0, // in-memory channels deleted; actor mailbox replaces them
-		RuntimeHealth:   string(h.rt.HealthState()),
-		ActiveProvider:  h.rt.provider.ProviderName(),
-	})
 }
 
 // HandleHealth handles GET /health for the runtime service.

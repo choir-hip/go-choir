@@ -142,16 +142,12 @@ func waitForTaskCompletion(t *testing.T, h *APIHandler, taskID string, timeout t
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		req := textureRequest(t, http.MethodGet, "/api/agent/status?loop_id="+taskID, nil)
-		w := httptest.NewRecorder()
-		h.HandleRunStatus(w, req)
-		if w.Code != http.StatusOK {
-			t.Fatalf("get task status: status = %d", w.Code)
+		rec, err := h.rt.GetRun(context.Background(), taskID, "user-1")
+		if err != nil {
+			t.Fatalf("get task status: %v", err)
 		}
-		var resp runStatusResponse
-		_ = json.NewDecoder(w.Body).Decode(&resp)
-		if resp.State.Terminal() {
-			return resp.State
+		if rec.State.Terminal() {
+			return rec.State
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
