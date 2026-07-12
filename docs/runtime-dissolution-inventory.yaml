@@ -6,11 +6,11 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 46990
-    test_loc: 53028
-    exports: 1148
-    export_caller_edges: 602
-    initial_unused_export_debt: 30
+    production_loc: 46949
+    test_loc: 52991
+    exports: 1144
+    export_caller_edges: 601
+    initial_unused_export_debt: 27
     routes: 47
     tools: 49
     production_importers: 4
@@ -208,13 +208,13 @@ files:
       loc: 1302
     - id: internal/runtime/run_memory_integration_test.go [test]
       disposition: lifecycle
-      loc: 446
+      loc: 408
     - id: internal/runtime/run_memory_test.go [test]
       disposition: lifecycle
       loc: 441
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3718
+      loc: 3677
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -352,7 +352,7 @@ files:
       loc: 1673
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
-      loc: 3180
+      loc: 3181
     - id: internal/runtime/toolloopvalidation_test.go [test]
       disposition: tools
       loc: 922
@@ -1744,8 +1744,6 @@ exports:
         - internal/runtime/run_memory.go
     - id: internal/runtime/run_memory_integration_test.go:func:TestChildRunUsesRunMemory
       disposition: lifecycle
-    - id: internal/runtime/run_memory_integration_test.go:func:TestRuntimeManualRunMemoryCompaction
-      disposition: lifecycle
     - id: internal/runtime/run_memory_integration_test.go:func:TestRuntimeRunMemoryOverflowFailureBlocksRun
       disposition: lifecycle
     - id: internal/runtime/run_memory_integration_test.go:func:TestRuntimeRunMemoryOverflowRecoveryRetrievesRawEntry
@@ -1782,8 +1780,6 @@ exports:
         - internal/actorruntime/adapter.go
     - id: internal/runtime/runtime.go:func:WithPromotionAdapter
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:func:WithToolRegistry
-      disposition: lifecycle
     - id: internal/runtime/runtime.go:func:WithTraceStore
       disposition: lifecycle
       production_callers:
@@ -1803,8 +1799,6 @@ exports:
       production_callers:
         - internal/runtime/texture.go
         - internal/runtime/texture_agent_revision.go
-    - id: internal/runtime/runtime.go:method(*Runtime):CompactRunMemory
-      disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):DispatchActorActive
       disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):EnsurePersistentSuperAgent
@@ -1826,7 +1820,6 @@ exports:
       disposition: lifecycle
       production_callers:
         - internal/runtime/api.go
-        - internal/runtime/runtime.go
         - internal/runtime/texture_agent_revision.go
     - id: internal/runtime/runtime.go:method(*Runtime):HealthState
       disposition: lifecycle
@@ -1897,8 +1890,6 @@ exports:
         - internal/runtime/texture_merge.go
         - internal/runtime/tools_coagent.go
         - internal/runtime/tools_research.go
-    - id: internal/runtime/runtime.go:method(*Runtime):TraceStore
-      disposition: lifecycle
     - id: internal/runtime/runtime.go:type:Runtime
       disposition: lifecycle
       production_callers:
@@ -3659,17 +3650,11 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/runtime.go:func:WithPromotionAdapter
       disposition: delete
-    - id: internal/runtime/runtime.go:func:WithToolRegistry
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):CompactRunMemory
-      disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):DispatchActorActive
       disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):SetHealth
       disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):StartRun
-      disposition: delete
-    - id: internal/runtime/runtime.go:method(*Runtime):TraceStore
       disposition: delete
     - id: internal/runtime/search_gateway.go:method(*gatewaySearchClient):Search
       disposition: delete
@@ -3930,7 +3915,7 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/config.go:26:Re-exported from internal/provideriface for backward compatibility.
       disposition: delete
-    - id: internal/runtime/runtime.go:1994:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1953:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/runtime.go:97:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete

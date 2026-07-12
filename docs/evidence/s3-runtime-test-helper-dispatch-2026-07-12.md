@@ -43,3 +43,11 @@ Forbidden: replacement production helper, alias, forwarding method, exported tes
 4. registered routes, tool registrations, and state authorities remain unchanged;
 5. ratchet exports, unused debt, and production LOC decrease with no gated growth;
 6. independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
+
+## S3-I3 Implementation Receipt
+
+- Integrated implementation: `883cec57` (isolated commit `9af87334d591c53a47c0f4664850e71e0dc776ec`).
+- Exact diff: four authorized Go files, `3` insertions and `81` deletions.
+- Deleted only `WithToolRegistry`, `(*Runtime).TraceStore`, and `(*Runtime).CompactRunMemory`; `(*Runtime).StartRun` and every caller remain unchanged and are deferred.
+- Focused tool-loop/Trace tests and default runtime package compilation passed after integration.
+- Ratchet passed after deleting the three fulfilled unused-export debt rows: production LOC `46990 -> 46949`, test LOC `53028 -> 52991`, exports `1148 -> 1144`, caller edges `602 -> 601`, and initial unused-export debt `30 -> 27`; routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, and citers remained gated.
