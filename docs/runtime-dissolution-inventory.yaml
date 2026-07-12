@@ -6,11 +6,11 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 46949
+    production_loc: 46944
     test_loc: 53035
-    exports: 1145
+    exports: 1144
     export_caller_edges: 601
-    initial_unused_export_debt: 27
+    initial_unused_export_debt: 26
     routes: 47
     tools: 49
     production_importers: 4
@@ -340,7 +340,7 @@ files:
       loc: 740
     - id: internal/runtime/textureprompts/prompts.go [production]
       disposition: texture
-      loc: 84
+      loc: 79
     - id: internal/runtime/textureprompts/prompts_test.go [test]
       disposition: texture
       loc: 57
@@ -2731,8 +2731,6 @@ exports:
       disposition: texture
       production_callers:
         - internal/runtime/prompt_store.go
-    - id: internal/runtime/textureprompts/prompts.go:func:RevisionMediaSourceResearchRequired
-      disposition: texture
     - id: internal/runtime/textureprompts/prompts.go:func:RevisionPolicyOverlay
       disposition: texture
       production_callers:
@@ -3661,8 +3659,6 @@ initial_unused_export_debt:
     - id: internal/runtime/search_gateway.go:method(*gatewaySearchClient):Search
       disposition: delete
     - id: internal/runtime/texture_workflow_verifier.go:method(*Runtime):VerifyTextureWorkflow
-      disposition: delete
-    - id: internal/runtime/textureprompts/prompts.go:func:RevisionMediaSourceResearchRequired
       disposition: delete
     - id: internal/runtime/toolloop.go:func:WithCompletionGuard
       disposition: delete

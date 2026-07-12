@@ -37,3 +37,11 @@ Forbidden: `ChannelPost`, `ChannelRead`, every channel caller, replacement helpe
 4. active overlays/templates, channel APIs/callers, routes, tools, and state authorities remain unchanged;
 5. ratchet production LOC, exports, and unused-export debt decrease with no gated growth;
 6. independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
+
+## S3-I4 Implementation Receipt
+
+- Integrated implementation: `710d2046` (isolated commit `4888b0775f5bfb34baa07aefa663696dfa36b8fd`).
+- Exact production diff: `internal/runtime/textureprompts/prompts.go`, five deletions, no insertions.
+- `ChannelPost`, `ChannelRead`, `channel_store.go`, all callers, tests, embedded overlay YAML, wildcard embedding, and generic renderer remain unchanged.
+- `go test ./internal/runtime/textureprompts -count=1` and default runtime package compilation passed.
+- Ratchet passed: production LOC `46949 -> 46944`, exports `1145 -> 1144`, and initial unused-export debt `27 -> 26`; test LOC, caller edges, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, and citers remained gated.
