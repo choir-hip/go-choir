@@ -185,6 +185,12 @@ Cursor found that a struct embedding a named Store-shaped interface receives a p
 
 **Required repair:** resolve the selected method's declaring named interface, not only the immediate receiver, and add a promoted embedded-interface regression.
 
+### Final Semantic-Authority Verification
+
+The repair removes `non_store`; every exact Store-signature named-interface candidate is conservatively materialized as a Store call with its compiled method semantic. The compiled authority covers every currently called Store method; unknown methods fail closed. Baseline regeneration derives candidate and call dispositions from compiled authority rather than prior YAML. Promoted selections resolve through the method's declaring named interface.
+
+Independent verification at `45f25ac9` passed disposition-laundering, fake-to-Store transition, promoted embedded-interface, candidate drift, all prior flow-shape, deceptive/unknown method, method-value, and direct-call regressions. Default invocation passed with 461 Store calls, four conservative interface candidates, and 151 citers. The intended residual is fail-closed evolution: a legitimate new Store method requires an explicit compiled-authority update.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` / incomplete. S0-FINAL-002 through S0-FINAL-004 require one authority-boundary repair; S1 remains waiting for independent verification and checkpoint adjudication.
+S0 remains `consensus_pending` only for the final post-authority six-member panel. S0-FINAL-002 through S0-FINAL-004 are repaired according to focused and independent evidence; S1 remains waiting for checkpoint adjudication.
