@@ -85,3 +85,20 @@ cancellation, immediate durable terminalization, and admission release. The
 60-minute production activation budget and late-completion overwrite guard
 remain covered by focused runtime tests and independent verification; waiting
 60 minutes is not required for the staging cancellation transition.
+
+## Final Consensus Finding
+
+Codex reproduced a blocking uncovered lifecycle race:
+`passivateIdleToolLoopRun` writes its activation snapshot directly through
+`Store.UpdateRun`. If owner cancellation or deadline terminalization wins after
+the tool loop returns its passivation result but before that direct write, the
+stale passivation snapshot can overwrite `cancelled`/`failed`, clear
+`FinishedAt`, and make the run nonterminal again. The shared
+`persistActivationState` guard protects completion and failure writes but is
+not used by this passivation path.
+
+**S1-CONS-001 — confirmed blocking.** Passivation must use the same serialized
+stored-terminal-wins authority as all other post-provider lifecycle writes, and
+a deterministic cancellation/deadline-versus-passivation regression must fail
+before the repair and pass afterward. The deployed acceptance remains valid
+for the route it exercised but does not disprove this narrower race.
