@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 7fa4e62f0182fde1931821dc17735760adbc3aac
+  journal_expected_parent_sha: 047d110c
   orchestrator_lock:
     holder: Main
     epoch: 9
     expires_at: 2026-07-12T10:20:00Z
-    expected_parent_sha: 7fa4e62f0182fde1931821dc17735760adbc3aac
+    expected_parent_sha: 047d110c
     lock_transition_id: s2-lock-renewal-59
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -720,9 +720,9 @@ run_checkpoint_and_resumption_state:
     ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29185043037
     staging_ref: https://choir.news/health@7fa4e62f0182fde1931821dc17735760adbc3aac
     product_proof_refs: [docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-d-deployed-acceptance-receipt, agent://S2LifecycleVerifier]
-    consensus_ref: /tmp/choir-s2-final-consensus-20260712
-    open_findings: [authenticated_human_browser_article_render_proof_pending]
-    adjudication_ref: pending_authenticated_browser_proof_then_final_consensus
+    consensus_ref: pending_post_acceptance_consensus
+    open_findings: [final_post_acceptance_consensus_pending]
+    adjudication_ref: pending_final_consensus
   delegation_ledger_schema:
     required_fields:
       - slice_id
