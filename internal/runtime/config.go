@@ -27,8 +27,8 @@ import (
 type Config = provideriface.Config
 
 const (
-	// DefaultStorePath is the local marker/legacy-import path used to derive the
-	// embedded Dolt workspace for runtime state.
+	// DefaultStorePath is the local marker path used to derive the embedded Dolt
+	// workspace for runtime state. Retired SQLite content is never imported.
 	DefaultStorePath = "/tmp/go-choir-m3/runtime.db"
 
 	// DefaultProviderTimeout is how long the stub provider simulates work.
@@ -130,7 +130,7 @@ func LoadConfig() Config {
 		VmctlURL:           envOr("RUNTIME_VMCTL_URL", os.Getenv("PROXY_VMCTL_URL")),
 		MaildURL:           os.Getenv("RUNTIME_MAILD_URL"),
 		WirePublishURL:     os.Getenv("RUNTIME_WIRE_PUBLISH_URL"),
-		CorpusdURL:       envOr("RUNTIME_CORPUSD_URL", envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL)),
+		CorpusdURL:         envOr("RUNTIME_CORPUSD_URL", envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL)),
 		LLMProvider:        os.Getenv("RUNTIME_LLM_PROVIDER"),
 		LLMModel:           os.Getenv("RUNTIME_LLM_MODEL"),
 		LLMReasoningEffort: os.Getenv("RUNTIME_LLM_REASONING_EFFORT"),

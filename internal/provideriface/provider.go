@@ -156,8 +156,8 @@ type Config struct {
 	// SandboxID is the stable identity of this sandbox instance.
 	SandboxID string
 
-	// StorePath is the marker/legacy-import path used to derive the embedded
-	// Dolt workspace for task/event persistence.
+	// StorePath is the marker path used to derive the embedded Dolt workspace
+	// for task/event persistence. Retired SQLite content is never imported.
 	StorePath string
 
 	// PromptRoot is the sandbox-owned filesystem root for editable role prompts.

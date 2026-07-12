@@ -15,7 +15,7 @@ counts:
     tools: 49
     production_importers: 4
     wrappers: 5
-    compatibility_markers: 16
+    compatibility_markers: 15
     store_calls: 444
     interface_candidates: 4
     citers: 177
@@ -4051,8 +4051,6 @@ compatibility_markers:
     - id: internal/runtime/app_promotion.go:944:normalizeRouteProfile converts a legacy "route:computerID" RouteProfile to
       disposition: delete
     - id: internal/runtime/config.go:26:Re-exported from internal/provideriface for backward compatibility.
-      disposition: delete
-    - id: internal/runtime/config.go:30:DefaultStorePath is the local marker/legacy-import path used to derive the
       disposition: delete
     - id: internal/runtime/runtime.go:1999:This is the legacy execution path used when no tool registry is configured
       disposition: delete

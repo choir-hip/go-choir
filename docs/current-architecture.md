@@ -266,8 +266,8 @@ deployed build identity. It replaces ad hoc claims like "the Trace looked good."
 The embedded Dolt runtime migration is complete on staging. As of commit
 `c3b1a4b2547d672eadd9b3d74b76ba9371518648`, per-user runtime/control product
 tables and Texture tables open in the same embedded Dolt workspace inside the
-user computer. The old `/state` path remains a marker and legacy-import source;
-fresh accepted staging computers showed no runtime SQLite WAL/SHM pair. Host
+user computer. The old `/state` path remains only as an inert workspace marker;
+serving startup does not read or import retired SQLite rows. Host
 auth/session state remains host-owned.
 
 Runtime model selection is policy-driven. Provider secrets and the platform

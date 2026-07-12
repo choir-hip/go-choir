@@ -8,8 +8,8 @@
 // Design decisions:
 //   - One embedded Dolt workspace per user computer owns both runtime/control
 //     state and Texture/app state.
-//   - Legacy SQLite runtime files are imported into Dolt and left in place as
-//     rollback inputs during cutover.
+//   - Retired SQLite runtime files are inert evidence; serving startup never
+//     reads or imports them.
 //   - Event sequence numbers are per-task, enabling incremental cursors for
 //     Trace projections and internal workflow verification.
 //   - Runtime writes are serialized through the main embedded connection while
