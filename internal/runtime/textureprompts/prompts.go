@@ -39,11 +39,6 @@ func RevisionWorkerFindingsOverlay(opts RevisionWorkerFindingsOptions) string {
 	return mustRenderOverlay("revision_worker_findings", opts)
 }
 
-// RevisionMediaSourceResearchRequired returns policy when new media sources need research.
-func RevisionMediaSourceResearchRequired() string {
-	return mustRenderOverlay("revision_media_source_research_required", nil)
-}
-
 // RevisionSourceEntitiesIntro returns the static intro for detected source entities.
 func RevisionSourceEntitiesIntro() string {
 	return mustRenderOverlay("revision_source_entities_intro", nil)
