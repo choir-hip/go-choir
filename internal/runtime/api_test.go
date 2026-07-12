@@ -2423,6 +2423,7 @@ func TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs(t *testing.T) {
 		{http.MethodGet, "/api/events", ""},
 		{http.MethodGet, "/api/prompts", ""},
 		{http.MethodPost, "/api/test/texture/worker-update", `{"doc_id":"doc","schema_version":"coagent_source_packet.v1","kind":"evidence_update"}`},
+		{http.MethodPost, "/internal/runtime/objectgraph/web-captures", `{"items":[]}`},
 		{http.MethodPost, "/api/texture/documents/doc-1/agent-revision", `{"intent":"revise"}`},
 	}
 

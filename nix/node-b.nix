@@ -427,8 +427,8 @@ in
   systemd.services.go-choir-sourcecycled = {
     description = "go-choir Source Service Ingestion Daemon";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-vmctl.service" ];
-    wants = [ "network-online.target" "go-choir-vmctl.service" ];
+    after = [ "network-online.target" "go-choir-proxy.service" "go-choir-vmctl.service" ];
+    wants = [ "network-online.target" "go-choir-proxy.service" "go-choir-vmctl.service" ];
     path = with pkgs; [ bash coreutils ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "sourcecycled" goChoirPackages.sourcecycled}";
@@ -442,6 +442,8 @@ in
       Environment = [
         "SOURCE_SERVICE_ADDR=0.0.0.0:8787"
         "SOURCE_SERVICE_CONFIG_PATH=/opt/go-choir/configs/sources.json"
+        "SOURCE_SERVICE_OBJECTGRAPH_BASE_URL=http://127.0.0.1:8082"
+        "SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID=universal-wire-platform"
         "SOURCE_SERVICE_RUNTIME_OWNER_ID=universal-wire-platform"
         "SOURCE_SERVICE_AGENT_DISPATCH_MAX_PROCESSORS=1"
         "SOURCE_SERVICE_AGENT_DISPATCH_DRAIN_INTERVAL_SECONDS=60"

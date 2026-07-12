@@ -17,6 +17,7 @@ import (
 	embedded "github.com/dolthub/driver"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/cycle"
+	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sources"
@@ -158,30 +159,49 @@ func TestUniversalWireSourceRegistryConfigKeepsBroadUntieredCoverage(t *testing.
 	}
 }
 
-func TestWriteSourceItemsToObjectGraphUsesRuntimeEndpointWhenConfigured(t *testing.T) {
-	t.Setenv("SOURCECYCLED_VMCTL_PROXY_SOCK", "")
-	t.Setenv("VMCTL_SANDBOX_PROXY_SOCK", "")
-	t.Setenv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "universal-wire-platform")
-	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "vm-universal-wire-platform")
-	var gotPath, gotInternalCaller string
-	var gotPayload runtimeWebCaptureProjectionRequest
-	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		gotInternalCaller = r.Header.Get("X-Internal-Caller")
-		if err := json.NewDecoder(r.Body).Decode(&gotPayload); err != nil {
-			t.Fatalf("decode runtime projection request: %v", err)
+func TestWriteSourceItemsToObjectGraphPublishesCanonicalObjectsAndEdges(t *testing.T) {
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_OWNER_ID", "universal-wire-platform")
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_COMPUTER_ID", "host-sourcecycled")
+	objects := make(map[string]objectgraph.Object)
+	var edges []objectgraph.Edge
+	var requestPaths []string
+	hostServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPaths = append(requestPaths, r.URL.Path)
+		if strings.Contains(r.URL.Path, "/internal/runtime/objectgraph/web-captures") {
+			t.Fatalf("capture publication targeted retired runtime route: %s", r.URL.Path)
 		}
-		writeSourceServiceJSON(w, http.StatusCreated, runtimeWebCaptureProjectionResponse{
-			Status:            "ok",
-			CaptureCount:      1,
-			SourceEntityCount: 1,
-			CapturedFromEdges: 1,
-			SkippedItemCount:  0,
-		})
+		if got := r.Header.Get("X-Internal-Caller"); got != "true" {
+			t.Fatalf("X-Internal-Caller = %q, want true", got)
+		}
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/internal/platform/objects":
+			var obj objectgraph.Object
+			if err := json.NewDecoder(r.Body).Decode(&obj); err != nil {
+				t.Fatalf("decode canonical object: %v", err)
+			}
+			objects[obj.CanonicalID] = obj
+			writeSourceServiceJSON(w, http.StatusOK, obj)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/internal/platform/objects/"):
+			id := strings.TrimPrefix(r.URL.Path, "/internal/platform/objects/")
+			obj, ok := objects[id]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			writeSourceServiceJSON(w, http.StatusOK, obj)
+		case r.Method == http.MethodPut && r.URL.Path == "/internal/platform/edges":
+			var edge objectgraph.Edge
+			if err := json.NewDecoder(r.Body).Decode(&edge); err != nil {
+				t.Fatalf("decode canonical edge: %v", err)
+			}
+			edges = append(edges, edge)
+			writeSourceServiceJSON(w, http.StatusOK, edge)
+		default:
+			t.Fatalf("unexpected canonical objectgraph request %s %s", r.Method, r.URL.Path)
+		}
 	}))
-	defer runtimeServer.Close()
-	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", runtimeServer.URL)
-	t.Setenv("SOURCECYCLED_RUNTIME_BASE_URL", "")
+	defer hostServer.Close()
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_BASE_URL", hostServer.URL)
 
 	store := newTestCycleStorage(t)
 	defer store.Close()
@@ -191,29 +211,46 @@ func TestWriteSourceItemsToObjectGraphUsesRuntimeEndpointWhenConfigured(t *testi
 	}
 	now := time.Date(2026, 6, 26, 18, 45, 0, 0, time.UTC)
 	item := sources.Item{
-		ID:           "srcitem-runtime-target-1",
-		SourceID:     "rss:runtime_target",
+		ID:           "srcitem-canonical-target-1",
+		SourceID:     "rss:canonical_target",
 		SourceType:   sources.SourceTypeRSS,
-		FetchID:      "fetch-runtime-target-1",
-		OriginalID:   "https://example.com/runtime-target",
-		Title:        "Runtime target story",
-		Body:         "Sourcecycled should send this item to the configured runtime projection endpoint.",
-		URL:          "https://example.com/runtime-target",
-		CanonicalURL: "https://example.com/runtime-target",
+		FetchID:      "fetch-canonical-target-1",
+		OriginalID:   "https://example.com/canonical-target",
+		Title:        "Canonical target story",
+		Body:         "Sourcecycled publishes this capture directly to the host canonical object graph.",
+		URL:          "https://example.com/canonical-target",
+		CanonicalURL: "https://example.com/canonical-target",
 		FetchedAt:    now,
-		ContentHash:  sources.ContentHash("Runtime target story", "Sourcecycled should send this item to the configured runtime projection endpoint.", "https://example.com/runtime-target", "https://example.com/runtime-target"),
+		ContentHash:  sources.ContentHash("Canonical target story", "Sourcecycled publishes this capture directly to the host canonical object graph.", "https://example.com/canonical-target", "https://example.com/canonical-target"),
 	}
-	if err := writeSourceItemsToObjectGraph(context.Background(), store, cycleID, []sources.Item{item}, now, "web_captures_graph_written", "source items projected to objectgraph web captures"); err != nil {
-		t.Fatalf("write source items to objectgraph: %v", err)
+	if err := writeSourceItemsToObjectGraph(context.Background(), store, cycleID, []sources.Item{item}, now, "web_captures_graph_written", "source items published to canonical objectgraph web captures"); err != nil {
+		t.Fatalf("write source items to canonical objectgraph: %v", err)
 	}
-	if gotPath != "/internal/runtime/objectgraph/web-captures" {
-		t.Fatalf("runtime projection path = %q, want /internal/runtime/objectgraph/web-captures", gotPath)
+	if len(objects) != 2 {
+		t.Fatalf("canonical objects = %d, want capture and source entity; paths=%v", len(objects), requestPaths)
 	}
-	if gotInternalCaller != "true" {
-		t.Fatalf("runtime projection internal caller = %q, want true", gotInternalCaller)
+	var captureCount, sourceEntityCount int
+	for _, obj := range objects {
+		if obj.OwnerID != "universal-wire-platform" || obj.ComputerID != "host-sourcecycled" {
+			t.Fatalf("canonical object authority = %+v", obj)
+		}
+		switch obj.ObjectKind {
+		case objectgraph.WebCaptureObjectKind:
+			captureCount++
+		case objectgraph.ObjectKind("choir.source_entity"):
+			sourceEntityCount++
+		}
 	}
-	if gotPayload.OwnerID != "universal-wire-platform" || gotPayload.ComputerID != "vm-universal-wire-platform" || len(gotPayload.Items) != 1 {
-		t.Fatalf("runtime projection payload = %+v", gotPayload)
+	if captureCount != 1 || sourceEntityCount != 1 {
+		t.Fatalf("canonical object kinds: captures=%d source_entities=%d", captureCount, sourceEntityCount)
+	}
+	if len(edges) != 1 || edges[0].Kind != objectgraph.EdgeKind("captured_from") {
+		t.Fatalf("canonical edges = %+v, want one captured_from edge", edges)
+	}
+	for _, requestPath := range requestPaths {
+		if strings.Contains(requestPath, "/internal/runtime/") {
+			t.Fatalf("canonical publication made runtime request %q", requestPath)
+		}
 	}
 	summary, err := store.LatestCycleSummary(context.Background())
 	if err != nil {
@@ -224,39 +261,33 @@ func TestWriteSourceItemsToObjectGraphUsesRuntimeEndpointWhenConfigured(t *testi
 	}
 	event := summary.Events[0]
 	if event.Kind != "web_captures_graph_written" ||
-		event.Metadata["objectgraph_mode"] != "runtime_api" ||
-		event.Metadata["capture_count"] != float64(1) {
+		event.Metadata["objectgraph_mode"] != "corpusd_api" ||
+		event.Metadata["capture_count"] != float64(1) ||
+		event.Metadata["captured_from_edges"] != float64(1) {
 		t.Fatalf("cycle event = %+v", event)
 	}
 }
 
-func TestIngestionRuntimeDispatcherProjectsWebCapturesInBoundedBatches(t *testing.T) {
-	var batchSizes []int
+func TestProjectSourceItemsToObjectGraphNeverFallsBackToRuntime(t *testing.T) {
+	t.Setenv("SOURCE_SERVICE_OBJECTGRAPH_BASE_URL", "")
+	t.Setenv("SOURCECYCLED_OBJECTGRAPH_BASE_URL", "")
+	runtimeRequests := 0
 	runtimeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload runtimeWebCaptureProjectionRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Fatalf("decode projection request: %v", err)
-		}
-		batchSizes = append(batchSizes, len(payload.Items))
-		writeSourceServiceJSON(w, http.StatusCreated, runtimeWebCaptureProjectionResponse{
-			CaptureCount:      len(payload.Items),
-			SourceEntityCount: len(payload.Items),
-			CapturedFromEdges: len(payload.Items),
-		})
+		runtimeRequests++
+		http.Error(w, "runtime capture projection is retired", http.StatusGone)
 	}))
 	defer runtimeServer.Close()
+	t.Setenv("SOURCE_SERVICE_RUNTIME_BASE_URL", runtimeServer.URL)
 
-	items := make([]sources.Item, 205)
-	dispatcher := &ingestionRuntimeDispatcher{baseURL: runtimeServer.URL, ownerID: "owner", client: runtimeServer.Client()}
-	summary, err := dispatcher.projectWebCaptures(context.Background(), items, time.Now())
-	if err != nil {
-		t.Fatalf("project web captures: %v", err)
+	_, err := projectSourceItemsToObjectGraph(context.Background(), []sources.Item{{
+		ID:   "srcitem-no-runtime-fallback",
+		Body: "This item must not be projected through a runtime.",
+	}}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "SOURCE_SERVICE_OBJECTGRAPH_BASE_URL") {
+		t.Fatalf("missing canonical endpoint error = %v", err)
 	}
-	if got, want := fmt.Sprint(batchSizes), "[100 100 5]"; got != want {
-		t.Fatalf("batch sizes = %s, want %s", got, want)
-	}
-	if summary.CaptureCount != len(items) || summary.SourceEntityCount != len(items) || summary.CapturedFromEdges != len(items) {
-		t.Fatalf("projection summary did not aggregate batches: %+v", summary)
+	if runtimeRequests != 0 {
+		t.Fatalf("runtime capture requests = %d, want zero", runtimeRequests)
 	}
 }
 
