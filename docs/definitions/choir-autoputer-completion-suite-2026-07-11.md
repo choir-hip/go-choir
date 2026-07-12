@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 691bbf1d
+  journal_expected_parent_sha: 655fb81b
   orchestrator_lock:
     holder: Main
     epoch: 13
     expires_at: 2026-07-12T17:25:09Z
-    expected_parent_sha: 691bbf1d
+    expected_parent_sha: 655fb81b
     lock_transition_id: s3-lock-renewal-106
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1372,20 +1372,21 @@ run_checkpoint_and_resumption_state:
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
       direct_shared_worktree_justification: not_applicable
-      lock_acquired_ref: 691bbf1d
+      lock_acquired_ref: 655fb81b
       lock_release_ref: pending_S3_I4_landing
       stage_started_at: 2026-07-12T15:41:43Z
       transition_id: s3-i4-dispatch-intent-111
-      expected_parent_sha: 691bbf1d
+      expected_parent_sha: 655fb81b
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i4-dispatch-intent-111, recorded_at: 2026-07-12T15:41:43Z, actor: Main, expected_parent_sha: bc1419fc, precondition: S3_I3_landed_ratchet_PASS_three_declaration_only_exports_confirmed, postcondition: exact_declaration_only_deletion_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i4-dispatched-112, recorded_at: 2026-07-12T15:44:07Z, actor: Main, expected_parent_sha: 691bbf1d, precondition: canonical_intent_and_live_lock_epoch_13, postcondition: S3I4Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
+        - {status: dispatched, transition_id: s3-i4-scope-amended-113, recorded_at: 2026-07-12T15:45:57Z, actor: Main, expected_parent_sha: 655fb81b, precondition: build_tag_reconciliation_found_15_ChannelPost_ChannelRead_callers, postcondition: channel_methods_and_callers_deferred_one_prompt_export_scope_canonical_before_commit, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T17:25:09Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [internal/runtime/channel_store.go, internal/runtime/textureprompts/prompts.go, docs/runtime-dissolution-inventory.yaml]
-      forbidden_targets: [replacement_helpers, aliases, forwarding_methods, exported_test_seams, active_overlays_templates, ChannelCast, owner_scoped_store_queries, actor_message_delivery, routes, tool_registrations, state_authorities, unrelated_cleanup]
-      authority_edges_locked: [ChannelCast_unchanged, owner_scoped_reads_unchanged, actor_delivery_unchanged, overlays_templates_unchanged, routes_tools_state_authorities_unchanged]
+      exact_files_packages_routes_state_authorities: [internal/runtime/textureprompts/prompts.go, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [ChannelPost, ChannelRead, channel_callers, replacement_helpers, aliases, forwarding_methods, exported_test_seams, active_overlays_templates, routes, tool_registrations, state_authorities, unrelated_cleanup]
+      authority_edges_locked: [channel_APIs_callers_unchanged, overlays_templates_unchanged, routes_tools_state_authorities_unchanged]
       implementer_agent: S3I4Implementer
       verifier_agent: pending_independent_verification
       pre_mutation_sha: 691bbf1d
@@ -1394,8 +1395,8 @@ run_checkpoint_and_resumption_state:
       external_operation_id: not_applicable
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
-      expected_precondition: three_exports_have_only_self_declaration_references
-      observed_postcondition: pending_implementation
+      expected_precondition: one_prompt_export_has_only_self_declaration_reference
+      observed_postcondition: pending_implementation_channel_methods_deferred_with_build_tag_caller_graph_recorded
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: pending
       implementation_commit_sha: pending
@@ -1404,13 +1405,13 @@ run_checkpoint_and_resumption_state:
       deploy_ref: pending
       deployed_sha: pending
       acceptance_ref: pending
-      acceptance_contract: three_declaration_only_exports_deleted_active_replacements_unchanged
+      acceptance_contract: one_declaration_only_prompt_export_deleted_channel_APIs_and_active_overlays_unchanged
       evidence_refs: [docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md]
-      open_findings: []
+      open_findings: [ChannelPost_ChannelRead_15_comprehensive_callers_deferred_to_caller_complete_slice]
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-12T15:44:07Z
-      reconciliation_result: one_matching_live_agent_job_S3I4Implementer
+      last_reconciled_at: 2026-07-12T15:45:57Z
+      reconciliation_result: one_live_implementer_scope_narrowed_before_commit
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

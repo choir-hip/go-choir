@@ -8,35 +8,32 @@
 - Mutation class: orange
 - Rollback: revert the atomic implementation landing to `bc1419fc`; do not restore exports through aliases.
 - Protected surfaces: none. No route, tool registration, run state, Trace, Wire, promotion/rollback, candidate computer, auth/session, vmctl, gateway/provider, or deployment-routing surface may change.
-- Conjecture delta: three exported declarations have no caller; deleting them removes false API surface while preserving the active replacement paths.
-- Heresy delta at dispatch: `discovered: three declaration-only exports`; `introduced: none`; `repaired: pending`.
+- Conjecture delta: one exported prompt declaration has no caller; deleting it removes false API surface without changing active overlays or templates.
+- Heresy delta at dispatch: `discovered: one in-scope declaration-only export plus two wider build-tag caller surfaces deferred`; `introduced: none`; `repaired: pending`.
 
 ## Problem Record
 
-The executable ratchet and independent LSP reference checks identify three exported declarations whose only reference is their own declaration:
+The executable ratchet and initial LSP reference checks classified three exports as declaration-only. Implementation reconciliation then found `15` comprehensive-build-tag calls to `(*Runtime).ChannelPost` and `(*Runtime).ChannelRead` across `agent_tools_test.go`, `concurrent_workers_test.go`, and `failure_isolation_test.go`. Both channel methods and every caller are therefore deferred to a dedicated caller-complete slice and forbidden here.
 
-- `(*Runtime).ChannelPost` in `internal/runtime/channel_store.go`; addressed wake/delivery is already owned by `ChannelCast`, the active replacement to which this wrapper forwards.
-- `(*Runtime).ChannelRead` in `internal/runtime/channel_store.go`; active channel readers use owner-scoped store queries and actor message paths, not this ownerless wrapper.
-- `textureprompts.RevisionMediaSourceResearchRequired` in `internal/runtime/textureprompts/prompts.go`; no production or test caller renders this overlay through the declaration.
+`textureprompts.RevisionMediaSourceResearchRequired` in `internal/runtime/textureprompts/prompts.go` remains the sole in-scope export: repository-wide and build-tag-aware checks find no production or test caller rendering the overlay through this declaration.
 
-A declaration with no caller is not product capability. Keeping these exports preserves misleading ownership surfaces and unused-export debt. This problem record precedes implementation.
+A declaration with no caller is not product capability. Keeping this export preserves misleading prompt API surface and unused-export debt. This amended problem record precedes implementation commit.
 
 ## Exact Mutation Lock
 
-Allowed production files only:
+Allowed production file only:
 
-- `internal/runtime/channel_store.go`: delete exactly `ChannelPost`, `ChannelRead`, and attached comments.
 - `internal/runtime/textureprompts/prompts.go`: delete exactly `RevisionMediaSourceResearchRequired` and its attached comment.
 
-`docs/runtime-dissolution-inventory.yaml` is parent-owned and changes only after implementation proof. No test file is authorized: no caller rewrite is expected.
+`docs/runtime-dissolution-inventory.yaml` is parent-owned and changes only after implementation proof. No test file is authorized.
 
-Forbidden: replacement helper, alias, forwarding method, exported test seam, active overlay/template deletion, `ChannelCast` change, owner-scoped store-query change, actor message delivery change, route/tool registration change, state-authority change, unrelated cleanup, or package extraction.
+Forbidden: `ChannelPost`, `ChannelRead`, every channel caller, replacement helper, alias, forwarding method, exported test seam, active overlay/template deletion, route/tool registration change, state-authority change, unrelated cleanup, or package extraction.
 
 ## Acceptance
 
 1. repository-wide symbol/reference and build-tag searches find no caller before deletion and no residual symbol afterward;
-2. exactly the three declarations/comments are removed with no caller or test change;
-3. default runtime and textureprompts packages compile and focused channel/prompt tests pass;
-4. `ChannelCast`, owner-scoped channel reads, actor delivery, overlays/templates, routes, tools, and state authorities remain unchanged;
+2. exactly the one prompt declaration/comment is removed with no caller or test change, while both channel methods and every caller remain unchanged;
+3. default runtime and textureprompts packages compile and focused prompt tests pass;
+4. active overlays/templates, channel APIs/callers, routes, tools, and state authorities remain unchanged;
 5. ratchet production LOC, exports, and unused-export debt decrease with no gated growth;
 6. independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.

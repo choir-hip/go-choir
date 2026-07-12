@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 443
     interface_candidates: 4
-    citers: 205
+    citers: 202
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5038,11 +5038,11 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/api.go, internal/runtime/api_spawn_test.go, internal/runtime/api_test.go, internal/runtime/concurrent_workers_test.go, internal/runtime… [sha256:facf8de6a54e72478edc949782fe5bf44be7e22663d1225dc5813d5363c23434]'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/channel_store.go, internal/runtime/textureprompts/prompts.go, docs/runtime-dissolution-inventory.yaml]'
-      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/promptspec/promptspec.go, internal/runtime/runtime.go, internal/runtime/tool_profiles.go, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/runtime.go, internal/runtime/toolloop_test.go, internal/runtime/trace_wiring_test.go, internal/runtime/run_memory_integration_test.go, docs/runtime-dissolution-inventory.yaml]'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/textureprompts/prompts.go, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
       disposition: block
@@ -5182,15 +5182,9 @@ citers:
       disposition: historical_evidence
     - id: docs/evidence/s3-runtime-dead-helper-dispatch-2026-07-12.md:2. focused package compilation/tests for `internal/runtime/promptspec` and default `internal/runtime` pass;
       disposition: historical_evidence
-    - id: docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:- `(*Runtime).ChannelPost` in `internal/runtime/channel_store.go`; addressed wake/delivery is already owned by `ChannelCast`, the active replacement to which this wrapper forwards.
-      disposition: historical_evidence
-    - id: docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:- `(*Runtime).ChannelRead` in `internal/runtime/channel_store.go`; active channel readers use owner-scoped store queries and actor message paths, not this ownerless wrapper.
-      disposition: historical_evidence
-    - id: 'docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:- `internal/runtime/channel_store.go`: delete exactly `ChannelPost`, `ChannelRead`, and attached comments.'
-      disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:- `internal/runtime/textureprompts/prompts.go`: delete exactly `RevisionMediaSourceResearchRequired` and its attached comment.'
       disposition: historical_evidence
-    - id: docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:- `textureprompts.RevisionMediaSourceResearchRequired` in `internal/runtime/textureprompts/prompts.go`; no production or test caller renders this overlay through the declaration.
+    - id: 'docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md:`textureprompts.RevisionMediaSourceResearchRequired` in `internal/runtime/textureprompts/prompts.go` remains the sole in-scope export: repository-wide and build-tag-aware checks find no production or … [sha256:4895adabe5189ea3369565445534e09a843369a818ec45cea1eb7b669a39f104]'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md:- Both pre-mutation `c4173c6d` and current head fail `go test -tags comprehensive ./internal/runtime -run ''^$''` with the same first diagnostics: `internal/runtime/prompts_test.go:56` missing `prompt.p… [sha256:1b0d7bc3fd23ff438cb2c6958e5ef6a3fc0d27c29ba32e5ad0ee2649b359a8ca]'
       disposition: historical_evidence
