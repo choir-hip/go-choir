@@ -121,6 +121,14 @@ Codex and OMP GPT-5.5 independently found the same direct false pass. For `f := 
 
 The panel also noted that three package-level `internal/store` helpers are over-inventoried as Store calls. This is conservative but should be corrected while resolving receiver identity: only Store methods, explicitly store-backed interface methods, and tracked Store method values belong.
 
+### S0-POST-003 — interface matching lacks Store provenance
+
+**Status:** confirmed; blocking repair correctness.
+
+The interface repair matches any named runtime interface method by name/signature against `Store`, without proving that a `*store.Store` value can reach the receiver. An unrelated interface such as `reporter { GetRun() }`, implemented and used only by a fake runtime type, is therefore inventoried because Store also has `GetRun`. This creates false drift and contradicts the repair contract's unrelated-interface exclusion.
+
+**Required repair:** interface-mediated inventory must require concrete Store provenance. At minimum, prove a Store value is passed/assigned to the interface receiver path; merely satisfying the interface or sharing a method signature is insufficient. Add same-name fake-interface and real Store-passed-interface regressions.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` / incomplete. S0-CONS-001 through S0-CONS-004 repaired direct calls, but the post-repair panel confirmed interface-mediated and method-value bypasses. S1 remains waiting until S0-POST-001 and S0-POST-002 are repaired, independently verified, and the subsequent checkpoint is adjudicated.
+S0 remains `consensus_pending` / incomplete. S0-POST-001 and S0-POST-002 are repaired in shape, but independent verification confirmed S0-POST-003: interface matching lacks concrete Store provenance. S1 remains waiting until provenance-aware interface inventory passes independent verification and checkpoint adjudication.
