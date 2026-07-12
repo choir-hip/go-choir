@@ -15,13 +15,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-
 // InjectUserTurnsFunc allows the runtime to splice additional user turns into a
 // running loop between model iterations. This is used for runtime-owned inbox
 // delivery: queued messages are threaded in as normal user turns rather than
 // polled by the agent.
 type InjectUserTurnsFunc func(finalCheckpoint bool) ([]json.RawMessage, error)
-
 
 // ToolLoopMemoryHooks lets the runtime persist and rebuild provider context
 // around the tool loop without making the tool loop depend on a storage layer.
@@ -1679,20 +1677,28 @@ func buildSystemPromptWithTools(basePrompt string, registry *ToolRegistry) strin
 }
 
 func runMemoryMessageRole(msg json.RawMessage) string {
-	var parsed struct { Role string `json:"role"` }
-	if err := json.Unmarshal(msg, &parsed); err != nil { return "" }
+	var parsed struct {
+		Role string `json:"role"`
+	}
+	if err := json.Unmarshal(msg, &parsed); err != nil {
+		return ""
+	}
 	return strings.TrimSpace(parsed.Role)
 }
 
 func truncatePromptSnippet(value string, limit int) string {
 	value = strings.TrimSpace(value)
-	if limit <= 0 || len(value) <= limit { return value }
+	if limit <= 0 || len(value) <= limit {
+		return value
+	}
 	return strings.TrimSpace(value[:limit]) + "..."
 }
 
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
-		if value = strings.TrimSpace(value); value != "" { return value }
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
 	}
 	return ""
 }

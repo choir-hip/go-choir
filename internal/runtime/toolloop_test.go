@@ -148,7 +148,7 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 		emit,
 		nil,
 		toolregistry.WithInitialToolChoice("function:patch_texture"),
-		toolregistry.WithTerminalToolSuccesses("patch_texture"),)
+		toolregistry.WithTerminalToolSuccesses("patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}

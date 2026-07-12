@@ -388,7 +388,7 @@ func TestToolLoopToolUseResponse(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -478,7 +478,7 @@ func TestToolLoopToolResultFedBack(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -590,7 +590,7 @@ func TestToolLoopMultiToolSequential(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -794,7 +794,7 @@ func TestToolLoopWithMultipleToolsRegistered(t *testing.T) {
 		"You are helpful.",
 		4096,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {},
-		nil,)
+		nil)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -830,7 +830,7 @@ func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
 			Provider:        "fireworks",
 			Model:           "accounts/fireworks/models/deepseek-v4-flash",
 			ReasoningEffort: "low",
-		}),)
+		}))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}

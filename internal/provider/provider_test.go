@@ -3290,7 +3290,7 @@ func runLiveProviderToolLoop(t *testing.T, p Provider, selection provideriface.L
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
 		toolregistry.WithToolLoopLLMConfig(selection),
-		toolregistry.WithInitialToolChoice(initialToolChoice),)
+		toolregistry.WithInitialToolChoice(initialToolChoice))
 }
 
 func TestFireworksProviderUsesDefaultReasoningEffort(t *testing.T) {

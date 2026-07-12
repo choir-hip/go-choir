@@ -91,7 +91,10 @@ func (p *capturingToolChoiceProvider) CallWithTools(ctx context.Context, req pro
 
 type basicProvider struct{}
 
-func (basicProvider) Execute(_ context.Context, task *types.RunRecord, _ provideriface.EventEmitFunc) error { task.Result = "basic result"; return nil }
+func (basicProvider) Execute(_ context.Context, task *types.RunRecord, _ provideriface.EventEmitFunc) error {
+	task.Result = "basic result"
+	return nil
+}
 func (basicProvider) ProviderName() string { return "basic" }
 
 // --- Tool-Calling Loop Tests ---
@@ -117,7 +120,7 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -181,7 +184,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 			}
 		},
 		nil,
-		WithTerminalToolSuccesses("patch_texture"),)
+		WithTerminalToolSuccesses("patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -240,7 +243,7 @@ func TestRunToolLoopRequiredNextToolSatisfiedInSameBatchDoesNotRetry(t *testing.
 		0,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {},
 		nil,
-		WithTerminalToolSuccesses("request_worker_vm", "start_worker_delegation"),)
+		WithTerminalToolSuccesses("request_worker_vm", "start_worker_delegation"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -272,7 +275,7 @@ func TestRunToolLoopEmitsProviderCallProgressBeforeCall(t *testing.T) {
 		0,
 		emit,
 		nil,
-		WithToolLoopLLMConfig(provideriface.LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", ReasoningEffort: "none"}),)
+		WithToolLoopLLMConfig(provideriface.LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", ReasoningEffort: "none"}))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -345,7 +348,7 @@ func TestRunToolLoopEmitsResponseTextAndToolCallNames(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -406,7 +409,7 @@ func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		WithInitialToolChoice("required"),)
+		WithInitialToolChoice("required"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -489,7 +492,7 @@ func TestRunToolLoopCompletionGuardRetriesEndTurn(t *testing.T) {
 		nil,
 		func(opts *toolLoopOptions) {
 			opts.completionGuard = guard
-		},)
+		})
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -582,7 +585,7 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:record_texture_decision"),)
+		WithInitialToolChoice("function:record_texture_decision"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -679,7 +682,7 @@ func TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool(t *testing.T
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:patch_texture"),)
+		WithInitialToolChoice("function:patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -774,7 +777,7 @@ func TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool(t *testing.T
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:patch_texture"),)
+		WithInitialToolChoice("function:patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -799,7 +802,6 @@ func TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool(t *testing.T
 		t.Fatal("missing required_initial_tool_failed retry event")
 	}
 }
-
 
 func TestRunToolLoopCarriesAssistantReasoningContent(t *testing.T) {
 	registry := NewToolRegistry()
@@ -839,7 +841,7 @@ func TestRunToolLoopCarriesAssistantReasoningContent(t *testing.T) {
 		"You are helpful.",
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
-		nil,)
+		nil)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -933,7 +935,7 @@ func TestRunToolLoopRequiredToolTurnRetriesMissingToolWithoutArtificialBudget(t 
 			}
 		},
 		nil,
-		WithInitialToolChoice("required"),)
+		WithInitialToolChoice("required"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1018,7 +1020,7 @@ func TestRunToolLoopRequiredNextToolUsesRequiredChoice(t *testing.T) {
 				retrySeen = true
 			}
 		},
-		nil,)
+		nil)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1100,7 +1102,7 @@ func TestRunToolLoopRequiredNextToolGetsFiniteBudgetWhenPolicyOmitsMaxTokens(t *
 		"You are helpful.",
 		0,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {},
-		nil,)
+		nil)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1171,7 +1173,7 @@ func TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries(t *testing
 				retryAttempts = append(retryAttempts, intMapValue(decoded, "attempt"))
 			}
 		},
-		nil,)
+		nil)
 	if err == nil || !strings.Contains(err.Error(), `required next tool "start_worker_delegation" was not called after 2 retries`) {
 		t.Fatalf("err = %v, want bounded required next tool retry error", err)
 	}
@@ -1255,7 +1257,7 @@ func TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool(t *testing.T) {
 				retryReasons = append(retryReasons, stringMapValue(decoded, "reason"))
 			}
 		},
-		nil,)
+		nil)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1320,7 +1322,7 @@ func TestRunToolLoopIgnoresSemanticRequiredNextToolFromUntrustedProducer(t *test
 				t.Fatalf("semantic next_required_tool from web_search must not emit retry: %s", payload)
 			}
 		},
-		nil,)
+		nil)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1380,7 +1382,7 @@ func TestRunToolLoopMemoryHookPersistsFinalAssistant(t *testing.T) {
 		4096,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		WithToolLoopMemoryHooks(hooks),)
+		WithToolLoopMemoryHooks(hooks))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1431,7 +1433,7 @@ func TestRunToolLoopMemoryHookCanRetryProviderOverflow(t *testing.T) {
 		4096,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		WithToolLoopMemoryHooks(hooks),)
+		WithToolLoopMemoryHooks(hooks))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1586,7 +1588,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 		emit,
 		nil,
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"),)
+		WithTerminalToolSuccesses("patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1672,7 +1674,7 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoice
 		emit,
 		nil,
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"),)
+		WithTerminalToolSuccesses("patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1739,7 +1741,7 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 			Source:          "test_fallback",
 		}),
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"),)
+		WithTerminalToolSuccesses("patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1824,7 +1826,7 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 			},
 		),
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"),)
+		WithTerminalToolSuccesses("patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1909,7 +1911,7 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 				Source:          "test_platform_fallback",
 			},
 		),
-		WithTerminalToolSuccesses("patch_texture"),)
+		WithTerminalToolSuccesses("patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1987,7 +1989,7 @@ func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testin
 			ReasoningEffort: "medium",
 			Source:          "test_deepseek_fallback",
 		}),
-		WithTerminalToolSuccesses("patch_texture"),)
+		WithTerminalToolSuccesses("patch_texture"))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -2027,7 +2029,7 @@ func TestRunToolLoopRetriesProviderRateLimit(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -2086,7 +2088,7 @@ func TestRunToolLoopWithToolUse(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -2174,7 +2176,7 @@ func TestRunToolLoopMultipleToolIterations(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -2216,7 +2218,7 @@ func TestRunToolLoopMaxIterations(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 
 	if err == nil {
 		t.Fatal("expected error for exceeding max iterations")
@@ -2267,7 +2269,7 @@ func TestRunToolLoopBudgetLimitsProviderCalls(t *testing.T) {
 		4096,
 		emit,
 		nil,
-		WithToolLoopBudget(ToolLoopBudget{Label: "test-budget", MaxProviderCalls: 2}),)
+		WithToolLoopBudget(ToolLoopBudget{Label: "test-budget", MaxProviderCalls: 2}))
 	if err == nil || !strings.Contains(err.Error(), `tool loop budget "test-budget" exhausted`) {
 		t.Fatalf("error = %v, want budget exhaustion", err)
 	}
@@ -2330,7 +2332,7 @@ func TestRunToolLoopBudgetCountsPriorProviderCalls(t *testing.T) {
 			SpentInputTokens:   100,
 			SpentOutputTokens:  200,
 			MaxProviderCalls:   3,
-		}),)
+		}))
 	if err == nil || !strings.Contains(err.Error(), `tool loop budget "rewarm-budget" exhausted`) {
 		t.Fatalf("error = %v, want cumulative provider-call exhaustion", err)
 	}
@@ -2363,7 +2365,7 @@ func TestRunToolLoopBudgetLimitsCumulativeTokens(t *testing.T) {
 		4096,
 		emit,
 		nil,
-		WithToolLoopBudget(ToolLoopBudget{Label: "token-budget", MaxTotalTokens: 50}),)
+		WithToolLoopBudget(ToolLoopBudget{Label: "token-budget", MaxTotalTokens: 50}))
 	if err == nil || !strings.Contains(err.Error(), `total tokens 60 exceeded max 50`) {
 		t.Fatalf("error = %v, want token budget exhaustion", err)
 	}
@@ -2452,7 +2454,7 @@ func TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn(t *tes
 			4096,
 			emit,
 			injector,
-			WithParkWaiter(waiter),)
+			WithParkWaiter(waiter))
 		done <- struct {
 			text  string
 			usage provideriface.TokenUsage
@@ -2529,7 +2531,7 @@ func TestRunToolLoopContinuesAfterMaxTokensPartialText(t *testing.T) {
 		"You are helpful.",
 		0,
 		emit,
-		nil,)
+		nil)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -2567,7 +2569,7 @@ func TestRunToolLoopMaxTokensWithoutTextStillFails(t *testing.T) {
 		"You are helpful.",
 		0,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {},
-		nil,)
+		nil)
 
 	if err == nil || !strings.Contains(err.Error(), "max_tokens without text") {
 		t.Fatalf("error = %v, want max_tokens without text", err)
@@ -2619,7 +2621,7 @@ func TestRunToolLoopToolUseWithoutCalls(t *testing.T) {
 		"You are helpful.",
 		4096,
 		emit,
-		nil,)
+		nil)
 
 	if err == nil {
 		t.Fatal("expected error for tool_use without tool calls")
@@ -2666,6 +2668,7 @@ func TestAsToolLoopProvider(t *testing.T) {
 		t.Error("expected toolLoopAdapter wrapper for stub provider")
 	}
 }
+
 // --- Helper content builders ---
 
 func TestBuildAssistantContent(t *testing.T) {
@@ -2761,7 +2764,6 @@ func isContextOverflowError(err error) bool {
 			strings.Contains(text, "length") ||
 			strings.Contains(text, "window"))
 }
-
 
 func TestExecuteToolBatchPreservesExecutionContext(t *testing.T) {
 	type contextKey string

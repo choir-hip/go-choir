@@ -154,7 +154,7 @@ func TestFireworksRuntimeToolLoopPreservesReasoningContentThroughAdapter(t *test
 			Provider:        "fireworks",
 			Model:           "accounts/fireworks/models/deepseek-v4-flash",
 			ReasoningEffort: "none",
-		}),)
+		}))
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -234,7 +234,7 @@ func TestIntegrationFireworksRuntimeToolLoopLive(t *testing.T) {
 					Model:           model,
 					ReasoningEffort: "none",
 				}),
-				toolregistry.WithInitialToolChoice("function:record_status"),)
+				toolregistry.WithInitialToolChoice("function:record_status"))
 			if err != nil {
 				t.Fatalf("runtime tool loop: %v", err)
 			}
@@ -299,7 +299,7 @@ func TestIntegrationFireworksRuntimeToolLoopTextureShapedLive(t *testing.T) {
 			Model:           model,
 			ReasoningEffort: "none",
 		}),
-		toolregistry.WithInitialToolChoice("required"),)
+		toolregistry.WithInitialToolChoice("required"))
 	if err != nil {
 		t.Fatalf("runtime texture-shaped tool loop: %v", err)
 	}
