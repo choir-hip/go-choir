@@ -95,6 +95,32 @@ The scanner now emits every exact typed production call resolving to `internal/s
 
 Independent verifier `S0RatchetVerifier` reran the full focused suite and baseline command at `9319eca8` and reported PASS with no blockers. Current Claim/Release/Cancel/Patch/promotion/Wire calls are present; all IDs resolve to underlying store methods rather than runtime wrappers.
 
+## Post-Repair Panel
+
+Run: `/tmp/choir-s0-post-repair-consensus-20260711`.
+
+Six agents completed successfully: Codex, opencode, Cursor, OMP GPT-5.5, OMP Gemini 3.5, and OMP GLM 5.2. Devin produced no output and stalled beyond the runner deadline; the runner was terminated after preserving the six completed opinions. Cursor completed successfully with `status=ok`, so the permission prompts observed outside this run did not stall this panel. Per owner direction, one stalled panel member does not block adjudication when independent completed evidence remains.
+
+Verdicts: Codex, Cursor, and OMP GPT-5.5 reported `BLOCKING`; OMP Gemini and OMP GLM reported `PASS`; opencode's completed output supplied investigation evidence but did not finish the requested verdict shape. The two demonstrated blocker classes below govern regardless of vote count.
+
+### S0-POST-001 — interface-mediated store mutations are invisible
+
+**Status:** confirmed lead; blocking pending repair.
+
+Cursor identified live `runtime_persistence.go` calls through runtime-local interfaces such as `runSubmissionStore`. The called function resolves to an interface method rather than a method declared in `internal/store`, so the scanner emits no `store_calls` identity even when the concrete value is `*store.Store`. A new store mutation called only through the same interface shape can therefore bypass disposition.
+
+**Required repair:** resolve store-backed interface calls through concrete type/data-flow evidence, or conservatively inventory interface method calls whose method name and signature match `internal/store.Store`; unknown interface-mediated store operations must fail closed. Add a runtime interface fixture.
+
+### S0-POST-002 — Store method values bypass call inventory
+
+**Status:** confirmed; blocking.
+
+Codex and OMP GPT-5.5 independently found the same direct false pass. For `f := stateStore.SaveDesktopState; f(ctx, state)`, the selection resolves to the Store method but the later call resolves to a local variable, so direct `CallExpr` function resolution emits no identity. OMP GPT-5.5 reproduced this with a temporary focused test: a novel Store mutation invoked through a method value produced zero `store_calls` and the comparison passed.
+
+**Required repair:** inventory Store method selections used as values and bind their eventual calls through SSA/data flow, or conservatively fail closed on every Store method selection until it is explicitly dispositioned. Add mutating and legitimate-read method-value regressions.
+
+The panel also noted that three package-level `internal/store` helpers are over-inventoried as Store calls. This is conservative but should be corrected while resolving receiver identity: only Store methods, explicitly store-backed interface methods, and tracked Store method values belong.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` until the required post-repair panel adjudicates the exact repaired diff. S0-CONS-001 through S0-CONS-004 are repaired according to focused and independent evidence; S1 remains waiting on the phase checkpoint.
+S0 remains `consensus_pending` / incomplete. S0-CONS-001 through S0-CONS-004 repaired direct calls, but the post-repair panel confirmed interface-mediated and method-value bypasses. S1 remains waiting until S0-POST-001 and S0-POST-002 are repaired, independently verified, and the subsequent checkpoint is adjudicated.
