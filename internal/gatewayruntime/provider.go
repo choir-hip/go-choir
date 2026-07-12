@@ -64,7 +64,7 @@ func (p *Provider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 	}
 }
 
-// Execute implements runtime.Provider.
+// Execute implements provideriface.Provider.
 func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
 	emit(types.EventRunProgress, "execution", json.RawMessage(`{"status":"started","provider":"gateway","routed":true}`))
 
@@ -122,7 +122,7 @@ func (p *Provider) Execute(ctx context.Context, task *types.RunRecord, emit prov
 	return nil
 }
 
-// CallWithTools implements runtime.ToolLoopProvider.
+// CallWithTools implements provideriface.ToolLoopProvider.
 func (p *Provider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	llmReq := llmRequest{
 		Provider:        firstNonEmpty(req.Provider, p.llmProvider),

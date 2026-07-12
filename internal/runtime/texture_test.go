@@ -141,7 +141,7 @@ type textureEditToolProvider struct {
 	resultFunc func(prompt string) string
 	delay      time.Duration
 	choices    []string
-	firstTools []ToolDefinition
+	firstTools []provideriface.ToolDefinition
 }
 
 func newTextureEditToolProvider(result string) *textureEditToolProvider {
@@ -174,10 +174,10 @@ func (p *textureEditToolProvider) Execute(ctx context.Context, task *types.RunRe
 	return nil
 }
 
-func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+		p.firstTools = append([]provideriface.ToolDefinition(nil), req.ToolDefinitions...)
 	}
 	if p.delay > 0 {
 		timer := time.NewTimer(p.delay)
@@ -189,11 +189,11 @@ func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoo
 		}
 	}
 	if messagesContainToolCall(req.Messages, "spawn_agent") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
 			Model:      "test-model",
@@ -203,12 +203,12 @@ func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoo
 		if !strings.Contains(req.ToolChoice, "patch_texture") {
 			if !messagesContainCoagentFollowUpDelivery(req.Messages) ||
 				messagesToolCallCount(req.Messages, "patch_texture")+messagesToolCallCount(req.Messages, "rewrite_texture") >= 2 {
-				return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+				return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
 			}
 		}
 	}
 	if (lastUser == "" && !strings.Contains(req.ToolChoice, "patch_texture")) || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
 	}
 	prompt := toolLoopPromptContext(req)
 	result := p.result
@@ -217,15 +217,15 @@ func (p *textureEditToolProvider) CallWithTools(ctx context.Context, req ToolLoo
 	}
 	call, err := editTextureToolCallFromLegacyResult(prompt, result)
 	if err != nil {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: result, Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: result, Model: "test-model"}, nil
 	}
 	if strings.Contains(req.ToolChoice, "patch_texture") {
 		call, err = requiredPatchTextureToolCallFromLegacyResult(prompt, result)
 		if err != nil {
-			return &ToolLoopResponse{StopReason: "end_turn", Text: result, Model: "test-model"}, nil
+			return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: result, Model: "test-model"}, nil
 		}
 	}
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls:  []types.ToolCall{call},
 		Model:      "test-model",
@@ -247,10 +247,10 @@ func (p *textureParkResidentProvider) Execute(ctx context.Context, task *types.R
 	return nil
 }
 
-func (p *textureParkResidentProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureParkResidentProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
 	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "no texture tools", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "no texture tools", Model: "test-model"}, nil
 	}
 	prompt := req.System + "\n" + extractLastUserMessage(req.Messages)
 	var result string
@@ -261,13 +261,13 @@ func (p *textureParkResidentProvider) CallWithTools(ctx context.Context, req Too
 		!messagesContainText(req.Messages, "Grounded update from parked resident actor."):
 		result = textureReplaceAllResult("Grounded update from parked resident actor.")
 	default:
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "resident actor idle", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "resident actor idle", Model: "test-model"}, nil
 	}
 	call, err := editTextureToolCallFromLegacyResult(prompt, result)
 	if err != nil {
 		return nil, err
 	}
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls:  []types.ToolCall{call},
 		Model:      "test-model",
@@ -277,7 +277,7 @@ func (p *textureParkResidentProvider) CallWithTools(ctx context.Context, req Too
 type textureDecisionThenEditProvider struct {
 	provideriface.Provider
 	choices    []string
-	firstTools []ToolDefinition
+	firstTools []provideriface.ToolDefinition
 	calls      int
 }
 
@@ -289,15 +289,15 @@ func (p *textureDecisionThenEditProvider) Execute(ctx context.Context, task *typ
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
-func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+		p.firstTools = append([]provideriface.ToolDefinition(nil), req.ToolDefinitions...)
 	}
 	p.calls++
 	switch p.calls {
 	case 1:
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-decision",
@@ -309,7 +309,7 @@ func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req
 					"next_action":"Write the concise reader-facing Texture revision."
 				}`),
 			}},
-			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Usage: provideriface.TokenUsage{InputTokens: 1, OutputTokens: 1},
 			Model: "test-model",
 		}, nil
 	case 2:
@@ -317,7 +317,7 @@ func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req
 		// rather than appending to it. The off-document decision rationale lives in
 		// the prompt (now canonical V0) and must not be carried into the authored
 		// document body, so the model rewrites the whole document with clean prose.
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-reader-edit",
@@ -327,11 +327,11 @@ func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req
 					"rationale":"Author the clean reader-facing Texture revision from the owner prompt."
 				}`),
 			}},
-			Usage: TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Usage: provideriface.TokenUsage{InputTokens: 1, OutputTokens: 1},
 			Model: "test-model",
 		}, nil
 	default:
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 }
 
@@ -424,7 +424,7 @@ func messagesToolCallCount(messages []json.RawMessage, name string) int {
 	return count
 }
 
-func toolDefinitionsContain(defs []ToolDefinition, name string) bool {
+func toolDefinitionsContain(defs []provideriface.ToolDefinition, name string) bool {
 	for _, def := range defs {
 		if def.Name == name {
 			return true
@@ -433,7 +433,7 @@ func toolDefinitionsContain(defs []ToolDefinition, name string) bool {
 	return false
 }
 
-func assertInitialTextureAutonomousSurface(t *testing.T, defs []ToolDefinition) {
+func assertInitialTextureAutonomousSurface(t *testing.T, defs []provideriface.ToolDefinition) {
 	t.Helper()
 	if len(defs) <= 1 {
 		t.Fatalf("initial Texture tool definitions = %+v, want full Texture affordance surface", defs)
@@ -532,7 +532,7 @@ func requiredPatchTextureToolCallFromLegacyResult(prompt, raw string) (types.Too
 	return call, nil
 }
 
-func toolLoopPromptContext(req ToolLoopRequest) string {
+func toolLoopPromptContext(req provideriface.ToolLoopRequest) string {
 	var b strings.Builder
 	b.WriteString(req.System)
 	for _, raw := range req.Messages {
@@ -1716,7 +1716,7 @@ func (p *revisionPromptEchoProvider) Execute(ctx context.Context, task *types.Ru
 	return nil
 }
 
-func (p *revisionPromptEchoProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *revisionPromptEchoProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	provider := &textureEditToolProvider{
 		Provider: NewStubProvider(1 * time.Millisecond),
 		delay:    p.delay,
@@ -1767,13 +1767,13 @@ func (p *stochasticWorkflowProvider) Execute(ctx context.Context, task *types.Ru
 	return nil
 }
 
-func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	if messagesContainToolCall(req.Messages, "spawn_agent") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow conductor handoff complete", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
 			Model:      "test-model",
@@ -1783,10 +1783,10 @@ func (p *stochasticWorkflowProvider) CallWithTools(ctx context.Context, req Tool
 		if strings.Contains(req.ToolChoice, "patch_texture") {
 			goto producePatch
 		}
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
 	if (lastUser == "" && !strings.Contains(req.ToolChoice, "patch_texture")) || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
 producePatch:
 	delay := p.delay
@@ -1804,15 +1804,15 @@ producePatch:
 	result := buildStochasticTextureResult(prompt)
 	call, err := editTextureToolCallFromLegacyResult(prompt, result)
 	if err != nil {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 	}
 	if strings.Contains(req.ToolChoice, "patch_texture") {
 		call, err = requiredPatchTextureToolCallFromLegacyResult(prompt, result)
 		if err != nil {
-			return &ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
+			return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "stochastic workflow loop completed", Model: "test-model"}, nil
 		}
 	}
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls:  []types.ToolCall{call},
 		Model:      "test-model",
@@ -2205,7 +2205,7 @@ func TestTextureSystemPromptSharesChoirCoreContext(t *testing.T) {
 type textureMinimalEditProvider struct {
 	provideriface.Provider
 	choices    []string
-	firstTools []ToolDefinition
+	firstTools []provideriface.ToolDefinition
 }
 
 func (p *textureMinimalEditProvider) ProviderName() string {
@@ -2216,31 +2216,31 @@ func (p *textureMinimalEditProvider) Execute(ctx context.Context, task *types.Ru
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
-func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+		p.firstTools = append([]provideriface.ToolDefinition(nil), req.ToolDefinitions...)
 	}
 	if messagesContainToolCall(req.Messages, "spawn_agent") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "conductor handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
 	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
 	}
 	// The canonical write is no longer terminal, so after writing once the model
 	// intentionally ends the run rather than writing again.
 	if messagesContainToolCall(req.Messages, "patch_texture") || messagesContainToolCall(req.Messages, "rewrite_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "texture turn complete", Model: "test-model"}, nil
 	}
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-minimal-edit",
@@ -2254,7 +2254,7 @@ func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req Tool
 type textureWriteAndResearchProvider struct {
 	provideriface.Provider
 	choices    []string
-	firstTools []ToolDefinition
+	firstTools []provideriface.ToolDefinition
 	wrote      bool
 	spawned    bool
 }
@@ -2267,17 +2267,17 @@ func (p *textureWriteAndResearchProvider) Execute(ctx context.Context, task *typ
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
-func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+		p.firstTools = append([]provideriface.ToolDefinition(nil), req.ToolDefinitions...)
 	}
 	if messagesContainToolCall(req.Messages, "spawn_agent") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "handoff complete", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "handoff complete", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
 			Model:      "test-model",
@@ -2285,7 +2285,7 @@ func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req
 	}
 	if p.wrote && !p.spawned && toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") {
 		p.spawned = true
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{
 				{
@@ -2301,10 +2301,10 @@ func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req
 		}, nil
 	}
 	if p.wrote || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 	p.wrote = true
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-write-working-revision",
@@ -2332,18 +2332,18 @@ func (p *textureAgenticResearchProvider) Execute(ctx context.Context, task *type
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
-func (p *textureAgenticResearchProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureAgenticResearchProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
 	if messagesContainText(req.Messages, "texture_model_prior_interim_needs_evidence_path") ||
 		messagesContainText(req.Messages, "The latest canonical Texture revision is flagged model_prior_interim") {
 		p.sawGuardInstruction = true
 	}
 	if messagesContainToolCall(req.Messages, "spawn_agent") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "research opened", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "research opened", Model: "test-model"}, nil
 	}
 	lastUser := extractLastUserMessage(req.Messages)
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
 			Model:      "test-model",
@@ -2355,7 +2355,7 @@ func (p *textureAgenticResearchProvider) CallWithTools(ctx context.Context, req 
 	}
 	if p.wrote && !p.spawned && messagesContainToolCall(req.Messages, "patch_texture") {
 		p.spawned = true
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-open-researcher-agentically",
@@ -2369,10 +2369,10 @@ func (p *textureAgenticResearchProvider) CallWithTools(ctx context.Context, req 
 		}, nil
 	}
 	if p.wrote || !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "premature interim-only completion", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "premature interim-only completion", Model: "test-model"}, nil
 	}
 	p.wrote = true
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-write-agentic-working-revision",
@@ -2400,7 +2400,7 @@ func (p *textureInitialNoOpThenDraftProvider) Execute(ctx context.Context, task 
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
-func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.initialBlockID == "" {
 		p.initialBlockID = firstPromptOutlineParagraphID(req.System + "\n" + extractLastUserMessage(req.Messages))
@@ -2414,11 +2414,11 @@ func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context,
 		}
 	}
 	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") || p.attempts >= 3 {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 	p.attempts++
 	if p.attempts == 1 {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-initial-missing-find",
@@ -2439,7 +2439,7 @@ func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context,
 		if blockID == "" {
 			blockID = "p-doc-initial-noop-retry-rev-doc-initial-noop-retry-v0-0"
 		}
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-initial-noop",
@@ -2455,7 +2455,7 @@ func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context,
 			Model: "test-model",
 		}, nil
 	}
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "tool_use",
 		ToolCalls: []types.ToolCall{{
 			ID:        "call-initial-useful-draft",
@@ -2501,7 +2501,7 @@ type textureResearchEvidenceLoopProvider struct {
 	provideriface.Provider
 	mu                 sync.Mutex
 	choices            []string
-	firstTools         []ToolDefinition
+	firstTools         []provideriface.ToolDefinition
 	targetAgentID      string
 	initialTextureDone bool
 	researchUpdateDone bool
@@ -2516,7 +2516,7 @@ func (p *textureResearchEvidenceLoopProvider) Execute(ctx context.Context, task 
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
-func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.mu.Lock()
 	if p.targetAgentID == "" {
 		p.targetAgentID = textureAgentIDFromSystemPrompt(req.System)
@@ -2524,7 +2524,7 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 	targetAgentID := p.targetAgentID
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+		p.firstTools = append([]provideriface.ToolDefinition(nil), req.ToolDefinitions...)
 	}
 	p.mu.Unlock()
 
@@ -2533,7 +2533,7 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 		toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") &&
 		!messagesContainToolCall(req.Messages, "spawn_agent") &&
 		messagesContainToolCall(req.Messages, "patch_texture") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-spawn-researcher-after-guard",
@@ -2553,9 +2553,9 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 		p.researchUpdateDone = true
 		p.mu.Unlock()
 		if alreadyUpdated {
-			return &ToolLoopResponse{StopReason: "end_turn", Text: "research update already sent", Model: "test-model"}, nil
+			return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "research update already sent", Model: "test-model"}, nil
 		}
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-research-update",
@@ -2582,14 +2582,14 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 	}
 
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
 	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 
 	hasWorkerUpdate := messagesContainToolCall(req.Messages, "update_coagent") || messagesContainText(req.Messages, "coagent_update")
@@ -2605,7 +2605,7 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 	p.mu.Unlock()
 
 	if !initialDone {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-initial-working-revision",
@@ -2616,7 +2616,7 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 		}, nil
 	}
 	if hasWorkerUpdate && !wakeDone {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-evidence-backed-revision",
@@ -2629,16 +2629,16 @@ func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context,
 	if messagesContainToolCall(req.Messages, "update_coagent") ||
 		messagesContainToolCall(req.Messages, "spawn_agent") ||
 		messagesContainToolCall(req.Messages, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
-	return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 }
 
 type textureSuperEvidenceLoopProvider struct {
 	provideriface.Provider
 	mu                 sync.Mutex
 	choices            []string
-	firstTools         []ToolDefinition
+	firstTools         []provideriface.ToolDefinition
 	targetAgentID      string
 	initialTextureDone bool
 	superUpdateDone    bool
@@ -2653,7 +2653,7 @@ func (p *textureSuperEvidenceLoopProvider) Execute(ctx context.Context, task *ty
 	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
-func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.mu.Lock()
 	if p.targetAgentID == "" {
 		p.targetAgentID = textureAgentIDFromSystemPrompt(req.System)
@@ -2661,7 +2661,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 	targetAgentID := p.targetAgentID
 	p.choices = append(p.choices, req.ToolChoice)
 	if p.firstTools == nil && toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		p.firstTools = append([]ToolDefinition(nil), req.ToolDefinitions...)
+		p.firstTools = append([]provideriface.ToolDefinition(nil), req.ToolDefinitions...)
 	}
 	p.mu.Unlock()
 
@@ -2671,7 +2671,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 		toolDefinitionsContain(req.ToolDefinitions, "request_super_execution") &&
 		!hasWorkerUpdate &&
 		!messagesContainToolCall(req.Messages, "request_super_execution") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-request-super-after-guard",
@@ -2687,7 +2687,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 		toolDefinitionsContain(req.ToolDefinitions, "request_super_execution") &&
 		!hasWorkerUpdate &&
 		!messagesContainToolCall(req.Messages, "request_super_execution") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-request-super-after-v1",
@@ -2706,9 +2706,9 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 		p.superUpdateDone = true
 		p.mu.Unlock()
 		if alreadyUpdated {
-			return &ToolLoopResponse{StopReason: "end_turn", Text: "super update already sent", Model: "test-model"}, nil
+			return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "super update already sent", Model: "test-model"}, nil
 		}
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-super-update",
@@ -2731,14 +2731,14 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 	}
 
 	if toolDefinitionsContain(req.ToolDefinitions, "spawn_agent") && !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls:  []types.ToolCall{conductorSpawnTextureToolCall(lastUser)},
 			Model:      "test-model",
 		}, nil
 	}
 	if !toolDefinitionsContain(req.ToolDefinitions, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
 
 	p.mu.Lock()
@@ -2753,7 +2753,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 	p.mu.Unlock()
 
 	if !initialDone {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-initial-execution-revision",
@@ -2764,7 +2764,7 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 		}, nil
 	}
 	if hasWorkerUpdate && !wakeDone {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-super-evidence-backed-revision",
@@ -2777,9 +2777,9 @@ func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, re
 	if messagesContainToolCall(req.Messages, "update_coagent") ||
 		messagesContainToolCall(req.Messages, "request_super_execution") ||
 		messagesContainToolCall(req.Messages, "patch_texture") {
-		return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+		return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 	}
-	return &ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
+	return &provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "done", Model: "test-model"}, nil
 }
 
 func TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *testing.T) {

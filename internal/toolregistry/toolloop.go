@@ -1,4 +1,4 @@
-package runtime
+package toolregistry
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -14,20 +15,17 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Re-exported from internal/provideriface for backward compatibility.
-// New code should import internal/provideriface directly.
-type (
-	ToolLoopProvider = provideriface.ToolLoopProvider
-	ToolLoopRequest  = provideriface.ToolLoopRequest
-	ToolLoopResponse = provideriface.ToolLoopResponse
-	TokenUsage       = provideriface.TokenUsage
-)
 
 // InjectUserTurnsFunc allows the runtime to splice additional user turns into a
 // running loop between model iterations. This is used for runtime-owned inbox
 // delivery: queued messages are threaded in as normal user turns rather than
 // polled by the agent.
 type InjectUserTurnsFunc func(finalCheckpoint bool) ([]json.RawMessage, error)
+
+// ToolBatchExecutorFunc executes one provider-requested tool batch and returns
+// results in call order. RunToolLoop requires an executor for every non-empty
+// tool batch; callers own any execution policy layered over registry execution.
+type ToolBatchExecutorFunc func(context.Context, *ToolRegistry, []types.ToolCall, provideriface.EventEmitFunc) []types.ToolResult
 
 // ToolLoopMemoryHooks lets the runtime persist and rebuild provider context
 // around the tool loop without making the tool loop depend on a storage layer.
@@ -100,8 +98,8 @@ type ToolLoopBudget struct {
 
 type toolLoopOptions struct {
 	memoryHooks                   ToolLoopMemoryHooks
-	llmConfig                     LLMSelection
-	providerPreconditionFallbacks []LLMSelection
+	llmConfig                     provideriface.LLMSelection
+	providerPreconditionFallbacks []provideriface.LLMSelection
 	initialToolChoice             string
 	terminalTools                 map[string]bool
 	requiredWriteTools            map[string]bool
@@ -141,7 +139,7 @@ func WithToolLoopMemoryHooks(hooks ToolLoopMemoryHooks) ToolLoopOption {
 
 // WithToolLoopLLMConfig carries the per-run provider/model choice resolved
 // from computer-owned model policy into each provider request.
-func WithToolLoopLLMConfig(config LLMSelection) ToolLoopOption {
+func WithToolLoopLLMConfig(config provideriface.LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
 		opts.llmConfig = config
 	}
@@ -151,9 +149,9 @@ func WithToolLoopLLMConfig(config LLMSelection) ToolLoopOption {
 // provider request-shape precondition or provider-availability failures. The
 // tool loop only uses these after preserving the same tool obligation on the
 // original selection first.
-func WithProviderPreconditionFallbacks(fallbacks ...LLMSelection) ToolLoopOption {
+func WithProviderPreconditionFallbacks(fallbacks ...provideriface.LLMSelection) ToolLoopOption {
 	return func(opts *toolLoopOptions) {
-		opts.providerPreconditionFallbacks = append([]LLMSelection(nil), fallbacks...)
+		opts.providerPreconditionFallbacks = append([]provideriface.LLMSelection(nil), fallbacks...)
 	}
 }
 
@@ -256,8 +254,8 @@ var providerRateLimitRetryDelays = []time.Duration{
 //   - Tool execution emits observable events through the event bus.
 //
 // Returns the final text result, total token usage, and any error.
-func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolRegistry, initialMessages []json.RawMessage, systemPrompt string, maxTokens int, emit provideriface.EventEmitFunc, injectUserTurns InjectUserTurnsFunc, opts ...ToolLoopOption) (string, TokenUsage, error) {
-	var totalUsage TokenUsage
+func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, registry *ToolRegistry, executeToolBatch ToolBatchExecutorFunc, initialMessages []json.RawMessage, systemPrompt string, maxTokens int, emit provideriface.EventEmitFunc, injectUserTurns InjectUserTurnsFunc, opts ...ToolLoopOption) (string, provideriface.TokenUsage, error) {
+	var totalUsage provideriface.TokenUsage
 	options := toolLoopOptions{}
 	for _, opt := range opts {
 		if opt != nil {
@@ -267,7 +265,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 	messages := make([]json.RawMessage, len(initialMessages))
 	copy(messages, initialMessages)
 
-	toolDefs := []ToolDefinition{}
+	toolDefs := []provideriface.ToolDefinition{}
 	if registry != nil {
 		toolDefs = registry.Definitions()
 		systemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
@@ -377,7 +375,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			messages = rebuilt
 		}
 
-		req := ToolLoopRequest{
+		req := provideriface.ToolLoopRequest{
 			Provider:        activeLLMConfig.Provider,
 			Model:           activeLLMConfig.Model,
 			ReasoningEffort: activeLLMConfig.ReasoningEffort,
@@ -450,7 +448,7 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			requiredTimeout = requiredNextTool
 			providerCtx, cancelProviderCall = context.WithTimeout(ctx, requiredNextToolCallTimeout)
 		}
-		resp, err := callToolLoopProviderWithRetries(providerCtx, provider, req, emit)
+		resp, err := CallToolLoopProviderWithRetries(providerCtx, provider, req, emit)
 		providerCallErr := providerCtx.Err()
 		if cancelProviderCall != nil {
 			cancelProviderCall()
@@ -602,7 +600,10 @@ func RunToolLoop(ctx context.Context, provider ToolLoopProvider, registry *ToolR
 			requiredCalled := requiredToolCalled(activeRequired, resp.ToolCalls)
 
 			// Execute tools and collect results.
-			toolResults := executeTools(ctx, registry, resp.ToolCalls, emit)
+			if executeToolBatch == nil {
+				return "", totalUsage, fmt.Errorf("tool loop: batch executor is required for tool calls")
+			}
+			toolResults := executeToolBatch(ctx, registry, resp.ToolCalls, emit)
 
 			// Append tool results as a user message (per Anthropic Messages API convention).
 			toolResultMsg, _ := json.Marshal(map[string]any{
@@ -1032,7 +1033,7 @@ func checkToolLoopBudgetBeforeProvider(budget ToolLoopBudget, providerCalls int,
 	return nil
 }
 
-func checkToolLoopBudgetAfterProvider(budget ToolLoopBudget, usage TokenUsage) error {
+func checkToolLoopBudgetAfterProvider(budget ToolLoopBudget, usage provideriface.TokenUsage) error {
 	if !budget.active() {
 		return nil
 	}
@@ -1052,7 +1053,7 @@ func checkToolLoopBudgetAfterProvider(budget ToolLoopBudget, usage TokenUsage) e
 	return nil
 }
 
-func emitToolLoopBudgetExhausted(emit provideriface.EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage TokenUsage, cause error) {
+func emitToolLoopBudgetExhausted(emit provideriface.EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage provideriface.TokenUsage, cause error) {
 	if emit == nil {
 		return
 	}
@@ -1068,7 +1069,7 @@ func emitToolLoopBudgetExhausted(emit provideriface.EventEmitFunc, budget ToolLo
 	emit(types.EventRunProgress, "tool_loop_budget", payload)
 }
 
-func emitToolLoopBudgetUsage(emit provideriface.EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage TokenUsage) {
+func emitToolLoopBudgetUsage(emit provideriface.EventEmitFunc, budget ToolLoopBudget, providerCalls int, usage provideriface.TokenUsage) {
 	if emit == nil || !budget.active() {
 		return
 	}
@@ -1229,21 +1230,21 @@ func providerModelFallbackReason(err error) string {
 	return "provider_precondition_fallback"
 }
 
-func sameLLMSelection(a, b LLMSelection) bool {
+func sameLLMSelection(a, b provideriface.LLMSelection) bool {
 	return strings.TrimSpace(a.Provider) == strings.TrimSpace(b.Provider) &&
 		strings.TrimSpace(a.Model) == strings.TrimSpace(b.Model) &&
 		strings.TrimSpace(a.ReasoningEffort) == strings.TrimSpace(b.ReasoningEffort) &&
 		a.MaxTokens == b.MaxTokens
 }
 
-func toolDefinitionsMatchingName(defs []ToolDefinition, name string) []ToolDefinition {
+func toolDefinitionsMatchingName(defs []provideriface.ToolDefinition, name string) []provideriface.ToolDefinition {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return defs
 	}
 	for _, def := range defs {
 		if def.Name == name {
-			return []ToolDefinition{def}
+			return []provideriface.ToolDefinition{def}
 		}
 	}
 	return defs
@@ -1309,7 +1310,7 @@ func successfulTerminalToolNames(calls []types.ToolCall, results []types.ToolRes
 	seen := make(map[string]bool, limit)
 	for i := 0; i < limit; i++ {
 		name := strings.TrimSpace(calls[i].Name)
-		if name == "" || !terminalTools[name] || results[i].IsError || !isStructuredToolSuccess(results[i].Output) {
+		if name == "" || !terminalTools[name] || results[i].IsError || !IsStructuredToolSuccess(results[i].Output) {
 			continue
 		}
 		if !seen[name] {
@@ -1320,7 +1321,7 @@ func successfulTerminalToolNames(calls []types.ToolCall, results []types.ToolRes
 	return names
 }
 
-func isStructuredToolSuccess(output string) bool {
+func IsStructuredToolSuccess(output string) bool {
 	var decoded map[string]any
 	return json.Unmarshal([]byte(strings.TrimSpace(output)), &decoded) == nil && len(decoded) > 0
 }
@@ -1365,7 +1366,7 @@ func requiredInitialToolChoiceReminderText(requiredName, reason string) string {
 	return fmt.Sprintf("The previous model turn did not call the required initial tool %q (%s). Call exactly that available tool now. Do not write prose and do not call any other tool.", requiredName, reason)
 }
 
-func callToolLoopProviderWithRetries(ctx context.Context, provider ToolLoopProvider, req ToolLoopRequest, emit provideriface.EventEmitFunc) (*ToolLoopResponse, error) {
+func CallToolLoopProviderWithRetries(ctx context.Context, provider provideriface.ToolLoopProvider, req provideriface.ToolLoopRequest, emit provideriface.EventEmitFunc) (*provideriface.ToolLoopResponse, error) {
 	var lastErr error
 	for attempt := 0; ; attempt++ {
 		resp, err := provider.CallWithTools(ctx, req)
@@ -1373,7 +1374,7 @@ func callToolLoopProviderWithRetries(ctx context.Context, provider ToolLoopProvi
 			return resp, nil
 		}
 		lastErr = err
-		if !isProviderRateLimitError(err) || attempt >= len(providerRateLimitRetryDelays) {
+		if !IsProviderRateLimitError(err) || attempt >= len(providerRateLimitRetryDelays) {
 			return nil, lastErr
 		}
 		delay := providerRateLimitRetryDelays[attempt]
@@ -1392,7 +1393,7 @@ func callToolLoopProviderWithRetries(ctx context.Context, provider ToolLoopProvi
 	}
 }
 
-func isProviderRateLimitError(err error) bool {
+func IsProviderRateLimitError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -1417,7 +1418,7 @@ func sleepContext(ctx context.Context, delay time.Duration) error {
 	}
 }
 
-func toolDefinitionNames(defs []ToolDefinition) []string {
+func toolDefinitionNames(defs []provideriface.ToolDefinition) []string {
 	names := make([]string, 0, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
@@ -1552,9 +1553,9 @@ func buildToolResultContent(results []types.ToolResult) []any {
 	return content
 }
 
-// --- ToolLoopProvider adapter for providers that don't natively support it ---
+// --- provideriface.ToolLoopProvider adapter for providers that don't natively support it ---
 
-// toolLoopAdapter wraps a basic Provider to implement ToolLoopProvider by
+// toolLoopAdapter wraps a basic Provider to implement provideriface.ToolLoopProvider by
 // converting tool-loop calls into the simpler Provider.Execute interface.
 // This is used when a provider (like the StubProvider or BridgeProvider)
 // doesn't directly implement CallWithTools.
@@ -1568,10 +1569,10 @@ type toolLoopAdapter struct {
 	provideriface.Provider
 }
 
-// CallWithTools implements ToolLoopProvider by delegating to the underlying
+// CallWithTools implements provideriface.ToolLoopProvider by delegating to the underlying
 // Provider's Execute method. The adapter extracts the last user message as
 // the prompt and returns a single-turn end_turn response.
-func (a *toolLoopAdapter) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (a *toolLoopAdapter) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	// Extract the last user message as the prompt for the simple provider.
 	prompt := extractLastUserMessage(req.Messages)
 
@@ -1602,10 +1603,10 @@ func (a *toolLoopAdapter) CallWithTools(ctx context.Context, req ToolLoopRequest
 		result = task.Result
 	}
 
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "end_turn",
 		Text:       result,
-		Usage:      TokenUsage{},
+		Usage:      provideriface.TokenUsage{},
 	}, nil
 }
 
@@ -1651,13 +1652,54 @@ func extractTextFromContent(content any) string {
 	}
 }
 
-// asToolLoopProvider converts a Provider to a ToolLoopProvider. If the
-// provider already implements ToolLoopProvider, it is returned directly.
+// AsToolLoopProvider converts a Provider to a provideriface.ToolLoopProvider. If the
+// provider already implements provideriface.ToolLoopProvider, it is returned directly.
 // Otherwise, it is wrapped in a toolLoopAdapter that converts tool-loop
 // calls into simple provider calls.
-func asToolLoopProvider(p provideriface.Provider) ToolLoopProvider {
-	if tlp, ok := p.(ToolLoopProvider); ok {
+func AsToolLoopProvider(p provideriface.Provider) provideriface.ToolLoopProvider {
+	if tlp, ok := p.(provideriface.ToolLoopProvider); ok {
 		return tlp
 	}
 	return &toolLoopAdapter{Provider: p}
+}
+
+func stringMapValue(m map[string]any, key string) string {
+	value := m[key]
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	}
+	rv := reflect.ValueOf(value)
+	if rv.IsValid() && rv.Kind() == reflect.String {
+		return strings.TrimSpace(rv.String())
+	}
+	return ""
+}
+
+func buildSystemPromptWithTools(basePrompt string, registry *ToolRegistry) string {
+	if registry == nil || registry.Size() == 0 {
+		return basePrompt
+	}
+	return basePrompt + "\n\n" + registry.Catalog()
+}
+
+func runMemoryMessageRole(msg json.RawMessage) string {
+	var parsed struct { Role string `json:"role"` }
+	if err := json.Unmarshal(msg, &parsed); err != nil { return "" }
+	return strings.TrimSpace(parsed.Role)
+}
+
+func truncatePromptSnippet(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 || len(value) <= limit { return value }
+	return strings.TrimSpace(value[:limit]) + "..."
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" { return value }
+	}
+	return ""
 }

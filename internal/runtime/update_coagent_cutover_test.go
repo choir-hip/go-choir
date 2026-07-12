@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -2145,16 +2146,16 @@ func TestUpdateCoagentWarmActivationInjectsPendingTurn(t *testing.T) {
 
 type warmUpdateInjectionProvider struct {
 	*StubProvider
-	requests []ToolLoopRequest
+	requests []provideriface.ToolLoopRequest
 }
 
-func (p *warmUpdateInjectionProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *warmUpdateInjectionProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.requests = append(p.requests, req)
 	if len(p.requests) == 1 {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "initial response before warm update",
-			Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+			Usage:      provideriface.TokenUsage{InputTokens: 1, OutputTokens: 1},
 			Model:      "test-model",
 		}, nil
 	}
@@ -2162,15 +2163,15 @@ func (p *warmUpdateInjectionProvider) CallWithTools(ctx context.Context, req Too
 	if !toolLoopRequestContains(req, "WARM_UPDATE_CONTENT") {
 		text = "missing warm update"
 	}
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "end_turn",
 		Text:       text,
-		Usage:      TokenUsage{InputTokens: 1, OutputTokens: 1},
+		Usage:      provideriface.TokenUsage{InputTokens: 1, OutputTokens: 1},
 		Model:      "test-model",
 	}, nil
 }
 
-func toolLoopRequestContains(req ToolLoopRequest, needle string) bool {
+func toolLoopRequestContains(req provideriface.ToolLoopRequest, needle string) bool {
 	for _, msg := range req.Messages {
 		if strings.Contains(string(msg), needle) {
 			return true

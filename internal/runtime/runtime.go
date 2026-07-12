@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/qdrant"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -1649,7 +1650,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	registry := rt.toolRegistryForRun(rec)
 
 	// Use the tool-calling loop if a tool registry is configured and the
-	// provider supports the ToolLoopProvider interface. Otherwise, fall back
+	// provider supports the provideriface.ToolLoopProvider interface. Otherwise, fall back
 	// to the simple Provider.Execute path.
 	if registry != nil && registry.Size() > 0 {
 		rt.executeWithToolLoop(ctx, rec, registry, emit)
@@ -1662,7 +1663,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 // This is the primary execution path when a tool registry is configured,
 // enabling the LLM to invoke registered Go function-call tools.
 func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord, registry *ToolRegistry, emit provideriface.EventEmitFunc) {
-	tlp := asToolLoopProvider(rt.provider)
+	tlp := toolregistry.AsToolLoopProvider(rt.provider)
 
 	// Build the initial conversation from the run prompt.
 	initialMessages := []json.RawMessage{}
@@ -1747,24 +1748,25 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		emit(types.EventRunProgress, "tool_loop_fallbacks_configured", payload)
 	}
 
-	toolLoopOptions := []ToolLoopOption{
-		WithToolLoopMemoryHooks(memory.hooks()),
-		WithToolLoopLLMConfig(llmConfig),
-		WithProviderPreconditionFallbacks(preconditionFallbacks...),
+	toolLoopOptions := []toolregistry.ToolLoopOption{
+		toolregistry.WithToolLoopMemoryHooks(memory.hooks()),
+		toolregistry.WithToolLoopLLMConfig(llmConfig),
+		toolregistry.WithProviderPreconditionFallbacks(preconditionFallbacks...),
 	}
 	if waiter := rt.coagentParkWaiter(rec); waiter != nil {
-		toolLoopOptions = append(toolLoopOptions, WithParkWaiter(waiter))
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithParkWaiter(waiter))
 	}
 	if isTextureAgentRevisionTaskType(metadataString(rec.Metadata, "type")) {
-		toolLoopOptions = append(toolLoopOptions, WithInitialToolChoice(initialTextureToolChoice(rec)))
-		toolLoopOptions = append(toolLoopOptions, WithToolLoopBudget(textureActorToolLoopBudget(rec)))
-		toolLoopOptions = append(toolLoopOptions, WithTerminalToolSuccesses("patch_texture", "rewrite_texture"))
-		toolLoopOptions = append(toolLoopOptions, WithRequiredWriteTools("patch_texture", "rewrite_texture"))
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithInitialToolChoice(initialTextureToolChoice(rec)))
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithToolLoopBudget(textureActorToolLoopBudget(rec)))
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithTerminalToolSuccesses("patch_texture", "rewrite_texture"))
+		toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteTools("patch_texture", "rewrite_texture"))
 	}
 
-	text, usage, err := RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
+	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry,
+	executeTools, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
-		if errors.Is(err, ErrToolLoopPassivated) {
+		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)
 			return
 		}
@@ -1842,12 +1844,12 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	rt.maybeContinuePersistentSuperInbox(persistCtx, rec)
 }
 
-func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunRecord, text string, usage TokenUsage, passivationErr error) {
+func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunRecord, text string, usage provideriface.TokenUsage, passivationErr error) {
 	if rt == nil || rt.store == nil || rec == nil {
 		return
 	}
 	reason := "idle_deadline"
-	var passivatedErr *ToolLoopPassivatedError
+	var passivatedErr *toolregistry.ToolLoopPassivatedError
 	if errors.As(passivationErr, &passivatedErr) && strings.TrimSpace(passivatedErr.Reason) != "" {
 		reason = strings.TrimSpace(passivatedErr.Reason)
 	}
@@ -2481,7 +2483,7 @@ const (
 	defaultTextureActorMaxElapsed       = 45 * time.Minute
 )
 
-func textureActorToolLoopBudget(rec *types.RunRecord) ToolLoopBudget {
+func textureActorToolLoopBudget(rec *types.RunRecord) toolregistry.ToolLoopBudget {
 	docID := ""
 	if rec != nil {
 		docID = strings.TrimSpace(firstNonEmpty(
@@ -2493,7 +2495,7 @@ func textureActorToolLoopBudget(rec *types.RunRecord) ToolLoopBudget {
 	if docID != "" {
 		label = "texture:" + docID
 	}
-	budget := ToolLoopBudget{
+	budget := toolregistry.ToolLoopBudget{
 		Label:            label,
 		MaxProviderCalls: defaultTextureActorMaxProviderCalls,
 		MaxTotalTokens:   defaultTextureActorMaxTotalTokens,
@@ -3444,7 +3446,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 		state = types.RunBlocked
 		kind = types.EventRunBlocked
 		cause = events.CauseSupervisorRecovery
-	} else if isProviderRateLimitError(err) {
+	} else if toolregistry.IsProviderRateLimitError(err) {
 		state = types.RunBlocked
 		kind = types.EventRunBlocked
 		cause = events.CauseSupervisorRecovery

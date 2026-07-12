@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -72,7 +72,7 @@ func TestGatewayBridgeProviderName(t *testing.T) {
 	}
 }
 
-// --- Execute tests (runtime.Provider interface) ---
+// --- Execute tests (provideriface.Provider interface) ---
 
 func TestGatewayBridgeProviderExecuteSuccess(t *testing.T) {
 	mock := &mockGatewayCaller{
@@ -202,7 +202,7 @@ func TestGatewayBridgeProviderExecuteCancelledContext(t *testing.T) {
 	}
 }
 
-// --- CallWithTools tests (runtime.ToolLoopProvider interface) ---
+// --- CallWithTools tests (provideriface.ToolLoopProvider interface) ---
 
 func TestGatewayBridgeProviderCallWithToolsEndTurn(t *testing.T) {
 	mock := &mockGatewayCaller{
@@ -218,7 +218,7 @@ func TestGatewayBridgeProviderCallWithToolsEndTurn(t *testing.T) {
 	}
 	gbp := NewGatewayBridgeProvider(mock)
 
-	req := runtime.ToolLoopRequest{
+	req := provideriface.ToolLoopRequest{
 		System:    "You are helpful.",
 		Messages:  []json.RawMessage{[]byte(`{"role":"user","content":[{"type":"text","text":"What is the answer?"}]}`)},
 		MaxTokens: 4096,
@@ -260,11 +260,11 @@ func TestGatewayBridgeProviderCallWithToolsToolUse(t *testing.T) {
 	}
 	gbp := NewGatewayBridgeProvider(mock)
 
-	req := runtime.ToolLoopRequest{
+	req := provideriface.ToolLoopRequest{
 		System:    "You have tools.",
 		Messages:  []json.RawMessage{[]byte(`{"role":"user","content":[{"type":"text","text":"Read the file"}]}`)},
 		MaxTokens: 4096,
-		ToolDefinitions: []runtime.ToolDefinition{
+		ToolDefinitions: []provideriface.ToolDefinition{
 			{Name: "read_file", Description: "Read a file", Parameters: map[string]any{"type": "object"}},
 		},
 	}
@@ -308,7 +308,7 @@ func TestGatewayBridgeProviderCallWithToolsUsesPerRunModelSelection(t *testing.T
 	gbp := NewGatewayBridgeProvider(mock)
 	gbp.SetRuntimeLLMConfig("chatgpt", "gpt-5.5", "low")
 
-	req := runtime.ToolLoopRequest{
+	req := provideriface.ToolLoopRequest{
 		Provider:        "fireworks",
 		Model:           "accounts/fireworks/models/deepseek-v4-flash",
 		ReasoningEffort: "none",
@@ -346,7 +346,7 @@ func TestGatewayBridgeProviderCallWithToolsError(t *testing.T) {
 	}
 	gbp := NewGatewayBridgeProvider(mock)
 
-	req := runtime.ToolLoopRequest{
+	req := provideriface.ToolLoopRequest{
 		System:    "system",
 		Messages:  []json.RawMessage{[]byte(`{"role":"user","content":"hi"}`)},
 		MaxTokens: 1024,

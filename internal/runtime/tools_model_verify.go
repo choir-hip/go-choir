@@ -9,6 +9,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 type verifyModelCapabilityArgs struct {
@@ -78,7 +79,7 @@ func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapa
 	}
 	messages := []json.RawMessage{buildVerificationUserMessage(prompt, normalized)}
 	maxTokens := provideriface.MaxInteractiveOutputTokensForSelection(selection, role)
-	resp, err := asToolLoopProvider(rt.provider).CallWithTools(ctx, ToolLoopRequest{
+	resp, err := toolregistry.AsToolLoopProvider(rt.provider).CallWithTools(ctx, provideriface.ToolLoopRequest{
 		Provider:        selection.Provider,
 		Model:           selection.Model,
 		ReasoningEffort: selection.ReasoningEffort,

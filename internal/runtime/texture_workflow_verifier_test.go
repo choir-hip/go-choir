@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"context"
 	"encoding/json"
 	"math/rand"
@@ -496,7 +497,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 		"summary":   "prompt bar to worker worktree AppChangePackage proof",
 	})
 	workerProvider := newMockToolLoopProvider(
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-bash",
@@ -504,7 +505,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 				Arguments: bashArgs,
 			}},
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-export",
@@ -512,7 +513,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 				Arguments: exportArgs,
 			}},
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "Published product-path AppChangePackage.",
 		},

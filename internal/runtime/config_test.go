@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -219,8 +220,8 @@ func TestIdlePassivationCannotOverwriteCancelledRun(t *testing.T) {
 		context.Background(),
 		stale,
 		"late passivation",
-		TokenUsage{InputTokens: 3, OutputTokens: 5},
-		&ToolLoopPassivatedError{Reason: "idle"},
+		provideriface.TokenUsage{InputTokens: 3, OutputTokens: 5},
+		&toolregistry.ToolLoopPassivatedError{Reason: "idle"},
 	)
 
 	stored, err := rt.store.GetRun(context.Background(), stale.RunID)

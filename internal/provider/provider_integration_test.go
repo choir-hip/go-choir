@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -130,7 +130,7 @@ func TestFireworksRuntimeToolLoopPreservesReasoningContentThroughAdapter(t *test
 		baseURL:    server.URL,
 	}
 	registry := toolregistry.NewToolRegistry()
-	if err := registry.Register(runtime.Tool{
+	if err := registry.Register(toolregistry.Tool{
 		Name:        "record_status",
 		Description: "Record status.",
 		Parameters: map[string]any{
@@ -145,16 +145,17 @@ func TestFireworksRuntimeToolLoopPreservesReasoningContentThroughAdapter(t *test
 		t.Fatalf("register tool: %v", err)
 	}
 
-	text, _, err := runtime.RunToolLoop(
+	text, _, err := toolregistry.RunToolLoop(
 		context.Background(),
 		NewBridgeProvider(provider),
 		registry,
+		toolregistry.ExecuteToolBatch,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Record ok, then finish with DONE."}]}`)},
 		"You are a harness proof agent.",
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		runtime.WithToolLoopLLMConfig(runtime.LLMSelection{
+		toolregistry.WithToolLoopLLMConfig(provideriface.LLMSelection{
 			Provider:        "fireworks",
 			Model:           "accounts/fireworks/models/deepseek-v4-flash",
 			ReasoningEffort: "none",
@@ -213,7 +214,7 @@ func TestIntegrationFireworksRuntimeToolLoopLive(t *testing.T) {
 				t.Fatalf("fireworks provider: %v", err)
 			}
 			registry := toolregistry.NewToolRegistry()
-			if err := registry.Register(runtime.Tool{
+			if err := registry.Register(toolregistry.Tool{
 				Name:        "record_status",
 				Description: "Record status.",
 				Parameters: map[string]any{
@@ -229,21 +230,22 @@ func TestIntegrationFireworksRuntimeToolLoopLive(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
-			text, usage, err := runtime.RunToolLoop(
+			text, usage, err := toolregistry.RunToolLoop(
 				ctx,
 				NewBridgeProvider(p),
 				registry,
+				toolregistry.ExecuteToolBatch,
 				[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with FIREWORKS_RUNTIME_TOOL_LOOP_OK."}]}`)},
 				"You are a Choir runtime harness proof. Use the tool once when requested.",
 				0,
 				func(types.EventKind, string, json.RawMessage) {},
 				nil,
-				runtime.WithToolLoopLLMConfig(runtime.LLMSelection{
+				toolregistry.WithToolLoopLLMConfig(provideriface.LLMSelection{
 					Provider:        "fireworks",
 					Model:           model,
 					ReasoningEffort: "none",
 				}),
-				runtime.WithInitialToolChoice("function:record_status"),
+				toolregistry.WithInitialToolChoice("function:record_status"),
 			)
 			if err != nil {
 				t.Fatalf("runtime tool loop: %v", err)
@@ -266,7 +268,7 @@ func TestIntegrationFireworksRuntimeToolLoopTextureShapedLive(t *testing.T) {
 		t.Fatalf("fireworks provider: %v", err)
 	}
 	registry := toolregistry.NewToolRegistry()
-	if err := registry.Register(runtime.Tool{
+	if err := registry.Register(toolregistry.Tool{
 		Name:        "record_status",
 		Description: strings.Repeat("Record status for a Texture-shaped harness proof. ", 20),
 		Parameters: map[string]any{
@@ -282,7 +284,7 @@ func TestIntegrationFireworksRuntimeToolLoopTextureShapedLive(t *testing.T) {
 	}
 	for i := 1; i < 12; i++ {
 		name := fmt.Sprintf("unused_texture_like_tool_%02d", i)
-		if err := registry.Register(runtime.Tool{
+		if err := registry.Register(toolregistry.Tool{
 			Name:        name,
 			Description: strings.Repeat("Unused Texture-like tool definition to simulate a broad appagent catalog. ", 16),
 			Parameters: map[string]any{
@@ -299,21 +301,22 @@ func TestIntegrationFireworksRuntimeToolLoopTextureShapedLive(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	text, usage, err := runtime.RunToolLoop(
+	text, usage, err := toolregistry.RunToolLoop(
 		ctx,
 		NewBridgeProvider(p),
 		registry,
+		toolregistry.ExecuteToolBatch,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with FIREWORKS_TEXTURE_SHAPED_TOOL_LOOP_OK."}]}`)},
 		strings.Repeat("You are a Texture appagent. Use the exact tool requested when the user asks for a tool proof. ", 160),
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		runtime.WithToolLoopLLMConfig(runtime.LLMSelection{
+		toolregistry.WithToolLoopLLMConfig(provideriface.LLMSelection{
 			Provider:        "fireworks",
 			Model:           model,
 			ReasoningEffort: "none",
 		}),
-		runtime.WithInitialToolChoice("required"),
+		toolregistry.WithInitialToolChoice("required"),
 	)
 	if err != nil {
 		t.Fatalf("runtime texture-shaped tool loop: %v", err)

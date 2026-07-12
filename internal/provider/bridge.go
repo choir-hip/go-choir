@@ -14,7 +14,7 @@ import (
 )
 
 // BridgeProvider adapts the LLM provider.Provider interface to the
-// runtime.Provider interface consumed by the runtime engine. It translates
+// provideriface.Provider interface consumed by the runtime engine. It translates
 // between the runtime's RunRecord/EventEmitFunc model and the provider
 // package's LLMRequest/LLMResponse model.
 //
@@ -99,7 +99,7 @@ func (b *BridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPolicy {
 	return policy
 }
 
-// Execute implements the runtime.Provider interface. It translates the
+// Execute implements the provideriface.Provider interface. It translates the
 // task prompt into an LLM request, calls the real provider with streaming
 // enabled, emits incremental delta events for each text chunk, and returns
 // the accumulated result text.
@@ -187,7 +187,7 @@ func (b *BridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emi
 	return nil
 }
 
-// CallWithTools implements the runtime.ToolLoopProvider interface. It
+// CallWithTools implements the provideriface.ToolLoopProvider interface. It
 // translates the tool-loop request (with conversation history and tool
 // definitions) into a provider LLMRequest, calls the real provider, and
 // returns a ToolLoopResponse that may contain tool calls.
@@ -370,7 +370,7 @@ func convertRawMessages(raw []json.RawMessage) []Message {
 }
 
 // GatewayBridgeProvider adapts the gateway.GatewayClient to both the
-// runtime.Provider and runtime.ToolLoopProvider interfaces. When the
+// provideriface.Provider and provideriface.ToolLoopProvider interfaces. When the
 // sandbox runtime is configured with a gateway URL (PROXY_VMCTL_URL /
 // RUNTIME_GATEWAY_URL), LLM calls route through the host-side gateway
 // instead of resolving providers directly. This ensures provider
@@ -438,7 +438,7 @@ func (g *GatewayBridgeProvider) RuntimeProviderPolicy() provideriface.ProviderPo
 	}
 }
 
-// Execute implements the runtime.Provider interface. It translates the
+// Execute implements the provideriface.Provider interface. It translates the
 // task prompt into an LLM request and routes it through the gateway with
 // streaming enabled, emitting incremental delta events for each text chunk.
 func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
@@ -503,7 +503,7 @@ func (g *GatewayBridgeProvider) Execute(ctx context.Context, task *types.RunReco
 	return nil
 }
 
-// CallWithTools implements the runtime.ToolLoopProvider interface.
+// CallWithTools implements the provideriface.ToolLoopProvider interface.
 // It translates the tool-loop request into a gateway LLM request and
 // returns a response that may contain tool calls.
 func (g *GatewayBridgeProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {

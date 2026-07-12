@@ -22,24 +22,24 @@ func TestRuntimeRunMemoryThresholdCompaction(t *testing.T) {
 	t.Parallel()
 	registry := testRunMemoryRegistry(t)
 	provider := newMockToolLoopProvider(
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{
 				{ID: "call-1", Name: "echo", Arguments: json.RawMessage(`{"text":"hello"}`)},
 			},
-			Usage: TokenUsage{InputTokens: 10, OutputTokens: 5},
+			Usage: provideriface.TokenUsage{InputTokens: 10, OutputTokens: 5},
 			Model: "test-model",
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       runMemoryCheckpointJSONForTest("remember this through the tool call", []string{"echo tool completed"}, []string{"continue after compaction"}),
-			Usage:      TokenUsage{InputTokens: 12, OutputTokens: 6},
+			Usage:      provideriface.TokenUsage{InputTokens: 12, OutputTokens: 6},
 			Model:      "test-model",
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "finished after compaction",
-			Usage:      TokenUsage{InputTokens: 8, OutputTokens: 4},
+			Usage:      provideriface.TokenUsage{InputTokens: 8, OutputTokens: 4},
 			Model:      "test-model",
 		},
 	)
@@ -164,8 +164,8 @@ func TestRuntimeManualRunMemoryCompaction(t *testing.T) {
 	t.Parallel()
 	registry := testRunMemoryRegistry(t)
 	provider := newMockToolLoopProvider(
-		&ToolLoopResponse{StopReason: "end_turn", Text: "manual compaction target", Model: "test-model"},
-		&ToolLoopResponse{StopReason: "end_turn", Text: runMemoryCheckpointJSONForTest("manual compaction prompt", []string{"manual run completed"}, []string{"resume from manual checkpoint"}), Model: "test-model"},
+		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "manual compaction target", Model: "test-model"},
+		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: runMemoryCheckpointJSONForTest("manual compaction prompt", []string{"manual run completed"}, []string{"resume from manual checkpoint"}), Model: "test-model"},
 	)
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider, registry)
 	rt.cfg.RunMemoryKeepRecentTokens = 1
@@ -180,7 +180,7 @@ func TestRuntimeManualRunMemoryCompaction(t *testing.T) {
 	}
 
 	memory := newRunMemoryManager(rt.store, &done, rt.cfg, func(types.EventKind, string, json.RawMessage) {})
-	memory.withLLMCompactor(asToolLoopProvider(rt.provider), provideriface.ResolvedLLMConfigFromMetadata(done.Metadata), 0)
+	memory.withLLMCompactor(toolregistry.AsToolLoopProvider(rt.provider), provideriface.ResolvedLLMConfigFromMetadata(done.Metadata), 0)
 	compacted, err := memory.compactIfNeeded(context.Background(), "manual_test", true)
 	if err != nil {
 		t.Fatalf("manual compact: %v", err)
@@ -208,8 +208,8 @@ func TestChildRunUsesRunMemory(t *testing.T) {
 	t.Parallel()
 	registry := testRunMemoryRegistry(t)
 	provider := newMockToolLoopProvider(
-		&ToolLoopResponse{StopReason: "end_turn", Text: "parent done", Model: "test-model"},
-		&ToolLoopResponse{StopReason: "end_turn", Text: "child done", Model: "test-model"},
+		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "parent done", Model: "test-model"},
+		&provideriface.ToolLoopResponse{StopReason: "end_turn", Text: "child done", Model: "test-model"},
 	)
 	rt, s := testRuntimeWithProviderAndRegistry(t, provider, registry)
 
@@ -282,13 +282,13 @@ type runMemoryOverflowRetrievalProvider struct {
 	agentCalls int32
 }
 
-func (p *runMemoryOverflowRetrievalProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *runMemoryOverflowRetrievalProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	atomic.AddInt32(&p.calls, 1)
 	if strings.Contains(req.System, "runtime run-memory compactor") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       runMemoryCheckpointJSONForTest("recover from overflow", []string{"raw sentinel compacted"}, []string{"call get_run_memory_entry for the compacted entry id"}),
-			Usage:      TokenUsage{InputTokens: 12, OutputTokens: 6},
+			Usage:      provideriface.TokenUsage{InputTokens: 12, OutputTokens: 6},
 			Model:      req.Model,
 		}, nil
 	}
@@ -308,24 +308,24 @@ func (p *runMemoryOverflowRetrievalProvider) CallWithTools(ctx context.Context, 
 		if entryID == "" {
 			return nil, fmt.Errorf("compacted retry context missing raw entry id: %s", raw)
 		}
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-get-memory",
 				Name:      "get_run_memory_entry",
 				Arguments: json.RawMessage(fmt.Sprintf(`{"entry_id":%q}`, entryID)),
 			}},
-			Usage: TokenUsage{InputTokens: 10, OutputTokens: 5},
+			Usage: provideriface.TokenUsage{InputTokens: 10, OutputTokens: 5},
 			Model: "test-model",
 		}, nil
 	case 3:
 		if !strings.Contains(raw, p.sentinel) {
 			return nil, fmt.Errorf("final context missing sentinel from retrieved raw entry")
 		}
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "retrieved raw sentinel",
-			Usage:      TokenUsage{InputTokens: 8, OutputTokens: 4},
+			Usage:      provideriface.TokenUsage{InputTokens: 8, OutputTokens: 4},
 			Model:      "test-model",
 		}, nil
 	default:
@@ -392,13 +392,13 @@ type runtimeOverflowProvider struct {
 	agentCalls            int32
 }
 
-func (p *runtimeOverflowProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *runtimeOverflowProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	atomic.AddInt32(&p.calls, 1)
 	if strings.Contains(req.System, "runtime run-memory compactor") {
-		return &ToolLoopResponse{
+		return &provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       runMemoryCheckpointJSONForTest("recover from overflow", []string{"provider overflow compacted"}, []string{"continue the run"}),
-			Usage:      TokenUsage{InputTokens: 12, OutputTokens: 6},
+			Usage:      provideriface.TokenUsage{InputTokens: 12, OutputTokens: 6},
 			Model:      req.Model,
 		}, nil
 	}
@@ -406,10 +406,10 @@ func (p *runtimeOverflowProvider) CallWithTools(ctx context.Context, req ToolLoo
 	if call <= p.failuresBeforeSuccess {
 		return nil, fmt.Errorf("maximum context length exceeded")
 	}
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason: "end_turn",
 		Text:       fmt.Sprintf("recovered with %d messages", len(req.Messages)),
-		Usage:      TokenUsage{InputTokens: 3, OutputTokens: 2},
+		Usage:      provideriface.TokenUsage{InputTokens: 3, OutputTokens: 2},
 		Model:      "test-model",
 	}, nil
 }

@@ -13,7 +13,7 @@ import (
 )
 
 type capturingModelVerifyProvider struct {
-	req   ToolLoopRequest
+	req   provideriface.ToolLoopRequest
 	calls int
 }
 
@@ -24,14 +24,14 @@ func (p *capturingModelVerifyProvider) Execute(ctx context.Context, task *types.
 
 func (p *capturingModelVerifyProvider) ProviderName() string { return "capture" }
 
-func (p *capturingModelVerifyProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *capturingModelVerifyProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.req = req
 	p.calls++
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		StopReason:       "end_turn",
 		Text:             "verification passed",
 		ReasoningContent: "hidden verifier reasoning",
-		Usage:            TokenUsage{InputTokens: 11, OutputTokens: 7},
+		Usage:            provideriface.TokenUsage{InputTokens: 11, OutputTokens: 7},
 		Model:            req.Model,
 	}, nil
 }

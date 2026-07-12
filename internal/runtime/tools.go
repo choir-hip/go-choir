@@ -14,9 +14,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Re-exported from internal/provideriface for backward compatibility.
-type ToolDefinition = provideriface.ToolDefinition
-
 // Re-exported from internal/toolregistry for backward compatibility.
 // New code should import internal/toolregistry directly.
 type (
@@ -70,7 +67,7 @@ func executeTools(ctx context.Context, registry *ToolRegistry, calls []types.Too
 				skipReason = fmt.Sprintf("tool_notice:duplicate Texture write tool %s in this Texture turn skipped after call %s; one canonical document mutation is allowed per revision run", call.Name, successfulTextureEditCallID)
 			}
 			results[i] = executeOneTool(ctx, registry, call, skipReason, emit)
-			if skipReason == "" && profile == AgentProfileTexture && isTextureWriteToolName(call.Name) && !results[i].IsError && isStructuredToolSuccess(results[i].Output) {
+			if skipReason == "" && profile == AgentProfileTexture && isTextureWriteToolName(call.Name) && !results[i].IsError && toolregistry.IsStructuredToolSuccess(results[i].Output) {
 				successfulTextureEditCallID = call.ID
 			}
 		}

@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 var textureMergePreviewCommentRE = regexp.MustCompile(`(?is)\n*\s*<!--\s*Texture merge preview provenance\b.*?-->\s*`)
@@ -168,7 +170,7 @@ func (rt *Runtime) callTextureSemanticMergeModel(ctx context.Context, ownerID st
 		"content": []map[string]string{{"type": "text", "text": prompt}},
 	})
 	start := time.Now()
-	resp, err := callToolLoopProviderWithRetries(ctx, asToolLoopProvider(rt.provider), ToolLoopRequest{
+	resp, err := toolregistry.CallToolLoopProviderWithRetries(ctx, toolregistry.AsToolLoopProvider(rt.provider), provideriface.ToolLoopRequest{
 		Provider:        selection.Provider,
 		Model:           selection.Model,
 		ReasoningEffort: selection.ReasoningEffort,

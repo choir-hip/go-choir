@@ -21,7 +21,7 @@ import (
 
 type semanticMergeTestProvider struct {
 	response string
-	req      ToolLoopRequest
+	req      provideriface.ToolLoopRequest
 	calls    int
 }
 
@@ -32,14 +32,14 @@ func (p *semanticMergeTestProvider) Execute(ctx context.Context, task *types.Run
 	return nil
 }
 
-func (p *semanticMergeTestProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (p *semanticMergeTestProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	p.calls++
 	p.req = req
-	return &ToolLoopResponse{
+	return &provideriface.ToolLoopResponse{
 		ID:         "model-response-1",
 		StopReason: "end_turn",
 		Text:       p.response,
-		Usage:      TokenUsage{InputTokens: 321, OutputTokens: 123},
+		Usage:      provideriface.TokenUsage{InputTokens: 321, OutputTokens: 123},
 		Model:      "semantic-test-model",
 	}, nil
 }

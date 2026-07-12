@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -1494,7 +1494,7 @@ func TestBridgeProviderCallWithToolsReturnsToolCalls(t *testing.T) {
 
 	bridge := NewBridgeProvider(mock)
 
-	req := runtime.ToolLoopRequest{
+	req := provideriface.ToolLoopRequest{
 		System:    "You are helpful.",
 		Messages:  []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Read the hosts file"}]}`)},
 		MaxTokens: 4096,
@@ -1539,7 +1539,7 @@ func TestBridgeProviderCallWithToolsEndTurn(t *testing.T) {
 
 	bridge := NewBridgeProvider(mock)
 
-	req := runtime.ToolLoopRequest{
+	req := provideriface.ToolLoopRequest{
 		System:    "You are helpful.",
 		Messages:  []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"What is the answer?"}]}`)},
 		MaxTokens: 4096,
@@ -1870,12 +1870,12 @@ func TestBridgeProviderCallWithToolsPassesToolDefinitions(t *testing.T) {
 
 	bridge := NewBridgeProvider(mock)
 
-	req := runtime.ToolLoopRequest{
+	req := provideriface.ToolLoopRequest{
 		System: "You are helpful.",
 		Messages: []json.RawMessage{
 			json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Read a file"}]}`),
 		},
-		ToolDefinitions: []runtime.ToolDefinition{
+		ToolDefinitions: []provideriface.ToolDefinition{
 			{Name: "read_file", Description: "Read a file", Parameters: map[string]any{"type": "object"}},
 		},
 		MaxTokens: 4096,
@@ -2948,7 +2948,7 @@ func TestIntegrationDeepSeekRuntimeExactToolChoiceLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new deepseek provider: %v", err)
 	}
-	text, usage, err := runLiveProviderToolLoop(t, p, runtime.LLMSelection{
+	text, usage, err := runLiveProviderToolLoop(t, p, provideriface.LLMSelection{
 		Provider:        "deepseek",
 		Model:           "deepseek-v4-flash",
 		ReasoningEffort: "medium",
@@ -2979,7 +2979,7 @@ func TestIntegrationXiaomiRuntimeExactToolChoiceLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new xiaomi provider: %v", err)
 	}
-	text, usage, err := runLiveProviderToolLoop(t, p, runtime.LLMSelection{
+	text, usage, err := runLiveProviderToolLoop(t, p, provideriface.LLMSelection{
 		Provider:        "xiaomi",
 		Model:           "mimo-v2.5-pro",
 		ReasoningEffort: "none",
@@ -3010,7 +3010,7 @@ func TestIntegrationDeepSeekAnthropicRuntimeExactToolChoiceLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new deepseek anthropic provider: %v", err)
 	}
-	text, usage, err := runLiveProviderToolLoop(t, p, runtime.LLMSelection{
+	text, usage, err := runLiveProviderToolLoop(t, p, provideriface.LLMSelection{
 		Provider:        "deepseek-anthropic",
 		Model:           "deepseek-v4-flash",
 		ReasoningEffort: "medium",
@@ -3044,7 +3044,7 @@ func TestIntegrationXiaomiAnthropicRuntimeExactToolChoiceLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new xiaomi anthropic provider: %v", err)
 	}
-	text, usage, err := runLiveProviderToolLoop(t, p, runtime.LLMSelection{
+	text, usage, err := runLiveProviderToolLoop(t, p, provideriface.LLMSelection{
 		Provider:        "xiaomi-anthropic",
 		Model:           "mimo-v2.5-pro",
 		ReasoningEffort: "medium",
@@ -3064,7 +3064,7 @@ func TestIntegrationRuntimeToolChoiceModesLive(t *testing.T) {
 	type liveProviderCase struct {
 		name      string
 		provider  Provider
-		selection runtime.LLMSelection
+		selection provideriface.LLMSelection
 	}
 	cases := make([]liveProviderCase, 0, 4)
 	if apiKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); apiKey != "" {
@@ -3075,7 +3075,7 @@ func TestIntegrationRuntimeToolChoiceModesLive(t *testing.T) {
 		cases = append(cases, liveProviderCase{
 			name:     "deepseek-openai",
 			provider: p,
-			selection: runtime.LLMSelection{
+			selection: provideriface.LLMSelection{
 				Provider:        "deepseek",
 				Model:           "deepseek-v4-flash",
 				ReasoningEffort: "medium",
@@ -3094,7 +3094,7 @@ func TestIntegrationRuntimeToolChoiceModesLive(t *testing.T) {
 		cases = append(cases, liveProviderCase{
 			name:     "deepseek-anthropic",
 			provider: pAnthropic,
-			selection: runtime.LLMSelection{
+			selection: provideriface.LLMSelection{
 				Provider:        "deepseek-anthropic",
 				Model:           "deepseek-v4-flash",
 				ReasoningEffort: "medium",
@@ -3109,7 +3109,7 @@ func TestIntegrationRuntimeToolChoiceModesLive(t *testing.T) {
 		cases = append(cases, liveProviderCase{
 			name:     "xiaomi-openai",
 			provider: p,
-			selection: runtime.LLMSelection{
+			selection: provideriface.LLMSelection{
 				Provider:        "xiaomi",
 				Model:           "mimo-v2.5-pro",
 				ReasoningEffort: "medium",
@@ -3128,7 +3128,7 @@ func TestIntegrationRuntimeToolChoiceModesLive(t *testing.T) {
 		cases = append(cases, liveProviderCase{
 			name:     "xiaomi-anthropic",
 			provider: pAnthropic,
-			selection: runtime.LLMSelection{
+			selection: provideriface.LLMSelection{
 				Provider:        "xiaomi-anthropic",
 				Model:           "mimo-v2.5-pro",
 				ReasoningEffort: "medium",
@@ -3259,10 +3259,10 @@ func parseJSONMapFromProviderTextForTest(t *testing.T, text string) map[string]a
 	return out
 }
 
-func runLiveProviderToolLoop(t *testing.T, p Provider, selection runtime.LLMSelection, initialToolChoice, marker string) (string, runtime.TokenUsage, error) {
+func runLiveProviderToolLoop(t *testing.T, p Provider, selection provideriface.LLMSelection, initialToolChoice, marker string) (string, provideriface.TokenUsage, error) {
 	t.Helper()
 	registry := toolregistry.NewToolRegistry()
-	if err := registry.Register(runtime.Tool{
+	if err := registry.Register(toolregistry.Tool{
 		Name:        "record_status",
 		Description: "Record a provider conformance status.",
 		Parameters: map[string]any{
@@ -3284,17 +3284,18 @@ func runLiveProviderToolLoop(t *testing.T, p Provider, selection runtime.LLMSele
 		userInstruction = "Do not call tools. Respond with " + marker + "."
 		systemPrompt = "You are a Choir provider conformance proof agent. When tool choice is none, answer directly with the requested marker and do not call tools."
 	}
-	return runtime.RunToolLoop(
+	return toolregistry.RunToolLoop(
 		ctx,
 		NewBridgeProvider(p),
 		registry,
+		toolregistry.ExecuteToolBatch,
 		[]json.RawMessage{json.RawMessage(fmt.Sprintf(`{"role":"user","content":[{"type":"text","text":%q}]}`, userInstruction))},
 		systemPrompt,
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		runtime.WithToolLoopLLMConfig(selection),
-		runtime.WithInitialToolChoice(initialToolChoice),
+		toolregistry.WithToolLoopLLMConfig(selection),
+		toolregistry.WithInitialToolChoice(initialToolChoice),
 	)
 }
 

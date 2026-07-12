@@ -4597,7 +4597,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 		"checks": ["grep -q background README.md"]
 	}`, base)
 	workerProvider := newMockToolLoopProvider(
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-export",
@@ -4605,7 +4605,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 				Arguments: json.RawMessage(exportArgs),
 			}},
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "Published background worker AppChangePackage.",
 		},
@@ -4842,7 +4842,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 		t.Fatalf("open worker store: %v", err)
 	}
 	workerProvider := newMockToolLoopProvider(
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:   "call-worker-update",
@@ -4860,7 +4860,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 					}`),
 			}},
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "Submitted direct worker update.",
 		},
@@ -5463,7 +5463,7 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 	if err := os.MkdirAll(workerCWD, 0o755); err != nil {
 		t.Fatalf("create worker cwd: %v", err)
 	}
-	workerProvider := newMockToolLoopProvider(&ToolLoopResponse{
+	workerProvider := newMockToolLoopProvider(&provideriface.ToolLoopResponse{
 		StopReason: "end_turn",
 		Text:       "Received bootstrap instructions.",
 	})
@@ -6550,7 +6550,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 		"checks":      []string{"test -f isolated-worker-proof.txt"},
 	})
 	workerProvider := newMockToolLoopProvider(
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-bash",
@@ -6558,7 +6558,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 				Arguments: bashArgs,
 			}},
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{{
 				ID:        "call-export",
@@ -6566,7 +6566,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 				Arguments: exportArgs,
 			}},
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "Published local worktree AppChangePackage.",
 		},

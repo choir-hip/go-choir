@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	runtimestore "github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -32,7 +33,7 @@ type runMemoryManager struct {
 	rec                       *types.RunRecord
 	cfg                       Config
 	emit                      provideriface.EventEmitFunc
-	provider                  ToolLoopProvider
+	provider                  provideriface.ToolLoopProvider
 	llmConfig                 LLMSelection
 	promptOverheadTokens      int
 	overflowRecoveryAttempted bool
@@ -48,7 +49,7 @@ func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg Co
 	}
 }
 
-func (m *runMemoryManager) withLLMCompactor(provider ToolLoopProvider, llmConfig LLMSelection, promptOverheadTokens int) *runMemoryManager {
+func (m *runMemoryManager) withLLMCompactor(provider provideriface.ToolLoopProvider, llmConfig LLMSelection, promptOverheadTokens int) *runMemoryManager {
 	m.provider = provider
 	m.llmConfig = llmConfig
 	m.promptOverheadTokens = promptOverheadTokens
@@ -151,8 +152,8 @@ func latestRunMemoryCheckpointAndTail(entries []types.RunMemoryEntry) (string, [
 	return "", entries
 }
 
-func (m *runMemoryManager) hooks() ToolLoopMemoryHooks {
-	return ToolLoopMemoryHooks{
+func (m *runMemoryManager) hooks() toolregistry.ToolLoopMemoryHooks {
+	return toolregistry.ToolLoopMemoryHooks{
 		BeforeProviderCall: m.beforeProviderCall,
 		AfterAppendMessage: m.afterAppendMessage,
 		OnProviderError:    m.onProviderError,
@@ -579,7 +580,7 @@ func (m *runMemoryManager) generateLLMCompaction(ctx context.Context, plan runMe
 			map[string]string{"type": "text", "text": userText},
 		},
 	})
-	resp, err := m.provider.CallWithTools(ctx, ToolLoopRequest{
+	resp, err := m.provider.CallWithTools(ctx, provideriface.ToolLoopRequest{
 		Provider:        m.llmConfig.Provider,
 		Model:           m.llmConfig.Model,
 		ReasoningEffort: m.llmConfig.ReasoningEffort,

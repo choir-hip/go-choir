@@ -16,7 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// --- file_read Tool Implementation ---
+// --- file_read toolregistry.Tool Implementation ---
 //
 // The file_read tool is a real in-process tool that reads a file from the
 // local filesystem and returns its contents. It is the first real tool
@@ -24,13 +24,13 @@ import (
 //
 // It validates:
 //   - VAL-LLM-010: LLM request with tools returns tool_use response
-//   - VAL-LLM-011: Tool calling loop executes tool, feeds result back to LLM
+//   - VAL-LLM-011: toolregistry.Tool calling loop executes tool, feeds result back to LLM
 //   - VAL-LLM-012: Multi-tool loop executes multiple tools sequentially
 
-// fileReadTool returns a Tool that reads a file from the given base directory.
+// fileReadTool returns a toolregistry.Tool that reads a file from the given base directory.
 // The tool expects a JSON argument with a "path" field (relative to baseDir).
-func fileReadTool(baseDir string) Tool {
-	return Tool{
+func fileReadTool(baseDir string) toolregistry.Tool {
+	return toolregistry.Tool{
 		Name:        "file_read",
 		Description: "Read the contents of a file from the sandbox filesystem. Provide the file path as a relative or absolute path.",
 		Parameters: map[string]any{
@@ -65,13 +65,13 @@ func fileReadTool(baseDir string) Tool {
 	}
 }
 
-// --- TestToolLoop: Comprehensive Tool Calling Validation ---
+// --- TestToolLoop: Comprehensive toolregistry.Tool Calling Validation ---
 //
 // These tests validate the full tool-calling loop end-to-end, covering:
-// 1. Tool registration (file_read)
+// 1. toolregistry.Tool registration (file_read)
 // 2. LLM invokes file_read during task
-// 3. Tool result fed back to LLM
-// 4. Tool events emitted (tool.invoked, tool.result)
+// 3. toolregistry.Tool result fed back to LLM
+// 4. toolregistry.Tool events emitted (tool.invoked, tool.result)
 // 5. Task completes with tool-augmented response
 // 6. Multi-tool sequential execution
 
@@ -170,8 +170,8 @@ func TestToolLoopFileReadError(t *testing.T) {
 // This validates:
 //   - file_read tool registered in ToolRegistry
 //   - LLM can invoke file_read tool during task
-//   - Tool result fed back to LLM
-//   - Tool events emitted (tool.invoked, tool.result)
+//   - toolregistry.Tool result fed back to LLM
+//   - toolregistry.Tool events emitted (tool.invoked, tool.result)
 //   - Task completes with tool-augmented response
 func TestToolLoopFileReadWithRuntime(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -191,7 +191,7 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 	// Mock provider that simulates LLM calling file_read then producing final answer.
 	provider := newMockToolLoopProvider(
 		// First response: LLM requests file_read tool.
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			Text:       "",
 			ToolCalls: []types.ToolCall{
@@ -201,14 +201,14 @@ func TestToolLoopFileReadWithRuntime(t *testing.T) {
 					Arguments: json.RawMessage(`{"path":"os-release"}`),
 				},
 			},
-			Usage: TokenUsage{InputTokens: 50, OutputTokens: 20},
+			Usage: provideriface.TokenUsage{InputTokens: 50, OutputTokens: 20},
 			Model: "test-model",
 		},
 		// Second response: LLM summarizes the file contents.
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "The system is ChoirOS version 1.0.",
-			Usage:      TokenUsage{InputTokens: 80, OutputTokens: 15},
+			Usage:      provideriface.TokenUsage{InputTokens: 80, OutputTokens: 15},
 			Model:      "test-model",
 		},
 	)
@@ -350,7 +350,7 @@ func TestToolLoopToolUseResponse(t *testing.T) {
 
 	// Provider returns tool_use with a valid tool call.
 	provider := newMockToolLoopProvider(
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			ID:         "resp-001",
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{
@@ -360,15 +360,15 @@ func TestToolLoopToolUseResponse(t *testing.T) {
 					Arguments: json.RawMessage(`{"path":"/etc/hosts"}`),
 				},
 			},
-			Usage: TokenUsage{InputTokens: 30, OutputTokens: 10},
+			Usage: provideriface.TokenUsage{InputTokens: 30, OutputTokens: 10},
 			Model: "test-model",
 		},
 		// Second turn: final response after tool result.
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			ID:         "resp-002",
 			StopReason: "end_turn",
 			Text:       "The hosts file contains localhost mappings.",
-			Usage:      TokenUsage{InputTokens: 50, OutputTokens: 20},
+			Usage:      provideriface.TokenUsage{InputTokens: 50, OutputTokens: 20},
 			Model:      "test-model",
 		},
 	)
@@ -384,10 +384,11 @@ func TestToolLoopToolUseResponse(t *testing.T) {
 		}{kind, payload})
 	}
 
-	text, usage, err := RunToolLoop(
+	text, usage, err := toolregistry.RunToolLoop(
 		context.Background(),
 		provider,
 		registry,
+		executeTools,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"Read /etc/hosts and summarize"}`)},
 		"You are helpful.",
 		4096,
@@ -452,7 +453,7 @@ func TestToolLoopToolResultFedBack(t *testing.T) {
 	// are included in the conversation.
 	var capturedMessages []json.RawMessage
 	provider := &messageCapturingProvider{
-		responses: []*ToolLoopResponse{
+		responses: []*provideriface.ToolLoopResponse{
 			// First: LLM requests file_read.
 			{
 				StopReason: "tool_use",
@@ -463,14 +464,14 @@ func TestToolLoopToolResultFedBack(t *testing.T) {
 						Arguments: json.RawMessage(`{"path":"story.txt"}`),
 					},
 				},
-				Usage: TokenUsage{InputTokens: 20, OutputTokens: 10},
+				Usage: provideriface.TokenUsage{InputTokens: 20, OutputTokens: 10},
 				Model: "test-model",
 			},
 			// Second: LLM produces final answer incorporating file content.
 			{
 				StopReason: "end_turn",
 				Text:       "The file contains a pangram: The quick brown fox jumps over the lazy dog.",
-				Usage:      TokenUsage{InputTokens: 40, OutputTokens: 20},
+				Usage:      provideriface.TokenUsage{InputTokens: 40, OutputTokens: 20},
 				Model:      "test-model",
 			},
 		},
@@ -479,10 +480,11 @@ func TestToolLoopToolResultFedBack(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	text, _, err := RunToolLoop(
+	text, _, err := toolregistry.RunToolLoop(
 		context.Background(),
 		provider,
 		registry,
+		executeTools,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"Read story.txt and describe it"}`)},
 		"You are helpful.",
 		4096,
@@ -499,7 +501,7 @@ func TestToolLoopToolResultFedBack(t *testing.T) {
 		t.Errorf("text: got %q", text)
 	}
 
-	// VAL-LLM-011: Tool result was fed back to the LLM in conversation.
+	// VAL-LLM-011: toolregistry.Tool result was fed back to the LLM in conversation.
 	// The second CallWithTools should have received a conversation that
 	// includes the tool result message.
 	if len(capturedMessages) < 3 {
@@ -557,7 +559,7 @@ func TestToolLoopMultiToolSequential(t *testing.T) {
 	// Provider makes two sequential tool calls then summarizes.
 	provider := newMockToolLoopProvider(
 		// First response: read intro.txt.
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{
 				{
@@ -566,11 +568,11 @@ func TestToolLoopMultiToolSequential(t *testing.T) {
 					Arguments: json.RawMessage(`{"path":"intro.txt"}`),
 				},
 			},
-			Usage: TokenUsage{InputTokens: 25, OutputTokens: 10},
+			Usage: provideriface.TokenUsage{InputTokens: 25, OutputTokens: 10},
 			Model: "test-model",
 		},
 		// Second response: read details.txt.
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{
 				{
@@ -579,14 +581,14 @@ func TestToolLoopMultiToolSequential(t *testing.T) {
 					Arguments: json.RawMessage(`{"path":"details.txt"}`),
 				},
 			},
-			Usage: TokenUsage{InputTokens: 40, OutputTokens: 10},
+			Usage: provideriface.TokenUsage{InputTokens: 40, OutputTokens: 10},
 			Model: "test-model",
 		},
 		// Third response: final summary referencing both files.
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "Summary: This is a test document. The system has 3 components.",
-			Usage:      TokenUsage{InputTokens: 60, OutputTokens: 20},
+			Usage:      provideriface.TokenUsage{InputTokens: 60, OutputTokens: 20},
 			Model:      "test-model",
 		},
 	)
@@ -596,10 +598,11 @@ func TestToolLoopMultiToolSequential(t *testing.T) {
 		emittedKinds = append(emittedKinds, kind)
 	}
 
-	text, usage, err := RunToolLoop(
+	text, usage, err := toolregistry.RunToolLoop(
 		context.Background(),
 		provider,
 		registry,
+		executeTools,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"Read intro.txt and details.txt, then summarize"}`)},
 		"You are helpful.",
 		4096,
@@ -668,7 +671,7 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 
 	// Provider simulates: read file → summarize.
 	provider := newMockToolLoopProvider(
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{
 				{
@@ -677,13 +680,13 @@ func TestToolLoopEndToEndWithRuntime(t *testing.T) {
 					Arguments: json.RawMessage(`{"path":"version.txt"}`),
 				},
 			},
-			Usage: TokenUsage{InputTokens: 30, OutputTokens: 15},
+			Usage: provideriface.TokenUsage{InputTokens: 30, OutputTokens: 15},
 			Model: "test-model",
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "Based on the version file, this is ChoirOS Sandbox Runtime v1.0, built on 2024-04-12, with tools and streaming features.",
-			Usage:      TokenUsage{InputTokens: 60, OutputTokens: 25},
+			Usage:      provideriface.TokenUsage{InputTokens: 60, OutputTokens: 25},
 			Model:      "test-model",
 		},
 	)
@@ -752,7 +755,7 @@ func TestToolLoopWithMultipleToolsRegistered(t *testing.T) {
 	}
 
 	// Register a second tool (simple echo tool).
-	if err := registry.Register(Tool{
+	if err := registry.Register(toolregistry.Tool{
 		Name:        "echo",
 		Description: "Echo back the input text",
 		Parameters: map[string]any{
@@ -785,7 +788,7 @@ func TestToolLoopWithMultipleToolsRegistered(t *testing.T) {
 
 	// Provider invokes both tools in one turn.
 	provider := newMockToolLoopProvider(
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "tool_use",
 			ToolCalls: []types.ToolCall{
 				{
@@ -794,21 +797,22 @@ func TestToolLoopWithMultipleToolsRegistered(t *testing.T) {
 					Arguments: json.RawMessage(`{"text":"Hello world"}`),
 				},
 			},
-			Usage: TokenUsage{InputTokens: 20, OutputTokens: 10},
+			Usage: provideriface.TokenUsage{InputTokens: 20, OutputTokens: 10},
 			Model: "test-model",
 		},
-		&ToolLoopResponse{
+		&provideriface.ToolLoopResponse{
 			StopReason: "end_turn",
 			Text:       "I echoed: Hello world",
-			Usage:      TokenUsage{InputTokens: 30, OutputTokens: 10},
+			Usage:      provideriface.TokenUsage{InputTokens: 30, OutputTokens: 10},
 			Model:      "test-model",
 		},
 	)
 
-	text, _, err := RunToolLoop(
+	text, _, err := toolregistry.RunToolLoop(
 		context.Background(),
 		provider,
 		registry,
+		executeTools,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"Use the echo tool"}`)},
 		"You are helpful.",
 		4096,
@@ -825,18 +829,19 @@ func TestToolLoopWithMultipleToolsRegistered(t *testing.T) {
 }
 
 func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
-	provider := newMockToolLoopProvider(&ToolLoopResponse{
+	provider := newMockToolLoopProvider(&provideriface.ToolLoopResponse{
 		StopReason: "end_turn",
 		Text:       "done",
-		Usage:      TokenUsage{InputTokens: 10, OutputTokens: 2},
+		Usage:      provideriface.TokenUsage{InputTokens: 10, OutputTokens: 2},
 		Model:      "provider-resolved-model",
 	})
 	var progressPayloads []map[string]any
 
-	_, _, err := RunToolLoop(
+	_, _, err := toolregistry.RunToolLoop(
 		context.Background(),
 		provider,
 		toolregistry.NewToolRegistry(),
+		executeTools,
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
@@ -850,7 +855,7 @@ func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
 			}
 		},
 		nil,
-		WithToolLoopLLMConfig(LLMSelection{
+		toolregistry.WithToolLoopLLMConfig(provideriface.LLMSelection{
 			Provider:        "fireworks",
 			Model:           "accounts/fireworks/models/deepseek-v4-flash",
 			ReasoningEffort: "low",
@@ -879,16 +884,16 @@ func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
 
 // --- Helper types ---
 
-// messageCapturingProvider is a mock ToolLoopProvider that captures all
+// messageCapturingProvider is a mock provideriface.ToolLoopProvider that captures all
 // messages sent to CallWithTools for verification.
 type messageCapturingProvider struct {
 	provideriface.Provider
-	responses        []*ToolLoopResponse
+	responses        []*provideriface.ToolLoopResponse
 	capturedMessages *[]json.RawMessage
 	callIdx          int
 }
 
-func (m *messageCapturingProvider) CallWithTools(ctx context.Context, req ToolLoopRequest) (*ToolLoopResponse, error) {
+func (m *messageCapturingProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	// Capture the messages.
 	if m.capturedMessages != nil {
 		*m.capturedMessages = req.Messages

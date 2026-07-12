@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -501,11 +502,11 @@ func buildCoagentUpdatePrompt(updates []types.CoagentSourcePacket) string {
 	return strings.TrimSpace(b.String())
 }
 
-func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) InjectUserTurnsFunc {
+func (rt *Runtime) coagentUpdateTurnInjector(rec *types.RunRecord) toolregistry.InjectUserTurnsFunc {
 	return rt.coagentUpdateTurnInjectorWithInitialPhase(rec, "")
 }
 
-func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecord, initialPhase string) InjectUserTurnsFunc {
+func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecord, initialPhase string) toolregistry.InjectUserTurnsFunc {
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
 	}
@@ -581,7 +582,7 @@ func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
 	return len(coagentUpdateIDsForRun(rec)) > 0
 }
 
-func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFunc {
+func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) toolregistry.ToolLoopParkWaiterFunc {
 	if rt == nil || rt.store == nil || rec == nil || !runSupportsCoagentUpdateInjection(rec) {
 		return nil
 	}
@@ -593,7 +594,7 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 	if ownerID == "" || agentID == "" {
 		return nil
 	}
-	return func(ctx context.Context, state ToolLoopParkState) (ToolLoopParkResult, error) {
+	return func(ctx context.Context, state toolregistry.ToolLoopParkState) (toolregistry.ToolLoopParkResult, error) {
 		ready := func() (bool, error) {
 			updates, err := rt.store.ListCoagentMailboxBacklog(ctx, ownerID, agentID, 100)
 			if err != nil {
@@ -623,12 +624,12 @@ func (rt *Runtime) coagentParkWaiter(rec *types.RunRecord) ToolLoopParkWaiterFun
 		// and the handler will resume the tool loop from the park point.
 		ok, err := ready()
 		if err != nil {
-			return ToolLoopParkResult{}, err
+			return toolregistry.ToolLoopParkResult{}, err
 		}
 		if ok {
-			return ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}, nil
+			return toolregistry.ToolLoopParkResult{Continue: true, Reason: "update_coagent_signal"}, nil
 		}
-		return ToolLoopParkResult{Continue: false, Passivate: true, Reason: "idle_actor_passivate"}, nil
+		return toolregistry.ToolLoopParkResult{Continue: false, Passivate: true, Reason: "idle_actor_passivate"}, nil
 	}
 }
 

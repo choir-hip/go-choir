@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -42,12 +42,12 @@ func TestCallWithToolsRoutesThroughGatewayWireContract(t *testing.T) {
 	provider := New(server.URL, "sandbox-token")
 	provider.SetRuntimeLLMConfig("fireworks", "accounts/fireworks/models/deepseek-v4-flash", "none")
 
-	resp, err := provider.CallWithTools(context.Background(), runtime.ToolLoopRequest{
+	resp, err := provider.CallWithTools(context.Background(), provideriface.ToolLoopRequest{
 		System:     "system",
 		Messages:   []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"hi"}]}`)},
 		ToolChoice: "required",
 		MaxTokens:  2048,
-		ToolDefinitions: []runtime.ToolDefinition{{
+		ToolDefinitions: []provideriface.ToolDefinition{{
 			Name:        "lookup",
 			Description: "look something up",
 			Parameters:  map[string]any{"type": "object"},
