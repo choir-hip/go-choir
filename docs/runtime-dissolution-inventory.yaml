@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 443
     interface_candidates: 4
-    citers: 213
+    citers: 214
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5203,6 +5203,8 @@ citers:
     - id: docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:- `internal/runtime/trace_wiring_test.go`;
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:Allowed production file: `internal/runtime/runtime.go`, deleting exactly the three in-scope wrappers and attached comments. `(*Runtime).StartRun` is forbidden in this iteration.'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-toolfunc-alias-dispatch-2026-07-12.md:- Exact source diff: one deletion in `internal/runtime/tools.go`; `ToolFunc = toolregistry.ToolFunc` was removed and every surrounding byte remained unchanged.'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-toolfunc-alias-dispatch-2026-07-12.md:Only `internal/runtime/tools.go` may change in source:'
       disposition: historical_evidence
