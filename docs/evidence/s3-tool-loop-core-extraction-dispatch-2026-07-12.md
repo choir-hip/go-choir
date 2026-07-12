@@ -16,6 +16,32 @@ This is a substrate problem, not an app symptom. Patching another runtime compat
 
 ## Exact Mutation Lock
 
+## Fresh Caller-Graph Boundary Correction
+
+The first mechanical extraction probe found that `RunToolLoop` directly calls
+runtime-private `executeTools`. That batch executor contains app/profile policy:
+planned duplicate-side-effect suppression, Texture single-write enforcement,
+sequential versus parallel ordering, output projection/capping, and event
+payload construction. Moving that policy into `toolregistry` would silently
+move app authority and violate the original mutation lock; keeping the direct
+call is impossible without an import cycle.
+
+S3 explicitly allows boundaries to adjust from fresh caller evidence. The
+correct boundary is dependency inversion: `toolregistry` owns the
+storage-independent provider/tool-loop state machine and a narrow batch-executor
+function contract; runtime temporarily owns and supplies the existing
+app/profile-aware batch executor unchanged. This is not a compatibility facade:
+there is no old `runtime.RunToolLoop`, no forwarder, and no alternate execution
+path. A later step-2 slice moves or dissolves the remaining executor policy
+before runtime embedding is removed.
+
+The executor contract may carry only the existing `(context, registry, calls,
+event emitter) -> ordered results` behavior. It must not expose runtime types,
+storage, routes, state, models, profiles, or app policy, and it must not add a
+fallback path. `RunToolLoop` must require exactly one executor when a registry
+and tool calls are present; tests may use the authoritative generic executor
+provided by `toolregistry` only where the old behavior was already generic.
+
 Extract the complete storage-independent tool-loop engine from `internal/runtime/toolloop.go` into `internal/toolregistry`, including its behavioral tests and private helpers. Migrate every production and test caller to the authoritative package. Delete the old runtime declarations rather than aliasing or forwarding them.
 
 Allowed source scope:

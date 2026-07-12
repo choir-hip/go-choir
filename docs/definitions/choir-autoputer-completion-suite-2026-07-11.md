@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: dd9724fc
+  journal_expected_parent_sha: 9277f2a4
   orchestrator_lock:
     holder: Main
     epoch: 16
     expires_at: 2026-07-12T22:00:00Z
-    expected_parent_sha: dd9724fc
+    expected_parent_sha: 9277f2a4
     lock_transition_id: s3-lock-renewal-156
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1691,16 +1691,16 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 16
-      status: dispatched
+      status: blocked_incomplete
       dispatch_nonce: s3-runtime-dissolution-i9-nonce-01
       dispatch_ref: S3I9Implementer
       agent_session_ref: agent://S3I9Implementer
       dispatch_prompt_ref: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md#exact-mutation-lock
       implementer_job_ref: S3I9Implementer
-      implementer_output_ref: pending_agent_return
+      implementer_output_ref: agent://S3I9Implementer#structural-boundary-finding
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      worktree_or_branch_ref: /private/tmp/go-choir-s3-i9@agent/s3-i9-toolloop
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -1709,16 +1709,18 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I9_landing
       stage_started_at: 2026-07-12T20:05:09Z
       transition_id: s3-i9-dispatch-intent-165
-      expected_parent_sha: dd9724fc
+      expected_parent_sha: 9277f2a4
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i9-dispatch-intent-165, recorded_at: 2026-07-12T20:05:09Z, actor: Main, expected_parent_sha: a28b590a, precondition: S3_I8_landed_step1_complete, postcondition: exact_tool_loop_core_extraction_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i9-dispatched-166, recorded_at: 2026-07-12T20:11:57Z, actor: Main, expected_parent_sha: dd9724fc, precondition: canonical_intent_and_live_lock_epoch_16, postcondition: S3I9Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
+        - {status: blocked_incomplete, transition_id: s3-i9-boundary-finding-167, recorded_at: 2026-07-12T20:19:20Z, actor: S3I9Implementer, expected_parent_sha: 9277f2a4, precondition: mechanical_leaf_extraction_attempted, postcondition: executeTools_app_policy_coupling_documented_before_contract_correction, external_operation_id: not_applicable}
+        - {status: dispatch_intent, transition_id: s3-i9-boundary-corrected-168, recorded_at: 2026-07-12T20:19:20Z, actor: Main, expected_parent_sha: 9277f2a4, precondition: fresh_caller_graph_proves_direct_runtime_executor_dependency, postcondition: narrow_required_batch_executor_contract_authorized_no_fallback_or_runtime_type, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T22:00:00Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [internal/runtime/toolloop.go, internal/runtime/direct_toolloop_callers_and_tests, internal/toolregistry, internal/provider/direct_toolloop_callers, docs/runtime-dissolution-inventory.yaml]
-      forbidden_targets: [provider_semantics, tool_execution_order, retries, budgets, park_behavior, event_payloads, registrations, routes, state, models, app_tools, replacement_aliases, wrappers, facades, test_seams, unrelated_cleanup]
-      authority_edges_locked: [toolregistry_owns_registry_and_loop, provider_contract_unchanged, runtime_behavior_unchanged, routes_tools_state_authorities_unchanged]
+      exact_files_packages_routes_state_authorities: [internal/runtime/toolloop.go, internal/runtime/tools.go_batch_executor_caller, internal/runtime/direct_toolloop_callers_and_tests, internal/toolregistry, internal/provider/direct_toolloop_callers, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [provider_semantics, tool_execution_order, retries, budgets, park_behavior, event_payloads, registrations, routes, state, models, app_tools, replacement_aliases, wrappers, facades, fallback_execution_paths, runtime_types_in_executor_contract, unrelated_cleanup]
+      authority_edges_locked: [toolregistry_owns_storage_independent_loop, runtime_temporarily_supplies_single_existing_app_policy_executor, provider_contract_unchanged, runtime_behavior_unchanged, routes_tools_state_authorities_unchanged]
       implementer_agent: S3I9Implementer
       verifier_agent: pending_independent_verifier
       pre_mutation_sha: a28b590a
@@ -1737,13 +1739,13 @@ run_checkpoint_and_resumption_state:
       deploy_ref: pending
       deployed_sha: pending
       acceptance_ref: pending
-      acceptance_contract: complete_tool_loop_engine_extracted_to_toolregistry_no_runtime_alias_behavior_preserved
+      acceptance_contract: storage_independent_tool_loop_extracted_to_toolregistry_required_narrow_executor_contract_no_runtime_alias_no_fallback_behavior_preserved
       evidence_refs: [docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md]
-      open_findings: []
+      open_findings: [batch_executor_policy_remains_runtime_owned_for_later_step2_slice]
       landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-12T20:11:57Z
-      reconciliation_result: one_matching_live_agent_job_S3I9Implementer
+      adjudication: boundary_corrected_from_fresh_caller_evidence_implementation_pending
+      last_reconciled_at: 2026-07-12T20:19:20Z
+      reconciliation_result: one_matching_aborted_diagnostic_agent_result_contract_correction_documented
       close_condition: extraction_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
