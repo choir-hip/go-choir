@@ -693,13 +693,13 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 9319eca895bd49b21199bfbebc59ac1e839cdf76
+  journal_expected_parent_sha: 0873733302bea93e3f8278fc8b830ea005564809
   orchestrator_lock:
     holder: Main
-    epoch: 4
-    expires_at: 2026-07-12T00:34:21Z
-    expected_parent_sha: aea36c0853357758f913d3886b0c3e57a918fab1
-    lock_transition_id: s0-lock-renewal-13
+    epoch: 5
+    expires_at: 2026-07-12T02:38:32Z
+    expected_parent_sha: 0873733302bea93e3f8278fc8b830ea005564809
+    lock_transition_id: s0-lock-takeover-22
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
     B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
@@ -791,7 +791,7 @@ run_checkpoint_and_resumption_state:
     - slice_id: S0-runtime-inventory-ratchet-01
       subgoal: S0
       suite_run_id: choir-autoputer-completion-2026-07-11-01
-      orchestrator_lock_epoch: 4
+      orchestrator_lock_epoch: 5
       status: consensus
       dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
       dispatch_ref: S0RatchetImplementer
@@ -809,8 +809,8 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-post-repair-consensus-pending-21
-      expected_parent_sha: 9319eca895bd49b21199bfbebc59ac1e839cdf76
+      transition_id: s0-lock-takeover-22
+      expected_parent_sha: 0873733302bea93e3f8278fc8b830ea005564809
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
@@ -833,7 +833,8 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-read-prefix-failed-19, recorded_at: 2026-07-11T23:23:48Z, actor: S0RatchetVerifier, expected_parent_sha: bf16aacf3381dbc09c99fe0e7b9169e4ad02bece, precondition: independent_verification_of_exhaustive_store_call_partition, postcondition: read_prefix_fallback_fail_open_counterexample_recorded, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-exact-store-disposition-returned-20, recorded_at: 2026-07-11T23:33:28Z, actor: Main, expected_parent_sha: 11c6dff6071555154e60f3a1aea953f802ef8ffc, precondition: exact_baseline_authority_for_all_typed_store_calls_integrated_and_local_passed, postcondition: S0_CONS_004_repaired_pending_independent_verification, external_operation_id: not_applicable}
         - {status: consensus, transition_id: s0-runtime-inventory-ratchet-post-repair-consensus-pending-21, recorded_at: 2026-07-11T23:35:57Z, actor: Main, expected_parent_sha: 9319eca895bd49b21199bfbebc59ac1e839cdf76, precondition: exact_store_call_baseline_authority_and_independent_verifier_PASS, postcondition: post_repair_default_panel_requested_on_exact_repaired_diff, external_operation_id: agentic_consensus_S0_post_repair_20260711_02}
-      lock_expires_at: 2026-07-12T00:34:21Z
+        - {status: consensus, transition_id: s0-lock-takeover-22, recorded_at: 2026-07-12T00:38:32Z, actor: Main, expected_parent_sha: 0873733302bea93e3f8278fc8b830ea005564809, precondition: epoch_4_expired_origin_main_matches_HEAD_no_external_effect_pending_and_one_attributable_dirty_evidence_path, postcondition: epoch_5_acquired_after_nonce_job_output_and_dirty_path_reconciliation, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-12T02:38:32Z
       mutation_class: yellow
       protected_surfaces: []
       exact_files_packages_routes_state_authorities: [cmd/runtime-ratchet/**, docs/runtime-dissolution-inventory.yaml]
