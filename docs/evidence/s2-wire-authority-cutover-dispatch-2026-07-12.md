@@ -91,3 +91,13 @@ Focused proof passed:
 - `go test ./internal/runtime -run 'Test(RuntimeTextureReadsRemainOwnerScopedAfterWireCutover|RuntimeDoesNotRegisterUniversalWireStories|WirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition|WirePublicationDoesNotBootstrapLocalEdition)$' -count=1`
 - `go run ./cmd/runtime-ratchet`
 - `go test ./cmd/runtime-ratchet`
+
+## S2-D — Product VM Stop/Observe/Start Control
+
+The S2 completion contract requires the feed to be read while the platform VM is stopped through a product/vmctl surface. The deployed product already exposes authenticated `/api/compute/status` and wake/recovery, and vmctl already exposes owner-scoped `StopDesktop`; the missing connection is a stop action and CLI commands. This is a bounded red extension authorized by the S2 Definition itself, not a new lifecycle state machine.
+
+Allowed paths: `internal/proxy/compute_status.go`, `internal/proxy/handlers_test.go` or focused compute tests, `cmd/choir/main.go`, `cmd/choir/main_test.go`, and the runtime ratchet baseline if mechanically required.
+
+Change: add `stop_current_computer` to the existing authenticated compute recovery action switch, call the existing owner-scoped vmctl `StopDesktop`, and return the stopped computer receipt. Add `choir computer status|stop|start` over the existing compute status/recovery routes. `start` uses the existing `wake_current_computer` action. No runtime API, new state machine, raw internal route exposure, SSH, or process control.
+
+Acceptance: focused proxy and CLI tests prove API-key owner-scoped status/stop/start request shapes; deployed CLI stops the current platform computer, status observes it stopped, `choir wire stories` returns the same story while stopped, and start restores the computer.
