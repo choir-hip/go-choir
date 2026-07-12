@@ -5033,13 +5033,13 @@ store_calls:
       disposition: read
 interface_candidates:
     - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.AppendEvent
-      disposition: store_backed
+      disposition: lifecycle
     - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.CreateAgentMutation
-      disposition: store_backed
+      disposition: lifecycle
     - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.CreateRun
-      disposition: store_backed
+      disposition: lifecycle
     - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.UpsertAgent
-      disposition: store_backed
+      disposition: lifecycle
 citers:
     - id: .github/scripts/ci-impact-classify-test:assert_output runtime-change $'internal/runtime/engine.go\n' \
       disposition: block

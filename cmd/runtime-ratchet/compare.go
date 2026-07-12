@@ -29,6 +29,140 @@ var citerDispositions = map[string]bool{
 	"block": true,
 }
 
+var storeMethodSemantics = map[string]string{
+	"ActiveCoSuperSlotRun": "read",
+	"AppendChannelMessage": "lifecycle",
+	"AppendEvent": "lifecycle",
+	"AppendRunMemoryEntry": "lifecycle",
+	"CancelAgentMutation": "lifecycle",
+	"ClaimCoSuperSlot": "lifecycle",
+	"CoSuperSlotByAgent": "read",
+	"CoSuperSlotByAgentAndTrajectory": "read",
+	"CoSuperSlotRun": "read",
+	"CompleteAgentMutation": "lifecycle",
+	"CountActiveCoSuperSlots": "read",
+	"CountPendingWorkerUpdatesByTrajectory": "read",
+	"CountRevisionsByDoc": "read",
+	"CreateAgentMutation": "lifecycle",
+	"CreateBrowserSession": "lifecycle",
+	"CreateContentItem": "wire",
+	"CreateDocument": "wire",
+	"CreateEvidence": "lifecycle",
+	"CreateRevision": "wire",
+	"CreateRevisionWithSourceGraph": "wire",
+	"CreateRun": "lifecycle",
+	"CreateTextureDecision": "wire",
+	"CreateTrajectoryIfAbsent": "wire",
+	"CreateWorkItem": "wire",
+	"CurrentVersionNumberByDoc": "read",
+	"DeferAgentMutation": "lifecycle",
+	"DeleteDocument": "wire",
+	"DispatchWorkerUpdate": "lifecycle",
+	"FailAgentMutation": "lifecycle",
+	"FindWorkItemByFingerprint": "read",
+	"GetAgent": "read",
+	"GetAgentMutationByRun": "read",
+	"GetAppAdoption": "read",
+	"GetAppChangePackage": "read",
+	"GetAppChangePackageForViewer": "read",
+	"GetBlame": "read",
+	"GetBrowserSession": "read",
+	"GetCandidatePackageIntake": "read",
+	"GetComputerSourceLineage": "read",
+	"GetContentItem": "read",
+	"GetDesktopStateForDesktop": "read",
+	"GetDesktopStateForSession": "read",
+	"GetDiff": "read",
+	"GetDocument": "read",
+	"GetDocumentAlias": "read",
+	"GetDocumentAliasSourcePath": "read",
+	"GetEvidence": "read",
+	"GetHistory": "read",
+	"GetLatestActiveRunByAgent": "read",
+	"GetLatestPassivatedRunByAgent": "read",
+	"GetMediaProgress": "read",
+	"GetPendingAgentMutationByDoc": "read",
+	"GetRevision": "read",
+	"GetRevisionUnscoped": "read",
+	"GetRun": "read",
+	"GetRunAcceptance": "read",
+	"GetRunAcceptanceByID": "read",
+	"GetRunMemoryEntry": "read",
+	"GetTextureControllerCheckpoint": "read",
+	"GetTrajectory": "read",
+	"GetUserPreference": "read",
+	"GetWorkerUpdate": "read",
+	"LatestActorRunMemoryEntries": "read",
+	"ListActiveRunsByTrajectoryExcluding": "read",
+	"ListAllDocuments": "read",
+	"ListAppAdoptions": "read",
+	"ListAppChangePackages": "read",
+	"ListBrowserSessions": "read",
+	"ListCandidatePackageIntakes": "read",
+	"ListChannelMessages": "read",
+	"ListCoagentMailboxBacklog": "read",
+	"ListCoagentMailboxBacklogAll": "read",
+	"ListContentItems": "read",
+	"ListDocumentsByOwner": "read",
+	"ListEvents": "read",
+	"ListEventsByOwner": "read",
+	"ListEventsByOwnerAfter": "read",
+	"ListEventsByTrajectory": "read",
+	"ListEvidenceByAgent": "read",
+	"ListMediaRecents": "read",
+	"ListOpenAssignedWorkItems": "read",
+	"ListPodcastSubscriptions": "read",
+	"ListRevisionsByDoc": "read",
+	"ListRunAcceptances": "read",
+	"ListRunAcceptancesByTrajectory": "read",
+	"ListRunMemoryEntries": "read",
+	"ListRunsByChannel": "read",
+	"ListRunsByIngestionHandoff": "read",
+	"ListRunsByOwner": "read",
+	"ListRunsByState": "read",
+	"ListTextureDecisionsByDocument": "read",
+	"ListTextureSourceEntitiesForRevision": "read",
+	"ListTextureSourceGraphForRevisions": "read",
+	"ListTextureSourceRefsForRevision": "read",
+	"ListTrajectoriesByOwner": "read",
+	"ListWorkItemsByTrajectory": "read",
+	"ListWorkerUpdatesByTrajectory": "read",
+	"MarkAgentMutationStale": "lifecycle",
+	"MarkWorkerUpdatesDelivered": "lifecycle",
+	"PatchRevisionMetadata": "wire",
+	"Path": "read",
+	"ReactivateAgentMutation": "lifecycle",
+	"RecordAgentMutationRevision": "wire",
+	"ReleaseCoSuperSlotClaim": "lifecycle",
+	"SaveDesktopStateForDesktop": "lifecycle",
+	"SaveDesktopStateForSession": "lifecycle",
+	"SaveUserPreference": "lifecycle",
+	"SearchPublishedDocuments": "read",
+	"SleepAgentMutation": "lifecycle",
+	"TexturePath": "read",
+	"UpdateAppAdoptionIfCurrent": "promotion",
+	"UpdateBrowserSession": "lifecycle",
+	"UpdateCandidatePackageIntakeIfCurrent": "promotion",
+	"UpdateDocument": "wire",
+	"UpdateRun": "lifecycle",
+	"UpdateRunAndMarkWorkerUpdatesDelivered": "lifecycle",
+	"UpdateTrajectoryStatus": "wire",
+	"UpdateTrajectorySubjectRefs": "wire",
+	"UpdateWorkItemDetails": "wire",
+	"UpdateWorkItemStatus": "wire",
+	"UpsertAgent": "lifecycle",
+	"UpsertAppAdoption": "promotion",
+	"UpsertAppChangePackage": "promotion",
+	"UpsertCandidatePackageIntake": "promotion",
+	"UpsertComputerSourceLineage": "promotion",
+	"UpsertDocumentAlias": "wire",
+	"UpsertMediaProgress": "lifecycle",
+	"UpsertMediaRecent": "lifecycle",
+	"UpsertPodcastSubscription": "lifecycle",
+	"UpsertRunAcceptance": "lifecycle",
+	"UpsertTextureControllerCheckpoint": "wire",
+}
+
 func readInventory(path string) (Inventory, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -196,7 +330,6 @@ func validateEntries(category string, entries []Entry, citer bool) []string {
 }
 
 func validateInterfaceCandidates(entries []Entry) []string {
-	allowed := map[string]bool{"store_backed": true, "non_store": true}
 	seen := map[string]bool{}
 	var problems []string
 	for _, entry := range entries {
@@ -208,10 +341,12 @@ func validateInterfaceCandidates(entries []Entry) []string {
 			problems = append(problems, fmt.Sprintf("interface_candidates: duplicate item %q", entry.ID))
 		}
 		seen[entry.ID] = true
-		if !allowed[entry.Disposition] {
+		method := storeCallMethod(entry.ID)
+		expected := storeMethodSemantics[method]
+		if expected == "" || entry.Disposition != expected {
 			problems = append(problems, fmt.Sprintf(
-				"interface_candidates: missing or invalid disposition %q for %q; want store_backed or non_store",
-				entry.Disposition, entry.ID,
+				"interface_candidates: %s must use authoritative %q disposition, got %q for %q",
+				method, expected, entry.Disposition, entry.ID,
 			))
 		}
 	}
@@ -219,27 +354,23 @@ func validateInterfaceCandidates(entries []Entry) []string {
 }
 
 func validateInterfaceCandidateAuthority(inventory Inventory) []string {
-	storeCalls := map[string]bool{}
+	storeCalls := map[string]Entry{}
 	for _, entry := range inventory.StoreCalls {
-		storeCalls[entry.ID] = true
+		storeCalls[entry.ID] = entry
 	}
 	var problems []string
 	for _, candidate := range inventory.InterfaceCandidates {
-		switch candidate.Disposition {
-		case "store_backed":
-			if !storeCalls[candidate.ID] {
-				problems = append(problems, fmt.Sprintf(
-					"interface_candidates: store_backed candidate %q is missing from store_calls authority",
-					candidate.ID,
-				))
-			}
-		case "non_store":
-			if storeCalls[candidate.ID] {
-				problems = append(problems, fmt.Sprintf(
-					"interface_candidates: non_store candidate %q must not appear in store_calls authority",
-					candidate.ID,
-				))
-			}
+		storeCall, exists := storeCalls[candidate.ID]
+		if !exists {
+			problems = append(problems, fmt.Sprintf(
+				"interface_candidates: candidate %q is missing from potential store_calls authority",
+				candidate.ID,
+			))
+		} else if storeCall.Disposition != candidate.Disposition {
+			problems = append(problems, fmt.Sprintf(
+				"interface_candidates: candidate %q disposition %q does not match store_calls disposition %q",
+				candidate.ID, candidate.Disposition, storeCall.Disposition,
+			))
 		}
 	}
 	return problems
@@ -249,22 +380,7 @@ func validateStoreCalls(entries []Entry) []string {
 	allowed := map[string]bool{
 		"read": true, "lifecycle": true, "wire": true, "promotion": true,
 	}
-	knownWriters := map[string]string{
-		"ClaimCoSuperSlot": "lifecycle",
-		"ReleaseCoSuperSlotClaim": "lifecycle",
-		"CancelAgentMutation": "lifecycle",
-		"PatchRevisionMetadata": "wire",
-		"CreateDocument": "wire",
-		"CreateRevision": "wire",
-		"UpdateDocument": "wire",
-		"CreateWorkItem": "wire",
-		"UpdateTrajectoryStatus": "wire",
-		"UpdateTrajectorySubjectRefs": "wire",
-		"UpsertAppAdoption": "promotion",
-		"UpsertComputerSourceLineage": "promotion",
-		"UpsertAppChangePackage": "promotion",
-		"UpdateAppAdoptionIfCurrent": "promotion",
-	}
+	knownWriters := storeMethodSemantics
 	seen := map[string]bool{}
 	var problems []string
 	for _, entry := range entries {
@@ -286,7 +402,12 @@ func validateStoreCalls(entries []Entry) []string {
 		if ordinal := strings.Index(method, "#"); ordinal >= 0 {
 			method = method[:ordinal]
 		}
-		if expected := knownWriters[method]; expected != "" && entry.Disposition != expected {
+		expected := knownWriters[method]
+		if expected == "" {
+			problems = append(problems, fmt.Sprintf(
+				"store_calls: %s has no authoritative semantic disposition", method,
+			))
+		} else if entry.Disposition != expected {
 			problems = append(problems, fmt.Sprintf(
 				"store_calls: %s must use %s disposition, got %q",
 				method, expected, entry.Disposition,

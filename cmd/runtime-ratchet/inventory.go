@@ -593,11 +593,16 @@ func importedStoreMethods(typeImporter types.Importer) (map[string]*types.Func, 
 	return methods, nil
 }
 
-func storeSelectionKey(selection *types.Selection, function *types.Func, storeMethods map[string]*types.Func) (string, bool) {
+func storeSelectionKey(_ *types.Selection, function *types.Func, storeMethods map[string]*types.Func) (string, bool) {
 	if isConcreteStoreMethod(function) {
 		return "internal/store.method:Store." + function.Name(), true
 	}
-	receiver := types.Unalias(selection.Recv())
+	signature, _ := function.Type().(*types.Signature)
+	if signature == nil || signature.Recv() == nil {
+		return "", false
+	}
+	declaredReceiver := signature.Recv().Type()
+	receiver := types.Unalias(declaredReceiver)
 	if pointer, ok := receiver.(*types.Pointer); ok {
 		receiver = types.Unalias(pointer.Elem())
 	}
@@ -614,7 +619,7 @@ func storeSelectionKey(selection *types.Selection, function *types.Func, storeMe
 	if storeMethod == nil || !sameCallableSignature(function, storeMethod) {
 		return "", false
 	}
-	receiverName := types.TypeString(selection.Recv(), func(pkg *types.Package) string {
+	receiverName := types.TypeString(declaredReceiver, func(pkg *types.Package) string {
 		return pkg.Path()
 	})
 	receiverName = strings.TrimPrefix(receiverName, "github.com/yusefmosiah/go-choir/")

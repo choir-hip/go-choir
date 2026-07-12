@@ -281,6 +281,35 @@ var stateStore *store.Store
 	}
 }
 
+func TestStoreWriterDispositionsCannotBeLaundered(t *testing.T) {
+	required := map[string]string{
+		"CreateBrowserSession": "lifecycle",
+		"UpdateBrowserSession": "lifecycle",
+		"UpsertPodcastSubscription": "lifecycle",
+		"UpsertMediaProgress": "lifecycle",
+		"UpsertMediaRecent": "lifecycle",
+		"SaveUserPreference": "lifecycle",
+		"UpsertDocumentAlias": "wire",
+		"DeleteDocument": "wire",
+	}
+	for method, expected := range required {
+		t.Run(method, func(t *testing.T) {
+			inventory := Inventory{StoreCalls: []Entry{{
+				ID: "internal/runtime/fixture.go:use:internal/store.method:Store." + method,
+				Disposition: "read",
+			}}}
+			assertDiagnostic(t, errors.New(strings.Join(validateStoreCalls(inventory.StoreCalls), "\n")), "must use "+expected+" disposition")
+			applyAuthoritativeStoreDispositions(&inventory)
+			if inventory.StoreCalls[0].Disposition != expected {
+				t.Fatalf("authoritative regeneration disposition = %q, want %q", inventory.StoreCalls[0].Disposition, expected)
+			}
+			if problems := validateStoreCalls(inventory.StoreCalls); len(problems) > 0 {
+				t.Fatalf("authoritative disposition: %v", problems)
+			}
+		})
+	}
+}
+
 func TestExactReadRequiresBaselineDisposition(t *testing.T) {
 	root := fixtureRepository(t)
 	writeFixture(t, root, "internal/store/store.go", `package store
@@ -358,12 +387,12 @@ func TestStoreBackedInterfaceCallIsInventoried(t *testing.T) {
 	writeFixture(t, root, "internal/store/store.go", `package store
 
 type Store struct{}
-func (*Store) SaveDesktopState() {}
+func (*Store) SaveUserPreference() {}
 `)
 	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
-type persistence interface { SaveDesktopState() }
+type persistence interface { SaveUserPreference() }
 func adapt(source persistence) { persist(source) }
 func persist(target persistence) {}
 func begin(state *store.Store) { adapt(state) }
@@ -372,16 +401,16 @@ func begin(state *store.Store) { adapt(state) }
 	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
-type persistence interface { SaveDesktopState() }
+type persistence interface { SaveUserPreference() }
 func adapt(source persistence) { persist(source) }
-func persist(target persistence) { target.SaveDesktopState() }
+func persist(target persistence) { target.SaveUserPreference() }
 func begin(state *store.Store) { adapt(state) }
 `)
 	current := mustScan(t, root)
 	err := compareInventory(baseline, current)
 	assertDiagnostic(t, err, "interface_candidates: added item")
 	assertDiagnostic(t, err, "store.interface:")
-	current.InterfaceCandidates[0].Disposition = "store_backed"
+	current.InterfaceCandidates[0].Disposition = "lifecycle"
 	applyInterfaceCandidateAuthority(&current, current)
 	current.StoreCalls[0].Disposition = "lifecycle"
 	if problems := validateInterfaceCandidates(current.InterfaceCandidates); len(problems) > 0 {
@@ -398,11 +427,11 @@ func begin(state *store.Store) { adapt(state) }
 func TestInterfaceCandidateAuthorityCoversFlowShapes(t *testing.T) {
 	flows := map[string]string{
 		"return": `func source(state *store.Store) persistence { return state }
-func use() { source(&store.Store{}).SaveDesktopState() }`,
-		"conversion": `func use() { persistence(&store.Store{}).SaveDesktopState() }`,
+func use() { source(&store.Store{}).SaveUserPreference() }`,
+		"conversion": `func use() { persistence(&store.Store{}).SaveUserPreference() }`,
 		"composite": `type holder struct { state persistence }
-func use() { holder{state: &store.Store{}}.state.SaveDesktopState() }`,
-		"closure": `func use() { (func() persistence { return &store.Store{} })().SaveDesktopState() }`,
+func use() { holder{state: &store.Store{}}.state.SaveUserPreference() }`,
+		"closure": `func use() { (func() persistence { return &store.Store{} })().SaveUserPreference() }`,
 	}
 	for name, flow := range flows {
 		t.Run(name, func(t *testing.T) {
@@ -410,12 +439,12 @@ func use() { holder{state: &store.Store{}}.state.SaveDesktopState() }`,
 			writeFixture(t, root, "internal/store/store.go", `package store
 
 type Store struct{}
-func (*Store) SaveDesktopState() {}
+func (*Store) SaveUserPreference() {}
 `)
 			writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
-type persistence interface { SaveDesktopState() }
+type persistence interface { SaveUserPreference() }
 `+flow)
 			inventory := mustScan(t, root)
 			if len(inventory.InterfaceCandidates) != 1 {
@@ -424,12 +453,14 @@ type persistence interface { SaveDesktopState() }
 			if len(inventory.StoreCalls) != 0 {
 				t.Fatalf("candidate became Store authority before disposition: %+v", inventory.StoreCalls)
 			}
-			inventory.InterfaceCandidates[0].Disposition = "store_backed"
+			inventory.InterfaceCandidates[0].Disposition = "read"
 			applyInterfaceCandidateAuthority(&inventory, inventory)
 			if len(inventory.StoreCalls) != 1 {
 				t.Fatalf("store-backed candidate calls = %+v, want one", inventory.StoreCalls)
 			}
-			assertDiagnostic(t, errors.New(strings.Join(validateStoreCalls(inventory.StoreCalls), "\n")), "missing or invalid disposition")
+			assertDiagnostic(t, errors.New(strings.Join(validateInterfaceCandidates(inventory.InterfaceCandidates), "\n")), `must use authoritative "lifecycle" disposition`)
+			assertDiagnostic(t, errors.New(strings.Join(validateStoreCalls(inventory.StoreCalls), "\n")), "must use lifecycle disposition")
+			inventory.InterfaceCandidates[0].Disposition = "lifecycle"
 			inventory.StoreCalls[0].Disposition = "lifecycle"
 			if problems := validateInterfaceCandidateAuthority(inventory); len(problems) > 0 {
 				t.Fatalf("candidate authority: %v", problems)
@@ -438,7 +469,36 @@ type persistence interface { SaveDesktopState() }
 	}
 }
 
-func TestSameNameFakeInterfaceIsExcludedWithoutStoreFlow(t *testing.T) {
+func TestPromotedEmbeddedInterfaceSelectionIsCandidate(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) SaveUserPreference() {}
+`)
+	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+type persistence interface { SaveUserPreference() }
+type embedded struct { persistence }
+var _ *store.Store
+func persist(value embedded) { value.SaveUserPreference() }
+`)
+	inventory := mustScan(t, root)
+	if len(inventory.InterfaceCandidates) != 1 {
+		t.Fatalf("promoted interface candidates = %+v, want one", inventory.InterfaceCandidates)
+	}
+	if !strings.Contains(inventory.InterfaceCandidates[0].ID, "internal/runtime.persistence.SaveUserPreference") {
+		t.Fatalf("candidate identity does not name declaring interface: %q", inventory.InterfaceCandidates[0].ID)
+	}
+	inventory.InterfaceCandidates[0].Disposition = "lifecycle"
+	applyInterfaceCandidateAuthority(&inventory, inventory)
+	if len(inventory.StoreCalls) != 1 {
+		t.Fatalf("promoted potential Store calls = %+v, want one", inventory.StoreCalls)
+	}
+}
+
+func TestSameNameFakeInterfaceIsConservativePotentialStoreCall(t *testing.T) {
 	root := fixtureRepository(t)
 	writeFixture(t, root, "internal/store/store.go", `package store
 
@@ -460,14 +520,14 @@ func report() { activeReporter.GetRun() }
 		t.Fatalf("fake-only same-name interface candidates = %+v, want one", inventory.InterfaceCandidates)
 	}
 	inventory.InterfaceCandidates[0].Disposition = "later"
-	assertDiagnostic(t, errors.New(strings.Join(validateInterfaceCandidates(inventory.InterfaceCandidates), "\n")), `missing or invalid disposition "later"`)
-	inventory.InterfaceCandidates[0].Disposition = "non_store"
+	assertDiagnostic(t, errors.New(strings.Join(validateInterfaceCandidates(inventory.InterfaceCandidates), "\n")), `must use authoritative "read" disposition`)
+	inventory.InterfaceCandidates[0].Disposition = "read"
 	applyInterfaceCandidateAuthority(&inventory, inventory)
 	if problems := validateInterfaceCandidateAuthority(inventory); len(problems) > 0 {
-		t.Fatalf("fake-only non_store authority: %v", problems)
+		t.Fatalf("fake-only potential Store authority: %v", problems)
 	}
-	if len(inventory.StoreCalls) != 0 {
-		t.Fatalf("fake-only same-name interface produced store calls: %+v", inventory.StoreCalls)
+	if len(inventory.StoreCalls) != 1 || inventory.StoreCalls[0].Disposition != "read" {
+		t.Fatalf("fake-only potential Store call = %+v, want one read", inventory.StoreCalls)
 	}
 }
 

@@ -33,10 +33,10 @@ func main() {
 		previous, readErr := readInventory(baselinePath)
 		if readErr == nil {
 			inventory.UnusedExportDebt = previous.UnusedExportDebt
-			applyPriorInterfaceCandidateDispositions(&inventory, previous)
-			applyInterfaceCandidateAuthority(&inventory, inventory)
-			applyPriorStoreDispositions(&inventory, previous)
 		}
+		applyAuthoritativeInterfaceCandidateDispositions(&inventory)
+		applyInterfaceCandidateAuthority(&inventory, inventory)
+		applyAuthoritativeStoreDispositions(&inventory)
 		if problems := validateInterfaceCandidates(inventory.InterfaceCandidates); len(problems) > 0 {
 			fatal(fmt.Errorf("cannot write baseline:\n  - %s", strings.Join(problems, "\n  - ")))
 		}
@@ -69,21 +69,10 @@ func main() {
 	fmt.Println("runtime dissolution inventory: PASS")
 	printCounts(inventory.Counts)
 }
-func applyPriorInterfaceCandidateDispositions(current *Inventory, previous Inventory) {
-	dispositions := map[string]string{}
-	for _, entry := range previous.InterfaceCandidates {
-		dispositions[entry.ID] = entry.Disposition
-	}
+func applyAuthoritativeInterfaceCandidateDispositions(current *Inventory) {
 	for index := range current.InterfaceCandidates {
 		entry := &current.InterfaceCandidates[index]
-		entry.Disposition = dispositions[entry.ID]
-		if entry.Disposition == "" {
-			if strings.Contains(entry.ID, "runSubmissionStore.") {
-				entry.Disposition = "store_backed"
-			} else if len(previous.InterfaceCandidates) == 0 {
-				entry.Disposition = "non_store"
-			}
-		}
+		entry.Disposition = storeMethodSemantics[storeCallMethod(entry.ID)]
 	}
 }
 
@@ -97,8 +86,10 @@ func applyInterfaceCandidateAuthority(current *Inventory, authority Inventory) {
 		existing[entry.ID] = true
 	}
 	for _, candidate := range current.InterfaceCandidates {
-		if dispositions[candidate.ID] == "store_backed" && !existing[candidate.ID] {
-			current.StoreCalls = append(current.StoreCalls, Entry{ID: candidate.ID})
+		if !existing[candidate.ID] {
+			current.StoreCalls = append(current.StoreCalls, Entry{
+				ID: candidate.ID, Disposition: dispositions[candidate.ID],
+			})
 			existing[candidate.ID] = true
 		}
 	}
@@ -107,37 +98,10 @@ func applyInterfaceCandidateAuthority(current *Inventory, authority Inventory) {
 	})
 }
 
-func applyPriorStoreDispositions(current *Inventory, previous Inventory) {
-	dispositions := map[string]string{}
-	byMethod := map[string]string{}
-	ambiguousMethod := map[string]bool{}
-	record := func(entry Entry, disposition string) {
-		dispositions[entry.ID] = disposition
-		method := storeCallMethod(entry.ID)
-		if existing := byMethod[method]; existing != "" && existing != disposition {
-			ambiguousMethod[method] = true
-		} else {
-			byMethod[method] = disposition
-		}
-	}
-	for _, entry := range previous.StoreCalls {
-		record(entry, entry.Disposition)
-	}
-	for _, entry := range previous.LegacyStateWriters {
-		record(entry, entry.Disposition)
-	}
-	for _, entry := range previous.LegacyStoreReads {
-		record(entry, "read")
-	}
+func applyAuthoritativeStoreDispositions(current *Inventory) {
 	for index := range current.StoreCalls {
 		entry := &current.StoreCalls[index]
-		entry.Disposition = dispositions[entry.ID]
-		if entry.Disposition == "" {
-			method := storeCallMethod(entry.ID)
-			if !ambiguousMethod[method] {
-				entry.Disposition = byMethod[method]
-			}
-		}
+		entry.Disposition = storeMethodSemantics[storeCallMethod(entry.ID)]
 	}
 }
 
