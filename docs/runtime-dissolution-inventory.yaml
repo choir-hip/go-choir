@@ -6,11 +6,11 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 46932
-    test_loc: 53038
-    exports: 1141
+    production_loc: 46931
+    test_loc: 53044
+    exports: 1140
     export_caller_edges: 601
-    initial_unused_export_debt: 23
+    initial_unused_export_debt: 22
     routes: 47
     tools: 49
     production_importers: 4
@@ -43,7 +43,7 @@ files:
       loc: 20
     - id: internal/runtime/api_test.go [test]
       disposition: api
-      loc: 3182
+      loc: 3183
     - id: internal/runtime/api_texture_prompt_eval.go [production]
       disposition: texture
       loc: 129
@@ -208,7 +208,7 @@ files:
       loc: 1302
     - id: internal/runtime/run_memory_integration_test.go [test]
       disposition: lifecycle
-      loc: 452
+      loc: 453
     - id: internal/runtime/run_memory_test.go [test]
       disposition: lifecycle
       loc: 441
@@ -271,7 +271,7 @@ files:
       loc: 234
     - id: internal/runtime/texture_decision_test.go [test]
       disposition: texture
-      loc: 164
+      loc: 165
     - id: internal/runtime/texture_diagnosis.go [production]
       disposition: texture
       loc: 215
@@ -352,13 +352,13 @@ files:
       loc: 1663
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
-      loc: 3183
+      loc: 3184
     - id: internal/runtime/toolloopvalidation_test.go [test]
       disposition: tools
-      loc: 922
+      loc: 923
     - id: internal/runtime/tools.go [production]
       disposition: tools
-      loc: 639
+      loc: 638
     - id: internal/runtime/tools_capsule.go [production]
       disposition: tools
       loc: 546
@@ -451,7 +451,7 @@ files:
       loc: 260
     - id: internal/runtime/wire_processor_decision_test.go [test]
       disposition: wire
-      loc: 510
+      loc: 511
     - id: internal/runtime/wire_publication.go [production]
       disposition: wire
       loc: 657
@@ -3247,8 +3247,6 @@ exports:
       disposition: tools
       production_callers:
         - internal/runtime/tool_profiles.go
-    - id: internal/runtime/tools.go:var:NewToolRegistry
-      disposition: tools
     - id: internal/runtime/tools_capsule.go:func:RegisterCapsuleExecTools
       disposition: tools
     - id: internal/runtime/tools_capsule.go:func:RegisterCapsuleTools
@@ -3659,8 +3657,6 @@ initial_unused_export_debt:
     - id: internal/runtime/toolloop.go:method(*ToolLoopPassivatedError):Unwrap
       disposition: delete
     - id: internal/runtime/toolloop.go:method(*toolLoopAdapter):CallWithTools
-      disposition: delete
-    - id: internal/runtime/tools.go:var:NewToolRegistry
       disposition: delete
     - id: internal/runtime/tools_capsule.go:func:RegisterCapsuleExecTools
       disposition: delete

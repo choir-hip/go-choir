@@ -28,3 +28,10 @@ Allowed source paths: `internal/runtime/tools.go` and only test files containing
 - introduce no replacement runtime helper/alias/test seam or unrelated cleanup.
 
 Acceptance requires zero residual runtime constructor alias/callers, focused tests/default compilation, ratchet decrease without gated growth, independent verification, full CI, staging identity/product smoke, consensus, and adjudication.
+
+## S3-I8 Implementation Receipt
+
+- Integrated implementation: `35f9c1f0` (isolated commit `7da3eea102112513339db6f4a9ca35c884115b94`).
+- Ten-file exact cutover: `86` legacy test calls became direct `toolregistry.NewToolRegistry()` calls; the runtime alias was deleted; no production caller or replacement seam remains.
+- Default runtime/provider tests and compilation passed; integration-tag provider compilation passed. Comprehensive-tag runtime compilation reproduces identical pre-existing `prompts_test.go`/`texture_test.go` errors at the canonical parent.
+- Ratchet passed after removing the fulfilled export/debt rows: production LOC `46932 -> 46931`, test LOC `53038 -> 53044`, exports `1141 -> 1140`, initial unused-export debt `23 -> 22`; caller edges and every gated authority count remained flat.
