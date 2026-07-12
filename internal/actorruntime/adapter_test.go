@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -86,7 +87,7 @@ func waitForRunState(t *testing.T, s *store.Store, ctx context.Context, runID st
 func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
 	env := newAdapterTestEnv(t)
 
-	rec, err := env.adapter.StartRun(env.ctx, "Test prompt for actor handler", "test-owner")
+	rec, err := env.adapter.Runtime.StartRun(env.ctx, "Test prompt for actor handler", "test-owner")
 	if err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
@@ -101,7 +102,7 @@ func TestAdapterStartRunExecutesViaActorHandler(t *testing.T) {
 }
 
 // TestAdapterDispatchActorActive verifies that the Adapter wires the
-// dispatch function on the embedded runtime.
+// dispatch function on the runtime core.
 func TestAdapterDispatchActorActive(t *testing.T) {
 	env := newAdapterTestEnv(t)
 
@@ -110,6 +111,28 @@ func TestAdapterDispatchActorActive(t *testing.T) {
 	}
 	if env.adapter.ActorRuntime() == nil {
 		t.Fatal("ActorRuntime() = nil, want non-nil")
+	}
+}
+
+func TestAdapterRuntimeCoreIsNamedAndNotEmbedded(t *testing.T) {
+	adapterType := reflect.TypeOf(Adapter{})
+	runtimeType := reflect.TypeOf((*runtime.Runtime)(nil))
+	runtimeFields := 0
+	for i := range adapterType.NumField() {
+		field := adapterType.Field(i)
+		if field.Type != runtimeType {
+			continue
+		}
+		runtimeFields++
+		if field.Name != "Runtime" {
+			t.Errorf("runtime core field name = %q, want %q", field.Name, "Runtime")
+		}
+		if field.Anonymous {
+			t.Error("runtime core field is anonymous, want named field")
+		}
+	}
+	if runtimeFields != 1 {
+		t.Errorf("runtime core field count = %d, want 1", runtimeFields)
 	}
 }
 

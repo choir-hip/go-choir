@@ -120,10 +120,10 @@ func main() {
 	var rtOpts []actorruntime.RuntimeOption
 
 	// Mount the Dolt-backed trace observability store when enabled. The store
-	// wraps the same embedded Dolt *sql.DB that owns runtime/Texture state, so
-	// no extra connection is opened. A schema-application or append failure
-	// degrades gracefully: the runtime logs and continues without persistence
-	// (existing event recording and bus publishing are unchanged).
+	// wraps the same Dolt *sql.DB that owns runtime/Texture state, so no extra
+	// connection is opened. A schema-application or append failure degrades
+	// gracefully: the runtime logs and continues without persistence (existing
+	// event recording and bus publishing are unchanged).
 	if rtCfg.TracePersistenceEnabled {
 		traceStore, err := trace.NewDoltStore(db.DB())
 		if err != nil {
@@ -144,7 +144,7 @@ func main() {
 		if ownerID == "" {
 			return
 		}
-		_, err := rt.EmitProductEvent(r.Context(), ownerID, desktopIDFromRequest(r), types.EventFileChanged, map[string]any{
+		_, err := rt.Runtime.EmitProductEvent(r.Context(), ownerID, desktopIDFromRequest(r), types.EventFileChanged, map[string]any{
 			"operation":        event.Operation,
 			"path":             event.Path,
 			"parent_path":      event.ParentPath,
@@ -168,18 +168,18 @@ func main() {
 		if strings.TrimSpace(toolCWD) == "" {
 			toolCWD = filesRoot
 		}
-		if err := rt.InstallDefaultAgentTools(toolCWD); err != nil {
+		if err := rt.Runtime.InstallDefaultAgentTools(toolCWD); err != nil {
 			log.Fatalf("sandbox: install default agent tools: %v", err)
 		}
 		superTools := 0
-		if registry := rt.ToolRegistryForProfile(runtime.AgentProfileSuper); registry != nil {
+		if registry := rt.Runtime.ToolRegistryForProfile(runtime.AgentProfileSuper); registry != nil {
 			superTools = registry.Size()
 		}
 		log.Printf("sandbox: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
-			sizeOfRegistry(rt.ToolRegistryForProfile(runtime.AgentProfileConductor)),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(runtime.AgentProfileConductor)),
 			superTools,
-			sizeOfRegistry(rt.ToolRegistryForProfile(runtime.AgentProfileResearcher)),
-			sizeOfRegistry(rt.ToolRegistryForProfile(runtime.AgentProfileTexture)),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(runtime.AgentProfileResearcher)),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(runtime.AgentProfileTexture)),
 		)
 	} else {
 		log.Printf("sandbox: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")

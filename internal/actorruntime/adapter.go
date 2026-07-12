@@ -1,9 +1,9 @@
 // Package actorruntime adapts the durable actor runtime (internal/actor) to
 // the surface that cmd/sandbox/main.go expects from the old runtime
 // (internal/runtime).
-//
-// The Adapter embeds *runtime.Runtime for business logic access (tool loops,
-// coagent spawning, state transitions, wire synthesis) and replaces the old
+
+// The Adapter retains a named runtime core for business logic (tool loops,
+// coagent spawning, state transitions, wire synthesis) and replaces the
 // runtime's concurrency substrate (startRunAsync, channels, agentWaiters,
 // 15 mutexes) with the actor runtime's single-mutex mailbox model.
 //
@@ -36,12 +36,10 @@ import (
 )
 
 // RuntimeOption configures optional adapter components.
-// This mirrors runtime.RuntimeOption so cmd/sandbox/main.go can use the same
-// option pattern.
 type RuntimeOption func(*Adapter)
 
 // WithTraceStore mounts a Dolt-backed trace observability store into the
-// embedded runtime so trace events are persisted alongside existing event
+// runtime core so trace events are persisted alongside existing event
 // recording. This is a passthrough to runtime.WithTraceStore; the adapter does
 // not own the store connection (the caller manages the *sql.DB lifecycle).
 func WithTraceStore(s trace.Store) RuntimeOption {
@@ -103,15 +101,15 @@ func WithOnActorFailure(fn func(agentID string, err error)) RuntimeOption {
 	}
 }
 
-// Adapter wraps an actor.Runtime to provide the same surface as the old
-// runtime.Runtime. It embeds *runtime.Runtime for business logic access and
-// replaces the concurrency substrate with the actor runtime.
+// Adapter owns actor dispatch and lifecycle around an explicitly named runtime
+// business-logic core. Naming the field keeps the runtime method set from being
+// promoted onto the adapter.
 //
-// The Adapter sets a dispatch function on the embedded runtime: when the
-// business logic calls rt.activate(rec) or rt.wakeUpdatedCoagent(...), the
-// dispatch function sends actor messages through actor.Send.
+// The Adapter sets a dispatch function on the runtime core: when the business
+// logic activates a run or wakes a coagent, the dispatch function sends actor
+// messages through actor.Send.
 type Adapter struct {
-	*runtime.Runtime // embedded for business logic (promoted methods)
+	Runtime *runtime.Runtime
 
 	cfg      provideriface.Config
 	store    *store.Store
@@ -133,20 +131,19 @@ type Adapter struct {
 	started   bool
 }
 
-// New creates a new actor-based runtime adapter. It mirrors the old
-// runtime.New signature so cmd/sandbox/main.go can switch with a single
-// import change.
+// New creates a runtime business-logic core and its actor-based lifecycle
+// adapter. The core remains explicitly available as Adapter.Runtime without
+// promoting its method set onto Adapter.
 //
-// The adapter creates a *runtime.Runtime for business logic, an actor runtime
-// for concurrency, and wires them together: the runtime's ActorBridge is set
-// to this adapter, so run activations and coagent wakes go through actor.Send.
+// The runtime core's ActorBridge is set to the adapter, so run activations and
+// coagent wakes go through actor.Send.
 func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, opts ...RuntimeOption) *Adapter {
 	// Create the business-logic runtime with the same options pattern.
 	rtOpts := convertOpts(opts)
 	rt := runtime.New(cfg, s, bus, provider, rtOpts...)
 
 	a := &Adapter{
-		Runtime:  rt,
+		Runtime: rt,
 		cfg:      cfg,
 		store:    s,
 		bus:      bus,
@@ -175,7 +172,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	a.logPath = logPath
 
 	// Create the handler and actor runtime.
-	handler := newActorHandler(rt)
+	handler := newActorHandler(a.Runtime)
 	actorOpts := actor.Options{
 		MaxResident:         0, // unlimited for now
 		HandlerRetryBackoff: 100 * time.Millisecond,
@@ -205,8 +202,8 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	return a
 }
 
-// dispatch is the function hook that the embedded runtime calls to send
-// actor messages. It is set via rt.SetDispatchActor(a.dispatch).
+// dispatch is the function hook that the runtime core calls to send actor
+// messages. It is set via rt.SetDispatchActor(a.dispatch).
 func (a *Adapter) dispatch(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error {
 	toAgentID = strings.TrimSpace(toAgentID)
 	if toAgentID == "" {
@@ -224,10 +221,10 @@ func (a *Adapter) dispatch(ctx context.Context, toAgentID, kind, content, trajec
 	return a.actorRT.Send(ctx, u)
 }
 
-// Start starts the runtime. It calls the embedded runtime's Start (which
-// performs boot recovery: passivate interrupted runs, sweep pending actors,
-// reconcile texture documents) and then sweeps the actor log to recover any
-// actors with unprocessed backlog from a previous process.
+// Start starts the runtime. It calls the core runtime's Start (which performs
+// boot recovery: passivate interrupted runs, sweep pending actors, reconcile
+// texture documents) and then sweeps the actor log to recover any actors with
+// unprocessed backlog from a previous process.
 func (a *Adapter) Start(ctx context.Context) {
 	a.Runtime.Start(ctx)
 	// Recover any actors with durable backlog from a previous process.
@@ -237,7 +234,7 @@ func (a *Adapter) Start(ctx context.Context) {
 	a.startOnce.Do(func() { a.started = true })
 }
 
-// Stop gracefully shuts down the actor runtime and the embedded runtime.
+// Stop gracefully shuts down the actor runtime and the runtime core.
 func (a *Adapter) Stop() {
 	a.actorRT.Stop()
 	a.Runtime.Stop()
@@ -247,10 +244,10 @@ func (a *Adapter) Stop() {
 }
 
 // Drain gracefully shuts down the actor runtime with a timeout, then stops
-// the embedded runtime. In-flight actor handlers receive a cancellation
-// context; actors that do not finish within the timeout are logged (their
-// partial side effects are visible in the durable log). This is the
-// backpressure-aware alternative to Stop.
+// the runtime core. In-flight actor handlers receive a cancellation context;
+// actors that do not finish within the timeout are logged (their partial side
+// effects are visible in the durable log). This is the backpressure-aware
+// alternative to Stop.
 func (a *Adapter) Drain(timeout time.Duration) {
 	a.actorRT.Drain(timeout)
 	a.Runtime.Stop()
@@ -265,16 +262,9 @@ func (a *Adapter) ActorRuntime() *actor.Runtime {
 }
 
 // convertOpts translates actorruntime.RuntimeOption into runtime.RuntimeOption.
-// Since both are func(T) patterns on different types, and the Adapter embeds
-// *runtime.Runtime, the options that target the Adapter are applied in New;
-// the ones that should target the runtime are passed through. For now, all
-// options target the Adapter (they configure adapter-level concerns). The
-// runtime gets its own options via runtime.New's internal defaults.
+// Adapter options are applied in New after the core is constructed. Runtime
+// options continue to use runtime.New's internal defaults.
 func convertOpts(opts []RuntimeOption) []runtime.RuntimeOption {
-	// No translation needed yet: runtime.RuntimeOption is applied inside
-	// runtime.New via its own defaults. Adapter options configure the
-	// adapter (e.g., MaxResident in the future). If an option needs to
-	// reach the embedded runtime, it can do so via a.Adapter.Runtime.
 	return nil
 }
 
