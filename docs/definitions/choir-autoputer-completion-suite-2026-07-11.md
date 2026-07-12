@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 3d7d29ce
+  journal_expected_parent_sha: 68ff76a4
   orchestrator_lock:
     holder: Main
     epoch: 15
     expires_at: 2026-07-12T20:00:00Z
-    expected_parent_sha: 3d7d29ce
+    expected_parent_sha: 68ff76a4
     lock_transition_id: s3-lock-renewal-139
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1561,7 +1561,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 15
-      status: verifying
+      status: consensus
       dispatch_nonce: s3-runtime-dissolution-i7-nonce-01
       dispatch_ref: S3I7Implementer
       agent_session_ref: agent://S3I7Implementer
@@ -1569,7 +1569,7 @@ run_checkpoint_and_resumption_state:
       implementer_job_ref: S3I7Implementer
       implementer_output_ref: agent://S3I7Implementer
       verifier_job_ref: S3I7Verifier
-      verifier_output_ref: pending_independent_verification
+      verifier_output_ref: agent://S3I7Verifier
       worktree_or_branch_ref: agent/s3-i7-toolregistry-with-tools@5987bcc721baafaaa7ceddbceeb57a91faf60248
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
@@ -1579,13 +1579,15 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I7_landing
       stage_started_at: 2026-07-12T18:23:51Z
       transition_id: s3-i7-dispatch-intent-146
-      expected_parent_sha: 3d7d29ce
+      expected_parent_sha: 68ff76a4
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i7-dispatch-intent-146, recorded_at: 2026-07-12T18:23:51Z, actor: Main, expected_parent_sha: 72299d24, precondition: S3_I6_landed_ratchet_PASS_one_test_only_constructor_alias_confirmed, postcondition: exact_NewToolRegistryWithTools_alias_deletion_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i7-dispatched-147, recorded_at: 2026-07-12T18:25:29Z, actor: Main, expected_parent_sha: 3d365d10, precondition: canonical_intent_and_live_lock_epoch_15, postcondition: S3I7Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
         - {status: committed, transition_id: s3-i7-implementation-returned-148, recorded_at: 2026-07-12T18:31:26Z, actor: Main, expected_parent_sha: 4acea522, precondition: isolated_exact_scope_commit_returned, postcondition: integrated_4a2c8bd9_ratchet_PASS_ready_for_independent_verification, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i7-verifier-intent-149, recorded_at: 2026-07-12T18:32:18Z, actor: Main, expected_parent_sha: 67a3bd82, precondition: implementation_and_ratchet_checkpoint_pushed, postcondition: independent_verifier_dispatch_authorized, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i7-verifier-dispatched-150, recorded_at: 2026-07-12T18:33:24Z, actor: Main, expected_parent_sha: 3d7d29ce, precondition: verifier_intent_canonical, postcondition: independent_S3I7Verifier_active, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s3-i7-verifier-pass-151, recorded_at: 2026-07-12T19:00:26Z, actor: S3I7Verifier, expected_parent_sha: 68ff76a4, precondition: independent_source_compile_and_ratchet_verification, postcondition: independent_PASS_confidence_0_98_no_findings, external_operation_id: not_applicable}
+        - {status: accepted, transition_id: s3-i7-ci-deploy-accepted-152, recorded_at: 2026-07-12T19:00:26Z, actor: Main, expected_parent_sha: 68ff76a4, precondition: full_CI_attempt_2_and_deploy_receipt_complete, postcondition: staging_health_and_authenticated_run_list_200_consensus_pending, external_operation_id: github_actions_29204058610_attempt_2}
       lock_expires_at: 2026-07-12T20:00:00Z
       mutation_class: orange
       protected_surfaces: []
@@ -1605,18 +1607,18 @@ run_checkpoint_and_resumption_state:
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 4a2c8bd9
       implementation_commit_sha: 4a2c8bd9
-      push_ref: pending
-      ci_run_ref: pending
-      deploy_ref: pending
-      deployed_sha: pending
-      acceptance_ref: pending
+      push_ref: 68ff76a4
+      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29204058610#attempt-2
+      deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/29204058610#job-86681456930
+      deployed_sha: 67a3bd82e5a38b19e2e2fcf5f46bdd051d600512
+      acceptance_ref: docs/evidence/s3-toolregistry-with-tools-alias-dispatch-2026-07-12.md#s3-i7-final-verification-ci-deploy-and-acceptance
       acceptance_contract: test_only_constructor_alias_deleted_authoritative_toolregistry_behavior_preserved
-      evidence_refs: [docs/evidence/s3-toolregistry-with-tools-alias-dispatch-2026-07-12.md, agent://S3I7Implementer]
+      evidence_refs: [docs/evidence/s3-toolregistry-with-tools-alias-dispatch-2026-07-12.md, agent://S3I7Implementer, agent://S3I7Verifier, https://github.com/choir-hip/go-choir/actions/runs/29204058610#attempt-2]
       open_findings: []
       landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-12T18:33:24Z
-      reconciliation_result: one_matching_independent_verifier_job_S3I7Verifier
+      adjudication: independent_PASS_deployed_accepted_final_consensus_pending
+      last_reconciled_at: 2026-07-12T19:00:26Z
+      reconciliation_result: verifier_PASS_CI_PASS_deployed_67a3bd82_staging_product_accepted_consensus_pending
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

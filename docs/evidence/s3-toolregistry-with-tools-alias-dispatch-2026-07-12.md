@@ -34,3 +34,11 @@ After implementation, regenerate `docs/runtime-dissolution-inventory.yaml`. Acce
 - Exact source diff: delete the runtime constructor alias, add the authoritative `internal/toolregistry` import to `tools_test.go`, and change the sole test caller to `toolregistry.NewToolRegistryWithTools`; `2` insertions and `2` deletions.
 - Focused `TestNewToolRegistryWithTools` and default runtime compilation passed before and after; all-source/build-tag-aware scans found no production/external caller and no replacement runtime seam.
 - Ratchet passed after removing the fulfilled export/debt rows: production LOC `46933 -> 46932`, test LOC `53037 -> 53038`, exports `1142 -> 1141`, initial unused-export debt `24 -> 23`; caller edges and every gated authority count remained flat.
+
+## S3-I7 Final Verification, CI, Deploy, and Acceptance
+
+- Independent `S3I7Verifier` returned `PASS` at confidence `0.98` with no findings on canonical `3d7d29ce`.
+- GitHub Actions run `29204058610`, attempt `2`, passed every selected normal/race gate and deployed checkpoint `67a3bd82e5a38b19e2e2fcf5f46bdd051d600512`.
+- Deployment job `86681456930` published the activation receipt at `2026-07-12T18:47:41Z`; sandbox and gateway artifacts were active at `67a3bd82e5a38b19e2e2fcf5f46bdd051d600512`.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`, proving the registered run-list product path remained live after alias deletion.
+- Residual risk: none within S3-I7; later ordered S3 deletion work remains.
