@@ -36,3 +36,11 @@ Forbidden: completion-guard field/type/behavior deletion, replacement production
 4. completion-guard behavior, tool-loop flow, providers, routes, tools, and state authorities remain unchanged;
 5. ratchet production LOC, exports, and unused-export debt decrease with no gated growth;
 6. independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
+
+## S3-I5 Implementation Receipt
+
+- Integrated implementation: `bf3815da` (isolated commit `70f71b020c14443dd51a0b185b5048583420e477`).
+- Exact diff: `internal/runtime/toolloop.go` and `internal/runtime/toolloop_test.go`, `3` insertions and `11` deletions.
+- The sole caller now supplies the wrapper's identical closure directly; completion-guard field, type, evaluation/retry logic, events, requests, providers/models, routes, tools, and state authorities are unchanged.
+- Focused completion-guard test and default runtime compilation passed; the implementer additionally passed every `TestRunToolLoop*` test.
+- Ratchet passed: production LOC `46944 -> 46934`, exports `1144 -> 1143`, and initial unused-export debt `26 -> 25`; test LOC changed `53035 -> 53037` for the explicit closure, while caller edges and every gated authority count remained flat.

@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: e299ab97
+  journal_expected_parent_sha: cb63e308
   orchestrator_lock:
     holder: Main
     epoch: 14
     expires_at: 2026-07-12T18:35:00Z
-    expected_parent_sha: e299ab97
+    expected_parent_sha: cb63e308
     lock_transition_id: s3-lock-renewal-123
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1426,16 +1426,16 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 14
-      status: dispatched
+      status: committed
       dispatch_nonce: s3-runtime-dissolution-i5-nonce-01
       dispatch_ref: S3I5Implementer
       agent_session_ref: agent://S3I5Implementer
       dispatch_prompt_ref: docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md#exact-mutation-lock
       implementer_job_ref: S3I5Implementer
-      implementer_output_ref: pending_agent_return
+      implementer_output_ref: agent://S3I5Implementer
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      worktree_or_branch_ref: agent/s3-i5-toolloop-option@70f71b020c14443dd51a0b185b5048583420e477
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -1444,10 +1444,11 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I5_landing
       stage_started_at: 2026-07-12T16:35:00Z
       transition_id: s3-i5-dispatch-intent-123
-      expected_parent_sha: e299ab97
+      expected_parent_sha: cb63e308
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i5-dispatch-intent-123, recorded_at: 2026-07-12T16:35:00Z, actor: Main, expected_parent_sha: b1e2d214, precondition: S3_I4_landed_ratchet_PASS_one_test_only_option_wrapper_confirmed, postcondition: exact_toolloop_option_deletion_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i5-dispatched-124, recorded_at: 2026-07-12T16:39:44Z, actor: Main, expected_parent_sha: e299ab97, precondition: canonical_intent_and_live_lock_epoch_14, postcondition: S3I5Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s3-i5-implementation-returned-125, recorded_at: 2026-07-12T16:45:27Z, actor: Main, expected_parent_sha: cb63e308, precondition: isolated_exact_scope_commit_returned, postcondition: integrated_bf3815da_ratchet_PASS_ready_for_independent_verification, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T18:35:00Z
       mutation_class: orange
       protected_surfaces: []
@@ -1463,22 +1464,22 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: one_same_package_test_caller_no_production_caller
-      observed_postcondition: pending_implementation
+      observed_postcondition: option_wrapper_deleted_identical_test_closure_ratchet_PASS
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: pending
-      implementation_commit_sha: pending
+      implementation_sha_or_dirty_snapshot: bf3815da
+      implementation_commit_sha: bf3815da
       push_ref: pending
       ci_run_ref: pending
       deploy_ref: pending
       deployed_sha: pending
       acceptance_ref: pending
       acceptance_contract: test_only_option_wrapper_deleted_completion_guard_behavior_preserved
-      evidence_refs: [docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md]
+      evidence_refs: [docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md, agent://S3I5Implementer]
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-12T16:39:44Z
-      reconciliation_result: one_matching_live_agent_job_S3I5Implementer
+      last_reconciled_at: 2026-07-12T16:45:27Z
+      reconciliation_result: isolated_commit_integrated_as_bf3815da_ratchet_PASS
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

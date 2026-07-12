@@ -6,11 +6,11 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 46944
-    test_loc: 53035
-    exports: 1144
+    production_loc: 46934
+    test_loc: 53037
+    exports: 1143
     export_caller_edges: 601
-    initial_unused_export_debt: 26
+    initial_unused_export_debt: 25
     routes: 47
     tools: 49
     production_importers: 4
@@ -349,10 +349,10 @@ files:
       loc: 698
     - id: internal/runtime/toolloop.go [production]
       disposition: tools
-      loc: 1673
+      loc: 1663
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
-      loc: 3181
+      loc: 3183
     - id: internal/runtime/toolloopvalidation_test.go [test]
       disposition: tools
       loc: 922
@@ -2953,8 +2953,6 @@ exports:
       disposition: tools
       production_callers:
         - internal/runtime/runtime.go
-    - id: internal/runtime/toolloop.go:func:WithCompletionGuard
-      disposition: tools
     - id: internal/runtime/toolloop.go:func:WithInitialToolChoice
       disposition: tools
       production_callers:
@@ -3659,8 +3657,6 @@ initial_unused_export_debt:
     - id: internal/runtime/search_gateway.go:method(*gatewaySearchClient):Search
       disposition: delete
     - id: internal/runtime/texture_workflow_verifier.go:method(*Runtime):VerifyTextureWorkflow
-      disposition: delete
-    - id: internal/runtime/toolloop.go:func:WithCompletionGuard
       disposition: delete
     - id: internal/runtime/toolloop.go:method(*ToolLoopPassivatedError):Error
       disposition: delete
