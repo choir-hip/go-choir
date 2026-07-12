@@ -27,3 +27,10 @@ Allowed source paths only: `internal/runtime/tools.go` and `internal/runtime/too
 - introduce no replacement runtime alias/helper/test seam or unrelated cleanup.
 
 After implementation, regenerate `docs/runtime-dissolution-inventory.yaml`. Acceptance requires focused/default compilation, ratchet decrease without gated growth, independent verification, full CI, staging identity/product smoke, consensus, and adjudication.
+
+## S3-I7 Implementation Receipt
+
+- Integrated implementation: `4a2c8bd9` (isolated commit `5987bcc721baafaaa7ceddbceeb57a91faf60248`).
+- Exact source diff: delete the runtime constructor alias, add the authoritative `internal/toolregistry` import to `tools_test.go`, and change the sole test caller to `toolregistry.NewToolRegistryWithTools`; `2` insertions and `2` deletions.
+- Focused `TestNewToolRegistryWithTools` and default runtime compilation passed before and after; all-source/build-tag-aware scans found no production/external caller and no replacement runtime seam.
+- Ratchet passed after removing the fulfilled export/debt rows: production LOC `46933 -> 46932`, test LOC `53037 -> 53038`, exports `1142 -> 1141`, initial unused-export debt `24 -> 23`; caller edges and every gated authority count remained flat.

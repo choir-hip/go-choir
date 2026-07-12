@@ -6,11 +6,11 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 46933
-    test_loc: 53037
-    exports: 1142
+    production_loc: 46932
+    test_loc: 53038
+    exports: 1141
     export_caller_edges: 601
-    initial_unused_export_debt: 24
+    initial_unused_export_debt: 23
     routes: 47
     tools: 49
     production_importers: 4
@@ -358,7 +358,7 @@ files:
       loc: 922
     - id: internal/runtime/tools.go [production]
       disposition: tools
-      loc: 640
+      loc: 639
     - id: internal/runtime/tools_capsule.go [production]
       disposition: tools
       loc: 546
@@ -400,7 +400,7 @@ files:
       loc: 360
     - id: internal/runtime/tools_test.go [test]
       disposition: tools
-      loc: 1897
+      loc: 1898
     - id: internal/runtime/tools_texture.go [production]
       disposition: texture
       loc: 1881
@@ -3249,8 +3249,6 @@ exports:
         - internal/runtime/tool_profiles.go
     - id: internal/runtime/tools.go:var:NewToolRegistry
       disposition: tools
-    - id: internal/runtime/tools.go:var:NewToolRegistryWithTools
-      disposition: tools
     - id: internal/runtime/tools_capsule.go:func:RegisterCapsuleExecTools
       disposition: tools
     - id: internal/runtime/tools_capsule.go:func:RegisterCapsuleTools
@@ -3663,8 +3661,6 @@ initial_unused_export_debt:
     - id: internal/runtime/toolloop.go:method(*toolLoopAdapter):CallWithTools
       disposition: delete
     - id: internal/runtime/tools.go:var:NewToolRegistry
-      disposition: delete
-    - id: internal/runtime/tools.go:var:NewToolRegistryWithTools
       disposition: delete
     - id: internal/runtime/tools_capsule.go:func:RegisterCapsuleExecTools
       disposition: delete
