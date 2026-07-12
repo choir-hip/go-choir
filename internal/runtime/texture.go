@@ -1021,22 +1021,12 @@ func (h *APIHandler) handleTextureGetDocument(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	readOwnerID, err := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, docID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-			return
-		}
-		log.Printf("texture api: resolve document owner %s: %v", docID, err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load document"})
-		return
-	}
-	doc, err := h.rt.Store().GetDocument(r.Context(), docID, readOwnerID)
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, readOwnerID)
+	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
 	if err != nil {
 		log.Printf("texture api: get pending mutation for document: %v", err)
 	}
@@ -1560,6 +1550,10 @@ func (h *APIHandler) handleTextureListRevisions(w http.ResponseWriter, r *http.R
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
+	if _, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID); err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
+		return
+	}
 
 	limit := 10000
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
@@ -1570,17 +1564,7 @@ func (h *APIHandler) handleTextureListRevisions(w http.ResponseWriter, r *http.R
 	if limit > 10000 {
 		limit = 10000
 	}
-	readOwnerID, err := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, docID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-			return
-		}
-		log.Printf("texture api: resolve revision list owner %s: %v", docID, err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list revisions"})
-		return
-	}
-	revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), docID, readOwnerID, limit)
+	revs, err := h.rt.Store().ListRevisionsByDoc(r.Context(), docID, ownerID, limit)
 	if err != nil {
 		log.Printf("texture api: list revisions: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list revisions"})
@@ -1592,7 +1576,7 @@ func (h *APIHandler) handleTextureListRevisions(w http.ResponseWriter, r *http.R
 		responseRevs = append(responseRevs, rev)
 	}
 	resp := textureListRevisionsResponse{
-		Revisions: h.revisionResponsesFromRecords(r.Context(), responseRevs, readOwnerID, docID),
+		Revisions: h.revisionResponsesFromRecords(r.Context(), responseRevs, ownerID, docID),
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
@@ -1621,19 +1605,8 @@ func (h *APIHandler) HandleTextureRevision(w http.ResponseWriter, r *http.Reques
 
 	rev, err := h.rt.Store().GetRevision(r.Context(), revisionID, ownerID)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			if unscoped, unscopedErr := h.rt.Store().GetRevisionUnscoped(r.Context(), revisionID); unscopedErr == nil {
-				readOwnerID, resolveErr := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, unscoped.DocID)
-				if resolveErr == nil && readOwnerID == unscoped.OwnerID {
-					rev = unscoped
-					err = nil
-				}
-			}
-		}
-		if err != nil {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
-			return
-		}
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "revision not found"})
+		return
 	}
 	writeAPIJSON(w, http.StatusOK, h.revisionResponseFromRecord(r.Context(), rev))
 }
@@ -1659,18 +1632,12 @@ func (h *APIHandler) HandleTextureHistory(w http.ResponseWriter, r *http.Request
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-
-	readOwnerID, err := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, docID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-			return
-		}
-		log.Printf("texture api: resolve history owner %s: %v", docID, err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get history"})
+	if _, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID); err != nil {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	entries, err := h.rt.Store().GetHistory(r.Context(), docID, readOwnerID, 50)
+
+	entries, err := h.rt.Store().GetHistory(r.Context(), docID, ownerID, 50)
 	if err != nil {
 		log.Printf("texture api: get history: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get history"})
@@ -1704,17 +1671,7 @@ func (h *APIHandler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.
 		return
 	}
 
-	readOwnerID, err := h.resolveUniversalWireTextureReadOwner(r.Context(), ownerID, docID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-			return
-		}
-		log.Printf("texture api: resolve stream owner %s: %v", docID, err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to open document stream"})
-		return
-	}
-	doc, err := h.rt.Store().GetDocument(r.Context(), docID, readOwnerID)
+	doc, err := h.rt.Store().GetDocument(r.Context(), docID, ownerID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
@@ -1728,7 +1685,7 @@ func (h *APIHandler) HandleTextureDocumentStream(w http.ResponseWriter, r *http.
 		flusher.Flush()
 	}
 
-	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, readOwnerID)
+	pendingMutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
 	if err != nil {
 		log.Printf("texture api: get pending mutation for stream: %v", err)
 	}

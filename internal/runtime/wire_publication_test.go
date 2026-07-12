@@ -12,6 +12,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
+const retiredUniversalWireEditionSourcePath = "universal-wire/Wire.texture"
+
 func TestWirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()
@@ -111,7 +113,7 @@ func TestWirePublicationDoesNotBootstrapLocalEdition(t *testing.T) {
 		return &wirepublish.PublishTextureResponse{PublicationID: "pub-2", PublicationVersionID: "pubver-2", RoutePath: "/pub/texture/no-edition"}, nil
 	}
 	handler.rt.maybeAutonomousPublishWireArticle(ctx, story, rev, rec)
-	if _, err := handler.rt.Store().GetDocumentAlias(ctx, universalWirePlatformOwnerID(), universalWireEditionSourcePath); !errors.Is(err, store.ErrNotFound) {
+	if _, err := handler.rt.Store().GetDocumentAlias(ctx, universalWirePlatformOwnerID(), retiredUniversalWireEditionSourcePath); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("local Wire.texture alias err = %v, want not found after successful corpusd publication", err)
 	}
 }
@@ -162,7 +164,7 @@ func seedLocalEditionSentinel(t *testing.T, handler *APIHandler) {
 	if err := handler.rt.Store().UpdateDocument(context.Background(), doc); err != nil {
 		t.Fatalf("advance sentinel head: %v", err)
 	}
-	if err := handler.rt.Store().UpsertDocumentAlias(context.Background(), doc.OwnerID, universalWireEditionSourcePath, doc.DocID, now); err != nil {
+	if err := handler.rt.Store().UpsertDocumentAlias(context.Background(), doc.OwnerID, retiredUniversalWireEditionSourcePath, doc.DocID, now); err != nil {
 		t.Fatalf("create edition sentinel alias: %v", err)
 	}
 }

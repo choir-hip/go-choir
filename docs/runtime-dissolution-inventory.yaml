@@ -6,19 +6,19 @@ counts:
     go_files: 148
     production_files: 78
     test_files: 70
-    production_loc: 47446
-    test_loc: 54535
-    exports: 1198
-    export_caller_edges: 606
+    production_loc: 47324
+    test_loc: 54583
+    exports: 1199
+    export_caller_edges: 604
     initial_unused_export_debt: 39
     routes: 47
     tools: 49
     production_importers: 4
     wrappers: 5
     compatibility_markers: 16
-    store_calls: 448
+    store_calls: 444
     interface_candidates: 4
-    citers: 175
+    citers: 176
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -262,7 +262,7 @@ files:
       loc: 333
     - id: internal/runtime/texture.go [production]
       disposition: texture
-      loc: 2209
+      loc: 2166
     - id: internal/runtime/texture_agent_revision.go [production]
       disposition: texture
       loc: 1281
@@ -430,10 +430,10 @@ files:
       loc: 332
     - id: internal/runtime/universal_wire.go [production]
       disposition: wire
-      loc: 109
+      loc: 30
     - id: internal/runtime/universal_wire_test.go [test]
       disposition: wire
-      loc: 25
+      loc: 71
     - id: internal/runtime/update_coagent_cutover_test.go [test]
       disposition: core
       loc: 2308
@@ -457,7 +457,7 @@ files:
       loc: 657
     - id: internal/runtime/wire_publication_test.go [test]
       disposition: wire
-      loc: 168
+      loc: 170
     - id: internal/runtime/wire_reconciler_debounce.go [production]
       disposition: wire
       loc: 340
@@ -730,7 +730,6 @@ exports:
         - internal/runtime/texture_lineage.go
         - internal/runtime/texture_merge.go
         - internal/runtime/texture_proposals.go
-        - internal/runtime/universal_wire.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionDetail
       disposition: promotion
       production_callers:
@@ -1997,7 +1996,6 @@ exports:
         - internal/runtime/texture_merge.go
         - internal/runtime/tools_coagent.go
         - internal/runtime/tools_research.go
-        - internal/runtime/universal_wire.go
     - id: internal/runtime/runtime.go:method(*Runtime):ToolRegistry
       disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):TraceStore
@@ -3630,6 +3628,8 @@ exports:
       disposition: core
     - id: internal/runtime/universal_wire_test.go:func:TestRuntimeDoesNotRegisterUniversalWireStories
       disposition: wire
+    - id: internal/runtime/universal_wire_test.go:func:TestRuntimeTextureReadsRemainOwnerScopedAfterWireCutover
+      disposition: wire
     - id: internal/runtime/update_coagent_cutover_test.go:func:TestCoagentRewarmIgnoresBlockedHistoricalActivation
       disposition: core
     - id: internal/runtime/update_coagent_cutover_test.go:func:TestCoagentRewarmUsesResidentActivationNotActiveRunProxy
@@ -4070,9 +4070,9 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/tools_texture.go:1588:source_ref display_mode enum after the hard cutover. Legacy expanded
       disposition: delete
-    - id: internal/runtime/universal_wire.go:93:Accept both the new "corpusd_route_path" key and the legacy
+    - id: internal/runtime/universal_wire.go:14:Accept both the new "corpusd_route_path" key and the legacy
       disposition: delete
-    - id: internal/runtime/universal_wire.go:94:"platformd_route_path" key for backward compatibility with existing
+    - id: internal/runtime/universal_wire.go:15:"platformd_route_path" key for backward compatibility with existing
       disposition: delete
 store_calls:
     - id: internal/runtime/api.go:HandleChannelMessageList:internal/store.method:Store.ListChannelMessages
@@ -4583,6 +4583,8 @@ store_calls:
       disposition: read
     - id: internal/runtime/texture.go:HandleTextureExportDocument:internal/store.method:Store.GetRevision
       disposition: read
+    - id: internal/runtime/texture.go:HandleTextureHistory:internal/store.method:Store.GetDocument
+      disposition: read
     - id: internal/runtime/texture.go:HandleTextureHistory:internal/store.method:Store.GetHistory
       disposition: read
     - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateContentItem
@@ -4619,8 +4621,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/texture.go:HandleTextureRevision:internal/store.method:Store.GetRevision
       disposition: read
-    - id: internal/runtime/texture.go:HandleTextureRevision:internal/store.method:Store.GetRevisionUnscoped
-      disposition: read
     - id: internal/runtime/texture.go:attachTextureSourceGraphObjects:internal/store.method:Store.ListTextureSourceEntitiesForRevision
       disposition: read
     - id: internal/runtime/texture.go:attachTextureSourceGraphObjects:internal/store.method:Store.ListTextureSourceRefsForRevision
@@ -4652,6 +4652,8 @@ store_calls:
     - id: internal/runtime/texture.go:handleTextureDeleteDocument:internal/store.method:Store.DeleteDocument
       disposition: wire
     - id: internal/runtime/texture.go:handleTextureGetDocument:internal/store.method:Store.GetDocument
+      disposition: read
+    - id: internal/runtime/texture.go:handleTextureListRevisions:internal/store.method:Store.GetDocument
       disposition: read
     - id: internal/runtime/texture.go:handleTextureListRevisions:internal/store.method:Store.ListRevisionsByDoc
       disposition: read
@@ -4903,16 +4905,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/trajectory.go:stampAndMintTrajectory:internal/store.method:Store.CreateTrajectoryIfAbsent
       disposition: wire
-    - id: internal/runtime/universal_wire.go:resolveUniversalWireTextureReadOwner:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/runtime/universal_wire.go:resolveUniversalWireTextureReadOwner:internal/store.method:Store.GetDocument#2
-      disposition: read
-    - id: internal/runtime/universal_wire.go:universalWireEditionIncludesDoc:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/runtime/universal_wire.go:universalWireEditionIncludesDoc:internal/store.method:Store.GetDocumentAlias
-      disposition: read
-    - id: internal/runtime/universal_wire.go:universalWireEditionIncludesDoc:internal/store.method:Store.GetRevision
-      disposition: read
     - id: internal/runtime/wire_platform_publish.go:persistWirePlatformPublicationRef:internal/store.method:Store.PatchRevisionMetadata
       disposition: wire
     - id: internal/runtime/wire_platform_publish.go:syncWireTextureDocumentToCorpusd:internal/store.method:Store.ListRevisionsByDoc
@@ -5298,6 +5290,8 @@ citers:
     - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:3. `cmd/sourcecycled/main.go` projects durable web captures through `/internal/runtime/objectgraph/web-captures`, forcing the shared world-wire write through a user-computer runtime even though corpus… [sha256:5db5b93175746e9915a49c973a13ef27c24437c4147505176a579d24314375d3]
       disposition: historical_evidence
     - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:Allowed paths: `internal/platform/**`, `internal/proxy/**`, `internal/runtime/universal_wire.go`, `internal/runtime/wire_publication.go`, their focused tests, route/config registries, and runtime ratchet inventory.'
+      disposition: historical_evidence
+    - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:At canonical `97dc05f7`, independent verifier `S2IndependentVerifier` found a blocking retained authority in `internal/runtime/universal_wire.go:40-89`. Although S2-B deleted local edition advancement… [sha256:1193dc8c5bfb9f50f15f87a437c6a14d8db0bd32e26df2f80ae83addc34e56a7]
       disposition: historical_evidence
     - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:Change: replace the sourcecycled runtime projection target with the existing corpusd object-graph HTTP service through the host service/proxy path; remove `/internal/runtime/objectgraph/web-captures` … [sha256:ead26837bfd20889d399cdb596ce7458eb284f39d02654aac64744a9df79e153]'
       disposition: historical_evidence
