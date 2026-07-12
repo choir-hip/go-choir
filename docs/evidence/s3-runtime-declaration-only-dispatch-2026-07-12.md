@@ -50,3 +50,11 @@ Forbidden: `ChannelPost`, `ChannelRead`, every channel caller, replacement helpe
 
 - `S3I4Verifier` confirmed the source deletion, channel preservation, focused tests, and default compilation, but returned procedural `BLOCKING` because the implementation receipt added two historical-evidence citers after the prior baseline.
 - The inventory was regenerated; ratchet and ratchet unit tests pass with `citers=204`. No source correction was required.
+
+## S3-I4 Final Verification, CI, Deploy, and Acceptance
+
+- Independent `S3I4Verifier` final recheck returned `PASS` at confidence `0.99` with no findings on canonical `c0f075ba`.
+- GitHub Actions run `29199070620`, attempt `2`, passed every selected normal/race gate and deployed checkpoint `fe4a1bc480687963546c774ad6f81fa425d91ba8`.
+- Deployment job `86668756969` published the activation receipt at `2026-07-12T16:13:48Z`; sandbox and gateway artifacts were active at `fe4a1bc480687963546c774ad6f81fa425d91ba8`.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`, proving the registered run-list product path remained live after prompt-export deletion.
+- Residual risk: the unchanged `15`-call comprehensive-tag `ChannelPost`/`ChannelRead` graph remains deferred to a caller-complete slice.
