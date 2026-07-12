@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 16
     store_calls: 462
     interface_candidates: 4
-    citers: 164
+    citers: 165
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5360,6 +5360,8 @@ citers:
     - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/runtime_test.go`
       disposition: historical_evidence
     - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:At canonical `e649ee28`, `S1DeployVerifier` reported **BLOCKING**. Focused runtime/CLI tests and `go test ./cmd/runtime-ratchet` passed. The required default ratchet invocation failed because the rege… [sha256:346b662f5c9ed210b14ba921c84c4cace85290a2abb4e5f1849b75f42e9dd860]
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:Focused lifecycle tests passed across `internal/runtime` and `cmd/choir`.
       disposition: historical_evidence
     - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
       disposition: block
