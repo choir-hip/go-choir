@@ -685,27 +685,27 @@ evidence_ledger:
 run_checkpoint_and_resumption_state:
   status: working
   suite_authority: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
-  current_subgoal: S1
-  last_completed_subgoal: S0
+  current_subgoal: S2
+  last_completed_subgoal: S1
   definition_gate:
     status: passed
     consensus_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab
+  journal_expected_parent_sha: 9dff3690
   orchestrator_lock:
     holder: Main
-    epoch: 7
-    expires_at: 2026-07-12T06:51:11Z
-    expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab
-    lock_transition_id: s1-lock-renewal-44
+    epoch: 8
+    expires_at: 2026-07-12T07:15:00Z
+    expected_parent_sha: 9dff3690
+    lock_transition_id: s2-lock-acquisition-49
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
     B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
     S0: {status: complete, started_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, completed_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md, docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md, agent://S0RatchetVerifier, artifact://461, https://github.com/choir-hip/go-choir/actions/runs/29176500535], rollback_refs: [008a7b88cf200119c0f762cc51cfba6be3007445], blockers: []}
-    S1: {status: checkpoint_incomplete, started_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, completed_at_sha: '', evidence_refs: [docs/definitions/choir-run-deploy-unblock-2026-07-11.md, docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372], rollback_refs: [2327fcef4716aef070eb4b819296f01b44267364], blockers: []}
-    S2: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S1]}
+    S1: {status: complete, started_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, completed_at_sha: 9dff3690, evidence_refs: [docs/definitions/choir-run-deploy-unblock-2026-07-11.md, docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372, /tmp/choir-s1-final-consensus-20260712, /tmp/choir-s1-post-repair-consensus-20260712], rollback_refs: [2327fcef4716aef070eb4b819296f01b44267364], blockers: []}
+    S2: {status: working, started_at_sha: 9dff3690, completed_at_sha: '', evidence_refs: [docs/definitions/choir-wire-store-conformance-2026-07-11.md], rollback_refs: [9dff3690], blockers: []}
     S3: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S2]}
     S4: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S3]}
     S5: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S4]}
@@ -714,15 +714,15 @@ run_checkpoint_and_resumption_state:
     S8: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S7]}
     S9: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S8]}
   active_phase_checkpoint:
-    subgoal: S1
-    status: consensus_pending
-    deployed_sha: 4973ee40570382c25398ea50e15148569cf351ab
-    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29179656372
-    staging_ref: activation_receipt_29179656372_attempt_1_at_2026-07-12T04:37:20Z
-    product_proof_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md#s1-cons-001-repair-receipt, run:2d37e688-7fa5-4034-859e-b98b3a445e01, run:7b0cb532-b4d1-4c85-9a9d-062beab82197]
-    consensus_ref: /tmp/choir-s1-post-repair-consensus-20260712
-    open_findings: []
-    adjudication_ref: pending_post_repair_panel
+    subgoal: S2
+    status: checkpoint_incomplete
+    deployed_sha: pending
+    ci_ref: pending
+    staging_ref: pending
+    product_proof_refs: []
+    consensus_ref: pending
+    open_findings: [S2_fresh_authority_and_caller_inventory_required]
+    adjudication_ref: pending
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -879,7 +879,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S1
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 7
-      status: consensus
+      status: landed
       dispatch_nonce: s1-deploy-unblock-01-nonce-01
       dispatch_ref: S1DeployImplementer
       agent_session_ref: agent://S1DeployImplementer
@@ -894,10 +894,10 @@ run_checkpoint_and_resumption_state:
       direct_shared_worktree_allowed: false
       direct_shared_worktree_justification: not_applicable
       lock_acquired_ref: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
-      lock_release_ref: pending_slice_close
+      lock_release_ref: 9dff3690
       stage_started_at: 2026-07-12T02:47:34Z
-      transition_id: s1-post-repair-consensus-open-47
-      expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab
+      transition_id: s1-landed-s2-started-49
+      expected_parent_sha: 9dff3690
       stage_history:
         - {status: dispatch_intent, transition_id: s1-deploy-unblock-dispatch-intent-36, recorded_at: 2026-07-12T02:47:34Z, actor: Main, expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31, precondition: S0_complete_S1_working_lock_epoch_6_held_and_red_ceremony_recorded, postcondition: exact_mutation_lock_existing_replacement_connection_and_acceptance_contract_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s1-deploy-unblock-dispatched-37, recorded_at: 2026-07-12T02:49:53Z, actor: Main, expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b, precondition: canonical_dispatch_intent_and_live_lock_epoch_6, postcondition: S1DeployImplementer_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
@@ -914,7 +914,9 @@ run_checkpoint_and_resumption_state:
         - {status: deployed, transition_id: s1-consensus-race-repair-deployed-46, recorded_at: 2026-07-12T04:37:20Z, actor: GitHub_Actions, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: full_CI_and_race_shards_green, postcondition: sandbox_and_gateway_activation_receipt_at_repair_commit, external_operation_id: github_actions_run_29179656372}
         - {status: accepted, transition_id: s1-consensus-race-repair-accepted-46a, recorded_at: 2026-07-12T04:49:30Z, actor: Main, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: repair_deployed_and_product_CLI_available, postcondition: actual_choir_run_cancel_returned_cancelled_for_two_active_runs, external_operation_id: runs_2d37e688_and_7b0cb532}
         - {status: consensus, transition_id: s1-post-repair-consensus-open-47, recorded_at: 2026-07-12T04:51:11Z, actor: Main, expected_parent_sha: 4973ee40570382c25398ea50e15148569cf351ab, precondition: repaired_green_deployed_independently_verified_and_CLI_accepted, postcondition: six_member_post_repair_panel_running, external_operation_id: consensus_dir_tmp_choir_s1_post_repair_consensus_20260712}
-      lock_expires_at: 2026-07-12T06:51:11Z
+        - {status: adjudicated, transition_id: s1-post-repair-consensus-adjudicated-48, recorded_at: 2026-07-12T05:15:00Z, actor: Main, expected_parent_sha: 9dff3690, precondition: four_explicit_PASS_no_completed_blocker_one_incomplete_no_verdict_one_stalled_no_output_and_final_ratchet_PASS, postcondition: S1_CONS_001_repaired_and_S1_checkpoint_PASS, external_operation_id: consensus_dir_tmp_choir_s1_post_repair_consensus_20260712}
+        - {status: landed, transition_id: s1-landed-s2-started-49, recorded_at: 2026-07-12T05:15:00Z, actor: Main, expected_parent_sha: 9dff3690, precondition: S1_all_exit_evidence_green_and_no_open_findings, postcondition: S1_complete_S2_working_lock_epoch_8_acquired, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-12T07:15:00Z
       mutation_class: red
       protected_surfaces: [run_acceptance, admission_occupancy, owner_scoped_cancellation, choir_run_CLI, staging_hot_refresh_deploy]
       exact_files_packages_routes_state_authorities: [internal/provideriface/provider.go, internal/runtime/config.go, internal/runtime/config_test.go, internal/runtime/runtime.go, internal/runtime/runtime_test.go, internal/runtime/api.go, internal/runtime/api_test.go, cmd/choir/main.go, cmd/choir/main_test.go, docs/runtime-dissolution-inventory.yaml, RunRecord.State, Runtime.CancelRun, /api/agent/loops, /api/agent/cancel]
@@ -939,12 +941,12 @@ run_checkpoint_and_resumption_state:
       deployed_sha: 4973ee40570382c25398ea50e15148569cf351ab
       acceptance_ref: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md#s1-cons-001-repair-receipt
       acceptance_contract: owner_scoped_product_CLI_cancel_and_60m_activation_budget_terminalize_runs_release_admission_and_restore_hot_refresh
-      evidence_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372, /tmp/choir-s1-final-consensus-20260712]
+      evidence_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372, /tmp/choir-s1-final-consensus-20260712, /tmp/choir-s1-post-repair-consensus-20260712]
       open_findings: []
-      landed_commit_sha: pending_post_repair_consensus
-      adjudication: S1_CONS_001_repaired_focused_ratchet_independent_CI_deploy_and_direct_CLI_proof_PASS_post_repair_consensus_pending
-      last_reconciled_at: 2026-07-12T04:51:11Z
-      reconciliation_result: one_consensus_blocker_repaired_and_all_pre_panel_gates_green
+      landed_commit_sha: 9dff3690
+      adjudication: PASS_S1_CONS_001_repaired_four_explicit_panel_PASS_no_completed_blocker_final_canonical_ratchet_PASS
+      last_reconciled_at: 2026-07-12T05:15:00Z
+      reconciliation_result: S1_complete_and_S2_authorized
       close_condition: staging_running_runs_zero_or_authoritative_equivalent_green_deployed_commit_cancel_deadline_regressions_independent_verification_and_consensus_adjudication
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
@@ -954,7 +956,7 @@ run_checkpoint_and_resumption_state:
   ratchet_artifact:
     path: docs/runtime-dissolution-inventory.yaml
     baseline_ref: 7994dfa62e3e9ba8420a5bb4810aae9be87a4ae1
-    last_verified_ref: artifact://461; agent://S0RatchetVerifier
+    last_verified_ref: 9dff3690; agent://S1DeployVerifier; https://github.com/choir-hip/go-choir/actions/runs/29179656372
   current_artifact_state:
     runtime_dissolution: S0_inventory_and_ratchets_complete
     autoputer: not_complete
@@ -963,13 +965,14 @@ run_checkpoint_and_resumption_state:
   what_shipped:
     - 008a7b88cf200119c0f762cc51cfba6be3007445 grand-suite authority, registry cutover, subordinate demotions, consensus evidence, and live doccheck packet
     - 2327fcef4716aef070eb4b819296f01b44267364 S0 runtime inventory, executable ratchets, independent verification, consensus adjudication, and CI acceptance
+    - 4973ee40570382c25398ea50e15148569cf351ab S1 owner-scoped list/cancel product surfaces, 60-minute activation budget, terminal-state late-write guards, passivation race repair, green CI/deploy, direct CLI acceptance, independent verification, and post-repair consensus
   what_was_proven:
     - One suite entrypoint across ACTIVE, mission graph, authority manifest, README, and doccheck live packet
     - Post-repair six-reviewer consensus cleared authority, durability, S1 exception, and S4 boundary findings
     - Live doccheck passed; full doccheck reported no errors; cmd/doccheck tests passed
     - S0 exact inventory covers 150 Go files, 461 Store calls, four conservative interface candidates, 151 citers, caller/debt/route/tool/importer/wrapper/compat surfaces, and fails closed on drift.
+    - S1 restored runtime-bearing deployability and proved owner-scoped list/cancel, immediate admission release, durable terminal cancellation, deadline terminalization, late completion/passivation resistance, and direct deployed CLI cancellation.
   unproven_or_partial_claims:
-    - Deploy restoration
     - Wire authority cutover
     - Runtime extinction
     - Audited computer through contained Choir-in-Choir operator proof
@@ -977,15 +980,14 @@ run_checkpoint_and_resumption_state:
     - Runtime dead-code Phase 1 was not runtime dissolution; the package returned to its original production size.
     - A single executable grand suite replaces competing run-truth and autoputer sequencing spines.
   remaining_error_field:
-    - staging deploy blocked by one active run
     - Wire authority split and VM fate-sharing
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
-  highest_impact_remaining_uncertainty: Whether the existing cancellation authority and product operator path can drain stale staging work and restore deploy without a second lifecycle state machine.
-  next_executable_probe: Reconcile current staging run occupancy, cancellation API and CLI surfaces, stale-progress handling, and deployment identity before dispatching the bounded S1 red mutation.
+  highest_impact_remaining_uncertainty: The exact remaining runtime-local Wire publication/read/migration callers and the smallest atomic cutover onto corpusd world-wire authority.
+  next_executable_probe: Build the fresh S2 authority/caller/deletion inventory, verify existing corpusd publication/read capabilities and product lifecycle controls, then persist exact non-overlapping mutation slices before dispatch.
   suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
-    - docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md
+    - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
   rollback_refs: []
   superseded_by: ''
   successor_goal_string: ''

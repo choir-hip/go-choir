@@ -129,3 +129,24 @@ Post-deploy, the actual product CLI command
 `7b0cb532-b4d1-4c85-9a9d-062beab82197` was also cancelled through the CLI.
 This closes the earlier non-blocking evidence gap between the authenticated API
 and the CLI wrapper.
+
+## Post-Repair Consensus Adjudication
+
+The post-repair panel produced four explicit S1 PASS verdicts: Codex
+(`0.98`), OMP GPT-5.5 (`0.94`), OMP Gemini 3.5 (`1.0`), and Cursor. Opencode
+independently ran the exact focused regressions successfully but did not finish
+the requested verdict after its attempt to create a temporary worktree was
+denied. OMP GLM produced no output and was terminated as stalled; neither
+incomplete member contributes a vote or a finding.
+
+No completed reviewer produced a blocking finding. The only new observation was
+the already-classified non-blocking boot-only direct passivation write in
+`passivateInterruptedActivations`; it operates before resident activation
+admission and cannot race owner cancellation or a resident progress deadline.
+The orchestrator therefore adjudicates S1-CONS-001 repaired and the S1
+checkpoint **PASS**.
+
+After the repair receipt introduced one new runtime-package citer,
+the inventory classified it as `historical_evidence`; canonical
+`go test ./cmd/runtime-ratchet && go run ./cmd/runtime-ratchet` passed at
+`9dff3690` with 165 citers. This is the final S1 ratchet state.
