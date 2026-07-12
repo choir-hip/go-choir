@@ -3143,7 +3143,8 @@ func testRuntimeWithProviderAndRegistry(t *testing.T, provider provideriface.Pro
 		SupervisionInterval: 1 * time.Hour,
 	}
 
-	rt := New(cfg, s, bus, provider, WithToolRegistry(registry))
+	rt := New(cfg, s, bus, provider)
+	rt.toolRegistry = registry
 	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {

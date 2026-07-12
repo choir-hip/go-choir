@@ -400,15 +400,6 @@ func (rt *Runtime) PromptStore() *PromptStore {
 // RuntimeOption configures optional Runtime components.
 type RuntimeOption func(*Runtime)
 
-// WithToolRegistry sets the tool registry for the runtime. When a tool
-// registry is provided, the runtime uses the tool-calling loop instead
-// of the simple provider bridge path for run execution.
-func WithToolRegistry(registry *ToolRegistry) RuntimeOption {
-	return func(rt *Runtime) {
-		rt.toolRegistry = registry
-	}
-}
-
 // WithTraceStore mounts a Dolt-backed trace observability store into the
 // runtime. When set, every emitted event is projected (via trace.FromEventRecord)
 // and appended to the store in addition to the existing event recording and bus
@@ -429,12 +420,6 @@ func WithPromotionAdapter(adapter *computerversion.DoltPromotionAdapter) Runtime
 	return func(rt *Runtime) {
 		rt.promotionAdapter = adapter
 	}
-}
-
-// TraceStore returns the mounted trace observability store, or nil when none is
-// configured. Used by tests and diagnostics.
-func (rt *Runtime) TraceStore() trace.Store {
-	return rt.traceStore
 }
 
 func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWakeTimer) RuntimeOption {
@@ -1962,32 +1947,6 @@ func (rt *Runtime) sleepTextureMutationAfterIdle(ctx context.Context, rec *types
 	default:
 		return nil
 	}
-}
-
-// CompactRunMemory forces a durable run-memory checkpoint for an existing run.
-// It is the runtime primitive behind manual compaction controls and uses the
-// same compaction/event path as automatic threshold and overflow recovery.
-func (rt *Runtime) CompactRunMemory(ctx context.Context, runID, ownerID, reason string) error {
-	rec, err := rt.GetRun(ctx, runID, ownerID)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(reason) == "" {
-		reason = "manual"
-	}
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		rt.emitEvent(ctx, rec, kind, events.CauseSupervisorRecovery, payload)
-	}
-	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit)
-	memory.withLLMCompactor(asToolLoopProvider(rt.provider), provideriface.ResolvedLLMConfigFromMetadata(rec.Metadata), 0)
-	compacted, err := memory.compactIfNeeded(ctx, reason, true)
-	if err != nil {
-		return err
-	}
-	if !compacted {
-		return fmt.Errorf("run memory compaction skipped: no compactable entries")
-	}
-	return nil
 }
 
 // executeWithProvider runs the run through the simple Provider.Execute path.

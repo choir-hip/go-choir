@@ -228,7 +228,7 @@ func TestNilTraceStoreIsNoOp(t *testing.T) {
 	rt, cleanup := newTraceWiringRuntime(t, nil)
 	defer cleanup()
 
-	if rt.TraceStore() != nil {
+	if rt.traceStore != nil {
 		t.Fatal("expected nil trace store")
 	}
 	rec := &types.RunRecord{
