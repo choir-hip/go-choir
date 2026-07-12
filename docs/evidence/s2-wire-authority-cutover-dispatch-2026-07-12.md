@@ -101,3 +101,27 @@ Allowed paths: `internal/proxy/compute_status.go`, `internal/proxy/handlers_test
 Change: add `stop_current_computer` to the existing authenticated compute recovery action switch, call the existing owner-scoped vmctl `StopDesktop`, and return the stopped computer receipt. Add `choir computer status|stop|start` over the existing compute status/recovery routes. `start` uses the existing `wake_current_computer` action. No runtime API, new state machine, raw internal route exposure, SSH, or process control.
 
 Acceptance: focused proxy and CLI tests prove API-key owner-scoped status/stop/start request shapes; deployed CLI stops the current platform computer, status observes it stopped, `choir wire stories` returns the same story while stopped, and start restores the computer.
+
+### S2-D Deployed Acceptance Receipt
+
+Commit `7fa4e62f0182fde1931821dc17735760adbc3aac` implements the bounded lifecycle surface. `TestComputeRecoveryStopUsesOwnerScopedVMCTL` proves that the authenticated owner reaches vmctl `StopDesktop` and that both the product receipt and ownership lookup report `stopped`. `TestComputerLifecycleCommandsUseProductComputeAPI` proves the CLI request shapes:
+
+- `choir computer status` -> `GET /api/compute/status`;
+- `choir computer stop` -> `POST /api/compute/recovery` with `stop_current_computer`;
+- `choir computer start` -> the same product route with `wake_current_computer`.
+
+Focused package proof passed with `go test ./internal/proxy ./cmd/choir -count=1`. The final runtime ratchet and its tests passed after recording this evidence document's new runtime citer.
+
+GitHub Actions run `29185043037` passed and deployed the same full SHA. At `2026-07-12T08:18:49Z`, `https://choir.news/health` reported `7fa4e62f0182fde1931821dc17735760adbc3aac`. The deployed product CLI then proved:
+
+- initial current-computer state `active`;
+- stop receipt state `stopped`;
+- independent `choir computer status` observation state `stopped`;
+- Wire story count `100` before and while stopped;
+- first story ID `source-network-texture-202ba0b3-48b9-40fb-8ab5-40dd190c8155` unchanged while stopped;
+- start receipt action `wake_current_computer`;
+- final independently observed current-computer state `active`.
+
+Independent reviewer `S2LifecycleVerifier` returned PASS at confidence `0.94`: owner identity comes only from authenticated `AuthResult.UserID`; status requires `read:runtime`; stop/start require `write:runtime`; no Wire, VM-local runtime, SSH, raw internal route, fallback, or migration coupling was introduced. The new proxy test uses cookie authentication rather than an API key, but the pre-existing API-key scope test and CLI Bearer transport independently cover those paths; the reviewer classified this as non-blocking test coverage, not a defect.
+
+The browser session available to the orchestrator is signed out. It proves the deployed signed-out desktop but cannot open the authenticated Universal Wire app; an authenticated human-browser article-render proof remains an external authentication boundary and is the only unclosed S2 acceptance item. No claim of S2 completion is made from the CLI receipt alone.
