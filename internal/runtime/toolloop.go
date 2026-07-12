@@ -211,16 +211,6 @@ func WithRequiredWriteTools(names ...string) ToolLoopOption {
 	}
 }
 
-// WithCompletionGuard lets a caller reject an end_turn as incomplete and append
-// an ordinary user turn describing the remaining obligation. The guard does not
-// choose a tool; it keeps the tool loop uniform while letting app-level policy
-// define what counts as a complete turn.
-func WithCompletionGuard(guard ToolLoopCompletionGuardFunc) ToolLoopOption {
-	return func(opts *toolLoopOptions) {
-		opts.completionGuard = guard
-	}
-}
-
 // WithParkWaiter lets a caller suspend normal completion until a durable signal
 // or idle deadline. The waiter must not call the provider; on Continue=true the
 // loop injects runtime-owned user turns and resumes provider calls only after

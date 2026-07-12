@@ -519,7 +519,9 @@ func TestRunToolLoopCompletionGuardRetriesEndTurn(t *testing.T) {
 		0,
 		emit,
 		nil,
-		WithCompletionGuard(guard),
+		func(opts *toolLoopOptions) {
+			opts.completionGuard = guard
+		},
 	)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
