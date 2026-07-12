@@ -52,3 +52,11 @@ Durable suite/evidence updates remain orchestrator-owned. No other production fi
 - `go run ./cmd/runtime-ratchet`
 
 The implementer returns an isolated commit and exact outputs. It does not push, deploy, drain staging, or edit suite/evidence documents.
+
+## Independent Verification Receipt
+
+At canonical `e649ee28`, `S1DeployVerifier` reported **BLOCKING**. Focused runtime/CLI tests and `go test ./cmd/runtime-ratchet` passed. The required default ratchet invocation failed because the regenerated baseline still cited two prospective suite entries for `internal/runtime/runtime_test.go` and `internal/runtime/api_test.go`; the implementation did not modify those files, and the orchestrator correctly removed the prospective entries before verification. The baseline therefore contained two nonexistent citer identities and reported 165 citers versus the current 163.
+
+**Classification:** verification-order drift, not a lifecycle behavior failure. Route registration, owner scope, CLI shapes, immediate terminal cancellation, deadline terminalization, admission release, and late-completion resistance passed independent review.
+
+**Required repair:** regenerate the inventory against the final canonical suite state, preserving all S1 code identities and explicit dispositions while removing only the two nonexistent citations; then rerun focused and default ratchet proof and independent verification.
