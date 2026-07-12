@@ -51,3 +51,10 @@ Forbidden: replacement production helper, alias, forwarding method, exported tes
 - Deleted only `WithToolRegistry`, `(*Runtime).TraceStore`, and `(*Runtime).CompactRunMemory`; `(*Runtime).StartRun` and every caller remain unchanged and are deferred.
 - Focused tool-loop/Trace tests and default runtime package compilation passed after integration.
 - Ratchet passed after deleting the three fulfilled unused-export debt rows: production LOC `46990 -> 46949`, test LOC `53028 -> 52991`, exports `1148 -> 1144`, caller edges `602 -> 601`, and initial unused-export debt `30 -> 27`; routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, and citers remained gated.
+
+## S3-I3 Independent Verification Blocker
+
+- Independent verifier `S3I3Verifier` returned `BLOCKING` at confidence `0.99`.
+- Reproducer: `git diff --unified=8 ce0cc940..883cec57 -G'StartRun' -- internal/runtime` shows that deleting the wrapper-only manual-compaction test also deleted one existing `rt.StartRun(...)` caller.
+- This violates the amended invariant that `StartRun` and every caller remain unchanged. The smallest repair is to restore that test setup and caller while invoking the same unexported same-package compaction machinery directly; no production helper is restored.
+- All other verifier checks passed. Comprehensive-tag compilation remains blocked by the documented pre-existing `prompt.provideriface` and `AuthorKind`/`AuthorLabel` drift.
