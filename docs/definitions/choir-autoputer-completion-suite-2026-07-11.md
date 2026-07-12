@@ -693,13 +693,13 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 9aab1a1f
+  journal_expected_parent_sha: 491a7d7e
   orchestrator_lock:
     holder: Main
-    epoch: 12
-    expires_at: 2026-07-12T15:35:02Z
-    expected_parent_sha: 9aab1a1f
-    lock_transition_id: s3-lock-renewal-88
+    epoch: 13
+    expires_at: 2026-07-12T17:25:09Z
+    expected_parent_sha: 491a7d7e
+    lock_transition_id: s3-lock-renewal-106
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
     B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
@@ -1289,8 +1289,8 @@ run_checkpoint_and_resumption_state:
     - slice_id: S3-I3-runtime-test-only-wrappers
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
-      orchestrator_lock_epoch: 12
-      status: verifying
+      orchestrator_lock_epoch: 13
+      status: consensus
       dispatch_nonce: s3-runtime-dissolution-i3-nonce-01
       dispatch_ref: S3I3Implementer
       agent_session_ref: agent://S3I3Implementer
@@ -1308,7 +1308,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I3_landing
       stage_started_at: 2026-07-12T14:10:09Z
       transition_id: s3-i3-dispatch-intent-98
-      expected_parent_sha: 9aab1a1f
+      expected_parent_sha: 491a7d7e
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i3-dispatch-intent-98, recorded_at: 2026-07-12T14:10:09Z, actor: Main, expected_parent_sha: 5f981886, precondition: S3_I2_landed_ratchet_PASS_initial_four_wrapper_hypothesis, postcondition: initial_wrapper_deletion_and_test_rewrite_scope_is_canonical, external_operation_id: not_applicable}
         - {status: dispatch_intent, transition_id: s3-i3-scope-amended-99, recorded_at: 2026-07-12T14:15:29Z, actor: Main, expected_parent_sha: ce0cc940, precondition: implementation_reconciliation_found_48_plus_StartRun_test_callers_outside_lock, postcondition: StartRun_deferred_and_three_wrapper_exact_scope_canonical_before_commit, external_operation_id: not_applicable}
@@ -1318,7 +1318,9 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s3-i3-verifier-dispatched-103, recorded_at: 2026-07-12T14:27:02Z, actor: Main, expected_parent_sha: 206f3631, precondition: verifier_intent_canonical, postcondition: independent_S3I3Verifier_active, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s3-i3-verifier-blocked-104, recorded_at: 2026-07-12T14:33:10Z, actor: S3I3Verifier, expected_parent_sha: e181cefb, precondition: independent_source_and_behavior_verification, postcondition: deleted_manual_compaction_test_removed_one_StartRun_caller_repair_required, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i3-caller-repair-105, recorded_at: 2026-07-12T14:39:55Z, actor: Main, expected_parent_sha: 9aab1a1f, precondition: verifier_blocker_documented_before_fix, postcondition: StartRun_caller_restored_direct_internal_compaction_proof_PASS_final_reverification_required, external_operation_id: not_applicable}
-      lock_expires_at: 2026-07-12T15:35:02Z
+        - {status: verifying, transition_id: s3-i3-verifier-pass-107, recorded_at: 2026-07-12T15:25:09Z, actor: S3I3Verifier, expected_parent_sha: 491a7d7e, precondition: caller_repair_and_ratchet_refresh_canonical, postcondition: independent_PASS_confidence_0_99_no_findings, external_operation_id: not_applicable}
+        - {status: accepted, transition_id: s3-i3-ci-deploy-accepted-108, recorded_at: 2026-07-12T15:25:09Z, actor: Main, expected_parent_sha: 491a7d7e, precondition: full_CI_attempts_and_deploy_receipt_complete, postcondition: staging_health_and_authenticated_run_list_200_consensus_pending, external_operation_id: github_actions_29196207835_attempt_2}
+      lock_expires_at: 2026-07-12T17:25:09Z
       mutation_class: orange
       protected_surfaces: []
       exact_files_packages_routes_state_authorities: [internal/runtime/runtime.go, internal/runtime/toolloop_test.go, internal/runtime/trace_wiring_test.go, internal/runtime/run_memory_integration_test.go, docs/runtime-dissolution-inventory.yaml]
@@ -1337,18 +1339,18 @@ run_checkpoint_and_resumption_state:
       external_operation_idempotent: true
       implementation_sha_or_dirty_snapshot: 0d393019
       implementation_commit_sha: 0d393019
-      push_ref: pending
-      ci_run_ref: pending
-      deploy_ref: pending
-      deployed_sha: pending
-      acceptance_ref: pending
+      push_ref: 491a7d7e
+      ci_run_ref: [https://github.com/choir-hip/go-choir/actions/runs/29196720577#attempt-2, https://github.com/choir-hip/go-choir/actions/runs/29196207835#attempt-2]
+      deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/29196207835#job-86663389857
+      deployed_sha: 187728542a24b6bd69ddb16596cb56c031124b0b
+      acceptance_ref: docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md#s3-i3-final-verification-ci-deploy-and-acceptance
       acceptance_contract: three_test_only_wrappers_deleted_StartRun_unchanged_meaningful_runtime_behavior_coverage_preserved
-      evidence_refs: [docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md, agent://S3I3Implementer, agent://S3I3Verifier]
-      open_findings: [final_independent_reverification_pending, StartRun_48_plus_test_callers_deferred_to_caller_complete_slice]
-      landed_commit_sha: pending
-      adjudication: verifier_blocker_repaired_final_reverification_pending
-      last_reconciled_at: 2026-07-12T14:39:55Z
-      reconciliation_result: caller_preservation_repair_0d393019_and_isolated_comprehensive_test_PASS
+      evidence_refs: [docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md, agent://S3I3Implementer, agent://S3I3Verifier, https://github.com/choir-hip/go-choir/actions/runs/29196720577#attempt-2, https://github.com/choir-hip/go-choir/actions/runs/29196207835#attempt-2]
+      open_findings: [StartRun_48_plus_test_callers_deferred_to_caller_complete_slice]
+      landed_commit_sha: 491a7d7e
+      adjudication: independent_PASS_deployed_accepted_final_consensus_pending
+      last_reconciled_at: 2026-07-12T15:25:09Z
+      reconciliation_result: verifier_PASS_CI_PASS_deployed_18772854_staging_product_accepted_consensus_pending
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

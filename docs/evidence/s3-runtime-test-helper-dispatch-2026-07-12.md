@@ -65,3 +65,12 @@ Forbidden: replacement production helper, alias, forwarding method, exported tes
 - Restored `TestRuntimeManualRunMemoryCompaction` and its original `rt.StartRun(...)` caller; replaced only the deleted exported wrapper invocation with direct same-package `runMemoryManager.compactIfNeeded(..., "manual_test", true)` setup.
 - Isolated comprehensive proof passed after removing only the three unrelated pre-existing failing test files from a detached temporary worktree: `go test -tags comprehensive ./internal/runtime -run '^TestRuntimeManualRunMemoryCompaction$' -count=1`.
 - Default runtime compile, runtime-ratchet tests, and the runtime ratchet pass. Current ratchet: production LOC `46949`, test LOC `53035`, exports `1145`, caller edges `601`, unused debt `27`, routes `47`, tools `49`, wrappers `5`, citers `198`.
+
+## S3-I3 Final Verification, CI, Deploy, and Acceptance
+
+- Independent `S3I3Verifier` final recheck returned `PASS` at confidence `0.99` with no findings on canonical `491a7d7e`.
+- Full behavior CI run `29196720577`, attempt `2`, passed every selected normal/race gate for repair checkpoint `b154756e`.
+- Production-deletion CI run `29196207835`, attempt `2`, passed every selected normal/race gate and deployed checkpoint `187728542a24b6bd69ddb16596cb56c031124b0b`.
+- Deployment job `86663389857` published the activation receipt at `2026-07-12T15:11:34Z`; sandbox and gateway artifacts were active at `187728542a24b6bd69ddb16596cb56c031124b0b`.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`, proving the registered run-list product path remained live after wrapper deletion.
+- Residual risk: unrelated comprehensive-tag compilation drift remains outside S3-I3; the repaired comprehensive compaction test itself passed in the isolated proof.
