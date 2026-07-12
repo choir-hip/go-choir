@@ -42,3 +42,12 @@ Forbidden: replacement helper, alias, wrapper, forwarding method, new package, r
 4. runtime ratchet passes with exports, unused-export debt, and production LOC decreased and no gated count increased;
 5. independent verifier confirms exact deletion-only scope;
 6. full CI, staging identity/health, product-path smoke, and post-implementation consensus have no confirmed blocker.
+
+## S3-I2 Implementation And Verification Receipt
+
+- Integrated implementation: `f637c5b8` (isolated commit `6cb224a3b4f148f5d8e0f2f4f1b413bb35823db7`).
+- Exact diff: three authorized Go files, `27` deletions, no insertions. Only `Document.MustRender`, `(*Runtime).ToolRegistry`, `WithToolProfileRegistry`, and their attached comments were removed.
+- Default proof passed: `go test ./internal/runtime/promptspec -count=1`, `go test ./internal/runtime -count=1`, and the focused default-tool/profile tests.
+- Ratchet proof passed: `go test ./cmd/runtime-ratchet -count=1` and `go run ./cmd/runtime-ratchet`. Production LOC decreased `47017` to `46990`, exports `1151` to `1148`, export caller edges `603` to `602`, and initial unused export debt `33` to `30`; every gated route, tool, importer, wrapper, compatibility, store-call, interface-candidate, test/file, and citer count stayed flat.
+- Independent reviewer `S3I2Verifier` returned PASS at confidence `0.97` with no findings after exact diff, residual symbol, build-tag, alias/wrapper, route/registration, state-authority, and ratchet review.
+- Behavior CI run `29193594601` was canceled by the immediately following durable verifier-ledger push. Attempt `2` must pass and deploy before this slice can close.
