@@ -627,9 +627,9 @@ CREATE INDEX IF NOT EXISTS idx_desktop_window_placements_instance ON desktop_win
 `
 
 // Open opens (or creates) the unified embedded Dolt workspace derived from
-// dbPath and applies the runtime and texture schemas. If dbPath points at a
-// legacy runtime SQLite database, its rows are imported into Dolt once and the
-// SQLite file is left in place as a rollback source.
+// dbPath and applies the runtime and texture schemas. A legacy SQLite file at
+// dbPath is retained only as inert rollback evidence; serving startup never
+// reads or imports it.
 func Open(dbPath string) (*Store, error) {
 	log.Printf("store: open phase=prepare-path status=starting")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
@@ -689,13 +689,6 @@ func Open(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("runtime store: bootstrap texture: %w", err)
 	}
 	log.Printf("store: open phase=texture-schema status=complete")
-
-	log.Printf("store: open phase=legacy-import status=starting")
-	if err := s.importLegacySQLiteRuntime(dbPath); err != nil {
-		_ = s.Close()
-		return nil, fmt.Errorf("runtime store: import legacy sqlite: %w", err)
-	}
-	log.Printf("store: open phase=legacy-import status=complete")
 
 	if freshStore {
 		if err := os.WriteFile(dbPath, nil, 0o644); err != nil {

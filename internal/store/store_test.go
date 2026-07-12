@@ -13,6 +13,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+
+	_ "modernc.org/sqlite"
 )
 
 func testStoreCoagentPacket(kind, summary string) types.CoagentSourcePacketPayload {
@@ -116,7 +118,7 @@ WHERE table_schema = DATABASE()
 	return count > 0
 }
 
-func TestOpenImportsLegacySQLiteRowsWithoutObjectGraphReplay(t *testing.T) {
+func TestOpenDoesNotImportLegacySQLiteRuntimeRows(t *testing.T) {
 	path := testStorePath(t)
 	cleanupTestStorePath(path)
 	t.Cleanup(func() { cleanupTestStorePath(path) })
@@ -125,67 +127,26 @@ func TestOpenImportsLegacySQLiteRowsWithoutObjectGraphReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open legacy sqlite: %v", err)
 	}
-	now := time.Now().UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano)
-	windowsJSON := `[{"window_id":"win-legacy","app_id":"texture","title":"Legacy Texture","geometry":{"x":1,"y":2,"width":640,"height":480},"mode":"normal","z_index":1}]`
-	for _, stmt := range []string{
-		`CREATE TABLE runs (
-			loop_id TEXT PRIMARY KEY,
-			owner_id TEXT NOT NULL,
-			sandbox_id TEXT NOT NULL,
-			state TEXT NOT NULL,
-			prompt TEXT NOT NULL DEFAULT '',
-			result TEXT NOT NULL DEFAULT '',
-			error TEXT NOT NULL DEFAULT '',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			finished_at TEXT,
-			metadata_json TEXT NOT NULL DEFAULT '{}'
-		)`,
-		`CREATE TABLE events (
-			event_id TEXT PRIMARY KEY,
-			loop_id TEXT NOT NULL DEFAULT '',
-			owner_id TEXT NOT NULL DEFAULT '',
-			seq INTEGER NOT NULL,
-			ts TEXT NOT NULL,
-			kind TEXT NOT NULL,
-			phase TEXT NOT NULL DEFAULT '',
-			payload_json TEXT NOT NULL DEFAULT '{}'
-		)`,
-		`CREATE TABLE desktop_state (
-			owner_id TEXT PRIMARY KEY,
-			windows_json TEXT NOT NULL DEFAULT '[]',
-			active_window TEXT NOT NULL DEFAULT '',
-			updated_at TEXT NOT NULL
-		)`,
-	} {
-		if _, err := legacy.Exec(stmt); err != nil {
-			_ = legacy.Close()
-			t.Fatalf("create legacy schema: %v", err)
-		}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := legacy.Exec(`CREATE TABLE runs (
+		loop_id TEXT PRIMARY KEY,
+		owner_id TEXT NOT NULL,
+		sandbox_id TEXT NOT NULL,
+		state TEXT NOT NULL,
+		prompt TEXT NOT NULL DEFAULT '',
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`); err != nil {
+		_ = legacy.Close()
+		t.Fatalf("create legacy runs table: %v", err)
 	}
 	if _, err := legacy.Exec(
-		`INSERT INTO runs (loop_id, owner_id, sandbox_id, state, prompt, created_at, updated_at, metadata_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		"legacy-run", "user-legacy", "sandbox-legacy", types.RunRunning, "migrate me", now, now, `{"source":"sqlite"}`,
+		`INSERT INTO runs (loop_id, owner_id, sandbox_id, state, prompt, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"legacy-run", "user-legacy", "sandbox-legacy", types.RunRunning, "do not import", now, now,
 	); err != nil {
 		_ = legacy.Close()
 		t.Fatalf("insert legacy run: %v", err)
-	}
-	if _, err := legacy.Exec(
-		`INSERT INTO events (event_id, loop_id, owner_id, seq, ts, kind, phase, payload_json)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		"legacy-event", "legacy-run", "user-legacy", 7, now, types.EventRunStarted, "start", `{"legacy":true}`,
-	); err != nil {
-		_ = legacy.Close()
-		t.Fatalf("insert legacy event: %v", err)
-	}
-	if _, err := legacy.Exec(
-		`INSERT INTO desktop_state (owner_id, windows_json, active_window, updated_at)
-		 VALUES (?, ?, ?, ?)`,
-		"user-legacy", windowsJSON, "win-legacy", now,
-	); err != nil {
-		_ = legacy.Close()
-		t.Fatalf("insert legacy desktop state: %v", err)
 	}
 	if err := legacy.Close(); err != nil {
 		t.Fatalf("close legacy sqlite: %v", err)
@@ -193,36 +154,19 @@ func TestOpenImportsLegacySQLiteRowsWithoutObjectGraphReplay(t *testing.T) {
 
 	s, err := Open(path)
 	if err != nil {
-		t.Fatalf("open migrated store: %v", err)
+		t.Fatalf("open Dolt store beside legacy SQLite marker: %v", err)
 	}
 	defer func() { _ = s.Close() }()
 
-	var (
-		ownerID string
-		prompt  string
-	)
-	if err := s.db.QueryRowContext(context.Background(),
-		`SELECT owner_id, prompt FROM runs WHERE loop_id = ?`, "legacy-run",
-	).Scan(&ownerID, &prompt); err != nil {
-		t.Fatalf("query imported relational run: %v", err)
-	}
-	if ownerID != "user-legacy" || prompt != "migrate me" {
-		t.Fatalf("imported relational run owner=%q prompt=%q", ownerID, prompt)
-	}
-	var streamSeq int64
-	if err := s.db.QueryRowContext(context.Background(),
-		`SELECT stream_seq FROM events WHERE event_id = ?`, "legacy-event",
-	).Scan(&streamSeq); err != nil {
-		t.Fatalf("query imported relational event: %v", err)
-	}
-	if streamSeq != 7 {
-		t.Fatalf("imported relational event stream_seq = %d, want 7", streamSeq)
-	}
-	if _, err := s.GetRun(context.Background(), "legacy-run"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("canonical object graph run lookup error = %v, want %v", err, ErrNotFound)
+	var ownerID string
+	err = s.db.QueryRowContext(context.Background(),
+		`SELECT owner_id FROM runs WHERE loop_id = ?`, "legacy-run",
+	).Scan(&ownerID)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("legacy SQLite run was imported: owner=%q err=%v", ownerID, err)
 	}
 	if info, err := os.Stat(path); err != nil || info.Size() == 0 {
-		t.Fatalf("legacy sqlite rollback file was not preserved: info=%+v err=%v", info, err)
+		t.Fatalf("legacy SQLite evidence was not retained: info=%+v err=%v", info, err)
 	}
 }
 
