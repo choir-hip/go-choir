@@ -205,6 +205,33 @@ func TestCancelResidentRunReleasesImmediatelyAndRejectsLateCompletion(t *testing
 	}
 }
 
+func TestIdlePassivationCannotOverwriteCancelledRun(t *testing.T) {
+	rt, _ := testRuntime(t)
+	stale, err := rt.createRunWithMetadata(context.Background(), "stale passivation", "user-alice", nil)
+	if err != nil {
+		t.Fatalf("create run: %v", err)
+	}
+	if err := rt.CancelRun(context.Background(), stale.RunID, "user-alice"); err != nil {
+		t.Fatalf("cancel run: %v", err)
+	}
+
+	rt.passivateIdleToolLoopRun(
+		context.Background(),
+		stale,
+		"late passivation",
+		TokenUsage{InputTokens: 3, OutputTokens: 5},
+		&ToolLoopPassivatedError{Reason: "idle"},
+	)
+
+	stored, err := rt.store.GetRun(context.Background(), stale.RunID)
+	if err != nil {
+		t.Fatalf("get run after late passivation: %v", err)
+	}
+	if stored.State != types.RunCancelled || stored.FinishedAt == nil {
+		t.Fatalf("run after late passivation = state %q finished_at %v, want cancelled terminal state", stored.State, stored.FinishedAt)
+	}
+}
+
 func TestActivationBudgetProgressDeadlineTerminalizesAndReleases(t *testing.T) {
 	rt, _ := testRuntime(t)
 	provider := newLateCompletionProvider()

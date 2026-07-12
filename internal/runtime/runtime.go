@@ -1897,8 +1897,12 @@ func (rt *Runtime) passivateIdleToolLoopRun(ctx context.Context, rec *types.RunR
 	rec.Metadata["actor_sleep_state"] = "idle"
 	rec.Metadata["actor_sleep_at"] = now.Format(time.RFC3339Nano)
 
-	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+	persisted, err := rt.persistActivationState(context.Background(), rec)
+	if err != nil {
 		log.Printf("runtime: passivate idle run %s: %v", rec.RunID, err)
+		return
+	}
+	if !persisted {
 		return
 	}
 	payload := map[string]any{

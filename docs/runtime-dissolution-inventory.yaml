@@ -6,9 +6,9 @@ counts:
     go_files: 150
     production_files: 80
     test_files: 70
-    production_loc: 48888
-    test_loc: 55680
-    exports: 1214
+    production_loc: 48892
+    test_loc: 55707
+    exports: 1215
     export_caller_edges: 613
     initial_unused_export_debt: 39
     routes: 49
@@ -16,7 +16,7 @@ counts:
     production_importers: 4
     wrappers: 5
     compatibility_markers: 16
-    store_calls: 463
+    store_calls: 462
     interface_candidates: 4
     citers: 164
 files:
@@ -94,7 +94,7 @@ files:
       loc: 342
     - id: internal/runtime/config_test.go [test]
       disposition: core
-      loc: 296
+      loc: 323
     - id: internal/runtime/content.go [production]
       disposition: content
       loc: 1983
@@ -217,7 +217,7 @@ files:
       loc: 441
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3724
+      loc: 3728
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -1362,6 +1362,8 @@ exports:
     - id: internal/runtime/config_test.go:func:TestActivationBudgetProgressDeadlineTerminalizesAndReleases
       disposition: core
     - id: internal/runtime/config_test.go:func:TestCancelResidentRunReleasesImmediatelyAndRejectsLateCompletion
+      disposition: core
+    - id: internal/runtime/config_test.go:func:TestIdlePassivationCannotOverwriteCancelledRun
       disposition: core
     - id: internal/runtime/config_test.go:func:TestLoadConfigDefaultsPromotionSourceRepoOutsideGitWorktree
       disposition: core
@@ -4108,7 +4110,7 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/runtime.go:101:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
-    - id: internal/runtime/runtime.go:2000:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:2004:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/tool_profiles.go:18:Re-exported from internal/agentprofile for backward compatibility.
       disposition: delete
@@ -4497,8 +4499,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/runtime.go:maybeWakeTextureOnWorkerMessage:internal/store.method:Store.GetRun
       disposition: read
-    - id: internal/runtime/runtime.go:passivateIdleToolLoopRun:internal/store.method:Store.UpdateRun
-      disposition: lifecycle
     - id: internal/runtime/runtime.go:passivateInterruptedActivations:internal/store.method:Store.ListRunsByState
       disposition: read
     - id: internal/runtime/runtime.go:passivateInterruptedActivations:internal/store.method:Store.MarkAgentMutationStale
