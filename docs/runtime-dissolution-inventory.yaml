@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 443
     interface_candidates: 4
-    citers: 214
+    citers: 218
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5036,6 +5036,8 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools.go, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools.go, internal/runtime/tools_test.go, docs/runtime-dissolution-inventory.yaml]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:result: approximately 40K live app lines move, 6K-8K core moves, internal/runtime deleted'
@@ -5219,6 +5221,12 @@ citers:
     - id: 'docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md:- `internal/runtime/toolloop_test.go`: replace the one wrapper call with a direct same-package `ToolLoopOption` closure assigning `opts.completionGuard = guard`.'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md:Repository-wide and build-tag-aware searches identify exactly one caller of `WithCompletionGuard`: `TestRunToolLoopCompletionGuardRetriesEndTurn` in `internal/runtime/toolloop_test.go`. Production nev… [sha256:e2b098394d6c1875ec23a93c2079a31279468c5b503ac5840700142d386dc5dc]'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-toolregistry-with-tools-alias-dispatch-2026-07-12.md:Allowed source paths only: `internal/runtime/tools.go` and `internal/runtime/tools_test.go`.'
+      disposition: historical_evidence
+    - id: docs/evidence/s3-toolregistry-with-tools-alias-dispatch-2026-07-12.md:The executable dissolution inventory classifies `internal/runtime/tools.go:var:NewToolRegistryWithTools` as `delete`. Keeping it retains a redundant compatibility surface and one unit of unused-export debt.
+      disposition: historical_evidence
+    - id: docs/evidence/s3-toolregistry-with-tools-alias-dispatch-2026-07-12.md:`internal/runtime/tools.go` still re-exports `toolregistry.NewToolRegistryWithTools` under a backward-compatibility block. Repository/build-tag-aware search finds exactly one caller, `TestNewToolRegis… [sha256:d5e7ec8f147a481932701e32875b6286b86b633379cee6d77f7812883d1aa2c7]
       disposition: historical_evidence
     - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
       disposition: block
