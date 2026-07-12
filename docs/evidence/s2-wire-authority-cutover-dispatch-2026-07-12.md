@@ -75,3 +75,9 @@ Acceptance: sourcecycled tests prove canonical object/edge publication to the ho
 S2-A is independent. S2-B and S2-C share the canonical object/publication authority edge and must be integrated in one landed S2 commit so no deployed state has mixed authority. Implementation agents may work in isolated branches, but the orchestrator performs conflict resolution, full focused verification, one final authority audit, then lands atomically.
 
 The S2 phase does not pass until independent verification and a post-implementation consensus panel find no remaining runtime-local shared wire read/write/migration authority, and deployed staging proves publication, feed read, source capture persistence, VM stop/start fate-sharing, and feed visibility across restart.
+
+## S2-VER-001 — Retained VM-Local Edition Read Gate
+
+At canonical `97dc05f7`, independent verifier `S2IndependentVerifier` found a blocking retained authority in `internal/runtime/universal_wire.go:40-89`. Although S2-B deleted local edition advancement, `resolveUniversalWireTextureReadOwner` still authorized cross-owner Texture document and revision reads only when the platform document appeared in the VM-local `universal-wire/Wire.texture` alias and current revision. New corpusd publications can never satisfy that stale gate, so runtime Texture reads return not-found and the VM-local store remains shared-wire read authority.
+
+Classification: substrate authority-routing regression. The existing canonical public publication route is proxy/corpusd; runtime Texture endpoints are private working-state surfaces. The repair is therefore deletion-first: remove the cross-owner runtime read exception and edition parser/gate, make runtime Texture reads owner-scoped only, and leave public article/feed reads exclusively on proxy/corpusd. Do not add a corpusd fallback inside runtime Texture handlers.
