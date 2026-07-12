@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b
+  journal_expected_parent_sha: a47cecef55dadb768e55475e313cc89b14121e10
   orchestrator_lock:
     holder: Main
     epoch: 6
@@ -879,16 +879,16 @@ run_checkpoint_and_resumption_state:
       subgoal: S1
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 6
-      status: dispatched
+      status: committed
       dispatch_nonce: s1-deploy-unblock-01-nonce-01
       dispatch_ref: S1DeployImplementer
       agent_session_ref: agent://S1DeployImplementer
       dispatch_prompt_ref: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
       implementer_job_ref: S1DeployImplementer
-      implementer_output_ref: pending_agent_output
+      implementer_output_ref: agent://S1DeployImplementer
       verifier_job_ref: S1DeployVerifier_pending_dispatch
       verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      worktree_or_branch_ref: s1-deploy-unblock-implementer@47abce2a4de850a64cd121f63a24d8048eca7bc9
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -896,11 +896,13 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 063d42aef8df4e59101a2ed2eed20f8185d9fb31
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-12T02:47:34Z
-      transition_id: s1-deploy-unblock-dispatched-37
-      expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b
+      transition_id: s1-deploy-unblock-committed-38
+      expected_parent_sha: a47cecef55dadb768e55475e313cc89b14121e10
       stage_history:
         - {status: dispatch_intent, transition_id: s1-deploy-unblock-dispatch-intent-36, recorded_at: 2026-07-12T02:47:34Z, actor: Main, expected_parent_sha: 063d42aef8df4e59101a2ed2eed20f8185d9fb31, precondition: S0_complete_S1_working_lock_epoch_6_held_and_red_ceremony_recorded, postcondition: exact_mutation_lock_existing_replacement_connection_and_acceptance_contract_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s1-deploy-unblock-dispatched-37, recorded_at: 2026-07-12T02:49:53Z, actor: Main, expected_parent_sha: f05b065b46b3fa734e91b1393b57c77c70ba3b9b, precondition: canonical_dispatch_intent_and_live_lock_epoch_6, postcondition: S1DeployImplementer_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
+        - {status: implementation_returned, transition_id: s1-deploy-unblock-returned-38a, recorded_at: 2026-07-12T03:14:45Z, actor: S1DeployImplementer, expected_parent_sha: a47cecef55dadb768e55475e313cc89b14121e10, precondition: one_matching_agent_result_for_dispatch_nonce, postcondition: isolated_commit_47abce2a_recorded_and_integrated, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s1-deploy-unblock-committed-38, recorded_at: 2026-07-12T03:14:45Z, actor: Main, expected_parent_sha: a47cecef55dadb768e55475e313cc89b14121e10, precondition: implementation_integrated_focused_tests_and_S0_ratchet_PASS, postcondition: canonical_code_ready_for_push_and_independent_verifier_dispatch, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T04:37:02Z
       mutation_class: red
       protected_surfaces: [run_acceptance, admission_occupancy, owner_scoped_cancellation, choir_run_CLI, staging_hot_refresh_deploy]
@@ -916,30 +918,28 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref_then_staging_product_API
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: existing_cancel_and_list_handlers_unwired_active_execution_unbounded_staging_deployed_at_6e893d90
-      observed_postcondition: pending_implementation
+      observed_postcondition: routes_and_CLI_connected_activation_budget_60m_immediate_terminal_cancellation_and_late_write_guard_integrated_with_focused_and_ratchet_PASS
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: pending
-      implementation_commit_sha: pending
+      implementation_sha_or_dirty_snapshot: 47abce2a4de850a64cd121f63a24d8048eca7bc9
+      implementation_commit_sha: 47abce2a4de850a64cd121f63a24d8048eca7bc9
       push_ref: pending
       ci_run_ref: pending
       deploy_ref: pending
       deployed_sha: pending
-      acceptance_ref: pending
+      acceptance_ref: artifact://524; artifact://526
       acceptance_contract: owner_scoped_product_CLI_cancel_and_60m_activation_budget_terminalize_runs_release_admission_and_restore_hot_refresh
       evidence_refs: [docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md]
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-12T02:49:53Z
-      reconciliation_result: one_matching_live_agent_job_S1DeployImplementer
+      last_reconciled_at: 2026-07-12T03:14:45Z
+      reconciliation_result: exactly_one_matching_implementation_integrated_as_a47cecef_and_local_proof_passed
       close_condition: staging_running_runs_zero_or_authoritative_equivalent_green_deployed_commit_cancel_deadline_regressions_independent_verification_and_consensus_adjudication
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
     - {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}
     - {path: internal/runtime/api.go, symbols: [RegisterRoutes], routes: [/api/agent/loops, /api/agent/cancel], disposition: core, reason: connect_existing_owner_scoped_operator_handlers}
     - {path: internal/runtime/config_test.go, disposition: test, reason: activation_budget_configuration_regression}
-    - {path: internal/runtime/runtime_test.go, disposition: test, reason: deadline_and_terminal_cancel_regressions}
-    - {path: internal/runtime/api_test.go, disposition: test, reason: registered_owner_scoped_routes}
   ratchet_artifact:
     path: docs/runtime-dissolution-inventory.yaml
     baseline_ref: 7994dfa62e3e9ba8420a5bb4810aae9be87a4ae1
