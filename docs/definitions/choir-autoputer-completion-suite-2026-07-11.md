@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 195ef87b
+  journal_expected_parent_sha: 464e58cc
   orchestrator_lock:
     holder: Main
     epoch: 12
     expires_at: 2026-07-12T15:35:02Z
-    expected_parent_sha: 195ef87b
+    expected_parent_sha: 464e58cc
     lock_transition_id: s3-lock-renewal-88
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1216,7 +1216,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 12
-      status: consensus
+      status: consensus_repair
       dispatch_nonce: s3-runtime-dissolution-i2-nonce-01
       dispatch_ref: S3I2Implementer
       agent_session_ref: agent://S3I2Implementer
@@ -1234,7 +1234,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I2_landing
       stage_started_at: 2026-07-12T12:47:48Z
       transition_id: s3-i2-dispatch-intent-79
-      expected_parent_sha: 195ef87b
+      expected_parent_sha: 464e58cc
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i2-dispatch-intent-79, recorded_at: 2026-07-12T12:47:48Z, actor: Main, expected_parent_sha: f10b8d98, precondition: S3_I1_landed_ratchet_PASS_three_declaration_only_exports_confirmed, postcondition: exact_deletion_only_helper_slice_is_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i2-dispatched-80, recorded_at: 2026-07-12T12:50:39Z, actor: Main, expected_parent_sha: 2bc15174, precondition: canonical_dispatch_intent_and_live_lock_epoch_11, postcondition: S3I2Implementer_started_with_recorded_nonce_and_exact_mutation_lock, external_operation_id: not_applicable}
@@ -1249,6 +1249,8 @@ run_checkpoint_and_resumption_state:
         - {status: deployed, transition_id: s3-i2-deployed-90, recorded_at: 2026-07-12T13:35:02Z, actor: Main, expected_parent_sha: 195ef87b, precondition: CI_PASS_and_deploy_job_success, postcondition: sandbox_and_gateway_active_at_6180be79, external_operation_id: activation_receipt_29193594601_attempt_2}
         - {status: accepted, transition_id: s3-i2-accepted-91, recorded_at: 2026-07-12T13:35:02Z, actor: Main, expected_parent_sha: 195ef87b, precondition: deployed_identity_6180be79, postcondition: authenticated_registered_run_list_200_and_all_deploy_health_checks_PASS, external_operation_id: staging_probe_2026_07_12T13_22Z}
         - {status: consensus, transition_id: s3-i2-consensus-intent-92, recorded_at: 2026-07-12T13:35:02Z, actor: Main, expected_parent_sha: 195ef87b, precondition: deployed_accepted_verified_ratchet_PASS, postcondition: post_implementation_consensus_ready, external_operation_id: pending_agentic_consensus_S3_I2}
+        - {status: consensus, transition_id: s3-i2-consensus-blocked-93, recorded_at: 2026-07-12T13:55:41Z, actor: Main, expected_parent_sha: 464e58cc, precondition: four_reviewer_panel_complete, postcondition: three_PASS_one_confirmed_receipt_citer_blocker, external_operation_id: /tmp/choir-s3-i2-consensus-20260712}
+        - {status: consensus_repair, transition_id: s3-i2-consensus-repair-94, recorded_at: 2026-07-12T13:55:41Z, actor: Main, expected_parent_sha: 464e58cc, precondition: receipt_literal_created_one_new_runtime_citer, postcondition: command_wording_normalized_and_citer_count_restored_to_192_pending_final_panel, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T15:35:02Z
       mutation_class: orange
       protected_surfaces: []
@@ -1275,11 +1277,11 @@ run_checkpoint_and_resumption_state:
       acceptance_ref: docs/evidence/s3-runtime-dead-helper-dispatch-2026-07-12.md#s3-i2-implementation-and-verification-receipt
       acceptance_contract: three_dead_helpers_deleted_no_route_tool_or_state_authority_change
       evidence_refs: [docs/evidence/s3-runtime-dead-helper-dispatch-2026-07-12.md, agent://S3I2Implementer, agent://S3I2Verifier]
-      open_findings: [post_implementation_consensus_pending]
+      open_findings: [final_post_repair_consensus_pending]
       landed_commit_sha: pending
-      adjudication: independent_verifier_PASS_deployed_accepted_consensus_pending
-      last_reconciled_at: 2026-07-12T13:35:02Z
-      reconciliation_result: deployed_accepted_verified_consensus_intent_persisting
+      adjudication: three_PASS_one_confirmed_citer_blocker_repaired_final_panel_pending
+      last_reconciled_at: 2026-07-12T13:55:41Z
+      reconciliation_result: consensus_blocker_repaired_ratchet_rebase_pending
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
