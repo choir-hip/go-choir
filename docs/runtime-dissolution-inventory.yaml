@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 13
     store_calls: 443
     interface_candidates: 4
-    citers: 227
+    citers: 228
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -4968,6 +4968,8 @@ citers:
     - id: docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:- `internal/runtime/trace_wiring_test.go`;
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:Allowed production file: `internal/runtime/runtime.go`, deleting exactly the three in-scope wrappers and attached comments. `(*Runtime).StartRun` is forbidden in this iteration.'
+      disposition: historical_evidence
+    - id: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md:- Retained the three runtime-consumed helpers in `internal/runtime/toolloop_test.go`; they remain test-only and create no production alias or execution path.
       disposition: historical_evidence
     - id: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md:- `internal/runtime/toolloop.go` and directly affected runtime callers/tests;
       disposition: historical_evidence
