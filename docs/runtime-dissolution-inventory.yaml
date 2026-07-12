@@ -16,7 +16,7 @@ counts:
     production_importers: 4
     wrappers: 5
     compatibility_markers: 16
-    store_calls: 460
+    store_calls: 461
     citers: 151
 files:
     - id: internal/runtime/agent_tools_test.go [test]
@@ -4526,6 +4526,14 @@ store_calls:
       disposition: read
     - id: internal/runtime/runtime.go:workerUpdateRevisionMetadata:internal/store.method:Store.ListChannelMessages
       disposition: read
+    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.CreateAgentMutation
+      disposition: lifecycle
+    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.CreateRun
+      disposition: lifecycle
+    - id: internal/runtime/runtime_persistence.go:persistSubmittedRun:internal/store.interface:internal/runtime.runSubmissionStore.UpsertAgent
+      disposition: lifecycle
     - id: internal/runtime/super_controller.go:assignedOpenWorkItemsForAgentTrajectory:internal/store.method:Store.ListWorkItemsByTrajectory
       disposition: read
     - id: internal/runtime/super_controller.go:coagentParkWaiter:internal/store.method:Store.ListCoagentMailboxBacklog
@@ -4898,12 +4906,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/tools_texture.go:requestPersistentSuperExecution:internal/store.method:Store.DispatchWorkerUpdate
       disposition: lifecycle
-    - id: internal/runtime/tools_texture.go:textureToolSourceEntityGraphRecord:internal/store.object:BuildTextureSourceEntityCanonicalID
-      disposition: read
-    - id: internal/runtime/tools_texture.go:textureToolSourceEntityGraphRecord:internal/store.object:TextureSourceGraphVersionID
-      disposition: read
-    - id: internal/runtime/tools_texture.go:textureToolSourceRefGraphRecord:internal/store.object:BuildTextureSourceRefCanonicalID
-      disposition: read
     - id: internal/runtime/tools_vmctl.go:listWorkerToolEventsForCurrentScope:internal/store.method:Store.ListEvents
       disposition: read
     - id: internal/runtime/tools_vmctl.go:listWorkerToolEventsForCurrentScope:internal/store.method:Store.ListEventsByTrajectory

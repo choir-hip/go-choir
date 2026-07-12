@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/importer"
@@ -477,12 +478,17 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 		Uses:       map[*ast.Ident]types.Object{},
 		Selections: map[*ast.SelectorExpr]*types.Selection{},
 	}
+	gcImporter := importer.ForCompiler(fset, "gc", lookup)
 	configuration := &types.Config{
 		GoVersion: "go1.25",
-		Importer:  importer.ForCompiler(fset, "gc", lookup),
+		Importer:  gcImporter,
 	}
 	if _, err := configuration.Check(listed.ImportPath, fset, files, typeInfo); err != nil {
 		return fmt.Errorf("type-check production package %s: %w", listed.ImportPath, err)
+	}
+	storeMethods, err := importedStoreMethods(gcImporter)
+	if err != nil {
+		return fmt.Errorf("load internal/store.Store methods: %w", err)
 	}
 	for identifier, object := range typeInfo.Uses {
 		if object == nil || object.Pkg() == nil || !object.Exported() {
@@ -503,19 +509,25 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 		for _, file := range files {
 			ordinals := map[string]int{}
 			ast.Inspect(file, func(node ast.Node) bool {
-				call, ok := node.(*ast.CallExpr)
+				selector, ok := node.(*ast.SelectorExpr)
 				if !ok {
 					return true
 				}
-				function := calledFunction(call, typeInfo)
-				if function == nil || function.Pkg() == nil ||
-					function.Pkg().Path() != "github.com/yusefmosiah/go-choir/internal/store" {
+				selection := typeInfo.Selections[selector]
+				if selection == nil {
 					return true
 				}
-				position := fset.Position(call.Pos())
+				function, ok := selection.Obj().(*types.Func)
+				if !ok {
+					return true
+				}
+				key, storeBacked := storeSelectionKey(selection, function, storeMethods)
+				if !storeBacked {
+					return true
+				}
+				position := fset.Position(selector.Pos())
 				relative := slashRel(root, position.Filename)
-				base := relative + ":" + enclosingFunction(file, call.Pos()) + ":" +
-					strings.TrimPrefix(typeObjectKey(function), "github.com/yusefmosiah/go-choir/")
+				base := relative + ":" + enclosingFunction(file, selector.Pos()) + ":" + key
 				id := uniqueID(base, ordinals)
 				calls[id] = Entry{ID: id}
 				return true
@@ -540,16 +552,82 @@ func typeObjectKey(object types.Object) string {
 	}
 	return object.Pkg().Path() + ".object:" + object.Name()
 }
-func calledFunction(call *ast.CallExpr, info *types.Info) *types.Func {
-	var object types.Object
-	switch function := call.Fun.(type) {
-	case *ast.Ident:
-		object = info.Uses[function]
-	case *ast.SelectorExpr:
-		object = info.Uses[function.Sel]
+
+func importedStoreMethods(typeImporter types.Importer) (map[string]*types.Func, error) {
+	storePackage, err := typeImporter.Import("github.com/yusefmosiah/go-choir/internal/store")
+	if err != nil {
+		return map[string]*types.Func{}, nil
 	}
-	result, _ := object.(*types.Func)
-	return result
+	storeObject := storePackage.Scope().Lookup("Store")
+	if storeObject == nil {
+		return nil, errors.New("internal/store.Store type is missing")
+	}
+	storeType, ok := types.Unalias(storeObject.Type()).(*types.Named)
+	if !ok {
+		return nil, errors.New("internal/store.Store is not a named type")
+	}
+	methods := map[string]*types.Func{}
+	methodSet := types.NewMethodSet(types.NewPointer(storeType))
+	for index := range methodSet.Len() {
+		method, ok := methodSet.At(index).Obj().(*types.Func)
+		if ok {
+			methods[method.Name()] = method
+		}
+	}
+	return methods, nil
+}
+
+func storeSelectionKey(selection *types.Selection, function *types.Func, storeMethods map[string]*types.Func) (string, bool) {
+	if isConcreteStoreMethod(function) {
+		return "internal/store.method:Store." + function.Name(), true
+	}
+	receiver := types.Unalias(selection.Recv())
+	if pointer, ok := receiver.(*types.Pointer); ok {
+		receiver = types.Unalias(pointer.Elem())
+	}
+	namedReceiver, ok := receiver.(*types.Named)
+	if !ok || namedReceiver.Obj().Pkg() == nil ||
+		(namedReceiver.Obj().Pkg().Path() != runtimeImport &&
+			!strings.HasPrefix(namedReceiver.Obj().Pkg().Path(), runtimeImport+"/")) {
+		return "", false
+	}
+	if _, ok := namedReceiver.Underlying().(*types.Interface); !ok {
+		return "", false
+	}
+	storeMethod := storeMethods[function.Name()]
+	if storeMethod == nil || !sameCallableSignature(function, storeMethod) {
+		return "", false
+	}
+	receiverName := types.TypeString(selection.Recv(), func(pkg *types.Package) string {
+		return pkg.Path()
+	})
+	receiverName = strings.TrimPrefix(receiverName, "github.com/yusefmosiah/go-choir/")
+	return "internal/store.interface:" + receiverName + "." + function.Name(), true
+}
+
+func isConcreteStoreMethod(function *types.Func) bool {
+	signature, _ := function.Type().(*types.Signature)
+	if signature == nil || signature.Recv() == nil {
+		return false
+	}
+	receiver := types.Unalias(signature.Recv().Type())
+	if pointer, ok := receiver.(*types.Pointer); ok {
+		receiver = types.Unalias(pointer.Elem())
+	}
+	named, ok := receiver.(*types.Named)
+	return ok && named.Obj().Pkg() != nil &&
+		named.Obj().Pkg().Path() == "github.com/yusefmosiah/go-choir/internal/store" &&
+		named.Obj().Name() == "Store"
+}
+
+func sameCallableSignature(left, right *types.Func) bool {
+	leftSignature, leftOK := left.Type().(*types.Signature)
+	rightSignature, rightOK := right.Type().(*types.Signature)
+	if !leftOK || !rightOK || leftSignature.Variadic() != rightSignature.Variadic() {
+		return false
+	}
+	return types.Identical(leftSignature.Params(), rightSignature.Params()) &&
+		types.Identical(leftSignature.Results(), rightSignature.Results())
 }
 
 

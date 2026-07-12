@@ -63,18 +63,44 @@ func main() {
 }
 func applyPriorStoreDispositions(current *Inventory, previous Inventory) {
 	dispositions := map[string]string{}
+	byMethod := map[string]string{}
+	ambiguousMethod := map[string]bool{}
+	record := func(entry Entry, disposition string) {
+		dispositions[entry.ID] = disposition
+		method := storeCallMethod(entry.ID)
+		if existing := byMethod[method]; existing != "" && existing != disposition {
+			ambiguousMethod[method] = true
+		} else {
+			byMethod[method] = disposition
+		}
+	}
 	for _, entry := range previous.StoreCalls {
-		dispositions[entry.ID] = entry.Disposition
+		record(entry, entry.Disposition)
 	}
 	for _, entry := range previous.LegacyStateWriters {
-		dispositions[entry.ID] = entry.Disposition
+		record(entry, entry.Disposition)
 	}
 	for _, entry := range previous.LegacyStoreReads {
-		dispositions[entry.ID] = "read"
+		record(entry, "read")
 	}
 	for index := range current.StoreCalls {
-		current.StoreCalls[index].Disposition = dispositions[current.StoreCalls[index].ID]
+		entry := &current.StoreCalls[index]
+		entry.Disposition = dispositions[entry.ID]
+		if entry.Disposition == "" {
+			method := storeCallMethod(entry.ID)
+			if !ambiguousMethod[method] {
+				entry.Disposition = byMethod[method]
+			}
+		}
 	}
+}
+
+func storeCallMethod(id string) string {
+	method := id[strings.LastIndex(id, ".")+1:]
+	if ordinal := strings.Index(method, "#"); ordinal >= 0 {
+		method = method[:ordinal]
+	}
+	return method
 }
 
 func enforceDebtAuthority(root, baselinePath string, current Inventory, writing, bootstrap bool) error {

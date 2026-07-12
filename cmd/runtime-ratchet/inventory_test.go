@@ -304,6 +304,103 @@ func readStore(value *store.Store) { value.GetDocument() }
 
 
 
+func TestStoreMethodValuesAreInventoried(t *testing.T) {
+	t.Run("mutating method value is new call identity", func(t *testing.T) {
+		root := fixtureRepository(t)
+		writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) SaveDesktopState() {}
+`)
+		writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+`)
+		baseline := mustScan(t, root)
+		writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+var saveState = stateStore.SaveDesktopState
+`)
+		err := compareInventory(baseline, mustScan(t, root))
+		assertDiagnostic(t, err, "store_calls: added item")
+		assertDiagnostic(t, err, "SaveDesktopState")
+	})
+
+	t.Run("read method value requires read disposition", func(t *testing.T) {
+		root := fixtureRepository(t)
+		writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) GetDocument() {}
+`)
+		writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+var stateStore *store.Store
+var readDocument = stateStore.GetDocument
+`)
+		baseline := mustScan(t, root)
+		current := mustScan(t, root)
+		assertDiagnostic(t, compareInventory(baseline, current), "missing or invalid disposition")
+		baseline.StoreCalls[0].Disposition = "read"
+		if err := compareInventory(baseline, current); err != nil {
+			t.Fatalf("baseline-dispositioned method value read: %v", err)
+		}
+	})
+}
+
+func TestStoreBackedInterfaceCallIsInventoried(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func (*Store) SaveDesktopState() {}
+`)
+	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+type persistence interface { SaveDesktopState() }
+var backing persistence = &store.Store{}
+`)
+	baseline := mustScan(t, root)
+	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+type persistence interface { SaveDesktopState() }
+var backing persistence = &store.Store{}
+func persist() { backing.SaveDesktopState() }
+`)
+	current := mustScan(t, root)
+	err := compareInventory(baseline, current)
+	assertDiagnostic(t, err, "store_calls: added item")
+	assertDiagnostic(t, err, "store.interface:")
+	current.StoreCalls[0].Disposition = "lifecycle"
+	if problems := validateStoreCalls(current.StoreCalls); len(problems) > 0 {
+		t.Fatalf("store-backed interface disposition: %v", problems)
+	}
+}
+
+func TestPackageStoreHelperIsNotStoreMethod(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/store/store.go", `package store
+
+type Store struct{}
+func SaveDesktopState() {}
+`)
+	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/store"
+func persist() { store.SaveDesktopState() }
+`)
+	inventory := mustScan(t, root)
+	if len(inventory.StoreCalls) != 0 {
+		t.Fatalf("package helper produced store method calls: %+v", inventory.StoreCalls)
+	}
+}
+
 func TestInventoryUsesAuthoritativeFilesAndStableCiterIdentities(t *testing.T) {
 	t.Run("ignored generated tree is excluded", func(t *testing.T) {
 		root := fixtureRepository(t)
