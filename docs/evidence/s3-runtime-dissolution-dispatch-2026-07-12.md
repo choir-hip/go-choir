@@ -52,4 +52,11 @@ This is deletion-only S3 order item 1. It does not authorize Browser extraction,
 - Ratchet proof passed: `go run ./cmd/runtime-ratchet` and `go test ./cmd/runtime-ratchet`. Counts decreased from production LOC `47324` to `47018`, test LOC `54583` to `53028`, exports `1199` to `1151`, export caller edges `604` to `603`, initial unused export debt `39` to `33`, and store calls `444` to `443`. Routes `47`, tools `49`, production importers `4`, wrappers `5`, compatibility markers `15`, and interface candidates `4` remain unchanged.
 - Independent reviewer `S3I1Verifier` returned PASS at confidence `0.91` with no findings after source-level adversarial review.
 - Both pre-mutation `c4173c6d` and current head fail `go test -tags comprehensive ./internal/runtime -run '^$'` with the same first diagnostics: `internal/runtime/prompts_test.go:56` missing `prompt.provideriface` and `internal/runtime/texture_test.go` obsolete `AuthorKind` / `AuthorLabel` fields. This drift predates S3-I1; the current compile emits no deleted-surface error.
-- CI run `29190541541` for the behavior push was canceled by the immediately following verifier-ledger push. It must be rerun and deployed before this slice can close.
+- CI run `29190541541` for the behavior push was initially canceled by the immediately following verifier-ledger push; attempt `2` supplied the required full CI and deployment proof below.
+
+## S3-I1 Deployment And Consensus Receipt
+
+- GitHub Actions run `29190541541`, attempt `2`, passed all selected normal and race gates and deployed successfully.
+- Activation receipt at `2026-07-12T11:37:30Z` identifies target `405a97bc1987d6f0434301c7cd2415d11f3c1c44`, run `29190541541`, attempt `2`, with sandbox and gateway artifacts active at that commit.
+- Authenticated staging probes returned the expected boundary: retired `/api/agent/spawn`, `/api/agent/status`, and `/api/agent/topology` returned `404`; registered `/api/agent/loops` returned `200`; invalid input to registered `/api/prompt-bar` returned `400`.
+- Four-reviewer consensus at `/tmp/choir-s3-i1-consensus-20260712` returned three PASS verdicts and one procedural BLOCKING verdict. The blocker did not dispute the deletion: current-head evidence citations had advanced beyond the `405a97bc` ratchet baseline, and `internal/runtime/api.go` retained one stale comment naming retired `GET /api/agent/status`. Both findings are repaired before final consensus. The same reviewer also required reconciliation of already-completed CI, deploy, and acceptance fields.

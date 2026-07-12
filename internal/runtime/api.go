@@ -187,9 +187,8 @@ type cancelResponse struct {
 	State types.RunState `json:"state"`
 }
 
-// runStatusResponse is the JSON response for GET /api/agent/status.
-// It returns the full run record correlated to the submitted handle
-// (VAL-RUNTIME-004).
+// runStatusResponse is the shared JSON projection used by the registered run
+// list and cancel surfaces.
 type runStatusResponse struct {
 	AgentID             string                                `json:"agent_id"`
 	RunID               string                                `json:"loop_id"`
