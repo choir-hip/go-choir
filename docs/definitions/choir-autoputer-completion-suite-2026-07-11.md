@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: f7c96382
+  journal_expected_parent_sha: 50ff30bd
   orchestrator_lock:
     holder: Main
     epoch: 14
     expires_at: 2026-07-12T18:35:00Z
-    expected_parent_sha: f7c96382
+    expected_parent_sha: 50ff30bd
     lock_transition_id: s3-lock-renewal-123
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1488,6 +1488,63 @@ run_checkpoint_and_resumption_state:
       adjudication: four_PASS_no_blockers_S3_I5_closed
       last_reconciled_at: 2026-07-12T17:29:47Z
       reconciliation_result: S3_I5_landed_next_ordered_deletion_iteration_authorized
+      close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
+    - slice_id: S3-I6-toolfunc-alias
+      subgoal: S3
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 14
+      status: planned
+      dispatch_nonce: s3-runtime-dissolution-i6-nonce-01
+      dispatch_ref: pending_S3I6Implementer
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s3-toolfunc-alias-dispatch-2026-07-12.md#exact-mutation-lock
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_return
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: 50ff30bd
+      lock_release_ref: pending_S3_I6_landing
+      stage_started_at: 2026-07-12T17:32:46Z
+      transition_id: s3-i6-dispatch-intent-134
+      expected_parent_sha: 50ff30bd
+      stage_history:
+        - {status: dispatch_intent, transition_id: s3-i6-dispatch-intent-134, recorded_at: 2026-07-12T17:32:46Z, actor: Main, expected_parent_sha: 50ff30bd, precondition: S3_I5_landed_ratchet_PASS_one_declaration_only_alias_confirmed, postcondition: exact_ToolFunc_alias_deletion_slice_is_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-12T18:35:00Z
+      mutation_class: orange
+      protected_surfaces: []
+      exact_files_packages_routes_state_authorities: [internal/runtime/tools.go, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [Tool, ToolRegistry, constructor_aliases, imports, tool_schemas, registrations, routes, state, providers, models, replacement_aliases, helpers, test_seams, package_extraction, unrelated_cleanup]
+      authority_edges_locked: [toolregistry_ToolFunc_authority_preserved, tool_behavior_unchanged, routes_tools_state_authorities_unchanged]
+      implementer_agent: pending_S3I6Implementer
+      verifier_agent: pending_independent_verification
+      pre_mutation_sha: 50ff30bd
+      rollback_commit_or_ref: 50ff30bd
+      accepted_slice_dependency_refs: [S3-I5@f7c96382]
+      external_operation_id: not_applicable
+      effect_authority: canonical_git_ref_then_staging_sandbox
+      receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
+      expected_precondition: one_declaration_self_reference_no_callers
+      observed_postcondition: pending
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending
+      ci_run_ref: pending
+      deploy_ref: pending
+      deployed_sha: pending
+      acceptance_ref: pending
+      acceptance_contract: declaration_only_ToolFunc_alias_deleted_tool_authority_and_behavior_preserved
+      evidence_refs: [docs/evidence/s3-toolfunc-alias-dispatch-2026-07-12.md]
+      open_findings: []
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-12T17:32:46Z
+      reconciliation_result: no_prior_matching_dispatch_found
       close_condition: deletion_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

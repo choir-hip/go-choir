@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 15
     store_calls: 443
     interface_candidates: 4
-    citers: 209
+    citers: 213
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5038,6 +5038,8 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/toolloop.go, internal/runtime/toolloop_test.go, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools.go, docs/runtime-dissolution-inventory.yaml]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:result: approximately 40K live app lines move, 6K-8K core moves, internal/runtime deleted'
@@ -5205,6 +5207,12 @@ citers:
     - id: docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:- `internal/runtime/trace_wiring_test.go`;
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:Allowed production file: `internal/runtime/runtime.go`, deleting exactly the three in-scope wrappers and attached comments. `(*Runtime).StartRun` is forbidden in this iteration.'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-toolfunc-alias-dispatch-2026-07-12.md:Only `internal/runtime/tools.go` may change in source:'
+      disposition: historical_evidence
+    - id: docs/evidence/s3-toolfunc-alias-dispatch-2026-07-12.md:The executable runtime dissolution ratchet classifies `internal/runtime/tools.go:type:ToolFunc` as `delete`. Keeping the alias preserves an unused compatibility surface and one unit of initial unused-export debt.
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-toolfunc-alias-dispatch-2026-07-12.md:`internal/runtime/tools.go` still re-exports `toolregistry.ToolFunc` as `runtime.ToolFunc` under a backward-compatibility comment. LSP reference analysis reports exactly one reference: the declaration… [sha256:8a4059694a1db79a8dd32854782b52796fe1ba196b4895f88de4a2213572a41e]'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md:- Exact diff: `internal/runtime/toolloop.go` and `internal/runtime/toolloop_test.go`, `3` insertions and `11` deletions.'
       disposition: historical_evidence
