@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -442,6 +443,51 @@ func TestRunCancelPostsAgentCancelRequest(t *testing.T) {
 	}
 	if resp["state"] != "cancelled" {
 		t.Fatalf("state = %v, want cancelled", resp["state"])
+	}
+}
+
+func TestComputerLifecycleCommandsUseProductComputeAPI(t *testing.T) {
+	var requests []struct {
+		method string
+		path   string
+		action string
+	}
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		action := ""
+		if r.Method == http.MethodPost {
+			var body map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode lifecycle body: %v", err)
+			}
+			action = body["action"]
+		}
+		requests = append(requests, struct {
+			method string
+			path   string
+			action string
+		}{method: r.Method, path: r.URL.Path, action: action})
+		_, _ = io.WriteString(w, `{"ok":true,"status":"ok","current_computer":{"state":"stopped"}}`)
+	}))
+	defer stub.Close()
+
+	for _, command := range []string{"status", "stop", "start"} {
+		var out, errOut bytes.Buffer
+		code := run([]string{"computer", command, "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+		if code != 0 {
+			t.Fatalf("computer %s code = %d, stderr=%s", command, code, errOut.String())
+		}
+	}
+	want := []struct {
+		method string
+		path   string
+		action string
+	}{
+		{method: http.MethodGet, path: "/api/compute/status"},
+		{method: http.MethodPost, path: "/api/compute/recovery", action: "stop_current_computer"},
+		{method: http.MethodPost, path: "/api/compute/recovery", action: "wake_current_computer"},
+	}
+	if !reflect.DeepEqual(requests, want) {
+		t.Fatalf("lifecycle requests = %+v, want %+v", requests, want)
 	}
 }
 

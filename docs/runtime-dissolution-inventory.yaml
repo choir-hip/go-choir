@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 16
     store_calls: 444
     interface_candidates: 4
-    citers: 176
+    citers: 177
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5276,6 +5276,8 @@ citers:
     - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:At canonical `e649ee28`, `S1DeployVerifier` reported **BLOCKING**. Focused runtime/CLI tests and `go test ./cmd/runtime-ratchet` passed. The required default ratchet invocation failed because the rege… [sha256:346b662f5c9ed210b14ba921c84c4cace85290a2abb4e5f1849b75f42e9dd860]
       disposition: historical_evidence
     - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:Focused lifecycle tests passed across `internal/runtime` and `cmd/choir`.
+      disposition: historical_evidence
+    - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:- `go test ./internal/runtime -run 'Test(RuntimeTextureReadsRemainOwnerScopedAfterWireCutover|RuntimeDoesNotRegisterUniversalWireStories|WirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition|Wir… [sha256:a0e796ee27cad3a3b0e6b100db38ee99dcfbd9d9a871266b32ad0e00c7bc5b8e]
       disposition: historical_evidence
     - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:- `internal/runtime/objectgraph_runtime.go`: shared capture publication handler inside a user computer.'
       disposition: historical_evidence

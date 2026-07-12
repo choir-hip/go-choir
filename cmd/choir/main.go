@@ -61,6 +61,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runSearch(rest, stdout, stderr)
 	case "run":
 		return runRun(rest, stdout, stderr)
+	case "computer":
+		return runComputer(rest, stdout, stderr)
 	case "api-key":
 		return runAPIKey(rest, stdout, stderr)
 	case "version":
@@ -95,6 +97,9 @@ Commands:
   run status <id>     Get the status of a prompt-bar submission
   run list            List recent owner-scoped runs
   run cancel <id>     Cancel an owner-scoped pending or running run
+  computer status      Observe the current computer through the product API
+  computer stop        Stop the current computer through owner-scoped vmctl
+  computer start       Start or resume the current computer
   api-key list        List your API keys
   api-key create      Create a delegated API key (requires manage:keys or admin)
   api-key revoke <id> Revoke this key, or a delegated key with manage:keys/admin
@@ -452,6 +457,66 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 	var resp json.RawMessage
 	if err := c.do(http.MethodGet, "/api/platform/retrieval/search?q="+url.QueryEscape(q), nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir search: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+
+// ---- computer ----
+
+func runComputer(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "choir computer: subcommand required (status|stop|start)")
+		return 2
+	}
+	switch args[0] {
+	case "status":
+		return runComputerStatus(args[1:], stdout, stderr)
+	case "stop":
+		return runComputerAction(args[1:], "stop_current_computer", "stop", stdout, stderr)
+	case "start":
+		return runComputerAction(args[1:], "wake_current_computer", "start", stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "choir computer: unknown subcommand %q\n", args[0])
+		return 2
+	}
+}
+
+func runComputerStatus(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir computer status", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir computer status: %v\n", err)
+		return 2
+	}
+	if len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir computer status: unexpected positional arguments")
+		return 2
+	}
+	var resp json.RawMessage
+	if err := c.do(http.MethodGet, "/api/compute/status", nil, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir computer status: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+
+func runComputerAction(args []string, action, command string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir computer "+command, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir computer %s: %v\n", command, err)
+		return 2
+	}
+	if len(fs.Args()) != 0 {
+		fmt.Fprintf(stderr, "choir computer %s: unexpected positional arguments\n", command)
+		return 2
+	}
+	var resp json.RawMessage
+	if err := c.do(http.MethodPost, "/api/compute/recovery", map[string]string{"action": action}, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir computer %s: %v\n", command, err)
 		return 1
 	}
 	return writeJSON(stdout, resp)

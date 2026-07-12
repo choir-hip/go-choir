@@ -58,6 +58,7 @@ type computeRuntimeStatus struct {
 type computeMonitorCapabilities struct {
 	StatusAPI                bool     `json:"status_api"`
 	WakeCurrentComputer      bool     `json:"wake_current_computer"`
+	StopCurrentComputer      bool     `json:"stop_current_computer"`
 	DesktopStateRecovery     bool     `json:"desktop_state_recovery"`
 	LazyAppHydration         bool     `json:"lazy_app_hydration"`
 	ArbitraryProcessKill     bool     `json:"arbitrary_process_kill"`
@@ -111,6 +112,7 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		Capabilities: computeMonitorCapabilities{
 			StatusAPI:            true,
 			WakeCurrentComputer:  h.vmctlClient != nil,
+			StopCurrentComputer:  h.vmctlClient != nil,
 			DesktopStateRecovery: true,
 			LazyAppHydration:     true,
 			ArbitraryProcessKill: false,
@@ -352,6 +354,39 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 				Recovery:        recovery,
 			})
 		}
+	case "stop_current_computer":
+		if err := h.vmctlClient.StopDesktop(authResult.UserID, desktopID); err != nil {
+			log.Printf("proxy compute recovery: stop current computer desktop=%s: %v", desktopID, err)
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to stop current computer"})
+			return
+		}
+		current := computeComputerFromFields(
+			desktopID,
+			string(vmctl.VMKindInteractive),
+			string(vmctl.VMStateStopped),
+			currentWarmnessFallback(desktopID),
+			desktopID == vmctl.PrimaryDesktopID,
+			0,
+			"user",
+			"",
+		)
+		if own, lookupErr := h.vmctlClient.LookupDesktopContext(r.Context(), authResult.UserID, desktopID); lookupErr == nil && own != nil {
+			current = computeComputerFromFields(
+				own.DesktopID,
+				string(own.Kind),
+				own.State,
+				own.WarmnessClass,
+				own.Published,
+				own.Epoch,
+				own.StoppedBy,
+				own.LastActiveAt,
+			)
+		}
+		writeJSON(w, http.StatusOK, computeRecoveryResponse{
+			OK:              true,
+			Action:          action,
+			CurrentComputer: current,
+		})
 	default:
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "unsupported recovery action"})
 	}

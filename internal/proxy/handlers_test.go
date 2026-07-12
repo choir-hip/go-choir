@@ -2664,6 +2664,7 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 	vmctlMux.HandleFunc("/internal/vmctl/fork-desktop", vmctlHandler.HandleForkDesktop)
 	vmctlMux.HandleFunc("/internal/vmctl/publish-desktop", vmctlHandler.HandlePublishDesktop)
 	vmctlMux.HandleFunc("/internal/vmctl/lookup", vmctlHandler.HandleLookup)
+	vmctlMux.HandleFunc("/internal/vmctl/stop", vmctlHandler.HandleStop)
 	vmctlMux.HandleFunc("/internal/vmctl/list", vmctlHandler.HandleList)
 	vmctlMux.HandleFunc("/internal/vmctl/refresh", vmctlHandler.HandleRefresh)
 	vmctlMux.HandleFunc("/health", vmctlHandler.HandleHealth)
@@ -3406,6 +3407,44 @@ func TestComputeRecoveryWakeCreatesRedactedCurrentComputer(t *testing.T) {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("compute recovery leaked %q in %s", forbidden, body)
 		}
+	}
+}
+
+func TestComputeRecoveryStopUsesOwnerScopedVMCTL(t *testing.T) {
+	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
+	client := vmctl.NewClient(vmctlSrv.URL)
+	token := issueTestAccessJWT(priv, "compute-stop-user")
+
+	wakeReq := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"wake_current_computer"}`))
+	wakeReq.Header.Set("Content-Type", "application/json")
+	wakeReq.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	wakeW := httptest.NewRecorder()
+	handler.HandleAPI(wakeW, wakeReq)
+	if wakeW.Code != http.StatusOK {
+		t.Fatalf("wake current computer = %d body=%s", wakeW.Code, wakeW.Body.String())
+	}
+
+	stopReq := httptest.NewRequest(http.MethodPost, "/api/compute/recovery", strings.NewReader(`{"action":"stop_current_computer"}`))
+	stopReq.Header.Set("Content-Type", "application/json")
+	stopReq.AddCookie(&http.Cookie{Name: "choir_access", Value: token})
+	stopW := httptest.NewRecorder()
+	handler.HandleAPI(stopW, stopReq)
+	if stopW.Code != http.StatusOK {
+		t.Fatalf("stop current computer = %d body=%s", stopW.Code, stopW.Body.String())
+	}
+	var result computeRecoveryResponse
+	if err := json.NewDecoder(stopW.Body).Decode(&result); err != nil {
+		t.Fatalf("decode stop response: %v", err)
+	}
+	if !result.OK || result.Action != "stop_current_computer" || result.CurrentComputer.State != string(vmctl.VMStateStopped) {
+		t.Fatalf("stop response = %+v", result)
+	}
+	own, err := client.LookupDesktop("compute-stop-user", vmctl.PrimaryDesktopID)
+	if err != nil {
+		t.Fatalf("lookup stopped computer: %v", err)
+	}
+	if own == nil || own.State != string(vmctl.VMStateStopped) || own.UserID != "compute-stop-user" {
+		t.Fatalf("stopped ownership = %+v", own)
 	}
 }
 
