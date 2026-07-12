@@ -135,6 +135,22 @@ The repair now seeds interface provenance only from concrete `*store.Store` argu
 
 Per owner instruction and observed panel behavior, subsequent panels exclude the stalled Devin member rather than allowing one zero-output process to halt the run. Cursor remains included because both completed panels recorded Cursor `ok`.
 
+## Final Six-Member Panel
+
+Run: `/tmp/choir-s0-final-consensus-20260712`. All six selected non-stalled members completed successfully: Codex, Cursor, opencode, OMP GPT-5.5, OMP Gemini 3.5, and OMP GLM 5.2. Cursor again completed `ok`; excluding Devin prevented the prior one-hour zero-output stall.
+
+Five reviewers produced or reproduced the same blocker class; OMP GLM reported PASS on the currently covered flows. The reproduced counterexamples govern.
+
+### S0-FINAL-001 — provenance analysis cannot be made complete by enumerating AST flow shapes
+
+**Status:** confirmed; blocking; substrate redesign required.
+
+Cursor, opencode, OMP GPT-5.5, and OMP Gemini reproduced Store-backed interface mutations invisible through return flow; Cursor also reproduced conversion and composite-literal field flows. Codex independently confirmed Store method-value limitations in the prior shape. The current provenance graph handles assignments, value specs, and call arguments, but not return positions, conversions, composites, cross-package returns, or all closure/container flows. Adding one AST edge at a time repeats the same failure class.
+
+**Structural decision:** stop proving Store provenance through an incomplete bespoke data-flow engine. Instead enumerate every runtime interface method selection whose exact name and callable signature match a Store method as a conservative candidate. A checked-in candidate baseline must explicitly classify each identity as `store_backed` or `non_store`; new candidates fail until classified. Store-backed candidates then join the existing `read | lifecycle | wire | promotion` Store-call authority. This preserves fail-closed behavior without falsely treating unrelated interfaces as Store calls and covers return/conversion/composite/closure flows because candidate enumeration is provenance-independent.
+
+**Required repair:** add the explicit interface-candidate authority, remove the bespoke provenance graph, migrate current `runSubmissionStore` calls to `store_backed`, classify any current unrelated candidates `non_store`, and add return/conversion/composite/fake-only candidate regressions. No candidate may disappear based on unmodeled flow.
+
 ## Checkpoint Result
 
-S0 remains `consensus_pending` only for the final post-repair panel. S0-POST-001 through S0-POST-003 are repaired according to focused and independent evidence; S1 remains waiting until the six-member non-stalled panel is adjudicated.
+S0 remains `consensus_pending` / incomplete. The final panel confirmed S0-FINAL-001; S1 remains waiting until conservative interface-candidate authority replaces incomplete provenance analysis, passes independent verification, and the final checkpoint is adjudicated.
