@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 9851f990
+  journal_expected_parent_sha: 820fa74d
   orchestrator_lock:
     holder: Main
     epoch: 16
     expires_at: 2026-07-12T22:00:00Z
-    expected_parent_sha: 9851f990
+    expected_parent_sha: 820fa74d
     lock_transition_id: s3-lock-renewal-156
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1691,13 +1691,13 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 16
-      status: implementing
+      status: committed
       dispatch_nonce: s3-runtime-dissolution-i9-nonce-01
       dispatch_ref: S3I9Implementer
       agent_session_ref: agent://S3I9Implementer
       dispatch_prompt_ref: docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md#exact-mutation-lock
       implementer_job_ref: S3I9Implementer
-      implementer_output_ref: pending_corrected_agent_return
+      implementer_output_ref: agent://S3I9Implementer
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
       worktree_or_branch_ref: /private/tmp/go-choir-s3-i9@agent/s3-i9-toolloop
@@ -1709,13 +1709,14 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I9_landing
       stage_started_at: 2026-07-12T20:05:09Z
       transition_id: s3-i9-dispatch-intent-165
-      expected_parent_sha: 9851f990
+      expected_parent_sha: 820fa74d
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i9-dispatch-intent-165, recorded_at: 2026-07-12T20:05:09Z, actor: Main, expected_parent_sha: a28b590a, precondition: S3_I8_landed_step1_complete, postcondition: exact_tool_loop_core_extraction_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i9-dispatched-166, recorded_at: 2026-07-12T20:11:57Z, actor: Main, expected_parent_sha: dd9724fc, precondition: canonical_intent_and_live_lock_epoch_16, postcondition: S3I9Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s3-i9-boundary-finding-167, recorded_at: 2026-07-12T20:19:20Z, actor: S3I9Implementer, expected_parent_sha: 9277f2a4, precondition: mechanical_leaf_extraction_attempted, postcondition: executeTools_app_policy_coupling_documented_before_contract_correction, external_operation_id: not_applicable}
         - {status: dispatch_intent, transition_id: s3-i9-boundary-corrected-168, recorded_at: 2026-07-12T20:19:20Z, actor: Main, expected_parent_sha: 9277f2a4, precondition: fresh_caller_graph_proves_direct_runtime_executor_dependency, postcondition: narrow_required_batch_executor_contract_authorized_no_fallback_or_runtime_type, external_operation_id: not_applicable}
         - {status: implementing, transition_id: s3-i9-corrected-resume-169, recorded_at: 2026-07-12T20:20:42Z, actor: Main, expected_parent_sha: 9851f990, precondition: boundary_correction_canonical_and_agent_context_resumable, postcondition: S3I9Implementer_resumed_from_clean_canonical_parent, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s3-i9-implementation-returned-170, recorded_at: 2026-07-12T20:33:47Z, actor: Main, expected_parent_sha: 820fa74d, precondition: corrected_isolated_extraction_commit_returned, postcondition: integrated_820fa74d_focused_tests_and_ratchet_PASS_ready_for_independent_verification, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T22:00:00Z
       mutation_class: orange
       protected_surfaces: []
@@ -1724,29 +1725,29 @@ run_checkpoint_and_resumption_state:
       authority_edges_locked: [toolregistry_owns_storage_independent_loop, runtime_temporarily_supplies_single_existing_app_policy_executor, provider_contract_unchanged, runtime_behavior_unchanged, routes_tools_state_authorities_unchanged]
       implementer_agent: S3I9Implementer
       verifier_agent: pending_independent_verifier
-      pre_mutation_sha: a28b590a
-      rollback_commit_or_ref: a28b590a
+      pre_mutation_sha: 259537f0
+      rollback_commit_or_ref: 259537f0
       accepted_slice_dependency_refs: [S3-I8@c8ba9017]
       external_operation_id: not_applicable
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: live_tool_loop_engine_runtime_owned_toolregistry_types_already_authoritative
-      observed_postcondition: pending
+      observed_postcondition: tool_loop_engine_and_tests_toolregistry_owned_runtime_required_executor_only_ratchet_PASS
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: pending
-      implementation_commit_sha: pending
+      implementation_sha_or_dirty_snapshot: 820fa74d
+      implementation_commit_sha: 820fa74d
       push_ref: pending
       ci_run_ref: pending
       deploy_ref: pending
       deployed_sha: pending
       acceptance_ref: pending
       acceptance_contract: storage_independent_tool_loop_extracted_to_toolregistry_required_narrow_executor_contract_no_runtime_alias_no_fallback_behavior_preserved
-      evidence_refs: [docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md]
+      evidence_refs: [docs/evidence/s3-tool-loop-core-extraction-dispatch-2026-07-12.md, agent://S3I9Implementer]
       open_findings: [batch_executor_policy_remains_runtime_owned_for_later_step2_slice]
       landed_commit_sha: pending
-      adjudication: boundary_corrected_implementation_active
-      last_reconciled_at: 2026-07-12T20:20:42Z
-      reconciliation_result: one_matching_resumed_agent_job_S3I9Implementer
+      adjudication: focused_tests_PASS_ratchet_PASS_independent_verification_pending
+      last_reconciled_at: 2026-07-12T20:33:47Z
+      reconciliation_result: isolated_commit_integrated_as_820fa74d_ratchet_PASS
       close_condition: extraction_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

@@ -66,3 +66,13 @@ Forbidden:
 - focused tool-loop behavior tests pass, including boundaries, terminal transitions, required-next-tool protocol, provider fallback, budgets, memory hooks, and park/passivation;
 - production LOC and runtime-owned symbol debt decrease without growth in routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, or caller edges;
 - independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
+
+## S3-I9 Implementation Receipt
+
+- Integrated implementation: `820fa74d` (isolated commit `57b782894b1f148a776d57a9fc0fa3e0bc9f3782`).
+- `internal/runtime/toolloop.go` moved to authoritative `internal/toolregistry/toolloop.go`; behavioral coverage moved to `internal/toolregistry/toolloop_test.go`.
+- `internal/toolregistry.ToolBatchExecutorFunc` is the required acyclic execution-policy boundary. Runtime supplies its unchanged `executeTools`; generic provider/gateway callers supply `toolregistry.ExecuteToolBatch`. No fallback executor or runtime compatibility surface exists.
+- Focused `internal/toolregistry`, `internal/provider`, `internal/gatewayruntime`, runtime tool-loop/executor/memory tests, and integration-tag provider compilation passed on canonical integration.
+- Residual runtime-qualified tool-loop surface search returned empty.
+- Ratchet passed: Go files `148 -> 147`, production files `78 -> 77`, production LOC `46931 -> 45272`, test LOC `53044 -> 50232`, exports `1140 -> 1062`, caller edges `601 -> 559`, compatibility markers `15 -> 13`, and initial unused-export debt `22 -> 19`; every other gated authority count remained flat.
+- The remaining app/profile-aware batch execution policy is explicit later step-2 work, not hidden completion of runtime dissolution.
