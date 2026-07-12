@@ -693,7 +693,7 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 63b55b4e4f8675fd1fa20c17b56870ae734ba37a
+  journal_expected_parent_sha: 7994dfa62e3e9ba8420a5bb4810aae9be87a4ae1
   orchestrator_lock:
     holder: Main
     epoch: 5
@@ -721,8 +721,8 @@ run_checkpoint_and_resumption_state:
     staging_ref: staging_reconciled_at_6e893d90d8df0655398177e839e5270547472cd7; S0_makes_no_product_behavior_claim
     product_proof_refs:
       - go test ./cmd/runtime-ratchet (passed)
-      - go run ./cmd/runtime-ratchet (passed; 150 files, 48815/55487 LOC, 1208 exports, 610 caller edges, 41 initial debt, 47 routes, 49 tools, 4 importers, 5 wrappers, 16 compatibility markers, 461 exact store calls, 4 explicit interface candidates, 151 citers)
-      - agent://S0RatchetVerifier conservative interface-candidate authority verification PASS
+      - go run ./cmd/runtime-ratchet (passed; 150 files, 48815/55487 LOC, 1208 exports, 610 caller edges, 41 initial debt, 47 routes, 49 tools, 4 importers, 5 wrappers, 16 compatibility markers, 461 exact store calls, 4 conservative interface candidates, 151 citers)
+      - independent final semantic-authority verification pending
       - CI 29170071123 required test and build gates passed; deploy job is outside S0 acceptance
     consensus_ref: docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md
     open_findings: [S0-FINAL-002_non_store_negative_authority, S0-FINAL-003_store_writer_disposition_laundering, S0-FINAL-004_promoted_embedded_interface_bypass]
@@ -809,8 +809,8 @@ run_checkpoint_and_resumption_state:
       lock_acquired_ref: 1a9a90b63f6541fcb8d96502e85a158b8446d14e
       lock_release_ref: pending_slice_close
       stage_started_at: 2026-07-11T21:11:54Z
-      transition_id: s0-runtime-inventory-ratchet-post-substrate-blocked-31
-      expected_parent_sha: 63b55b4e4f8675fd1fa20c17b56870ae734ba37a
+      transition_id: s0-runtime-inventory-ratchet-semantic-authority-returned-32
+      expected_parent_sha: 7994dfa62e3e9ba8420a5bb4810aae9be87a4ae1
       stage_history:
         - {status: dispatch_intent, transition_id: s0-runtime-inventory-ratchet-dispatch-intent-01, recorded_at: 2026-07-11T21:11:54Z, actor: Main, expected_parent_sha: 1a9a90b63f6541fcb8d96502e85a158b8446d14e, precondition: S0_working_and_lock_epoch_3_held, postcondition: dispatch_prompt_and_exact_mutation_lock_are_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s0-runtime-inventory-ratchet-dispatched-02, recorded_at: 2026-07-11T21:14:41Z, actor: Main, expected_parent_sha: f72a141ef0f97fbec6521831dc3f5836b9526631, precondition: canonical_dispatch_intent_and_live_lock_epoch_3, postcondition: implementation_agent_started_with_recorded_nonce, external_operation_id: not_applicable}
@@ -843,6 +843,7 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s0-runtime-inventory-ratchet-candidate-authority-returned-29, recorded_at: 2026-07-12T01:36:47Z, actor: Main, expected_parent_sha: e50bff04f3cdf537cd52f40b38ecab395dd9822a, precondition: conservative_candidate_authority_repair_integrated, postcondition: local_focused_and_baseline_PASS_with_461_store_calls_4_interface_candidates_151_citers_pending_independent_verification, external_operation_id: not_applicable}
         - {status: consensus, transition_id: s0-runtime-inventory-ratchet-post-substrate-panel-pending-30, recorded_at: 2026-07-12T01:41:17Z, actor: Main, expected_parent_sha: 56ef34cec6ee02bbf77883c6b0f7831abc82fb7e, precondition: candidate_authority_focused_and_independent_verification_PASS, postcondition: final_six_member_non_stalled_post_substrate_panel_requested, external_operation_id: agentic_consensus_S0_post_substrate_20260712_04}
         - {status: consensus, transition_id: s0-runtime-inventory-ratchet-post-substrate-blocked-31, recorded_at: 2026-07-12T01:56:34Z, actor: Main, expected_parent_sha: 63b55b4e4f8675fd1fa20c17b56870ae734ba37a, precondition: six_non_stalled_members_completed_with_Cursor_ok, postcondition: non_store_negative_authority_writer_laundering_and_promoted_interface_bypass_recorded_for_single_authority_repair, external_operation_id: agentic_consensus_S0_post_substrate_20260712_04}
+        - {status: verifying, transition_id: s0-runtime-inventory-ratchet-semantic-authority-returned-32, recorded_at: 2026-07-12T02:10:38Z, actor: Main, expected_parent_sha: 7994dfa62e3e9ba8420a5bb4810aae9be87a4ae1, precondition: final_authority_repair_integrated, postcondition: local_focused_and_baseline_PASS_with_exhaustive_called_method_semantics_all_candidates_conservative_and_promoted_interface_coverage_pending_independent_verification, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-12T02:38:32Z
       mutation_class: yellow
       protected_surfaces: []
@@ -858,28 +859,28 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref
       receipt_lookup: git_history_and_agent_job_record
       expected_precondition: clean_agent_worktree_at_pre_mutation_sha
-      observed_postcondition: candidate_authority_repair_8e48a3a89bc94052d6d6ae7cb598e5db5e4fe05a_integrated_as_e50bff04_with_461_store_calls_4_interface_candidates_151_citers_and_local_pass
+      observed_postcondition: semantic_authority_repair_22b50a1dec2e0ee42e98bf542a4a2729ea068118_integrated_as_7994dfa6_with_461_store_calls_4_interface_candidates_151_citers_and_local_pass
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: 8e48a3a89bc94052d6d6ae7cb598e5db5e4fe05a
-      implementation_commit_sha: 8e48a3a89bc94052d6d6ae7cb598e5db5e4fe05a
-      push_ref: pending_push_for_candidate_authority_verification
+      implementation_sha_or_dirty_snapshot: 22b50a1dec2e0ee42e98bf542a4a2729ea068118
+      implementation_commit_sha: 22b50a1dec2e0ee42e98bf542a4a2729ea068118
+      push_ref: pending_push_for_final_authority_verification
       ci_run_ref: pending_latest_S0_final_repair_CI
       deploy_ref: not_applicable_yellow_slice
       deployed_sha: not_applicable_yellow_slice
       acceptance_ref: artifact://395
       acceptance_contract: go_test_cmd_runtime_ratchet_and_baseline_invocation_pass_with_regression_fixtures_failing
       evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md, docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md]
-      open_findings: [S0-FINAL-002_non_store_negative_authority, S0-FINAL-003_store_writer_disposition_laundering, S0-FINAL-004_promoted_embedded_interface_bypass]
-      landed_commit_sha: pending_final_authority_repair
-      adjudication: post_substrate_panel_4_blocking_2_pass; reproduced_negative_authority_and_writer_laundering_govern; promoted_interface_residual_promoted_to_contract_blocker
-      last_reconciled_at: 2026-07-12T01:56:34Z
-      reconciliation_result: six_member_post_substrate_panel_complete_no_stalls_Cursor_ok_three_authority_findings_recorded
+      open_findings: [S0-FINAL-002_through_004_pending_independent_verification]
+      landed_commit_sha: pending_final_authority_verification
+      adjudication: final_authority_repair_integrated_pending_independent_verification
+      last_reconciled_at: 2026-07-12T02:10:38Z
+      reconciliation_result: S0_FINAL_002_through_004_repaired_locally_pending_independent_verification
       close_condition: independently_verified_inventory_and_ratchet_landed_then_S0_consensus_adjudicated
   s1_runtime_exception_disposition: []
   ratchet_artifact:
     path: docs/runtime-dissolution-inventory.yaml
-    baseline_ref: e50bff04f3cdf537cd52f40b38ecab395dd9822a
-    last_verified_ref: artifact://428; agent://S0RatchetVerifier
+    baseline_ref: 7994dfa62e3e9ba8420a5bb4810aae9be87a4ae1
+    last_verified_ref: artifact://461; pending_agent://S0RatchetVerifier
   current_artifact_state:
     suite_definition: authority_persisted_at_008a7b88cf200119c0f762cc51cfba6be3007445
     runtime_dissolution: not_started
