@@ -142,19 +142,13 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 		AgentProfile: AgentProfileTexture,
 		AgentRole:    AgentProfileTexture,
 	}
-	text, _, err := toolregistry.RunToolLoop(
-		toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)),
-		provider,
-		registry,
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"write v1"}`)},
+	text, _, err := toolregistry.RunToolLoop(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"write v1"}`)},
 		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
 		toolregistry.WithInitialToolChoice("function:patch_texture"),
-		toolregistry.WithTerminalToolSuccesses("patch_texture"),
-	)
+		toolregistry.WithTerminalToolSuccesses("patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}

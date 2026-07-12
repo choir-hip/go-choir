@@ -112,17 +112,12 @@ func TestRunToolLoopEndTurn(t *testing.T) {
 		emittedEvents = append(emittedEvents, kind)
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		nil,
-		ExecuteToolBatch, // no tool registry
+	text, usage, err := RunToolLoop(context.Background(), provider, nil, // no tool registry
 		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -177,12 +172,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 	)
 
 	var terminalProgress bool
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"revise"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"revise"}`)},
 		"You are Texture.",
 		0,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -191,8 +181,7 @@ func TestRunToolLoopTerminalToolSuccessStopsWithoutExtraProviderTurn(t *testing.
 			}
 		},
 		nil,
-		WithTerminalToolSuccesses("patch_texture"),
-	)
+		WithTerminalToolSuccesses("patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -246,18 +235,12 @@ func TestRunToolLoopRequiredNextToolSatisfiedInSameBatchDoesNotRetry(t *testing.
 		},
 	)
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
 		"You are Super.",
 		0,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {},
 		nil,
-		WithTerminalToolSuccesses("request_worker_vm", "start_worker_delegation"),
-	)
+		WithTerminalToolSuccesses("request_worker_vm", "start_worker_delegation"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -284,18 +267,12 @@ func TestRunToolLoopEmitsProviderCallProgressBeforeCall(t *testing.T) {
 		}
 	}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		nil,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		0,
 		emit,
 		nil,
-		WithToolLoopLLMConfig(provideriface.LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", ReasoningEffort: "none"}),
-	)
+		WithToolLoopLLMConfig(provideriface.LLMSelection{Provider: "fireworks", Model: "accounts/fireworks/models/deepseek-v4-flash", ReasoningEffort: "none"}),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -364,17 +341,11 @@ func TestRunToolLoopEmitsResponseTextAndToolCallNames(t *testing.T) {
 		}
 	}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -430,18 +401,12 @@ func TestRunToolLoopInitialToolChoiceAppliesOnlyFirstCall(t *testing.T) {
 		},
 	}, choices: &choices}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
 		"You are helpful.",
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		WithInitialToolChoice("required"),
-	)
+		WithInitialToolChoice("required"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -517,20 +482,14 @@ func TestRunToolLoopCompletionGuardRetriesEndTurn(t *testing.T) {
 		return ToolLoopCompletionGuardResult{}, nil
 	}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record status"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"record status"}`)},
 		"You are helpful.",
 		0,
 		emit,
 		nil,
 		func(opts *toolLoopOptions) {
 			opts.completionGuard = guard
-		},
-	)
+		},)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -618,18 +577,12 @@ func TestRunToolLoopExactInitialToolChoiceRejectsDifferentReturnedTool(t *testin
 		}
 	}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record first"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"record first"}`)},
 		"You are helpful.",
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:record_texture_decision"),
-	)
+		WithInitialToolChoice("function:record_texture_decision"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -721,18 +674,12 @@ func TestRunToolLoopExactInitialToolChoiceRetriesEndTurnWithoutTool(t *testing.T
 		}
 	}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"write first"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"write first"}`)},
 		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:patch_texture"),
-	)
+		WithInitialToolChoice("function:patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -822,18 +769,12 @@ func TestRunToolLoopExactInitialToolChoiceRetriesFailedRequiredTool(t *testing.T
 		}
 	}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"write first"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"write first"}`)},
 		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
-		WithInitialToolChoice("function:patch_texture"),
-	)
+		WithInitialToolChoice("function:patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -894,17 +835,11 @@ func TestRunToolLoopCarriesAssistantReasoningContent(t *testing.T) {
 		},
 	}, requests: &requests}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
 		"You are helpful.",
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
-		nil,
-	)
+		nil,)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -989,12 +924,7 @@ func TestRunToolLoopRequiredToolTurnRetriesMissingToolWithoutArtificialBudget(t 
 	}, choices: &choices, maxTokens: &maxTokens}
 
 	var retrySeen bool
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"record"}`)},
 		"You are helpful.",
 		131072,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1003,8 +933,7 @@ func TestRunToolLoopRequiredToolTurnRetriesMissingToolWithoutArtificialBudget(t 
 			}
 		},
 		nil,
-		WithInitialToolChoice("required"),
-	)
+		WithInitialToolChoice("required"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1081,12 +1010,7 @@ func TestRunToolLoopRequiredNextToolUsesRequiredChoice(t *testing.T) {
 	}, choices: &choices, maxTokens: &maxTokens, requests: &requests}
 
 	var retrySeen bool
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
 		"You are helpful.",
 		131072,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1094,8 +1018,7 @@ func TestRunToolLoopRequiredNextToolUsesRequiredChoice(t *testing.T) {
 				retrySeen = true
 			}
 		},
-		nil,
-	)
+		nil,)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1173,17 +1096,11 @@ func TestRunToolLoopRequiredNextToolGetsFiniteBudgetWhenPolicyOmitsMaxTokens(t *
 		},
 	}, choices: &choices, maxTokens: &maxTokens}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
 		"You are helpful.",
 		0,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {},
-		nil,
-	)
+		nil,)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1242,12 +1159,7 @@ func TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries(t *testing
 		},
 	}, choices: &choices}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
 		"You are helpful.",
 		131072,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1259,8 +1171,7 @@ func TestRunToolLoopRequiredNextToolMaxTokensStopsAfterBoundedRetries(t *testing
 				retryAttempts = append(retryAttempts, intMapValue(decoded, "attempt"))
 			}
 		},
-		nil,
-	)
+		nil,)
 	if err == nil || !strings.Contains(err.Error(), `required next tool "start_worker_delegation" was not called after 2 retries`) {
 		t.Fatalf("err = %v, want bounded required next tool retry error", err)
 	}
@@ -1332,12 +1243,7 @@ func TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool(t *testing.T) {
 	}, choices: &choices}
 
 	var retryReasons []string
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"start worker"}`)},
 		"You are helpful.",
 		131072,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1349,8 +1255,7 @@ func TestRunToolLoopRetriesEndTurnBeforeRequiredNextTool(t *testing.T) {
 				retryReasons = append(retryReasons, stringMapValue(decoded, "reason"))
 			}
 		},
-		nil,
-	)
+		nil,)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1407,12 +1312,7 @@ func TestRunToolLoopIgnoresSemanticRequiredNextToolFromUntrustedProducer(t *test
 			Model:      "test-model",
 		},
 	}, choices: &choices}
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"research"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"research"}`)},
 		"You are helpful.",
 		4096,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -1420,8 +1320,7 @@ func TestRunToolLoopIgnoresSemanticRequiredNextToolFromUntrustedProducer(t *test
 				t.Fatalf("semantic next_required_tool from web_search must not emit retry: %s", payload)
 			}
 		},
-		nil,
-	)
+		nil,)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1476,18 +1375,12 @@ func TestRunToolLoopMemoryHookPersistsFinalAssistant(t *testing.T) {
 		},
 	}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		nil,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		WithToolLoopMemoryHooks(hooks),
-	)
+		WithToolLoopMemoryHooks(hooks),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1533,18 +1426,12 @@ func TestRunToolLoopMemoryHookCanRetryProviderOverflow(t *testing.T) {
 		},
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		nil,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"very long"}`)},
+	text, usage, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"very long"}`)},
 		"You are helpful.",
 		4096,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
-		WithToolLoopMemoryHooks(hooks),
-	)
+		WithToolLoopMemoryHooks(hooks),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1693,19 +1580,13 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterProviderPrecondition(t *te
 		}
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
+	text, usage, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
 		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"),
-	)
+		WithTerminalToolSuccesses("patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1785,19 +1666,13 @@ func TestRunToolLoopRelaxesExactInitialToolChoiceAfterDeepSeekThinkingToolChoice
 		}
 	}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write"}]}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write"}]}`)},
 		"You are a Texture appagent.",
 		0,
 		emit,
 		nil,
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"),
-	)
+		WithTerminalToolSuccesses("patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1847,12 +1722,7 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 		}
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
+	text, usage, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
 		"You are a Texture appagent.",
 		0,
 		emit,
@@ -1869,8 +1739,7 @@ func TestRunToolLoopFallsBackModelAfterRelaxedInitialToolChoicePrecondition(t *t
 			Source:          "test_fallback",
 		}),
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"),
-	)
+		WithTerminalToolSuccesses("patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -1930,12 +1799,7 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 		fallbackModels = append(fallbackModels, fmt.Sprintf("%s/%s", decoded["to_provider"], decoded["to_model"]))
 	}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"write the mission checkpoint"}]}`)},
 		"You are a Texture appagent.",
 		0,
 		emit,
@@ -1960,8 +1824,7 @@ func TestRunToolLoopTriesMultipleProviderPreconditionFallbacks(t *testing.T) {
 			},
 		),
 		WithInitialToolChoice("function:patch_texture"),
-		WithTerminalToolSuccesses("patch_texture"),
-	)
+		WithTerminalToolSuccesses("patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -2022,12 +1885,7 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 		fallbackModels = append(fallbackModels, fmt.Sprintf("%s/%s", decoded["to_provider"], decoded["to_model"]))
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"run the wire proof"}]}`)},
+	text, usage, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"run the wire proof"}]}`)},
 		"You are Super.",
 		0,
 		emit,
@@ -2051,8 +1909,7 @@ func TestRunToolLoopFallsBackAfterProviderAvailabilityError(t *testing.T) {
 				Source:          "test_platform_fallback",
 			},
 		),
-		WithTerminalToolSuccesses("patch_texture"),
-	)
+		WithTerminalToolSuccesses("patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -2114,12 +1971,7 @@ func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testin
 		fallbackModels = append(fallbackModels, fmt.Sprintf("%s/%s", decoded["to_provider"], decoded["to_model"]))
 	}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"lease a worker"}]}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"lease a worker"}]}`)},
 		"You are Super.",
 		0,
 		emit,
@@ -2135,8 +1987,7 @@ func TestRunToolLoopTriesProviderPreconditionFallbackWithoutToolChoice(t *testin
 			ReasoningEffort: "medium",
 			Source:          "test_deepseek_fallback",
 		}),
-		WithTerminalToolSuccesses("patch_texture"),
-	)
+		WithTerminalToolSuccesses("patch_texture"),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -2172,17 +2023,11 @@ func TestRunToolLoopRetriesProviderRateLimit(t *testing.T) {
 		}
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		nil,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	text, usage, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -2237,17 +2082,11 @@ func TestRunToolLoopWithToolUse(t *testing.T) {
 		emittedEvents = append(emittedEvents, kind)
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"calculate 2+2"}`)},
+	text, usage, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"calculate 2+2"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -2331,17 +2170,11 @@ func TestRunToolLoopMultipleToolIterations(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	text, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"research this"}`)},
+	text, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"research this"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -2379,17 +2212,11 @@ func TestRunToolLoopMaxIterations(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err == nil {
 		t.Fatal("expected error for exceeding max iterations")
@@ -2435,18 +2262,12 @@ func TestRunToolLoopBudgetLimitsProviderCalls(t *testing.T) {
 		}
 	}
 
-	_, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
+	_, usage, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
 		"You are helpful.",
 		4096,
 		emit,
 		nil,
-		WithToolLoopBudget(ToolLoopBudget{Label: "test-budget", MaxProviderCalls: 2}),
-	)
+		WithToolLoopBudget(ToolLoopBudget{Label: "test-budget", MaxProviderCalls: 2}),)
 	if err == nil || !strings.Contains(err.Error(), `tool loop budget "test-budget" exhausted`) {
 		t.Fatalf("error = %v, want budget exhaustion", err)
 	}
@@ -2498,12 +2319,7 @@ func TestRunToolLoopBudgetCountsPriorProviderCalls(t *testing.T) {
 		}
 	}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"loop"}`)},
 		"You are helpful.",
 		4096,
 		emit,
@@ -2514,8 +2330,7 @@ func TestRunToolLoopBudgetCountsPriorProviderCalls(t *testing.T) {
 			SpentInputTokens:   100,
 			SpentOutputTokens:  200,
 			MaxProviderCalls:   3,
-		}),
-	)
+		}),)
 	if err == nil || !strings.Contains(err.Error(), `tool loop budget "rewarm-budget" exhausted`) {
 		t.Fatalf("error = %v, want cumulative provider-call exhaustion", err)
 	}
@@ -2543,18 +2358,12 @@ func TestRunToolLoopBudgetLimitsCumulativeTokens(t *testing.T) {
 		}
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		nil,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	text, usage, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
 		emit,
 		nil,
-		WithToolLoopBudget(ToolLoopBudget{Label: "token-budget", MaxTotalTokens: 50}),
-	)
+		WithToolLoopBudget(ToolLoopBudget{Label: "token-budget", MaxTotalTokens: 50}),)
 	if err == nil || !strings.Contains(err.Error(), `total tokens 60 exceeded max 50`) {
 		t.Fatalf("error = %v, want token budget exhaustion", err)
 	}
@@ -2638,18 +2447,12 @@ func TestRunToolLoopParkWaiterBlocksWithoutProviderCallsUntilInjectedTurn(t *tes
 	}
 
 	go func() {
-		text, usage, err := RunToolLoop(
-			context.Background(),
-			provider,
-			nil,
-			ExecuteToolBatch,
-			[]json.RawMessage{json.RawMessage(`{"role":"user","content":"wait for updates"}`)},
+		text, usage, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"wait for updates"}`)},
 			"You are helpful.",
 			4096,
 			emit,
 			injector,
-			WithParkWaiter(waiter),
-		)
+			WithParkWaiter(waiter),)
 		done <- struct {
 			text  string
 			usage provideriface.TokenUsage
@@ -2722,17 +2525,11 @@ func TestRunToolLoopContinuesAfterMaxTokensPartialText(t *testing.T) {
 		}
 	}
 
-	text, usage, err := RunToolLoop(
-		context.Background(),
-		provider,
-		nil,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	text, usage, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		0,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -2766,17 +2563,11 @@ func TestRunToolLoopMaxTokensWithoutTextStillFails(t *testing.T) {
 		},
 	)
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		nil,
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, nil, []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		0,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {},
-		nil,
-	)
+		nil,)
 
 	if err == nil || !strings.Contains(err.Error(), "max_tokens without text") {
 		t.Fatalf("error = %v, want max_tokens without text", err)
@@ -2795,8 +2586,7 @@ func TestRunToolLoopContextCancelled(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	_, _, err := RunToolLoop(ctx, provider, nil,
-	ExecuteToolBatch, nil, "", 4096, emit, nil)
+	_, _, err := RunToolLoop(ctx, provider, nil, nil, "", 4096, emit, nil)
 	if err == nil {
 		t.Error("expected error for cancelled context")
 	}
@@ -2825,17 +2615,11 @@ func TestRunToolLoopToolUseWithoutCalls(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		NewToolRegistry(),
-		ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	_, _, err := RunToolLoop(context.Background(), provider, NewToolRegistry(), []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err == nil {
 		t.Fatal("expected error for tool_use without tool calls")
@@ -2978,45 +2762,6 @@ func isContextOverflowError(err error) bool {
 			strings.Contains(text, "window"))
 }
 
-func TestRunToolLoopRequiresBatchExecutorForToolCalls(t *testing.T) {
-	registry := NewToolRegistry()
-	executed := false
-	if err := registry.Register(Tool{
-		Name: "echo",
-		Func: func(context.Context, json.RawMessage) (string, error) {
-			executed = true
-			return "echoed", nil
-		},
-	}); err != nil {
-		t.Fatalf("register echo: %v", err)
-	}
-	provider := newMockToolLoopProvider(&provideriface.ToolLoopResponse{
-		StopReason: "tool_use",
-		ToolCalls: []types.ToolCall{{
-			ID:        "call-echo",
-			Name:      "echo",
-			Arguments: json.RawMessage(`{"text":"hello"}`),
-		}},
-	})
-
-	_, _, err := RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		nil,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"echo hello"}`)},
-		"You are helpful.",
-		1024,
-		func(types.EventKind, string, json.RawMessage) {},
-		nil,
-	)
-	if err == nil || !strings.Contains(err.Error(), "batch executor is required") {
-		t.Fatalf("err = %v, want required batch executor error", err)
-	}
-	if executed {
-		t.Fatal("tool executed without the required batch executor")
-	}
-}
 
 func TestExecuteToolBatchPreservesExecutionContext(t *testing.T) {
 	type contextKey string

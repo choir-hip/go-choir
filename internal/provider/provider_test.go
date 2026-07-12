@@ -3284,19 +3284,13 @@ func runLiveProviderToolLoop(t *testing.T, p Provider, selection provideriface.L
 		userInstruction = "Do not call tools. Respond with " + marker + "."
 		systemPrompt = "You are a Choir provider conformance proof agent. When tool choice is none, answer directly with the requested marker and do not call tools."
 	}
-	return toolregistry.RunToolLoop(
-		ctx,
-		NewBridgeProvider(p),
-		registry,
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(fmt.Sprintf(`{"role":"user","content":[{"type":"text","text":%q}]}`, userInstruction))},
+	return toolregistry.RunToolLoop(ctx, NewBridgeProvider(p), registry, []json.RawMessage{json.RawMessage(fmt.Sprintf(`{"role":"user","content":[{"type":"text","text":%q}]}`, userInstruction))},
 		systemPrompt,
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
 		nil,
 		toolregistry.WithToolLoopLLMConfig(selection),
-		toolregistry.WithInitialToolChoice(initialToolChoice),
-	)
+		toolregistry.WithInitialToolChoice(initialToolChoice),)
 }
 
 func TestFireworksProviderUsesDefaultReasoningEffort(t *testing.T) {

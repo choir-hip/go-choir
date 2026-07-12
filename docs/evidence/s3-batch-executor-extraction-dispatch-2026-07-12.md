@@ -58,3 +58,10 @@ Forbidden:
 - Independent `S3I10Verifier` returned `BLOCKING` at confidence `0.99`.
 - Although every caller now supplies the same authoritative executor, `RunToolLoop` still exposes `ToolBatchExecutorFunc` as an arbitrary callback parameter. That public injection seam violates sole executor ownership and permits a second execution policy.
 - Smallest repair: delete `ToolBatchExecutorFunc`, remove the parameter from `RunToolLoop`, call `ExecuteToolBatch` directly inside the loop, and update every caller mechanically. No policy or behavior change is required.
+
+## S3-I10 Verifier Blocker Repair
+
+- Deleted `ToolBatchExecutorFunc` and its nil-injection test; `RunToolLoop` now calls `ExecuteToolBatch` directly.
+- Mechanically removed the callback argument from all `48` callers. Residual callback/seam search is empty.
+- Focused owner loop/executor/context, runtime integration, provider, gateway/gatewayruntime, integration-tag compilation, and ratchet checks pass after repair.
+- Ratchet now records production LOC `44680` and test LOC `50266`; gated authority counts remain non-increasing.

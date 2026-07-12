@@ -145,12 +145,7 @@ func TestFireworksRuntimeToolLoopPreservesReasoningContentThroughAdapter(t *test
 		t.Fatalf("register tool: %v", err)
 	}
 
-	text, _, err := toolregistry.RunToolLoop(
-		context.Background(),
-		NewBridgeProvider(provider),
-		registry,
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Record ok, then finish with DONE."}]}`)},
+	text, _, err := toolregistry.RunToolLoop(context.Background(), NewBridgeProvider(provider), registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Record ok, then finish with DONE."}]}`)},
 		"You are a harness proof agent.",
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
@@ -159,8 +154,7 @@ func TestFireworksRuntimeToolLoopPreservesReasoningContentThroughAdapter(t *test
 			Provider:        "fireworks",
 			Model:           "accounts/fireworks/models/deepseek-v4-flash",
 			ReasoningEffort: "none",
-		}),
-	)
+		}),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}
@@ -230,12 +224,7 @@ func TestIntegrationFireworksRuntimeToolLoopLive(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
-			text, usage, err := toolregistry.RunToolLoop(
-				ctx,
-				NewBridgeProvider(p),
-				registry,
-				toolregistry.ExecuteToolBatch,
-				[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with FIREWORKS_RUNTIME_TOOL_LOOP_OK."}]}`)},
+			text, usage, err := toolregistry.RunToolLoop(ctx, NewBridgeProvider(p), registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with FIREWORKS_RUNTIME_TOOL_LOOP_OK."}]}`)},
 				"You are a Choir runtime harness proof. Use the tool once when requested.",
 				0,
 				func(types.EventKind, string, json.RawMessage) {},
@@ -245,8 +234,7 @@ func TestIntegrationFireworksRuntimeToolLoopLive(t *testing.T) {
 					Model:           model,
 					ReasoningEffort: "none",
 				}),
-				toolregistry.WithInitialToolChoice("function:record_status"),
-			)
+				toolregistry.WithInitialToolChoice("function:record_status"),)
 			if err != nil {
 				t.Fatalf("runtime tool loop: %v", err)
 			}
@@ -301,12 +289,7 @@ func TestIntegrationFireworksRuntimeToolLoopTextureShapedLive(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	text, usage, err := toolregistry.RunToolLoop(
-		ctx,
-		NewBridgeProvider(p),
-		registry,
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with FIREWORKS_TEXTURE_SHAPED_TOOL_LOOP_OK."}]}`)},
+	text, usage, err := toolregistry.RunToolLoop(ctx, NewBridgeProvider(p), registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":[{"type":"text","text":"Call record_status with status OK, then respond with FIREWORKS_TEXTURE_SHAPED_TOOL_LOOP_OK."}]}`)},
 		strings.Repeat("You are a Texture appagent. Use the exact tool requested when the user asks for a tool proof. ", 160),
 		0,
 		func(types.EventKind, string, json.RawMessage) {},
@@ -316,8 +299,7 @@ func TestIntegrationFireworksRuntimeToolLoopTextureShapedLive(t *testing.T) {
 			Model:           model,
 			ReasoningEffort: "none",
 		}),
-		toolregistry.WithInitialToolChoice("required"),
-	)
+		toolregistry.WithInitialToolChoice("required"),)
 	if err != nil {
 		t.Fatalf("runtime texture-shaped tool loop: %v", err)
 	}

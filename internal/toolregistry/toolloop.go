@@ -22,10 +22,6 @@ import (
 // polled by the agent.
 type InjectUserTurnsFunc func(finalCheckpoint bool) ([]json.RawMessage, error)
 
-// ToolBatchExecutorFunc executes one provider-requested tool batch and returns
-// results in call order. RunToolLoop requires an executor for every non-empty
-// tool batch; callers own any execution policy layered over registry execution.
-type ToolBatchExecutorFunc func(context.Context, *ToolRegistry, []types.ToolCall, provideriface.EventEmitFunc) []types.ToolResult
 
 // ToolLoopMemoryHooks lets the runtime persist and rebuild provider context
 // around the tool loop without making the tool loop depend on a storage layer.
@@ -254,7 +250,7 @@ var providerRateLimitRetryDelays = []time.Duration{
 //   - Tool execution emits observable events through the event bus.
 //
 // Returns the final text result, total token usage, and any error.
-func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, registry *ToolRegistry, executeToolBatch ToolBatchExecutorFunc, initialMessages []json.RawMessage, systemPrompt string, maxTokens int, emit provideriface.EventEmitFunc, injectUserTurns InjectUserTurnsFunc, opts ...ToolLoopOption) (string, provideriface.TokenUsage, error) {
+func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, registry *ToolRegistry, initialMessages []json.RawMessage, systemPrompt string, maxTokens int, emit provideriface.EventEmitFunc, injectUserTurns InjectUserTurnsFunc, opts ...ToolLoopOption) (string, provideriface.TokenUsage, error) {
 	var totalUsage provideriface.TokenUsage
 	options := toolLoopOptions{}
 	for _, opt := range opts {
@@ -600,10 +596,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 			requiredCalled := requiredToolCalled(activeRequired, resp.ToolCalls)
 
 			// Execute tools and collect results.
-			if executeToolBatch == nil {
-				return "", totalUsage, fmt.Errorf("tool loop: batch executor is required for tool calls")
-			}
-			toolResults := executeToolBatch(ctx, registry, resp.ToolCalls, emit)
+			toolResults := ExecuteToolBatch(ctx, registry, resp.ToolCalls, emit)
 
 			// Append tool results as a user message (per Anthropic Messages API convention).
 			toolResultMsg, _ := json.Marshal(map[string]any{

@@ -384,17 +384,11 @@ func TestToolLoopToolUseResponse(t *testing.T) {
 		}{kind, payload})
 	}
 
-	text, usage, err := toolregistry.RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"Read /etc/hosts and summarize"}`)},
+	text, usage, err := toolregistry.RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"Read /etc/hosts and summarize"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -480,17 +474,11 @@ func TestToolLoopToolResultFedBack(t *testing.T) {
 
 	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {}
 
-	text, _, err := toolregistry.RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"Read story.txt and describe it"}`)},
+	text, _, err := toolregistry.RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"Read story.txt and describe it"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -598,17 +586,11 @@ func TestToolLoopMultiToolSequential(t *testing.T) {
 		emittedKinds = append(emittedKinds, kind)
 	}
 
-	text, usage, err := toolregistry.RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"Read intro.txt and details.txt, then summarize"}`)},
+	text, usage, err := toolregistry.RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"Read intro.txt and details.txt, then summarize"}`)},
 		"You are helpful.",
 		4096,
 		emit,
-		nil,
-	)
+		nil,)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -808,17 +790,11 @@ func TestToolLoopWithMultipleToolsRegistered(t *testing.T) {
 		},
 	)
 
-	text, _, err := toolregistry.RunToolLoop(
-		context.Background(),
-		provider,
-		registry,
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"Use the echo tool"}`)},
+	text, _, err := toolregistry.RunToolLoop(context.Background(), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"Use the echo tool"}`)},
 		"You are helpful.",
 		4096,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {},
-		nil,
-	)
+		nil,)
 
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
@@ -837,12 +813,7 @@ func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
 	})
 	var progressPayloads []map[string]any
 
-	_, _, err := toolregistry.RunToolLoop(
-		context.Background(),
-		provider,
-		toolregistry.NewToolRegistry(),
-		toolregistry.ExecuteToolBatch,
-		[]json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
+	_, _, err := toolregistry.RunToolLoop(context.Background(), provider, toolregistry.NewToolRegistry(), []json.RawMessage{json.RawMessage(`{"role":"user","content":"hi"}`)},
 		"You are helpful.",
 		4096,
 		func(kind types.EventKind, phase string, payload json.RawMessage) {
@@ -859,8 +830,7 @@ func TestToolLoopProgressIncludesResolvedLLMConfig(t *testing.T) {
 			Provider:        "fireworks",
 			Model:           "accounts/fireworks/models/deepseek-v4-flash",
 			ReasoningEffort: "low",
-		}),
-	)
+		}),)
 	if err != nil {
 		t.Fatalf("run tool loop: %v", err)
 	}

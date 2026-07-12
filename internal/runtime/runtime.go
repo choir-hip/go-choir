@@ -1763,8 +1763,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		toolLoopOptions = append(toolLoopOptions, toolregistry.WithRequiredWriteTools("patch_texture", "rewrite_texture"))
 	}
 
-	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry,
-	toolregistry.ExecuteToolBatch, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
+	text, usage, err := toolregistry.RunToolLoop(ctx, tlp, registry, initialMessages, systemPrompt, maxOutputTokens, emit, injectUserTurns, toolLoopOptions...)
 	if err != nil {
 		if errors.Is(err, toolregistry.ErrToolLoopPassivated) {
 			rt.passivateIdleToolLoopRun(context.Background(), rec, text, usage, err)

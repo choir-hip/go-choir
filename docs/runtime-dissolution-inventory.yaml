@@ -6,8 +6,8 @@ counts:
     go_files: 147
     production_files: 77
     test_files: 70
-    production_loc: 44681
-    test_loc: 50302
+    production_loc: 44680
+    test_loc: 50266
     exports: 1061
     export_caller_edges: 549
     initial_unused_export_debt: 19
@@ -214,7 +214,7 @@ files:
       loc: 441
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3679
+      loc: 3678
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -349,10 +349,10 @@ files:
       loc: 678
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
-      loc: 410
+      loc: 404
     - id: internal/runtime/toolloopvalidation_test.go [test]
       disposition: tools
-      loc: 928
+      loc: 898
     - id: internal/runtime/tools.go [production]
       disposition: tools
       loc: 48
@@ -3651,7 +3651,7 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/config.go:26:Re-exported from internal/provideriface for backward compatibility.
       disposition: delete
-    - id: internal/runtime/runtime.go:1955:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1954:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/runtime.go:98:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
