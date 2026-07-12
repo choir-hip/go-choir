@@ -164,11 +164,35 @@ func (rt *Runtime) activate(rec *types.RunRecord) {
 // lifecycle.
 func (rt *Runtime) ExecuteActivationSync(ctx context.Context, rec *types.RunRecord) {
 	runRec := *rec
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	runCtx, cancel := context.WithTimeout(ctx, rt.cfg.ActivationBudget)
+
 	rt.runningMu.Lock()
+	stored, err := rt.store.GetRun(context.Background(), rec.RunID)
+	if err == nil && stored.State.Terminal() {
+		rt.runningMu.Unlock()
+		cancel()
+		*rec = stored
+		return
+	}
 	rt.running[rec.RunID] = cancel
 	rt.runningMu.Unlock()
+
+	stopProgressDeadline := context.AfterFunc(runCtx, func() {
+		if !errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			return
+		}
+		if err := rt.terminalizeRun(
+			context.Background(),
+			rec.RunID,
+			rec.OwnerID,
+			"activation budget exceeded: progress deadline reached",
+		); err != nil && !strings.Contains(err.Error(), "cannot cancel") {
+			log.Printf("runtime: progress deadline for run %s: %v", rec.RunID, err)
+		}
+	})
+	defer stopProgressDeadline()
+	defer cancel()
+
 	rt.wg.Add(1)
 	rt.executeActivation(runCtx, &runRec)
 	*rec = runRec
@@ -1083,50 +1107,70 @@ func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.Run
 //   - the run belongs to a different owner
 //   - the run is already in a terminal state
 func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
+	return rt.terminalizeRun(ctx, runID, ownerID, "run cancelled")
+}
+ 
+// terminalizeRun persists cancellation before releasing admission or signalling
+// the resident activation. The shared lifecycle lock orders this transition
+// against activation state writes, so a late provider return cannot replace it.
+func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason string) error {
+	rt.runningMu.Lock()
 	rec, err := rt.store.GetRun(ctx, runID)
 	if err != nil {
+		rt.runningMu.Unlock()
 		if err == store.ErrNotFound {
 			return fmt.Errorf("run not found: %s", runID)
 		}
 		return fmt.Errorf("lookup run: %w", err)
 	}
-
-	// Ownership check.
 	if rec.OwnerID != ownerID {
+		rt.runningMu.Unlock()
 		return store.ErrNotFound
 	}
-
-	// Only running or pending runs can be cancelled.
 	if rec.State.Terminal() {
+		rt.runningMu.Unlock()
 		return fmt.Errorf("cannot cancel run in %s state", rec.State)
 	}
 
-	// Cancel the run's execution context.
-	rt.runningMu.Lock()
-	cancel, ok := rt.running[runID]
-	if ok {
-		cancel()
-		delete(rt.running, runID)
+	now := time.Now().UTC()
+	rec.State = types.RunCancelled
+	rec.Error = reason
+	rec.UpdatedAt = now
+	rec.FinishedAt = &now
+	if err := rt.store.UpdateRun(ctx, rec); err != nil {
+		rt.runningMu.Unlock()
+		return fmt.Errorf("update cancelled run: %w", err)
 	}
+	cancel := rt.running[runID]
+	delete(rt.running, runID)
 	rt.runningMu.Unlock()
 
-	if !ok {
-		// Run was not running in this process (e.g., pending or recovered).
-		// Transition it directly to cancelled.
-		now := time.Now().UTC()
-		rec.State = types.RunCancelled
-		rec.UpdatedAt = now
-		rec.FinishedAt = &now
-		if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx, &rec); err != nil {
-			return fmt.Errorf("update cancelled run: %w", err)
-		}
-
-		errPayload, _ := json.Marshal(map[string]string{"error": "run cancelled"})
-		rt.emitEvent(ctx, &rec, types.EventRunCancelled, events.CauseTaskLifecycle, errPayload)
-
+	if cancel != nil {
+		cancel()
 	}
-
+	errPayload, _ := json.Marshal(map[string]string{"error": reason})
+	rt.emitEvent(context.Background(), &rec, types.EventRunCancelled, events.CauseTaskLifecycle, errPayload)
 	return nil
+}
+
+// persistActivationState serializes activation writes with cancellation and
+// progress-deadline terminalization. A stored terminal state always wins.
+func (rt *Runtime) persistActivationState(ctx context.Context, rec *types.RunRecord) (bool, error) {
+	rt.runningMu.Lock()
+	defer rt.runningMu.Unlock()
+
+	stored, err := rt.store.GetRun(context.Background(), rec.RunID)
+	if err != nil {
+		return false, err
+	}
+	if stored.State.Terminal() {
+		*rec = stored
+		return false, nil
+	}
+	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(ctx, rec); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // CancelAgent cancels the most recent non-terminal run owned by the given agent.
@@ -1592,9 +1636,13 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 	// Transition to running.
 	rec.State = types.RunRunning
 	rec.UpdatedAt = now
-	if err := rt.store.UpdateRun(ctx, *rec); err != nil {
+	persisted, err := rt.persistActivationState(ctx, rec)
+	if err != nil {
 		log.Printf("runtime: update run %s to running: %v", rec.RunID, err)
 		rt.handleExecutionError(ctx, rec, fmt.Errorf("update run state: %w", err))
+		return
+	}
+	if !persisted {
 		return
 	}
 
@@ -1795,8 +1843,12 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// immediately fetches run status can observe the run as still
 	// running, and if the persist fails the store is left with a
 	// completion event for a non-terminal run.
-	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); err != nil {
+	persisted, err := rt.persistActivationState(persistCtx, rec)
+	if err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
+		return
+	}
+	if !persisted {
 		return
 	}
 	resultLenPayload, _ := json.Marshal(map[string]any{
@@ -1999,8 +2051,12 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	// immediately fetches run status can observe the run as still
 	// running, and if the persist fails the store is left with a
 	// completion event for a non-terminal run.
-	if err := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); err != nil {
+	persisted, err := rt.persistActivationState(persistCtx, rec)
+	if err != nil {
 		log.Printf("runtime: update run %s to completed: %v", rec.RunID, err)
+		return
+	}
+	if !persisted {
 		return
 	}
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
@@ -3423,6 +3479,9 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	cause := events.CauseProviderFailure
 
 	if ctx.Err() != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			err = errors.New("activation budget exceeded: progress deadline reached")
+		}
 		// Context cancellation means the runtime is shutting down or the
 		// run was cancelled, not a provider failure. Treat as cancelled.
 		state = types.RunCancelled
@@ -3450,8 +3509,12 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	// Use background context for persistence so that cancelled-run state
 	// transitions are persisted even when the run context is cancelled.
 	persistCtx := context.Background()
-	if updateErr := rt.updateRunAndMarkSuccessfulCoagentActivationDelivered(persistCtx, rec); updateErr != nil {
+	persisted, updateErr := rt.persistActivationState(persistCtx, rec)
+	if updateErr != nil {
 		log.Printf("runtime: update run %s to %s: %v", rec.RunID, state, updateErr)
+	}
+	if !persisted {
+		return
 	}
 
 	errPayload, _ := json.Marshal(map[string]string{"error": err.Error()})

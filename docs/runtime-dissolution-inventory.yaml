@@ -6,26 +6,26 @@ counts:
     go_files: 150
     production_files: 80
     test_files: 70
-    production_loc: 48815
-    test_loc: 55487
-    exports: 1208
-    export_caller_edges: 610
-    initial_unused_export_debt: 41
-    routes: 47
+    production_loc: 48888
+    test_loc: 55680
+    exports: 1214
+    export_caller_edges: 613
+    initial_unused_export_debt: 39
+    routes: 49
     tools: 49
     production_importers: 4
     wrappers: 5
     compatibility_markers: 16
-    store_calls: 461
+    store_calls: 463
     interface_candidates: 4
-    citers: 151
+    citers: 165
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
       loc: 6773
     - id: internal/runtime/api.go [production]
       disposition: api
-      loc: 1774
+      loc: 1776
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
       loc: 858
@@ -91,10 +91,10 @@ files:
       loc: 1388
     - id: internal/runtime/config.go [production]
       disposition: core
-      loc: 334
+      loc: 342
     - id: internal/runtime/config_test.go [test]
       disposition: core
-      loc: 103
+      loc: 296
     - id: internal/runtime/content.go [production]
       disposition: content
       loc: 1983
@@ -217,7 +217,7 @@ files:
       loc: 441
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3661
+      loc: 3724
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -630,6 +630,8 @@ exports:
         - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleCancel
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleChannelMessageList
       disposition: api
     - id: internal/runtime/api.go:method(*APIHandler):HandleHealth
@@ -690,6 +692,8 @@ exports:
         - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunList
       disposition: api
+      production_callers:
+        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatus
       disposition: api
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatusByID
@@ -1253,6 +1257,10 @@ exports:
       disposition: core
     - id: internal/runtime/concurrent_workers_test.go:method(*conditionalFailProvider):ProviderName
       disposition: core
+    - id: internal/runtime/config.go:const:DefaultActivationBudget
+      disposition: core
+      production_callers:
+        - internal/runtime/config.go
     - id: internal/runtime/config.go:const:DefaultAppPromotionBuildTimeout
       disposition: core
       production_callers:
@@ -1351,6 +1359,10 @@ exports:
         - internal/runtime/objectgraph_runtime.go
         - internal/runtime/run_memory.go
         - internal/runtime/runtime.go
+    - id: internal/runtime/config_test.go:func:TestActivationBudgetProgressDeadlineTerminalizesAndReleases
+      disposition: core
+    - id: internal/runtime/config_test.go:func:TestCancelResidentRunReleasesImmediatelyAndRejectsLateCompletion
+      disposition: core
     - id: internal/runtime/config_test.go:func:TestLoadConfigDefaultsPromotionSourceRepoOutsideGitWorktree
       disposition: core
     - id: internal/runtime/config_test.go:func:TestLoadConfigDefaultsResearcherCount
@@ -1362,6 +1374,12 @@ exports:
     - id: internal/runtime/config_test.go:func:TestLoadConfigReadsObscuraCDPScreenshots
       disposition: core
     - id: internal/runtime/config_test.go:func:TestLoadConfigReadsResearcherCount
+      disposition: core
+    - id: internal/runtime/config_test.go:func:TestRunListAndCancelRoutesAreWiredAndOwnerScoped
+      disposition: api
+    - id: internal/runtime/config_test.go:method(*lateCompletionProvider):Execute
+      disposition: core
+    - id: internal/runtime/config_test.go:method(*lateCompletionProvider):ProviderName
       disposition: core
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentCreate
       disposition: content
@@ -3779,11 +3797,7 @@ exports:
     - id: internal/runtime/wire_reconciler_debounce_test.go:func:TestWirePublishDebouncerPreservesSingleCycleLineage
       disposition: wire
 initial_unused_export_debt:
-    - id: internal/runtime/api.go:method(*APIHandler):HandleCancel
-      disposition: delete
     - id: internal/runtime/api.go:method(*APIHandler):HandleChannelMessageList
-      disposition: delete
-    - id: internal/runtime/api.go:method(*APIHandler):HandleRunList
       disposition: delete
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunStatus
       disposition: delete
@@ -3865,6 +3879,10 @@ routes:
     - id: internal/runtime/api.go:HandleFunc:/api/adoptions/:h.HandleAppAdoptionDetail
       disposition: api
     - id: internal/runtime/api.go:HandleFunc:/api/adoptions:h.HandleAppAdoptionsRoot
+      disposition: api
+    - id: internal/runtime/api.go:HandleFunc:/api/agent/cancel:h.HandleCancel
+      disposition: api
+    - id: internal/runtime/api.go:HandleFunc:/api/agent/loops:h.HandleRunList
       disposition: api
     - id: internal/runtime/api.go:HandleFunc:/api/app-change-packages/:h.HandleAppChangePackageDetail
       disposition: api
@@ -4090,7 +4108,7 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/runtime.go:101:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
-    - id: internal/runtime/runtime.go:1948:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:2000:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/tool_profiles.go:18:Re-exported from internal/agentprofile for backward compatibility.
       disposition: delete
@@ -4369,8 +4387,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/runtime.go:CancelAgent:internal/store.method:Store.GetLatestActiveRunByAgent
       disposition: read
-    - id: internal/runtime/runtime.go:CancelRun:internal/store.method:Store.GetRun
-      disposition: read
     - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.GetRun
       disposition: read
     - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.ListActiveRunsByTrajectoryExcluding
@@ -4385,6 +4401,8 @@ store_calls:
       disposition: wire
     - id: internal/runtime/runtime.go:EnsurePersistentSuperAgent:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
+    - id: internal/runtime/runtime.go:ExecuteActivationSync:internal/store.method:Store.GetRun
+      disposition: read
     - id: internal/runtime/runtime.go:GetRun:internal/store.method:Store.GetRun
       disposition: read
     - id: internal/runtime/runtime.go:ListRunsByOwner:internal/store.method:Store.ListRunsByOwner
@@ -4443,8 +4461,6 @@ store_calls:
       disposition: lifecycle
     - id: internal/runtime/runtime.go:ensureConductorTextureRoute:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:executeActivation:internal/store.method:Store.UpdateRun
-      disposition: lifecycle
     - id: internal/runtime/runtime.go:executeWithToolLoop:internal/store.method:Store.UpdateRun
       disposition: lifecycle
     - id: internal/runtime/runtime.go:handleExecutionError:internal/store.method:Store.CompleteAgentMutation
@@ -4489,6 +4505,8 @@ store_calls:
       disposition: lifecycle
     - id: internal/runtime/runtime.go:passivateInterruptedActivations:internal/store.method:Store.UpdateRun
       disposition: lifecycle
+    - id: internal/runtime/runtime.go:persistActivationState:internal/store.method:Store.GetRun
+      disposition: read
     - id: internal/runtime/runtime.go:persistEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
     - id: internal/runtime/runtime.go:previousTextureWorkerMetadataSeq:internal/store.method:Store.GetDocument
@@ -4519,6 +4537,10 @@ store_calls:
       disposition: lifecycle
     - id: internal/runtime/runtime.go:sweepPendingUpdateActors:internal/store.method:Store.ListCoagentMailboxBacklogAll
       disposition: read
+    - id: internal/runtime/runtime.go:terminalizeRun:internal/store.method:Store.GetRun
+      disposition: read
+    - id: internal/runtime/runtime.go:terminalizeRun:internal/store.method:Store.UpdateRun
+      disposition: lifecycle
     - id: internal/runtime/runtime.go:textureRunRequestedWorkers:internal/store.method:Store.ListEvents
       disposition: read
     - id: internal/runtime/runtime.go:textureWorkerUpdateCommitSeq:internal/store.method:Store.GetWorkerUpdate
@@ -5223,11 +5245,25 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- production packages importing `internal/runtime`;
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/api.go, symbols: [RegisterRoutes], routes: [/api/agent/loops, /api/agent/cancel], disposition: core, reason: connect_existing_owner_scoped_operator_handlers}'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/api_test.go, disposition: test, reason: registered_owner_scoped_routes}'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/config_test.go, disposition: test, reason: activation_budget_configuration_regression}'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/runtime_test.go, disposition: test, reason: deadline_and_terminal_cancel_regressions}'
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:3. Dissolve `internal/runtime` through repeated atomic deletion/cutover
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:Implement against the extracted lifecycle boundary, not `internal/runtime`.
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:deletion_target_reference: internal/runtime'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/provideriface/provider.go, internal/runtime/config.go, internal/runtime/config_test.go, internal/runtime/runtime.go, internal/runtime/runtime_t… [sha256:6687142f5f443a6b310a9f2e13c056a098144518f9b1b26089320ac72c8da3d5]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
       disposition: block
@@ -5312,6 +5348,20 @@ citers:
     - id: 'docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:Create the mechanically checkable S0 inventory and ratchet for `internal/runtime`. Exact mutation targets are:'
       disposition: historical_evidence
     - id: docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md:Do not modify `internal/runtime`, runtime callers, routes, registrations, lifecycle authority, Wire authority, promotion authority, suite/registry documents, CI, or deployment configuration.
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `go test ./internal/runtime ./cmd/choir -run 'Deadline|ActivationBudget|Cancel|RunList'`
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/api.go`
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/api_test.go`
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/config.go`
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/config_test.go`
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/runtime.go`
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/runtime_test.go`
       disposition: historical_evidence
     - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
       disposition: block

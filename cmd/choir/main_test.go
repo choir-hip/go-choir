@@ -383,6 +383,68 @@ func TestRunStatusHitsSubmissionEndpoint(t *testing.T) {
 	}
 }
 
+func TestRunListHitsAgentLoopsEndpoint(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/agent/loops" {
+			t.Errorf("path = %q, want /api/agent/loops", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %q, want GET", r.Method)
+		}
+		if got := r.URL.Query().Get("limit"); got != "7" {
+			t.Errorf("limit = %q, want 7", got)
+		}
+		_, _ = io.WriteString(w, `{"runs":[{"loop_id":"run-123","state":"running"}]}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"run", "list", "--api-key=choir_sk_test", "--host=" + stub.URL, "--limit=7"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; stdout=%s", err, out.String())
+	}
+	if len(resp["runs"].([]any)) != 1 {
+		t.Fatalf("runs = %v, want one run", resp["runs"])
+	}
+}
+
+func TestRunCancelPostsAgentCancelRequest(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/agent/cancel" {
+			t.Errorf("path = %q, want /api/agent/cancel", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body["loop_id"] != "run-123" {
+			t.Fatalf("loop_id = %q, want run-123", body["loop_id"])
+		}
+		_, _ = io.WriteString(w, `{"loop_id":"run-123","state":"cancelled"}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"run", "cancel", "--api-key=choir_sk_test", "--host=" + stub.URL, "run-123"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v; stdout=%s", err, out.String())
+	}
+	if resp["state"] != "cancelled" {
+		t.Fatalf("state = %v, want cancelled", resp["state"])
+	}
+}
+
 // TestAPIKeyListHitsAuthEndpoint asserts the api-key list command GETs
 // /auth/api-keys with the Bearer token.
 func TestAPIKeyListHitsAuthEndpoint(t *testing.T) {

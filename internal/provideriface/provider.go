@@ -170,6 +170,9 @@ type Config struct {
 
 	// ProviderTimeout is the simulated work duration for the stub provider.
 	ProviderTimeout time.Duration
+	// ActivationBudget is the maximum wall-clock residency of one activation.
+	// The runtime persists a terminal progress-deadline outcome when it expires.
+	ActivationBudget time.Duration
 
 	// SupervisionInterval is legacy reserved configuration. The old polling
 	// supervisor has been deleted and this value is currently unused.

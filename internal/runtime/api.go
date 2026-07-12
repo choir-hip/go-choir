@@ -1551,6 +1551,8 @@ func RegisterRoutes(s *server.Server, h *APIHandler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
+	s.HandleFunc("/api/agent/loops", h.HandleRunList)
+	s.HandleFunc("/api/agent/cancel", h.HandleCancel)
 	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
 	s.HandleFunc("/api/costs", h.HandleCosts)
 	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)

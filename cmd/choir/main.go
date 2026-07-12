@@ -93,6 +93,8 @@ Commands:
   search <query>      Search the corpus
   run start <text>    Submit a prompt to the conductor (starts a run)
   run status <id>     Get the status of a prompt-bar submission
+  run list            List recent owner-scoped runs
+  run cancel <id>     Cancel an owner-scoped pending or running run
   api-key list        List your API keys
   api-key create      Create a delegated API key (requires manage:keys or admin)
   api-key revoke <id> Revoke this key, or a delegated key with manage:keys/admin
@@ -459,7 +461,7 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 
 func runRun(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir run: subcommand required (start|status)")
+		fmt.Fprintln(stderr, "choir run: subcommand required (start|status|list|cancel)")
 		return 2
 	}
 	sub := args[0]
@@ -468,6 +470,10 @@ func runRun(args []string, stdout, stderr io.Writer) int {
 		return runRunStart(args[1:], stdout, stderr)
 	case "status":
 		return runRunStatus(args[1:], stdout, stderr)
+	case "list":
+		return runRunList(args[1:], stdout, stderr)
+	case "cancel":
+		return runRunCancel(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "choir run: unknown subcommand %q\n", sub)
 		return 2
@@ -513,6 +519,54 @@ func runRunStatus(args []string, stdout, stderr io.Writer) int {
 	var resp json.RawMessage
 	if err := c.do(http.MethodGet, "/api/prompt-bar/submissions/"+id, nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir run status %s: %v\n", id, err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+
+func runRunList(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir run list", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	limit := fs.Int("limit", defaultListLimit, "Maximum number of recent runs")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir run list: %v\n", err)
+		return 2
+	}
+	if len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir run list: unexpected positional arguments")
+		return 2
+	}
+	if *limit <= 0 || *limit > 500 {
+		fmt.Fprintln(stderr, "choir run list: --limit must be between 1 and 500")
+		return 2
+	}
+	var resp json.RawMessage
+	path := fmt.Sprintf("/api/agent/loops?limit=%d", *limit)
+	if err := c.do(http.MethodGet, path, nil, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir run list: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+
+func runRunCancel(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir run cancel", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir run cancel: %v\n", err)
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
+		fmt.Fprintln(stderr, "choir run cancel: run id required")
+		return 2
+	}
+	id := strings.TrimSpace(rest[0])
+	var resp json.RawMessage
+	if err := c.do(http.MethodPost, "/api/agent/cancel", map[string]string{"loop_id": id}, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir run cancel %s: %v\n", id, err)
 		return 1
 	}
 	return writeJSON(stdout, resp)
