@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 16
     store_calls: 463
     interface_candidates: 4
-    citers: 165
+    citers: 164
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -1376,7 +1376,7 @@ exports:
     - id: internal/runtime/config_test.go:func:TestLoadConfigReadsResearcherCount
       disposition: core
     - id: internal/runtime/config_test.go:func:TestRunListAndCancelRoutesAreWiredAndOwnerScoped
-      disposition: api
+      disposition: core
     - id: internal/runtime/config_test.go:method(*lateCompletionProvider):Execute
       disposition: core
     - id: internal/runtime/config_test.go:method(*lateCompletionProvider):ProviderName
@@ -5247,15 +5247,11 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/api.go, symbols: [RegisterRoutes], routes: [/api/agent/loops, /api/agent/cancel], disposition: core, reason: connect_existing_owner_scoped_operator_handlers}'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/api_test.go, disposition: test, reason: registered_owner_scoped_routes}'
-      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/config_test.go, disposition: test, reason: activation_budget_configuration_regression}'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}'
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/runtime_test.go, disposition: test, reason: deadline_and_terminal_cancel_regressions}'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:3. Dissolve `internal/runtime` through repeated atomic deletion/cutover
       disposition: block
@@ -5362,6 +5358,8 @@ citers:
     - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/runtime.go`
       disposition: historical_evidence
     - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:- `internal/runtime/runtime_test.go`
+      disposition: historical_evidence
+    - id: docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md:At canonical `e649ee28`, `S1DeployVerifier` reported **BLOCKING**. Focused runtime/CLI tests and `go test ./cmd/runtime-ratchet` passed. The required default ratchet invocation failed because the rege… [sha256:346b662f5c9ed210b14ba921c84c4cace85290a2abb4e5f1849b75f42e9dd860]
       disposition: historical_evidence
     - id: docs/heresy-detectors.md:`internal/runtime/prompt_defaults`, selected frontend/source/test directories,
       disposition: block
