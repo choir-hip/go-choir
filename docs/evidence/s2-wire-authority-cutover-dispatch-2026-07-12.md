@@ -133,3 +133,19 @@ The final four-reviewer post-acceptance panel at `/tmp/choir-s2-post-acceptance-
 This residue is not shared-Wire authority and does not invalidate the deployed stop/feed/browser receipts. However, the S2 Definition's invariant is unqualified: `No serving process performs legacy data migration at startup.` The S2-A dispatch likewise says to remove `the migration implementation` and permit normal private store opening, not a retained importer. The narrower completion bullet names `backfillOGFromSQL`, and three reviewers treated the private importer as out of scope, but majority interpretation cannot override the literal invariant. The orchestrator therefore adjudicates the dissent as blocking rather than silently weakening the Definition.
 
 Classification: red persistent-state startup migration residue. Protected surface: VM-local private runtime state and restart durability. Conjecture delta: deleting all serving-process legacy import machinery completes the intended code-only cutover; normal schema initialization and current Dolt state remain authoritative. Admissible evidence: source deletion, a regression proving `Open` does not import a seeded legacy SQLite row, focused store/runtime restart tests, ratchet decrease, independent verification, CI, deployed build identity, and staging health. Rollback: revert the deletion commit if a candidate or staging restart cannot open the current Dolt workspace; do not restore the importer merely to recover retired SQLite rows. Heresy delta: `discovered` one retained startup migration path; `introduced` none; `repaired` pending.
+
+### S2-CONS-001 Repair Receipt
+
+Commit `f6a47440f10de2a96bb9eed6609d9bf93e80d90c` deletes `internal/store/migration.go` in full and removes the `legacy-import` phase and `importLegacySQLiteRuntime` call from `Store.Open`. `TestOpenDoesNotImportLegacySQLiteRuntimeRows` now seeds a retired SQLite `runs` row, opens the current Dolt store beside that inert file, and proves the row is absent while the legacy file remains untouched as non-serving evidence. Repository search finds no importer symbols or alternate startup path.
+
+Focused proof passed:
+
+- `go test ./internal/store -run 'Test(OpenDoesNotImportLegacySQLiteRuntimeRows|OpenMigratesWorkerUpdatesBeforeDeliveryIndex)' -count=1`;
+- `go test ./internal/store ./cmd/sandbox -count=1`;
+- `go run ./cmd/runtime-ratchet`.
+
+Independent reviewer `S2MigrationVerifier` returned PASS at confidence `0.98`: all importer machinery and its sole startup invocation are gone; sandbox and proxy serving callsites use the repaired `Store.Open`; normal current-Dolt schema bootstrap, reopen, and derived-state maintenance remain; no compatibility or fallback path remains.
+
+GitHub Actions run `29186793178` passed all selected gates, including non-runtime race coverage, and deployed successfully. Its activation receipt records sandbox artifact `f6a47440f10de2a96bb9eed6609d9bf93e80d90c` active at `2026-07-12T09:14:13Z`; the deploy refreshed the active computer, whose product status reports epoch `1860`, `last_active_at` `2026-07-12T09:14:14.860Z`, runtime `ready`, and current state `active`. The post-refresh Wire feed still returns `100` articles with first story ID `source-network-texture-202ba0b3-48b9-40fb-8ab5-40dd190c8155`. The public proxy health identity remains `7fa4e62f` because this internal/store change selected the sandbox artifact, not a proxy rebuild; the artifact-specific activation receipt is the deployed identity authority for this repair.
+
+Heresy delta: `discovered` one retained startup migration path; `introduced` none; `repaired` one. Residual risk is limited to rollback requiring a code revert if current Dolt schema opening regresses; retired SQLite rows are deliberately no longer recoverable through serving startup.

@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 48581f66
+  journal_expected_parent_sha: f6a47440f10de2a96bb9eed6609d9bf93e80d90c
   orchestrator_lock:
     holder: Main
     epoch: 9
     expires_at: 2026-07-12T10:20:00Z
-    expected_parent_sha: 48581f66
+    expected_parent_sha: f6a47440f10de2a96bb9eed6609d9bf93e80d90c
     lock_transition_id: s2-lock-renewal-59
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -716,13 +716,13 @@ run_checkpoint_and_resumption_state:
   active_phase_checkpoint:
     subgoal: S2
     status: checkpoint_incomplete
-    deployed_sha: 7fa4e62f0182fde1931821dc17735760adbc3aac
-    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29185043037
-    staging_ref: https://choir.news/health@7fa4e62f0182fde1931821dc17735760adbc3aac
-    product_proof_refs: [docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-d-deployed-acceptance-receipt, agent://S2LifecycleVerifier]
-    consensus_ref: /tmp/choir-s2-post-acceptance-consensus-20260712
-    open_findings: [S2_CONS_001_retained_startup_legacy_SQLite_runtime_import]
-    adjudication_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-cons-001--retained-startup-legacy-sqlite-runtime-import
+    deployed_sha: f6a47440f10de2a96bb9eed6609d9bf93e80d90c
+    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29186793178
+    staging_ref: activation_receipt_29186793178_sandbox_f6a47440_at_2026-07-12T09:14:13Z
+    product_proof_refs: [docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-d-deployed-acceptance-receipt, docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-cons-001-repair-receipt, agent://S2LifecycleVerifier, agent://S2MigrationVerifier]
+    consensus_ref: pending_post_S2_CONS_001_repair_consensus
+    open_findings: [final_post_repair_consensus_pending]
+    adjudication_ref: pending_post_repair_consensus
   delegation_ledger_schema:
     required_fields:
       - slice_id
