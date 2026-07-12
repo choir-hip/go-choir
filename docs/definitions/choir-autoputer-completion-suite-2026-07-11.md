@@ -693,19 +693,19 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 9dff3690
+  journal_expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
   orchestrator_lock:
     holder: Main
     epoch: 8
     expires_at: 2026-07-12T07:15:00Z
-    expected_parent_sha: 9dff3690
+    expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
     lock_transition_id: s2-lock-acquisition-49
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
     B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
     S0: {status: complete, started_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, completed_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md, docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md, agent://S0RatchetVerifier, artifact://461, https://github.com/choir-hip/go-choir/actions/runs/29176500535], rollback_refs: [008a7b88cf200119c0f762cc51cfba6be3007445], blockers: []}
     S1: {status: complete, started_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, completed_at_sha: 9dff3690, evidence_refs: [docs/definitions/choir-run-deploy-unblock-2026-07-11.md, docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372, /tmp/choir-s1-final-consensus-20260712, /tmp/choir-s1-post-repair-consensus-20260712], rollback_refs: [2327fcef4716aef070eb4b819296f01b44267364], blockers: []}
-    S2: {status: working, started_at_sha: 9dff3690, completed_at_sha: '', evidence_refs: [docs/definitions/choir-wire-store-conformance-2026-07-11.md], rollback_refs: [9dff3690], blockers: []}
+    S2: {status: working, started_at_sha: 9dff3690, completed_at_sha: '', evidence_refs: [docs/definitions/choir-wire-store-conformance-2026-07-11.md, docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md], rollback_refs: [9dff3690], blockers: []}
     S3: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S2]}
     S4: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S3]}
     S5: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S4]}
@@ -721,7 +721,7 @@ run_checkpoint_and_resumption_state:
     staging_ref: pending
     product_proof_refs: []
     consensus_ref: pending
-    open_findings: [S2_fresh_authority_and_caller_inventory_required]
+    open_findings: [S2_implementation_and_product_acceptance_pending]
     adjudication_ref: pending
   delegation_ledger_schema:
     required_fields:
@@ -948,6 +948,177 @@ run_checkpoint_and_resumption_state:
       last_reconciled_at: 2026-07-12T05:15:00Z
       reconciliation_result: S1_complete_and_S2_authorized
       close_condition: staging_running_runs_zero_or_authoritative_equivalent_green_deployed_commit_cancel_deadline_regressions_independent_verification_and_consensus_adjudication
+    - slice_id: S2-A-delete-runtime-migration
+      subgoal: S2
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 8
+      status: dispatch_intent
+      dispatch_nonce: s2-wire-authority-cutover-01-nonce-01-A
+      dispatch_ref: pending_agent_dispatch
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-a--delete-boot-time-retired-sql-replay
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_dispatch
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      lock_release_ref: pending_S2_landing
+      stage_started_at: 2026-07-12T05:21:52Z
+      transition_id: s2-a-dispatch-intent-50
+      expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      stage_history:
+        - {status: dispatch_intent, transition_id: s2-a-dispatch-intent-50, recorded_at: 2026-07-12T05:21:52Z, actor: Main, expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591, precondition: S1_complete_S2_working_fresh_inventory_recorded, postcondition: exact_migration_deletion_slice_is_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-12T07:15:00Z
+      mutation_class: red
+      protected_surfaces: [VM_lifecycle, VM_local_private_store]
+      exact_files_packages_routes_state_authorities: [internal/store/migration.go, internal/store/migration_test.go, internal/store/store.go, cmd/sandbox/main.go, cmd/sandbox/main_test.go, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [migration_shim, compatibility_alias, feature_flag, corpusd_state, production_deploy_before_atomic_S2_landing]
+      authority_edges_locked: [VM_local_private_state_only, no_boot_time_retired_SQL_replay]
+      implementer_agent: pending_agent_dispatch
+      verifier_agent: pending_independent_verification
+      pre_mutation_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      rollback_commit_or_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      accepted_slice_dependency_refs: [S1@9dff3690]
+      external_operation_id: not_applicable
+      effect_authority: canonical_git_ref_then_staging_VM_boot
+      receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
+      expected_precondition: sandbox_boot_replays_retired_relational_rows_into_VM_local_objectgraph
+      observed_postcondition: pending_implementation
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending_atomic_S2_landing
+      ci_run_ref: pending_atomic_S2_landing
+      deploy_ref: pending_atomic_S2_landing
+      deployed_sha: pending_atomic_S2_landing
+      acceptance_ref: pending_atomic_S2_acceptance
+      acceptance_contract: sandbox_boot_has_no_retired_SQL_replay_API_or_background_loop
+      evidence_refs: [docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md]
+      open_findings: []
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-12T05:21:52Z
+      reconciliation_result: dispatch_intent_persisted
+      close_condition: integrated_with_S2_B_and_S2_C_independently_verified_deployed_accepted_consensus_adjudicated
+    - slice_id: S2-B-corpusd-wire-read-edition
+      subgoal: S2
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 8
+      status: dispatch_intent
+      dispatch_nonce: s2-wire-authority-cutover-01-nonce-01-B
+      dispatch_ref: pending_agent_dispatch
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-b--make-corpusd-the-only-public-wire-read-and-edition-authority
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_dispatch
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      lock_release_ref: pending_S2_landing
+      stage_started_at: 2026-07-12T05:21:52Z
+      transition_id: s2-b-dispatch-intent-50
+      expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      stage_history:
+        - {status: dispatch_intent, transition_id: s2-b-dispatch-intent-50, recorded_at: 2026-07-12T05:21:52Z, actor: Main, expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591, precondition: S1_complete_S2_working_fresh_inventory_recorded, postcondition: exact_corpusd_read_and_edition_cutover_slice_is_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-12T07:15:00Z
+      mutation_class: red
+      protected_surfaces: [corpusd_canonical_writes, public_wire_reads, runtime_publication_settlement, proxy_routing]
+      exact_files_packages_routes_state_authorities: [internal/platform, internal/proxy, internal/runtime/universal_wire.go, internal/runtime/wire_publication.go, /api/universal-wire/stories, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [dual_read, dual_write, backfill, runtime_fallback, compatibility_alias, third_store]
+      authority_edges_locked: [corpusd_only_world_wire_authority, user_computer_private_working_state_only]
+      implementer_agent: pending_agent_dispatch
+      verifier_agent: pending_independent_verification
+      pre_mutation_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      rollback_commit_or_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      accepted_slice_dependency_refs: [S1@9dff3690]
+      external_operation_id: not_applicable
+      effect_authority: canonical_git_ref_then_staging_product_API
+      receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
+      expected_precondition: corpusd_publication_exists_but_runtime_local_edition_and_story_read_remain_authoritative
+      observed_postcondition: pending_implementation
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending_atomic_S2_landing
+      ci_run_ref: pending_atomic_S2_landing
+      deploy_ref: pending_atomic_S2_landing
+      deployed_sha: pending_atomic_S2_landing
+      acceptance_ref: pending_atomic_S2_acceptance
+      acceptance_contract: canonical_corpusd_publications_render_existing_story_contract_without_runtime_local_edition
+      evidence_refs: [docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md]
+      open_findings: []
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-12T05:21:52Z
+      reconciliation_result: dispatch_intent_persisted
+      close_condition: integrated_with_S2_A_and_S2_C_independently_verified_deployed_accepted_consensus_adjudicated
+    - slice_id: S2-C-source-captures-to-corpusd
+      subgoal: S2
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 8
+      status: dispatch_intent
+      dispatch_nonce: s2-wire-authority-cutover-01-nonce-01-C
+      dispatch_ref: pending_agent_dispatch
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md#s2-c--publish-source-captures-directly-to-corpusd
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_dispatch
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_isolated_worktree_or_patch
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      lock_release_ref: pending_S2_landing
+      stage_started_at: 2026-07-12T05:21:52Z
+      transition_id: s2-c-dispatch-intent-50
+      expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      stage_history:
+        - {status: dispatch_intent, transition_id: s2-c-dispatch-intent-50, recorded_at: 2026-07-12T05:21:52Z, actor: Main, expected_parent_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591, precondition: S1_complete_S2_working_fresh_inventory_recorded, postcondition: exact_source_capture_corpusd_cutover_slice_is_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-12T07:15:00Z
+      mutation_class: red
+      protected_surfaces: [source_ingestion, corpusd_canonical_writes, VM_lifecycle, runtime_host_proxy]
+      exact_files_packages_routes_state_authorities: [cmd/sourcecycled, internal/cycle/web_capture_graph.go, internal/proxy/platform_objectgraph.go, internal/platform/objectgraph_handlers.go, internal/runtime/objectgraph_runtime.go, deployment_configuration, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [VM_boot_for_capture_write, local_fallback, dual_path, third_store, processor_activation_rearchitecture]
+      authority_edges_locked: [corpusd_only_shared_capture_authority, runtime_processor_activation_separate_from_capture_persistence]
+      implementer_agent: pending_agent_dispatch
+      verifier_agent: pending_independent_verification
+      pre_mutation_sha: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      rollback_commit_or_ref: d4bcf26f55d9c8f5acb43ed00ab3ec74df48e591
+      accepted_slice_dependency_refs: [S1@9dff3690]
+      external_operation_id: not_applicable
+      effect_authority: canonical_git_ref_then_staging_source_ingestion
+      receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
+      expected_precondition: sourcecycled_shared_capture_projection_calls_user_computer_runtime
+      observed_postcondition: pending_implementation
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending_atomic_S2_landing
+      ci_run_ref: pending_atomic_S2_landing
+      deploy_ref: pending_atomic_S2_landing
+      deployed_sha: pending_atomic_S2_landing
+      acceptance_ref: pending_atomic_S2_acceptance
+      acceptance_contract: sourcecycled_publishes_canonical_capture_graph_without_user_VM_boot_or_runtime_projection_route
+      evidence_refs: [docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md]
+      open_findings: []
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-12T05:21:52Z
+      reconciliation_result: dispatch_intent_persisted
+      close_condition: integrated_with_S2_A_and_S2_B_independently_verified_deployed_accepted_consensus_adjudicated
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
     - {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}
