@@ -153,6 +153,7 @@ Notes:
 - `--mode ask` is read-only Q&A style.
 - `--trust` suppresses headless workspace trust prompts.
 - `--force` automatically approves all commands/permissions.
+- `--yolo` is an alias for `--force`; passing both is unnecessary.
 - `--approve-mcps` automatically approves all MCP servers.
 - The runner redirects stdin from `/dev/null` so the agent never sees a TTY;
   without this, Cursor detects an interactive terminal and prompts for command
@@ -199,6 +200,9 @@ omp -p --mode text --model openai-codex/gpt-5.5 --thinking high --no-session "$P
 omp -p --mode text --model google-antigravity/gemini-3.5-flash --thinking high --no-session "$PROMPT"
 omp -p --mode text --model zai/glm-5.2 --thinking high --no-session "$PROMPT"
 ```
+
+The runner also passes `--auto-approve` and `--max-time` to OMP so a tool call
+cannot block on an invisible approval prompt or run without a deadline.
 
 Optional overrides:
 
@@ -280,7 +284,7 @@ The script writes:
 
 ```text
 <out-dir>/prompt.md      exact prompt sent to agents
-<out-dir>/manifest.tsv   agent, status, exit code, output path, command
+<out-dir>/manifest.tsv   agent, status, exit code, duration, output path, command
 <out-dir>/<agent>.out    combined stdout/stderr for each run
 <out-dir>/<agent>.cmd    shell-quoted command for reproducibility
 ```
@@ -293,13 +297,24 @@ Default output directory:
 
 Use `--out-dir DIR` to pin the location.
 
+`/tmp` is session diagnostics, not resumable evidence. When resumption or audit
+requires durability, archive the prompt, manifest, candidate identity,
+adjudicated findings, and reviewer-health telemetry under a durable referenced
+identity. Raw transcripts need not become their own Git commit.
+
+Every agent has a 180-second hard deadline by default. Override it with
+`--timeout-seconds N`.
+The runner requires GNU `timeout` (provided by `coreutils`), verifies that
+implementation before launch, and fails rather than running an unbounded panel.
+
 Manifest statuses:
 
 ```text
-ok                   agent completed with exit 0
-failed               agent command exited non-zero
-skipped-missing-cli  required CLI binary was not found
-dry-run              command was rendered but not executed
+ok                     agent completed with exit 0
+failed                 agent command exited non-zero
+timed-out              GNU timeout killed the agent at its hard deadline
+skipped-missing-cli    required CLI binary was not found
+dry-run                command was rendered but not executed
 ```
 
 Default exit behavior:
@@ -364,13 +379,45 @@ Return only actionable risks and fixes.
 
 ## Workflow
 
-1. Build a prompt file when the prompt is long, quote-heavy, or includes code/diffs.
-2. Run the bundled script with the default panel or requested `--include`/`--exclude` set.
-3. Read `manifest.tsv` first.
-4. Read each successful `<agent>.out`.
-5. Treat failures/skips as panel metadata, not fatal if `--keep-going` was intentional.
-6. Synthesize; do not concatenate.
-7. Locally verify any high-impact code claim before presenting it as fact.
+When reviewing work governed by a Definition, consensus is an assurance
+operation, not a separate Git beat. If the assurance profile requires a panel
+for a canonical Define or Implement boundary:
+
+1. Prepare the decision-complete diff and its available evidence.
+2. Bind review to a frozen identity containing base revision, complete included
+   and excluded path scope, content digest, and evidence refs. Use a
+   content-addressed patch/bundle, read-only snapshot, or isolated candidate
+   commit; a candidate commit is review substrate, not canonical mission state.
+3. Freeze scoped mutation, then run the risk-tiered panel. Map panel breadth to
+   the project's existing mutation classes and ceremony; never substitute the
+   panel for required evidence, rollback, protected-surface, or authority work.
+4. Read `manifest.tsv` and successful outputs, synthesize rather than
+   concatenate, and locally verify high-impact claims.
+5. Adjudicate findings into the candidate. A confirmed new behavior problem
+   requires a code-free problem/Define boundary before repair when the project
+   uses problem-documentation-first.
+6. Compare the accepted candidate identity before the canonical commit.
+   Material semantic change makes the review stale; rerun proportionately.
+   Record why any deterministic formatting or generated delta is content-neutral.
+7. Durably bind the accepted candidate identity, consensus/evidence refs,
+   adjudication, and any no-rerun rationale in the reviewed artifact or commit
+   metadata. Do not create standalone consensus-intent, output, or adjudication
+   commits.
+
+After commit, CI, deployment, production, migration, restart, credential,
+provider, VM, promotion, rollback, and other external observations may be newly
+available. Run post-boundary consensus only when interpreting such evidence or
+a surprise can change the graph, evidence class, authority, mutation boundary,
+escalation, route, or stopping condition; otherwise fold receipts into the next
+natural Define boundary.
+
+For any other consensus task:
+
+1. Build a prompt file when the prompt is long, quote-heavy, or includes diffs.
+2. Run the bundled script with the chosen panel.
+3. Read the manifest and successful outputs; treat intentional partial-panel
+   failures as metadata.
+4. Synthesize and locally verify high-impact claims.
 
 ## Synthesis Template
 
