@@ -59,3 +59,10 @@ Allowed files: `internal/runtime/api_candidate_package_intake.go`, direct candid
 - Proof deltas from the discarded experiment: routes `2 -> 0`, APIHandler receivers `128 -> 117`, production LOC `43944 -> 43563`, test LOC `50065 -> 47276`, exports `1006 -> 985`, caller edges `363 -> 349`; importers, wrappers, and interface candidates flat. The otherwise strong deletion does not override the debt violation.
 - The worktree is clean and no commit exists. Lowercasing, deleting, or moving the eleven domain operations changes deferred candidate/promotion authority outside this orange lock; adding a caller, registrar, wrapper, interface, or seam would only hide the debt.
 - Required parent-plan change: carry these production-called receivers through the atomic handler ownership cutover, or authorize the protected candidate/promotion domain ownership/visibility cutover first. Slice-local ratchet weakening is not authorized.
+
+## S3-I17 Blocker Adjudication
+
+- Post-blocker consensus at `/tmp/choir-s3-i17-blocker-consensus-20260713` returned three substantive Option A verdicts at confidence `0.91-0.97`; the fourth runner produced no verdict.
+- Option A rejects the standalone deletion route with evidence. Carry all eleven production-called candidate-intake receivers through the one atomic APIHandler ownership cutover so their real domain caller edges remain; defer protected candidate/promotion domain ownership to ordered step 4.
+- This does not weaken deletion-first or the ratchet: the runtime handler authority is deleted atomically in the next slice, while dormant candidate transport remains bounded step-4 deletion debt. No fake caller or seam is introduced.
+- S3-I17 is abandoned without mutation and superseded by the atomic handler cutover. Its compile-proven blocker is cleared as `rejected_with_evidence`, not ignored or escalated.
