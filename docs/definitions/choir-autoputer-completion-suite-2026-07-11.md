@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 3824d10f
+  journal_expected_parent_sha: f79c0957
   orchestrator_lock:
     holder: Main
     epoch: 21
     expires_at: 2026-07-13T05:21:50Z
-    expected_parent_sha: 3824d10f
+    expected_parent_sha: f79c0957
     lock_transition_id: s3-lock-renewal-214
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1956,7 +1956,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 21
-      status: consensus
+      status: blocked_incomplete
       dispatch_nonce: s3-runtime-dissolution-i13-nonce-01
       dispatch_ref: S3I13Implementer
       agent_session_ref: agent://S3I13Implementer
@@ -1974,7 +1974,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I13_landing
       stage_started_at: 2026-07-13T01:56:13Z
       transition_id: s3-i13-dispatch-intent-210
-      expected_parent_sha: 3824d10f
+      expected_parent_sha: f79c0957
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i13-dispatch-intent-210, recorded_at: 2026-07-13T01:56:13Z, actor: Main, expected_parent_sha: 6ee86dd1, precondition: S3_I12_landed_config_authority_extracted_step3_continues, postcondition: exact_sandbox_runtime_import_cutover_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i13-dispatched-211, recorded_at: 2026-07-13T01:57:59Z, actor: Main, expected_parent_sha: 9b8af38b, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_20, postcondition: S3I13Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
@@ -1982,6 +1982,7 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s3-i13-verifier-dispatched-213, recorded_at: 2026-07-13T02:51:18Z, actor: Main, expected_parent_sha: 7c014386, precondition: canonical_implementation_focused_tests_and_ratchet_PASS, postcondition: independent_S3I13Verifier_authorized, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i13-verifier-pass-215, recorded_at: 2026-07-13T03:24:02Z, actor: S3I13Verifier, expected_parent_sha: 3824d10f, precondition: independent_import_stub_profile_registry_model_path_verification, postcondition: PASS_confidence_0_96_no_findings, external_operation_id: not_applicable}
         - {status: accepted, transition_id: s3-i13-ci-deploy-accepted-216, recorded_at: 2026-07-13T03:24:02Z, actor: Main, expected_parent_sha: 3824d10f, precondition: full_CI_attempt_2_deploy_receipt_and_product_smoke_complete, postcondition: deployed_7c014386_staging_health_and_authenticated_run_list_200_consensus_pending, external_operation_id: github_actions_29220365255_attempt_2}
+        - {status: blocked_incomplete, transition_id: s3-i13-consensus-blocked-217, recorded_at: 2026-07-13T03:34:57Z, actor: Main, expected_parent_sha: f79c0957, precondition: four_reviewer_final_panel_completed, postcondition: three_PASS_one_BLOCKING_gofmt_and_receipt_accuracy_repairs_required, external_operation_id: consensus_tmp_choir_s3_i13_final_consensus_20260713}
       lock_expires_at: 2026-07-13T05:21:50Z
       mutation_class: orange
       protected_surfaces: []
@@ -2008,11 +2009,11 @@ run_checkpoint_and_resumption_state:
       acceptance_ref: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md#s3-i13-ci-deploy-and-acceptance
       acceptance_contract: cmd_sandbox_runtime_import_deleted_stub_and_bootstrap_symbols_moved_to_canonical_owners_behavior_preserved
       evidence_refs: [docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, agent://S3I13Implementer, agent://S3I13Verifier, https://github.com/choir-hip/go-choir/actions/runs/29220365255#attempt-2]
-      open_findings: []
+      open_findings: [gofmt_80_changed_files_nonclean_53_new_relative_to_parent, receipt_every_other_gate_flat_false_citers_236_to_241_classified_durable_evidence_growth]
       landed_commit_sha: pending
-      adjudication: independent_PASS_deployed_accepted_final_consensus_pending
-      last_reconciled_at: 2026-07-13T03:24:02Z
-      reconciliation_result: verifier_PASS_CI_attempt2_PASS_deployed_7c014386_staging_product_accepted_consensus_pending
+      adjudication: three_PASS_one_BLOCKING_smallest_formatter_and_receipt_repair_required
+      last_reconciled_at: 2026-07-13T03:34:57Z
+      reconciliation_result: final_consensus_blocked_problem_documented_before_source_repair
       close_condition: cutover_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

@@ -37,7 +37,7 @@ Preserve stub delay/cancellation/progress/error/result/policy behavior, conducto
 - `cmd/sandbox` has no runtime import; profiles use `agentprofile`, registries use `toolregistry`, model-policy path derivation is provideriface-owned, and `internal/provider` solely owns complete StubProvider behavior plus shared pure Texture-decision helpers.
 - Runtime StubProvider, model-path, nine AgentProfile compatibility constants, ToolRegistry alias, and MustNewToolRegistry forwarder are deleted; every caller is migrated and no replacement seam remains. The pre-existing runtime `Tool` alias remains explicitly outside this slice.
 - Focused runtime/sandbox/provider/provideriface/actorruntime/gatewayruntime and exact stub/config/bootstrap tests pass.
-- Ratchet passed after canonical regeneration and removal of three fulfilled initial-unused-export debts: production LOC `44338 -> 44224`, exports `1031 -> 1014`, caller edges `520 -> 372`, initial unused-export debt `19 -> 16`, production importers `4 -> 3`, compatibility markers `12 -> 10`; every other gate is flat.
+- Ratchet passed after canonical regeneration and removal of three fulfilled initial-unused-export debts: production LOC `44338 -> 44224`, exports `1031 -> 1014`, caller edges `520 -> 372`, initial unused-export debt `19 -> 16`, production importers `4 -> 3`, compatibility markers `12 -> 10`; routes, tools, wrappers, store calls, interface candidates, and legacy state counts are flat. Classified historical citers increased `236 -> 241` solely from this slice's durable definition/evidence references; citer growth is intentionally allowed by the ratchet and does not create runtime authority.
 
 ## Dispatch Substrate Reconciliation
 
@@ -54,3 +54,10 @@ The implementer returned a clean named branch commit but switched the shared rep
 - GitHub Actions run `29220365255` attempt `2` passed every default, integration, race, ratchet, SBOM, and deploy gate for head `7c014386aca694949516d60c380580e47b01f5b6`.
 - Deploy job `86725820359` completed successfully.
 - Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
+
+## S3-I13 Final Consensus Blockers
+
+- Codex, Gemini, and OpenCode returned `PASS`; GPT-5.5 returned `BLOCKING` at confidence `0.91`.
+- Source blocker: `gofmt -l` found `80` changed Go files non-clean, `53` newly unformatted relative to the parent, including malformed import grouping and an indented `done:` label. The semantic cutover passes, but canonical Go formatting is required before closure.
+- Evidence blocker: the implementation receipt incorrectly said every other gate was flat. `citers` increased `236 -> 241` from canonical S3-I13 definition/evidence references. The executable ratchet intentionally permits citer growth while classifying every new citer; this is not source authority growth, but the receipt must state it exactly.
+- Smallest repair: correct the receipt, format only changed S3-I13 Go files, rerun focused packages and ratchet, then request final verifier/consensus recheck.
