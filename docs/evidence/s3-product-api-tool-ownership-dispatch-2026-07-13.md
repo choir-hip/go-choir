@@ -40,5 +40,14 @@ A four-runner architecture panel completed. Codex identified the hidden producti
 - Internal, test, agent, prompt-config, raw-event, non-Super, missing-owner, invalid-method/path, oversized-body, and oversized-response cases retain exact rejection/truncation behavior.
 - Disabled tools leave the product API tool absent; enabled tools register it once, and duplicate registration fails explicitly.
 - Focused `internal/apihandler`, runtime, sandbox, and actor-runtime tests pass.
-- Runtime production LOC and API constructor caller edges decrease; routes/tools remain flat; wrappers do not increase; every other gated authority count is non-increasing except classified durable citers.
+- Runtime production LOC, API constructor caller edges, and runtime-scoped tool declarations decrease; routes and the enabled product tool catalog remain flat; wrappers do not increase; every other gated authority count is non-increasing except classified durable citers.
 - Independent verification, full CI, deploy identity, authenticated public product-path smoke, consensus, and adjudication pass before closure.
+
+## S3-I14 Implementation Receipt
+
+- Integrated isolated commit `d72d86a93576fdc10e757b1986907dd3940c4665` as canonical `ca9b3142`.
+- `internal/apihandler` now owns `product_api_request` as a canonical `toolregistry.Tool` bound to the already constructed production server. No per-call server, mux, handler, route registrar, callback, interface, accessor, alias, or fallback remains.
+- Sandbox installs default registries, registers the one canonical route table, then registers the server-bound tool exactly once in the existing Super registry only when tools are enabled.
+- Runtime's product tool implementation/test files and default registration are deleted. The runtime default-catalog regression now asserts that server-bound transport is absent; apihandler tests cover canonical-server identity, owner/email headers, schema, nil/duplicate registration, allowlist/rejections, size limits, truncation, and result shape.
+- Focused tests passed for apihandler, runtime, sandbox, and actor-runtime. The runtime ratchet passes.
+- Ratchet deltas: Go files `146 -> 144`, production files `76 -> 75`, test files `70 -> 69`, production LOC `44216 -> 44032`, test LOC `50223 -> 50142`, exports `1014 -> 1012`, caller edges `372 -> 368`, runtime-scoped tool declarations `49 -> 48`; routes, production importers, wrappers, compatibility markers, store calls, interface candidates, and initial unused-export debt are flat. The enabled product catalog remains behaviorally flat because sandbox registers the same tool after runtime's duplicate constructor-backed registration is deleted. Three durable dispatch/suite citers are classified (`241 -> 244`).
