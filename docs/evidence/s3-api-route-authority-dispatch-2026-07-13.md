@@ -53,3 +53,11 @@ Forbidden: any `APIHandler` method/body move; app/domain/route behavior or path 
 - GitHub Actions run `29232081536` attempt `2` passed every completed default, integration, runtime-race, docs, and heresy lane, but the non-runtime race lane `86758741778` exhausted its command timeout while `internal/server.TestHealthHandlerIncludesAddrAfterStart` was still running.
 - The log reports no race detector finding or failed test; the lane summary classifies every completed test `pass` and explicitly reports the one still-running server test at timeout.
 - This is not attributed to the route-authority change. A failed-lane-only retry is running; no source fix is authorized unless the retry produces a reproducible change-attributable failure.
+
+## S3-I16 CI, Deploy, and Acceptance
+
+- Attempt `3` was cancelled by the subsequent documentation checkpoint under main-branch concurrency, not by a test result.
+- GitHub Actions run `29232081536` attempt `4` passed every default, integration, race, ratchet, SBOM, and deploy gate for head `3b10893c13a9d79b7ab4219dc6b9377c6d0ed1fd`.
+- The previously timed-out non-runtime race lane passed in `11m1s` on attempt `4`.
+- Deploy job `86763987981` completed successfully.
+- Authenticated public `GET https://choir.news/api/texture/documents` returned `200`.
