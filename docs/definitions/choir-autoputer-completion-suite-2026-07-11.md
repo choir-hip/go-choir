@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 736e3416
+  journal_expected_parent_sha: 3f485404
   orchestrator_lock:
     holder: Main
     epoch: 25
     expires_at: 2026-07-13T10:24:25Z
-    expected_parent_sha: 736e3416
+    expected_parent_sha: 3f485404
     lock_transition_id: s3-lock-renewal-251
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -721,8 +721,8 @@ run_checkpoint_and_resumption_state:
     staging_ref: authenticated_public_texture_documents_200_at_2026-07-13T08:13:45Z
     product_proof_refs: [docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md#s3-i16-ci-deploy-and-acceptance]
     consensus_ref: /tmp/choir-s3-i16-final-consensus-20260713
-    open_findings: [S3_step3_runtime_APIHandler_and_HTTP_method_ownership_remains, apihandler_runtime_importer_wrapper_heuristic_delete_debt, runtime_candidate_intake_harness_registrar_delete_debt, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
-    adjudication_ref: S3_I16_PASS_next_step3_handler_boundary_mapping
+    open_findings: [S3_I17_candidate_intake_harness_deletion_dispatch_intent, S3_step3_runtime_APIHandler_and_HTTP_method_ownership_remains, apihandler_runtime_importer_wrapper_heuristic_delete_debt, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
+    adjudication_ref: S3_I16_PASS_S3_I17_dispatch_pending
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -2213,6 +2213,63 @@ run_checkpoint_and_resumption_state:
       last_reconciled_at: 2026-07-13T08:21:49Z
       reconciliation_result: landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_runtime_surface_decreased
       close_condition: route_authority_cutover_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
+    - slice_id: S3-I17-candidate-intake-harness-deletion
+      subgoal: S3
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 25
+      status: dispatch_intent
+      dispatch_nonce: s3-runtime-dissolution-i17-nonce-01
+      dispatch_ref: pending_S3I17Implementer
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md#exact-mutation-lock
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_return
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_S3I17Implementer_isolated
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: 3f485404
+      lock_release_ref: pending_S3_I17_landing
+      stage_started_at: 2026-07-13T08:35:12Z
+      transition_id: s3-i17-dispatch-intent-252
+      expected_parent_sha: 3f485404
+      stage_history:
+        - {status: dispatch_intent, transition_id: s3-i17-dispatch-intent-252, recorded_at: 2026-07-13T08:35:12Z, actor: Main, expected_parent_sha: 3f485404, precondition: S3_I16_landed_route_authority_externalized, postcondition: exact_dormant_candidate_intake_mutation_transport_deletion_slice_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-13T10:24:25Z
+      mutation_class: orange
+      protected_surfaces: []
+      exact_files_packages_routes_state_authorities: [internal/runtime/api_candidate_package_intake.go, internal/runtime/candidate_package_intake_test.go, direct_candidate_intake_tests, internal/apihandler/routes_test.go_if_exclusion_assertion_required, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [live_read_only_candidate_review_route_or_handlers, live_route_table, app_domain_behavior_semantics, promotion_or_candidate_state_authority, new_package, exported_test_helper, registrar, route_table, facade, HTTP_shim, interface, callback, alias, accessor, forwarder, wrapper, compatibility_path]
+      authority_edges_locked: [apihandler_live_46_slot_table_unchanged, runtime_candidate_domain_operations_preserved, dormant_mutation_transport_deleted, runtime_route_count_zero]
+      implementer_agent: pending_S3I17Implementer
+      verifier_agent: pending_independent_verifier
+      pre_mutation_sha: 3f485404
+      rollback_commit_or_ref: 3f485404
+      accepted_slice_dependency_refs: [S3-I16@3b10893c, /tmp/choir-s3-handler-boundary-consensus-20260713]
+      external_operation_id: not_applicable
+      effect_authority: canonical_git_ref
+      receipt_lookup: git_history_agent_job_record
+      expected_precondition: dormant_test_only_candidate_intake_mutation_registrar_and_eleven_receivers_remain
+      observed_postcondition: pending
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending
+      ci_run_ref: not_required_nonlive_test_harness_deletion
+      deploy_ref: not_required_nonlive_test_harness_deletion
+      deployed_sha: unchanged_3b10893c
+      acceptance_ref: pending
+      acceptance_contract: dormant_mutation_transport_zero_live_read_only_review_surface_and_domain_invariants_preserved
+      evidence_refs: [docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md, /tmp/choir-s3-handler-boundary-consensus-20260713, /tmp/choir-s3-handler-dependency-map.json]
+      open_findings: []
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-13T08:35:12Z
+      reconciliation_result: no_prior_matching_dispatch_found
+      close_condition: dormant_transport_deleted_domain_and_live_review_behavior_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
     - {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}
@@ -2248,8 +2305,8 @@ run_checkpoint_and_resumption_state:
     - Wire authority split and VM fate-sharing
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
-  highest_impact_remaining_uncertainty: The minimum acyclic boundary that moves runtime.APIHandler and its HTTP methods into the canonical apihandler owner while keeping runtime business behavior behind cohesive APIs rather than accessors, callbacks, interfaces, or dual handler types.
-  next_executable_probe: Map every APIHandler receiver file and private runtime dependency after S3-I16, then persist the smallest deletion-bearing handler-ownership prerequisite or prove the atomic whole-boundary minimum.
+  highest_impact_remaining_uncertainty: Whether dormant candidate-intake mutation transport can be deleted while preserving its domain invariants and the sole live read-only review surface without a replacement registrar or test shim.
+  next_executable_probe: Implement S3-I17 candidate-intake harness deletion under the canonical mutation lock.
   suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
     - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
@@ -2258,6 +2315,7 @@ run_checkpoint_and_resumption_state:
     - docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md
     - docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md
     - docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md
+    - docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md
   rollback_refs: []
   superseded_by: ''
   successor_goal_string: ''
