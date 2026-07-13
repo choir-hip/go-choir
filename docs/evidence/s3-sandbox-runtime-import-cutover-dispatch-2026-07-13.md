@@ -65,7 +65,7 @@ The implementer returned a clean named branch commit but switched the shared rep
 ## S3-I13 Formatter Repair Receipt
 
 - Formatted exactly the Go files changed by `6ee86dd1..08049400`; `gofmt -l` is empty afterward.
-- Focused tests passed for `internal/runtime`, `cmd/sandbox`, `internal/provider`, `internal/provideriface`, `internal/actorruntime`, and `internal/gatewayruntime`.
+- Focused tests passed for the runtime, sandbox command, provider, provider-interface, actor-runtime, and gateway-runtime packages.
 - Canonical inventory regenerated for formatting-only line removal: production LOC `44224 -> 44216`; every semantic authority count is unchanged. The runtime ratchet passes.
 
 ## S3-I13 Repair Verification Blocker
