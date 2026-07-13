@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: a8543769
+  journal_expected_parent_sha: 9cf1dc3f
   orchestrator_lock:
     holder: Main
     epoch: 21
     expires_at: 2026-07-13T05:21:50Z
-    expected_parent_sha: a8543769
+    expected_parent_sha: 9cf1dc3f
     lock_transition_id: s3-lock-renewal-214
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -706,7 +706,7 @@ run_checkpoint_and_resumption_state:
     S0: {status: complete, started_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, completed_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, evidence_refs: [docs/evidence/s0-runtime-ratchet-dispatch-2026-07-11.md, docs/evidence/choir-autoputer-s0-consensus-2026-07-11.md, agent://S0RatchetVerifier, artifact://461, https://github.com/choir-hip/go-choir/actions/runs/29176500535], rollback_refs: [008a7b88cf200119c0f762cc51cfba6be3007445], blockers: []}
     S1: {status: complete, started_at_sha: 2327fcef4716aef070eb4b819296f01b44267364, completed_at_sha: 9dff3690, evidence_refs: [docs/definitions/choir-run-deploy-unblock-2026-07-11.md, docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md, agent://S1DeployVerifier, https://github.com/choir-hip/go-choir/actions/runs/29179656372, /tmp/choir-s1-final-consensus-20260712, /tmp/choir-s1-post-repair-consensus-20260712], rollback_refs: [2327fcef4716aef070eb4b819296f01b44267364], blockers: []}
     S2: {status: complete, started_at_sha: 9dff3690, completed_at_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50, evidence_refs: [docs/definitions/choir-wire-store-conformance-2026-07-11.md, docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md, agent://S2LifecycleVerifier, agent://S2MigrationVerifier, /tmp/choir-s2-final-repair-consensus-20260712, https://github.com/choir-hip/go-choir/actions/runs/29188248479], rollback_refs: [9dff3690, 481fb8c8], blockers: []}
-    S3: {status: working, started_at_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50, completed_at_sha: '', evidence_refs: [docs/runtime-dissolution-inventory.yaml, docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md, docs/evidence/s3-runtime-dead-helper-dispatch-2026-07-12.md, docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md, docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md, docs/evidence/s3-toolloop-test-option-dispatch-2026-07-12.md], rollback_refs: [b7b1262e455a779ca00c8d968ef28b3fa6af9b50], blockers: []}
+    S3: {status: working, started_at_sha: b7b1262e455a779ca00c8d968ef28b3fa6af9b50, completed_at_sha: '', evidence_refs: [docs/runtime-dissolution-inventory.yaml, docs/evidence/s3-runtime-dissolution-dispatch-2026-07-12.md, docs/evidence/s3-step2-phase-gate-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md], rollback_refs: [b7b1262e455a779ca00c8d968ef28b3fa6af9b50], blockers: []}
     S4: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S3]}
     S5: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S4]}
     S6: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S5]}
@@ -716,13 +716,13 @@ run_checkpoint_and_resumption_state:
   active_phase_checkpoint:
     subgoal: S3
     status: working
-    deployed_sha: fe4a1bc480687963546c774ad6f81fa425d91ba8
-    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29199070620#attempt-2
-    staging_ref: activation_receipt_29199070620_sandbox_gateway_fe4a1bc4_at_2026-07-12T16:13:48Z
-    product_proof_refs: [docs/evidence/s3-runtime-declaration-only-dispatch-2026-07-12.md#s3-i4-final-verification-ci-deploy-and-acceptance]
-    consensus_ref: /tmp/choir-s3-i4-final-consensus-20260712
-    open_findings: [S3_I5_toolloop_test_option_dispatch_intent, ChannelPost_ChannelRead_caller_complete_slice_deferred, StartRun_caller_complete_slice_deferred]
-    adjudication_ref: S3_I4_PASS_S3_I5_pending
+    deployed_sha: 2c04d34660fc45db417d608f3e838345b0ad345c
+    ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29222195480#attempt-3
+    staging_ref: authenticated_agent_loops_200_at_2026-07-13T04:12:36Z
+    product_proof_refs: [docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md#s3-i13-final-repair-verification-and-ci]
+    consensus_ref: /tmp/choir-s3-i13-repaired-final-consensus-20260713
+    open_findings: [S3_I14_API_apihandler_boundary_mapping_pending]
+    adjudication_ref: S3_I13_PASS_S3_I14_pending
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -1956,7 +1956,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 21
-      status: consensus
+      status: landed
       dispatch_nonce: s3-runtime-dissolution-i13-nonce-01
       dispatch_ref: S3I13Implementer
       agent_session_ref: agent://S3I13Implementer
@@ -1971,10 +1971,10 @@ run_checkpoint_and_resumption_state:
       direct_shared_worktree_allowed: false
       direct_shared_worktree_justification: not_applicable
       lock_acquired_ref: 6ee86dd1
-      lock_release_ref: pending_S3_I13_landing
+      lock_release_ref: s3-i13-consensus-adjudicated-223
       stage_started_at: 2026-07-13T01:56:13Z
       transition_id: s3-i13-dispatch-intent-210
-      expected_parent_sha: a8543769
+      expected_parent_sha: 9cf1dc3f
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i13-dispatch-intent-210, recorded_at: 2026-07-13T01:56:13Z, actor: Main, expected_parent_sha: 6ee86dd1, precondition: S3_I12_landed_config_authority_extracted_step3_continues, postcondition: exact_sandbox_runtime_import_cutover_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i13-dispatched-211, recorded_at: 2026-07-13T01:57:59Z, actor: Main, expected_parent_sha: 9b8af38b, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_20, postcondition: S3I13Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
@@ -1988,6 +1988,7 @@ run_checkpoint_and_resumption_state:
         - {status: verifying, transition_id: s3-i13-citer-repair-220, recorded_at: 2026-07-13T03:46:01Z, actor: Main, expected_parent_sha: b7928f03, precondition: incidental_citer_blocker_documented, postcondition: detector_matching_receipt_path_reworded_ratchet_PASS_citers_241_followup_verification_authorized, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i13-repair-followup-pass-221, recorded_at: 2026-07-13T04:12:36Z, actor: S3I13RepairVerifierFollowup, expected_parent_sha: a8543769, precondition: citer_repair_independently_rechecked, postcondition: PASS_confidence_0_98_no_findings_final_consensus_ready, external_operation_id: not_applicable}
         - {status: accepted, transition_id: s3-i13-repair-ci-deploy-accepted-222, recorded_at: 2026-07-13T04:12:36Z, actor: Main, expected_parent_sha: a8543769, precondition: full_CI_attempt_3_and_deploy_complete, postcondition: repair_2c04d346_deployed_authenticated_product_smoke_200_final_consensus_pending, external_operation_id: github_actions_29222195480_attempt_3}
+        - {status: landed, transition_id: s3-i13-consensus-adjudicated-223, recorded_at: 2026-07-13T04:21:00Z, actor: Main, expected_parent_sha: 9cf1dc3f, precondition: three_substantive_PASS_no_findings_one_inconclusive_permission_stop, postcondition: S3_I13_closed_next_ordered_S3_step3_API_iteration_authorized, external_operation_id: agentic_consensus_choir_s3_i13_repaired_final_20260713}
       lock_expires_at: 2026-07-13T05:21:50Z
       mutation_class: orange
       protected_surfaces: []
@@ -2015,10 +2016,10 @@ run_checkpoint_and_resumption_state:
       acceptance_contract: cmd_sandbox_runtime_import_deleted_stub_and_bootstrap_symbols_moved_to_canonical_owners_behavior_preserved
       evidence_refs: [docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, agent://S3I13Implementer, agent://S3I13Verifier, agent://S3I13RepairVerifier, agent://S3I13RepairVerifierFollowup, https://github.com/choir-hip/go-choir/actions/runs/29222195480#attempt-3]
       open_findings: []
-      landed_commit_sha: pending
-      adjudication: all_known_blockers_repaired_independent_followup_PASS_deployed_accepted_final_consensus_pending
-      last_reconciled_at: 2026-07-13T04:12:36Z
-      reconciliation_result: repair_followup_PASS_CI_attempt3_PASS_deployed_2c04d346_product_accepted_consensus_pending
+      landed_commit_sha: 2c04d346
+      adjudication: three_PASS_no_blockers_one_inconclusive_permission_stop_S3_I13_closed_next_step3_API_iteration_authorized
+      last_reconciled_at: 2026-07-13T04:21:00Z
+      reconciliation_result: S3_I13_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
       close_condition: cutover_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
@@ -2056,12 +2057,13 @@ run_checkpoint_and_resumption_state:
     - Wire authority split and VM fate-sharing
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
-  highest_impact_remaining_uncertainty: The smallest atomic S3 step-3 API/config/bootstrap ownership cutover that deletes the apihandler wrapper and direct cmd/sandbox runtime import without crossing into app/domain step 4.
-  next_executable_probe: Map current API/config/bootstrap callers and owners, then persist and dispatch the smallest step-3 cutover slice with no wrapper, alias, or dual route path.
+  highest_impact_remaining_uncertainty: The smallest atomic S3 step-3 API ownership cutover that deletes the apihandler wrapper without crossing into app/domain step 4.
+  next_executable_probe: Map current API/apihandler callers and owners, then persist and dispatch the smallest step-3 cutover slice with no wrapper, alias, or dual route path.
   suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
     - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
     - docs/evidence/s3-step2-phase-gate-2026-07-13.md
+    - docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md
   rollback_refs: []
   superseded_by: ''
   successor_goal_string: ''
