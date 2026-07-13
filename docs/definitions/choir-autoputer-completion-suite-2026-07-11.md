@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: e20a7e01
+  journal_expected_parent_sha: edd2d551
   orchestrator_lock:
     holder: Main
     epoch: 26
     expires_at: 2026-07-13T13:02:17Z
-    expected_parent_sha: e20a7e01
+    expected_parent_sha: edd2d551
     lock_transition_id: s3-lock-renewal-255
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -2277,12 +2277,12 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 26
-      status: dispatch_intent
+      status: dispatched
       dispatch_nonce: s3-runtime-dissolution-i18-nonce-01
-      dispatch_ref: pending_S3I18Implementer
-      agent_session_ref: pending_agent_dispatch
+      dispatch_ref: S3I18Implementer
+      agent_session_ref: agent://S3I18Implementer
       dispatch_prompt_ref: docs/evidence/s3-api-handler-ownership-dispatch-2026-07-13.md#exact-mutation-lock
-      implementer_job_ref: pending_agent_dispatch
+      implementer_job_ref: S3I18Implementer
       implementer_output_ref: pending_agent_return
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
@@ -2295,9 +2295,10 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I18_landing
       stage_started_at: 2026-07-13T09:05:13Z
       transition_id: s3-i18-dispatch-intent-257
-      expected_parent_sha: e20a7e01
+      expected_parent_sha: edd2d551
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i18-dispatch-intent-257, recorded_at: 2026-07-13T09:05:13Z, actor: Main, expected_parent_sha: e20a7e01, precondition: S3_I17_rejected_with_evidence_atomic_boundary_authorized, postcondition: exact_atomic_128_receiver_APIHandler_ownership_cutover_canonical, external_operation_id: not_applicable}
+        - {status: dispatched, transition_id: s3-i18-dispatched-258, recorded_at: 2026-07-13T09:07:44Z, actor: Main, expected_parent_sha: edd2d551, precondition: canonical_red_ceremony_exact_mutation_lock_and_live_epoch_26, postcondition: S3I18Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T13:02:17Z
       mutation_class: red
       protected_surfaces: [authentication_owner_scope, internal_caller_authorization, Texture_canonical_writes_revisions_merges_proposals, run_lifecycle_cancel_acceptance_trajectory_evidence, candidate_promotion_adoption_switch_rollback_rollforward, model_provider_policy, browser_sessions, WebSocket_event_delivery, persistent_store, runtime_health, product_API_tool]
@@ -2307,7 +2308,7 @@ run_checkpoint_and_resumption_state:
       exact_files_packages_routes_state_authorities: [internal/apihandler, internal/runtime/api.go, internal/runtime/api_app_promotion.go, internal/runtime/api_candidate_package_intake.go, internal/runtime/api_costs.go, internal/runtime/api_texture_prompt_eval.go, internal/runtime/api_trajectory.go, internal/runtime/browser.go, internal/runtime/content.go, internal/runtime/desktop.go, internal/runtime/live_ws.go, internal/runtime/media_state.go, internal/runtime/podcast.go, internal/runtime/prompts.go, internal/runtime/runtime_refresh.go, internal/runtime/texture.go, internal/runtime/texture_agent_revision.go, internal/runtime/texture_import.go, internal/runtime/texture_lineage.go, internal/runtime/texture_merge.go, internal/runtime/texture_proposals.go, internal/sandbox/run.go, direct_tests, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [route_path_order_method_status_body_schema_auth_change, domain_state_semantics_change, candidate_promotion_provider_store_actor_lifecycle_Texture_authority_move, new_package, alias, wrapper, interface, callback_table, generic_facade, accessor, forwarder, dual_handler, dual_route, duplicate_registrar, compatibility_path, unrelated_formatting]
       authority_edges_locked: [apihandler_sole_handler_type_constructor_and_route_table, runtime_zero_APIHandler_declarations_receivers_aliases, sandbox_one_handler_construction, same_canonical_server_product_tool, runtime_business_operations_unchanged]
-      implementer_agent: pending_S3I18Implementer
+      implementer_agent: S3I18Implementer
       verifier_agent: pending_distinct_red_verifier
       pre_mutation_sha: e20a7e01
       rollback_commit_or_ref: e20a7e01
@@ -2330,8 +2331,8 @@ run_checkpoint_and_resumption_state:
       open_findings: [private_runtime_dependencies_require_same_landing_cohesive_resolution]
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-13T09:05:13Z
-      reconciliation_result: no_prior_matching_dispatch_found
+      last_reconciled_at: 2026-07-13T09:07:44Z
+      reconciliation_result: one_matching_planned_agent_dispatch_S3I18Implementer
       close_condition: atomic_handler_cutover_landed_deployed_controlled_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
