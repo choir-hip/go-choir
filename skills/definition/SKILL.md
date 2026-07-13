@@ -150,21 +150,19 @@ non-definition, observables, execution effects, settlement authority, and
 invalidation triggers. Use the authoring schema when creating or changing node
 structure.
 
-## Determined State
+## Determined-State Membership
 
-Determined state is the current semantic authority snapshot.
+Determined state is not a second snapshot. It is the admissibility rule for
+claims recorded once in the definition graph or canonical state capsule. A
+claim is determined only when it is user-stated authority, an observed fact, a
+settled definition with no live contradiction, or an owner-stated operational
+preference. Plausible, stylish, repeated, or model-asserted claims are not
+determined.
 
-A claim belongs to determined state only if it is:
-
-1. **user-stated authority**;
-2. **observed fact** from tools, files, commands, traces, artifacts, or systems;
-3. **settled definition** with no live contradiction;
-4. **operational preference** explicitly stated by the owner.
-
-A claim does not belong if it is merely plausible, stylish, repeated, or asserted
-by a model.
-
-Keep settled, contested, and open claims explicit using the authoring schema.
+Current settled claims live only in `state_capsule.determined_claims`.
+Contested and open meanings live only in graph nodes referenced by
+`active_frontier` or `open_findings`; do not restate them in another current
+summary.
 
 ## Canonical State Capsule
 

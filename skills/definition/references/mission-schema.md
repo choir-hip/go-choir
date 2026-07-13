@@ -8,7 +8,6 @@ the compact rules in `SKILL.md` and need not load this file.
 
 - Recommended document sections
 - Definition node schema
-- Determined state schema
 - Canonical state capsule schema
 - Conjecture schema
 - Evidence record schema
@@ -87,22 +86,6 @@ settlement:
   invalidation_triggers: []
 ```
 
-## Determined State Schema
-
-```yaml
-determined_state:
-  settled:
-    - claim: <authoritative statement>
-      source: user-stated | observed | settled-definition | operational-preference
-      execution_effect: <what this changes>
-  contested:
-    - node: <definition id>
-      issue: <why not settled>
-      next_resolution_step: <critical-process step>
-  open:
-    - node: <definition id>
-      missing: <what must be defined>
-```
 
 ## Canonical State Capsule Schema
 
@@ -122,6 +105,10 @@ state_capsule:
       evidence_refs: []
       rollback_refs: []
   artifact_identity: {source: <ref>, build: <ref>, deploy: <ref>}
+  determined_claims:
+    - claim: <authoritative statement>
+      source: user-stated | observed | settled-definition | operational-preference
+      execution_effect: <what this changes>
   locks: []
   open_findings: []
   belief_changes: []
