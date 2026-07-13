@@ -36,3 +36,16 @@ Preserve every environment name, default value, normalization rule, filesystem d
 - All mechanically located production, default-test, integration-tag, comprehensive-tag, actorruntime, provider/gatewayruntime, and sandbox callers use provideriface directly; no runtime alias, forwarder, duplicate helper/default, or fallback loader remains.
 - Focused provideriface config, sandbox bootstrap-value, runtime activation/run-memory, actorruntime, and integration-tag runtime checks pass. Comprehensive-tag compilation reproduces only the identical pre-existing `prompts_test.go`/`texture_test.go` failures.
 - Ratchet passed after canonical regeneration: Go files `147 -> 146`, production files `77 -> 76`, production LOC `44680 -> 44338`, test LOC `50266 -> 50172`, exports `1061 -> 1031`, caller edges `549 -> 520`, compatibility markers `13 -> 12`; every other gated authority count is flat.
+
+## S3-I12 Independent Verification
+
+- Independent `S3I12Verifier` returned `PASS` at confidence `0.98` with no findings.
+- Verified exact config declaration/caller relocation, absence of runtime aliases/forwarders/fallbacks/duplicates, preserved defaults/normalization/test behavior, focused compilation/tests, ratchet counts, and no out-of-scope semantic change.
+- Full CI, comprehensive-tag parent drift disposition, deployment, and staging acceptance remained external gates at verifier return.
+
+## S3-I12 CI, Deploy, and Acceptance
+
+- GitHub Actions run `29216971462` attempt `2` passed every default, integration, race, ratchet, SBOM, and deploy gate for head `5958b290cf76b8340e454030e00e7f40436bd0be`.
+- Deploy job `86716121905` completed successfully.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
+- Comprehensive-tag parent drift remains the documented pre-existing `prompts_test.go`/`texture_test.go` failure set; default and integration-tag CI paths are green.
