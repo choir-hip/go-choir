@@ -12,21 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
-
-const DefaultFilesRoot = "/tmp/go-choir-files"
-
-// ResolveFilesRoot returns the effective files root. It prefers the explicit
-// argument, then SANDBOX_FILES_ROOT, then the local-dev default.
-func ResolveFilesRoot(rootDir string) string {
-	if rootDir == "" {
-		rootDir = os.Getenv("SANDBOX_FILES_ROOT")
-	}
-	if rootDir == "" {
-		rootDir = DefaultFilesRoot
-	}
-	return rootDir
-}
 
 // requireAuth checks that the X-Authenticated-User header exists, providing
 // defense-in-depth auth gating at the sandbox level. The proxy validates the
@@ -82,7 +70,7 @@ func NewFilesHandler(rootDir string) *FilesHandler {
 // NewFilesHandlerWithObserver creates a file browser handler and emits
 // mutation events to observer after successful writes.
 func NewFilesHandlerWithObserver(rootDir string, observer FileChangeObserver) *FilesHandler {
-	rootDir = ResolveFilesRoot(rootDir)
+	rootDir = provideriface.ResolveFilesRoot(rootDir)
 	// Ensure root directory exists.
 	if err := os.MkdirAll(rootDir, 0o755); err != nil {
 		log.Printf("files: could not create root directory %s: %v", rootDir, err)

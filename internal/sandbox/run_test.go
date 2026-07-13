@@ -1,15 +1,18 @@
-package main
+package sandbox
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/sandbox"
 )
 
 func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
-	cfg := sandbox.Config{
+	cfg := Config{
 		SandboxID: "vm-test",
 		StorePath: "/tmp/runtime.db",
 	}
@@ -45,8 +48,28 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 }
 
 func TestBuildRuntimeConfigDerivesCanonicalModelPolicyPath(t *testing.T) {
-	got := buildRuntimeConfig(sandbox.Config{SandboxID: "vm-test"}, provideriface.Config{}, "/files")
+	got := buildRuntimeConfig(Config{SandboxID: "vm-test"}, provideriface.Config{}, "/files")
 	if got.ModelPolicyPath != "/files/System/model-policy.toml" {
 		t.Fatalf("ModelPolicyPath = %q, want canonical files path", got.ModelPolicyPath)
+	}
+}
+
+func TestRunZotSessionUsesProcessConfiguration(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ZOT_SESSION_ID", "entry-test")
+	t.Setenv("ZOT_ROOT_DIR", root)
+	t.Setenv("ZOT_USER_ID", "entry@example.com")
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if code := RunZotSession(strings.NewReader("quit\n"), &stdout, &stderr); code != 0 {
+		t.Fatalf("RunZotSession code = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "zot repair session entry-test") {
+		t.Fatalf("stdout = %q, want configured session ID", stdout.String())
+	}
+	logPath := filepath.Join(root, ".choir", "zot", "sessions", "entry-test", "session.jsonl")
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("session log: %v", err)
 	}
 }

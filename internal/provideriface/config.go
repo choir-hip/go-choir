@@ -13,6 +13,9 @@ const (
 	// workspace for runtime state. Retired SQLite content is never imported.
 	DefaultStorePath = "/tmp/go-choir-m3/runtime.db"
 
+	// DefaultFilesRoot is the local-development root for sandbox-owned files.
+	DefaultFilesRoot = "/tmp/go-choir-files"
+
 	// DefaultProviderTimeout is how long the stub provider simulates work.
 	DefaultProviderTimeout = 2 * time.Second
 
@@ -91,6 +94,18 @@ const (
 	// it is a tunable baseline, not a universal constant.
 	DefaultQdrantDedupThreshold = 0.7862
 )
+
+// ResolveFilesRoot returns the effective files root. It prefers the explicit
+// argument, then SANDBOX_FILES_ROOT, then the local-development default.
+func ResolveFilesRoot(rootDir string) string {
+	if rootDir == "" {
+		rootDir = os.Getenv("SANDBOX_FILES_ROOT")
+	}
+	if rootDir == "" {
+		rootDir = DefaultFilesRoot
+	}
+	return rootDir
+}
 
 // DefaultModelPolicyPath derives the computer-owned model policy path.
 func DefaultModelPolicyPath(filesRoot string) string {

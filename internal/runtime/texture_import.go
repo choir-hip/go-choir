@@ -20,7 +20,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/sandbox"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -448,7 +448,7 @@ func readTextureSourceFileBytes(sourcePath string) ([]byte, bool) {
 	if sourcePath == "" || isTextureShortcutPath(sourcePath) {
 		return nil, false
 	}
-	filesRoot := sandbox.ResolveFilesRoot("")
+	filesRoot := provideriface.ResolveFilesRoot("")
 	absPath := filepath.Join(filesRoot, filepath.FromSlash(sourcePath))
 	cleanRoot, err := filepath.Abs(filesRoot)
 	if err != nil {
@@ -782,7 +782,7 @@ func ensureTextureManifest(ctx context.Context, st *store.Store, ownerID string,
 		return "", fmt.Errorf("marshal texture shortcut: %w", err)
 	}
 
-	filesRoot := sandbox.ResolveFilesRoot("")
+	filesRoot := provideriface.ResolveFilesRoot("")
 	absPath := filepath.Join(filesRoot, filepath.FromSlash(sourcePath))
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return "", fmt.Errorf("create manifest directory: %w", err)
@@ -834,7 +834,7 @@ func allocateTextureManifestPath(ctx context.Context, st *store.Store, ownerID s
 		fmt.Sprintf("%s%s", stem, textureShortcutExt),
 		fmt.Sprintf("%s-%s%s", stem, suffix, textureShortcutExt),
 	}
-	filesRoot := sandbox.ResolveFilesRoot("")
+	filesRoot := provideriface.ResolveFilesRoot("")
 	for _, candidate := range candidates {
 		docID, err := st.GetDocumentAlias(ctx, ownerID, candidate)
 		if err == nil {

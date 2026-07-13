@@ -151,3 +151,18 @@ func TestDefaultModelPolicyPath(t *testing.T) {
 		t.Fatalf("model policy path = %q, want %q", got, want)
 	}
 }
+
+func TestResolveFilesRootPrecedence(t *testing.T) {
+	t.Setenv("SANDBOX_FILES_ROOT", "/environment/files")
+	if got := ResolveFilesRoot("/explicit/files"); got != "/explicit/files" {
+		t.Fatalf("explicit files root = %q, want %q", got, "/explicit/files")
+	}
+	if got := ResolveFilesRoot(""); got != "/environment/files" {
+		t.Fatalf("environment files root = %q, want %q", got, "/environment/files")
+	}
+
+	t.Setenv("SANDBOX_FILES_ROOT", "")
+	if got := ResolveFilesRoot(""); got != DefaultFilesRoot {
+		t.Fatalf("default files root = %q, want %q", got, DefaultFilesRoot)
+	}
+}

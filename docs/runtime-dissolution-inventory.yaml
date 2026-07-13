@@ -6,26 +6,26 @@ counts:
     go_files: 144
     production_files: 75
     test_files: 69
-    production_loc: 44032
-    test_loc: 50142
+    production_loc: 44024
+    test_loc: 50141
     exports: 1012
-    export_caller_edges: 368
+    export_caller_edges: 365
     initial_unused_export_debt: 16
     routes: 47
     tools: 48
     production_importers: 3
-    wrappers: 5
-    compatibility_markers: 10
+    wrappers: 3
+    compatibility_markers: 8
     store_calls: 443
     interface_candidates: 4
-    citers: 244
+    citers: 245
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
       loc: 6785
     - id: internal/runtime/api.go [production]
       disposition: api
-      loc: 1470
+      loc: 1462
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
       loc: 858
@@ -298,7 +298,7 @@ files:
       loc: 65
     - id: internal/runtime/texture_live_llm_workflow_test.go [test]
       disposition: texture
-      loc: 502
+      loc: 501
     - id: internal/runtime/texture_media_sources.go [production]
       disposition: texture
       loc: 890
@@ -598,15 +598,14 @@ exports:
     - id: internal/runtime/api.go:func:NewAPIHandler
       disposition: api
       production_callers:
-        - internal/apihandler/api.go
+        - internal/sandbox/run.go
     - id: internal/runtime/api.go:func:RegisterRoutes
       disposition: api
       production_callers:
-        - internal/apihandler/api.go
+        - internal/sandbox/run.go
     - id: internal/runtime/api.go:func:RegisterTextureRoutes
       disposition: api
       production_callers:
-        - internal/apihandler/api.go
         - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleCancel
       disposition: api
@@ -683,7 +682,6 @@ exports:
     - id: internal/runtime/api.go:type:APIHandler
       disposition: api
       production_callers:
-        - internal/apihandler/api.go
         - internal/runtime/api.go
         - internal/runtime/api_app_promotion.go
         - internal/runtime/api_candidate_package_intake.go
@@ -1467,8 +1465,8 @@ exports:
     - id: internal/runtime/product_events.go:method(*Runtime):EmitProductEvent
       disposition: core
       production_callers:
-        - cmd/sandbox/main.go
         - internal/runtime/product_events.go
+        - internal/sandbox/run.go
     - id: internal/runtime/prompt_bar_unit_test.go:func:TestConductorTextureRouteRecordsExplicitDecisionFromStoredPrompt
       disposition: model
     - id: internal/runtime/prompt_bar_unit_test.go:func:TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture
@@ -1750,7 +1748,6 @@ exports:
       production_callers:
         - internal/actorruntime/adapter.go
         - internal/actorruntime/handler.go
-        - internal/apihandler/api.go
         - internal/runtime/api.go
         - internal/runtime/api_app_promotion.go
         - internal/runtime/app_promotion.go
@@ -2620,13 +2617,13 @@ exports:
     - id: internal/runtime/tool_profiles.go:method(*Runtime):InstallDefaultAgentTools
       disposition: tools
       production_callers:
-        - cmd/sandbox/main.go
+        - internal/sandbox/run.go
     - id: internal/runtime/tool_profiles.go:method(*Runtime):ToolRegistryForProfile
       disposition: tools
       production_callers:
-        - cmd/sandbox/main.go
         - internal/runtime/prompts.go
         - internal/runtime/texture.go
+        - internal/sandbox/run.go
     - id: internal/runtime/tool_profiles.go:type:AgentRoleSpec
       disposition: tools
       production_callers:
@@ -3291,7 +3288,7 @@ production_importers:
       disposition: delete
     - id: internal/actorruntime/handler.go
       disposition: delete
-    - id: internal/apihandler/api.go
+    - id: internal/sandbox/run.go
       disposition: delete
 wrappers:
     - id: internal/actorruntime/adapter.go:field:runtime.Runtime
@@ -3300,15 +3297,7 @@ wrappers:
       disposition: delete
     - id: internal/actorruntime/handler.go:field:runtime.Runtime#2
       disposition: delete
-    - id: internal/apihandler/api.go:field:runtime.APIHandler
-      disposition: delete
-    - id: internal/apihandler/api.go:field:runtime.Runtime
-      disposition: delete
 compatibility_markers:
-    - id: 'internal/runtime/api.go:1243:Deprecated: use apihandler.RegisterRoutes from internal/apihandler. This'
-      disposition: delete
-    - id: 'internal/runtime/api.go:288:Deprecated: use apihandler.NewAPIHandler from internal/apihandler. This'
-      disposition: delete
     - id: internal/runtime/app_promotion.go:462:Legacy records without the captured base skip the check.
       disposition: delete
     - id: internal/runtime/app_promotion.go:944:normalizeRouteProfile converts a legacy "route:computerID" RouteProfile to
@@ -4420,6 +4409,8 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/runtime/provider.go, internal/runtime/model_policy.go, internal/provideriface, internal/agentpro… [sha256:d4ab90f5639a5a656867a5073a5c92a3d07a12ab98749f0b293825b880999f1b]'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/sandbox/run.go, internal/sandbox/run_test.go, internal/sandbox/files.go, internal/apihandler/api… [sha256:dc92641b04b6082d6483abd50c11af2d3442e9ab9a3e6ab3b399328a6fb6ed35]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sourcecycled, internal/cycle/web_capture_graph.go, internal/proxy/platform_objectgraph.go, internal/platform/objectgraph_handlers.go, internal/runti… [sha256:2549ae29a8205c9d40642e75fdb52d0a57ffd8ba620d7d73bc89ef3463077988]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/platform, internal/proxy, internal/runtime/universal_wire.go, internal/runtime/wire_publication.go, /api/universal-wire/stories, docs/runtime-dissolution-inventory.yaml]'
@@ -4448,7 +4439,7 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools.go, internal/runtime/tools_test.go, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools_product_api.go, internal/runtime/tools_product_api_test.go, internal/runtime/tool_profiles.go, internal/apihandler/product_api_to… [sha256:9b24fd466aee8ada58fbfaa7f869ec3bc3283a08b497209f005b64fa9ee90421]'
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/tools_product_api.go, internal/runtime/tools_product_api_test.go, internal/runtime/tool_profiles.go, internal/runtime/agent_tools_test.… [sha256:123ced3101d7d7e0f688fb6fa1993133a44c312cf21fed180d05ece2b3fb277a]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:forbidden_targets: [internal/runtime/**, runtime_production_callers, route_registrations, tool_registrations, run_lifecycle_authority, Wire_authority, promotion_authority, suite_and_registry_docs, CI, deployment]'
       disposition: block
@@ -4638,6 +4629,8 @@ citers:
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-test-helper-dispatch-2026-07-12.md:Allowed production file: `internal/runtime/runtime.go`, deleting exactly the three in-scope wrappers and attached comments. `(*Runtime).StartRun` is forbidden in this iteration.'
       disposition: historical_evidence
+    - id: docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md:- Migrate `internal/runtime/texture_live_llm_workflow_test.go` from the deleted wrapper to its package-local runtime handler constructor.
+      disposition: historical_evidence
     - id: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md:- `cmd/sandbox` has no direct `internal/runtime` import or runtime-qualified symbol;
       disposition: historical_evidence
     - id: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md:Remove the direct `internal/runtime` import from `cmd/sandbox/main.go` and its tests. Replace runtime profile and registry compatibility symbols with `agentprofile` and `toolregistry`. Move `DefaultMo… [sha256:1196623c6a4f0ccaa899e02b448a142b0bc6278480affd74f89d307d8e5375de]
@@ -4687,8 +4680,6 @@ citers:
     - id: internal/actorruntime/adapter.go:// (internal/runtime).
       disposition: block
     - id: internal/agentprofile/agentprofile.go:// the runtime. These constants were extracted from internal/runtime so that
-      disposition: block
-    - id: internal/apihandler/api.go:// internal/runtime package. The types in this package wrap the runtime
       disposition: block
     - id: internal/provideriface/provider.go:// concurrency behavior. Extracted from internal/runtime so the actorruntime
       disposition: block

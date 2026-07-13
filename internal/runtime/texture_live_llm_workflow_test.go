@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -96,7 +95,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	defer cancel()
 	rt.Start(ctx)
 	t.Cleanup(func() { rt.Stop() })
-	h := apihandler.NewAPIHandler(rt)
+	h := choirruntime.NewAPIHandler(rt)
 
 	conductorResp := postLiveJSON(t, h.HandlePromptBar, http.MethodPost, "/api/prompt-bar", map[string]any{
 		"text": "Research cellular automata as a toy model for biological evolution, then produce a concise working document that can later mention an artifact and verification result.",
