@@ -165,7 +165,8 @@ func main() {
 	// RUNTIME_DISABLE_TOOLS=1 to opt out (for stub-only tests where no tools
 	// should run). RUNTIME_ENABLE_TOOLS is still honored for back-compat but
 	// is no longer required.
-	if os.Getenv("RUNTIME_DISABLE_TOOLS") == "" {
+	toolsEnabled := os.Getenv("RUNTIME_DISABLE_TOOLS") == ""
+	if toolsEnabled {
 		toolCWD := os.Getenv("RUNTIME_TOOL_CWD")
 		if strings.TrimSpace(toolCWD) == "" {
 			toolCWD = filesRoot
@@ -173,16 +174,6 @@ func main() {
 		if err := rt.Runtime.InstallDefaultAgentTools(toolCWD); err != nil {
 			log.Fatalf("sandbox: install default agent tools: %v", err)
 		}
-		superTools := 0
-		if registry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super); registry != nil {
-			superTools = registry.Size()
-		}
-		log.Printf("sandbox: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
-			superTools,
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Researcher)),
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
-		)
 	} else {
 		log.Printf("sandbox: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
 	}
@@ -190,6 +181,18 @@ func main() {
 	// Register runtime API routes (overrides default /health).
 	apiHandler := apihandler.NewAPIHandler(rt.Runtime)
 	apihandler.RegisterRoutes(s, apiHandler)
+	if toolsEnabled {
+		superRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super)
+		if err := apihandler.RegisterProductAPIRequestTool(s, superRegistry); err != nil {
+			log.Fatalf("sandbox: register product API tool: %v", err)
+		}
+		log.Printf("sandbox: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
+			superRegistry.Size(),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Researcher)),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
+		)
+	}
 
 	// Readiness endpoint: probes Qdrant and Ollama, the two external
 	// dependencies of the semantic-dedup path. Both degrade gracefully via

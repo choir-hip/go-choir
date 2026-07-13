@@ -553,9 +553,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterCoagentUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
-	if err := superRegistry.Register(newProductAPIRequestTool(rt)); err != nil {
-		return err
-	}
 	if err := RegisterShipperTools(superRegistry, rt, cwd); err != nil {
 		return err
 	}

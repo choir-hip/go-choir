@@ -1,4 +1,4 @@
-package runtime
+package apihandler
 
 import (
 	"bytes"
@@ -16,18 +16,39 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
-const productAPIToolMaxBodyBytes = 1 << 20
+const (
+	productAPIToolName         = "product_api_request"
+	productAPIToolMaxBodyBytes = 1 << 20
+)
 
-func newProductAPIRequestTool(rt *Runtime) Tool {
+// RegisterProductAPIRequestTool registers the foreground Super product API
+// tool against the canonical server route table.
+func RegisterProductAPIRequestTool(s *server.Server, registry *toolregistry.ToolRegistry) error {
+	if s == nil {
+		return fmt.Errorf("register product_api_request: nil server")
+	}
+	if registry == nil {
+		return fmt.Errorf("register product_api_request: nil registry")
+	}
+	if _, exists := registry.Lookup(productAPIToolName); exists {
+		return fmt.Errorf("register product_api_request: tool %q already registered", productAPIToolName)
+	}
+	if err := registry.Register(newProductAPIRequestTool(s)); err != nil {
+		return fmt.Errorf("register product_api_request: %w", err)
+	}
+	return nil
+}
+
+func newProductAPIRequestTool(s *server.Server) toolregistry.Tool {
 	type args struct {
 		Method string          `json:"method"`
 		Path   string          `json:"path"`
 		Body   json.RawMessage `json:"body,omitempty"`
 	}
-	return Tool{
-		Name:        "product_api_request",
+	return toolregistry.Tool{
+		Name:        productAPIToolName,
 		Description: "Call an allowed authenticated product API route in the current runtime using the run owner as the authenticated user. This is for foreground super product-path orchestration; it refuses internal, test, agent, prompt-config, and raw event mutation routes.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"method": map[string]any{"type": "string", "enum": []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}},
 			"path":   map[string]any{"type": "string", "description": "Absolute API path, optionally with query string, such as /api/universal-wire/stories."},
 			"body":   map[string]any{"type": "object", "description": "Optional JSON body for POST/PUT requests."},
@@ -37,13 +58,11 @@ func newProductAPIRequestTool(rt *Runtime) Tool {
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode product_api_request args: %w", err)
 			}
-			if rt == nil {
-				return "", fmt.Errorf("product_api_request missing runtime")
-			}
-			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != agentprofile.Super {
+			execution := toolregistry.ExecutionContextFrom(ctx)
+			if execution.Profile != agentprofile.Super {
 				return "", fmt.Errorf("product_api_request is only available to foreground super")
 			}
-			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
+			ownerID := execution.OwnerID
 			if ownerID == "" {
 				return "", fmt.Errorf("product_api_request missing owner context")
 			}
@@ -65,20 +84,17 @@ func newProductAPIRequestTool(rt *Runtime) Tool {
 				}
 				body = bytes.NewReader(in.Body)
 			}
-			req := httptest.NewRequest(method, path, body)
-			req = req.WithContext(ctx)
+			req := httptest.NewRequest(method, path, body).WithContext(ctx)
 			req.Header.Set("X-Authenticated-User", ownerID)
-			if ownerEmail := toolregistry.ExecutionContextFrom(ctx).OwnerEmail; ownerEmail != "" {
-				req.Header.Set("X-Authenticated-Email", ownerEmail)
+			if execution.OwnerEmail != "" {
+				req.Header.Set("X-Authenticated-Email", execution.OwnerEmail)
 			}
 			if body != nil {
 				req.Header.Set("Content-Type", "application/json")
 			}
 
-			mux := server.NewServer("runtime-product-api-tool", "0")
-			RegisterRoutes(mux, NewAPIHandler(rt))
 			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, req)
+			s.ServeHTTP(w, req)
 			resp := w.Result()
 			defer func() { _ = resp.Body.Close() }()
 			respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, productAPIToolMaxBodyBytes+1))
@@ -104,7 +120,11 @@ func newProductAPIRequestTool(rt *Runtime) Tool {
 			if resp.StatusCode >= 400 {
 				result["error"] = "product API returned non-2xx status"
 			}
-			return toolResultJSON(result)
+			out, err := json.Marshal(result)
+			if err != nil {
+				return "", err
+			}
+			return string(out), nil
 		},
 	}
 }
