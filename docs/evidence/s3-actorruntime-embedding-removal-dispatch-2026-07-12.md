@@ -55,3 +55,9 @@ Smallest repair: retain one explicit named `Runtime *runtime.Runtime` field and 
 - Attempt `2` had timed out in the non-runtime race lane while tests were still passing/running; failed-job retry completed successfully without a source change.
 - Deploy job `86708347659` completed successfully.
 - Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
+
+## S3-I11 Final Consensus
+
+- Gemini, GPT-5.5, and OpenCode returned `PASS` with no blocking source findings and confidence `0.98-1.0`; all authorized only the next S3 step-2 extraction iteration.
+- Codex found no source blocker but labeled the pre-adjudication ledger's intentionally pending consensus/landed fields `BLOCKING`. That procedural finding is satisfied by this adjudication transition itself; treating “not yet adjudicated” as a source blocker would make the required consensus gate circular.
+- Adjudication: `PASS`. Close S3-I11. The explicit `Adapter.Runtime` and handler runtime edge remain declared step-2 debt; step 2, S3, and step 3 remain incomplete/unauthorized.
