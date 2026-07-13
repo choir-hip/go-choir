@@ -78,6 +78,14 @@ The recommended route is option 1. It preserves the intended destination and cle
 
 Because this changes a red protected-surface boundary and the mission's ordered graph, the orchestrator cannot self-ratify it. S3-I18 is `blocked_incomplete` pending owner authority. Per dead-end escalation, no fourth incremental APIHandler patch is authorized.
 
+## Post-Blocker Consensus
+
+Four independent reviewers returned unanimous support for the structural stop, the `blocked_incomplete` state, the need for owner authority, the absence of an unwired complete replacement, and route 1 as the preferred replacement. Confidence ranged from 0.91 to 1.0. Two reviewers ranked step-4 reordering second and two ranked the broadened atomic landing second; that dissent does not affect the unanimous first choice.
+
+The smallest proposed authority object is `S3-I18R finite runtime business-operation boundary and two-landing cutover rule`: authorize one bounded red prerequisite landing containing only a closed set of cohesive typed runtime operations with production callers and behavior tests, followed by one atomic transport/type/test ownership cutover. Require a complete disposition table using only `move_to_apihandler_http_only`, `keep_private_runtime_domain`, `delete_as_dead`, or `replace_with_cohesive_runtime_operation`. Raw exports, accessors, wrappers, callbacks, aliases, forwarders, duplicate handlers, and indefinite dual paths remain forbidden.
+
+Consensus artifact: `/tmp/choir-s3-i18-blocker-consensus-20260713`.
+
 ## Conjecture And Heresy Delta
 
 - Conjecture delta: `S3_step3_transport_ownership_can_move_mechanically_before_business_operation_extraction` is falsified.
