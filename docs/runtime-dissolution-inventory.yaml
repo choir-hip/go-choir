@@ -3,22 +3,22 @@ canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 147
-    production_files: 77
+    go_files: 146
+    production_files: 76
     test_files: 70
-    production_loc: 44680
-    test_loc: 50266
-    exports: 1061
-    export_caller_edges: 549
+    production_loc: 44338
+    test_loc: 50172
+    exports: 1031
+    export_caller_edges: 520
     initial_unused_export_debt: 19
     routes: 47
     tools: 49
     production_importers: 4
     wrappers: 5
-    compatibility_markers: 13
+    compatibility_markers: 12
     store_calls: 443
     interface_candidates: 4
-    citers: 232
+    citers: 236
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -43,7 +43,7 @@ files:
       loc: 20
     - id: internal/runtime/api_test.go [test]
       disposition: api
-      loc: 3183
+      loc: 3184
     - id: internal/runtime/api_texture_prompt_eval.go [production]
       disposition: texture
       loc: 129
@@ -58,7 +58,7 @@ files:
       loc: 375
     - id: internal/runtime/app_promotion_build_test.go [test]
       disposition: promotion
-      loc: 373
+      loc: 374
     - id: internal/runtime/app_promotion_freshness_test.go [test]
       disposition: promotion
       loc: 59
@@ -70,7 +70,7 @@ files:
       loc: 1508
     - id: internal/runtime/browser_live_test.go [test]
       disposition: browser
-      loc: 149
+      loc: 151
     - id: internal/runtime/candidate_package_intake.go [production]
       disposition: candidate_package
       loc: 1697
@@ -89,12 +89,6 @@ files:
     - id: internal/runtime/concurrent_workers_test.go [test]
       disposition: core
       loc: 1249
-    - id: internal/runtime/config.go [production]
-      disposition: core
-      loc: 342
-    - id: internal/runtime/config_test.go [test]
-      disposition: core
-      loc: 324
     - id: internal/runtime/content.go [production]
       disposition: content
       loc: 1983
@@ -131,6 +125,9 @@ files:
     - id: internal/runtime/internal_run_idempotency_test.go [test]
       disposition: lifecycle
       loc: 370
+    - id: internal/runtime/lifecycle_authority_test.go [test]
+      disposition: core
+      loc: 220
     - id: internal/runtime/live_ws.go [production]
       disposition: core
       loc: 189
@@ -148,7 +145,7 @@ files:
       loc: 675
     - id: internal/runtime/model_policy_test.go [test]
       disposition: model
-      loc: 545
+      loc: 547
     - id: internal/runtime/objective_fingerprint.go [production]
       disposition: core
       loc: 46
@@ -211,7 +208,7 @@ files:
       loc: 453
     - id: internal/runtime/run_memory_test.go [test]
       disposition: lifecycle
-      loc: 441
+      loc: 442
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
       loc: 3678
@@ -259,7 +256,7 @@ files:
       loc: 194
     - id: internal/runtime/test_helpers_test.go [test]
       disposition: core
-      loc: 329
+      loc: 330
     - id: internal/runtime/texture.go [production]
       disposition: texture
       loc: 2167
@@ -301,7 +298,7 @@ files:
       loc: 65
     - id: internal/runtime/texture_live_llm_workflow_test.go [test]
       disposition: texture
-      loc: 500
+      loc: 501
     - id: internal/runtime/texture_media_sources.go [production]
       disposition: texture
       loc: 890
@@ -418,7 +415,7 @@ files:
       loc: 259
     - id: internal/runtime/trace_wiring_test.go [test]
       disposition: core
-      loc: 345
+      loc: 346
     - id: internal/runtime/trajectory.go [production]
       disposition: core
       loc: 142
@@ -1152,131 +1149,6 @@ exports:
       disposition: core
     - id: internal/runtime/concurrent_workers_test.go:method(*conditionalFailProvider):ProviderName
       disposition: core
-    - id: internal/runtime/config.go:const:DefaultActivationBudget
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultAppPromotionBuildTimeout
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultAppPromotionRuntimeArtifactPath
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultAppPromotionRuntimeBuildCommand
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultAppPromotionUIArtifactPath
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultAppPromotionUIBuildCommand
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultCorpusdURL
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultOllamaEmbeddingModel
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultOllamaURL
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultPromotionSourceRepo
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultProviderTimeout
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultQdrantDedupThreshold
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultQdrantURL
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultResearcherCount
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultRunMemoryContextThresholdRatio
-      disposition: core
-      production_callers:
-        - internal/runtime/run_memory.go
-    - id: internal/runtime/config.go:const:DefaultRunMemoryContextThresholdTokens
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultRunMemoryKeepRecentTokens
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultRunMemoryPromptReserveTokens
-      disposition: core
-      production_callers:
-        - internal/runtime/run_memory.go
-    - id: internal/runtime/config.go:const:DefaultSourceLedgerRepo
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultStorePath
-      disposition: core
-      production_callers:
-        - cmd/sandbox/main.go
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultTextureActorParkIdle
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:const:DefaultTextureWakeDebounce
-      disposition: core
-      production_callers:
-        - internal/runtime/config.go
-    - id: internal/runtime/config.go:func:LoadConfig
-      disposition: core
-      production_callers:
-        - cmd/sandbox/main.go
-    - id: internal/runtime/config.go:type:Config
-      disposition: core
-      production_callers:
-        - cmd/sandbox/main.go
-        - internal/runtime/config.go
-        - internal/runtime/model_policy.go
-        - internal/runtime/run_memory.go
-        - internal/runtime/runtime.go
-    - id: internal/runtime/config_test.go:func:TestActivationBudgetProgressDeadlineTerminalizesAndReleases
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestCancelResidentRunReleasesImmediatelyAndRejectsLateCompletion
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestIdlePassivationCannotOverwriteCancelledRun
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestLoadConfigDefaultsPromotionSourceRepoOutsideGitWorktree
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestLoadConfigDefaultsResearcherCount
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestLoadConfigFallsBackOnInvalidResearcherCount
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestLoadConfigReadsEnableTestAPIs
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestLoadConfigReadsObscuraCDPScreenshots
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestLoadConfigReadsResearcherCount
-      disposition: core
-    - id: internal/runtime/config_test.go:func:TestRunListAndCancelRoutesAreWiredAndOwnerScoped
-      disposition: core
-    - id: internal/runtime/config_test.go:method(*lateCompletionProvider):Execute
-      disposition: core
-    - id: internal/runtime/config_test.go:method(*lateCompletionProvider):ProviderName
-      disposition: core
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentCreate
       disposition: content
       production_callers:
@@ -1469,6 +1341,18 @@ exports:
       disposition: lifecycle
     - id: internal/runtime/internal_run_idempotency_test.go:func:TestHandleInternalRunSubmissionResolvesIdentityBeforeOverload
       disposition: lifecycle
+    - id: internal/runtime/lifecycle_authority_test.go:func:TestActivationBudgetProgressDeadlineTerminalizesAndReleases
+      disposition: core
+    - id: internal/runtime/lifecycle_authority_test.go:func:TestCancelResidentRunReleasesImmediatelyAndRejectsLateCompletion
+      disposition: core
+    - id: internal/runtime/lifecycle_authority_test.go:func:TestIdlePassivationCannotOverwriteCancelledRun
+      disposition: core
+    - id: internal/runtime/lifecycle_authority_test.go:func:TestRunListAndCancelRoutesAreWiredAndOwnerScoped
+      disposition: core
+    - id: internal/runtime/lifecycle_authority_test.go:method(*lateCompletionProvider):Execute
+      disposition: core
+    - id: internal/runtime/lifecycle_authority_test.go:method(*lateCompletionProvider):ProviderName
+      disposition: core
     - id: internal/runtime/live_ws.go:method(*APIHandler):HandleLiveWS
       disposition: core
       production_callers:
@@ -3649,8 +3533,6 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/app_promotion.go:944:normalizeRouteProfile converts a legacy "route:computerID" RouteProfile to
       disposition: delete
-    - id: internal/runtime/config.go:26:Re-exported from internal/provideriface for backward compatibility.
-      disposition: delete
     - id: internal/runtime/runtime.go:1954:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/runtime.go:98:New creates a new Runtime with the given config, store, event bus, and
@@ -4768,6 +4650,8 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/api.go, internal/runtime/api_spawn_test.go, internal/runtime/api_test.go, internal/runtime/concurrent_workers_test.go, internal/runtime… [sha256:facf8de6a54e72478edc949782fe5bf44be7e22663d1225dc5813d5363c23434]'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/config.go, internal/runtime/config_test.go, internal/provideriface, all_direct_config_callers_and_tests, docs/runtime-dissolution-inventory.yaml]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/promptspec/promptspec.go, internal/runtime/runtime.go, internal/runtime/tool_profiles.go, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/runtime.go, internal/runtime/toolloop_test.go, internal/runtime/trace_wiring_test.go, internal/runtime/run_memory_integration_test.go, docs/runtime-dissolution-inventory.yaml]'
@@ -4919,6 +4803,12 @@ citers:
     - id: 'docs/evidence/s3-new-tool-registry-test-callers-dispatch-2026-07-12.md:Allowed source paths: `internal/runtime/tools.go` and only test files containing a `NewToolRegistry()` caller under `internal/runtime` or `internal/provider`.'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-new-tool-registry-test-callers-dispatch-2026-07-12.md:`internal/runtime/tools.go` re-exports `toolregistry.NewToolRegistry`. The executable inventory reports no production callers. Repository/build-tag-aware search finds callers only in test files: runti… [sha256:4ebec14aa183008a9ef9bb759ad4a7a5a0574c764ec13cc51eeed8d920df65ca]'
+      disposition: historical_evidence
+    - id: docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md:- `internal/runtime/config.go` and `config_test.go` are deleted;
+      disposition: historical_evidence
+    - id: docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md:Move all live declarations and behavior from `internal/runtime/config.go` into `internal/provideriface` beside the canonical `Config` schema. Move the complete behavioral tests from `internal/runtime/… [sha256:4cd6a3962f2b1dc6767f3a8bd0a8069157579bbb674899ced17867a70e29fb85]
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md:The unanimous S3 step-2 gate authorized step 3: move real API/config/bootstrap ownership, remove the `apihandler` wrapper, and remove direct `cmd/sandbox` runtime imports. `provideriface.Config` alrea… [sha256:ef974f0df953d82fdc399358a587693893a479de8aac88227032fcc19669be10]'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-runtime-dead-helper-dispatch-2026-07-12.md:- `internal/runtime/promptspec/promptspec.go: Document.MustRender`;'
       disposition: historical_evidence

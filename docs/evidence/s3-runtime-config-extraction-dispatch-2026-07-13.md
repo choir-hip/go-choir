@@ -28,3 +28,11 @@ Preserve every environment name, default value, normalization rule, filesystem d
 - all default, focused config, runtime, actorruntime, provider, gatewayruntime, and cmd/sandbox caller paths compile and focused behavior tests pass;
 - runtime production/test LOC, exports, caller edges, compatibility markers, and unused-export debt decrease while every gated authority count is non-increasing;
 - independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
+
+## S3-I12 Implementation Receipt
+
+- Integrated implementation `58593d85` from isolated commit `c435257234137e4aaa16ed63c171168a7c9630dd`.
+- `provideriface` now solely owns `Config`, all defaults, `LoadConfig`, `NormalizeConfig`, and private parsing/filesystem helpers; runtime config source and tests are deleted or moved to their behavioral owner.
+- All mechanically located production, default-test, integration-tag, comprehensive-tag, actorruntime, provider/gatewayruntime, and sandbox callers use provideriface directly; no runtime alias, forwarder, duplicate helper/default, or fallback loader remains.
+- Focused provideriface config, sandbox bootstrap-value, runtime activation/run-memory, actorruntime, and integration-tag runtime checks pass. Comprehensive-tag compilation reproduces only the identical pre-existing `prompts_test.go`/`texture_test.go` failures.
+- Ratchet passed after canonical regeneration: Go files `147 -> 146`, production files `77 -> 76`, production LOC `44680 -> 44338`, test LOC `50266 -> 50172`, exports `1061 -> 1031`, caller edges `549 -> 520`, compatibility markers `13 -> 12`; every other gated authority count is flat.

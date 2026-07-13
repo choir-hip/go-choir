@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 798b2977
+  journal_expected_parent_sha: 58593d85
   orchestrator_lock:
     holder: Main
     epoch: 19
     expires_at: 2026-07-13T02:36:24Z
-    expected_parent_sha: 798b2977
+    expected_parent_sha: 58593d85
     lock_transition_id: s3-lock-renewal-201
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1893,16 +1893,16 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 19
-      status: dispatched
+      status: committed
       dispatch_nonce: s3-runtime-dissolution-i12-nonce-01
       dispatch_ref: S3I12Implementer
       agent_session_ref: agent://S3I12Implementer
       dispatch_prompt_ref: docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md#exact-mutation-lock
       implementer_job_ref: S3I12Implementer
-      implementer_output_ref: pending_agent_return
+      implementer_output_ref: agent://S3I12Implementer
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: pending_S3I12Implementer_isolated_worktree
+      worktree_or_branch_ref: agent/s3-i12-runtime-config@c435257234137e4aaa16ed63c171168a7c9630dd
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -1911,10 +1911,11 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I12_landing
       stage_started_at: 2026-07-13T00:48:47Z
       transition_id: s3-i12-dispatch-intent-202
-      expected_parent_sha: 798b2977
+      expected_parent_sha: 58593d85
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i12-dispatch-intent-202, recorded_at: 2026-07-13T00:48:47Z, actor: Main, expected_parent_sha: 27e1567d, precondition: S3_step2_gate_COMPLETE_step3_authorized, postcondition: exact_runtime_config_extraction_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i12-dispatched-203, recorded_at: 2026-07-13T00:50:43Z, actor: Main, expected_parent_sha: 798b2977, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_19, postcondition: S3I12Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s3-i12-implementation-returned-204, recorded_at: 2026-07-13T01:12:22Z, actor: Main, expected_parent_sha: 58593d85, precondition: isolated_exact_scope_commit_returned, postcondition: provideriface_sole_config_authority_runtime_config_deleted_focused_tests_and_ratchet_PASS, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T02:36:24Z
       mutation_class: orange
       protected_surfaces: []
@@ -1930,10 +1931,10 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: provideriface_owns_Config_schema_runtime_owns_alias_defaults_loader_normalizer
-      observed_postcondition: pending
+      observed_postcondition: provideriface_sole_config_schema_defaults_loader_normalizer_runtime_config_files_deleted_ratchet_decreased
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: pending
-      implementation_commit_sha: pending
+      implementation_sha_or_dirty_snapshot: 58593d85
+      implementation_commit_sha: 58593d85
       push_ref: pending
       ci_run_ref: pending
       deploy_ref: pending
@@ -1943,9 +1944,9 @@ run_checkpoint_and_resumption_state:
       evidence_refs: [docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, docs/evidence/s3-step2-phase-gate-2026-07-13.md]
       open_findings: []
       landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-13T00:50:43Z
-      reconciliation_result: one_matching_planned_agent_dispatch_S3I12Implementer
+      adjudication: focused_tests_PASS_ratchet_PASS_independent_verification_pending
+      last_reconciled_at: 2026-07-13T01:12:22Z
+      reconciliation_result: isolated_commit_integrated_as_58593d85_focused_tests_and_ratchet_PASS
       close_condition: extraction_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
