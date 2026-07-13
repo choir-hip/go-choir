@@ -35,7 +35,7 @@ Forbidden: any `APIHandler` method/body move; app/domain/route behavior or path 
 - Exact health override, all public/internal/test-gated paths, route order, method dispatch, and Texture prefix behavior are unchanged.
 - Test routes remain gated by the existing sandbox-loaded `EnableTestAPIs` value with no new runtime accessor.
 - Same canonical `server.Server` remains bound to the product API tool.
-- Focused apihandler/runtime/sandbox tests and runtime ratchet pass; routes/tools are flat, runtime production LOC and export/caller edges decrease, and every other authority count is non-increasing except classified durable citers.
+- Focused apihandler/runtime/sandbox tests and runtime ratchet pass; live route slots and tools are flat, while runtime-scoped routes, production LOC, exports, and caller edges decrease. Every other authority count is non-increasing except classified durable citers and the exact transitional `internal/apihandler/routes.go` production-importer/wrapper heuristic entries required for the canonical owner to name the not-yet-extracted `runtime.APIHandler`; those entries remain explicit deletion debt and do not weaken the final zero-importer/zero-wrapper extinction gate.
 - Independent verification, full CI, deploy identity, authenticated public product-path smoke, consensus, and adjudication pass before closure.
 
 ## S3-I16 Implementation Receipt
@@ -46,4 +46,10 @@ Forbidden: any `APIHandler` method/body move; app/domain/route behavior or path 
 - Programmatic before/after comparison expanded old subregistrars and proved `46` slots in exact equal order: one health override plus `45` routes. Focused inventory and test-gate coverage exercises all slots, exclusions, and test APIs both disabled and enabled.
 - Focused apihandler/runtime/sandbox behavior tests and the runtime ratchet pass after canonical integration. The same server is passed to the route registrar and product API tool.
 - Ratchet: Go files `144 -> 143`, test files `69 -> 68`, production LOC `44024 -> 43944`, test LOC `50141 -> 50065`, exports `1012 -> 1006`, caller edges `365 -> 363`, runtime-scoped routes `47 -> 2`; tools, unused-export debt, compatibility markers, store calls, and interface candidates are flat. Citers increased only from classified dispatch evidence (`245 -> 249`).
-- Open ratchet adjudication: production importers `3 -> 4` and wrapper heuristic `3 -> 4` because the new canonical apihandler registrar necessarily imports runtime and names `runtime.APIHandler`. No forwarding wrapper, interface, callback, accessor, or compatibility seam exists. This conflicts literally with the dispatch's non-increasing-count sentence and requires independent verifier/consensus adjudication; it is not silently normalized as a pass.
+- Independent verifier adjudication: production importers `3 -> 4` and wrapper heuristic `3 -> 4` are truthful necessary transitional dependencies because the new canonical apihandler registrar must name the not-yet-extracted `runtime.APIHandler`. No forwarding wrapper, interface, callback, accessor, or compatibility seam exists. The slice-local overstrict sentence is amended to permit exactly `internal/apihandler/routes.go`; both inventory entries remain explicit `delete` debt, global no-growth remains binding, and final runtime extinction still requires zero production importers and wrappers.
+
+## S3-I16 CI Attempt 2 Timeout
+
+- GitHub Actions run `29232081536` attempt `2` passed every completed default, integration, runtime-race, docs, and heresy lane, but the non-runtime race lane `86758741778` exhausted its command timeout while `internal/server.TestHealthHandlerIncludesAddrAfterStart` was still running.
+- The log reports no race detector finding or failed test; the lane summary classifies every completed test `pass` and explicitly reports the one still-running server test at timeout.
+- This is not attributed to the route-authority change. A failed-lane-only retry is running; no source fix is authorized unless the retry produces a reproducible change-attributable failure.
