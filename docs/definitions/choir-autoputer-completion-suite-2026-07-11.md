@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: f4962ece
+  journal_expected_parent_sha: e05798ff
   orchestrator_lock:
     holder: Main
     epoch: 18
     expires_at: 2026-07-13T01:24:10Z
-    expected_parent_sha: f4962ece
+    expected_parent_sha: e05798ff
     lock_transition_id: s3-lock-renewal-192
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1829,7 +1829,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 18
-      status: verifying
+      status: consensus
       dispatch_nonce: s3-runtime-dissolution-i11-nonce-01
       dispatch_ref: S3I11Implementer
       agent_session_ref: agent://S3I11Implementer
@@ -1837,7 +1837,7 @@ run_checkpoint_and_resumption_state:
       implementer_job_ref: S3I11Implementer
       implementer_output_ref: agent://S3I11Implementer
       verifier_job_ref: S3I11Verifier
-      verifier_output_ref: pending_S3I11Verifier
+      verifier_output_ref: agent://S3I11Verifier
       worktree_or_branch_ref: agent/s3-i11-runtime-core@9fae2d61f677a260671a814d673dde758ffb568d
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
@@ -1847,13 +1847,15 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I11_landing
       stage_started_at: 2026-07-12T23:24:10Z
       transition_id: s3-i11-dispatch-intent-193
-      expected_parent_sha: f4962ece
+      expected_parent_sha: e05798ff
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i11-dispatch-intent-193, recorded_at: 2026-07-12T23:24:10Z, actor: Main, expected_parent_sha: ccc5c91a, precondition: S3_I10_landed_step2_continuation_authorized, postcondition: exact_actorruntime_embedding_removal_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i11-dispatched-194, recorded_at: 2026-07-12T23:25:41Z, actor: Main, expected_parent_sha: 72bcbbde, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_18, postcondition: S3I11Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
         - {status: blocked_incomplete, transition_id: s3-i11-ratchet-blocker-195, recorded_at: 2026-07-12T23:34:52Z, actor: Main, expected_parent_sha: cfccd608, precondition: isolated_embedding_removal_returned_and_focused_tests_PASS, postcondition: wrapper_count_5_to_6_failure_documented_before_repair, external_operation_id: not_applicable}
         - {status: committed, transition_id: s3-i11-ratchet-repaired-196, recorded_at: 2026-07-12T23:41:24Z, actor: Main, expected_parent_sha: e9de3b98, precondition: blocker_documented_canonically, postcondition: single_result_constructor_explicit_named_nonanonymous_runtime_field_focused_tests_and_ratchet_PASS, external_operation_id: not_applicable}
         - {status: verifying, transition_id: s3-i11-verifier-dispatched-197, recorded_at: 2026-07-12T23:42:34Z, actor: Main, expected_parent_sha: f4962ece, precondition: canonical_repaired_source_focused_tests_and_ratchet_PASS, postcondition: independent_S3I11Verifier_authorized, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s3-i11-verifier-pass-198, recorded_at: 2026-07-13T00:23:11Z, actor: S3I11Verifier, expected_parent_sha: e05798ff, precondition: independent_source_boundary_and_behavior_verification, postcondition: PASS_confidence_0_99_no_findings, external_operation_id: not_applicable}
+        - {status: accepted, transition_id: s3-i11-ci-deploy-accepted-199, recorded_at: 2026-07-13T00:23:11Z, actor: Main, expected_parent_sha: e05798ff, precondition: full_CI_attempt_3_deploy_receipt_and_product_smoke_complete, postcondition: deployed_f4962ece_staging_health_and_authenticated_run_list_200_consensus_pending, external_operation_id: github_actions_29213877006_attempt_3}
       lock_expires_at: 2026-07-13T01:24:10Z
       mutation_class: orange
       protected_surfaces: []
@@ -1874,17 +1876,17 @@ run_checkpoint_and_resumption_state:
       implementation_sha_or_dirty_snapshot: e9de3b98
       implementation_commit_sha: e9de3b98
       push_ref: e9de3b98
-      ci_run_ref: pending
-      deploy_ref: pending
-      deployed_sha: pending
-      acceptance_ref: pending
+      ci_run_ref: https://github.com/choir-hip/go-choir/actions/runs/29213877006#attempt-3
+      deploy_ref: https://github.com/choir-hip/go-choir/actions/runs/29213877006#job-86708347659
+      deployed_sha: f4962eced74dcafd0874e728d245cac1fd82f27a
+      acceptance_ref: docs/evidence/s3-actorruntime-embedding-removal-dispatch-2026-07-12.md#s3-i11-ci-deploy-and-acceptance
       acceptance_contract: one_explicit_named_nonanonymous_runtime_core_edge_no_promotion_no_new_seam_behavior_preserved_ratchet_nonincreasing
-      evidence_refs: [docs/evidence/s3-actorruntime-embedding-removal-dispatch-2026-07-12.md]
+      evidence_refs: [docs/evidence/s3-actorruntime-embedding-removal-dispatch-2026-07-12.md, agent://S3I11Implementer, agent://S3I11Verifier, https://github.com/choir-hip/go-choir/actions/runs/29213877006#attempt-3]
       open_findings: []
       landed_commit_sha: pending
-      adjudication: source_repair_PASS_independent_verification_pending
-      last_reconciled_at: 2026-07-12T23:42:34Z
-      reconciliation_result: canonical_repaired_source_ready_for_independent_verification
+      adjudication: independent_PASS_deployed_accepted_final_consensus_pending
+      last_reconciled_at: 2026-07-13T00:23:11Z
+      reconciliation_result: verifier_PASS_CI_attempt3_PASS_deployed_f4962ece_staging_product_accepted_consensus_pending
       close_condition: embedding_removed_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_nonincreasing
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

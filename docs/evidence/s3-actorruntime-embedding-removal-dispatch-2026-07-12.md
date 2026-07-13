@@ -42,3 +42,16 @@ Smallest repair: retain one explicit named `Runtime *runtime.Runtime` field and 
 - No constructor result edge, accessor, forwarder, callback, interface, fallback, duplicate core, or promoted runtime method remains.
 - `go test ./internal/actorruntime ./cmd/sandbox -count=1` passes.
 - The canonical runtime ratchet passes with wrappers flat at `5`; every gated authority count is non-increasing.
+
+## S3-I11 Independent Verification
+
+- Independent `S3I11Verifier` returned `PASS` at confidence `0.99` with no findings.
+- Verified one named non-anonymous runtime edge, original single-result constructor, one `runtime.New` construction, migrated callers, unchanged handler/dispatch wiring, unchanged lifecycle sequencing, no replacement seam, focused test pass, and ratchet wrappers flat at `5`.
+- Environment-level CI, deployment, staging acceptance, consensus, and adjudication remained pending at verifier return.
+
+## S3-I11 CI, Deploy, and Acceptance
+
+- GitHub Actions run `29213877006` attempt `3` passed every default, integration, race, ratchet, SBOM, and deploy gate for head `f4962eced74dcafd0874e728d245cac1fd82f27a`.
+- Attempt `2` had timed out in the non-runtime race lane while tests were still passing/running; failed-job retry completed successfully without a source change.
+- Deploy job `86708347659` completed successfully.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
