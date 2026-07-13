@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 51da6689
+  journal_expected_parent_sha: e20a7e01
   orchestrator_lock:
     holder: Main
     epoch: 26
     expires_at: 2026-07-13T13:02:17Z
-    expected_parent_sha: 51da6689
+    expected_parent_sha: e20a7e01
     lock_transition_id: s3-lock-renewal-255
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -721,8 +721,8 @@ run_checkpoint_and_resumption_state:
     staging_ref: authenticated_public_texture_documents_200_at_2026-07-13T08:13:45Z
     product_proof_refs: [docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md#s3-i16-ci-deploy-and-acceptance]
     consensus_ref: /tmp/choir-s3-i16-final-consensus-20260713
-    open_findings: [S3_I18_atomic_APIHandler_ownership_dispatch_pending, apihandler_runtime_importer_wrapper_heuristic_delete_debt, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
-    adjudication_ref: S3_I17_rejected_with_evidence_Option_A_atomic_handler_cutover_authorized
+    open_findings: [S3_I18_atomic_APIHandler_ownership_dispatch_intent, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
+    adjudication_ref: S3_I17_rejected_with_evidence_S3_I18_dispatch_pending
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -2273,6 +2273,66 @@ run_checkpoint_and_resumption_state:
       last_reconciled_at: 2026-07-13T09:02:17Z
       reconciliation_result: abandoned_clean_no_commit_blocker_cleared_by_parent_plan_change
       close_condition: dormant_transport_deleted_domain_and_live_review_behavior_independently_verified_consensus_adjudicated_ratchet_decreased
+    - slice_id: S3-I18-atomic-api-handler-ownership
+      subgoal: S3
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 26
+      status: dispatch_intent
+      dispatch_nonce: s3-runtime-dissolution-i18-nonce-01
+      dispatch_ref: pending_S3I18Implementer
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s3-api-handler-ownership-dispatch-2026-07-13.md#exact-mutation-lock
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_return
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_S3I18Implementer_isolated
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: e20a7e01
+      lock_release_ref: pending_S3_I18_landing
+      stage_started_at: 2026-07-13T09:05:13Z
+      transition_id: s3-i18-dispatch-intent-257
+      expected_parent_sha: e20a7e01
+      stage_history:
+        - {status: dispatch_intent, transition_id: s3-i18-dispatch-intent-257, recorded_at: 2026-07-13T09:05:13Z, actor: Main, expected_parent_sha: e20a7e01, precondition: S3_I17_rejected_with_evidence_atomic_boundary_authorized, postcondition: exact_atomic_128_receiver_APIHandler_ownership_cutover_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-13T13:02:17Z
+      mutation_class: red
+      protected_surfaces: [authentication_owner_scope, internal_caller_authorization, Texture_canonical_writes_revisions_merges_proposals, run_lifecycle_cancel_acceptance_trajectory_evidence, candidate_promotion_adoption_switch_rollback_rollforward, model_provider_policy, browser_sessions, WebSocket_event_delivery, persistent_store, runtime_health, product_API_tool]
+      conjecture_delta: route_owner_can_atomically_own_handler_transport_while_runtime_retains_cohesive_business_operations
+      heresy_delta: {discovered: runtime_still_owns_HTTP_handler_implementation_after_route_cutover, introduced: none_allowed, repaired: runtime_APIHandler_and_receiver_authority_zero}
+      admissible_evidence_class: exact_source_and_dependency_proof_focused_behavior_independent_red_verification_full_CI_race_SBoM_deploy_identity_authenticated_controlled_write_read_and_public_read_consensus
+      exact_files_packages_routes_state_authorities: [internal/apihandler, internal/runtime/api.go, internal/runtime/api_app_promotion.go, internal/runtime/api_candidate_package_intake.go, internal/runtime/api_costs.go, internal/runtime/api_texture_prompt_eval.go, internal/runtime/api_trajectory.go, internal/runtime/browser.go, internal/runtime/content.go, internal/runtime/desktop.go, internal/runtime/live_ws.go, internal/runtime/media_state.go, internal/runtime/podcast.go, internal/runtime/prompts.go, internal/runtime/runtime_refresh.go, internal/runtime/texture.go, internal/runtime/texture_agent_revision.go, internal/runtime/texture_import.go, internal/runtime/texture_lineage.go, internal/runtime/texture_merge.go, internal/runtime/texture_proposals.go, internal/sandbox/run.go, direct_tests, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [route_path_order_method_status_body_schema_auth_change, domain_state_semantics_change, candidate_promotion_provider_store_actor_lifecycle_Texture_authority_move, new_package, alias, wrapper, interface, callback_table, generic_facade, accessor, forwarder, dual_handler, dual_route, duplicate_registrar, compatibility_path, unrelated_formatting]
+      authority_edges_locked: [apihandler_sole_handler_type_constructor_and_route_table, runtime_zero_APIHandler_declarations_receivers_aliases, sandbox_one_handler_construction, same_canonical_server_product_tool, runtime_business_operations_unchanged]
+      implementer_agent: pending_S3I18Implementer
+      verifier_agent: pending_distinct_red_verifier
+      pre_mutation_sha: e20a7e01
+      rollback_commit_or_ref: e20a7e01
+      accepted_slice_dependency_refs: [S3-I16@3b10893c, S3-I17@rejected_with_evidence, /tmp/choir-s3-i17-blocker-consensus-20260713]
+      external_operation_id: not_applicable
+      effect_authority: canonical_git_ref_then_staging_sandbox
+      receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_public_product_API
+      expected_precondition: apihandler_owns_routes_but_runtime_owns_APIHandler_and_128_receivers
+      observed_postcondition: pending
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending
+      ci_run_ref: pending
+      deploy_ref: pending
+      deployed_sha: pending
+      acceptance_ref: pending
+      acceptance_contract: one_apihandler_type_constructor_exact_behavior_runtime_handler_authority_zero
+      evidence_refs: [docs/evidence/s3-api-handler-ownership-dispatch-2026-07-13.md, /tmp/choir-s3-handler-dependency-map.json, /tmp/choir-s3-handler-boundary-consensus-20260713, docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md, /tmp/choir-s3-i17-blocker-consensus-20260713]
+      open_findings: [private_runtime_dependencies_require_same_landing_cohesive_resolution]
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-13T09:05:13Z
+      reconciliation_result: no_prior_matching_dispatch_found
+      close_condition: atomic_handler_cutover_landed_deployed_controlled_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
     - {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}
@@ -2309,7 +2369,7 @@ run_checkpoint_and_resumption_state:
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
   highest_impact_remaining_uncertainty: Whether the atomic 128-method APIHandler ownership cutover can resolve every private runtime dependency through existing APIs, handler-owned configuration, or cohesive same-landing business operations without an accessor facade, dual handler, or behavior drift.
-  next_executable_probe: Persist and dispatch S3-I18 atomic APIHandler ownership cutover under red-class ceremony and the canonical mutation lock.
+  next_executable_probe: Implement S3-I18 atomic APIHandler ownership cutover under the canonical red mutation lock.
   suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
     - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
@@ -2318,6 +2378,7 @@ run_checkpoint_and_resumption_state:
     - docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md
     - docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md
     - docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md
+    - docs/evidence/s3-api-handler-ownership-dispatch-2026-07-13.md
     - docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md
   rollback_refs: []
   superseded_by: ''
