@@ -2,16 +2,15 @@
 
 ## Subordinate Invocation Semantics
 
-This document is the S2 subgoal specification of:
+This document is the settled Wire receipt imported by:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-Do not invoke it as an independent mission. The grand-suite orchestrator uses
-it to cut the Universal Wire product path onto the world-wire store, delete
-boot/runtime-local authority, run independent micro-verification and phase
-consensus, and persist one suite checkpoint.
+Do not invoke it as an independent mission. Its world-wire cutover and deletion
+evidence remain a predecessor receipt; the active mission does not rerun it
+during resumption.
 
 ## Why this mission exists
 
@@ -28,8 +27,8 @@ match the decisions that already exist.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
-2. This subordinate Definition within S2 and D-WIRE scope.
+1. `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+2. This settled subordinate Definition within D-WIRE scope.
 3. `docs/computer-ontology.md` "Dolt Store Taxonomy" (owner two-store
    directive: world-wire store + VM-local embedded store, nothing else) and
    **D-WIRE** in `docs/definitions/og-dolt-heresy-completion-2026-07-08.md`
@@ -167,16 +166,15 @@ The mission is `complete` when all of the following are observed on staging:
    Stop and observe the VM through the product/vmctl API or `choir` CLI, never
    SSH, `systemctl`, raw process inspection, or journal access. If that bounded
    lifecycle surface does not exist, add only the smallest vmctl/`cmd`-side
-   S2 lifecycle/status control needed for this proof; it must not add an
-   `internal/runtime` surface and it is not S5 observation completion.
+   lifecycle/status control needed for this proof; it must not add an
+   `internal/runtime` surface and it is not R3 observation completion.
 5. A deploy (guest refresh included) occurs after publication, and the same
    stories response is returned unchanged afterward.
 6. The Universal Wire app (`frontend/src/lib/UniversalWireApp.svelte`) renders
    the article for a signed-in human, not only a curl diagnostic.
-7. The grand-suite ratchet report records S2's removed runtime-owned Wire
-   authority, importers, routes/symbols, and applicable file/LOC delta; S2
-   cannot claim dissolution iteration 1 without a mechanically decreasing
-   production ratchet.
+7. The active mission's runtime inventory records the removed Wire authority,
+   importers, routes/symbols, and applicable file/LOC delta; the settled receipt
+   remains valid only while the production ratchet does not regress.
 
 Item 4 is the keystone: it is the observable that was structurally impossible
 under the superseded topology.

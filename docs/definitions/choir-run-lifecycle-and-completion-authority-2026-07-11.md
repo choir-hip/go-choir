@@ -2,17 +2,16 @@
 
 ## Subordinate Invocation Semantics
 
-This document is the S6 run-truth specification of:
+This document is the R4 run-truth specification of:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-Do not invoke it independently. The grand-suite orchestrator executes it only
-after S1 Deploy restoration, S2 Wire authority cutover, S3 runtime extinction,
-S4 audited-computer proof, and S5 observation/receipt proof. Its lifecycle
-semantics survive; implementation must target the extracted core boundary, not
-recreate `internal/runtime`.
+Do not invoke it independently. The active mission executes it only after R1
+runtime extinction, R2 audited-computer proof, and R3 operator-truth proof. Its
+lifecycle semantics survive; implementation must target the extracted core
+boundary, not recreate `internal/runtime`.
 ## Why this mission exists
 
 Twelve activation attempts, culminating in the 2026-07-11 post-mortem,
@@ -41,14 +40,14 @@ exposed that processor run completion and retry authority are fragmented.
    duplicate same–Texture-actor-mailbox rewarms cancelled the only mandatory
    canonical write, and the reconciler still narrated success.
 
-After S2 dissolves C1/C2/C6 and S3 removes the runtime god package, C4 and C5
-remain the processor-path run-truth subgoal. S1 owns the fourth freeze mode
-(`running` forever); S6 re-verifies it.
+After the settled Wire receipt and R1 runtime extinction, C4 and C5 remain the
+processor-path run-truth subgoal. The settled Deploy receipt owns the fourth
+freeze mode (`running` forever); R4 re-verifies it.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
-2. This subordinate Definition within S6 scope.
+1. `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+2. This subordinate Definition within R4 scope.
 3. `docs/definitions/choir-autoputer-cli-operability-2026-07-11.md`
    (operator test and Introspection Contract).
 4. `docs/definitions/choir-wire-store-conformance-2026-07-11.md`.
@@ -57,7 +56,7 @@ remain the processor-path run-truth subgoal. S1 owns the fourth freeze mode
    as failure evidence.
 7. `docs/standing-questions.md`, `AGENTS.md`, `docs/choir-doctrine.md`,
    `docs/runtime-invariants.md`.
-8. Observed post-S3 source: extracted lifecycle/core packages,
+8. Observed post-R1 source: extracted lifecycle/core packages,
    `internal/types`, `cmd/sourcecycled`, and `cmd/choir`.
 
 ## Settled Inputs (do not re-litigate)
@@ -73,8 +72,8 @@ remain the processor-path run-truth subgoal. S1 owns the fourth freeze mode
   (C5 / Q6).
 - **Processor path only** for this mission; reconciler/editorial verification
   waits until the one-agent path is stable.
-- **Progress deadline and operator cancel** are inherited from grand S1.
-  Re-verify them here; do not build a second mechanism.
+- **Progress deadline and operator cancel** are inherited from the settled
+  Deploy receipt. Re-verify them here; do not build a second mechanism.
 
 ## Mission Purpose
 
@@ -97,34 +96,34 @@ remain the processor-path run-truth subgoal. S1 owns the fourth freeze mode
 - No PC-5 / audited-computer materialization (product-completion / ontology).
 - No promotion, route-slot, or key-scoping (`autoputer-cli` later phases).
 - No VM reprovisioning.
-- **No naming / rename sweeps** — grand S9 owns vocabulary cutover. New code
-  here is still born in successor vocabulary.
-- **No continuation, parent/child, or result-channel deletion** — grand S3
-  must already have completed those cutovers.
+- **No naming / rename sweeps** — R7 owns vocabulary cutover. New code here is
+  still born in successor vocabulary.
+- **No continuation, parent/child, or result-channel deletion** — R1 must
+  already have completed those cutovers.
 
 ## Dependency Truth (verified 2026-07-11; refresh at Phase 0)
 
-- Grand S2 Wire conformance and S3 runtime extinction must be complete before
-  this subgoal begins. Return to the suite orchestrator if they are not.
+- Settled Wire conformance and R1 runtime extinction must be complete before
+  R4 begins. Return control to the active mission if they are not.
 - `isTerminalRuntimeState` already treats `blocked` as terminal (`f1ceba5`).
   Phase B decides terminal-error vs retryable-dispatch routing.
 - `RunningCountByProfile` already derives from
   `store.ListRunsByState(..., RunRunning, ...)`. Residue: (a) error path falls
   back to in-memory `RunningCount()`; (b) `RunPending` not counted; (c)
   `processorRunOccupiesAdmission` defaults to "occupies" on lookup error.
-- Fourth freeze mode (`running` forever) is inherited from grand S1.
+- Fourth freeze mode (`running` forever) is inherited from the settled Deploy receipt.
 
 ## Open Decisions (defaults govern; deviations recorded in ledger)
 
 - **Single authority:** `RunRecord.State` semantics have one writer in the
   extracted lifecycle/core package; other projections are read-only or
-  derived. S3 must leave this boundary explicit before S6 begins.
+  derived. R1 must leave this boundary explicit before R4 begins.
 - **Retry policy:** sourcecycled retries on the next poll, up to **3** attempts
   per cycle. No synchronous immediate retry.
 - **Blocked-run timeout:** `RunBlocked` auto-cancels after **10 minutes** so
   cycle idempotency releases for retry (Phase B sweep). Admission must already
   treat all `blocked` as non-occupying (Phase A).
-- **Progress deadline:** inherited from grand S1; exact mechanism is re-verified.
+- **Progress deadline:** inherited from the settled Deploy receipt; exact mechanism is re-verified.
 - **Artifact predicate:** published world-wire article/story with ingestion
   lineage in the `corpusd` store — only after wire-store conformance.
 
@@ -133,7 +132,7 @@ remain the processor-path run-truth subgoal. S1 owns the fourth freeze mode
 - `RunCompleted` has a fetchable artifact in the world-wire store (from Phase D).
 - `RunBlocked`, `RunFailed`, and `RunCancelled` must not freeze admission and
   must not permanently consume cycle idempotency.
-- Active work stays within the grand S1 progress bound.
+- Active work stays within the settled progress bound.
 - Admission is derived from `RunRecord.State` (`RunPending` + in-deadline
   `RunRunning`); no silent fallback to the in-memory map on errors.
 - Two runs with the same cycle/ingestion fingerprint cannot be concurrently
@@ -155,26 +154,26 @@ Complete when all are observed on staging:
    - `blocked` with no redispatch/retry path (historical; routing fixed in B)
    - `passivated` with live trajectory
    - `completed` with live trajectory
-   - `running` with expired progress bound (grand S1; re-verify here)
+   - `running` with expired progress bound (settled Deploy receipt; re-verify here)
 5. Duplicate concurrent submissions → `409 Conflict`; retries after
    failed/cancelled → accepted.
-6. Grand S1 Deploy restoration still holds.
+6. Settled Deploy restoration still holds.
 
-Vocabulary residue is not an S6 completion criterion; grand S9 owns cutover.
+Vocabulary residue is not an R4 completion criterion; R7 owns cutover.
 
 ## Sequencing and Gates
 
-Order: Phase 0 → A → B → C (verify grand S1) → D → E.
+Order: Phase 0 → A → B → C (verify the settled Deploy receipt) → D → E.
 
-Every phase:
+Every accepted Define/Implement boundary:
 
-1. **Consensus checkpoint** through the grand-suite orchestration protocol.
-2. **Focused local proof** on affected packages plus build/vet as required.
-3. **Landing loop** per `AGENTS.md`.
-4. **QA** on staging; record IDs in the evidence ledger.
-5. **Halt-on-red;** repair within phase (documentation-first) or roll back to
-   the **rollback ref** = `git rev-parse HEAD` recorded at phase start before
-   the first behavior commit. Do not leave staging red.
+1. Apply the active mission's assurance profile to one immutable candidate.
+2. Run focused proof on affected packages plus build/vet as required.
+3. Execute the Landing Loop per `AGENTS.md`.
+4. Run staging product-path acceptance and reference IDs from the active
+   mission capsule/evidence index.
+5. Halt on reproduced failure; return to a code-free Define boundary or roll
+   back to the exact ref recorded before implementation.
 6. Do not start the next phase until acceptance is recorded.
 
 Docs-only commits use the docs-only landing path.
@@ -183,10 +182,10 @@ Docs-only commits use the docs-only landing path.
 
 ### Phase 0 — Reconciliation and checkpoint review (green/yellow)
 
-- Confirm grand S1–S5 are complete in the suite checkpoint.
-- Reconcile this semantic contract against the extracted S3 boundary.
-- Run agentic consensus through the grand-suite checkpoint protocol.
-- Record the adjudicated ledger entry. No code mutation.
+- Confirm the settled Deploy/Wire receipts and R1-R3 completion in the active
+  mission capsule.
+- Reconcile this semantic contract against the extracted R1 boundary.
+- Apply the active assurance profile to the immutable Define candidate.
 
 ### Phase A — Authority alignment and derived admission (red)
 
@@ -224,16 +223,16 @@ Docs-only commits use the docs-only landing path.
 
 ### Phase C — Verify deploy-unblock still holds (yellow/red if regression)
 
-- **Objective:** confirm grand S1 deadline/cancel/Deploy proof still holds.
-- **Changes:** none if green; if regressing, return the finding to the
-  grand-suite orchestrator for documentation-first repair.
+- **Objective:** confirm the settled deadline/cancel/Deploy proof still holds.
+- **Changes:** none if green; if regressing, return the finding to the active
+  mission for a documentation-first Define boundary.
 - **QA:** `running_runs: 0` on the platform VM (or equivalent health) and Deploy
   not blocked by a stuck run.
 
 ### Phase D — Artifact-verified completion (red)
 
-- **Gate:** grand S2–S5 completion is recorded. If not, return control to the
-  grand-suite orchestrator; do not invoke another `/goal`.
+- **Gate:** settled Deploy/Wire receipts and R1-R3 completion are recorded. If
+  not, return control to the active mission; do not invoke another `/goal`.
 - **Changes:** processor `RunCompleted` requires the artifact predicate; clean
   exit without artifact → `RunFailed`.
 - **Local proof:** run focused extracted-lifecycle tests matching
@@ -246,33 +245,29 @@ Docs-only commits use the docs-only landing path.
 - Extend `choir run status <id>` to print unified state (artifact receipt after
   D).
 - Land four freeze-mode regression tests if not already present.
-- Run grand-suite agentic consensus on the full S6 diff and evidence.
+- Apply the active assurance profile to the full R4 candidate and evidence.
 - Deployed acceptance: the run-truth slice of the external operator test.
-- Update the grand suite's evidence and resumption state.
-- Return control to the grand-suite orchestrator for S7.
+- Update the active mission capsule and evidence index.
+- Return control to R5.
 
 ## Follow-on Missions
 
-- Grand S9 owns vocabulary cutover and successor handoff.
-- Grand S7–S8 own promotion, contained keys, and Choir-in-Choir.
+- R7 owns vocabulary cutover and successor handoff.
+- R5-R6 own promotion, contained keys, and Choir-in-Choir.
 - Autopaper editorial/reconciler verification remains a successor mission.
-- Overlapping og-dolt deletion families are absorbed by grand S3.
+- Overlapping og-dolt deletion families are absorbed by R1.
 
 ## Supersession Record
 
-- Subordinate to `choir-autoputer-completion-suite-2026-07-11.md` S6.
+- Subordinate to `choir-autoputer-completion-2026-07-13.md` R4.
 - Investigation basis: autopaper activation attempt report.
-- Amended 2026-07-11: Dependency Truth, fourth freeze mode, gates, phases A–E,
+- Amended 2026-07-11: Dependency Truth, fourth freeze mode, gates, phases A-E,
   autonomous contract.
 - Amended 2026-07-11: owner directed full autonomy (self-adjudicate deviations;
   documented failure exits).
-- Amended 2026-07-11: Phase F naming added — **superseded the same day** by
-  suite foliation; naming moved to `choir-vocabulary-cutover-2026-07-11.md`.
-- Amended 2026-07-11 (suite rewrite): Correctness-only mission; no chain-exec;
-  pinned Open Decision defaults; freeze-mode language drops "continuation";
-  Phase A frees all `blocked` from admission; blocked timeout lives in Phase B;
-  Phase C verifies member 1; three→four freeze modes in admissible evidence;
-  "phase rollback ref" = SHA at phase start.
+- Amended 2026-07-11: naming moved to `choir-vocabulary-cutover-2026-07-11.md`.
+- Amended 2026-07-13: predecessor S-phase orchestration retired; R4 uses the
+  active mission's capsule and Define/Implement assurance boundaries.
 
 ## Red-Class Ceremony
 
@@ -296,7 +291,7 @@ Docs-only commits use the docs-only landing path.
 - **Heresy delta:**
   - `discovered`: split projections; at-most-once-ever dedup; narrative
     completion without artifact; `running` forever.
-  - `repaired` (S6): one `RunRecord.State` authority; retry semantics;
+  - `repaired` (R4): one `RunRecord.State` authority; retry semantics;
     artifact-gated completion; unified `choir run status`.
-  - `repaired` (grand S1): progress deadline + cancel.
-  - Naming repairs are grand S9.
+  - `repaired` (settled Deploy receipt): progress deadline + cancel.
+  - Naming repairs are R7.

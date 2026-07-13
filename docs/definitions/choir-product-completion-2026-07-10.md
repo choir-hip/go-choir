@@ -2,20 +2,20 @@
 
 ## Subordinate And Paused Invocation Semantics
 
-Do not invoke this document while the active grand suite is working:
+Do not invoke this document while the active mission is working:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-The grand suite consumes this document's PC-5 audited-computer contract in S4.
-Other CLI, desktop, Base, and historical Autopaper work is paused until the
-suite either completes or explicitly supersedes that work into a successor.
-A checkpoint in this document cannot compete with grand-suite authority.
+The active mission consumes this document's PC-5 audited-computer contract in
+R2. Other CLI, desktop, Base, and historical Autopaper work is paused until the
+mission either completes or explicitly supersedes that work into a successor.
+A checkpoint in this document cannot compete with active mission authority.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` for
+1. `docs/definitions/choir-autoputer-completion-2026-07-13.md` for
    active autoputer ordering and PC-5 execution.
 2. `docs/choir-doctrine.md`
 3. `AGENTS.md`
@@ -24,7 +24,7 @@ A checkpoint in this document cannot compete with grand-suite authority.
 6. this Definition for paused CLI, Wails desktop, Choir Base, and historical
    Autopaper evidence
 7. `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` for
-   storage/heresy/promotion contracts subordinate to the grand suite
+   storage/heresy/promotion contracts subordinate to the active mission
 8. `docs/runtime-invariants.md`, `docs/source-external-data-publication.md`,
    and `docs/texture-agentic-invariants-2026-06-13.md`
 9. observed source, tests, CI, and staging evidence
@@ -1112,13 +1112,13 @@ run_checkpoint_and_resumption_state:
     - no Base exact-byte two-device proof
     - no served ComputerVersion promotion end-to-end / OG truth-gate settlement
   highest_impact_remaining_uncertainty: >-
-    Grand S4 must select only the PC-5 pre-wiring rows needed for audited
+    R2 must select only the PC-5 pre-wiring rows needed for audited
     ComputerVersion construction; other product-completion work remains paused.
   next_executable_probe: >-
-    Resume through the grand suite. During S4, consume PC-5 exact durable-state
+    Resume through the active mission. During R2, consume PC-5 exact durable-state
     primitives without pulling Wails, Base product wiring, run truth, promotion,
     rollback, or Autopaper work forward.
-  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md"
+  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-2026-07-13.md"
   evidence_artifact_refs:
     - this Definition's evidence ledger
     - docs/definitions/choir-seam-repair-2026-07-10.md

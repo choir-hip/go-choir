@@ -43,7 +43,7 @@ var highRead = map[string]bool{
 	"docs/runtime-invariants.md":                    true,
 	"docs/texture-agentic-invariants-2026-06-13.md": true,
 	"docs/source-external-data-publication.md":      true,
-	"docs/definitions/choir-autoputer-completion-suite-2026-07-11.md": true,
+	"docs/definitions/choir-autoputer-completion-2026-07-13.md": true,
 }
 
 // defaultReadPacket is intentionally small. It includes the docs router plus
@@ -62,7 +62,7 @@ var defaultReadPacket = []string{
 	"docs/runtime-invariants.md",
 	"docs/texture-agentic-invariants-2026-06-13.md",
 	"docs/source-external-data-publication.md",
-	"docs/definitions/choir-autoputer-completion-suite-2026-07-11.md",
+	"docs/definitions/choir-autoputer-completion-2026-07-13.md",
 }
 
 type manifestFile struct {

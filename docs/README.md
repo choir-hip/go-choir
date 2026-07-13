@@ -36,8 +36,8 @@ They are the whole default packet; historical material is opt-in.
    — canonical artifact contract.
 10. [`source-external-data-publication.md`](source-external-data-publication.md)
     — source, provenance, and publication contract.
-11. [`definitions/choir-autoputer-completion-suite-2026-07-11.md`](definitions/choir-autoputer-completion-suite-2026-07-11.md)
-    — the sole active top-level product Definition and suite orchestrator.
+11. [`definitions/choir-autoputer-completion-2026-07-13.md`](definitions/choir-autoputer-completion-2026-07-13.md)
+    — the sole active top-level product Definition and mission orchestrator.
 
 The compact registry and views point to the source documents; none can override
 the doctrine, operating contract, or an explicitly promoted domain contract.

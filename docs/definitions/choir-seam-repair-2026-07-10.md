@@ -5,7 +5,7 @@
 This settled Definition is evidence and a subordinate source for:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
 Do not invoke this document independently. Its completed seam receipts remain
@@ -13,8 +13,8 @@ load-bearing; its checkpoint cannot authorize new product mutations.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` for any
-   current execution or resumption.
+1. `docs/definitions/choir-autoputer-completion-2026-07-13.md` for any current
+   execution or resumption.
 2. This Definition as settled seam evidence.
 3. `AGENTS.md` and `docs/choir-doctrine.md`.
 4. `docs/definitions/choir-product-completion-2026-07-10.md` as superseded
@@ -761,9 +761,9 @@ run_checkpoint_and_resumption_state:
     A future product mission should exercise promote/rollback against a real
     app-change package; seam-repair route-slot format and resolver behavior are proven.
   next_executable_probe: >-
-    Settled. Any remaining product work resumes only through the grand suite;
+    Settled. Any remaining product work resumes only through the active mission;
     this checkpoint cannot authorize another mutation.
-  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-2026-07-13.md
   evidence_artifact_refs:
     - caf16a88 (mission start)
     - a1073731 (pre-delete rollback)
@@ -781,5 +781,5 @@ run_checkpoint_and_resumption_state:
 ## Suggested Goal String
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```

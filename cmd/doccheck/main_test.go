@@ -236,7 +236,7 @@ func completeLivePacketReport() report {
 			Exists:      true,
 			Annotations: map[string]string{},
 		}
-		if path == "docs/definitions/choir-autoputer-completion-suite-2026-07-11.md" {
+		if path == "docs/definitions/choir-autoputer-completion-2026-07-13.md" {
 			doc.Annotations["doc_role"] = "definition"
 			doc.IsRoot = []string{"authority", "entry"}
 		}

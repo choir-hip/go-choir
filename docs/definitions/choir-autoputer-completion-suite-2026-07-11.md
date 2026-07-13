@@ -1,33 +1,25 @@
 # Choir Autoputer Completion Suite
 
-## Harness Invocation Semantics
+## Supersession Notice
+
+**Status:** superseded on 2026-07-13 by
+`docs/definitions/choir-autoputer-completion-2026-07-13.md`.
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-This document is the single executable authority for completing the Choir
-**autoputer** before opening Choir-in-Choir or resuming Autopaper editorial
-work. Unlike a passive suite index, this `/goal` invocation authorizes the
-orchestrator to execute the ordered subgoals below, update this document's
-durable state, and continue until the suite completion semantics are satisfied.
+This file is historical evidence, not executable authority. The successor
+imports the completed B0-S2 receipts and already-landed S3 effects, retires the
+falsified transport-before-domain order, and replaces this suite's
+documentation-per-transition orchestration with one canonical capsule and a
+Define/Implement rhythm. Do not resume the locks, delegation ledger, or B0-S9
+graph below. Read a referenced range only when a concrete historical claim
+requires forensic support.
 
-The orchestrator must not ask the owner to invoke each member Definition. It
-reads member Definitions as subordinate subgoal specifications and executes
-them within this one mission run.
-
-The same command resumes an interrupted run. On every invocation the
-orchestrator must reconcile this document with repository state, pushed and
-deployed commit identity, member evidence ledgers, CI, staging, and any
-in-flight subagent work before selecting the next action. A phase boundary,
-agent exit, context loss, terminal disconnect, or partial landing is a
-checkpoint, never completion.
-
-If learning changes the mission identity or owner-settled topology, the
-orchestrator must mark this document `superseded`, name the successor Definition
-and exact resumption command, update all registries atomically, and stop
-mutating under this authority. It must not silently rewrite the mission into a
-different object.
+This supersession is the explicit changed-mission transition required by the
+former suite. All three registries cut over atomically with the successor
+Definition; no second product mission remains active.
 
 ## Mutation Class And Ceremony
 
@@ -683,9 +675,10 @@ evidence_ledger:
 
 ```yaml
 run_checkpoint_and_resumption_state:
-  status: working
+  status: superseded
   suite_authority: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
-  current_subgoal: S3
+  successor_authority: docs/definitions/choir-autoputer-completion-2026-07-13.md
+  current_subgoal: successor-handoff
   last_completed_subgoal: S2
   definition_gate:
     status: passed
@@ -693,13 +686,13 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 631e3000
+  journal_expected_parent_sha: 30ddd8e69c65a3eb9668842e676140a26a84c926
   orchestrator_lock:
-    holder: Main
-    epoch: 26
-    expires_at: 2026-07-13T13:02:17Z
-    expected_parent_sha: 631e3000
-    lock_transition_id: s3-lock-renewal-255
+    holder: none
+    epoch: 27
+    expires_at: superseded
+    expected_parent_sha: 30ddd8e69c65a3eb9668842e676140a26a84c926
+    lock_transition_id: autoputer-successor-authority-2026-07-13-01
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
     B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
@@ -715,14 +708,14 @@ run_checkpoint_and_resumption_state:
     S9: {status: waiting_on_predecessor, started_at_sha: '', completed_at_sha: '', evidence_refs: [], rollback_refs: [], blockers: [S8]}
   active_phase_checkpoint:
     subgoal: S3
-    status: blocked_incomplete
+    status: superseded
     deployed_sha: 3b10893c13a9d79b7ab4219dc6b9377c6d0ed1fd
     ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29232081536#attempt-4
     staging_ref: authenticated_public_texture_documents_200_at_2026-07-13T08:13:45Z
     product_proof_refs: [docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md#s3-i16-ci-deploy-and-acceptance]
     consensus_ref: /tmp/choir-s3-i18-blocker-consensus-20260713
-    open_findings: [S3_I18_mechanical_handler_cutover_compile_falsified, owner_authority_required_for_replacement_boundary_and_order, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
-    adjudication_ref: S3_I18_blocked_incomplete_four_reviewer_unanimous_stop_and_route_A_recommendation_pending_owner_authority
+    open_findings: [transferred_to_choir_autoputer_completion_2026_07_13]
+    adjudication_ref: owner_directed_successor_redefinition_after_S3_nonconvergence
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -2370,9 +2363,9 @@ run_checkpoint_and_resumption_state:
     - Wire authority split and VM fate-sharing
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
-  highest_impact_remaining_uncertainty: Which owner-ratified S3 boundary may replace the falsified mechanical handler cutover—cohesive bounded prerequisite operations, one broadened red atomic landing, or step-4 domain extraction before transport ownership.
-  next_executable_probe: Owner authority decision on docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md; no fourth incremental APIHandler patch is authorized.
-  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+  highest_impact_remaining_uncertainty: Transferred to the successor Definition's R1 dependency-ordered dissolution frontier.
+  next_executable_probe: Invoke the successor; no further mutation is authorized under this file.
+  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-2026-07-13.md
   evidence_artifact_refs:
     - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
     - docs/evidence/s3-step2-phase-gate-2026-07-13.md
@@ -2384,8 +2377,8 @@ run_checkpoint_and_resumption_state:
     - docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md
     - docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md
   rollback_refs: []
-  superseded_by: ''
-  successor_goal_string: ''
+  superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md
+  successor_goal_string: /goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
 ## Forbidden Collapses
