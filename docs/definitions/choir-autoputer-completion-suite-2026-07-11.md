@@ -693,13 +693,13 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: aa66b683
+  journal_expected_parent_sha: 3c651e58
   orchestrator_lock:
     holder: Main
-    epoch: 22
-    expires_at: 2026-07-13T06:40:01Z
-    expected_parent_sha: aa66b683
-    lock_transition_id: s3-lock-renewal-226
+    epoch: 23
+    expires_at: 2026-07-13T07:52:40Z
+    expected_parent_sha: 3c651e58
+    lock_transition_id: s3-lock-renewal-234
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
     B0: {status: complete, started_at_sha: 27db14c36c482e321b56a056f6ce5e0accb338a4, completed_at_sha: 008a7b88cf200119c0f762cc51cfba6be3007445, evidence_refs: [008a7b88cf200119c0f762cc51cfba6be3007445, docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md], rollback_refs: [27db14c36c482e321b56a056f6ce5e0accb338a4], blockers: []}
@@ -721,8 +721,8 @@ run_checkpoint_and_resumption_state:
     staging_ref: authenticated_public_texture_documents_200_at_2026-07-13T05:37:04Z
     product_proof_refs: [docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md#s3-i14-ci-deploy-and-acceptance]
     consensus_ref: /tmp/choir-s3-i14-final-consensus-20260713
-    open_findings: [S3_step3_apihandler_wrapper_and_runtime_API_declarations_remain, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
-    adjudication_ref: S3_I14_PASS_next_step3_prerequisite_pending
+    open_findings: [S3_I15_sandbox_bootstrap_ownership_dispatch_intent, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
+    adjudication_ref: S3_I14_PASS_S3_I15_dispatch_pending
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -2085,6 +2085,63 @@ run_checkpoint_and_resumption_state:
       last_reconciled_at: 2026-07-13T05:48:20Z
       reconciliation_result: S3_I14_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
       close_condition: prerequisite_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
+    - slice_id: S3-I15-sandbox-bootstrap-ownership
+      subgoal: S3
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 23
+      status: dispatch_intent
+      dispatch_nonce: s3-runtime-dissolution-i15-nonce-01
+      dispatch_ref: pending_S3I15Implementer
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md#exact-mutation-lock
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_return
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_isolated_S3I15Implementer
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: 3c651e58
+      lock_release_ref: pending_S3_I15_landing
+      stage_started_at: 2026-07-13T05:52:40Z
+      transition_id: s3-i15-dispatch-intent-233
+      expected_parent_sha: 3c651e58
+      stage_history:
+        - {status: dispatch_intent, transition_id: s3-i15-dispatch-intent-233, recorded_at: 2026-07-13T05:52:40Z, actor: Main, expected_parent_sha: 3c651e58, precondition: S3_I14_landed_duplicate_API_constructor_deleted, postcondition: exact_sandbox_bootstrap_ownership_and_apihandler_wrapper_deletion_slice_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-13T07:52:40Z
+      mutation_class: orange
+      protected_surfaces: []
+      exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/sandbox/run.go, internal/sandbox/run_test.go, internal/apihandler/api.go, internal/runtime/api.go, internal/runtime/texture_live_llm_workflow_test.go, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [runtime_APIHandler_method_move, app_domain_code, routes, actor_lifecycle, provider_semantics, state, models, health_policy, deployment_config, step4, new_package, aliases, interfaces, callbacks, accessors, forwarders, fallback_bootstrap, second_server_or_mux, compatibility_shims]
+      authority_edges_locked: [internal_sandbox_sole_bootstrap_composition_owner, cmd_sandbox_process_entry_only, apihandler_wrapper_deleted, one_runtime_API_declaration_and_route_path, product_tool_same_canonical_server]
+      implementer_agent: pending_S3I15Implementer
+      verifier_agent: pending_independent_verifier
+      pre_mutation_sha: 3c651e58
+      rollback_commit_or_ref: 3c651e58
+      accepted_slice_dependency_refs: [S3-I14@ca9b3142]
+      external_operation_id: not_applicable
+      effect_authority: canonical_git_ref_then_staging_sandbox
+      receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_public_product_API
+      expected_precondition: cmd_sandbox_owns_bootstrap_and_apihandler_wraps_runtime_API
+      observed_postcondition: pending
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending
+      ci_run_ref: pending
+      deploy_ref: pending
+      deployed_sha: pending
+      acceptance_ref: pending
+      acceptance_contract: sandbox_package_sole_bootstrap_owner_cmd_entry_only_apihandler_wrapper_deleted_behavior_preserved
+      evidence_refs: [docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md, /tmp/choir-s3-i14-api-boundary-consensus-20260713]
+      open_findings: [nonattributable_staging_gateway_readiness_local_runtime_dolt_ollama_refused]
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-13T05:52:40Z
+      reconciliation_result: no_prior_matching_dispatch_found
+      close_condition: bootstrap_cutover_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
     - {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}
@@ -2121,14 +2178,15 @@ run_checkpoint_and_resumption_state:
     - Wire authority split and VM fate-sharing
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
-  highest_impact_remaining_uncertainty: The smallest deletion-bearing boundary that can remove the apihandler wrapper and explicit sandbox-to-runtime bootstrap edges without creating a facade or crossing into step-4 app/domain ownership.
-  next_executable_probe: Map remaining APIHandler private dependencies and sandbox bootstrap Runtime accesses after S3-I14, then persist the smallest acyclic deletion-bearing step-3 prerequisite.
+  highest_impact_remaining_uncertainty: Whether moving the complete sandbox composition into its existing owner and deleting the apihandler wrapper preserves exact startup and test behavior without exposing a new seam.
+  next_executable_probe: Implement S3-I15 sandbox bootstrap ownership and apihandler wrapper deletion under the canonical mutation lock.
   suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
     - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
     - docs/evidence/s3-step2-phase-gate-2026-07-13.md
     - docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md
     - docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md
+    - docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md
   rollback_refs: []
   superseded_by: ''
   successor_goal_string: ''
