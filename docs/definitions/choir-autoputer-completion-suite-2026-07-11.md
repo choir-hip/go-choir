@@ -685,20 +685,20 @@ evidence_ledger:
 run_checkpoint_and_resumption_state:
   status: working
   suite_authority: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
-  current_subgoal: S2
-  last_completed_subgoal: S1
+  current_subgoal: S3
+  last_completed_subgoal: S2
   definition_gate:
     status: passed
     consensus_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: b9aa7bb3
+  journal_expected_parent_sha: 3177a8c5
   orchestrator_lock:
     holder: Main
     epoch: 19
     expires_at: 2026-07-13T02:36:24Z
-    expected_parent_sha: b9aa7bb3
+    expected_parent_sha: 3177a8c5
     lock_transition_id: s3-lock-renewal-201
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1920,15 +1920,17 @@ run_checkpoint_and_resumption_state:
   belief_state_changes:
     - Runtime dead-code Phase 1 was not runtime dissolution; the package returned to its original production size.
     - A single executable grand suite replaces competing run-truth and autoputer sequencing spines.
+    - S3 step 2 is complete: tool-loop/executor/context authority moved to toolregistry and anonymous runtime embedding was removed; named lifecycle/storage edges remain later ordered residue.
   remaining_error_field:
     - Wire authority split and VM fate-sharing
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
-  highest_impact_remaining_uncertainty: The exact remaining runtime-local Wire publication/read/migration callers and the smallest atomic cutover onto corpusd world-wire authority.
-  next_executable_probe: Build the fresh S2 authority/caller/deletion inventory, verify existing corpusd publication/read capabilities and product lifecycle controls, then persist exact non-overlapping mutation slices before dispatch.
+  highest_impact_remaining_uncertainty: The smallest atomic S3 step-3 API/config/bootstrap ownership cutover that deletes the apihandler wrapper and direct cmd/sandbox runtime import without crossing into app/domain step 4.
+  next_executable_probe: Map current API/config/bootstrap callers and owners, then persist and dispatch the smallest step-3 cutover slice with no wrapper, alias, or dual route path.
   suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
     - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
+    - docs/evidence/s3-step2-phase-gate-2026-07-13.md
   rollback_refs: []
   superseded_by: ''
   successor_goal_string: ''
