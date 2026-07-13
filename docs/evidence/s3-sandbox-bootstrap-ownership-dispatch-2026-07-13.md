@@ -44,3 +44,13 @@ This is a deletion-bearing step-3 prerequisite. Runtime still owns `APIHandler` 
 - The exact bootstrap move exposed an existing reverse dependency: runtime Texture import code calls sandbox-owned `ResolveFilesRoot` at three production sites. Once the existing sandbox package owns bootstrap and imports runtime, that reverse edge creates an illegal Go package cycle.
 - This is a pre-existing ownership defect revealed by the cutover, not a reason to restore the wrapper.
 - Smallest deletion-bearing repair: move `DefaultFilesRoot` and `ResolveFilesRoot` into the existing provider-interface configuration authority, migrate sandbox and runtime callers, add exact explicit/environment/default precedence coverage, and delete the sandbox declarations. No alias, forwarder, duplicate resolver, callback, interface, or new package is permitted.
+
+## S3-I15 Implementation Receipt
+
+- Integrated isolated commit `2c950a7eb6439cd4148ce7b87554676c70d00609` as canonical `887bbdde`; it descends from the canonical cycle problem record `5d427cc3`.
+- `cmd/sandbox` is process entry only. The existing sandbox package owns the complete original startup sequence and dedicated `zot-session` operation.
+- The apihandler wrapper file is deleted. Sandbox bootstrap wires runtime's one handler/registrar path directly on the canonical server, then binds the apihandler-owned product tool to that same server and Super registry.
+- The compile-proven reverse dependency is deleted: files-root default/resolution authority moved to provider-interface configuration; sandbox and runtime callers converge there with exact explicit/environment/default precedence tests and no alias or forwarder.
+- Runtime's false apihandler deprecation pointers are removed, and the build-tagged live workflow uses the one runtime handler constructor directly.
+- Focused provider-interface, sandbox command/package, apihandler, actor-runtime, integration-tagged live workflow, full runtime, runtime-ratchet tests, sandbox build, and end-to-end `zot-session` entry smoke pass.
+- Ratchet deltas: production LOC `44032 -> 44024`, test LOC `50142 -> 50141`, caller edges `368 -> 365`, wrappers `5 -> 3`, compatibility markers `10 -> 8`; files, exports, debt, routes, tools, importers, store calls, and interface candidates are flat. One durable citer is classified (`244 -> 245`).
