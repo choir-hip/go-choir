@@ -51,3 +51,14 @@ A four-runner architecture panel completed. Codex identified the hidden producti
 - Runtime's product tool implementation/test files and default registration are deleted. The runtime default-catalog regression now asserts that server-bound transport is absent; apihandler tests cover canonical-server identity, owner/email headers, schema, nil/duplicate registration, allowlist/rejections, size limits, truncation, and result shape.
 - Focused tests passed for apihandler, runtime, sandbox, and actor-runtime. The runtime ratchet passes.
 - Ratchet deltas: Go files `146 -> 144`, production files `76 -> 75`, test files `70 -> 69`, production LOC `44216 -> 44032`, test LOC `50223 -> 50142`, exports `1014 -> 1012`, caller edges `372 -> 368`, runtime-scoped tool declarations `49 -> 48`; routes, production importers, wrappers, compatibility markers, store calls, interface candidates, and initial unused-export debt are flat. The enabled product catalog remains behaviorally flat because sandbox registers the same tool after runtime's duplicate constructor-backed registration is deleted. Three durable dispatch/suite citers are classified (`241 -> 244`).
+
+## S3-I14 Independent Verification
+
+- Independent `S3I14Verifier` returned `PASS` at confidence `0.99` with no remaining source, test, inventory, ownership, registration, schema, identity, size, result-shape, or error-parity blocker.
+- The verifier initially read the pre-evidence source commit's stale “tools flat” sentence, then re-read canonical `1453405e`, withdrew the finding, and confirmed the canonical runtime-scoped `49 -> 48` versus enabled-catalog-flat distinction.
+
+## S3-I14 CI, Deploy, and Acceptance
+
+- GitHub Actions run `29225212648` attempt `2` passed every lane except the non-runtime race job, which reached its job deadline while tests were still running and reported no test failure. Attempt `3` retried the failed lane and passed every default, integration, race, ratchet, SBOM, and deploy gate for head `ca9b314254bd5fb92333ceffe7daee8831f364ad`.
+- Deploy job `86740654409` completed successfully.
+- Staging health returned `200`/`status=ok`; authenticated public `GET https://choir.news/api/texture/documents` returned `200`.
