@@ -9,6 +9,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type promptDescriptorResponse struct {
@@ -88,10 +90,10 @@ func settingsPreviewRun(ownerID, role string) *types.RunRecord {
 		},
 	}
 	switch role {
-	case AgentProfileConductor:
+	case agentprofile.Conductor:
 		rec.Metadata["requested_app"] = "<requested_app>"
 		rec.Metadata["seed_prompt"] = "<seed_prompt>"
-	case AgentProfileTexture:
+	case agentprofile.Texture:
 		rec.AgentID = "texture:<doc_id>"
 		rec.ChannelID = "<doc_id>"
 		rec.Metadata[runMetadataAgentID] = "texture:<doc_id>"
@@ -101,7 +103,7 @@ func settingsPreviewRun(ownerID, role string) *types.RunRecord {
 	return rec
 }
 
-func toolResponsesForRegistry(registry *ToolRegistry) []toolDescriptorResponse {
+func toolResponsesForRegistry(registry *toolregistry.ToolRegistry) []toolDescriptorResponse {
 	if registry == nil {
 		return nil
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const productAPIToolMaxBodyBytes = 1 << 20
@@ -39,7 +40,7 @@ func newProductAPIRequestTool(rt *Runtime) Tool {
 			if rt == nil {
 				return "", fmt.Errorf("product_api_request missing runtime")
 			}
-			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
+			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != agentprofile.Super {
 				return "", fmt.Errorf("product_api_request is only available to foreground super")
 			}
 			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID

@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestHandlePromptBarTextureRouteCompletesConductorSynchronously(t *testing.T) {
@@ -81,7 +82,7 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithTexture(t *testing.T
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+	if initialRun.AgentProfile != agentprofile.Texture || initialRun.AgentRole != agentprofile.Texture {
 		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if initialRun.ChannelID != decision.DocID {
@@ -95,7 +96,7 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithTexture(t *testing.T
 		t.Fatalf("list runs before texture super request: %v", err)
 	}
 	for _, run := range runs {
-		if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == AgentProfileSuper {
+		if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == agentprofile.Super {
 			t.Fatalf("super run appeared before Texture request on prompt-bar trajectory: %+v", run)
 		}
 	}
@@ -105,8 +106,8 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithTexture(t *testing.T
 	if err != nil {
 		t.Fatalf("texture request super execution: %v", err)
 	}
-	if got := superResult["profile"]; got != AgentProfileSuper {
-		t.Fatalf("super profile = %v, want %s: %+v", got, AgentProfileSuper, superResult)
+	if got := superResult["profile"]; got != agentprofile.Super {
+		t.Fatalf("super profile = %v, want %s: %+v", got, agentprofile.Super, superResult)
 	}
 	if got := superResult["requested_by"]; got != initialRun.AgentID {
 		t.Fatalf("requested_by = %v, want %s", got, initialRun.AgentID)
@@ -147,7 +148,7 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+	if initialRun.AgentProfile != agentprofile.Texture || initialRun.AgentRole != agentprofile.Texture {
 		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
@@ -228,7 +229,7 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticS
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+	if initialRun.AgentProfile != agentprofile.Texture || initialRun.AgentRole != agentprofile.Texture {
 		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if metadataBoolValue(initialRun.Metadata, "texture_initial_super_request_required") {
@@ -248,7 +249,7 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticS
 			t.Fatalf("list runs: %v", err)
 		}
 		for _, run := range runs {
-			if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == AgentProfileSuper {
+			if trajectoryIDForRun(&run) == resp.SubmissionID && run.AgentProfile == agentprofile.Super {
 				t.Fatalf("automatic super run appeared before Texture requested one: %+v", run)
 			}
 		}
@@ -269,8 +270,8 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticS
 	if err != nil {
 		t.Fatalf("texture request super execution: %v", err)
 	}
-	if got := superResult["profile"]; got != AgentProfileSuper {
-		t.Fatalf("super profile = %v, want %s: %+v", got, AgentProfileSuper, superResult)
+	if got := superResult["profile"]; got != agentprofile.Super {
+		t.Fatalf("super profile = %v, want %s: %+v", got, agentprofile.Super, superResult)
 	}
 	if got := superResult["requested_by"]; got != initialRun.AgentID {
 		t.Fatalf("requested_by = %v, want %s", got, initialRun.AgentID)
@@ -285,15 +286,15 @@ func TestConductorTextureRouteRecordsExplicitDecisionFromStoredPrompt(t *testing
 
 	prompt := "Create a short Texture document titled M32_TEXTURE_ROUTE_DIAGNOSTIC. The body should say this marker is a deployed route diagnostic. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document Texture decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_TEXTURE_ROUTE_DIAGNOSTIC, next action Write the concise reader-facing Texture revision. Then write the concise reader-facing Texture revision."
 	rec, err := rt.completePromptBarDecisionRun(context.Background(), prompt, "user-alice", map[string]any{
-		runMetadataAgentProfile:  AgentProfileConductor,
-		runMetadataAgentRole:     AgentProfileConductor,
+		runMetadataAgentProfile:  agentprofile.Conductor,
+		runMetadataAgentRole:     agentprofile.Conductor,
 		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileTexture,
+		"requested_app":          agentprofile.Texture,
 		"initial_document_title": "M32_TEXTURE_ROUTE_DIAGNOSTIC",
 		"submission_surface":     "prompt_bar",
 	}, conductorDecision{
 		Action: "open_app",
-		App:    AgentProfileTexture,
+		App:    agentprofile.Texture,
 		Title:  "M32_TEXTURE_ROUTE_DIAGNOSTIC",
 	})
 	if err != nil {
@@ -311,7 +312,7 @@ func TestConductorTextureRouteRecordsExplicitDecisionFromStoredPrompt(t *testing
 	if err != nil {
 		t.Fatalf("get initial loop run: %v", err)
 	}
-	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+	if initialRun.AgentProfile != agentprofile.Texture || initialRun.AgentRole != agentprofile.Texture {
 		t.Fatalf("initial loop profile = %q/%q, want texture", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if !metadataBoolValue(initialRun.Metadata, "texture_initial_decision_required") {
@@ -391,7 +392,7 @@ func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
 	if metadataBoolValue(initialRun.Metadata, runMetadataExplicitResearcher) {
 		t.Fatalf("initial run metadata must not set %s from prompt text: %+v", runMetadataExplicitResearcher, initialRun.Metadata)
 	}
-	if initialRun.AgentProfile != AgentProfileTexture || initialRun.AgentRole != AgentProfileTexture {
+	if initialRun.AgentProfile != agentprofile.Texture || initialRun.AgentRole != agentprofile.Texture {
 		t.Fatalf("initial loop profile = %q/%q, want ordinary texture route", initialRun.AgentProfile, initialRun.AgentRole)
 	}
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {

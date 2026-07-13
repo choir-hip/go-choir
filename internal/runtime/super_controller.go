@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const runMetadataWorkerUpdatesInjected = "worker_updates_injected"
@@ -56,8 +57,8 @@ func (rt *Runtime) reconcilePersistentSuperActor(ctx context.Context, ownerID, a
 
 	first := updates[0]
 	metadata := map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      agentID,
 		"request_source":        "update_coagent",
 		"requested_by_agent_id": first.AgentID,
@@ -231,7 +232,7 @@ func isPersistentSuperAgentRun(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	if agentProfileForRun(rec) != AgentProfileSuper {
+	if agentProfileForRun(rec) != agentprofile.Super {
 		return false
 	}
 	if strings.TrimSpace(rec.OwnerID) == "" || strings.TrimSpace(rec.AgentID) == "" {
@@ -366,7 +367,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 	}
 	first := updates[0]
 	profile := canonicalAgentProfile(firstNonEmpty(agent.Profile, first.Role))
-	if profile == "" || profile == AgentProfileEmail || profile == AgentProfileConductor || profile == AgentProfileSuper {
+	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Super {
 		return nil, nil
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
@@ -552,7 +553,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 		appendCoagentUpdateIDsForRun(rec, updateIDs)
 		var sourceEntities []textureSourceEntity
 		var sourceRejections []coagentSourceRejection
-		if agentProfileForRun(rec) == AgentProfileTexture {
+		if agentProfileForRun(rec) == agentprofile.Texture {
 			sourceEntities, sourceRejections = rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(context.Background(), ownerID, fresh)
 			mergeTextureSourceEntitiesIntoRunMetadata(rec, sourceEntities)
 			mergeCoagentSourceRejectionsIntoRunMetadata(rec, sourceRejections)
@@ -573,7 +574,7 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 }
 
 func shouldAppendInitialCoagentMailboxTurns(rec *types.RunRecord) bool {
-	if rec == nil || agentProfileForRun(rec) != AgentProfileTexture {
+	if rec == nil || agentProfileForRun(rec) != agentprofile.Texture {
 		return false
 	}
 	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {
@@ -638,7 +639,7 @@ func runSupportsCoagentUpdateInjection(rec *types.RunRecord) bool {
 		return false
 	}
 	switch agentProfileForRun(rec) {
-	case AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher, AgentProfileTexture:
+	case agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper, agentprofile.Researcher, agentprofile.Texture:
 		return strings.TrimSpace(rec.AgentID) != ""
 	default:
 		return false
@@ -688,7 +689,7 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 	appendCoagentUpdateIDsForRun(rec, updateIDs)
 	var sourceEntities []textureSourceEntity
 	var sourceRejections []coagentSourceRejection
-	if agentProfileForRun(rec) == AgentProfileTexture {
+	if agentProfileForRun(rec) == agentprofile.Texture {
 		sourceEntities, sourceRejections = rt.evidenceSourceEntitiesAndRejectionsFromWorkerUpdates(ctx, ownerID, fresh)
 		mergeTextureSourceEntitiesIntoRunMetadata(rec, sourceEntities)
 		mergeCoagentSourceRejectionsIntoRunMetadata(rec, sourceRejections)
@@ -704,7 +705,7 @@ func shouldPrependInitialCoagentUpdates(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	if agentProfileForRun(rec) == AgentProfileTexture {
+	if agentProfileForRun(rec) == agentprofile.Texture {
 		return false
 	}
 	if metadataStringValue(rec.Metadata, "request_source") == "update_coagent" {

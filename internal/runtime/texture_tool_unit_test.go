@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -18,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type semanticMergeTestProvider struct {
@@ -650,16 +652,16 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 		Prompt:       "Patch structured Texture.",
 		CreatedAt:    now,
 		UpdatedAt:    now,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                     textureAgentRevisionTaskType,
 			"doc_id":                   doc.DocID,
 			"source_entities":          []textureSourceEntity{{EntityID: "legacy-sidecar", Kind: "content_item"}},
 			"source_ref_normalization": map[string]any{"legacy_count": 1},
 			runMetadataAgentID:         currentTextureAgentID(doc.DocID),
-			runMetadataAgentProfile:    AgentProfileTexture,
-			runMetadataAgentRole:       AgentProfileTexture,
+			runMetadataAgentProfile:    agentprofile.Texture,
+			runMetadataAgentRole:       agentprofile.Texture,
 			runMetadataChannelID:       doc.DocID,
 		},
 	}
@@ -676,7 +678,7 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 	if err != nil {
 		t.Fatalf("marshal patch args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err != nil {
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err != nil {
 		t.Fatalf("patch_texture: %v", err)
 	}
 	revs, err := s.ListRevisionsByDoc(ctx, doc.DocID, doc.OwnerID, 10)
@@ -764,7 +766,7 @@ func TestTextureToolCommitWritesStructuredRevisionAndRejectsStaleBase(t *testing
 			t.Fatalf("metadata retained legacy source key %q: %#v", key, meta)
 		}
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err == nil ||
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err == nil ||
 		!strings.Contains(err.Error(), "stale") {
 		t.Fatalf("stale base err = %v, want stale rejection", err)
 	}
@@ -1046,7 +1048,7 @@ func textureToolCommitRuntime(t *testing.T) (*store.Store, *Runtime) {
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, events.NewEventBus(), NewStubProvider(0))
+	}, s, events.NewEventBus(), provider.NewStubProvider(0))
 	setTestDispatch(rt, s)
 	if err := rt.InstallDefaultAgentTools(""); err != nil {
 		t.Fatalf("InstallDefaultAgentTools: %v", err)

@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // --- Mock provideriface.ToolLoopProvider ---
@@ -139,8 +140,8 @@ func TestRunToolLoopExactInitialToolChoiceAcceptsDuplicateSameTool(t *testing.T)
 	run := &types.RunRecord{
 		RunID:        "run-texture",
 		OwnerID:      "owner-1",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 	}
 	text, _, err := toolregistry.RunToolLoop(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), provider, registry, []json.RawMessage{json.RawMessage(`{"role":"user","content":"write v1"}`)},
 		"You are a Texture appagent.",

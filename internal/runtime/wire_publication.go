@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func wireCanonicalRevisionEligibleForPublication(doc types.Document, rev types.Revision, rec *types.RunRecord) bool {
@@ -130,7 +131,7 @@ func (rt *Runtime) beginWireProcessorDecisionWorkItem(ctx context.Context, rec *
 		TrajectoryID:         trajectoryID,
 		Objective:            "resolve processor request into explicit publication decisions",
 		Reason:               "processor request started without durable per-item decision ledger yet",
-		AuthorityProfile:     AgentProfileProcessor,
+		AuthorityProfile:     agentprofile.Processor,
 		ObjectiveFingerprint: wireProcessorDecisionWorkItemFingerprint(trajectoryID),
 		CreatedByRunID:       rec.RunID,
 		Details: map[string]any{
@@ -172,7 +173,7 @@ func (rt *Runtime) beginWireProcessorSourceDecisionWorkItems(ctx context.Context
 			TrajectoryID:         trajectoryID,
 			Objective:            "resolve source item into explicit publication decision",
 			Reason:               "processor request started with source item awaiting typed publication verdict",
-			AuthorityProfile:     AgentProfileProcessor,
+			AuthorityProfile:     agentprofile.Processor,
 			ObjectiveFingerprint: wireProcessorSourceItemDecisionWorkItemFingerprint(trajectoryID, sourceItemID),
 			CreatedByRunID:       rec.RunID,
 			Details: map[string]any{
@@ -522,7 +523,7 @@ func (rt *Runtime) beginWireStoryResolutionWorkItem(ctx context.Context, rec *ty
 		TrajectoryID:         trajectoryID,
 		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
 		Reason:               "processor opened a wire story Texture route",
-		AuthorityProfile:     AgentProfileTexture,
+		AuthorityProfile:     agentprofile.Texture,
 		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint(trajectoryID, docID),
 		CreatedByRunID:       rec.RunID,
 		Details: map[string]any{

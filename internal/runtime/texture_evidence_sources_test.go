@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestEvidenceRecordToSourceEntity_ContentIDYieldsWholeResourceByDefault(t *testing.T) {
@@ -79,7 +80,7 @@ func TestCoagentPacketHTTPSourceStaysURLBackedNotSyntheticContentItem(t *testing
 	update := types.CoagentSourcePacket{
 		OwnerID: "owner-url-source",
 		AgentID: "researcher:url-source",
-		Role:    AgentProfileResearcher,
+		Role:    agentprofile.Researcher,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-http",
@@ -110,7 +111,7 @@ func TestCoagentPacketHTTPSourcePreservesSourceTextForTransclusion(t *testing.T)
 	update := types.CoagentSourcePacket{
 		OwnerID: "owner-url-source-text",
 		AgentID: "researcher:url-source-text",
-		Role:    AgentProfileResearcher,
+		Role:    agentprofile.Researcher,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-whitehouse",
@@ -188,7 +189,7 @@ func TestCoagentPacketContentIDSourceHydratesImportedText(t *testing.T) {
 	update := types.CoagentSourcePacket{
 		OwnerID: ownerID,
 		AgentID: "researcher:content-id-source-text",
-		Role:    AgentProfileResearcher,
+		Role:    agentprofile.Researcher,
 		Packet: types.CoagentSourcePacketPayload{
 			Sources: []types.CoagentPacketSource{{
 				SourceID: "src-content-id",
@@ -327,7 +328,7 @@ func TestPendingUpdateRefsBecomeSourceEntities(t *testing.T) {
 		AgentID:       "researcher:refs",
 		TargetAgentID: targetAgentID,
 		ChannelID:     "doc-refs",
-		Role:          AgentProfileResearcher,
+		Role:          agentprofile.Researcher,
 		Packet:        newCoagentPacket("evidence_update", "source refs ready", coagentClaimsFromTexts([]string{"Typed refs should be available to Texture."}, sources), sources, nil, nil, nil),
 		Content:       "source refs ready",
 		CreatedAt:     now,
@@ -392,7 +393,7 @@ func TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping(
 		AgentID:       "super:execution",
 		TargetAgentID: "texture:doc-execution",
 		ChannelID:     "doc-execution",
-		Role:          AgentProfileSuper,
+		Role:          agentprofile.Super,
 		Packet: newCoagentPacket("execution_result", "implementation and verification evidence ready",
 			coagentClaimsFromTexts([]string{"Do not scrape command_output:prose-only or diff_hunk:prose-only from ordinary findings."}, sources),
 			sources,
@@ -472,7 +473,7 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 		AgentID:       "researcher:native-sources",
 		TargetAgentID: targetAgentID,
 		ChannelID:     docID,
-		Role:          AgentProfileResearcher,
+		Role:          agentprofile.Researcher,
 		Packet:        newCoagentPacket("evidence_update", "native source refs ready", coagentClaimsFromTexts([]string{"The source-backed finding is ready."}, sources), sources, nil, nil, nil),
 		Content:       "Use the source-backed finding.",
 		CreatedAt:     now,
@@ -494,8 +495,8 @@ func TestTextureCoagentSourceRefsSurviveInjectionAndDelivery(t *testing.T) {
 		RunID:        "run-native-source-refs",
 		OwnerID:      ownerID,
 		AgentID:      targetAgentID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		ChannelID:    docID,
 		Metadata: map[string]any{
 			"type":           textureAgentRevisionTaskType,
@@ -620,7 +621,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 		AgentID:       "researcher:summary-source",
 		TargetAgentID: targetAgentID,
 		ChannelID:     docID,
-		Role:          AgentProfileResearcher,
+		Role:          agentprofile.Researcher,
 		Packet:        newCoagentPacket("evidence_update", "source evidence ready", coagentClaimsFromTexts([]string{"OpenAI GPT-5.5 public release evidence is ready."}, sources), sources, nil, nil, nil),
 		Content:       "Use the OpenAI docs source evidence.",
 		CreatedAt:     now,
@@ -641,8 +642,8 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 		RunID:        "run-summary-source",
 		OwnerID:      ownerID,
 		AgentID:      targetAgentID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		ChannelID:    docID,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -697,7 +698,7 @@ func TestTextureCoagentEvidenceSummarySourceCanPatchWithNativeCitation(t *testin
 	if err != nil {
 		t.Fatalf("marshal texture edit args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), "patch_texture", editArgs); err != nil {
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), "patch_texture", editArgs); err != nil {
 		t.Fatalf("patch_texture should accept whole_resource source citation: %v", err)
 	}
 	updated, err := s.GetDocument(ctx, docID, ownerID)

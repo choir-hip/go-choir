@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/google/uuid"
@@ -25,6 +26,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // Runtime is the core runtime engine that manages run lifecycle, event
@@ -57,8 +59,8 @@ type Runtime struct {
 	internalIngestionSubmissionMu sync.Mutex
 
 	wg           sync.WaitGroup
-	toolRegistry *ToolRegistry
-	toolProfiles map[string]*ToolRegistry
+	toolRegistry *toolregistry.ToolRegistry
+	toolProfiles map[string]*toolregistry.ToolRegistry
 
 	textureWakeAfter func(time.Duration, func()) textureWakeTimer
 
@@ -255,23 +257,23 @@ func defaultAgentID(profile, ownerID string, metadata map[string]any) string {
 		return agentID
 	}
 	switch profile {
-	case AgentProfileConductor:
+	case agentprofile.Conductor:
 		if ownerID != "" {
 			return "conductor:" + ownerID
 		}
-	case AgentProfileSuper:
+	case agentprofile.Super:
 		if ownerID != "" {
 			return persistentSuperAgentID(ownerID)
 		}
-	case AgentProfileTexture:
+	case agentprofile.Texture:
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
 			return currentTextureAgentID(docID)
 		}
-	case AgentProfileProcessor:
+	case agentprofile.Processor:
 		if key := metadataStringValue(metadata, runMetadataProcessorKey); key != "" {
 			return "processor:" + safeRefPart(key)
 		}
-	case AgentProfileReconciler:
+	case agentprofile.Reconciler:
 		if scope := metadataStringValue(metadata, runMetadataReconcilerScope); scope != "" {
 			return "reconciler:" + safeRefPart(scope)
 		}
@@ -297,12 +299,12 @@ func defaultChannelID(profile string, metadata map[string]any, parent *types.Run
 	if parent != nil && strings.TrimSpace(parent.ChannelID) != "" {
 		return strings.TrimSpace(parent.ChannelID)
 	}
-	if profile == AgentProfileTexture {
+	if profile == agentprofile.Texture {
 		if docID := metadataStringValue(metadata, "doc_id"); docID != "" {
 			return docID
 		}
 	}
-	if profile == AgentProfileSuper || profile == AgentProfileProcessor || profile == AgentProfileReconciler {
+	if profile == agentprofile.Super || profile == agentprofile.Processor || profile == agentprofile.Reconciler {
 		return agentID
 	}
 	return ""
@@ -322,8 +324,8 @@ func (rt *Runtime) EnsurePersistentSuperAgent(ctx context.Context, ownerID strin
 		AgentID:   agentID,
 		OwnerID:   ownerID,
 		SandboxID: rt.cfg.SandboxID,
-		Profile:   AgentProfileSuper,
-		Role:      AgentProfileSuper,
+		Profile:   agentprofile.Super,
+		Role:      agentprofile.Super,
 		ChannelID: agentID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -346,8 +348,8 @@ func resolveRunIdentity(ownerID, sandboxID string, metadata map[string]any, pare
 		}
 	}
 	profile = canonicalAgentProfile(profile)
-	if strings.EqualFold(strings.TrimSpace(rawProfile), AgentProfileTexture) {
-		profile = AgentProfileTexture
+	if strings.EqualFold(strings.TrimSpace(rawProfile), agentprofile.Texture) {
+		profile = agentprofile.Texture
 	}
 	rawRole := metadataStringValue(metadata, runMetadataAgentRole)
 	role := rawRole
@@ -356,8 +358,8 @@ func resolveRunIdentity(ownerID, sandboxID string, metadata map[string]any, pare
 	} else {
 		role = canonicalAgentProfile(role)
 	}
-	if strings.EqualFold(strings.TrimSpace(rawRole), AgentProfileTexture) {
-		role = AgentProfileTexture
+	if strings.EqualFold(strings.TrimSpace(rawRole), agentprofile.Texture) {
+		role = agentprofile.Texture
 	}
 	agentID := defaultAgentID(profile, ownerID, metadata)
 	channelID := defaultChannelID(profile, metadata, parent, agentID)
@@ -507,7 +509,7 @@ func shouldLogWireLifecycle(rec *types.RunRecord) bool {
 		return false
 	}
 	profile := canonicalAgentProfile(agentProfileForRun(rec))
-	if profile == AgentProfileProcessor || profile == AgentProfileTexture || profile == AgentProfileResearcher || profile == AgentProfileCoSuper {
+	if profile == agentprofile.Processor || profile == agentprofile.Texture || profile == agentprofile.Researcher || profile == agentprofile.CoSuper {
 		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
 			return true
 		}
@@ -567,7 +569,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt), rt.traceStore); err != nil {
 		return nil, err
 	}
-	if canonicalAgentProfile(agentProfileForRun(rec)) == AgentProfileProcessor {
+	if canonicalAgentProfile(agentProfileForRun(rec)) == agentprofile.Processor {
 		if _, err := rt.beginWireProcessorDecisionWorkItem(ctx, rec); err != nil {
 			log.Printf("runtime: wire processor decision work item run=%s: %v", rec.RunID, err)
 		}
@@ -698,13 +700,13 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 			coagentProfile = canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentRole))
 		}
 		slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))
-		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && coagentProfile == AgentProfileCoSuper {
+		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && coagentProfile == agentprofile.CoSuper {
 			return nil, fmt.Errorf("vsuper co-super coagent requires co_super_slot to be implementation or verifier")
 		}
-		if coagentProfile == AgentProfileCoSuper && slot == "" {
+		if coagentProfile == agentprofile.CoSuper && slot == "" {
 			return nil, fmt.Errorf("vsuper co-super coagent requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
 		}
-		if slot != "" && coagentProfile == AgentProfileCoSuper {
+		if slot != "" && coagentProfile == agentprofile.CoSuper {
 			existing, found, err := rt.activeCoSuperSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
 			if err != nil {
 				return nil, err
@@ -718,7 +720,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		if err := rt.enforceCoSuperSlotBudget(ctx, &requesterRec); err != nil {
 			return nil, err
 		}
-		if slot == "verifier" && coagentProfile == AgentProfileCoSuper {
+		if slot == "verifier" && coagentProfile == agentprofile.CoSuper {
 			if err := rt.enforceVSuperVerifierSequencing(ctx, &requesterRec); err != nil {
 				return nil, err
 			}
@@ -737,7 +739,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	claimedCoSuperTrajectoryID := ""
 	claimedCoSuperSlotName := ""
 	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
-		canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == AgentProfileCoSuper &&
+		canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
 		rt.coagentSpawnBudgetApplies(&requesterRec) {
 		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
 		existing, claimed, err := rt.store.ClaimCoSuperSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, requesterRunID)
@@ -880,12 +882,12 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 }
 
 func inheritTextureRequesterMetadata(metadata map[string]any, requesterRun *types.RunRecord) map[string]any {
-	if requesterRun == nil || canonicalAgentProfile(agentProfileForRun(requesterRun)) != AgentProfileTexture {
+	if requesterRun == nil || canonicalAgentProfile(agentProfileForRun(requesterRun)) != agentprofile.Texture {
 		return metadata
 	}
 	metadata = cloneMetadata(metadata)
 	if metadataStringValue(metadata, "requested_by_profile") == "" {
-		metadata["requested_by_profile"] = AgentProfileTexture
+		metadata["requested_by_profile"] = agentprofile.Texture
 	}
 	if metadataStringValue(metadata, "requested_by_agent_id") == "" {
 		metadata["requested_by_agent_id"] = agentIDForRun(requesterRun)
@@ -944,7 +946,7 @@ func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 
 func spawnedCoagentWorkItemProfile(profile string) bool {
 	switch canonicalAgentProfile(profile) {
-	case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
+	case agentprofile.Researcher, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
 		return true
 	default:
 		return false
@@ -979,7 +981,7 @@ func (rt *Runtime) coagentSpawnBudgetApplies(requesterRec *types.RunRecord) bool
 	if requesterRec == nil {
 		return false
 	}
-	return canonicalAgentProfile(agentProfileForRun(requesterRec)) == AgentProfileVSuper
+	return canonicalAgentProfile(agentProfileForRun(requesterRec)) == agentprofile.VSuper
 }
 
 func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, requesterRec *types.RunRecord) error {
@@ -1329,7 +1331,7 @@ func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) in
 		if canonicalAgentProfile(runs[i].AgentProfile) != profile {
 			continue
 		}
-		if profile == AgentProfileProcessor && !rt.processorRunOccupiesAdmission(ctx, runs[i]) {
+		if profile == agentprofile.Processor && !rt.processorRunOccupiesAdmission(ctx, runs[i]) {
 			continue
 		}
 		count++
@@ -1518,7 +1520,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
 	}
 	profile := canonicalAgentProfile(firstNonEmpty(agent.Profile, first.AuthorityProfile))
-	if profile == "" || profile == AgentProfileEmail || profile == AgentProfileConductor || profile == AgentProfileTexture {
+	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Texture {
 		return nil, nil
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
@@ -1662,7 +1664,7 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 // executeWithToolLoop runs the run through the real tool-calling loop.
 // This is the primary execution path when a tool registry is configured,
 // enabling the LLM to invoke registered Go function-call tools.
-func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord, registry *ToolRegistry, emit provideriface.EventEmitFunc) {
+func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord, registry *toolregistry.ToolRegistry, emit provideriface.EventEmitFunc) {
 	tlp := toolregistry.AsToolLoopProvider(rt.provider)
 
 	// Build the initial conversation from the run prompt.
@@ -2023,7 +2025,7 @@ func (rt *Runtime) normalizeCompletedRunResult(rec *types.RunRecord) {
 	if rec == nil {
 		return
 	}
-	if agentProfileForRun(rec) != AgentProfileConductor {
+	if agentProfileForRun(rec) != agentprofile.Conductor {
 		return
 	}
 	rec.Result = normalizeConductorDecision(rec)
@@ -2048,35 +2050,25 @@ type conductorDecision struct {
 	InitialLoopID        string `json:"initial_loop_id,omitempty"`
 }
 
-func conductorSeedPrompt(rec *types.RunRecord) string {
-	if rec == nil {
-		return ""
-	}
-	seedPrompt, _ := rec.Metadata["seed_prompt"].(string)
-	if strings.TrimSpace(seedPrompt) == "" {
-		seedPrompt = strings.TrimSpace(rec.Prompt)
-	}
-	return strings.TrimSpace(seedPrompt)
-}
 
 func conductorRequestedApp(rec *types.RunRecord) string {
 	if rec == nil {
-		return AgentProfileTexture
+		return agentprofile.Texture
 	}
 	requestedApp, _ := rec.Metadata["requested_app"].(string)
 	if strings.TrimSpace(requestedApp) == "" {
-		requestedApp = AgentProfileTexture
+		requestedApp = agentprofile.Texture
 	}
 	requestedApp = strings.TrimSpace(requestedApp)
 	if isTextureDecisionApp(requestedApp) {
-		return AgentProfileTexture
+		return agentprofile.Texture
 	}
 	return requestedApp
 }
 
 func isTextureDecisionApp(app string) bool {
 	switch strings.ToLower(strings.TrimSpace(app)) {
-	case AgentProfileTexture:
+	case agentprofile.Texture:
 		return true
 	default:
 		return false
@@ -2101,7 +2093,7 @@ func conductorWindowTitle(rec *types.RunRecord, seedPrompt string) string {
 }
 
 func fillConductorDecisionFromRun(rec *types.RunRecord, decision conductorDecision) conductorDecision {
-	seedPrompt := conductorSeedPrompt(rec)
+	seedPrompt := provider.ConductorSeedPrompt(rec)
 	requestedApp := conductorRequestedApp(rec)
 	if strings.TrimSpace(decision.Action) == "" {
 		decision.Action = "open_app"
@@ -2117,7 +2109,7 @@ func fillConductorDecisionFromRun(rec *types.RunRecord, decision conductorDecisi
 			decision.SeedPrompt = seedPrompt
 		}
 		if isTextureDecisionApp(decision.App) {
-			decision.App = AgentProfileTexture
+			decision.App = agentprofile.Texture
 			decision.CreateInitialVersion = ptrBool(false)
 			decision.InitialContent = ""
 		}
@@ -2202,7 +2194,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 				parsed = fillConductorDecisionFromRun(rec, parsed)
 				if metadataStringValue(rec.Metadata, "doc_id") != "" && isTextureDecisionApp(metadataStringValue(rec.Metadata, "requested_app")) {
 					parsed.Action = "open_app"
-					parsed.App = AgentProfileTexture
+					parsed.App = agentprofile.Texture
 					parsed = fillConductorDecisionFromRun(rec, parsed)
 				}
 			case "open_app":
@@ -2230,26 +2222,6 @@ func ptrBool(v bool) *bool {
 	return &v
 }
 
-func buildInitialTextureTitle(seedPrompt, objective string) string {
-	source := strings.TrimSpace(seedPrompt)
-	if source == "" {
-		source = strings.TrimSpace(objective)
-	}
-	source = strings.Trim(source, " \t\r\n.:;!?")
-	if source == "" {
-		return "Working Document"
-	}
-	words := strings.Fields(source)
-	if len(words) > 9 {
-		words = words[:9]
-	}
-	title := strings.Join(words, " ")
-	title = strings.Trim(title, " \t\r\n.:;!?")
-	if title == "" {
-		return "Working Document"
-	}
-	return title
-}
 
 func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDecision) string {
 	if rec == nil || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
@@ -2260,7 +2232,7 @@ func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDec
 	}
 	seedPrompt := strings.TrimSpace(decision.SeedPrompt)
 	if seedPrompt == "" {
-		seedPrompt = conductorSeedPrompt(rec)
+		seedPrompt = provider.ConductorSeedPrompt(rec)
 	}
 	if seedPrompt == "" {
 		return ""
@@ -2270,7 +2242,7 @@ func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDec
 		title = conductorWindowTitle(rec, seedPrompt)
 	}
 	if title == "" {
-		title = buildInitialTextureTitle(seedPrompt, "")
+		title = provider.InitialTextureTitle(seedPrompt, "")
 	}
 	if title == "" || strings.EqualFold(title, seedPrompt) {
 		return seedPrompt
@@ -2279,7 +2251,7 @@ func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDec
 }
 
 func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.RunRecord, objective, initialContent string) (conductorDecision, error) {
-	if rec == nil || agentProfileForRun(rec) != AgentProfileConductor {
+	if rec == nil || agentProfileForRun(rec) != agentprofile.Conductor {
 		return conductorDecision{}, fmt.Errorf("conductor route requires a conductor record")
 	}
 
@@ -2327,7 +2299,7 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 	userRevisionID := uuid.New().String()
 	routeSeedPrompt := firstNonEmptyString(
 		strings.TrimSpace(decision.SeedPrompt),
-		conductorSeedPrompt(rec),
+		provider.ConductorSeedPrompt(rec),
 		strings.TrimSpace(rec.Prompt),
 		metadataStringValue(rec.Metadata, "seed_prompt"),
 	)
@@ -2375,8 +2347,8 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 		AgentID:   currentTextureAgentID(doc.DocID),
 		OwnerID:   rec.OwnerID,
 		SandboxID: rt.cfg.SandboxID,
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: doc.DocID,
 		CreatedAt: now,
 		UpdatedAt: time.Now().UTC(),
@@ -2425,7 +2397,7 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 }
 
 func (rt *Runtime) materializeConductorDecision(rec *types.RunRecord) {
-	if rec == nil || agentProfileForRun(rec) != AgentProfileConductor {
+	if rec == nil || agentProfileForRun(rec) != agentprofile.Conductor {
 		return
 	}
 
@@ -2777,7 +2749,7 @@ func texturePromptExplicitlyRequestsNoWorkerDecision(prompt string) bool {
 // completes successfully. Texture document writes are intentionally not handled
 // here: canonical appagent revisions are created only by Texture write tools.
 func (rt *Runtime) handleRunCompletion(ctx context.Context, rec *types.RunRecord) error {
-	if agentProfileForRun(rec) == AgentProfileConductor {
+	if agentProfileForRun(rec) == agentprofile.Conductor {
 		rt.materializeConductorDecision(rec)
 		return nil
 	}
@@ -2881,7 +2853,7 @@ func (rt *Runtime) textureRunRequestedWorkers(ctx context.Context, rec *types.Ru
 			}
 			profile, _ := output["profile"].(string)
 			role, _ := output["role"].(string)
-			if strings.TrimSpace(profile) == AgentProfileResearcher || strings.TrimSpace(role) == AgentProfileResearcher {
+			if strings.TrimSpace(profile) == agentprofile.Researcher || strings.TrimSpace(role) == agentprofile.Researcher {
 				return true
 			}
 		}
@@ -2900,7 +2872,7 @@ func (rt *Runtime) reconcileCompletedTextureRun(rec *types.RunRecord) {
 			docID = docIDFromTextureAgentID(agentID)
 		}
 	}
-	if strings.TrimSpace(docID) == "" && agentProfileForRun(rec) == AgentProfileTexture {
+	if strings.TrimSpace(docID) == "" && agentProfileForRun(rec) == agentprofile.Texture {
 		docID = channelIDForRun(rec)
 	}
 	if strings.TrimSpace(docID) == "" || strings.TrimSpace(rec.OwnerID) == "" {
@@ -2926,7 +2898,7 @@ func (rt *Runtime) channelHasGroundedHistory(ctx context.Context, ownerID, chann
 			continue
 		}
 		switch agentProfileForRun(&run) {
-		case AgentProfileResearcher, AgentProfileSuper, AgentProfileCoSuper:
+		case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
 			groundedRunIDs[run.RunID] = struct{}{}
 		}
 	}
@@ -2971,7 +2943,7 @@ func (rt *Runtime) maybeWakeTextureOnWorkerMessage(ctx context.Context, ownerID 
 			return
 		}
 		switch agentProfileForRun(&sourceRun) {
-		case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
+		case agentprofile.Researcher, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
 		default:
 			return
 		}
@@ -3531,7 +3503,7 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 // execution did not populate rec.Result directly. This text is run output only;
 // texture document revisions are materialized exclusively by Texture write tools.
 func (rt *Runtime) providerResult() string {
-	if sp, ok := rt.provider.(*StubProvider); ok {
+	if sp, ok := rt.provider.(*provider.StubProvider); ok {
 		return sp.Result
 	}
 	return "Run completed."

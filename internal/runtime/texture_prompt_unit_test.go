@@ -9,6 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestDefaultTexturePromptUsesDecisionNotesWithoutForcedSemanticSequence(t *testing.T) {
@@ -362,7 +363,7 @@ func TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T)
 		AuthorKind: types.AuthorAppAgent,
 	}
 	recent := []ChannelMessage{{
-		Role:    AgentProfileResearcher,
+		Role:    agentprofile.Researcher,
 		From:    "researcher:one",
 		Content: "Findings: identified matchups, but final scores are still unavailable from this packet.",
 	}}
@@ -398,7 +399,7 @@ func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) 
 		AuthorKind: types.AuthorUser,
 	}
 	recent := []ChannelMessage{{
-		Role:    AgentProfileResearcher,
+		Role:    agentprofile.Researcher,
 		From:    "researcher:one",
 		Content: "A usable source packet is ready for incorporation.",
 	}}
@@ -548,7 +549,7 @@ func TestTexturePromptRestoresFinalCommandEvidenceRequirementAfterSuperDelivery(
 		AuthorKind: types.AuthorAppAgent,
 	}
 	recent := []ChannelMessage{{
-		Role:    AgentProfileSuper,
+		Role:    agentprofile.Super,
 		From:    "super:one",
 		Content: "Worker update ready.\n\nFindings:\n- [CMD] command exited 0 and printed the expected hash.",
 	}}
@@ -579,7 +580,7 @@ func TestTexturePromptMixedObligationKeepsGeneralExecuteAffordanceWithoutKeyword
 		AuthorKind: types.AuthorAppAgent,
 	}
 	recent := []ChannelMessage{{
-		Role:    AgentProfileResearcher,
+		Role:    agentprofile.Researcher,
 		From:    "researcher:one",
 		Content: "Worker update ready.\n\nFindings:\n- [S1] Texture documents have durable revisions.",
 	}}

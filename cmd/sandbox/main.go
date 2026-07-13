@@ -9,17 +9,19 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/health"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/trace"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
@@ -112,7 +114,7 @@ func main() {
 		log.Printf("sandbox: using gateway provider (url=%s provider=%s model=%s reasoning=%s)",
 			gatewayURL, rtCfg.LLMProvider, rtCfg.LLMModel, rtCfg.LLMReasoningEffort)
 	} else {
-		rtProvider = runtime.NewStubProvider(rtCfg.ProviderTimeout)
+		rtProvider = provider.NewStubProvider(rtCfg.ProviderTimeout)
 		log.Printf("sandbox: using stub provider (no gateway configured)")
 	}
 
@@ -172,14 +174,14 @@ func main() {
 			log.Fatalf("sandbox: install default agent tools: %v", err)
 		}
 		superTools := 0
-		if registry := rt.Runtime.ToolRegistryForProfile(runtime.AgentProfileSuper); registry != nil {
+		if registry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super); registry != nil {
 			superTools = registry.Size()
 		}
 		log.Printf("sandbox: tool profiles enabled (conductor=%d super=%d researcher=%d texture=%d)",
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(runtime.AgentProfileConductor)),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Conductor)),
 			superTools,
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(runtime.AgentProfileResearcher)),
-			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(runtime.AgentProfileTexture)),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Researcher)),
+			sizeOfRegistry(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture)),
 		)
 	} else {
 		log.Printf("sandbox: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
@@ -265,7 +267,7 @@ func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg provideriface.Config, f
 		rtCfg.StorePath = provideriface.DefaultStorePath
 	}
 	if strings.TrimSpace(rtCfg.ModelPolicyPath) == "" {
-		rtCfg.ModelPolicyPath = runtime.DefaultModelPolicyPath(filesRoot)
+		rtCfg.ModelPolicyPath = provideriface.DefaultModelPolicyPath(filesRoot)
 	}
 	return rtCfg
 }
@@ -283,7 +285,7 @@ func desktopIDFromRequest(r *http.Request) string {
 	return types.PrimaryDesktopID
 }
 
-func sizeOfRegistry(registry *runtime.ToolRegistry) int {
+func sizeOfRegistry(registry *toolregistry.ToolRegistry) int {
 	if registry == nil {
 		return 0
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestWirePublishDebouncerFiresOnCountThreshold(t *testing.T) {
@@ -106,7 +107,7 @@ func TestDispatchStoryCorpusReconcilerCarriesSingleCycleLineage(t *testing.T) {
 		t.Fatalf("list reconciler runs: %v", err)
 	}
 	for _, run := range runs {
-		if metadataStringValue(run.Metadata, runMetadataAgentProfile) != AgentProfileReconciler {
+		if metadataStringValue(run.Metadata, runMetadataAgentProfile) != agentprofile.Reconciler {
 			continue
 		}
 		if got := metadataStringValue(run.Metadata, "ingestion_handoff_cycle_id"); got != "cycle-1" {
@@ -234,7 +235,7 @@ func TestDispatchStoryCorpusReconcilerDeduplicatesOneRunPerCycle(t *testing.T) {
 	}
 	handler.rt.dispatchStoryCorpusReconcilerFromPublishBatch(ctx, batch)
 	handler.rt.dispatchStoryCorpusReconcilerFromPublishBatch(ctx, batch)
-	runs, err := handler.rt.Store().ListRunsByIngestionHandoff(ctx, universalWirePlatformOwnerID(), AgentProfileReconciler, "reconciler_publish_cycle-1", "reconciler", 20)
+	runs, err := handler.rt.Store().ListRunsByIngestionHandoff(ctx, universalWirePlatformOwnerID(), agentprofile.Reconciler, "reconciler_publish_cycle-1", "reconciler", 20)
 	if err != nil {
 		t.Fatalf("list cycle reconciler runs: %v", err)
 	}
@@ -257,7 +258,7 @@ func TestDispatchStoryCorpusReconcilerOmitsFalseMixedCycleAttribution(t *testing
 		t.Fatalf("list reconciler runs: %v", err)
 	}
 	for _, run := range runs {
-		if metadataStringValue(run.Metadata, runMetadataAgentProfile) != AgentProfileReconciler {
+		if metadataStringValue(run.Metadata, runMetadataAgentProfile) != agentprofile.Reconciler {
 			continue
 		}
 		if got := metadataStringValue(run.Metadata, "ingestion_handoff_cycle_id"); got != "" {

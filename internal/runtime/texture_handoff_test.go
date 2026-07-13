@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"testing"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestEnsureTextureHandoffCorpusWakeRequiresChannelID(t *testing.T) {
@@ -20,7 +21,7 @@ func TestEnsureTextureHandoffCorpusWakeRequiresChannelID(t *testing.T) {
 
 	_, err = handler.rt.ensureTextureHandoff(ctx, reconcilerRun, textureHandoffRequest{
 		Kind:          textureHandoffKindCorpusWake,
-		CallerProfile: AgentProfileReconciler,
+		CallerProfile: agentprofile.Reconciler,
 		Objective:     "draft a corpus-wide correction without a target doc",
 	})
 	if err == nil {

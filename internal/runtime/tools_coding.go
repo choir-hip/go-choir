@@ -15,9 +15,10 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
-func RegisterFileTools(registry *ToolRegistry, cwd string) error {
+func RegisterFileTools(registry *toolregistry.ToolRegistry, cwd string) error {
 	for _, tool := range []Tool{
 		newReadFileTool(cwd),
 		newWriteFileTool(cwd),
@@ -32,7 +33,7 @@ func RegisterFileTools(registry *ToolRegistry, cwd string) error {
 	return nil
 }
 
-func RegisterReadOnlyFileTools(registry *ToolRegistry, cwd string) error {
+func RegisterReadOnlyFileTools(registry *toolregistry.ToolRegistry, cwd string) error {
 	for _, tool := range []Tool{
 		newReadFileTool(cwd),
 		newGlobTool(cwd),
@@ -45,7 +46,7 @@ func RegisterReadOnlyFileTools(registry *ToolRegistry, cwd string) error {
 	return nil
 }
 
-func RegisterCodingTools(registry *ToolRegistry, cwd string) error {
+func RegisterCodingTools(registry *toolregistry.ToolRegistry, cwd string) error {
 	for _, tool := range []Tool{
 		newBashTool(cwd),
 		newGitStatusTool(cwd),
@@ -571,7 +572,7 @@ func guardForegroundSuperMutation(ctx context.Context, tool string) error {
 	if strings.ToLower(strings.TrimSpace(os.Getenv("RUNTIME_SUPER_FOREGROUND_MUTATION_MODE"))) != "worker_only" {
 		return nil
 	}
-	if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileSuper {
+	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Super {
 		return nil
 	}
 	if toolregistry.ExecutionContextFrom(ctx).WorkingDir != "" {

@@ -3,6 +3,7 @@ package runtime
 import (
 	"strings"
 	"testing"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestPromptStoreSeedsDefaults(t *testing.T) {
@@ -36,10 +37,10 @@ func TestPromptStoreSeedsDefaults(t *testing.T) {
 			t.Fatalf("prompt %s source = %q, want default", prompt.Role, prompt.Source)
 		}
 	}
-	if _, err := store.Load("user-alice", AgentProfileProcessor); err != nil {
+	if _, err := store.Load("user-alice", agentprofile.Processor); err != nil {
 		t.Fatalf("load processor prompt: %v", err)
 	}
-	if _, err := store.Load("user-alice", AgentProfileReconciler); err != nil {
+	if _, err := store.Load("user-alice", agentprofile.Reconciler); err != nil {
 		t.Fatalf("load reconciler prompt: %v", err)
 	}
 }
@@ -47,7 +48,7 @@ func TestPromptStoreSeedsDefaults(t *testing.T) {
 func TestPromptStoreSupportsUserOverridesAndReset(t *testing.T) {
 	store := NewPromptStore(t.TempDir())
 
-	saved, err := store.Save("user-alice", AgentProfileTexture, "Custom texture prompt")
+	saved, err := store.Save("user-alice", agentprofile.Texture, "Custom texture prompt")
 	if err != nil {
 		t.Fatalf("save prompt override: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestPromptStoreSupportsUserOverridesAndReset(t *testing.T) {
 		t.Fatalf("saved source = %q, want user", saved.Source)
 	}
 
-	loaded, err := store.Load("user-alice", AgentProfileTexture)
+	loaded, err := store.Load("user-alice", agentprofile.Texture)
 	if err != nil {
 		t.Fatalf("load prompt override: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestPromptStoreSupportsUserOverridesAndReset(t *testing.T) {
 		t.Fatalf("loaded source = %q, want user", loaded.Source)
 	}
 
-	reset, err := store.Reset("user-alice", AgentProfileTexture)
+	reset, err := store.Reset("user-alice", agentprofile.Texture)
 	if err != nil {
 		t.Fatalf("reset prompt override: %v", err)
 	}

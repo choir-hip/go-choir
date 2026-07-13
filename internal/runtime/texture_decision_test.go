@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {
@@ -17,8 +18,8 @@ func TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {
 	rt, s := testRuntime(t)
 	docID := seedTextureDecisionDocument(t, s)
 	run, err := rt.createRunWithMetadata(ctx, "revise with owner-provided evidence", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataChannelID:    docID,
 		"type":                  "texture_agent_revision",
 		"doc_id":                docID,
@@ -87,8 +88,8 @@ func TestTextureDiagnosisAndTraceLogsIncludeDecisionRecords(t *testing.T) {
 	s := rt.Store()
 	docID := seedTextureDecisionDocument(t, s)
 	run, err := rt.createRunWithMetadata(ctx, "revise with owner-provided evidence", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataChannelID:    docID,
 		"type":                  "texture_agent_revision",
 		"doc_id":                docID,

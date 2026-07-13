@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const (
@@ -264,8 +265,8 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 	}
 	prompt += rt.wirePublishBatchDocumentContext(ctx, ownerID, batch)
 	metadata := map[string]any{
-		runMetadataAgentProfile:      AgentProfileReconciler,
-		runMetadataAgentRole:         AgentProfileReconciler,
+		runMetadataAgentProfile:      agentprofile.Reconciler,
+		runMetadataAgentRole:         agentprofile.Reconciler,
 		runMetadataReconcilerScope:   "story-corpus",
 		"activation_origin":          "publish_batch",
 		"request_source":             "wire_publish_debouncer",
@@ -281,7 +282,7 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 		metadata["source_network_request_id"] = batch.RequestID
 		metadata["ingestion_handoff_request_kind"] = "reconciler"
 		metadata["source_network_request_kind"] = batch.RequestKind
-		existing, listErr := rt.store.ListRunsByIngestionHandoff(ctx, ownerID, AgentProfileReconciler, reconcilerRequestID, "reconciler", 2)
+		existing, listErr := rt.store.ListRunsByIngestionHandoff(ctx, ownerID, agentprofile.Reconciler, reconcilerRequestID, "reconciler", 2)
 		if listErr != nil {
 			log.Printf("runtime: wire reconciler dedupe lookup failed cycle=%s request=%s: %v", batch.CycleID, reconcilerRequestID, listErr)
 			return

@@ -15,19 +15,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-// Re-exported from internal/agentprofile for backward compatibility.
-// New code should import internal/agentprofile directly.
-const (
-	AgentProfileConductor  = agentprofile.Conductor
-	AgentProfileSuper      = agentprofile.Super
-	AgentProfileCoSuper    = agentprofile.CoSuper
-	AgentProfileVSuper     = agentprofile.VSuper
-	AgentProfileResearcher = agentprofile.Researcher
-	AgentProfileTexture    = agentprofile.Texture
-	AgentProfileProcessor  = agentprofile.Processor
-	AgentProfileReconciler = agentprofile.Reconciler
-	AgentProfileEmail      = agentprofile.Email
-)
 
 const (
 	runMetadataAgentProfile        = "agent_profile"
@@ -87,14 +74,14 @@ func configuredAgentProfileForRun(rec *types.RunRecord) string {
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
-		return AgentProfileTexture
+		return agentprofile.Texture
 	}
 	return ""
 }
 
 func agentProfileForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return AgentProfileSuper
+		return agentprofile.Super
 	}
 	if strings.TrimSpace(rec.AgentProfile) != "" {
 		return canonicalAgentProfile(rec.AgentProfile)
@@ -105,14 +92,14 @@ func agentProfileForRun(rec *types.RunRecord) string {
 		}
 	}
 	if taskType, _ := rec.Metadata["type"].(string); isTextureAgentRevisionTaskType(taskType) {
-		return AgentProfileTexture
+		return agentprofile.Texture
 	}
-	return AgentProfileSuper
+	return agentprofile.Super
 }
 
 func agentRoleForRun(rec *types.RunRecord) string {
 	if rec == nil {
-		return AgentProfileSuper
+		return agentprofile.Super
 	}
 	if strings.TrimSpace(rec.AgentRole) != "" {
 		return canonicalAgentProfile(rec.AgentRole)
@@ -185,15 +172,15 @@ type AgentRoleSpec struct {
 
 func roleSpec(profile string) AgentRoleSpec {
 	switch canonicalAgentProfile(profile) {
-	case AgentProfileConductor:
+	case agentprofile.Conductor:
 		return AgentRoleSpec{
-			Profile:                AgentProfileConductor,
+			Profile:                agentprofile.Conductor,
 			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileTexture},
+			AllowedDelegateTargets: []string{agentprofile.Texture},
 		}
-	case AgentProfileResearcher:
+	case agentprofile.Researcher:
 		return AgentRoleSpec{
-			Profile:                   AgentProfileResearcher,
+			Profile:                   agentprofile.Researcher,
 			AllowReadOnlyFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
@@ -202,46 +189,46 @@ func roleSpec(profile string) AgentRoleSpec {
 			AllowCoAgentTools:         true,
 			AllowedDelegateTargets:    nil,
 		}
-	case AgentProfileTexture:
+	case agentprofile.Texture:
 		// Texture is the artifact control plane, not an evidence gatherer. It does
 		// not receive researcher-owned evidence tools (save/read/list_evidence) or
 		// the verify_model_capability diagnostic by default. It keeps run-memory
 		// retrieval so it can recover its own compacted context.
 		return AgentRoleSpec{
-			Profile:                AgentProfileTexture,
+			Profile:                agentprofile.Texture,
 			AllowMemoryTools:       true,
 			AllowCoAgentTools:      true,
-			AllowedDelegateTargets: []string{AgentProfileResearcher},
+			AllowedDelegateTargets: []string{agentprofile.Researcher},
 		}
-	case AgentProfileProcessor:
+	case agentprofile.Processor:
 		return AgentRoleSpec{
-			Profile:                   AgentProfileProcessor,
+			Profile:                   agentprofile.Processor,
 			AllowReadOnlyFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
 			AllowCoAgentTools:         true,
-			AllowedDelegateTargets:    []string{AgentProfileTexture},
+			AllowedDelegateTargets:    []string{agentprofile.Texture},
 		}
-	case AgentProfileReconciler:
+	case agentprofile.Reconciler:
 		return AgentRoleSpec{
-			Profile:                   AgentProfileReconciler,
+			Profile:                   agentprofile.Reconciler,
 			AllowReadOnlyFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
 			AllowCoAgentTools:         true,
-			AllowedDelegateTargets:    []string{AgentProfileTexture},
+			AllowedDelegateTargets:    []string{agentprofile.Texture},
 		}
-	case AgentProfileEmail:
+	case agentprofile.Email:
 		return AgentRoleSpec{
-			Profile: AgentProfileEmail,
+			Profile: agentprofile.Email,
 		}
-	case AgentProfileCoSuper:
+	case agentprofile.CoSuper:
 		return AgentRoleSpec{
-			Profile:                   AgentProfileCoSuper,
+			Profile:                   agentprofile.CoSuper,
 			AllowWritableFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
@@ -249,11 +236,11 @@ func roleSpec(profile string) AgentRoleSpec {
 			AllowModelDiagnosticTools: true,
 			AllowCodingTools:          true,
 			AllowCoAgentTools:         true,
-			AllowedDelegateTargets:    []string{AgentProfileResearcher},
+			AllowedDelegateTargets:    []string{agentprofile.Researcher},
 		}
-	case AgentProfileVSuper:
+	case agentprofile.VSuper:
 		return AgentRoleSpec{
-			Profile:                   AgentProfileVSuper,
+			Profile:                   agentprofile.VSuper,
 			AllowWritableFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
@@ -261,11 +248,11 @@ func roleSpec(profile string) AgentRoleSpec {
 			AllowModelDiagnosticTools: true,
 			AllowCodingTools:          true,
 			AllowCoAgentTools:         true,
-			AllowedDelegateTargets:    []string{AgentProfileResearcher, AgentProfileCoSuper},
+			AllowedDelegateTargets:    []string{agentprofile.Researcher, agentprofile.CoSuper},
 		}
-	case AgentProfileSuper:
+	case agentprofile.Super:
 		return AgentRoleSpec{
-			Profile:                   AgentProfileSuper,
+			Profile:                   agentprofile.Super,
 			AllowWritableFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
@@ -273,7 +260,7 @@ func roleSpec(profile string) AgentRoleSpec {
 			AllowModelDiagnosticTools: true,
 			AllowCodingTools:          true,
 			AllowCoAgentTools:         true,
-			AllowedDelegateTargets:    []string{AgentProfileResearcher, AgentProfileCoSuper},
+			AllowedDelegateTargets:    []string{agentprofile.Researcher, agentprofile.CoSuper},
 		}
 	default:
 		return AgentRoleSpec{Profile: strings.TrimSpace(profile)}
@@ -285,30 +272,30 @@ func canonicalAgentProfile(profile string) string {
 	normalized := strings.ToLower(strings.ReplaceAll(profile, "_", "-"))
 	switch normalized {
 	case "researcher", "researchers", "research", "research-agent", "research-worker", "web-research", "web-researcher":
-		return AgentProfileResearcher
+		return agentprofile.Researcher
 	case "cosuper", "co-super", "coagent", "co-agent":
-		return AgentProfileCoSuper
+		return agentprofile.CoSuper
 	case "vsuper", "v-super", "virtual-super", "vm-super", "candidate-super":
-		return AgentProfileVSuper
+		return agentprofile.VSuper
 	case "texture", "texture-agent", "document-agent":
-		return AgentProfileTexture
+		return agentprofile.Texture
 	case "processor", "news-processor", "source-processor", "universal-wire-processor":
-		return AgentProfileProcessor
+		return agentprofile.Processor
 	case "reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "universal-wire-reconciler":
-		return AgentProfileReconciler
+		return agentprofile.Reconciler
 	case "email", "email-agent", "email-appagent", "mail", "mail-agent":
-		return AgentProfileEmail
+		return agentprofile.Email
 	case "super":
-		return AgentProfileSuper
+		return agentprofile.Super
 	case "conductor":
-		return AgentProfileConductor
+		return agentprofile.Conductor
 	default:
 		return normalized
 	}
 }
 
 func isTextureProfileValue(profile string) bool {
-	return canonicalAgentProfile(profile) == AgentProfileTexture
+	return canonicalAgentProfile(profile) == agentprofile.Texture
 }
 
 func currentTextureAgentID(docID string) string {
@@ -316,7 +303,7 @@ func currentTextureAgentID(docID string) string {
 	if docID == "" {
 		return ""
 	}
-	return AgentProfileTexture + ":" + docID
+	return agentprofile.Texture + ":" + docID
 }
 
 func textureAgentIDMatchesDoc(agentID, docID string) bool {
@@ -330,12 +317,12 @@ func textureAgentIDMatchesDoc(agentID, docID string) bool {
 
 func isTextureAgentID(agentID string) bool {
 	agentID = strings.TrimSpace(agentID)
-	return strings.HasPrefix(agentID, AgentProfileTexture+":") || strings.HasPrefix(agentID, AgentProfileTexture+":")
+	return strings.HasPrefix(agentID, agentprofile.Texture+":") || strings.HasPrefix(agentID, agentprofile.Texture+":")
 }
 
 func docIDFromTextureAgentID(agentID string) string {
 	agentID = strings.TrimSpace(agentID)
-	for _, prefix := range []string{AgentProfileTexture + ":", AgentProfileTexture + ":"} {
+	for _, prefix := range []string{agentprofile.Texture + ":", agentprofile.Texture + ":"} {
 		if strings.HasPrefix(agentID, prefix) {
 			return strings.TrimSpace(strings.TrimPrefix(agentID, prefix))
 		}
@@ -393,48 +380,48 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 		b.WriteString("\n\n")
 		b.WriteString(skillContext)
 	}
-	if profile == AgentProfileConductor {
+	if profile == agentprofile.Conductor {
 		requestedApp, _ := rec.Metadata["requested_app"].(string)
 		seedPrompt, _ := rec.Metadata["seed_prompt"].(string)
 		if requestedApp == "" {
-			requestedApp = AgentProfileTexture
+			requestedApp = agentprofile.Texture
 		}
 		b.WriteString(runtimeprompts.ConductorRunOverlay(runtimeprompts.ConductorRunOptions{
 			RequestedApp: requestedApp,
 			SeedPrompt:   strings.TrimSpace(seedPrompt),
 		}))
 	}
-	if profile == AgentProfileTexture {
+	if profile == agentprofile.Texture {
 		b.WriteString(textureprompts.RunOverlay())
 	}
-	if profile == AgentProfileProcessor {
+	if profile == agentprofile.Processor {
 		b.WriteString(runtimeprompts.ProcessorRuntimeOverlay())
 	}
-	if profile == AgentProfileReconciler {
+	if profile == agentprofile.Reconciler {
 		b.WriteString(runtimeprompts.ReconcilerRuntimeOverlay())
 	}
-	if profile == AgentProfileSuper {
+	if profile == agentprofile.Super {
 		b.WriteString(runtimeprompts.SuperRuntimeOverlay())
 	}
 	repoBootstrap := workerRepoBootstrapForRun(rec)
-	if profile == AgentProfileVSuper {
+	if profile == agentprofile.VSuper {
 		b.WriteString(runtimeprompts.VSuperRuntimeOverlay(runtimeprompts.VSuperRuntimeOptions{
 			RepoBootstrap: repoBootstrap,
 		}))
 	}
-	if profile == AgentProfileCoSuper {
+	if profile == agentprofile.CoSuper {
 		b.WriteString(runtimeprompts.CoSuperRuntimeOverlay(runtimeprompts.CoSuperRuntimeOptions{
 			RepoBootstrap: repoBootstrap,
 		}))
 	}
-	if profile == AgentProfileResearcher {
+	if profile == agentprofile.Researcher {
 		b.WriteString(runtimeprompts.ResearcherRuntimeOverlay())
 	}
 	requesterAgentID := ""
 	textureDeliveryAgentID := ""
 	if rec != nil {
 		requesterAgentID = metadataStringValue(rec.Metadata, "requested_by_agent_id")
-		if profile == AgentProfileResearcher && isTextureAgentID(requesterAgentID) {
+		if profile == agentprofile.Researcher && isTextureAgentID(requesterAgentID) {
 			textureDeliveryAgentID = requesterAgentID
 		}
 	}
@@ -495,8 +482,8 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	return b.String(), nil
 }
 
-func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client) (*ToolRegistry, error) {
-	registry := MustNewToolRegistry()
+func (rt *Runtime) buildRegistryForRole(spec AgentRoleSpec, cwd string, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
+	registry := toolregistry.MustNewToolRegistry()
 	if spec.AllowWritableFiles {
 		if err := RegisterFileTools(registry, cwd); err != nil {
 			return nil, err
@@ -557,7 +544,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	sourceClient := newSourceSearchClientFromEnv()
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
-	superRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileSuper), cwd, searchClient, sourceClient, httpClient)
+	superRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.Super), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -573,7 +560,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterShipperTools(superRegistry, rt, cwd); err != nil {
 		return err
 	}
-	coSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileCoSuper), cwd, searchClient, sourceClient, httpClient)
+	coSuperRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.CoSuper), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -583,7 +570,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterShipperTools(coSuperRegistry, rt, cwd); err != nil {
 		return err
 	}
-	vSuperRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileVSuper), cwd, searchClient, sourceClient, httpClient)
+	vSuperRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.VSuper), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -593,14 +580,14 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterShipperTools(vSuperRegistry, rt, cwd); err != nil {
 		return err
 	}
-	researcherRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileResearcher), cwd, searchClient, sourceClient, httpClient)
+	researcherRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.Researcher), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterCoagentUpdateTools(researcherRegistry, rt); err != nil {
 		return err
 	}
-	processorRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileProcessor), cwd, searchClient, sourceClient, httpClient)
+	processorRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.Processor), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
@@ -610,46 +597,46 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterWireProcessorTools(processorRegistry, rt); err != nil {
 		return err
 	}
-	reconcilerRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileReconciler), cwd, searchClient, sourceClient, httpClient)
+	reconcilerRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.Reconciler), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterCoagentUpdateTools(reconcilerRegistry, rt); err != nil {
 		return err
 	}
-	conductorRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileConductor), cwd, searchClient, sourceClient, httpClient)
+	conductorRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.Conductor), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
-	textureRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileTexture), cwd, searchClient, sourceClient, httpClient)
+	textureRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.Texture), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 	if err := RegisterTextureTools(textureRegistry, rt); err != nil {
 		return err
 	}
-	emailRegistry, err := rt.buildRegistryForRole(roleSpec(AgentProfileEmail), cwd, searchClient, sourceClient, httpClient)
+	emailRegistry, err := rt.buildRegistryForRole(roleSpec(agentprofile.Email), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
 		return err
 	}
 
 	rt.toolRegistry = superRegistry
 	if rt.toolProfiles == nil {
-		rt.toolProfiles = make(map[string]*ToolRegistry)
+		rt.toolProfiles = make(map[string]*toolregistry.ToolRegistry)
 	}
-	rt.toolProfiles[AgentProfileConductor] = conductorRegistry
-	rt.toolProfiles[AgentProfileSuper] = superRegistry
-	rt.toolProfiles[AgentProfileCoSuper] = coSuperRegistry
-	rt.toolProfiles[AgentProfileVSuper] = vSuperRegistry
-	rt.toolProfiles[AgentProfileResearcher] = researcherRegistry
-	rt.toolProfiles[AgentProfileProcessor] = processorRegistry
-	rt.toolProfiles[AgentProfileReconciler] = reconcilerRegistry
-	rt.toolProfiles[AgentProfileTexture] = textureRegistry
-	rt.toolProfiles[AgentProfileEmail] = emailRegistry
+	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
+	rt.toolProfiles[agentprofile.Super] = superRegistry
+	rt.toolProfiles[agentprofile.CoSuper] = coSuperRegistry
+	rt.toolProfiles[agentprofile.VSuper] = vSuperRegistry
+	rt.toolProfiles[agentprofile.Researcher] = researcherRegistry
+	rt.toolProfiles[agentprofile.Processor] = processorRegistry
+	rt.toolProfiles[agentprofile.Reconciler] = reconcilerRegistry
+	rt.toolProfiles[agentprofile.Texture] = textureRegistry
+	rt.toolProfiles[agentprofile.Email] = emailRegistry
 	return nil
 }
 
-func (rt *Runtime) toolRegistryForRun(rec *types.RunRecord) *ToolRegistry {
+func (rt *Runtime) toolRegistryForRun(rec *types.RunRecord) *toolregistry.ToolRegistry {
 	profile := configuredAgentProfileForRun(rec)
 	if profile == "" {
 		return nil
@@ -662,7 +649,7 @@ func (rt *Runtime) toolRegistryForRun(rec *types.RunRecord) *ToolRegistry {
 	return rt.toolRegistry
 }
 
-func (rt *Runtime) ToolRegistryForProfile(profile string) *ToolRegistry {
+func (rt *Runtime) ToolRegistryForProfile(profile string) *toolregistry.ToolRegistry {
 	if rt.toolProfiles == nil {
 		return nil
 	}

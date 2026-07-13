@@ -7,9 +7,10 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
-func RegisterWireProcessorTools(registry *ToolRegistry, rt *Runtime) error {
+func RegisterWireProcessorTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	return registry.Register(newRecordWireProcessorDecisionTool(rt))
 }
 
@@ -57,7 +58,7 @@ func newRecordWireProcessorDecisionTool(rt *Runtime) Tool {
 			if runRec == nil {
 				return "", fmt.Errorf("record_wire_processor_decision missing run context")
 			}
-			if canonicalAgentProfile(agentProfileForRun(runRec)) != AgentProfileProcessor {
+			if canonicalAgentProfile(agentProfileForRun(runRec)) != agentprofile.Processor {
 				return "", fmt.Errorf("record_wire_processor_decision requires a processor run")
 			}
 			decision := wireProcessorDecisionVerdict(strings.TrimSpace(in.Decision))

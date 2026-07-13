@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func testPromptAPISetup(t *testing.T) (*Runtime, *APIHandler) {
@@ -98,8 +99,8 @@ func TestHandlePromptRoleSupportsSaveAndReset(t *testing.T) {
 	if len(getResp.Tools) == 0 {
 		t.Fatal("expected tools in prompt response")
 	}
-	if getResp.RolePolicy.Profile != AgentProfileTexture {
-		t.Fatalf("role policy profile = %q, want %q", getResp.RolePolicy.Profile, AgentProfileTexture)
+	if getResp.RolePolicy.Profile != agentprofile.Texture {
+		t.Fatalf("role policy profile = %q, want %q", getResp.RolePolicy.Profile, agentprofile.Texture)
 	}
 
 	deleteReq := authenticatedRequest(http.MethodDelete, "/api/prompts/texture", "", "user-alice")

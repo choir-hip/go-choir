@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type researchFindingEvidenceInput struct {
@@ -32,7 +33,7 @@ func resolveFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID str
 			profile = agentProfileForRun(runRec)
 		}
 	}
-	if profile == AgentProfileResearcher {
+	if profile == agentprofile.Researcher {
 		return resolveResearcherFindingsTarget(ctx, rt, explicitAgentID)
 	}
 	return resolveCoagentFindingsTarget(ctx, rt, explicitAgentID)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestBuildRunMemoryContextUsesLatestCompaction(t *testing.T) {
@@ -380,7 +381,7 @@ func TestRunMemoryCompactionPromptIncludesObjectiveAndRetrievalInstructions(t *t
 	rec := &types.RunRecord{
 		RunID:        "run-1",
 		State:        types.RunRunning,
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 		Prompt:       "Run docs/mission-llm-run-memory-compaction-v0.md as MissionGradient.",
 	}
 	plan := runMemoryCompactionPlan{

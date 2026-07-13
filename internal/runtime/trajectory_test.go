@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
@@ -14,8 +15,8 @@ func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
 	rt, s := testRuntime(t)
 
 	root, err := rt.StartRunWithMetadata(ctx, "build a document", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileConductor,
-		runMetadataAgentRole:    AgentProfileConductor,
+		runMetadataAgentProfile: agentprofile.Conductor,
+		runMetadataAgentRole:    agentprofile.Conductor,
 	})
 	if err != nil {
 		t.Fatalf("start root run: %v", err)
@@ -55,8 +56,8 @@ func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
 	// differs. (StartCoagentRun is the pre-M3 spawn API; the provenance edge
 	// it records is spawned_by, not a control relationship.)
 	spawned, err := rt.StartCoagentRun(ctx, root.RunID, "research the topic", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 	})
 	if err != nil {
 		t.Fatalf("start spawned run: %v", err)
@@ -81,8 +82,8 @@ func TestProcessorSpawnMintsPublicationTrajectory(t *testing.T) {
 	rt, s := testRuntime(t)
 
 	run, err := rt.StartRunWithMetadata(ctx, "ingest source handoff", "user-alice", map[string]any{
-		runMetadataAgentProfile:        AgentProfileProcessor,
-		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataAgentProfile:        agentprofile.Processor,
+		runMetadataAgentRole:           agentprofile.Processor,
 		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
 		"ingestion_handoff_request_id": "processor-request-1",
 		"source_network_request_id":    "processor-request-1",
@@ -143,8 +144,8 @@ func TestTrajectoryObligationsAnswersWaitingOn(t *testing.T) {
 	rt, s := testRuntime(t)
 
 	run, err := rt.StartRunWithMetadata(ctx, "publish the cycle", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileProcessor,
-		runMetadataAgentRole:    AgentProfileProcessor,
+		runMetadataAgentProfile: agentprofile.Processor,
+		runMetadataAgentRole:    agentprofile.Processor,
 	})
 	if err != nil {
 		t.Fatalf("start run: %v", err)
@@ -210,8 +211,8 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 	run := types.RunRecord{
 		RunID:        "run-legacy-metadata-only",
 		AgentID:      "agent-legacy",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		OwnerID:      "user-alice",
 		SandboxID:    "sandbox-test",
 		State:        types.RunPending,
@@ -219,8 +220,8 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}
@@ -274,8 +275,8 @@ func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
 		if err := s.CreateRun(ctx, types.RunRecord{
 			RunID:        runID,
 			AgentID:      fmt.Sprintf("agent-cancel-many-%04d", i),
-			AgentProfile: AgentProfileCoSuper,
-			AgentRole:    AgentProfileCoSuper,
+			AgentProfile: agentprofile.CoSuper,
+			AgentRole:    agentprofile.CoSuper,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunPending,
@@ -284,8 +285,8 @@ func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
 			CreatedAt:    now.Add(time.Duration(i) * time.Millisecond),
 			UpdatedAt:    now.Add(time.Duration(i) * time.Millisecond),
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileCoSuper,
-				runMetadataAgentRole:    AgentProfileCoSuper,
+				runMetadataAgentProfile: agentprofile.CoSuper,
+				runMetadataAgentRole:    agentprofile.CoSuper,
 				runMetadataTrajectoryID: trajectoryID,
 			},
 		}); err != nil {

@@ -14,12 +14,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestSubmitTaskReturnsStableHandle(t *testing.T) {
@@ -85,7 +87,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 		runMetadataAgentProfile:  "conductor",
 		runMetadataAgentRole:     "conductor",
 		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileTexture,
+		"requested_app":          agentprofile.Texture,
 		"seed_prompt":            "hi",
 		"initial_document_title": "hi",
 	})
@@ -116,8 +118,8 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	if result.Action != "open_app" {
 		t.Fatalf("action: got %q, want open_app", result.Action)
 	}
-	if result.App != AgentProfileTexture {
-		t.Fatalf("app: got %q, want %q", result.App, AgentProfileTexture)
+	if result.App != agentprofile.Texture {
+		t.Fatalf("app: got %q, want %q", result.App, agentprofile.Texture)
 	}
 	if result.SeedPrompt != "hi" {
 		t.Fatalf("seed_prompt: got %q, want hi", result.SeedPrompt)
@@ -189,7 +191,7 @@ func TestConductorTaskNormalizesStructuredRouteResult(t *testing.T) {
 	}
 	foundInitialTextureRun := false
 	for _, run := range runs {
-		if run.AgentProfile == AgentProfileTexture && run.RunID == result.InitialRunID {
+		if run.AgentProfile == agentprofile.Texture && run.RunID == result.InitialRunID {
 			foundInitialTextureRun = true
 		}
 	}
@@ -211,9 +213,9 @@ func TestConductorDecisionNormalizesToastAfterMaterializedTextureRoute(t *testin
 		OwnerID: "user-alice",
 		Result:  `{"action":"toast","message":"Opened the document."}`,
 		Metadata: map[string]any{
-			runMetadataAgentProfile:  AgentProfileConductor,
-			runMetadataAgentRole:     AgentProfileConductor,
-			"requested_app":          AgentProfileTexture,
+			runMetadataAgentProfile:  agentprofile.Conductor,
+			runMetadataAgentRole:     agentprofile.Conductor,
+			"requested_app":          agentprofile.Texture,
 			"seed_prompt":            "create a texture document",
 			"initial_document_title": "create a texture document",
 			"doc_id":                 "doc-texture-route",
@@ -227,8 +229,8 @@ func TestConductorDecisionNormalizesToastAfterMaterializedTextureRoute(t *testin
 	if err := json.Unmarshal([]byte(normalizeConductorDecision(rec)), &result); err != nil {
 		t.Fatalf("decode normalized decision: %v", err)
 	}
-	if result.Action != "open_app" || result.App != AgentProfileTexture {
-		t.Fatalf("normalized decision = action %q app %q, want open_app/%s", result.Action, result.App, AgentProfileTexture)
+	if result.Action != "open_app" || result.App != agentprofile.Texture {
+		t.Fatalf("normalized decision = action %q app %q, want open_app/%s", result.Action, result.App, agentprofile.Texture)
 	}
 	if result.DocID != "doc-texture-route" || result.InitialRevisionID != "rev-framing" {
 		t.Fatalf("normalized decision lost route metadata: %+v", result)
@@ -238,15 +240,15 @@ func TestConductorDecisionNormalizesToastAfterMaterializedTextureRoute(t *testin
 func TestConductorPromptBarStructuredDecisionMaterializesTextureRoute(t *testing.T) {
 	t.Parallel()
 	rt, s := testRuntime(t)
-	provider := rt.provider.(*StubProvider)
+	provider := rt.provider.(*provider.StubProvider)
 	provider.Result = `{"action":"open_app","app":"texture","title":"Durable document","initial_content":"# Durable document\n\nInitial conductor-authored abstract."}`
 	rt.Start(context.Background())
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "make a durable document", "user-alice", map[string]any{
-		runMetadataAgentProfile:  AgentProfileConductor,
-		runMetadataAgentRole:     AgentProfileConductor,
+		runMetadataAgentProfile:  agentprofile.Conductor,
+		runMetadataAgentRole:     agentprofile.Conductor,
 		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileTexture,
+		"requested_app":          agentprofile.Texture,
 		"seed_prompt":            "make a durable document",
 		"initial_document_title": "make a durable document",
 	})
@@ -262,7 +264,7 @@ func TestConductorPromptBarStructuredDecisionMaterializesTextureRoute(t *testing
 	if err := json.Unmarshal([]byte(stored.Result), &result); err != nil {
 		t.Fatalf("decode result: %v\n%s", err, stored.Result)
 	}
-	if result.Action != "open_app" || result.App != AgentProfileTexture || result.DocID == "" {
+	if result.Action != "open_app" || result.App != agentprofile.Texture || result.DocID == "" {
 		t.Fatalf("conductor result = %+v, want materialized Texture route", result)
 	}
 	// Conductor decisions no longer ship canonical document content; the
@@ -303,15 +305,15 @@ func TestConductorPromptBarStructuredDecisionMaterializesTextureRoute(t *testing
 func TestConductorPromptBarTextureRouteFallsBackToSeedPromptContent(t *testing.T) {
 	t.Parallel()
 	rt, s := testRuntime(t)
-	provider := rt.provider.(*StubProvider)
+	provider := rt.provider.(*provider.StubProvider)
 	provider.Result = `{"action":"open_app","app":"texture","title":"Fallback document"}`
 	rt.Start(context.Background())
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "Draft fallback content", "user-alice", map[string]any{
-		runMetadataAgentProfile:  AgentProfileConductor,
-		runMetadataAgentRole:     AgentProfileConductor,
+		runMetadataAgentProfile:  agentprofile.Conductor,
+		runMetadataAgentRole:     agentprofile.Conductor,
 		"input_source":           "prompt_bar",
-		"requested_app":          AgentProfileTexture,
+		"requested_app":          agentprofile.Texture,
 		"seed_prompt":            "Draft fallback content",
 		"initial_document_title": "Fallback document",
 	})
@@ -327,7 +329,7 @@ func TestConductorPromptBarTextureRouteFallsBackToSeedPromptContent(t *testing.T
 	if err := json.Unmarshal([]byte(stored.Result), &result); err != nil {
 		t.Fatalf("decode result: %v\n%s", err, stored.Result)
 	}
-	if result.Action != "open_app" || result.App != AgentProfileTexture || result.DocID == "" {
+	if result.Action != "open_app" || result.App != agentprofile.Texture || result.DocID == "" {
 		t.Fatalf("conductor result = %+v, want materialized Texture route", result)
 	}
 	// initial_content is intentionally empty on materialized Texture routes;
@@ -359,7 +361,7 @@ func TestConductorPromptBarTextureRouteFallsBackToSeedPromptContent(t *testing.T
 func TestProviderPromptUsesPromptOverride(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)
-	if _, err := rt.PromptStore().Save("user-alice", AgentProfileConductor, "Custom conductor prompt"); err != nil {
+	if _, err := rt.PromptStore().Save("user-alice", agentprofile.Conductor, "Custom conductor prompt"); err != nil {
 		t.Fatalf("save prompt override: %v", err)
 	}
 
@@ -367,7 +369,7 @@ func TestProviderPromptUsesPromptOverride(t *testing.T) {
 		RunID:    "task-1",
 		OwnerID:  "user-alice",
 		Prompt:   "route this request",
-		Metadata: map[string]any{runMetadataAgentProfile: AgentProfileConductor},
+		Metadata: map[string]any{runMetadataAgentProfile: agentprofile.Conductor},
 	}
 	prompt, err := rt.providerPromptForRun(rec)
 	if err != nil {
@@ -390,7 +392,7 @@ func TestSystemPromptForTextureDefaultsToResearch(t *testing.T) {
 		AgentID:      "texture:doc-1",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
 		Prompt:       "what's the latest with ai",
 	}
 
@@ -425,7 +427,7 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 		AgentID:      "agent-super-user-alice",
 		ChannelID:    "doc-sweep",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 		Prompt:       "Run a MissionGradient sweep substrate proof with worker/verifier cosupers.",
 	}
 
@@ -466,8 +468,8 @@ func TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper(t *testing.T) {
 		name    string
 		profile string
 	}{
-		{name: "vsuper", profile: AgentProfileVSuper},
-		{name: "co-super", profile: AgentProfileCoSuper},
+		{name: "vsuper", profile: agentprofile.VSuper},
+		{name: "co-super", profile: agentprofile.CoSuper},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := &types.RunRecord{
@@ -511,7 +513,7 @@ func TestStartCoagentRunInheritsWorkerRepoMetadata(t *testing.T) {
 		t.Fatalf("start parent: %v", err)
 	}
 	parent.Metadata = map[string]any{
-		runMetadataAgentProfile:        AgentProfileVSuper,
+		runMetadataAgentProfile:        agentprofile.VSuper,
 		runMetadataWorkerRepoRemote:    "https://github.com/yusefmosiah/go-choir.git",
 		runMetadataWorkerRepoBaseSHA:   "abc123",
 		runMetadataWorkerRepoBootstrap: "remote_git_clone",
@@ -521,8 +523,8 @@ func TestStartCoagentRunInheritsWorkerRepoMetadata(t *testing.T) {
 	}
 
 	child, err := rt.StartCoagentRun(ctx, parent.RunID, "implementation child", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileCoSuper,
-		runMetadataAgentRole:    AgentProfileCoSuper,
+		runMetadataAgentProfile: agentprofile.CoSuper,
+		runMetadataAgentRole:    agentprofile.CoSuper,
 	})
 	if err != nil {
 		t.Fatalf("start child: %v", err)
@@ -547,7 +549,7 @@ func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 		AgentID:      "researcher:doc-1:1",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
 		Prompt:       "Find the latest Anthropic model release notes and summarize what matters for the doc.",
 	}
 
@@ -598,7 +600,7 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 	}{
 		{
 			name:    "processor",
-			profile: AgentProfileProcessor,
+			profile: agentprofile.Processor,
 			want: []string{
 				"Universal Wire source-understanding agent",
 				"SourceItem batches",
@@ -610,7 +612,7 @@ func TestSystemPromptForUniversalWireProfilesLoadsSharedHarnessPrompts(t *testin
 		},
 		{
 			name:    "reconciler",
-			profile: AgentProfileReconciler,
+			profile: agentprofile.Reconciler,
 			want: []string{
 				"corpus-level Universal Wire story agent",
 				"existing published Textures",
@@ -652,8 +654,8 @@ func TestSystemPromptForUniversalWireTextureRunsUsesUnconditionalArticleGuidance
 		AgentID:      "texture:doc-universal-wire",
 		ChannelID:    "doc-universal-wire",
 		OwnerID:      "universal-wire-platform",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Prompt:       "Write the first publication-quality article revision for this Texture document.",
 		Metadata: map[string]any{
 			"type":                    "texture_agent_revision",
@@ -694,8 +696,8 @@ func TestSystemPromptForUniversalWireTextureRunsUsesUnconditionalArticleGuidance
 		AgentID:      "texture:doc-ordinary",
 		ChannelID:    "doc-ordinary",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Prompt:       "What is going on today?",
 		Metadata: map[string]any{
 			"type":   "texture_agent_revision",
@@ -751,7 +753,7 @@ func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
 		AgentID:      "vsuper:worker-1",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
 		Prompt:       "run a sweep",
 	}
 
@@ -854,7 +856,7 @@ func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
 
 	bus := events.NewEventBus()
 	// Create a provider that always fails.
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: errors.New("provider timeout after 30s"),
 		Result:  "",
@@ -1002,7 +1004,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
-	provider1 := NewStubProvider(50 * time.Millisecond)
+	provider1 := provider.NewStubProvider(50 * time.Millisecond)
 	rt1 := New(cfg, s1, bus1, provider1)
 
 	rec, err := rt1.StartRun(context.Background(), "survive restart", "user-alice")
@@ -1023,7 +1025,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	}
 
 	bus2 := events.NewEventBus()
-	provider2 := NewStubProvider(50 * time.Millisecond)
+	provider2 := provider.NewStubProvider(50 * time.Millisecond)
 	rt2 := New(cfg, s2, bus2, provider2)
 	setTestDispatch(rt2, s2)
 
@@ -1098,7 +1100,7 @@ func TestInterruptedRunningTasksPassivatedOnStart(t *testing.T) {
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: 1 * time.Hour,
 	}
-	provider := NewStubProvider(50 * time.Millisecond)
+	provider := provider.NewStubProvider(50 * time.Millisecond)
 	rt := New(cfg, s2, bus, provider)
 	setTestDispatch(rt, s2)
 
@@ -1166,7 +1168,7 @@ func TestInterruptedActivationPassivationDrainsBatches(t *testing.T) {
 		}
 	}
 
-	rt := New(provideriface.Config{SandboxID: "sandbox-test"}, s, events.NewEventBus(), NewStubProvider(0))
+	rt := New(provideriface.Config{SandboxID: "sandbox-test"}, s, events.NewEventBus(), provider.NewStubProvider(0))
 	setTestDispatch(rt, s)
 	rt.passivateInterruptedActivations(ctx)
 

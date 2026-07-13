@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages(t *testing.T) {
@@ -28,7 +29,7 @@ func TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages(t *testin
 		"worker_child_run_ids":         []string{"implementation-run-1", "verifier-run-1"},
 		"worker_child_event_counts":    map[string]int{"implementation-run-1": 7, "verifier-run-1": 3},
 		"worker_channel_message_count": 3,
-		"worker_spawned_profiles":      []string{AgentProfileCoSuper},
+		"worker_spawned_profiles":      []string{agentprofile.CoSuper},
 		"worker_event_summary": []map[string]any{
 			{
 				"kind":           types.EventToolResult,

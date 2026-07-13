@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // trajectoryKindForRun derives the trajectory kind from the spawn surface.
@@ -15,9 +16,9 @@ import (
 // settlement cycle, not defended.
 func trajectoryKindForRun(rec *types.RunRecord) types.TrajectoryKind {
 	switch canonicalAgentProfile(agentProfileForRun(rec)) {
-	case AgentProfileProcessor:
+	case agentprofile.Processor:
 		return types.TrajectoryKindPublication
-	case AgentProfileConductor, AgentProfileTexture, AgentProfileEmail:
+	case agentprofile.Conductor, agentprofile.Texture, agentprofile.Email:
 		return types.TrajectoryKindDocument
 	default:
 		return types.TrajectoryKindTask

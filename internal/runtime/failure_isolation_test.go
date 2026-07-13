@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -110,7 +111,7 @@ func waitForTaskState(t *testing.T, rt *Runtime, taskID string, timeout time.Dur
 // channel system (VAL-CHOIR-009, expected behavior #1).
 func TestFailureIsolation_FailedWorkerSendsErrorToParent(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("simulated worker failure: invalid tool invocation"),
 	}
@@ -167,7 +168,7 @@ func TestFailureIsolation_FailedWorkerSendsErrorToParent(t *testing.T) {
 // (VAL-CHOIR-009, expected behavior #2).
 func TestFailureIsolation_ParentContinuesRunning(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("child failure"),
 	}
@@ -201,7 +202,7 @@ func TestFailureIsolation_ParentContinuesRunning(t *testing.T) {
 // (VAL-CHOIR-009, expected behavior #3).
 func TestFailureIsolation_ErrorIncludesRunIDAndMessage(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("detailed error: connection refused to upstream service"),
 	}
@@ -338,7 +339,7 @@ func TestFailureIsolation_SiblingWorkersUnaffected(t *testing.T) {
 // (VAL-CHOIR-009 pass condition).
 func TestFailureIsolation_RuntimeHealthRemainsReady(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("worker failure for health test"),
 	}
@@ -367,7 +368,7 @@ func TestFailureIsolation_RuntimeHealthRemainsReady(t *testing.T) {
 // is emitted when a worker fails (VAL-CHOIR-009 pass condition).
 func TestFailureIsolation_TaskFailedEventEmitted(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("emit test failure"),
 	}
@@ -416,7 +417,7 @@ func TestFailureIsolation_TaskFailedEventEmitted(t *testing.T) {
 // is updated to failed state when execution fails.
 func TestFailureIsolation_ChildRunUpdatedOnFailure(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("child run failure test"),
 	}
@@ -447,7 +448,7 @@ func TestFailureIsolation_ChildRunUpdatedOnFailure(t *testing.T) {
 // (VAL-CHOIR-009 pass condition).
 func TestFailureIsolation_HealthEndpointRemainsHealthy(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("health endpoint failure test"),
 	}
@@ -478,7 +479,7 @@ func TestFailureIsolation_HealthEndpointRemainsHealthy(t *testing.T) {
 // (VAL-CHOIR-009 extended).
 func TestFailureIsolation_MultipleFailuresDontCrashRuntime(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("repeated failure"),
 	}
@@ -620,7 +621,7 @@ func TestFailureIsolation_ConcurrentFailuresAndSuccesses(t *testing.T) {
 // (VAL-CHOIR-009 verification step #3).
 func TestFailureIsolation_ParentResponsiveAfterFailure(t *testing.T) {
 	t.Parallel()
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("responsiveness test failure"),
 	}
@@ -681,7 +682,7 @@ func TestFailureIsolation_ParentResponsiveAfterFailure(t *testing.T) {
 func TestCancellation_CancelRunningTask(t *testing.T) {
 	t.Parallel()
 	// Use a slow provider so the task stays running.
-	provider := NewStubProvider(5 * time.Second)
+	provider := provider.NewStubProvider(5 * time.Second)
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
@@ -718,7 +719,7 @@ func TestCancellation_CancelRunningTask(t *testing.T) {
 // is emitted when a task is cancelled (VAL-CHOIR-010).
 func TestCancellation_CancelledEventEmitted(t *testing.T) {
 	t.Parallel()
-	provider := NewStubProvider(5 * time.Second)
+	provider := provider.NewStubProvider(5 * time.Second)
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
@@ -757,7 +758,7 @@ func TestCancellation_CancelledEventEmitted(t *testing.T) {
 // not produce a result (VAL-CHOIR-010).
 func TestCancellation_CancelledTaskNoResult(t *testing.T) {
 	t.Parallel()
-	provider := NewStubProvider(5 * time.Second)
+	provider := provider.NewStubProvider(5 * time.Second)
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
@@ -785,7 +786,7 @@ func TestCancellation_CancelledTaskNoResult(t *testing.T) {
 // non-existent task returns an appropriate error.
 func TestCancellation_CancelNonExistentTask(t *testing.T) {
 	t.Parallel()
-	provider := NewStubProvider(50 * time.Millisecond)
+	provider := provider.NewStubProvider(50 * time.Millisecond)
 	rt, _, _ := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
@@ -799,7 +800,7 @@ func TestCancellation_CancelNonExistentTask(t *testing.T) {
 // user's task returns an error (ownership check).
 func TestCancellation_CancelOtherUsersTask(t *testing.T) {
 	t.Parallel()
-	provider := NewStubProvider(5 * time.Second)
+	provider := provider.NewStubProvider(5 * time.Second)
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
@@ -816,7 +817,7 @@ func TestCancellation_CancelOtherUsersTask(t *testing.T) {
 // TestCancellation_SiblingUnaffectedByCancel verifies that cancelling one
 // running task does not affect other running runs (VAL-CHOIR-010).
 func TestCancellation_SiblingUnaffectedByCancel(t *testing.T) {
-	provider := NewStubProvider(500 * time.Millisecond)
+	provider := provider.NewStubProvider(500 * time.Millisecond)
 	rt, _, parentID := failureIsolationSetup(t, provider)
 	ctx := context.Background()
 
@@ -863,7 +864,7 @@ func TestCancellation_SiblingUnaffectedByCancel(t *testing.T) {
 // correctly (VAL-CHOIR-010).
 func TestCancellation_CancelViaAPI(t *testing.T) {
 	t.Parallel()
-	provider := NewStubProvider(5 * time.Second)
+	provider := provider.NewStubProvider(5 * time.Second)
 	rt, handler, parentID := failureIsolationSetup(t, provider)
 	child, err := rt.StartCoagentRun(context.Background(), parentID, "cancellable via api", "user-alice", nil)
 	if err != nil {
@@ -954,7 +955,7 @@ func TestRecovery_InterruptedTasksPassivatedOnRestart(t *testing.T) {
 		ProviderTimeout:     500 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,
 	}
-	provider := NewStubProvider(50 * time.Millisecond)
+	provider := provider.NewStubProvider(50 * time.Millisecond)
 	rt2 := New(cfg, s2, bus2, provider)
 	setTestDispatch(rt2, s2)
 	rt2.Start(context.Background())
@@ -1037,7 +1038,7 @@ func TestRecovery_RecoveredTasksEmitPassivatedEvents(t *testing.T) {
 		ProviderTimeout:     50 * time.Millisecond,
 		SupervisionInterval: 1 * time.Hour,
 	}
-	provider := NewStubProvider(50 * time.Millisecond)
+	provider := provider.NewStubProvider(50 * time.Millisecond)
 	rt2 := New(cfg, s2, bus2, provider)
 	setTestDispatch(rt2, s2)
 
@@ -1106,7 +1107,7 @@ func TestRecovery_RuntimeAcceptsNewTasksAfterRecovery(t *testing.T) {
 		t.Fatalf("open store 2: %v", err)
 	}
 	bus2 := events.NewEventBus()
-	fastProvider := NewStubProvider(50 * time.Millisecond)
+	fastProvider := provider.NewStubProvider(50 * time.Millisecond)
 	cfg := provideriface.Config{
 		SandboxID:           "sandbox-recovery-accept",
 		StorePath:           dbPath,

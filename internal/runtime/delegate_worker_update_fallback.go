@@ -12,10 +12,11 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func (rt *Runtime) synthesizeDelegateWorkerUpdateOnSuperFailure(ctx context.Context, rec *types.RunRecord, runErr error) error {
-	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileSuper {
+	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Super {
 		return nil
 	}
 	channelID, targetAgentID, ok := delegateWorkerUpdateTarget(rec)
@@ -48,7 +49,7 @@ func (rt *Runtime) synthesizeDelegateWorkerUpdateOnSuperFailure(ctx context.Cont
 }
 
 func (rt *Runtime) synthesizeSuperFailureUpdate(ctx context.Context, rec *types.RunRecord, runErr error) error {
-	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileSuper {
+	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Super {
 		return nil
 	}
 	channelID, targetAgentID, ok := delegateWorkerUpdateTarget(rec)
@@ -72,7 +73,7 @@ func (rt *Runtime) synthesizeSuperFailureUpdate(ctx context.Context, rec *types.
 }
 
 func (rt *Runtime) synthesizeDelegateWorkerUpdateCheckpoint(ctx context.Context, rec *types.RunRecord, output map[string]any, source string) error {
-	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileSuper {
+	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Super {
 		return nil
 	}
 	channelID, targetAgentID, ok := delegateWorkerUpdateTarget(rec)
@@ -125,7 +126,7 @@ func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.
 		FromRunID:    rec.RunID,
 		ToAgentID:    update.TargetAgentID,
 		TrajectoryID: metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
-		Role:         AgentProfileSuper,
+		Role:         agentprofile.Super,
 		Content:      update.Content,
 		Timestamp:    update.CreatedAt,
 	}
@@ -360,7 +361,7 @@ func delegateWorkerFallbackUpdate(rec *types.RunRecord, runErr error, ev types.E
 		TargetAgentID: targetAgentID,
 		ChannelID:     channelID,
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
-		Role:          AgentProfileSuper,
+		Role:          agentprofile.Super,
 		Packet: newCoagentPacket("blocker", "Runtime fallback: worker delegation evidence was preserved after Super failure.",
 			coagentClaimsFromTexts(trimDedupeNonEmpty(findings), sources),
 			sources,
@@ -442,7 +443,7 @@ func delegateWorkerCheckpointUpdate(rec *types.RunRecord, output map[string]any,
 		TargetAgentID: targetAgentID,
 		ChannelID:     channelID,
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
-		Role:          AgentProfileSuper,
+		Role:          agentprofile.Super,
 		Packet: newCoagentPacket("evidence_update", "Worker delegation checkpoint preserved.",
 			coagentClaimsFromTexts(trimDedupeNonEmpty(findings), sources),
 			sources,
@@ -493,7 +494,7 @@ func superFailureFallbackUpdate(rec *types.RunRecord, runErr error, eventsForRun
 		TargetAgentID: targetAgentID,
 		ChannelID:     channelID,
 		TrajectoryID:  metadataStringValue(rec.Metadata, runMetadataTrajectoryID),
-		Role:          AgentProfileSuper,
+		Role:          agentprofile.Super,
 		Packet: newCoagentPacket("blocker", "Runtime fallback: Super failed before worker delegation/package evidence reached Texture.",
 			coagentClaimsFromTexts(trimDedupeNonEmpty(findings), nil),
 			coagentSourcesFromTypedEvidenceRefs(trimDedupeNonEmpty(refs)),

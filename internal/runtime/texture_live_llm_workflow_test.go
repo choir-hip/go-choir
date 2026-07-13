@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -172,7 +173,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 		t.Fatalf("live researcher update missing packet sources: %+v", researchUpdate)
 	}
 
-	textureRegistry := rt.ToolRegistryForProfile(choirruntime.AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	superRequestRaw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		RunID: initialTextureRun.RunID, AgentID: initialTextureRun.AgentID, OwnerID: initialTextureRun.OwnerID,
 		Profile: initialTextureRun.AgentProfile, Role: initialTextureRun.AgentRole, ChannelID: initialTextureRun.ChannelID,

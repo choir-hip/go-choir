@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type capturingModelVerifyProvider struct {
@@ -44,8 +45,8 @@ func TestVerifyModelCapabilityExplicitTextOnlyOmitFireworksMaxTokens(t *testing.
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-text",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 	}))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{
@@ -82,7 +83,7 @@ func TestVerifyModelCapabilityRejectsImageForTextOnlyModel(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-image-blocker",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}))
 
 	_, err := tool.Func(ctx, json.RawMessage(`{
@@ -110,7 +111,7 @@ func TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-text-policy",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{
@@ -142,7 +143,7 @@ func TestVerifyModelCapabilityUsesPolicyForMiMoImage(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-mimo",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{
@@ -179,7 +180,7 @@ func TestVerifyModelCapabilityUsesDeterministicImageFixture(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-mimo-fixture",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}))
 
 	out, err := tool.Func(ctx, json.RawMessage(`{
@@ -211,7 +212,7 @@ func TestVerifyModelCapabilityRejectsMalformedImageInput(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-bad-image",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}))
 
 	_, err := tool.Func(ctx, json.RawMessage(`{

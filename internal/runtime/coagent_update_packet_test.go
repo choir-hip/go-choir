@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestBuildCoagentUpdateUserMessagesTypedPacket(t *testing.T) {
@@ -80,7 +82,7 @@ func TestRunSupportsCoagentUpdateInjectionIncludesTexture(t *testing.T) {
 	rec := &types.RunRecord{
 		AgentID: "texture:doc-1",
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
 		},
 	}
 	if !runSupportsCoagentUpdateInjection(rec) {
@@ -90,11 +92,11 @@ func TestRunSupportsCoagentUpdateInjectionIncludesTexture(t *testing.T) {
 
 func TestResolveResearcherFindingsTargetRequiresExplicitTextureAgent(t *testing.T) {
 	t.Parallel()
-	rt, _ := testRuntimeWithProviderAndRegistry(t, NewStubProvider(0), nil)
+	rt, _ := testRuntimeWithProviderAndRegistry(t, provider.NewStubProvider(0), nil)
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileResearcher,
-			"requested_by_profile":  AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Researcher,
+			"requested_by_profile":  agentprofile.Texture,
 			"requested_by_agent_id": "texture:doc-target",
 			runMetadataChannelID:    "doc-target",
 		},

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type TextureWorkflowVerificationOptions struct {
@@ -47,7 +48,7 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if conductor.OwnerID != ownerID {
 		return report, fmt.Errorf("prompt submission owner = %q, want %q", conductor.OwnerID, ownerID)
 	}
-	if agentProfileForRun(&conductor) != AgentProfileConductor || agentRoleForRun(&conductor) != AgentProfileConductor {
+	if agentProfileForRun(&conductor) != agentprofile.Conductor || agentRoleForRun(&conductor) != agentprofile.Conductor {
 		return report, fmt.Errorf("prompt submission is %q/%q, want conductor/conductor", agentProfileForRun(&conductor), agentRoleForRun(&conductor))
 	}
 	if metadataStringValue(conductor.Metadata, "input_source") != "prompt_bar" {
@@ -84,7 +85,7 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	textureRunIDs := map[string]bool{}
 	for _, run := range trajectoryRuns {
 		runByID[run.RunID] = run
-		if agentProfileForRun(&run) == AgentProfileTexture {
+		if agentProfileForRun(&run) == agentprofile.Texture {
 			textureRunIDs[run.RunID] = true
 		}
 	}
@@ -149,7 +150,7 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if opts.RequireResearchUpdates {
 		researchUpdateCount := 0
 		for _, update := range updates {
-			if update.Role != AgentProfileResearcher {
+			if update.Role != agentprofile.Researcher {
 				continue
 			}
 			researchUpdateCount++
@@ -168,7 +169,7 @@ func (rt *Runtime) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 	if opts.RequireWorkerUpdates {
 		workerUpdateCount := 0
 		for _, update := range updates {
-			if update.Role == AgentProfileResearcher {
+			if update.Role == agentprofile.Researcher {
 				continue
 			}
 			if !textureAgentIDMatchesDoc(update.TargetAgentID, doc.DocID) || update.ChannelID != doc.DocID || update.MessageSeq == 0 {
@@ -236,9 +237,9 @@ func verifyAllowedTextureDelegation(runs []types.RunRecord) error {
 		if !ok {
 			continue
 		}
-		if agentProfileForRun(&parent) == AgentProfileTexture {
+		if agentProfileForRun(&parent) == agentprofile.Texture {
 			switch agentProfileForRun(&run) {
-			case AgentProfileResearcher:
+			case agentprofile.Researcher:
 			default:
 				return fmt.Errorf("texture run %s directly delegated to disallowed %s run %s", parent.RunID, agentProfileForRun(&run), run.RunID)
 			}
@@ -260,7 +261,7 @@ func workerUpdatesForTextureDoc(updates []types.CoagentSourcePacket, docID strin
 func verifyPersistentSuperPath(ownerID string, runs []types.RunRecord) error {
 	wantAgentID := persistentSuperAgentID(ownerID)
 	for _, run := range runs {
-		if agentProfileForRun(&run) != AgentProfileSuper {
+		if agentProfileForRun(&run) != agentprofile.Super {
 			continue
 		}
 		if run.AgentID != wantAgentID {
@@ -269,7 +270,7 @@ func verifyPersistentSuperPath(ownerID string, runs []types.RunRecord) error {
 		if metadataStringValue(run.Metadata, "request_source") != "update_coagent" {
 			return fmt.Errorf("super run %s request_source = %q, want update_coagent", run.RunID, metadataStringValue(run.Metadata, "request_source"))
 		}
-		if metadataStringValue(run.Metadata, "requested_by_profile") == AgentProfileTexture {
+		if metadataStringValue(run.Metadata, "requested_by_profile") == agentprofile.Texture {
 			return nil
 		}
 	}
@@ -283,13 +284,13 @@ func verifyCoSuperParents(runs []types.RunRecord) error {
 		runByID[run.RunID] = run
 	}
 	for _, run := range runs {
-		if agentProfileForRun(&run) != AgentProfileCoSuper {
+		if agentProfileForRun(&run) != agentprofile.CoSuper {
 			continue
 		}
 		coSuperCount++
 		parent, ok := runByID[run.RequestedByRunID]
 		parentProfile := agentProfileForRun(&parent)
-		if !ok || (parentProfile != AgentProfileSuper && parentProfile != AgentProfileVSuper) {
+		if !ok || (parentProfile != agentprofile.Super && parentProfile != agentprofile.VSuper) {
 			return fmt.Errorf("co-super run %s parent profile = %q, want super or vsuper", run.RunID, parentProfile)
 		}
 	}
@@ -315,23 +316,23 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 		parentProfile := agentProfileForRun(&parent)
 		childProfile := agentProfileForRun(&run)
 		switch {
-		case childProfile == AgentProfileTexture:
+		case childProfile == agentprofile.Texture:
 			if !isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 				return fmt.Errorf("child Texture run %s is not a Texture agent revision", run.RunID)
 			}
-		case parentProfile == AgentProfileTexture && childProfile == AgentProfileResearcher:
+		case parentProfile == agentprofile.Texture && childProfile == agentprofile.Researcher:
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("researcher run %s lacks parent texture spawn_agent result", run.RunID)
 			}
-		case parentProfile == AgentProfileSuper && (childProfile == AgentProfileCoSuper || childProfile == AgentProfileResearcher):
+		case parentProfile == agentprofile.Super && (childProfile == agentprofile.CoSuper || childProfile == agentprofile.Researcher):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("%s run %s lacks parent super spawn_agent result", childProfile, run.RunID)
 			}
-		case parentProfile == AgentProfileVSuper && (childProfile == AgentProfileCoSuper || childProfile == AgentProfileResearcher):
+		case parentProfile == agentprofile.VSuper && (childProfile == agentprofile.CoSuper || childProfile == agentprofile.Researcher):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("%s run %s lacks parent vsuper spawn_agent result", childProfile, run.RunID)
 			}
-		case parentProfile == AgentProfileConductor && childProfile == AgentProfileTexture:
+		case parentProfile == agentprofile.Conductor && childProfile == agentprofile.Texture:
 			// Initial texture setup is product orchestration, not worker delegation.
 		default:
 			return fmt.Errorf("run %s (%s) has unsupported parent %s (%s)", run.RunID, childProfile, parent.RunID, parentProfile)

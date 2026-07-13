@@ -43,3 +43,10 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 		t.Fatalf("TextureActorParkIdle = %s, want %s", got.TextureActorParkIdle, loaded.TextureActorParkIdle)
 	}
 }
+
+func TestBuildRuntimeConfigDerivesCanonicalModelPolicyPath(t *testing.T) {
+	got := buildRuntimeConfig(sandbox.Config{SandboxID: "vm-test"}, provideriface.Config{}, "/files")
+	if got.ModelPolicyPath != "/files/System/model-policy.toml" {
+		t.Fatalf("ModelPolicyPath = %q, want canonical files path", got.ModelPolicyPath)
+	}
+}

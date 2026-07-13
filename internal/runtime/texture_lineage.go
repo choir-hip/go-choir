@@ -17,6 +17,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func buildMarkdownLineageRevisionMetadata(sourcePath string, version textureMarkdownLineageVersion, content, contentID, contentHashValue, contentPath, contentSource string, index, count int, lineage []map[string]any, sourceEntities []textureSourceEntity, resolutions []textureCitationMarkerResolution) (json.RawMessage, error) {
@@ -504,7 +505,7 @@ func buildMarkdownLineageContentItem(ownerID, sourcePath, title string, version 
 		OwnerID:     ownerID,
 		SourceType:  "file_version",
 		MediaType:   "text/markdown",
-		AppHint:     AgentProfileTexture,
+		AppHint:     agentprofile.Texture,
 		Title:       fmt.Sprintf("%s %s", title, label),
 		FilePath:    fmt.Sprintf("%s#%s", sourcePath, label),
 		TextContent: content,

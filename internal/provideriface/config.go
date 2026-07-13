@@ -92,6 +92,15 @@ const (
 	DefaultQdrantDedupThreshold = 0.7862
 )
 
+// DefaultModelPolicyPath derives the computer-owned model policy path.
+func DefaultModelPolicyPath(filesRoot string) string {
+	root := strings.TrimSpace(filesRoot)
+	if root == "" {
+		return ""
+	}
+	return filepath.Join(root, filepath.FromSlash("System/model-policy.toml"))
+}
+
 // LoadConfig resolves runtime configuration from environment variables.
 func LoadConfig() Config {
 	storePath := envOr("RUNTIME_STORE_PATH", DefaultStorePath)

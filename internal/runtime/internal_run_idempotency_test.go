@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func processorHandoffSubmissionFixture(ownerID, requestID, requestKind string, sourceItemIDs []string) internalRunSubmitRequest {
@@ -21,8 +22,8 @@ func processorHandoffSubmissionFixture(ownerID, requestID, requestKind string, s
 		Metadata: map[string]any{
 			runMetadataAgentID:               "processor-v2:processor-general-global-rss",
 			runMetadataChannelID:             "processor-v2:processor-general-global-rss",
-			runMetadataAgentProfile:          AgentProfileProcessor,
-			runMetadataAgentRole:             AgentProfileProcessor,
+			runMetadataAgentProfile:          agentprofile.Processor,
+			runMetadataAgentRole:             agentprofile.Processor,
 			"request_source":                 "sourcecycled",
 			"activation_origin":              "ingestion_event",
 			"ingestion_event_ids":            []string{"ingestionevt-test"},
@@ -48,8 +49,8 @@ func reconcilerHandoffSubmissionFixture(ownerID, requestID, requestKind, scope s
 		OwnerID: ownerID,
 		Prompt:  "Reconcile the story corpus.",
 		Metadata: map[string]any{
-			runMetadataAgentProfile:          AgentProfileReconciler,
-			runMetadataAgentRole:             AgentProfileReconciler,
+			runMetadataAgentProfile:          agentprofile.Reconciler,
+			runMetadataAgentRole:             agentprofile.Reconciler,
 			"request_source":                 "sourcecycled",
 			"ingestion_handoff_request_kind": requestKind,
 			"ingestion_handoff_request_id":   requestID,
@@ -142,8 +143,8 @@ func TestHandleInternalRunSubmissionDeduplicatesTypedProcessorHandoff(t *testing
 		AgentID:          "agent-child-processor-provenance",
 		ChannelID:        "channel-child-processor-provenance",
 		RequestedByRunID: first.RunID,
-		AgentProfile:     AgentProfileProcessor,
-		AgentRole:        AgentProfileProcessor,
+		AgentProfile:     agentprofile.Processor,
+		AgentRole:        agentprofile.Processor,
 		OwnerID:          submission.OwnerID,
 		SandboxID:        "sandbox-test",
 		State:            types.RunPending,
@@ -151,8 +152,8 @@ func TestHandleInternalRunSubmissionDeduplicatesTypedProcessorHandoff(t *testing
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile:          AgentProfileProcessor,
-			runMetadataAgentRole:             AgentProfileProcessor,
+			runMetadataAgentProfile:          agentprofile.Processor,
+			runMetadataAgentRole:             agentprofile.Processor,
 			"ingestion_handoff_request_id":   "processor-idempotent",
 			"ingestion_handoff_request_kind": "processor",
 		},
@@ -168,7 +169,7 @@ func TestHandleInternalRunSubmissionDeduplicatesTypedProcessorHandoff(t *testing
 	if second.RunID != first.RunID {
 		t.Fatalf("duplicate submission run id = %q, want original %q", second.RunID, first.RunID)
 	}
-	matches, err := rt.Store().ListRunsByIngestionHandoff(ctx, submission.OwnerID, AgentProfileProcessor, "processor-idempotent", "processor", 10)
+	matches, err := rt.Store().ListRunsByIngestionHandoff(ctx, submission.OwnerID, agentprofile.Processor, "processor-idempotent", "processor", 10)
 	if err != nil {
 		t.Fatalf("list processor handoff runs: %v", err)
 	}
@@ -227,7 +228,7 @@ func TestHandleInternalRunSubmissionDeduplicatesTypedReconcilerHandoff(t *testin
 		t.Fatalf("duplicate reconciler run id = %q, want original %q", got, first.RunID)
 	}
 
-	matches, err := rt.Store().ListRunsByIngestionHandoff(ctx, submission.OwnerID, AgentProfileReconciler, "reconciler-idempotent", "reconciler", 10)
+	matches, err := rt.Store().ListRunsByIngestionHandoff(ctx, submission.OwnerID, agentprofile.Reconciler, "reconciler-idempotent", "reconciler", 10)
 	if err != nil {
 		t.Fatalf("list reconciler handoff runs: %v", err)
 	}
@@ -285,7 +286,7 @@ func TestHandleInternalRunSubmissionConcurrentRetriesCreateOneProcessorRun(t *te
 		}
 	}
 
-	matches, err := rt.Store().ListRunsByIngestionHandoff(ctx, submission.OwnerID, AgentProfileProcessor, "processor-concurrent", "processor", 10)
+	matches, err := rt.Store().ListRunsByIngestionHandoff(ctx, submission.OwnerID, agentprofile.Processor, "processor-concurrent", "processor", 10)
 	if err != nil {
 		t.Fatalf("list concurrent processor handoff runs: %v", err)
 	}
@@ -308,8 +309,8 @@ func TestHandleInternalRunSubmissionResolvesIdentityBeforeOverload(t *testing.T)
 		RunID:        "run-legacy-processor-running",
 		AgentID:      metadataStringValue(submission.Metadata, runMetadataAgentID),
 		ChannelID:    metadataStringValue(submission.Metadata, runMetadataChannelID),
-		AgentProfile: AgentProfileProcessor,
-		AgentRole:    AgentProfileProcessor,
+		AgentProfile: agentprofile.Processor,
+		AgentRole:    agentprofile.Processor,
 		OwnerID:      submission.OwnerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
@@ -321,7 +322,7 @@ func TestHandleInternalRunSubmissionResolvesIdentityBeforeOverload(t *testing.T)
 	if err := rt.Store().CreateRun(ctx, existing); err != nil {
 		t.Fatalf("create legacy seeded processor run: %v", err)
 	}
-	assertRunIdentityLivesOnlyInBodyForTest(t, rt, existing.RunID, "processor-running", "processor", AgentProfileProcessor)
+	assertRunIdentityLivesOnlyInBodyForTest(t, rt, existing.RunID, "processor-running", "processor", agentprofile.Processor)
 
 	duplicateW := postInternalRunSubmissionFixture(t, handler, submission)
 	if duplicateW.Code != http.StatusAccepted {
@@ -355,8 +356,8 @@ func TestHandleInternalRunSubmissionResolvesIdentityBeforeOverload(t *testing.T)
 		t.Fatalf("non-string ingestion identity status = %d, want 400; body=%s", invalidTypedIdentityW.Code, invalidTypedIdentityW.Body.String())
 	}
 	wrongProfile := processorHandoffSubmissionFixture(submission.OwnerID, "researcher-typed-handoff", "processor", []string{"source-item-partial"})
-	wrongProfile.Metadata[runMetadataAgentProfile] = AgentProfileResearcher
-	wrongProfile.Metadata[runMetadataAgentRole] = AgentProfileResearcher
+	wrongProfile.Metadata[runMetadataAgentProfile] = agentprofile.Researcher
+	wrongProfile.Metadata[runMetadataAgentRole] = agentprofile.Researcher
 	wrongProfileW := postInternalRunSubmissionFixture(t, handler, wrongProfile)
 	if wrongProfileW.Code != http.StatusBadRequest {
 		t.Fatalf("non-ingestion profile handoff identity status = %d, want 400; body=%s", wrongProfileW.Code, wrongProfileW.Body.String())

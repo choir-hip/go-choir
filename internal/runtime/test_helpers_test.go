@@ -15,9 +15,11 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -85,7 +87,7 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, events.NewEventBus(), NewStubProvider(0))
+	}, s, events.NewEventBus(), provider.NewStubProvider(0))
 	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
@@ -210,7 +212,7 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, events.NewEventBus(), NewStubProvider(0))
+	}, s, events.NewEventBus(), provider.NewStubProvider(0))
 
 	setTestDispatch(rt, s)
 
@@ -272,7 +274,7 @@ func testPromptRuntime(t *testing.T) *Runtime {
 	}
 }
 
-func executeWorkerDelegationUntilSettled(t *testing.T, registry *ToolRegistry, ctx context.Context, raw json.RawMessage) (string, error) {
+func executeWorkerDelegationUntilSettled(t *testing.T, registry *toolregistry.ToolRegistry, ctx context.Context, raw json.RawMessage) (string, error) {
 	t.Helper()
 	startRaw, err := registry.Execute(ctx, "delegate_worker_vm", raw)
 	if err != nil {

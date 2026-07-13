@@ -24,6 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const maxImportedContentBytes = 2 * 1024 * 1024
@@ -689,7 +690,7 @@ func (rt *Runtime) importYouTubeURLContent(ctx context.Context, ownerID, normali
 			OwnerID:      ownerID,
 			SourceType:   "derived_transcript",
 			MediaType:    "text/x-youtube-transcript",
-			AppHint:      AgentProfileTexture,
+			AppHint:      agentprofile.Texture,
 			Title:        "Transcript for YouTube " + videoID,
 			SourceURL:    canonicalURL,
 			CanonicalURL: "youtube://" + videoID + "/transcript/" + firstNonEmpty(transcript.Language, "unknown"),
@@ -1779,7 +1780,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 	case mediaType == "application/pdf":
 		return "pdf"
 	case mediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-		return AgentProfileTexture
+		return agentprofile.Texture
 	case mediaType == "application/epub+zip":
 		return "epub"
 	case mediaType == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
@@ -1787,7 +1788,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 	case mediaType == "application/rss+xml" || strings.Contains(strings.ToLower(sourceURL+filePath), "podcast"):
 		return "podcast"
 	case mediaType == "text/markdown" || mediaType == "text/plain":
-		return AgentProfileTexture
+		return agentprofile.Texture
 	case mediaType == "text/html" || mediaType == "application/xhtml+xml":
 		return "browser"
 	default:

@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type requestEmailDraftArgs struct {
@@ -76,7 +77,7 @@ func newRequestEmailDraftTool(rt *Runtime) Tool {
 			"approval_mode":       map[string]any{"type": "string", "enum": []string{"owner_click", "owner_click_or_email_reply"}, "description": "How the owner may approve this exact draft version."},
 		}, []string{"doc_id", "revision_id", "to_addresses", "subject", "body_text"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile) != AgentProfileTexture {
+			if canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile) != agentprofile.Texture {
 				return "", fmt.Errorf("request_email_draft is only available to texture agents")
 			}
 			rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
@@ -141,8 +142,8 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		AgentID:   agentID,
 		OwnerID:   ownerID,
 		SandboxID: rt.cfg.SandboxID,
-		Profile:   AgentProfileEmail,
-		Role:      AgentProfileEmail,
+		Profile:   agentprofile.Email,
+		Role:      agentprofile.Email,
 		ChannelID: agentID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -236,13 +237,13 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	}
 
 	metadata := map[string]any{
-		runMetadataAgentProfile:  AgentProfileEmail,
-		runMetadataAgentRole:     AgentProfileEmail,
+		runMetadataAgentProfile:  agentprofile.Email,
+		runMetadataAgentRole:     agentprofile.Email,
 		runMetadataAgentID:       agentID,
 		runMetadataChannelID:     agentID,
 		runMetadataDesktopID:     desktopIDForRun(parent),
 		"requested_by":           parent.RunID,
-		"source_agent_profile":   AgentProfileTexture,
+		"source_agent_profile":   agentprofile.Texture,
 		"email_action":           "draft_request",
 		"email_draft_id":         draftID,
 		"email_draft_version_id": versionID,
@@ -263,8 +264,8 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 		AgentID:          agentID,
 		ChannelID:        agentID,
 		RequestedByRunID: parent.RunID,
-		AgentProfile:     AgentProfileEmail,
-		AgentRole:        AgentProfileEmail,
+		AgentProfile:     agentprofile.Email,
+		AgentRole:        agentprofile.Email,
 		OwnerID:          ownerID,
 		SandboxID:        rt.cfg.SandboxID,
 		State:            types.RunCompleted,
@@ -314,7 +315,7 @@ func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.Ru
 	result["agent_id"] = agentID
 	result["loop_id"] = runID
 	result["channel_id"] = agentID
-	result["profile"] = AgentProfileEmail
+	result["profile"] = agentprofile.Email
 	return result, nil
 }
 

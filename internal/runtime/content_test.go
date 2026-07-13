@@ -14,8 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func allowPrivateSourceFetchForTest(t *testing.T) {
@@ -649,8 +651,8 @@ func TestContentImportURLStoresConfiguredTranscriptItem(t *testing.T) {
 	if transcript.SourceType != "derived_transcript" || transcript.MediaType != "text/x-youtube-transcript" {
 		t.Fatalf("transcript item type = %q/%q", transcript.SourceType, transcript.MediaType)
 	}
-	if transcript.AppHint != AgentProfileTexture {
-		t.Fatalf("transcript app_hint = %q, want %q", transcript.AppHint, AgentProfileTexture)
+	if transcript.AppHint != agentprofile.Texture {
+		t.Fatalf("transcript app_hint = %q, want %q", transcript.AppHint, agentprofile.Texture)
 	}
 	if transcript.TextContent != "Stored transcript line." {
 		t.Fatalf("transcript text = %q", transcript.TextContent)
@@ -854,7 +856,7 @@ func TestPromptBarBareURLRoutesToDisplayApp(t *testing.T) {
 func TestPromptBarBareURLDoesNotRequireProvider(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
-	rt.provider = &StubProvider{Delay: 10 * time.Millisecond, FailErr: errors.New("provider unavailable")}
+	rt.provider = &provider.StubProvider{Delay: 10 * time.Millisecond, FailErr: errors.New("provider unavailable")}
 	body := `{"text":"https://example.com/report.pdf"}`
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", body, "user-content")
 	w := httptest.NewRecorder()

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestRuntimeSynthesizesTextureBlockerWhenSuperFailsBeforeDelegation(t *testing.T) {
@@ -22,8 +23,8 @@ func TestRuntimeSynthesizesTextureBlockerWhenSuperFailsBeforeDelegation(t *testi
 		RunID:        "super-run-before-delegation",
 		AgentID:      "super:" + ownerID,
 		ChannelID:    docID,
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
@@ -31,13 +32,13 @@ func TestRuntimeSynthesizesTextureBlockerWhenSuperFailsBeforeDelegation(t *testi
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 			runMetadataAgentID:      "super:" + ownerID,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: "traj-super-before-delegation",
 			"requested_by_agent_id": "texture:" + docID,
-			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_profile":  agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, *superRun); err != nil {
@@ -47,8 +48,8 @@ func TestRuntimeSynthesizesTextureBlockerWhenSuperFailsBeforeDelegation(t *testi
 		AgentID:   "super:" + ownerID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileSuper,
-		Role:      AgentProfileSuper,
+		Profile:   agentprofile.Super,
+		Role:      agentprofile.Super,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -108,8 +109,8 @@ func TestRuntimeSynthesizesWorkerDelegationUpdateAfterStartWorkerDelegation(t *t
 		RunID:        "super-run-after-start-delegation",
 		AgentID:      "super:" + ownerID,
 		ChannelID:    docID,
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
@@ -117,13 +118,13 @@ func TestRuntimeSynthesizesWorkerDelegationUpdateAfterStartWorkerDelegation(t *t
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 			runMetadataAgentID:      "super:" + ownerID,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: "traj-super-after-start-delegation",
 			"requested_by_agent_id": "texture:" + docID,
-			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_profile":  agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, *superRun); err != nil {
@@ -133,8 +134,8 @@ func TestRuntimeSynthesizesWorkerDelegationUpdateAfterStartWorkerDelegation(t *t
 		AgentID:   "super:" + ownerID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileSuper,
-		Role:      AgentProfileSuper,
+		Profile:   agentprofile.Super,
+		Role:      agentprofile.Super,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,

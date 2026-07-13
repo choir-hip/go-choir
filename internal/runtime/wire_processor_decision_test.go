@@ -9,6 +9,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict(t *testing.T) {
@@ -17,8 +18,8 @@ func TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdic
 	coveredByDocID := seedPublishedCoverageDoc(t, s, "user-alice", "wire-existing-coverage")
 
 	run, err := rt.StartRunWithMetadata(ctx, "review this batch", "user-alice", map[string]any{
-		runMetadataAgentProfile:        AgentProfileProcessor,
-		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataAgentProfile:        agentprofile.Processor,
+		runMetadataAgentRole:           agentprofile.Processor,
 		"ingestion_handoff_request_id": "processor-request-explicit",
 		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
 		"source_item_ids":              []string{"source-item-1"},
@@ -108,8 +109,8 @@ func TestRecordWireProcessorDecisionToolRejectsAlreadyCoveredWithoutPublishedDoc
 	}
 
 	run, err := rt.StartRunWithMetadata(ctx, "review this batch", "user-alice", map[string]any{
-		runMetadataAgentProfile:        AgentProfileProcessor,
-		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataAgentProfile:        agentprofile.Processor,
+		runMetadataAgentRole:           agentprofile.Processor,
 		"ingestion_handoff_request_id": "processor-request-unpublished",
 		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
 		"source_item_ids":              []string{"source-item-1"},
@@ -138,8 +139,8 @@ func TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch(t *
 	rt, s := testRuntime(t)
 
 	run, err := rt.StartRunWithMetadata(ctx, "review this batch", "user-alice", map[string]any{
-		runMetadataAgentProfile:        AgentProfileProcessor,
-		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataAgentProfile:        agentprofile.Processor,
+		runMetadataAgentRole:           agentprofile.Processor,
 		"ingestion_handoff_request_id": "processor-request-not-newsworthy",
 		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
 		"source_item_ids":              []string{"source-item-1"},
@@ -200,8 +201,8 @@ func TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen(t *testing.T) {
 	rt, s := testRuntime(t)
 
 	run, err := rt.StartRunWithMetadata(ctx, "review this batch", "user-alice", map[string]any{
-		runMetadataAgentProfile:        AgentProfileProcessor,
-		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataAgentProfile:        agentprofile.Processor,
+		runMetadataAgentRole:           agentprofile.Processor,
 		"ingestion_handoff_request_id": "processor-request-deferred",
 		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
 		"source_item_ids":              []string{"source-item-1"},
@@ -259,8 +260,8 @@ func TestProcessorTextureRouteRequiresExplicitSourceItemsForMultiItemRequest(t *
 	rt, _ := testRuntime(t)
 
 	run, err := rt.StartRunWithMetadata(ctx, "route a story to texture", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileProcessor,
-		runMetadataAgentRole:    AgentProfileProcessor,
+		runMetadataAgentProfile: agentprofile.Processor,
+		runMetadataAgentRole:    agentprofile.Processor,
 		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
 		"source_item_ids":       []string{"source-item-1", "source-item-2"},
 		"source_count":          2,
@@ -269,9 +270,9 @@ func TestProcessorTextureRouteRequiresExplicitSourceItemsForMultiItemRequest(t *
 		t.Fatalf("start processor run: %v", err)
 	}
 	_, err = rt.ensureCoagentTextureRevisionRoute(ctx, run, coagentTextureRouteRequest{
-		CallerProfile: AgentProfileProcessor,
-		Role:          AgentProfileTexture,
-		Profile:       AgentProfileTexture,
+		CallerProfile: agentprofile.Processor,
+		Role:          agentprofile.Texture,
+		Profile:       agentprofile.Texture,
 		Objective:     "Draft the article.",
 		Title:         "Wire Story",
 	})
@@ -285,8 +286,8 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 	rt, s := testRuntime(t)
 
 	run, err := rt.StartRunWithMetadata(ctx, "route a story to texture", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileProcessor,
-		runMetadataAgentRole:    AgentProfileProcessor,
+		runMetadataAgentProfile: agentprofile.Processor,
+		runMetadataAgentRole:    agentprofile.Processor,
 		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
 		"source_item_ids":       []string{"source-item-1", "source-item-2"},
 		"source_count":          2,
@@ -295,9 +296,9 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 		t.Fatalf("start processor run: %v", err)
 	}
 	route, err := rt.ensureCoagentTextureRevisionRoute(ctx, run, coagentTextureRouteRequest{
-		CallerProfile: AgentProfileProcessor,
-		Role:          AgentProfileTexture,
-		Profile:       AgentProfileTexture,
+		CallerProfile: agentprofile.Processor,
+		Role:          agentprofile.Texture,
+		Profile:       agentprofile.Texture,
 		Objective:     "Draft the article.",
 		Title:         "Wire Story",
 		SourceItemIDs: []string{"source-item-1"},
@@ -418,12 +419,12 @@ func TestBuildCoagentTextureRevisionPromptIncludesSourceBodyText(t *testing.T) {
 	parentRec := &types.RunRecord{
 		RunID:        "run-test-prompt",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileProcessor,
+		AgentProfile: agentprofile.Processor,
 	}
 	req := coagentTextureRouteRequest{
-		CallerProfile: AgentProfileProcessor,
-		Role:          AgentProfileTexture,
-		Profile:       AgentProfileTexture,
+		CallerProfile: agentprofile.Processor,
+		Role:          agentprofile.Texture,
+		Profile:       agentprofile.Texture,
 		Objective:     "Draft the article about the event.",
 		Title:         "Wire Story",
 	}
@@ -482,12 +483,12 @@ func TestBuildCoagentTextureRevisionPromptNotesMissingSourceText(t *testing.T) {
 	parentRec := &types.RunRecord{
 		RunID:        "run-test-prompt-empty",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileProcessor,
+		AgentProfile: agentprofile.Processor,
 	}
 	req := coagentTextureRouteRequest{
-		CallerProfile: AgentProfileProcessor,
-		Role:          AgentProfileTexture,
-		Profile:       AgentProfileTexture,
+		CallerProfile: agentprofile.Processor,
+		Role:          agentprofile.Texture,
+		Profile:       agentprofile.Texture,
 		Objective:     "Draft the article.",
 		Title:         "Wire Story",
 	}

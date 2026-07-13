@@ -8,6 +8,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) {
@@ -32,8 +33,8 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 		RunID:        "reconciler-idempotent-parent",
 		AgentID:      "reconciler:story-corpus",
 		ChannelID:    "reconciler:story-corpus",
-		AgentProfile: AgentProfileReconciler,
-		AgentRole:    AgentProfileReconciler,
+		AgentProfile: agentprofile.Reconciler,
+		AgentRole:    agentprofile.Reconciler,
 		OwnerID:      doc.OwnerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
@@ -41,8 +42,8 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile:          AgentProfileReconciler,
-			runMetadataAgentRole:             AgentProfileReconciler,
+			runMetadataAgentProfile:          agentprofile.Reconciler,
+			runMetadataAgentRole:             agentprofile.Reconciler,
 			runMetadataReconcilerScope:       "story-corpus",
 			"ingestion_handoff_cycle_id":     "cycle-idempotent",
 			"ingestion_handoff_request_id":   "reconciler_publish_idempotent",
@@ -54,7 +55,7 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 		t.Fatalf("create reconciler run: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileReconciler)
+	registry := rt.ToolRegistryForProfile(agentprofile.Reconciler)
 	args := json.RawMessage(`{
 		"objective":"Revise the existing canonical article from this reconciliation.",
 		"role":"texture",

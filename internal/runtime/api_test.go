@@ -17,9 +17,11 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // --- Task Submission Tests ---
@@ -52,14 +54,14 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get run: %v", err)
 	}
-	if rec.AgentProfile != AgentProfileConductor || rec.AgentRole != AgentProfileConductor {
+	if rec.AgentProfile != agentprofile.Conductor || rec.AgentRole != agentprofile.Conductor {
 		t.Fatalf("server-owned conductor identity not set: profile=%q role=%q", rec.AgentProfile, rec.AgentRole)
 	}
 	if got := metadataStringValue(rec.Metadata, "input_source"); got != "prompt_bar" {
 		t.Fatalf("input_source: got %q, want prompt_bar", got)
 	}
-	if got := metadataStringValue(rec.Metadata, "requested_app"); got != AgentProfileTexture {
-		t.Fatalf("requested_app: got %q, want %q", got, AgentProfileTexture)
+	if got := metadataStringValue(rec.Metadata, "requested_app"); got != agentprofile.Texture {
+		t.Fatalf("requested_app: got %q, want %q", got, agentprofile.Texture)
 	}
 	if got := metadataStringValue(rec.Metadata, "seed_prompt"); got != "Draft a research plan" {
 		t.Fatalf("seed_prompt: got %q", got)
@@ -68,7 +70,7 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if err := json.Unmarshal([]byte(rec.Result), &decision); err != nil {
 		t.Fatalf("decode prompt-bar decision: %v\n%s", err, rec.Result)
 	}
-	if decision.Action != "open_app" || decision.App != AgentProfileTexture || decision.DocID == "" {
+	if decision.Action != "open_app" || decision.App != agentprofile.Texture || decision.DocID == "" {
 		t.Fatalf("prompt-bar decision = %+v, want immediate Texture route", decision)
 	}
 	// Materialized Texture routes no longer carry conductor initial_content; the
@@ -115,8 +117,8 @@ func TestHandlePromptBarCreatesServerOwnedConductorRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Texture agent missing: %v", err)
 	}
-	if textureAgent.Profile != AgentProfileTexture || textureAgent.Role != AgentProfileTexture {
-		t.Fatalf("Texture agent identity = %q/%q, want %q/%q", textureAgent.Profile, textureAgent.Role, AgentProfileTexture, AgentProfileTexture)
+	if textureAgent.Profile != agentprofile.Texture || textureAgent.Role != agentprofile.Texture {
+		t.Fatalf("Texture agent identity = %q/%q, want %q/%q", textureAgent.Profile, textureAgent.Role, agentprofile.Texture, agentprofile.Texture)
 	}
 }
 
@@ -221,7 +223,7 @@ reasoning = "medium"
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if resp.Role != AgentProfileResearcher || resp.OverlayID != "mimo-eval" {
+	if resp.Role != agentprofile.Researcher || resp.OverlayID != "mimo-eval" {
 		t.Fatalf("route response identity = %+v", resp)
 	}
 	if resp.Provider != "xiaomi" || resp.Model != "mimo-v2.5-pro" || resp.ReasoningEffort != "medium" {
@@ -313,7 +315,7 @@ reasoning = "medium"
 	}
 	var textureRun *types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture {
+		if agentProfileForRun(&runs[i]) == agentprofile.Texture {
 			textureRun = &runs[i]
 			break
 		}
@@ -633,7 +635,7 @@ func TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvide
 		"worker_id":          "worker-after-fail",
 		"vm_id":              "vm-after-fail",
 		"worker_sandbox_url": "http://127.0.0.1:8086",
-		"profile":            AgentProfileVSuper,
+		"profile":            agentprofile.VSuper,
 		"objective":          "retry after failed worker",
 	})
 
@@ -858,8 +860,8 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-conductor-source-package",
 			AgentID:      "agent-conductor-source-package",
 			ChannelID:    "channel-source-package",
-			AgentProfile: AgentProfileConductor,
-			AgentRole:    AgentProfileConductor,
+			AgentProfile: agentprofile.Conductor,
+			AgentRole:    agentprofile.Conductor,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -869,8 +871,8 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileConductor,
-				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataAgentProfile: agentprofile.Conductor,
+				runMetadataAgentRole:    agentprofile.Conductor,
 				runMetadataTrajectoryID: "traj-source-package",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 				"input_source":          "prompt_bar",
@@ -881,8 +883,8 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			AgentID:          "agent-texture-source-package",
 			ChannelID:        "channel-source-package",
 			RequestedByRunID: "run-conductor-source-package",
-			AgentProfile:     AgentProfileTexture,
-			AgentRole:        AgentProfileTexture,
+			AgentProfile:     agentprofile.Texture,
+			AgentRole:        agentprofile.Texture,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -891,8 +893,8 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:        now.Add(4 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileTexture,
-				runMetadataAgentRole:    AgentProfileTexture,
+				runMetadataAgentProfile: agentprofile.Texture,
+				runMetadataAgentRole:    agentprofile.Texture,
 				runMetadataTrajectoryID: "traj-source-package",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -902,8 +904,8 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			AgentID:          "agent-super-source-package",
 			ChannelID:        "channel-source-package",
 			RequestedByRunID: "run-texture-source-package",
-			AgentProfile:     AgentProfileSuper,
-			AgentRole:        AgentProfileSuper,
+			AgentProfile:     agentprofile.Super,
+			AgentRole:        agentprofile.Super,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -912,8 +914,8 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:        now.Add(12 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileSuper,
-				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataAgentProfile: agentprofile.Super,
+				runMetadataAgentRole:    agentprofile.Super,
 				runMetadataTrajectoryID: "traj-source-package",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -973,7 +975,7 @@ func seedRunAcceptanceSourcePackageOnlyTrajectory(t *testing.T, rt *Runtime) {
 		"event_count":             12,
 		"worker_child_run_ids":    []string{"run-implementation-source-package", "run-verifier-source-package"},
 		"worker_event_summary":    []map[string]any{{"kind": "tool.result", "tool": "publish_app_change_package", "output_excerpt": "published pkg-source-only"}},
-		"worker_spawned_profiles": []string{AgentProfileCoSuper},
+		"worker_spawned_profiles": []string{agentprofile.CoSuper},
 		"app_change_packages": []map[string]any{{
 			"status":                         "published_unlisted",
 			"package_id":                     "pkg-source-only",
@@ -1014,8 +1016,8 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-conductor-runtime-supervision",
 			AgentID:      "agent-conductor-runtime-supervision",
 			ChannelID:    "channel-runtime-supervision",
-			AgentProfile: AgentProfileConductor,
-			AgentRole:    AgentProfileConductor,
+			AgentProfile: agentprofile.Conductor,
+			AgentRole:    agentprofile.Conductor,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1025,8 +1027,8 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileConductor,
-				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataAgentProfile: agentprofile.Conductor,
+				runMetadataAgentRole:    agentprofile.Conductor,
 				runMetadataTrajectoryID: "traj-runtime-supervision",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 				"input_source":          "prompt_bar",
@@ -1037,8 +1039,8 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			AgentID:          "agent-texture-runtime-supervision",
 			ChannelID:        "channel-runtime-supervision",
 			RequestedByRunID: "run-conductor-runtime-supervision",
-			AgentProfile:     AgentProfileTexture,
-			AgentRole:        AgentProfileTexture,
+			AgentProfile:     agentprofile.Texture,
+			AgentRole:        agentprofile.Texture,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -1047,8 +1049,8 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:        now.Add(4 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileTexture,
-				runMetadataAgentRole:    AgentProfileTexture,
+				runMetadataAgentProfile: agentprofile.Texture,
+				runMetadataAgentRole:    agentprofile.Texture,
 				runMetadataTrajectoryID: "traj-runtime-supervision",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1058,8 +1060,8 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			AgentID:          "agent-super-runtime-supervision",
 			ChannelID:        "channel-runtime-supervision",
 			RequestedByRunID: "run-texture-runtime-supervision",
-			AgentProfile:     AgentProfileSuper,
-			AgentRole:        AgentProfileSuper,
+			AgentProfile:     agentprofile.Super,
+			AgentRole:        agentprofile.Super,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -1068,8 +1070,8 @@ func seedRunAcceptanceRuntimeSupervisionTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:        now.Add(12 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileSuper,
-				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataAgentProfile: agentprofile.Super,
+				runMetadataAgentRole:    agentprofile.Super,
 				runMetadataTrajectoryID: "traj-runtime-supervision",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1178,8 +1180,8 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			RunID:        "run-conductor-acceptance",
 			AgentID:      "agent-conductor-acceptance",
 			ChannelID:    "channel-acceptance",
-			AgentProfile: AgentProfileConductor,
-			AgentRole:    AgentProfileConductor,
+			AgentProfile: agentprofile.Conductor,
+			AgentRole:    agentprofile.Conductor,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1189,8 +1191,8 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileConductor,
-				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataAgentProfile: agentprofile.Conductor,
+				runMetadataAgentRole:    agentprofile.Conductor,
 				runMetadataTrajectoryID: "traj-acceptance",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 				"input_source":          "prompt_bar",
@@ -1201,8 +1203,8 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			AgentID:          "agent-texture-acceptance",
 			ChannelID:        "channel-acceptance",
 			RequestedByRunID: "run-conductor-acceptance",
-			AgentProfile:     AgentProfileTexture,
-			AgentRole:        AgentProfileTexture,
+			AgentProfile:     agentprofile.Texture,
+			AgentRole:        agentprofile.Texture,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -1211,8 +1213,8 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			UpdatedAt:        now.Add(4 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileTexture,
-				runMetadataAgentRole:    AgentProfileTexture,
+				runMetadataAgentProfile: agentprofile.Texture,
+				runMetadataAgentRole:    agentprofile.Texture,
 				runMetadataTrajectoryID: "traj-acceptance",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1222,8 +1224,8 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			AgentID:          "agent-super-acceptance",
 			ChannelID:        "channel-acceptance",
 			RequestedByRunID: "run-texture-acceptance",
-			AgentProfile:     AgentProfileSuper,
-			AgentRole:        AgentProfileSuper,
+			AgentProfile:     agentprofile.Super,
+			AgentRole:        agentprofile.Super,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -1232,8 +1234,8 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 			UpdatedAt:        now.Add(12 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileSuper,
-				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataAgentProfile: agentprofile.Super,
+				runMetadataAgentRole:    agentprofile.Super,
 				runMetadataTrajectoryID: "traj-acceptance",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1297,7 +1299,7 @@ func seedRunAcceptanceTrajectoryWithDelegateStatus(t *testing.T, rt *Runtime, de
 		"worker_child_run_ids":         []string{"run-implementation-acceptance", "run-verifier-acceptance"},
 		"worker_child_event_counts":    map[string]int{"run-implementation-acceptance": 8, "run-verifier-acceptance": 5},
 		"worker_channel_message_count": 4,
-		"worker_spawned_profiles":      []string{AgentProfileCoSuper},
+		"worker_spawned_profiles":      []string{agentprofile.CoSuper},
 		"worker_event_summary": []map[string]any{
 			{
 				"kind":           "tool.result",
@@ -1363,8 +1365,8 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-conductor-acceptance",
 			AgentID:      "agent-conductor-acceptance",
 			ChannelID:    "channel-acceptance",
-			AgentProfile: AgentProfileConductor,
-			AgentRole:    AgentProfileConductor,
+			AgentProfile: agentprofile.Conductor,
+			AgentRole:    agentprofile.Conductor,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1374,8 +1376,8 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileConductor,
-				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataAgentProfile: agentprofile.Conductor,
+				runMetadataAgentRole:    agentprofile.Conductor,
 				runMetadataTrajectoryID: "traj-acceptance",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 				"input_source":          "prompt_bar",
@@ -1386,8 +1388,8 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			AgentID:          "agent-texture-acceptance",
 			ChannelID:        "channel-acceptance",
 			RequestedByRunID: "run-conductor-acceptance",
-			AgentProfile:     AgentProfileTexture,
-			AgentRole:        AgentProfileTexture,
+			AgentProfile:     agentprofile.Texture,
+			AgentRole:        agentprofile.Texture,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -1396,8 +1398,8 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:        now.Add(4 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileTexture,
-				runMetadataAgentRole:    AgentProfileTexture,
+				runMetadataAgentProfile: agentprofile.Texture,
+				runMetadataAgentRole:    agentprofile.Texture,
 				runMetadataTrajectoryID: "traj-acceptance",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1407,8 +1409,8 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			AgentID:          "agent-super-acceptance",
 			ChannelID:        "channel-acceptance",
 			RequestedByRunID: "run-texture-acceptance",
-			AgentProfile:     AgentProfileSuper,
-			AgentRole:        AgentProfileSuper,
+			AgentProfile:     agentprofile.Super,
+			AgentRole:        agentprofile.Super,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -1417,8 +1419,8 @@ func seedRunAcceptanceBlockedDelegationTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:        now.Add(12 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileSuper,
-				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataAgentProfile: agentprofile.Super,
+				runMetadataAgentRole:    agentprofile.Super,
 				runMetadataTrajectoryID: "traj-acceptance",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1482,8 +1484,8 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			RunID:        "run-conductor-pending-delegate",
 			AgentID:      "agent-conductor-pending-delegate",
 			ChannelID:    "channel-pending-delegate",
-			AgentProfile: AgentProfileConductor,
-			AgentRole:    AgentProfileConductor,
+			AgentProfile: agentprofile.Conductor,
+			AgentRole:    agentprofile.Conductor,
 			OwnerID:      "user-alice",
 			SandboxID:    "sandbox-test",
 			State:        types.RunCompleted,
@@ -1493,8 +1495,8 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:    finishedAt,
 			FinishedAt:   &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileConductor,
-				runMetadataAgentRole:    AgentProfileConductor,
+				runMetadataAgentProfile: agentprofile.Conductor,
+				runMetadataAgentRole:    agentprofile.Conductor,
 				runMetadataTrajectoryID: "traj-pending-delegate",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 				"input_source":          "prompt_bar",
@@ -1505,8 +1507,8 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			AgentID:          "agent-texture-pending-delegate",
 			ChannelID:        "channel-pending-delegate",
 			RequestedByRunID: "run-conductor-pending-delegate",
-			AgentProfile:     AgentProfileTexture,
-			AgentRole:        AgentProfileTexture,
+			AgentProfile:     agentprofile.Texture,
+			AgentRole:        agentprofile.Texture,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunCompleted,
@@ -1515,8 +1517,8 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			UpdatedAt:        now.Add(4 * time.Second),
 			FinishedAt:       &finishedAt,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileTexture,
-				runMetadataAgentRole:    AgentProfileTexture,
+				runMetadataAgentProfile: agentprofile.Texture,
+				runMetadataAgentRole:    agentprofile.Texture,
 				runMetadataTrajectoryID: "traj-pending-delegate",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1526,8 +1528,8 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			AgentID:          "agent-super-pending-delegate",
 			ChannelID:        "channel-pending-delegate",
 			RequestedByRunID: "run-texture-pending-delegate",
-			AgentProfile:     AgentProfileSuper,
-			AgentRole:        AgentProfileSuper,
+			AgentProfile:     agentprofile.Super,
+			AgentRole:        agentprofile.Super,
 			OwnerID:          "user-alice",
 			SandboxID:        "sandbox-test",
 			State:            types.RunRunning,
@@ -1535,8 +1537,8 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 			CreatedAt:        now.Add(5 * time.Second),
 			UpdatedAt:        now.Add(8 * time.Second),
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileSuper,
-				runMetadataAgentRole:    AgentProfileSuper,
+				runMetadataAgentProfile: agentprofile.Super,
+				runMetadataAgentRole:    agentprofile.Super,
 				runMetadataTrajectoryID: "traj-pending-delegate",
 				runMetadataDesktopID:    types.PrimaryDesktopID,
 			},
@@ -1590,7 +1592,7 @@ func seedRunAcceptancePendingDelegationTrajectory(t *testing.T, rt *Runtime) {
 		"worker_id":          "worker-pending",
 		"vm_id":              "vm-pending",
 		"worker_sandbox_url": "http://127.0.0.1:8085",
-		"profile":            AgentProfileVSuper,
+		"profile":            agentprofile.VSuper,
 		"objective":          "candidate-world task",
 	})
 }
@@ -2483,7 +2485,7 @@ func TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles(t *te
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode internal run response: %v", err)
 	}
-	if resp.RunID == "" || resp.AgentProfile != AgentProfileCoSuper || resp.OwnerID != "user-alice" {
+	if resp.RunID == "" || resp.AgentProfile != agentprofile.CoSuper || resp.OwnerID != "user-alice" {
 		t.Fatalf("unexpected internal run response: %+v", resp)
 	}
 
@@ -2506,7 +2508,7 @@ func TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles(t *te
 	if err := json.NewDecoder(processorW.Body).Decode(&processorResp); err != nil {
 		t.Fatalf("decode processor internal run response: %v", err)
 	}
-	if processorResp.AgentProfile != AgentProfileProcessor || processorResp.AgentID != "processor:processor-global_firehose-global-gdelt" {
+	if processorResp.AgentProfile != agentprofile.Processor || processorResp.AgentID != "processor:processor-global_firehose-global-gdelt" {
 		t.Fatalf("unexpected processor internal run response: %+v", processorResp)
 	}
 
@@ -2521,7 +2523,7 @@ func TestInternalRuntimeRunRoutesRequireInternalCallerAndConstrainProfiles(t *te
 	if err := json.NewDecoder(reconcilerW.Body).Decode(&reconcilerResp); err != nil {
 		t.Fatalf("decode reconciler internal run response: %v", err)
 	}
-	if reconcilerResp.AgentProfile != AgentProfileReconciler || reconcilerResp.AgentID != "reconciler:story-corpus" {
+	if reconcilerResp.AgentProfile != agentprofile.Reconciler || reconcilerResp.AgentID != "reconciler:story-corpus" {
 		t.Fatalf("unexpected reconciler internal run response: %+v", reconcilerResp)
 	}
 }
@@ -2531,8 +2533,8 @@ func TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolut
 	t.Setenv("RUNTIME_MAX_PROCESSOR_RUNS", "1")
 
 	rec, err := rt.createRunWithMetadata(context.Background(), "route a story to texture", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileProcessor,
-		runMetadataAgentRole:    AgentProfileProcessor,
+		runMetadataAgentProfile: agentprofile.Processor,
+		runMetadataAgentRole:    agentprofile.Processor,
 		runMetadataProcessorKey: "processor:global_firehose:global:gdelt",
 		"source_item_ids":       []string{"source-item-1"},
 		"source_count":          1,
@@ -2541,9 +2543,9 @@ func TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolut
 		t.Fatalf("create processor run: %v", err)
 	}
 	if _, err := rt.ensureCoagentTextureRevisionRoute(context.Background(), rec, coagentTextureRouteRequest{
-		CallerProfile: AgentProfileProcessor,
-		Role:          AgentProfileTexture,
-		Profile:       AgentProfileTexture,
+		CallerProfile: agentprofile.Processor,
+		Role:          agentprofile.Texture,
+		Profile:       agentprofile.Texture,
 		Objective:     "Draft the article.",
 		Title:         "Wire Story",
 		SourceItemIDs: []string{"source-item-1"},
@@ -2579,7 +2581,7 @@ func TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolut
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode processor internal run response: %v", err)
 	}
-	if resp.AgentProfile != AgentProfileProcessor || resp.AgentID != "processor:processor-global_firehose-global-gdelt" {
+	if resp.AgentProfile != agentprofile.Processor || resp.AgentID != "processor:processor-global_firehose-global-gdelt" {
 		t.Fatalf("unexpected processor internal run response: %+v", resp)
 	}
 }
@@ -2589,8 +2591,8 @@ func TestHandleInternalRunStatusIncludesTrajectoryObligations(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "ingest source handoff", "user-alice", map[string]any{
-		runMetadataAgentProfile:        AgentProfileProcessor,
-		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataAgentProfile:        agentprofile.Processor,
+		runMetadataAgentRole:           agentprofile.Processor,
 		"ingestion_handoff_request_id": "processor-request-status",
 		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
 		"source_item_ids":              []string{"source-item-1"},
@@ -2651,8 +2653,8 @@ func TestHandleInternalRunStatusIncludesProcessorResolutionTerminalBranch(t *tes
 	coveredByDocID := seedPublishedCoverageDoc(t, rt.Store(), "user-alice", "wire-status-covered")
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "review this batch", "user-alice", map[string]any{
-		runMetadataAgentProfile:        AgentProfileProcessor,
-		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataAgentProfile:        agentprofile.Processor,
+		runMetadataAgentRole:           agentprofile.Processor,
 		"ingestion_handoff_request_id": "processor-request-status-covered",
 		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
 		"source_item_ids":              []string{"source-item-1"},
@@ -2712,8 +2714,8 @@ func TestHandleInternalRunStatusIncludesExplicitNoStoryTerminalBranch(t *testing
 	rt, handler := testAPISetup(t)
 
 	rec, err := rt.StartRunWithMetadata(context.Background(), "review this batch", "user-alice", map[string]any{
-		runMetadataAgentProfile:        AgentProfileProcessor,
-		runMetadataAgentRole:           AgentProfileProcessor,
+		runMetadataAgentProfile:        agentprofile.Processor,
+		runMetadataAgentRole:           agentprofile.Processor,
 		"ingestion_handoff_request_id": "processor-request-status-no-story",
 		runMetadataProcessorKey:        "processor:global_firehose:global:gdelt",
 		"source_item_ids":              []string{"source-item-1"},
@@ -3053,7 +3055,7 @@ func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	failProvider := &StubProvider{
+	failProvider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: errors.New("provider connection refused"),
 	}
@@ -3078,7 +3080,7 @@ func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
 		t.Fatalf("failed run state = %q, want %q", failed.State, types.RunFailed)
 	}
 
-	rt.provider = NewStubProvider(50 * time.Millisecond)
+	rt.provider = provider.NewStubProvider(50 * time.Millisecond)
 	next, err := rt.StartRun(context.Background(), "after failure", "user-alice")
 	if err != nil {
 		t.Fatalf("runtime rejected run after provider failure: %v", err)

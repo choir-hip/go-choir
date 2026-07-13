@@ -17,9 +17,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
-func RegisterTextureTools(registry *ToolRegistry, rt *Runtime) error {
+func RegisterTextureTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newPatchTextureTool(rt),
 		newRewriteTextureTool(rt),
@@ -158,7 +159,7 @@ func newRewriteTextureTool(rt *Runtime) Tool {
 }
 
 func (rt *Runtime) executeTextureEditTool(ctx context.Context, toolName string, in editTextureArgs) (string, error) {
-	if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileTexture {
+	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Texture {
 		return "", fmt.Errorf("%s is only available to Texture agents", toolName)
 	}
 	rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
@@ -223,7 +224,7 @@ func newRecordTextureDecisionTool(rt *Runtime) Tool {
 			},
 		}, []string{"decision_kind", "reason"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileTexture {
+			if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Texture {
 				return "", fmt.Errorf("record_texture_decision is only available to Texture agents")
 			}
 			rec := toolregistry.ExecutionContextFrom(ctx).RunRecord
@@ -325,7 +326,7 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			"model":      map[string]any{"type": "string"},
 		}, []string{"objective"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileTexture {
+			if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Texture {
 				return "", fmt.Errorf("request_super_execution is only available to texture agents")
 			}
 			var in args
@@ -419,7 +420,7 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		TargetAgentID: superAgent.AgentID,
 		ChannelID:     channelID,
 		TrajectoryID:  trajectoryID,
-		Role:          AgentProfileTexture,
+		Role:          agentprofile.Texture,
 		Packet: newCoagentPacket("execution_request", objective, nil, nil, []types.CoagentPacketAction{
 			coagentAction("request_worker", objective, map[string]any{"requested_by_run_id": requesterRunID}, nil, types.CoagentPacketActionSafety{
 				MutationClass: "red",
@@ -437,7 +438,7 @@ func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		FromRunID:    requesterRunID,
 		ToAgentID:    superAgent.AgentID,
 		TrajectoryID: trajectoryID,
-		Role:         AgentProfileTexture,
+		Role:         agentprofile.Texture,
 		Content:      update.Content,
 		Timestamp:    now,
 	}

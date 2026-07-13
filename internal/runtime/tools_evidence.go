@@ -16,7 +16,7 @@ import (
 // RegisterEvidenceTools installs the researcher-owned evidence-gathering tools.
 // These belong to roles that do ordinary evidence collection (researcher and the
 // execution roles), not to Texture's authoring/control-plane affordance.
-func RegisterEvidenceTools(registry *ToolRegistry, rt *Runtime) error {
+func RegisterEvidenceTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newSaveEvidenceTool(rt),
 		newReadEvidenceTool(rt),
@@ -33,14 +33,14 @@ func RegisterEvidenceTools(registry *ToolRegistry, rt *Runtime) error {
 // exact durable run-memory retrieval after compaction, not ordinary evidence
 // gathering, so any tool-looping role (including Texture) may keep it without
 // receiving researcher-owned evidence tools.
-func RegisterRunMemoryTools(registry *ToolRegistry, rt *Runtime) error {
+func RegisterRunMemoryTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	return registry.Register(newGetRunMemoryEntryTool(rt))
 }
 
 // RegisterModelDiagnosticTools installs provider/model diagnostic verifiers.
 // verify_model_capability is a model diagnostic and does not belong in Texture's
 // default authoring affordance.
-func RegisterModelDiagnosticTools(registry *ToolRegistry, rt *Runtime) error {
+func RegisterModelDiagnosticTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
 	return registry.Register(newVerifyModelCapabilityTool(rt))
 }
 

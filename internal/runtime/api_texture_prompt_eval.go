@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // texturePromptEvalKind marks conductor runs created by the overlay-pinned
@@ -65,13 +67,13 @@ func (h *APIHandler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Requ
 	}
 
 	metadata := map[string]any{
-		runMetadataAgentProfile:       AgentProfileConductor,
-		runMetadataAgentRole:          AgentProfileConductor,
+		runMetadataAgentProfile:       agentprofile.Conductor,
+		runMetadataAgentRole:          agentprofile.Conductor,
 		runMetadataLLMPolicyOverlayID: overlayID,
 		"input_source":                "prompt_bar",
-		"requested_app":               AgentProfileTexture,
+		"requested_app":               agentprofile.Texture,
 		"seed_prompt":                 text,
-		"initial_document_title":      buildInitialTextureTitle(text, strings.TrimSpace(req.Title)),
+		"initial_document_title":      provider.InitialTextureTitle(text, strings.TrimSpace(req.Title)),
 		"submission_surface":          "prompt_bar",
 		"request_source":              "texture_prompt_eval",
 		"eval_kind":                   texturePromptEvalKind,
@@ -86,8 +88,8 @@ func (h *APIHandler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Requ
 	// Resolve the overlay against the Texture role up front so an unknown,
 	// expired, or invalid arm fails the request instead of silently falling back.
 	resolveMeta := cloneMetadata(metadata)
-	resolveMeta[runMetadataAgentProfile] = AgentProfileTexture
-	resolveMeta[runMetadataAgentRole] = AgentProfileTexture
+	resolveMeta[runMetadataAgentProfile] = agentprofile.Texture
+	resolveMeta[runMetadataAgentRole] = agentprofile.Texture
 	resolved := h.rt.ensureResolvedLLMMetadata(r.Context(), ownerID, resolveMeta)
 	if errText := metadataStringValue(resolved, runMetadataLLMPolicyError); errText != "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "model policy overlay did not resolve: " + errText})
@@ -100,8 +102,8 @@ func (h *APIHandler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Requ
 
 	decision := conductorDecision{
 		Action: "open_app",
-		App:    AgentProfileTexture,
-		Title:  buildInitialTextureTitle(text, strings.TrimSpace(req.Title)),
+		App:    agentprofile.Texture,
+		Title:  provider.InitialTextureTitle(text, strings.TrimSpace(req.Title)),
 	}
 	rec, err := h.rt.completePromptBarDecisionRun(r.Context(), text, ownerID, metadata, decision)
 	if err != nil {

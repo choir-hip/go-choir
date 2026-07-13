@@ -12,6 +12,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type runAcceptanceSynthesizeInput struct {
@@ -392,7 +393,7 @@ func chooseAcceptanceRootRun(runs []types.RunRecord, runID string) types.RunReco
 		}
 	}
 	for _, run := range runs {
-		if traceRunProfile(run) == AgentProfileConductor && metadataStringValue(run.Metadata, "input_source") == "prompt_bar" {
+		if traceRunProfile(run) == agentprofile.Conductor && metadataStringValue(run.Metadata, "input_source") == "prompt_bar" {
 			return run
 		}
 	}

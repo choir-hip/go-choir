@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // stubTraceStore is a minimal trace.Store implementation for wiring tests. It
@@ -88,7 +90,7 @@ func newTraceWiringRuntime(t *testing.T, traceStore trace.Store) (*Runtime, func
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, events.NewEventBus(), NewStubProvider(0), opts...)
+	}, s, events.NewEventBus(), provider.NewStubProvider(0), opts...)
 	setTestDispatch(rt, s)
 
 	cleanup := func() {
@@ -261,8 +263,8 @@ func TestPersistSubmittedRunProjectsToTraceStore(t *testing.T) {
 		AgentID:   "agent-sub",
 		OwnerID:   "user-alice",
 		SandboxID: "sandbox-trace-test",
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: "chan-sub",
 		CreatedAt: createdAt,
 		UpdatedAt: createdAt,

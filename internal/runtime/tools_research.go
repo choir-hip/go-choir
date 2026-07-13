@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type webSearchClient interface {
@@ -228,7 +229,7 @@ func sourceAPIItemMap(item sourceapi.ItemResult) map[string]any {
 	}
 }
 
-func RegisterResearchTools(registry *ToolRegistry, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client, rt *Runtime) error {
+func RegisterResearchTools(registry *toolregistry.ToolRegistry, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newWebSearchTool(searchClient, rt),
 		newSourceSearchTool(sourceClient, rt),
@@ -701,7 +702,7 @@ func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
 }
 
 func shouldRequireResearchUpdateAfterTool(ctx context.Context, rt *Runtime) bool {
-	if toolregistry.ExecutionContextFrom(ctx).Profile != AgentProfileResearcher {
+	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Researcher {
 		return false
 	}
 	if rt == nil || rt.store == nil {

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const maxSkillPromptExtractBytes = 1200
@@ -46,7 +47,7 @@ func (rt *Runtime) skillContextForProfile(profile string) string {
 
 func profileReceivesSkillContext(profile string) bool {
 	switch canonicalAgentProfile(profile) {
-	case AgentProfileConductor, AgentProfileTexture, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
+	case agentprofile.Conductor, agentprofile.Texture, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
 		return true
 	default:
 		return false

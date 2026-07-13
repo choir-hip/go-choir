@@ -141,3 +141,13 @@ func TestLoadConfigPreservesExplicitZeroDedupThreshold(t *testing.T) {
 		t.Fatalf("qdrant_dedup_threshold = %f, want explicit zero", cfg.QdrantDedupThreshold)
 	}
 }
+
+func TestDefaultModelPolicyPath(t *testing.T) {
+	if got := DefaultModelPolicyPath(" \t "); got != "" {
+		t.Fatalf("empty root path = %q, want empty", got)
+	}
+	root := filepath.Join(t.TempDir(), "Files")
+	if got, want := DefaultModelPolicyPath("  "+root+"  "), filepath.Join(root, "System", "model-policy.toml"); got != want {
+		t.Fatalf("model policy path = %q, want %q", got, want)
+	}
+}

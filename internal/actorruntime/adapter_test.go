@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -45,7 +46,7 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 		SupervisionInterval: time.Hour,
 	}
 
-	adapter := New(cfg, s, events.NewEventBus(), runtime.NewStubProvider(0))
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0))
 	t.Cleanup(func() {
 		adapter.Stop()
 		adapter.cleanupLog()

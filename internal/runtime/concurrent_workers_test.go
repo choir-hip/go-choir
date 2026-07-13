@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -46,7 +47,7 @@ func testConcurrentSetup(t *testing.T) (*Runtime, *APIHandler, string) {
 
 	bus := events.NewEventBus()
 	// Use a slow provider so runs stay running for concurrent observation.
-	provider := NewStubProvider(500 * time.Millisecond)
+	provider := provider.NewStubProvider(500 * time.Millisecond)
 	cfg := provideriface.Config{
 		SandboxID:           "sandbox-concurrent-test",
 		StorePath:           dbPath,
@@ -593,13 +594,13 @@ func TestConcurrentWorkers_ConcurrentSpawnStress(t *testing.T) {
 // slowProvider is a stub provider with a configurable delay per task,
 // allowing fine-grained control over task execution duration.
 type slowProvider struct {
-	StubProvider
+	provider.StubProvider
 	delay time.Duration
 }
 
 func newSlowProvider(delay time.Duration) *slowProvider {
 	return &slowProvider{
-		StubProvider: *NewStubProvider(delay),
+		StubProvider: *provider.NewStubProvider(delay),
 		delay:        delay,
 	}
 }
@@ -619,7 +620,7 @@ func TestConcurrentWorkers_TasksActuallyRunConcurrently(t *testing.T) {
 
 	bus := events.NewEventBus()
 	// Each task takes 200ms.
-	provider := NewStubProvider(200 * time.Millisecond)
+	provider := provider.NewStubProvider(200 * time.Millisecond)
 	cfg := provideriface.Config{
 		SandboxID:           "sandbox-concurrent-timing",
 		StorePath:           dbPath,
@@ -767,7 +768,7 @@ func TestConcurrentWorkers_FailedChildPostsErrorToParentChannel(t *testing.T) {
 
 	bus := events.NewEventBus()
 	// Provider that always fails.
-	provider := &StubProvider{
+	provider := &provider.StubProvider{
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("simulated provider failure"),
 	}
@@ -991,7 +992,7 @@ func TestConcurrentWorkers_SpawnWithSlowProvider_HighConcurrency(t *testing.T) {
 	}
 
 	bus := events.NewEventBus()
-	provider := NewStubProvider(300 * time.Millisecond)
+	provider := provider.NewStubProvider(300 * time.Millisecond)
 	cfg := provideriface.Config{
 		SandboxID:           "sandbox-high-concurrency",
 		StorePath:           dbPath,

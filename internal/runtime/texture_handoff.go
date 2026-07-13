@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type textureHandoffKind string
@@ -43,11 +44,11 @@ type textureHandoffDecision struct {
 
 func textureHandoffKindForCaller(profile string) textureHandoffKind {
 	switch canonicalAgentProfile(profile) {
-	case AgentProfileConductor:
+	case agentprofile.Conductor:
 		return textureHandoffKindUserPrompt
-	case AgentProfileProcessor:
+	case agentprofile.Processor:
 		return textureHandoffKindSourceOpen
-	case AgentProfileReconciler:
+	case agentprofile.Reconciler:
 		return textureHandoffKindCorpusWake
 	default:
 		return ""
@@ -60,7 +61,7 @@ func (rt *Runtime) ensureTextureHandoff(ctx context.Context, parentRec *types.Ru
 	}
 	switch req.Kind {
 	case textureHandoffKindUserPrompt:
-		if parentRec == nil || agentProfileForRun(parentRec) != AgentProfileConductor {
+		if parentRec == nil || agentProfileForRun(parentRec) != agentprofile.Conductor {
 			return textureHandoffDecision{}, fmt.Errorf("user_prompt handoff requires a conductor run")
 		}
 		decision, err := rt.ensureConductorTextureRoute(ctx, parentRec, req.Objective, req.InitialContent)
@@ -82,8 +83,8 @@ func (rt *Runtime) ensureTextureHandoff(ctx context.Context, parentRec *types.Ru
 		}
 		decision, err := rt.ensureCoagentTextureRevisionRoute(ctx, parentRec, coagentTextureRouteRequest{
 			CallerProfile:  req.CallerProfile,
-			Role:           AgentProfileTexture,
-			Profile:        AgentProfileTexture,
+			Role:           agentprofile.Texture,
+			Profile:        agentprofile.Texture,
 			Objective:      req.Objective,
 			Title:          req.Title,
 			ChannelID:      req.ChannelID,

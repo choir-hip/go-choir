@@ -13,9 +13,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
-func RegisterCoAgentTools(registry *ToolRegistry, rt *Runtime, spec AgentRoleSpec) error {
+func RegisterCoAgentTools(registry *toolregistry.ToolRegistry, rt *Runtime, spec AgentRoleSpec) error {
 	tools := []Tool{
 		newCancelAgentTool(rt),
 	}
@@ -46,7 +47,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 	allowedTargets := canonicalAllowedDelegateTargets(spec.AllowedDelegateTargets)
 	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowedTargets, ", ") + "."
 	description := "Spawn an allowed child agent run for the current " + spec.Profile + " profile."
-	if spec.Profile == AgentProfileConductor {
+	if spec.Profile == agentprofile.Conductor {
 		description = "Open a Texture document from a top-level conductor route. Conductor does not spawn researcher, super, or co-super workers."
 	}
 	return Tool{
@@ -97,7 +98,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if strings.TrimSpace(in.Slot) != "" && slot == "" {
 				return "", fmt.Errorf("spawn_agent slot must be implementation or verifier")
 			}
-			if callerProfile == AgentProfileVSuper && profile == AgentProfileCoSuper && slot == "" {
+			if callerProfile == agentprofile.VSuper && profile == agentprofile.CoSuper && slot == "" {
 				return "", fmt.Errorf("vsuper spawn_agent role=co-super requires slot=\"implementation\" or slot=\"verifier\" to avoid duplicate child runs")
 			}
 			constraints := map[string]any{
@@ -116,9 +117,9 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if overlayID := strings.TrimSpace(in.ModelPolicyOverlayID); overlayID != "" {
 				constraints[runMetadataLLMPolicyOverlayID] = overlayID
 			}
-			if (callerProfile == AgentProfileConductor ||
-				callerProfile == AgentProfileProcessor ||
-				callerProfile == AgentProfileReconciler) && profile == AgentProfileTexture {
+			if (callerProfile == agentprofile.Conductor ||
+				callerProfile == agentprofile.Processor ||
+				callerProfile == agentprofile.Reconciler) && profile == agentprofile.Texture {
 				parentRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 				if parentRec == nil {
 					parentRec = &types.RunRecord{
@@ -163,8 +164,8 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 						"initial_loop_id":        decision.InitialLoopID,
 						"loop_id":                decision.RevisionRunID,
 						"channel_id":             decision.DocID,
-						"role":                   AgentProfileTexture,
-						"profile":                AgentProfileTexture,
+						"role":                   agentprofile.Texture,
+						"profile":                agentprofile.Texture,
 						"state":                  "open",
 						"handoff_kind":           string(kind),
 					})
@@ -176,8 +177,8 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 					"loop_id":              decision.RevisionRunID,
 					"revision_loop_id":     decision.RevisionRunID,
 					"channel_id":           decision.DocID,
-					"role":                 AgentProfileTexture,
-					"profile":              AgentProfileTexture,
+					"role":                 agentprofile.Texture,
+					"profile":              agentprofile.Texture,
 					"state":                decision.State,
 					"title":                decision.Title,
 					"created_document":     decision.CreatedDocument,
@@ -236,7 +237,7 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires a parent run")
 	}
 	callerProfile := canonicalAgentProfile(req.CallerProfile)
-	if callerProfile != AgentProfileProcessor && callerProfile != AgentProfileReconciler {
+	if callerProfile != agentprofile.Processor && callerProfile != agentprofile.Reconciler {
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires processor or reconciler caller")
 	}
 	ownerID := strings.TrimSpace(parentRec.OwnerID)
@@ -245,7 +246,7 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 	}
 
 	now := time.Now().UTC()
-	if callerProfile == AgentProfileProcessor {
+	if callerProfile == agentprofile.Processor {
 		resolvedSourceItemIDs, err := resolveWireProcessorSourceItemIDs(parentRec, req.SourceItemIDs, true)
 		if err != nil {
 			return coagentTextureRouteDecision{}, err
@@ -257,7 +258,7 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 	if err != nil {
 		return coagentTextureRouteDecision{}, err
 	}
-	if callerProfile == AgentProfileProcessor {
+	if callerProfile == agentprofile.Processor {
 		if _, err := rt.beginWireStoryResolutionWorkItem(ctx, parentRec, doc); err != nil {
 			return coagentTextureRouteDecision{}, fmt.Errorf("open wire story resolution work item: %w", err)
 		}
@@ -267,8 +268,8 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 		AgentID:   currentTextureAgentID(doc.DocID),
 		OwnerID:   ownerID,
 		SandboxID: rt.cfg.SandboxID,
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: doc.DocID,
 		CreatedAt: now,
 		UpdatedAt: time.Now().UTC(),
@@ -277,7 +278,7 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 	}
 
 	prompt := buildCoagentTextureRevisionPrompt(parentRec, req, doc, created, sourceEntities)
-	if callerProfile == AgentProfileReconciler {
+	if callerProfile == agentprofile.Reconciler {
 		if existing, found, err := rt.existingReconcilerTextureHandoff(ctx, parentRec, doc.DocID); err != nil {
 			return coagentTextureRouteDecision{}, err
 		} else if found {
@@ -311,7 +312,7 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 	if err != nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("start texture article revision: %w", err)
 	}
-	if callerProfile == AgentProfileProcessor {
+	if callerProfile == agentprofile.Processor {
 		if _, err := rt.recordWireProcessorDecision(ctx, parentRec, wireProcessorDecisionUpdate{
 			Verdict:       wireProcessorDecisionOpenedTexture,
 			Summary:       "processor opened a Texture story route for this request",
@@ -343,7 +344,7 @@ func (rt *Runtime) existingReconcilerTextureHandoff(ctx context.Context, parentR
 		return types.RunRecord{}, false, fmt.Errorf("list existing reconciler Texture handoffs: %w", err)
 	}
 	for _, run := range runs {
-		if canonicalAgentProfile(agentProfileForRun(&run)) != AgentProfileTexture ||
+		if canonicalAgentProfile(agentProfileForRun(&run)) != agentprofile.Texture ||
 			strings.TrimSpace(run.RequestedByRunID) != strings.TrimSpace(parentRec.RunID) ||
 			metadataStringValue(run.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 			continue
@@ -368,7 +369,7 @@ func (rt *Runtime) verifyRequiredTextureRevisions(ctx context.Context, rec *type
 	written := make(map[string]struct{})
 	for _, child := range runs {
 		if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
-			canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileTexture ||
+			canonicalAgentProfile(agentProfileForRun(&child)) != agentprofile.Texture ||
 			metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 			continue
 		}
@@ -416,7 +417,7 @@ func (rt *Runtime) awaitRequiredTextureRevisions(ctx context.Context, rec *types
 		active := false
 		for _, child := range runs {
 			if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
-				canonicalAgentProfile(agentProfileForRun(&child)) != AgentProfileTexture ||
+				canonicalAgentProfile(agentProfileForRun(&child)) != agentprofile.Texture ||
 				metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 				continue
 			}
@@ -961,7 +962,7 @@ func canonicalAllowedDelegateTargets(targets []string) []string {
 	seen := make(map[string]bool, len(targets))
 	for _, target := range targets {
 		target = strings.TrimSpace(target)
-		if target != AgentProfileTexture {
+		if target != agentprofile.Texture {
 			target = canonicalAgentProfile(target)
 		}
 		if target == "" || seen[target] {
@@ -995,7 +996,7 @@ func newCancelAgentTool(rt *Runtime) Tool {
 			agentID := strings.TrimSpace(in.AgentID)
 			var target types.RunRecord
 			targetFromCallerSlot := false
-			if toolregistry.ExecutionContextFrom(ctx).Profile == AgentProfileVSuper {
+			if toolregistry.ExecutionContextFrom(ctx).Profile == agentprofile.VSuper {
 				callerTrajectoryID := trajectoryIDForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)
 				slot, found, err := rt.store.CoSuperSlotByAgentAndTrajectory(ctx, ownerID, callerTrajectoryID, agentID)
 				if err != nil {

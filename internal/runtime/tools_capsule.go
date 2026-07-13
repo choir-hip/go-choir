@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 // CapsuleToolCtx holds the capsule executor and current agent context
@@ -49,7 +50,7 @@ func capsuleCtxFromCtx(ctx context.Context) *CapsuleToolCtx {
 // RegisterCapsuleTools registers capsule-related tools for the super role:
 // spawn_capsule, destroy_capsule, mint_capability, list_capsules,
 // commit_transaction, inspect_capsule.
-func RegisterCapsuleTools(registry *ToolRegistry) error {
+func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 	for _, tool := range []Tool{
 		newSpawnCapsuleTool(),
 		newDestroyCapsuleTool(),
@@ -68,7 +69,7 @@ func RegisterCapsuleTools(registry *ToolRegistry) error {
 // RegisterCapsuleExecTools registers tools that operate inside a capsule
 // for the cosuper role: capsule_exec, capsule_read_file, capsule_write_file,
 // capsule_list_dir. These route through the broker via capability-verified RPCs.
-func RegisterCapsuleExecTools(registry *ToolRegistry) error {
+func RegisterCapsuleExecTools(registry *toolregistry.ToolRegistry) error {
 	for _, tool := range []Tool{
 		newCapsuleExecTool(),
 		newCapsuleReadFileTool(),

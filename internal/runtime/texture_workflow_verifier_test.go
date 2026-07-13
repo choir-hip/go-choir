@@ -19,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
@@ -72,7 +73,7 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 		t.Fatalf("get initial texture run: %v", err)
 	}
 
-	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	researcherResults := executeVerifierTools(t, rt, initialTextureRun, textureRegistry, []types.ToolCall{{
 		ID:   "spawn-researcher",
 		Name: "spawn_agent",
@@ -92,7 +93,7 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get researcher: %v", err)
 	}
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	executeVerifierTools(t, rt, researcherRun, researcherRegistry, []types.ToolCall{
 		{
 			ID:   "research-update",
@@ -130,7 +131,7 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get super run: %v", err)
 	}
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{
 		{
 			ID:        "write-artifact",
@@ -159,7 +160,7 @@ func TestVerifyTextureWorkflowDeterministicEventLog(t *testing.T) {
 	if err := json.Unmarshal([]byte(coSuperResults[0].Output), &coSuperResp); err != nil {
 		t.Fatalf("decode co-super spawn result: %v\n%s", err, coSuperResults[0].Output)
 	}
-	if coSuperResp.Profile != AgentProfileCoSuper || coSuperResp.RunID == "" {
+	if coSuperResp.Profile != agentprofile.CoSuper || coSuperResp.RunID == "" {
 		t.Fatalf("unexpected co-super spawn: %+v", coSuperResp)
 	}
 	updateResults := executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{
@@ -251,7 +252,7 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 		t.Fatalf("get initial texture run: %v", err)
 	}
 
-	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	researcherResults := executeVerifierTools(t, rt, initialTextureRun, textureRegistry, []types.ToolCall{{
 		ID:   "spawn-stochastic-researcher",
 		Name: "spawn_agent",
@@ -294,7 +295,7 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 	var workerSeq int64
 	actions := []action{
 		{at: time.Duration(5+rng.Intn(20)) * time.Millisecond, fn: func() int64 {
-			executeVerifierTools(t, rt, researcherRun, rt.ToolRegistryForProfile(AgentProfileResearcher), []types.ToolCall{{
+			executeVerifierTools(t, rt, researcherRun, rt.ToolRegistryForProfile(agentprofile.Researcher), []types.ToolCall{{
 				ID:   "stochastic-research",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
@@ -310,7 +311,7 @@ func TestVerifyTextureWorkflowSeededStochasticOrdering(t *testing.T) {
 			return 0
 		}},
 		{at: time.Duration(5+rng.Intn(20)) * time.Millisecond, fn: func() int64 {
-			results := executeVerifierTools(t, rt, superRun, rt.ToolRegistryForProfile(AgentProfileSuper), []types.ToolCall{{
+			results := executeVerifierTools(t, rt, superRun, rt.ToolRegistryForProfile(agentprofile.Super), []types.ToolCall{{
 				ID:   "stochastic-worker-update",
 				Name: "update_coagent",
 				Arguments: json.RawMessage(`{
@@ -595,7 +596,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 		t.Fatalf("get initial texture run: %v", err)
 	}
 
-	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	superResults := executeVerifierTools(t, rt, initialTextureRun, textureRegistry, []types.ToolCall{{
 		ID:   "request-super-product-path",
 		Name: "request_super_execution",
@@ -618,7 +619,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get super run: %v", err)
 	}
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	workerHandleResults := executeVerifierTools(t, rt, superRun, superRegistry, []types.ToolCall{{
 		ID:        "request-worker-product-path",
 		Name:      "request_worker_vm",
@@ -665,7 +666,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 			"worker_id":          workerHandleResp.Handle.WorkerID,
 			"vm_id":              workerHandleResp.Handle.VMID,
 			"objective":          "Commit and export the narrow product proof from the isolated worker worktree.",
-			"profile":            AgentProfileCoSuper,
+			"profile":            agentprofile.CoSuper,
 			"timeout_seconds":    10,
 		})
 		delegateRaw, err := executeWorkerDelegationUntilSettled(t, superRegistry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), delegateArgs)
@@ -693,7 +694,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 	}
 }
 
-func executeVerifierTools(t *testing.T, rt *Runtime, run *types.RunRecord, registry *ToolRegistry, calls []types.ToolCall) []types.ToolResult {
+func executeVerifierTools(t *testing.T, rt *Runtime, run *types.RunRecord, registry *toolregistry.ToolRegistry, calls []types.ToolCall) []types.ToolResult {
 	t.Helper()
 	if registry == nil {
 		t.Fatal("tool registry is nil")

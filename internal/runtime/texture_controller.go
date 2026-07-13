@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // scheduleTextureWorkerWake sends an actor message to the Texture agent for
@@ -224,7 +225,7 @@ func (rt *Runtime) isEligibleWorkerMessage(ctx context.Context, docID string, me
 		return false, err
 	}
 	switch agentProfileForRun(&run) {
-	case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
+	case agentprofile.Researcher, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
 		cache[runID] = true
 		return true, nil
 	default:

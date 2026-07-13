@@ -9,6 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec *types.RunRecord, runErr error) error {
@@ -20,7 +21,7 @@ func (rt *Runtime) synthesizeResearcherUpdateOnCompletion(ctx context.Context, r
 }
 
 func (rt *Runtime) synthesizeResearcherUpdateIfMissing(ctx context.Context, rec *types.RunRecord, runErr error) error {
-	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != AgentProfileResearcher {
+	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Researcher {
 		return nil
 	}
 	eventsForRun, err := rt.store.ListEvents(ctx, rec.RunID, 1000)

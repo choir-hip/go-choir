@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -30,6 +31,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func textureAPISetup(t *testing.T) (*APIHandler, *store.Store) {
@@ -61,7 +63,7 @@ func textureAPISetup(t *testing.T) (*APIHandler, *store.Store) {
 	}
 
 	bus := events.NewEventBus()
-	provider := NewStubProvider(2 * time.Second)
+	provider := provider.NewStubProvider(2 * time.Second)
 	rt := New(cfg, s, bus, provider)
 	setTestDispatch(rt, s)
 
@@ -130,7 +132,7 @@ func TestHandleInternalTextureProposalDeliveryRecordsAuthorInbox(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get proposal delivery run: %v", err)
 		}
-		if run.AgentProfile != AgentProfileSuper || run.OwnerID != "author-1" || !strings.Contains(run.Prompt, "readerprop-1") {
+		if run.AgentProfile != agentprofile.Super || run.OwnerID != "author-1" || !strings.Contains(run.Prompt, "readerprop-1") {
 			t.Fatalf("proposal delivery run mismatch: %+v", run)
 		}
 	}
@@ -147,7 +149,7 @@ type textureEditToolProvider struct {
 
 func newTextureEditToolProvider(result string) *textureEditToolProvider {
 	return &textureEditToolProvider{
-		Provider: NewStubProvider(1 * time.Millisecond),
+		Provider: provider.NewStubProvider(1 * time.Millisecond),
 		result:   result,
 	}
 }
@@ -287,7 +289,7 @@ func (p *textureDecisionThenEditProvider) ProviderName() string {
 }
 
 func (p *textureDecisionThenEditProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
-	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+	return provider.NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
 func (p *textureDecisionThenEditProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
@@ -341,10 +343,10 @@ func conductorSpawnTextureToolCall(prompt string) types.ToolCall {
 	if prompt == "" {
 		prompt = "Create a working document."
 	}
-	title := buildInitialTextureTitle(prompt, "")
+	title := provider.InitialTextureTitle(prompt, "")
 	args, _ := json.Marshal(map[string]any{
 		"objective":       prompt,
-		"role":            AgentProfileTexture,
+		"role":            agentprofile.Texture,
 		"initial_content": "# " + title + "\n\n" + prompt,
 	})
 	return types.ToolCall{ID: "spawn-texture-test-call", Name: "spawn_agent", Arguments: args}
@@ -651,8 +653,8 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 	parent := types.RunRecord{
 		RunID:        "run-cancel-parent",
 		AgentID:      "agent-super-cancel",
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 		OwnerID:      "user-1",
 		SandboxID:    "sandbox-texture-test",
 		State:        types.RunRunning,
@@ -661,8 +663,8 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}
@@ -670,8 +672,8 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 		RunID:            "run-cancel-child",
 		AgentID:          "agent-vsuper-cancel",
 		RequestedByRunID: "spawned-by-other-run",
-		AgentProfile:     AgentProfileVSuper,
-		AgentRole:        AgentProfileVSuper,
+		AgentProfile:     agentprofile.VSuper,
+		AgentRole:        agentprofile.VSuper,
 		OwnerID:          "user-1",
 		SandboxID:        "sandbox-texture-test",
 		State:            types.RunRunning,
@@ -680,8 +682,8 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataAgentProfile: agentprofile.VSuper,
+			runMetadataAgentRole:    agentprofile.VSuper,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}
@@ -689,8 +691,8 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 		RunID:            "run-cancel-graph-child-other-trajectory",
 		AgentID:          "agent-other-trajectory",
 		RequestedByRunID: parent.RunID,
-		AgentProfile:     AgentProfileVSuper,
-		AgentRole:        AgentProfileVSuper,
+		AgentProfile:     agentprofile.VSuper,
+		AgentRole:        agentprofile.VSuper,
 		OwnerID:          "user-1",
 		SandboxID:        "sandbox-texture-test",
 		State:            types.RunRunning,
@@ -699,8 +701,8 @@ func TestTextureCancelAgentRevisionCancelsTrajectoryAndLeavesMutationResumable(t
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataAgentProfile: agentprofile.VSuper,
+			runMetadataAgentRole:    agentprofile.VSuper,
 			runMetadataTrajectoryID: "traj-other-cancel-agent",
 		},
 	}
@@ -805,8 +807,8 @@ func TestTextureDeleteDocumentCancelsPendingActorTrajectory(t *testing.T) {
 		RunID:        "run-delete-cancels-texture",
 		AgentID:      currentTextureAgentID(doc.DocID),
 		ChannelID:    doc.DocID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		OwnerID:      "user-1",
 		SandboxID:    "sandbox-texture-test",
 		State:        types.RunRunning,
@@ -815,8 +817,8 @@ func TestTextureDeleteDocumentCancelsPendingActorTrajectory(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}
@@ -1664,7 +1666,7 @@ func TestCoagentUpdateTurnInjectorSupportsTexture(t *testing.T) {
 		RunID:        "run-texture",
 		OwnerID:      "user-1",
 		AgentID:      currentTextureAgentID("doc-x"),
-		AgentProfile: AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
 	}
 	if rt.coagentUpdateTurnInjector(textureRec) == nil {
 		t.Fatalf("Texture runs must warm-inject coagent packets")
@@ -1674,7 +1676,7 @@ func TestCoagentUpdateTurnInjectorSupportsTexture(t *testing.T) {
 		RunID:        "run-super",
 		OwnerID:      "user-1",
 		AgentID:      "super:user-1",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}
 	if rt.coagentUpdateTurnInjector(superRec) == nil {
 		t.Fatalf("super runs must keep warm injection")
@@ -1684,7 +1686,7 @@ func TestCoagentUpdateTurnInjectorSupportsTexture(t *testing.T) {
 		RunID:        "run-researcher",
 		OwnerID:      "user-1",
 		AgentID:      "researcher:abc",
-		AgentProfile: AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
 	}
 	if rt.coagentUpdateTurnInjector(researcherRec) == nil {
 		t.Fatalf("researcher runs must keep warm injection")
@@ -1719,7 +1721,7 @@ func (p *revisionPromptEchoProvider) Execute(ctx context.Context, task *types.Ru
 
 func (p *revisionPromptEchoProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
 	provider := &textureEditToolProvider{
-		Provider: NewStubProvider(1 * time.Millisecond),
+		Provider: provider.NewStubProvider(1 * time.Millisecond),
 		delay:    p.delay,
 		resultFunc: func(prompt string) string {
 			if strings.Contains(prompt, "Fresh user edit should survive") {
@@ -1745,9 +1747,9 @@ func (p *stochasticWorkflowProvider) Execute(ctx context.Context, task *types.Ru
 		delay = 90 * time.Millisecond
 	}
 	switch agentProfileForRun(task) {
-	case AgentProfileConductor:
+	case agentprofile.Conductor:
 		delay = 10 * time.Millisecond
-	case AgentProfileResearcher, AgentProfileSuper, AgentProfileCoSuper:
+	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
 		delay = 5 * time.Millisecond
 	}
 	timer := time.NewTimer(delay)
@@ -1759,7 +1761,7 @@ func (p *stochasticWorkflowProvider) Execute(ctx context.Context, task *types.Ru
 	}
 
 	switch agentProfileForRun(task) {
-	case AgentProfileTexture:
+	case agentprofile.Texture:
 		task.Result = buildStochasticTextureResult(task.Prompt)
 	default:
 		task.Result = "stochastic workflow loop completed"
@@ -2180,8 +2182,8 @@ func TestTextureSystemPromptSharesChoirCoreContext(t *testing.T) {
 		AgentID:      "texture:doc-1",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Prompt:       "What's the latest with AI?",
 	}
 
@@ -2214,7 +2216,7 @@ func (p *textureMinimalEditProvider) ProviderName() string {
 }
 
 func (p *textureMinimalEditProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
-	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+	return provider.NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
 func (p *textureMinimalEditProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
@@ -2265,7 +2267,7 @@ func (p *textureWriteAndResearchProvider) ProviderName() string {
 }
 
 func (p *textureWriteAndResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
-	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+	return provider.NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
 func (p *textureWriteAndResearchProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
@@ -2330,7 +2332,7 @@ func (p *textureAgenticResearchProvider) ProviderName() string {
 }
 
 func (p *textureAgenticResearchProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
-	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+	return provider.NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
 func (p *textureAgenticResearchProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
@@ -2398,7 +2400,7 @@ func (p *textureInitialNoOpThenDraftProvider) ProviderName() string {
 }
 
 func (p *textureInitialNoOpThenDraftProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
-	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+	return provider.NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
 func (p *textureInitialNoOpThenDraftProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
@@ -2514,7 +2516,7 @@ func (p *textureResearchEvidenceLoopProvider) ProviderName() string {
 }
 
 func (p *textureResearchEvidenceLoopProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
-	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+	return provider.NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
 func (p *textureResearchEvidenceLoopProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
@@ -2651,7 +2653,7 @@ func (p *textureSuperEvidenceLoopProvider) ProviderName() string {
 }
 
 func (p *textureSuperEvidenceLoopProvider) Execute(ctx context.Context, task *types.RunRecord, emit provideriface.EventEmitFunc) error {
-	return NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
+	return provider.NewStubProvider(1*time.Millisecond).Execute(ctx, task, emit)
 }
 
 func (p *textureSuperEvidenceLoopProvider) CallWithTools(ctx context.Context, req provideriface.ToolLoopRequest) (*provideriface.ToolLoopResponse, error) {
@@ -2839,7 +2841,7 @@ func TestTextureAgentRevisionCanEditUserProvidedTextWithoutWorkerHistory(t *test
 
 func TestDirectTextureReviseWritesWorkStateBeforeDelegatingResearch(t *testing.T) {
 	t.Parallel()
-	provider := &textureWriteAndResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureWriteAndResearchProvider{Provider: provider.NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	rt.cfg.TextureActorParkIdle = time.Second
@@ -2880,7 +2882,7 @@ func TestDirectTextureReviseWritesWorkStateBeforeDelegatingResearch(t *testing.T
 			t.Fatalf("list runs: %v", err)
 		}
 		for i := range runs {
-			if runs[i].RequestedByRunID == resp.RunID && runs[i].AgentProfile == AgentProfileResearcher {
+			if runs[i].RequestedByRunID == resp.RunID && runs[i].AgentProfile == agentprofile.Researcher {
 				researcher = &runs[i]
 				break
 			}
@@ -2988,7 +2990,7 @@ func TestInitialTextureRunWritesFirstAppagentRevisionThroughEdit(t *testing.T) {
 
 func TestInitialTextureRunWritesBeforeSpawningResearcher(t *testing.T) {
 	t.Parallel()
-	provider := &textureWriteAndResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureWriteAndResearchProvider{Provider: provider.NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Research current signals, write a working Texture, and ask researcher for evidence."}`, "user-1")
@@ -3041,7 +3043,7 @@ func TestInitialTextureRunWritesBeforeSpawningResearcher(t *testing.T) {
 	}
 	var researcher *types.RunRecord
 	for i := range runs {
-		if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
+		if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == agentprofile.Researcher {
 			researcher = &runs[i]
 			break
 		}
@@ -3056,7 +3058,7 @@ func TestInitialTextureRunWritesBeforeSpawningResearcher(t *testing.T) {
 
 func TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard(t *testing.T) {
 	t.Parallel()
-	provider := &textureAgenticResearchProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureAgenticResearchProvider{Provider: provider.NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"What's going on with Anthropic and the US government?"}`, "user-1")
@@ -3139,7 +3141,7 @@ func TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard(t *tes
 	}
 	var researcher *types.RunRecord
 	for i := range runs {
-		if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
+		if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == agentprofile.Researcher {
 			researcher = &runs[i]
 			break
 		}
@@ -3154,7 +3156,7 @@ func TestTextureCurrentEventsPromptCanOpenProbePathWithoutCompletionGuard(t *tes
 
 func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 	t.Parallel()
-	provider := &textureResearchEvidenceLoopProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureResearchEvidenceLoopProvider{Provider: provider.NewStubProvider(1 * time.Millisecond)}
 	clock := &fakeTextureWakeClock{}
 
 	h, s, rt := textureAPISetupWithProviderAndOptions(t, provider, true, withTextureWakeAfterFuncForTest(clock.afterFunc))
@@ -3194,7 +3196,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 			t.Fatalf("list runs: %v", err)
 		}
 		for i := range runs {
-			if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == AgentProfileResearcher {
+			if runs[i].RequestedByRunID == decision.InitialLoopID && runs[i].AgentProfile == agentprofile.Researcher {
 				researcherRun = &runs[i]
 				break
 			}
@@ -3219,7 +3221,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 		t.Fatalf("worker updates = %+v, want exactly one researcher update", updates)
 	}
 	update := updates[0]
-	if update.Role != AgentProfileResearcher ||
+	if update.Role != agentprofile.Researcher ||
 		update.AgentID != researcherRun.AgentID ||
 		update.TargetAgentID != currentTextureAgentID(decision.DocID) ||
 		update.ChannelID != decision.DocID ||
@@ -3271,7 +3273,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 	}
 	var textureRevisionRuns []types.RunRecord
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+		if agentProfileForRun(&run) == agentprofile.Texture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 			textureRevisionRuns = append(textureRevisionRuns, run)
 		}
 	}
@@ -3282,7 +3284,7 @@ func TestTextureCreatedResearcherEvidenceWakesTextureV2(t *testing.T) {
 
 func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	t.Parallel()
-	provider := &textureSuperEvidenceLoopProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureSuperEvidenceLoopProvider{Provider: provider.NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	rt.cfg.TextureActorParkIdle = time.Second
@@ -3324,7 +3326,7 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 			t.Fatalf("list runs: %v", err)
 		}
 		for i := range runs {
-			if runs[i].AgentProfile == AgentProfileSuper &&
+			if runs[i].AgentProfile == agentprofile.Super &&
 				runs[i].AgentID == persistentSuperAgentID("user-1") &&
 				trajectoryIDForRun(&runs[i]) == submission.SubmissionID {
 				superRun = &runs[i]
@@ -3342,7 +3344,7 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	if superRun.State != types.RunCompleted {
 		t.Fatalf("super state = %q, want completed; run=%+v", superRun.State, *superRun)
 	}
-	if metadataStringValue(superRun.Metadata, "requested_by_profile") != AgentProfileTexture {
+	if metadataStringValue(superRun.Metadata, "requested_by_profile") != agentprofile.Texture {
 		t.Fatalf("super requested_by_profile = %q, want texture; metadata=%+v", metadataStringValue(superRun.Metadata, "requested_by_profile"), superRun.Metadata)
 	}
 
@@ -3352,7 +3354,7 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 	}
 	var superUpdate *types.CoagentSourcePacket
 	for i := range updates {
-		if updates[i].Role == AgentProfileSuper && updates[i].TargetAgentID == currentTextureAgentID(decision.DocID) {
+		if updates[i].Role == agentprofile.Super && updates[i].TargetAgentID == currentTextureAgentID(decision.DocID) {
 			superUpdate = &updates[i]
 			break
 		}
@@ -3398,7 +3400,7 @@ func TestTextureCreatedSuperEvidenceWakesTextureV2(t *testing.T) {
 
 func TestInitialTextureRunDefaultsMinimalEditContextFromActivation(t *testing.T) {
 	t.Parallel()
-	provider := &textureMinimalEditProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureMinimalEditProvider{Provider: provider.NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Write a short M3.4 visible first draft."}`, "user-1")
@@ -3465,7 +3467,7 @@ func TestInitialTextureRunDefaultsMinimalEditContextFromActivation(t *testing.T)
 }
 
 func TestInitialTextureDecisionPromptRejectsPrematureEditBeforeDecision(t *testing.T) {
-	provider := &textureDecisionThenEditProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureDecisionThenEditProvider{Provider: provider.NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	prompt := "Create a short Texture document titled M32_TEXTURE_DECISION_ROUTE_TEST. The body should say this marker is a deployed acceptance probe. Keep the document reader-facing only. Because this task is fully supplied and requires no research or execution worker, record an off-document Texture decision note with decision_kind no_worker_needed, exact reason M3.2 staging proof: user supplied the needed content and requested no research or execution worker., evidence ref staging-marker:M32_TEXTURE_DECISION_ROUTE_TEST, next action Write the concise reader-facing Texture revision. Then write the concise reader-facing Texture revision."
@@ -3641,7 +3643,7 @@ func TestTextureAgentRevisionAppliesStructuredEdit(t *testing.T) {
 
 func TestTextureAgentRevisionIgnoresRawStubProviderResult(t *testing.T) {
 	t.Parallel()
-	h, s, _ := textureAPISetupWithProvider(t, NewStubProvider(1*time.Millisecond), false)
+	h, s, _ := textureAPISetupWithProvider(t, provider.NewStubProvider(1*time.Millisecond), false)
 	docID, _ := createDocWithUserRevision(t, h)
 
 	req := textureRequest(t, http.MethodPost, "/api/texture/documents/"+docID+"/revise",
@@ -3822,8 +3824,8 @@ func TestTextureSeededStochasticWorkflowContracts(t *testing.T) {
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	conductorRun, err := rt.StartRunWithMetadata(context.Background(), "Build a toy evolution model and verify it.", ownerID, map[string]any{
-		runMetadataAgentProfile:  AgentProfileConductor,
-		runMetadataAgentRole:     AgentProfileConductor,
+		runMetadataAgentProfile:  agentprofile.Conductor,
+		runMetadataAgentRole:     agentprofile.Conductor,
 		"input_source":           "prompt_bar",
 		"requested_app":          "texture",
 		"seed_prompt":            "Build a toy evolution model and verify it.",
@@ -3871,16 +3873,16 @@ func TestTextureSeededStochasticWorkflowContracts(t *testing.T) {
 	waitForRunRunning(t, rt, initialResp.RunID, ownerID, 5*time.Second)
 
 	researchRun, err := rt.StartCoagentRun(context.Background(), initialResp.RunID, "Research toy model evidence", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    decision.DocID,
 	})
 	if err != nil {
 		t.Fatalf("start researcher worker: %v", err)
 	}
 	superRun, err := rt.StartCoagentRun(context.Background(), initialResp.RunID, "Verify generated toy model", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataChannelID:    decision.DocID,
 	})
 	if err != nil {
@@ -4090,8 +4092,8 @@ func TestTextureWorkerMessageAutoWakeCreatesFollowUpRevision(t *testing.T) {
 	}
 
 	researchRun, err := rt.StartRunWithMetadata(context.Background(), "Ground the recent release claims", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
@@ -4159,7 +4161,7 @@ func TestTextureWorkerMessageAutoWakeCreatesFollowUpRevision(t *testing.T) {
 	}
 	var wakeRun *types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == researchRun.RunID {
+		if agentProfileForRun(&runs[i]) == agentprofile.Texture && runs[i].RequestedByRunID == researchRun.RunID {
 			wakeRun = &runs[i]
 			break
 		}
@@ -4200,8 +4202,8 @@ func TestTextureWorkerMessageAutoWakeBatchesRapidMessages(t *testing.T) {
 	}
 
 	researchRun, err := rt.StartRunWithMetadata(context.Background(), "Research the latest facts", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
@@ -4257,7 +4259,7 @@ func TestTextureWorkerMessageAutoWakeBatchesRapidMessages(t *testing.T) {
 	}
 	var wakeRuns []types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == researchRun.RunID {
+		if agentProfileForRun(&runs[i]) == agentprofile.Texture && runs[i].RequestedByRunID == researchRun.RunID {
 			wakeRuns = append(wakeRuns, runs[i])
 		}
 	}
@@ -4281,8 +4283,8 @@ func TestTextureWorkerMessageDebounceUsesFakeClock(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	researchRun, err := rt.StartRunWithMetadata(context.Background(), "Research with fake clock", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
@@ -4304,7 +4306,7 @@ func TestTextureWorkerMessageDebounceUsesFakeClock(t *testing.T) {
 		t.Fatalf("list channel runs before clock fires: %v", err)
 	}
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && run.RequestedByRunID == researchRun.RunID {
+		if agentProfileForRun(&run) == agentprofile.Texture && run.RequestedByRunID == researchRun.RunID {
 			t.Fatalf("wake run started before fake clock fired: %+v", run)
 		}
 	}
@@ -4357,8 +4359,8 @@ func TestTextureWorkerWakeRequeuesWhileMutationPending(t *testing.T) {
 	}
 
 	researchRun, err := rt.StartRunWithMetadata(context.Background(), "Research while texture mutation is pending", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
@@ -4374,7 +4376,7 @@ func TestTextureWorkerWakeRequeuesWhileMutationPending(t *testing.T) {
 		t.Fatalf("list channel runs after blocked wake: %v", err)
 	}
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && run.RequestedByRunID == researchRun.RunID {
+		if agentProfileForRun(&run) == agentprofile.Texture && run.RequestedByRunID == researchRun.RunID {
 			t.Fatalf("wake run should wait for pending mutation to clear, got %+v", run)
 		}
 	}
@@ -4420,16 +4422,16 @@ func TestResearcherUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		OwnerID:      "user-1",
 		SandboxID:    "sandbox-texture-test",
 		AgentID:      "texture:" + docID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		ChannelID:    docID,
 		State:        types.RunCompleted,
 		Prompt:       "Own the document",
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 			runMetadataChannelID:    docID,
 			runMetadataAgentID:      "texture:" + docID,
 			"doc_id":                docID,
@@ -4439,15 +4441,15 @@ func TestResearcherUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 		t.Fatalf("create texture requester run: %v", err)
 	}
 	researcherRun, err := rt.StartCoagentRun(context.Background(), textureRun.RunID, "Research the update", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
 		t.Fatalf("start researcher run: %v", err)
 	}
 
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
@@ -4508,7 +4510,7 @@ func TestResearcherUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 	var wakeRun *types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture &&
+		if agentProfileForRun(&runs[i]) == agentprofile.Texture &&
 			metadataStringValue(runs[i].Metadata, "request_source") == "update_coagent" {
 			wakeRun = &runs[i]
 			break
@@ -4580,7 +4582,7 @@ func TestResearcherUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	provider := &textureParkResidentProvider{Provider: NewStubProvider(time.Millisecond)}
+	provider := &textureParkResidentProvider{Provider: provider.NewStubProvider(time.Millisecond)}
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	rt.cfg.TextureActorParkIdle = 2 * time.Second
 	docID, _ := createDocWithUserRevision(t, h)
@@ -4620,8 +4622,8 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 		OwnerID:      "user-1",
 		SandboxID:    "sandbox-texture-test",
 		AgentID:      "researcher:parked-texture",
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
+		AgentRole:    agentprofile.Researcher,
 		ChannelID:    docID,
 		State:        types.RunRunning,
 		Prompt:       "Send one grounded update.",
@@ -4629,8 +4631,8 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 		UpdatedAt:    time.Now().UTC(),
 		Metadata: map[string]any{
 			runMetadataAgentID:      "researcher:parked-texture",
-			runMetadataAgentProfile: AgentProfileResearcher,
-			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentProfile: agentprofile.Researcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: textureRun.RunID,
 		},
@@ -4638,7 +4640,7 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 	if err := s.CreateRun(ctx, researcherRun); err != nil {
 		t.Fatalf("create researcher run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&researcherRun)), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"parked finding 001",
@@ -4689,7 +4691,7 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 	}
 	var textureRevisionRuns []types.RunRecord
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+		if agentProfileForRun(&run) == agentprofile.Texture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 			textureRevisionRuns = append(textureRevisionRuns, run)
 		}
 	}
@@ -4704,7 +4706,7 @@ func TestTextureRevisionRunParksAndConsumesUpdateWithoutColdWake(t *testing.T) {
 func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	provider := &textureParkResidentProvider{Provider: NewStubProvider(time.Millisecond)}
+	provider := &textureParkResidentProvider{Provider: provider.NewStubProvider(time.Millisecond)}
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	rt.cfg.TextureActorParkIdle = time.Second
 	docID, _ := createDocWithUserRevision(t, h)
@@ -4741,8 +4743,8 @@ func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 		OwnerID:      "user-1",
 		SandboxID:    "sandbox-texture-test",
 		AgentID:      "researcher:idle-resume-texture",
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
+		AgentRole:    agentprofile.Researcher,
 		ChannelID:    docID,
 		State:        types.RunRunning,
 		Prompt:       "Send one grounded update after Texture slept.",
@@ -4750,8 +4752,8 @@ func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 		UpdatedAt:    time.Now().UTC(),
 		Metadata: map[string]any{
 			runMetadataAgentID:      "researcher:idle-resume-texture",
-			runMetadataAgentProfile: AgentProfileResearcher,
-			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentProfile: agentprofile.Researcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: textureRun.RunID,
 		},
@@ -4759,7 +4761,7 @@ func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 	if err := s.CreateRun(ctx, researcherRun); err != nil {
 		t.Fatalf("create researcher run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&researcherRun)), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&researcherRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"idle resume finding",
@@ -4807,7 +4809,7 @@ func TestTextureIdlePassivatesAndResumesSameRun(t *testing.T) {
 	}
 	var textureRevisionRuns []types.RunRecord
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+		if agentProfileForRun(&run) == agentprofile.Texture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 			textureRevisionRuns = append(textureRevisionRuns, run)
 		}
 	}
@@ -4854,8 +4856,8 @@ func TestTextureWakeStartsIntegrationForCompletedThreadHistory(t *testing.T) {
 		OwnerID:      "user-1",
 		SandboxID:    "sandbox-texture-test",
 		AgentID:      "texture:" + docID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		ChannelID:    docID,
 		State:        types.RunCompleted,
 		Prompt:       "historical Texture thread activation",
@@ -4866,8 +4868,8 @@ func TestTextureWakeStartsIntegrationForCompletedThreadHistory(t *testing.T) {
 		Metadata: map[string]any{
 			"type":                    textureAgentRevisionTaskType,
 			runMetadataAgentID:        "texture:" + docID,
-			runMetadataAgentProfile:   AgentProfileTexture,
-			runMetadataAgentRole:      AgentProfileTexture,
+			runMetadataAgentProfile:   agentprofile.Texture,
+			runMetadataAgentRole:      agentprofile.Texture,
 			runMetadataChannelID:      docID,
 			"doc_id":                  docID,
 			"current_revision_id":     doc.CurrentRevisionID,
@@ -4884,7 +4886,7 @@ func TestTextureWakeStartsIntegrationForCompletedThreadHistory(t *testing.T) {
 		TargetAgentID: "texture:" + docID,
 		ChannelID:     docID,
 		TrajectoryID:  completed.RunID,
-		Role:          AgentProfileResearcher,
+		Role:          agentprofile.Researcher,
 		Packet:        testCoagentUpdatePacket("evidence_update", "existing thread update should not create a replacement run"),
 		Content:       "Existing thread update should wait for a resident or sleeping Texture actor.",
 		CreatedAt:     now.Add(time.Millisecond),
@@ -4918,7 +4920,7 @@ func TestTextureWakeStartsIntegrationForCompletedThreadHistory(t *testing.T) {
 	}
 	var textureRevisionRuns []types.RunRecord
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+		if agentProfileForRun(&run) == agentprofile.Texture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 			textureRevisionRuns = append(textureRevisionRuns, run)
 		}
 	}
@@ -4959,8 +4961,8 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 
 	textureRun, err := rt.StartRunWithMetadata(context.Background(), "Own the document", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataChannelID:    docID,
 		runMetadataAgentID:      "texture:" + docID,
 		"doc_id":                docID,
@@ -4970,15 +4972,15 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 	waitForRunRunning(t, rt, textureRun.RunID, "user-1", 5*time.Second)
 	superRun, err := rt.StartCoagentRun(context.Background(), textureRun.RunID, "Build and verify a toy artifact", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
 		t.Fatalf("start super run: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"execution_result",
@@ -5039,7 +5041,7 @@ func TestSubmitWorkerUpdateWakeUsesSameDebouncedPath(t *testing.T) {
 	}
 	var wakeRun *types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && runs[i].RequestedByRunID == superRun.RunID {
+		if agentProfileForRun(&runs[i]) == agentprofile.Texture && runs[i].RequestedByRunID == superRun.RunID {
 			wakeRun = &runs[i]
 			break
 		}
@@ -5091,14 +5093,14 @@ func TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp(t *test
 	}
 
 	researchRun, err := rt.StartRunWithMetadata(context.Background(), "Send one late finding", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    docID,
 	})
 	if err != nil {
 		t.Fatalf("start research run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileResearcher).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researchRun)), "update_coagent", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researchRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"evidence_update",
 		"summary":"late finding",
@@ -5152,7 +5154,7 @@ func TestTextureUpdateCoagentDuringActiveRevisionTriggersSameRunFollowUp(t *test
 	}
 	var textureRevisionRuns []types.RunRecord
 	for _, run := range runs {
-		if agentProfileForRun(&run) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
+		if agentProfileForRun(&run) == agentprofile.Texture && isTextureAgentRevisionTaskType(metadataStringValue(run.Metadata, "type")) {
 			textureRevisionRuns = append(textureRevisionRuns, run)
 		}
 	}
@@ -5203,7 +5205,7 @@ func TestBuildAgentRevisionRequestRequiresSuperContinuationForActiveWorker(t *te
 		AuthorKind: types.AuthorAppAgent,
 	}
 	recent := []ChannelMessage{{
-		Role:    AgentProfileSuper,
+		Role:    agentprofile.Super,
 		From:    "super:active-worker",
 		Content: "Worker update ready.\n\nFindings:\n- delegate_worker_vm returned status \"worker_run_active\" with worker state \"running\".\n\nNotes:\n- active_worker_obligation=true\n- finish_ready=false\n\nRefs:\n- worker_run:worker-run-active",
 	}}
@@ -5277,8 +5279,8 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 		CreatedAt: now.Add(2 * time.Second),
 		UpdatedAt: now.Add(2 * time.Second),
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileResearcher,
-			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentProfile: agentprofile.Researcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
 			runMetadataChannelID:    doc.DocID,
 		},
 	}
@@ -5318,8 +5320,8 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 	interruptedRun := types.RunRecord{
 		RunID:            "texture-interrupted-restart",
 		AgentID:          "texture:" + doc.DocID,
-		AgentProfile:     AgentProfileTexture,
-		AgentRole:        AgentProfileTexture,
+		AgentProfile:     agentprofile.Texture,
+		AgentRole:        agentprofile.Texture,
 		OwnerID:          "user-1",
 		SandboxID:        "sandbox-texture-test",
 		ChannelID:        doc.DocID,
@@ -5333,8 +5335,8 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 			"doc_id":                doc.DocID,
 			"current_revision_id":   userRev.RevisionID,
 			"scheduled_message_seq": message.Seq,
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 			runMetadataChannelID:    doc.DocID,
 			runMetadataAgentID:      "texture:" + doc.DocID,
 			runMetadataTrajectoryID: message.TrajectoryID,
@@ -5454,7 +5456,7 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 	}
 	var textureRevisionRuns []types.RunRecord
 	for i := range runs {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture && isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
+		if agentProfileForRun(&runs[i]) == agentprofile.Texture && isTextureAgentRevisionTaskType(metadataStringValue(runs[i].Metadata, "type")) {
 			textureRevisionRuns = append(textureRevisionRuns, runs[i])
 		}
 	}
@@ -5595,7 +5597,7 @@ func TestHandleTestTextureWorkerUpdateUsesStructuredToolPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if update.Role != AgentProfileSuper || len(coagentPacketSourceURIs(update.Packet, "file_artifact")) != 1 || len(coagentPacketSourceURIs(update.Packet, "test_run")) != 1 || len(update.Packet.Actions) == 0 {
+	if update.Role != agentprofile.Super || len(coagentPacketSourceURIs(update.Packet, "file_artifact")) != 1 || len(coagentPacketSourceURIs(update.Packet, "test_run")) != 1 || len(update.Packet.Actions) == 0 {
 		t.Fatalf("unexpected structured update: %+v", update)
 	}
 	if update.TrajectoryID != trajectoryIDForRun(&workerRun) || update.TrajectoryID != trajectoryIDForRun(&textureRun) {
@@ -5627,8 +5629,8 @@ func TestTextureAgentRevisionInheritsConductorTrajectoryFromRevisionMetadata(t *
 		RunID:        "conductor-parent-001",
 		AgentID:      "conductor:test",
 		ChannelID:    "conductor-parent-001",
-		AgentProfile: AgentProfileConductor,
-		AgentRole:    AgentProfileConductor,
+		AgentProfile: agentprofile.Conductor,
+		AgentRole:    agentprofile.Conductor,
 		OwnerID:      "user-1",
 		SandboxID:    "sandbox-texture-test",
 		State:        types.RunCompleted,
@@ -5636,8 +5638,8 @@ func TestTextureAgentRevisionInheritsConductorTrajectoryFromRevisionMetadata(t *
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileConductor,
-			runMetadataAgentRole:    AgentProfileConductor,
+			runMetadataAgentProfile: agentprofile.Conductor,
+			runMetadataAgentRole:    agentprofile.Conductor,
 			runMetadataAgentID:      "conductor:test",
 			runMetadataChannelID:    "conductor-parent-001",
 			runMetadataTrajectoryID: "trajectory-conductor-parent-001",
@@ -5773,7 +5775,7 @@ func TestTextureOpenFileResolvesCanonicalAlias(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetContentItem original: %v", err)
 	}
-	if originalItem.FilePath != "notes/ai-news.md" || originalItem.MediaType != "text/markdown" || originalItem.AppHint != AgentProfileTexture {
+	if originalItem.FilePath != "notes/ai-news.md" || originalItem.MediaType != "text/markdown" || originalItem.AppHint != agentprofile.Texture {
 		t.Fatalf("original content item = %#v", originalItem)
 	}
 	if originalItem.TextContent != "Initial file content" || originalItem.ContentHash == "" {
@@ -6391,7 +6393,7 @@ func TestTextureImportMarkdownLineageCreatesRevisionHistory(t *testing.T) {
 	for _, item := range items {
 		if item.SourceType == "file_version" && item.FilePath != "" && strings.HasPrefix(item.FilePath, "proposals/legal-cloud.md#") {
 			foundSnapshots++
-			if item.MediaType != "text/markdown" || item.AppHint != AgentProfileTexture || item.TextContent == "" || item.ContentHash == "" {
+			if item.MediaType != "text/markdown" || item.AppHint != agentprofile.Texture || item.TextContent == "" || item.ContentHash == "" {
 				t.Fatalf("snapshot content item = %#v", item)
 			}
 		}
@@ -6855,7 +6857,7 @@ func TestTextureImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 		OwnerID:     "user-1",
 		SourceType:  "file_version",
 		MediaType:   "text/markdown",
-		AppHint:     AgentProfileTexture,
+		AppHint:     agentprofile.Texture,
 		Title:       "legal-cloud.md v44",
 		FilePath:    "proposals/legal-cloud-content-backed.md#v44",
 		TextContent: oldContent,
@@ -6870,7 +6872,7 @@ func TestTextureImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 		OwnerID:     "user-1",
 		SourceType:  "file_version",
 		MediaType:   "text/markdown",
-		AppHint:     AgentProfileTexture,
+		AppHint:     agentprofile.Texture,
 		Title:       "legal-cloud.md v49",
 		FilePath:    "proposals/legal-cloud-content-backed.md#v49",
 		TextContent: latestContent,
@@ -7071,7 +7073,7 @@ func TestTextureOpenFilePreservesDocxAndPDFOriginalArtifacts(t *testing.T) {
 		warning   string
 		wantText  string
 	}{
-		{name: "docx", resp: docx, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", appHint: AgentProfileTexture, lossiness: 40, warning: "docx_projection_requires_style_adapter", wantText: "Extracted DOCX projection text"},
+		{name: "docx", resp: docx, mediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", appHint: agentprofile.Texture, lossiness: 40, warning: "docx_projection_requires_style_adapter", wantText: "Extracted DOCX projection text"},
 		{name: "pdf", resp: pdf, mediaType: "application/pdf", appHint: "pdf", lossiness: 80, warning: "pdf_projection_requires_extraction_adapter", wantText: "Extracted PDF projection text"},
 	} {
 		doc, err := s.GetDocument(context.Background(), tc.resp.DocID, "user-1")
@@ -7853,7 +7855,7 @@ func TestTextureStreamEventMapsTexturePassivationToSynthCompleted(t *testing.T) 
 func TestTextureIdlePassivationEventCarriesDocumentStreamCompletionPayload(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	provider := &textureParkResidentProvider{Provider: NewStubProvider(time.Millisecond)}
+	provider := &textureParkResidentProvider{Provider: provider.NewStubProvider(time.Millisecond)}
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	rt.cfg.TextureActorParkIdle = 25 * time.Millisecond
 	docID, _ := createDocWithUserRevision(t, h)
@@ -8187,13 +8189,13 @@ func TestTextureAgentRevisionDeliversOwnerRequestToResidentActor(t *testing.T) {
 		SandboxID:    "sandbox-texture-test",
 		State:        types.RunRunning,
 		Prompt:       "Revise the document.",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 			runMetadataAgentID:      agentID,
 			runMetadataChannelID:    docID,
 			"doc_id":                docID,
@@ -8333,8 +8335,8 @@ func TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 		Prompt:       "Revise the imported markdown proposal.",
 		CreatedAt:    now,
 		UpdatedAt:    now,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                "texture_agent_revision",
 			"doc_id":              doc.DocID,
@@ -8356,7 +8358,7 @@ func TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal edit args: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err != nil {
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "patch_texture", rawArgs); err != nil {
 		t.Fatalf("patch_texture: %v", err)
 	}
 	got, err := s.GetDocument(ctx, doc.DocID, doc.OwnerID)
@@ -8456,20 +8458,20 @@ func TestTextureAgentRevisionMutationCompletedOnlyOnce(t *testing.T) {
 		Result:       textureReplaceAllResult("Revised content", "rev-user-1"),
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                  "texture_agent_revision",
 			"doc_id":                "doc-mutation-test",
 			"current_revision_id":   "rev-user-1",
 			runMetadataAgentID:      "texture:doc-mutation-test",
 			runMetadataChannelID:    "doc-mutation-test",
-			runMetadataAgentRole:    AgentProfileTexture,
-			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    agentprofile.Texture,
+			runMetadataAgentProfile: agentprofile.Texture,
 		},
 	}
 
-	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	rawArgs, err := json.Marshal(editTextureArgs{
 		DocID:          "doc-mutation-test",
 		BaseRevisionID: "rev-user-1",
@@ -8566,8 +8568,8 @@ func TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *
 		Prompt:       "Revise the document",
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                  "texture_agent_revision",
 			"doc_id":                doc.DocID,
@@ -8575,8 +8577,8 @@ func TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *
 			"original_prompt":       "nba update",
 			runMetadataAgentID:      "texture:" + doc.DocID,
 			runMetadataChannelID:    doc.DocID,
-			runMetadataAgentRole:    AgentProfileTexture,
-			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    agentprofile.Texture,
+			runMetadataAgentProfile: agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -8592,7 +8594,7 @@ func TestEditTextureInitialWorkingRevisionDoesNotSmuggleRequiredContinuation(t *
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-initial-continuation",
 		"base_revision_id":"rev-user-continuation",
@@ -8664,16 +8666,16 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-texture-test",
 		AgentID:      "researcher-worker-noop",
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
+		AgentRole:    agentprofile.Researcher,
 		ChannelID:    docID,
 		State:        types.RunCompleted,
 		Prompt:       "Find the missing government evidence.",
 		CreatedAt:    now.Add(time.Second),
 		UpdatedAt:    now.Add(time.Second),
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileResearcher,
-			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentProfile: agentprofile.Researcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
 			runMetadataChannelID:    docID,
 			runMetadataAgentID:      "researcher-worker-noop",
 			runMetadataTrajectoryID: "traj-worker-noop",
@@ -8685,11 +8687,11 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 	message := &types.ChannelMessage{
 		ChannelID:    docID,
 		TrajectoryID: "traj-worker-noop",
-		From:         AgentProfileResearcher,
+		From:         agentprofile.Researcher,
 		FromRunID:    researchRun.RunID,
 		FromAgentID:  researchRun.AgentID,
 		ToAgentID:    agentID,
-		Role:         AgentProfileResearcher,
+		Role:         agentprofile.Researcher,
 		Content:      "Finding: Anthropic has grounded government evidence that must be reflected in the Texture revision.",
 		Timestamp:    now.Add(2 * time.Second),
 	}
@@ -8713,8 +8715,8 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-texture-test",
 		AgentID:      agentID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		ChannelID:    docID,
 		State:        types.RunRunning,
 		Prompt:       "Integrate the researcher evidence.",
@@ -8727,8 +8729,8 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 			"request_source":        "update_coagent",
 			"scheduled_message_seq": message.Seq,
 			runMetadataAgentID:      agentID,
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: "traj-worker-noop",
 		},
@@ -8747,7 +8749,7 @@ func TestTextureWorkerUpdateRevisionRejectsNoOpPatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal no-op patch: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "patch_texture", rawArgs); err == nil ||
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "patch_texture", rawArgs); err == nil ||
 		!strings.Contains(err.Error(), "worker update revision must change Texture content") {
 		t.Fatalf("no-op worker update patch err = %v, want worker-update no-op guard", err)
 	}
@@ -8830,8 +8832,8 @@ func TestInitialTextureRevisionRejectsNoOpPromptCopy(t *testing.T) {
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-texture-test",
 		AgentID:      agentID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		ChannelID:    docID,
 		State:        types.RunRunning,
 		Prompt:       "Draft the first model-prior Texture revision.",
@@ -8845,8 +8847,8 @@ func TestInitialTextureRevisionRejectsNoOpPromptCopy(t *testing.T) {
 			"seed_prompt":           promptContent,
 			"input_origin":          textureInputOriginUserPrompt,
 			runMetadataAgentID:      agentID,
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: "traj-initial-noop",
 		},
@@ -8865,7 +8867,7 @@ func TestInitialTextureRevisionRejectsNoOpPromptCopy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal initial no-op patch: %v", err)
 	}
-	if _, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "patch_texture", rawArgs); err == nil ||
+	if _, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "patch_texture", rawArgs); err == nil ||
 		!strings.Contains(err.Error(), "initial model-prior Texture revision must change prompt content") {
 		t.Fatalf("no-op initial patch err = %v, want model-prior no-op guard", err)
 	}
@@ -8887,7 +8889,7 @@ func TestInitialTextureRevisionRejectsNoOpPromptCopy(t *testing.T) {
 
 func TestInitialTextureNoOpPatchRetriesIntoUsefulDraft(t *testing.T) {
 	t.Parallel()
-	provider := &textureInitialNoOpThenDraftProvider{Provider: NewStubProvider(1 * time.Millisecond)}
+	provider := &textureInitialNoOpThenDraftProvider{Provider: provider.NewStubProvider(1 * time.Millisecond)}
 
 	h, s, rt := textureAPISetupWithProvider(t, provider, true)
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Draft a short private note."}`, "user-1")
@@ -8984,8 +8986,8 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation(t *testing.T
 		Prompt:       "Revise the document",
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                        "texture_agent_revision",
 			"doc_id":                      doc.DocID,
@@ -8994,8 +8996,8 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation(t *testing.T
 			runMetadataExplicitResearcher: true,
 			runMetadataAgentID:            "texture:" + doc.DocID,
 			runMetadataChannelID:          doc.DocID,
-			runMetadataAgentRole:          AgentProfileTexture,
-			runMetadataAgentProfile:       AgentProfileTexture,
+			runMetadataAgentRole:          agentprofile.Texture,
+			runMetadataAgentProfile:       agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -9011,7 +9013,7 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnContinuation(t *testing.T
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-continuation",
 		"base_revision_id":"rev-user-explicit-researcher",
@@ -9055,7 +9057,7 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing
 		DocID:       doc.DocID,
 		OwnerID:     doc.OwnerID,
 		AuthorKind:  types.AuthorAppAgent,
-		AuthorLabel: AgentProfileSuper,
+		AuthorLabel: agentprofile.Super,
 		Content:     "Super artifact is ready; researcher evidence is still missing.",
 		CreatedAt:   time.Now().UTC(),
 	}
@@ -9073,8 +9075,8 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing
 		Prompt:       "Revise the document",
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                        "texture_agent_revision",
 			"doc_id":                      doc.DocID,
@@ -9083,8 +9085,8 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing
 			runMetadataExplicitResearcher: true,
 			runMetadataAgentID:            "texture:" + doc.DocID,
 			runMetadataChannelID:          doc.DocID,
-			runMetadataAgentRole:          AgentProfileTexture,
-			runMetadataAgentProfile:       AgentProfileTexture,
+			runMetadataAgentRole:          agentprofile.Texture,
+			runMetadataAgentProfile:       agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -9100,7 +9102,7 @@ func TestEditTextureExplicitResearcherDoesNotForceSpawnAfterSuperBase(t *testing
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-after-super",
 		"base_revision_id":"rev-super-explicit-researcher",
@@ -9156,8 +9158,8 @@ func TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPromp
 		Prompt:       "Revise from worker update.",
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                  "texture_agent_revision",
 			"doc_id":                doc.DocID,
@@ -9165,8 +9167,8 @@ func TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPromp
 			"original_prompt":       "Revise from worker update.",
 			runMetadataAgentID:      "texture:" + doc.DocID,
 			runMetadataChannelID:    doc.DocID,
-			runMetadataAgentRole:    AgentProfileTexture,
-			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    agentprofile.Texture,
+			runMetadataAgentProfile: agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -9182,7 +9184,7 @@ func TestEditTextureExplicitResearcherFromBaseRevisionContentSurvivesWorkerPromp
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-base-content",
 		"base_revision_id":"rev-user-explicit-researcher-base-content",
@@ -9238,8 +9240,8 @@ func TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent(t *tes
 		Prompt:       "Revise from worker update.",
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                  "texture_agent_revision",
 			"doc_id":                doc.DocID,
@@ -9249,8 +9251,8 @@ func TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent(t *tes
 			"seed_prompt":           "Create a Texture document for the M3 route proof. Ask researcher for route evidence, then ask super for a verification note.",
 			runMetadataAgentID:      "texture:" + doc.DocID,
 			runMetadataChannelID:    doc.DocID,
-			runMetadataAgentRole:    AgentProfileTexture,
-			runMetadataAgentProfile: AgentProfileTexture,
+			runMetadataAgentRole:    agentprofile.Texture,
+			runMetadataAgentProfile: agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -9267,7 +9269,7 @@ func TestEditTextureExplicitResearcherFromSeedPromptSurvivesRequestIntent(t *tes
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-seed-prompt",
 		"base_revision_id":"rev-user-explicit-researcher-seed-prompt",
@@ -9324,13 +9326,13 @@ func TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher(t *test
 		Prompt:       "Research route evidence",
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
+		AgentRole:    agentprofile.Researcher,
 		Metadata: map[string]any{
 			runMetadataAgentID:      "researcher:existing",
 			runMetadataChannelID:    doc.DocID,
-			runMetadataAgentRole:    AgentProfileResearcher,
-			runMetadataAgentProfile: AgentProfileResearcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
+			runMetadataAgentProfile: agentprofile.Researcher,
 		},
 	}
 	if err := s.CreateRun(ctx, researcherRun); err != nil {
@@ -9347,8 +9349,8 @@ func TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher(t *test
 		Prompt:       "Revise the document",
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
 			"type":                        "texture_agent_revision",
 			"doc_id":                      doc.DocID,
@@ -9357,8 +9359,8 @@ func TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher(t *test
 			runMetadataExplicitResearcher: true,
 			runMetadataAgentID:            "texture:" + doc.DocID,
 			runMetadataChannelID:          doc.DocID,
-			runMetadataAgentRole:          AgentProfileTexture,
-			runMetadataAgentProfile:       AgentProfileTexture,
+			runMetadataAgentRole:          agentprofile.Texture,
+			runMetadataAgentProfile:       agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, run); err != nil {
@@ -9374,7 +9376,7 @@ func TestEditTextureExplicitResearcherDoesNotDuplicateExistingResearcher(t *test
 		t.Fatalf("create mutation: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	editRaw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&run)), "rewrite_texture", json.RawMessage(`{
 		"doc_id":"doc-explicit-researcher-existing",
 		"base_revision_id":"rev-user-explicit-researcher-existing",
@@ -9520,8 +9522,8 @@ func TestTextureDiagnosisIncludesDocumentChannelRuns(t *testing.T) {
 	docID, _ := createDocWithUserRevision(t, h)
 
 	docRun, err := rt.StartRunWithMetadata(context.Background(), "diagnose this document", "user-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:" + docID,
 		runMetadataChannelID:    "legacy-parent-channel",
 		"doc_id":                docID,
@@ -9531,8 +9533,8 @@ func TestTextureDiagnosisIncludesDocumentChannelRuns(t *testing.T) {
 	}
 	for i := 0; i < 5; i++ {
 		if _, err := rt.StartRunWithMetadata(context.Background(), fmt.Sprintf("newer unrelated run %d", i), "user-1", map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 			runMetadataChannelID:    fmt.Sprintf("unrelated-%d", i),
 		}); err != nil {
 			t.Fatalf("start unrelated run %d: %v", i, err)
@@ -9678,7 +9680,7 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 		ChannelID: docID,
 		State:     types.RunCompleted,
 		Metadata: map[string]any{
-			runMetadataAgentRole: AgentProfileResearcher,
+			runMetadataAgentRole: agentprofile.Researcher,
 		},
 	}
 	if err := s.CreateRun(ctx, researchRun); err != nil {
@@ -9690,7 +9692,7 @@ func TestTextureAgentRevisionPromotesResearcherContentRefsToSourceEntities(t *te
 		FromRunID:   researchRun.RunID,
 		FromAgentID: "researcher-content-source",
 		ToAgentID:   "texture:" + docID,
-		Role:        AgentProfileResearcher,
+		Role:        agentprofile.Researcher,
 		Content: strings.Join([]string{
 			"Coagent update ready.",
 			"Role: researcher.",

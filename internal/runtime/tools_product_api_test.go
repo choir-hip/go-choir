@@ -9,6 +9,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestProductAPIRequestToolUsesRunOwnerForAllowedProductRoute(t *testing.T) {
@@ -18,8 +19,8 @@ func TestProductAPIRequestToolUsesRunOwnerForAllowedProductRoute(t *testing.T) {
 		RunID:        "run-product-api",
 		AgentID:      "agent-super-product-api",
 		OwnerID:      "user-product-api",
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 	}
 
 	raw, err := tool.Func(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), json.RawMessage(`{
@@ -57,8 +58,8 @@ func TestProductAPIRequestToolRefusesInternalAndNonSuperCalls(t *testing.T) {
 		RunID:        "run-product-api-refuse",
 		AgentID:      "agent-super-product-api-refuse",
 		OwnerID:      "user-product-api",
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 	}
 	if _, err := tool.Func(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(`{
 		"method":"GET",
@@ -71,8 +72,8 @@ func TestProductAPIRequestToolRefusesInternalAndNonSuperCalls(t *testing.T) {
 		RunID:        "run-product-api-worker",
 		AgentID:      "agent-worker-product-api",
 		OwnerID:      "user-product-api",
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
+		AgentProfile: agentprofile.CoSuper,
+		AgentRole:    agentprofile.CoSuper,
 	}
 	if _, err := tool.Func(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(workerRun)), json.RawMessage(`{
 		"method":"GET",

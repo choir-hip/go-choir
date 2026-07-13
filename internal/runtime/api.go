@@ -19,9 +19,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // apiError is a JSON error envelope for API responses.
@@ -383,7 +385,7 @@ func (h *APIHandler) runStatusWithTrajectory(ctx context.Context, rec *types.Run
 		WaitingOn:         append([]string(nil), obligations.WaitingOn...),
 		OpenWorkItemCount: len(obligations.OpenWorkItems),
 	}
-	if canonicalAgentProfile(agentProfileForRun(rec)) == AgentProfileProcessor && ownerID != "" {
+	if canonicalAgentProfile(agentProfileForRun(rec)) == agentprofile.Processor && ownerID != "" {
 		item, found, err := h.rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
 		if err == nil && found {
 			resp.ProcessorResolution = &runProcessorResolutionStatusResponse{
@@ -430,7 +432,7 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedApp := AgentProfileTexture
+	requestedApp := agentprofile.Texture
 	var contentSourceURL, contentMediaType, contentAppHint string
 	if appHint, sourceURL, mediaType, ok := classifyPromptBarContentIntent(text); ok {
 		requestedApp = appHint
@@ -440,12 +442,12 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	metadata := map[string]any{
-		runMetadataAgentProfile:  AgentProfileConductor,
-		runMetadataAgentRole:     AgentProfileConductor,
+		runMetadataAgentProfile:  agentprofile.Conductor,
+		runMetadataAgentRole:     agentprofile.Conductor,
 		"input_source":           "prompt_bar",
 		"requested_app":          requestedApp,
 		"seed_prompt":            text,
-		"initial_document_title": buildInitialTextureTitle(text, ""),
+		"initial_document_title": provider.InitialTextureTitle(text, ""),
 		"submission_surface":     "prompt_bar",
 	}
 	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
@@ -462,7 +464,7 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		decision := conductorDecision{
 			Action:    "open_app",
 			App:       contentAppHint,
-			Title:     buildInitialTextureTitle(text, ""),
+			Title:     provider.InitialTextureTitle(text, ""),
 			SourceURL: contentSourceURL,
 			MediaType: contentMediaType,
 			AppHint:   contentAppHint,
@@ -471,8 +473,8 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 	} else if isTextureDecisionApp(requestedApp) {
 		decision := conductorDecision{
 			Action: "open_app",
-			App:    AgentProfileTexture,
-			Title:  buildInitialTextureTitle(text, ""),
+			App:    agentprofile.Texture,
+			Title:  provider.InitialTextureTitle(text, ""),
 		}
 		rec, err = h.rt.completePromptBarDecisionRun(r.Context(), text, ownerID, metadata, decision)
 		if err == nil {
@@ -530,7 +532,7 @@ func (h *APIHandler) HandlePromptBarSubmission(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "submission not found"})
 		return
 	}
-	if agentProfileForRun(rec) != AgentProfileConductor || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
+	if agentProfileForRun(rec) != agentprofile.Conductor || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "submission not found"})
 		return
 	}
@@ -578,7 +580,7 @@ func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Req
 	}
 	role := normalizeModelPolicyRole(r.URL.Query().Get("role"))
 	if role == "" {
-		role = AgentProfileConductor
+		role = agentprofile.Conductor
 	}
 	metadata := map[string]any{
 		runMetadataAgentProfile: role,
@@ -747,7 +749,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		return
 	}
 	switch profile {
-	case AgentProfileCoSuper, AgentProfileResearcher, AgentProfileVSuper, AgentProfileProcessor, AgentProfileReconciler:
+	case agentprofile.CoSuper, agentprofile.Researcher, agentprofile.VSuper, agentprofile.Processor, agentprofile.Reconciler:
 	default:
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal worker runs may only start co-super, researcher, vsuper, processor, or reconciler profiles"})
 		return
@@ -772,11 +774,11 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		return
 	}
 	typedIngestionSubmission := hasRequestID
-	if typedIngestionSubmission && profile != AgentProfileProcessor && profile != AgentProfileReconciler {
+	if typedIngestionSubmission && profile != agentprofile.Processor && profile != agentprofile.Reconciler {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "ingestion handoff identity is only valid for processor or reconciler profiles"})
 		return
 	}
-	if profile == AgentProfileProcessor || typedIngestionSubmission {
+	if profile == agentprofile.Processor || typedIngestionSubmission {
 		// One critical section owns typed identity lookup and persistence across
 		// ingestion profiles. It also serializes processor overload admission.
 		// Concurrent lost-receipt retries therefore cannot both observe absence.
@@ -832,7 +834,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		}
 	}
 
-	if profile == AgentProfileProcessor {
+	if profile == agentprofile.Processor {
 		// Reject genuinely new processor submissions when too many runs are
 		// active. Duplicate typed identities were returned above.
 		maxProc := 1
@@ -841,7 +843,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 				maxProc = parsed
 			}
 		}
-		if h.rt.RunningCountByProfile(r.Context(), AgentProfileProcessor) >= maxProc {
+		if h.rt.RunningCountByProfile(r.Context(), agentprofile.Processor) >= maxProc {
 			writeAPIJSON(w, http.StatusTooManyRequests, apiError{Error: "too many active processor runs; try again later"})
 			return
 		}
@@ -1215,7 +1217,7 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
-	runningProcessorRuns := h.rt.RunningCountByProfile(r.Context(), AgentProfileProcessor)
+	runningProcessorRuns := h.rt.RunningCountByProfile(r.Context(), agentprofile.Processor)
 	resp := runtimeHealthResponse{
 		Status:               string(health),
 		Service:              "sandbox",

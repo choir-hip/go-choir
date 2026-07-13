@@ -4,48 +4,49 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestTextureActorIdentityCompatibility(t *testing.T) {
 	rec := &types.RunRecord{
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 		},
 	}
-	if got := configuredAgentProfileForRun(rec); got != AgentProfileTexture {
-		t.Fatalf("configured profile = %q, want internal %q", got, AgentProfileTexture)
+	if got := configuredAgentProfileForRun(rec); got != agentprofile.Texture {
+		t.Fatalf("configured profile = %q, want internal %q", got, agentprofile.Texture)
 	}
-	if got := agentProfileForRun(rec); got != AgentProfileTexture {
-		t.Fatalf("agent profile = %q, want internal %q", got, AgentProfileTexture)
+	if got := agentProfileForRun(rec); got != agentprofile.Texture {
+		t.Fatalf("agent profile = %q, want internal %q", got, agentprofile.Texture)
 	}
-	if got := agentRoleForRun(rec); got != AgentProfileTexture {
-		t.Fatalf("agent role = %q, want internal %q", got, AgentProfileTexture)
+	if got := agentRoleForRun(rec); got != agentprofile.Texture {
+		t.Fatalf("agent role = %q, want internal %q", got, agentprofile.Texture)
 	}
 
 	agent, metadata := resolveRunIdentity("owner-1", "sandbox-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		"doc_id":                "doc-1",
 	}, nil)
-	if agent.AgentID != "texture:doc-1" || agent.Profile != AgentProfileTexture || agent.Role != AgentProfileTexture || agent.ChannelID != "doc-1" {
+	if agent.AgentID != "texture:doc-1" || agent.Profile != agentprofile.Texture || agent.Role != agentprofile.Texture || agent.ChannelID != "doc-1" {
 		t.Fatalf("resolved texture identity = %+v", agent)
 	}
-	if metadataStringValue(metadata, runMetadataAgentProfile) != AgentProfileTexture || metadataStringValue(metadata, runMetadataAgentRole) != AgentProfileTexture {
+	if metadataStringValue(metadata, runMetadataAgentProfile) != agentprofile.Texture || metadataStringValue(metadata, runMetadataAgentRole) != agentprofile.Texture {
 		t.Fatalf("resolved metadata = %+v, want texture profile/role", metadata)
 	}
 
 	legacy, legacyMetadata := resolveRunIdentity("owner-1", "sandbox-1", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		"doc_id":                "doc-1",
 	}, nil)
-	if legacy.AgentID != "texture:doc-1" || legacy.Profile != AgentProfileTexture || legacy.Role != AgentProfileTexture || legacy.ChannelID != "doc-1" {
+	if legacy.AgentID != "texture:doc-1" || legacy.Profile != agentprofile.Texture || legacy.Role != agentprofile.Texture || legacy.ChannelID != "doc-1" {
 		t.Fatalf("resolved legacy identity = %+v", legacy)
 	}
-	if metadataStringValue(legacyMetadata, runMetadataAgentProfile) != AgentProfileTexture || metadataStringValue(legacyMetadata, runMetadataAgentRole) != AgentProfileTexture {
+	if metadataStringValue(legacyMetadata, runMetadataAgentProfile) != agentprofile.Texture || metadataStringValue(legacyMetadata, runMetadataAgentRole) != agentprofile.Texture {
 		t.Fatalf("legacy metadata = %+v, want texture profile/role", legacyMetadata)
 	}
 
@@ -90,11 +91,11 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	if err != nil {
 		t.Fatalf("parseModelPolicy: %v", err)
 	}
-	texture := policy.Resolve(AgentProfileTexture)
+	texture := policy.Resolve(agentprofile.Texture)
 	if texture.Provider != "fireworks" || texture.Model != "accounts/fireworks/models/deepseek-v4-flash" {
 		t.Fatalf("texture selection = %+v, want legacy texture role selection", texture)
 	}
-	if got := normalizeModelPolicyRole("texture"); got != AgentProfileTexture {
-		t.Fatalf("texture normalized to %q, want %q", got, AgentProfileTexture)
+	if got := normalizeModelPolicyRole("texture"); got != agentprofile.Texture {
+		t.Fatalf("texture normalized to %q, want %q", got, agentprofile.Texture)
 	}
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const (
@@ -28,7 +29,7 @@ const (
 	maxDelegateWorkerVMTimeout     = 15 * time.Minute
 )
 
-func RegisterVMControlTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
+func RegisterVMControlTools(registry *toolregistry.ToolRegistry, rt *Runtime, cwd string) error {
 	for _, tool := range []Tool{
 		newForkDesktopTool(rt),
 		newPublishDesktopTool(rt),
@@ -276,7 +277,7 @@ func workerVMRequestResult(handle *vmctl.WorkerVMHandle) map[string]any {
 			"worker_sandbox_url": handle.SandboxURL,
 			"worker_id":          handle.WorkerID,
 			"vm_id":              handle.VMID,
-			"profile":            AgentProfileVSuper,
+			"profile":            agentprofile.VSuper,
 			"timeout_seconds":    int(defaultDelegateWorkerVMTimeout.Seconds()),
 		}
 		result["next_required_args"] = result["start_args"]
@@ -646,7 +647,7 @@ func newStartWorkerDelegationToolNamed(name, description string, rt *Runtime, cw
 			"worker_id":          map[string]any{"type": "string"},
 			"vm_id":              map[string]any{"type": "string"},
 			"objective":          map[string]any{"type": "string"},
-			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher}},
+			"profile":            map[string]any{"type": "string", "enum": []string{agentprofile.VSuper, agentprofile.CoSuper, agentprofile.Researcher}},
 			"timeout_seconds":    map[string]any{"type": "integer"},
 		}, []string{"worker_sandbox_url", "objective"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -656,7 +657,7 @@ func newStartWorkerDelegationToolNamed(name, description string, rt *Runtime, cw
 }
 
 func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw json.RawMessage) (string, error) {
-	if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
+	if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != agentprofile.Super {
 		return "", fmt.Errorf("start_worker_delegation is only available to super agents")
 	}
 	if rt == nil {
@@ -677,10 +678,10 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 	delegatedObjective := objective
 	profile := canonicalAgentProfile(in.Profile)
 	if profile == "" {
-		profile = AgentProfileVSuper
+		profile = agentprofile.VSuper
 	}
-	if profile != AgentProfileVSuper && profile != AgentProfileCoSuper && profile != AgentProfileResearcher {
-		return "", fmt.Errorf("profile must be %s, %s, or %s", AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher)
+	if profile != agentprofile.VSuper && profile != agentprofile.CoSuper && profile != agentprofile.Researcher {
+		return "", fmt.Errorf("profile must be %s, %s, or %s", agentprofile.VSuper, agentprofile.CoSuper, agentprofile.Researcher)
 	}
 	timeout := time.Duration(in.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
@@ -708,7 +709,7 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 		"request_source":        "worker_vm_delegation",
 		"delegated_by_run_id":   runID,
 		"delegated_by_agent_id": agentID,
-		"delegated_by_profile":  AgentProfileSuper,
+		"delegated_by_profile":  agentprofile.Super,
 		"worker_id":             strings.TrimSpace(in.WorkerID),
 		"worker_vm_id":          strings.TrimSpace(in.VMID),
 		"parent_sandbox_id":     toolregistry.ExecutionContextFrom(ctx).SandboxID,
@@ -749,7 +750,7 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 		metadata[runMetadataWorkerRepoBaseSHA] = bootstrap.BaseSHA
 		objective = bootstrap.WorkerPrompt + "\n\n" + delegatedObjective
 	}
-	if profile == AgentProfileVSuper {
+	if profile == agentprofile.VSuper {
 		objective = workerVSuperDelegateContract(timeout) + "\n\n" + objective
 	}
 	if preload := rt.preloadWorkerAppChangePackages(ctx, client, in.WorkerSandboxURL, ownerID, delegatedObjective); len(preload.ImportedPackageIDs) > 0 || len(preload.Errors) > 0 {
@@ -922,10 +923,10 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 			"vm_id":              map[string]any{"type": "string"},
 			"worker_run_id":      map[string]any{"type": "string"},
 			"loop_id":            map[string]any{"type": "string"},
-			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher}},
+			"profile":            map[string]any{"type": "string", "enum": []string{agentprofile.VSuper, agentprofile.CoSuper, agentprofile.Researcher}},
 		}, []string{"worker_sandbox_url"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
+			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != agentprofile.Super {
 				return "", fmt.Errorf("observe_worker_delegation is only available to super agents")
 			}
 			if rt == nil {
@@ -1002,12 +1003,12 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			"vm_id":              map[string]any{"type": "string"},
 			"worker_run_id":      map[string]any{"type": "string"},
 			"loop_id":            map[string]any{"type": "string"},
-			"profile":            map[string]any{"type": "string", "enum": []string{AgentProfileVSuper, AgentProfileCoSuper, AgentProfileResearcher}},
+			"profile":            map[string]any{"type": "string", "enum": []string{agentprofile.VSuper, agentprofile.CoSuper, agentprofile.Researcher}},
 			"objective":          map[string]any{"type": "string"},
 			"timeout_seconds":    map[string]any{"type": "integer"},
 		}, []string{"worker_sandbox_url"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
+			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != agentprofile.Super {
 				return "", fmt.Errorf("finish_worker_delegation is only available to super agents")
 			}
 			if rt == nil {
@@ -1094,7 +1095,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 				if timeout > maxDelegateWorkerVMTimeout {
 					timeout = maxDelegateWorkerVMTimeout
 				}
-				if profile == AgentProfileVSuper && status.State == types.RunCompleted {
+				if profile == agentprofile.VSuper && status.State == types.RunCompleted {
 					evidence = followWorkerChildRuns(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID, evidence, timeout)
 				}
 				rt.applyWorkerEvidenceToResult(ctx, client, in.WorkerSandboxURL, ownerID, evidence, true, toolregistry.ExecutionContextFrom(ctx).RunRecord, result)
@@ -1175,7 +1176,7 @@ func (rt *Runtime) applyWorkerEvidenceToResult(ctx context.Context, client *http
 		result["app_change_packages"] = packages
 	}
 	if mirrorTerminalPackages && rt != nil {
-		if stringMapValue(result, "profile") == AgentProfileVSuper && vSuperDelegateIncomplete(evidence, packages) {
+		if stringMapValue(result, "profile") == agentprofile.VSuper && vSuperDelegateIncomplete(evidence, packages) {
 			result["status"] = "worker_run_incomplete"
 			result["completion_blocker"] = "vsuper_completed_without_app_change_package_or_worker_update"
 			result["terminal_error"] = "worker vsuper completed after child coordination without publish_app_change_package or update_coagent evidence"
@@ -1215,7 +1216,7 @@ func (rt *Runtime) mirrorWorkerSubmitUpdates(ctx context.Context, superRec *type
 		if sourceAgentID == "" {
 			sourceAgentID = stringMapValue(result, "agent_id")
 		}
-		role := firstNonEmpty(stringMapValue(result, "profile"), AgentProfileVSuper)
+		role := firstNonEmpty(stringMapValue(result, "profile"), agentprofile.VSuper)
 		packet := normalizeCoagentSourcePacketPayload(item.Args.CoagentSourcePacketPayload)
 		packet.Notes = trimDedupeNonEmpty(append(packet.Notes,
 			"mirrored_from=worker_update_coagent",
@@ -1249,7 +1250,7 @@ func (rt *Runtime) mirrorWorkerSubmitUpdates(ctx context.Context, superRec *type
 			FromRunID:    superRec.RunID,
 			ToAgentID:    update.TargetAgentID,
 			TrajectoryID: update.TrajectoryID,
-			Role:         AgentProfileSuper,
+			Role:         agentprofile.Super,
 			Content:      update.Content,
 			Timestamp:    update.CreatedAt,
 		}
@@ -1389,7 +1390,7 @@ func newCancelWorkerDelegationTool(rt *Runtime) Tool {
 			"reason":             map[string]any{"type": "string"},
 		}, []string{"worker_sandbox_url"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != AgentProfileSuper {
+			if profile := toolregistry.ExecutionContextFrom(ctx).Profile; profile != agentprofile.Super {
 				return "", fmt.Errorf("cancel_worker_delegation is only available to super agents")
 			}
 			var in args
@@ -1467,7 +1468,7 @@ func prepareRemoteWorkerRepoBootstrap(ctx context.Context, cwd, workerSandboxURL
 		return remoteWorkerRepoBootstrap{}, nil
 	}
 	profile = canonicalAgentProfile(profile)
-	if profile != AgentProfileVSuper && profile != AgentProfileCoSuper {
+	if profile != agentprofile.VSuper && profile != agentprofile.CoSuper {
 		return remoteWorkerRepoBootstrap{}, nil
 	}
 	gitRemoteURL, gitBaseSHA := remoteWorkerRepoBootstrapSourceFromGit(ctx, cwd)
@@ -2130,7 +2131,7 @@ func vSuperDelegateIncomplete(evidence workerRunEvidence, packages []map[string]
 }
 
 func delegateRequiresAppChangePackage(profile, objective string) bool {
-	if canonicalAgentProfile(profile) != AgentProfileVSuper {
+	if canonicalAgentProfile(profile) != agentprofile.VSuper {
 		return false
 	}
 	objective = strings.ToLower(objective)

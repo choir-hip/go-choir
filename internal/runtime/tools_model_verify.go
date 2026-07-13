@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type verifyModelCapabilityArgs struct {
@@ -61,7 +62,7 @@ func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapa
 	}
 	role := normalizeModelPolicyRole(nonEmpty(in.Role, toolregistry.ExecutionContextFrom(ctx).Role))
 	if role == "" {
-		role = AgentProfileSuper
+		role = agentprofile.Super
 	}
 	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 	selection, policySource, err := rt.resolveToolModelSelection(ctx, ownerID, role, in)

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const contentExtractionAdapterVersion = 1
@@ -141,7 +142,7 @@ func extractPDFDocument(ctx context.Context, sourceName string, raw []byte) cont
 func extractDOCXDocument(ctx context.Context, sourceName string, raw []byte) contentExtraction {
 	extraction := contentExtraction{
 		MediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		AppHint:   AgentProfileTexture,
+		AppHint:   agentprofile.Texture,
 		Adapter:   "docx_pandoc_markdown",
 		Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
 	}

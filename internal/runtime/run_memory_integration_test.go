@@ -16,6 +16,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestRuntimeRunMemoryThresholdCompaction(t *testing.T) {
@@ -220,7 +221,7 @@ func TestChildRunUsesRunMemory(t *testing.T) {
 	waitForRunTerminalState(t, rt, parent.RunID, "user-alice", 5*time.Second)
 
 	child, err := rt.StartCoagentRun(context.Background(), parent.RunID, "child objective", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileCoSuper,
+		runMetadataAgentProfile: agentprofile.CoSuper,
 	})
 	if err != nil {
 		t.Fatalf("start child: %v", err)
@@ -414,7 +415,7 @@ func (p *runtimeOverflowProvider) CallWithTools(ctx context.Context, req provide
 	}, nil
 }
 
-func testRunMemoryRegistry(t *testing.T) *ToolRegistry {
+func testRunMemoryRegistry(t *testing.T) *toolregistry.ToolRegistry {
 	t.Helper()
 	registry := toolregistry.NewToolRegistry()
 	if err := registry.Register(Tool{

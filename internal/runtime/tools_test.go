@@ -17,17 +17,18 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestNormalizeDelegateTargetValueAllowsSingleNoisyAllowedTarget(t *testing.T) {
-	allowed := []string{AgentProfileResearcher}
-	if got := normalizeDelegateTargetValue("researcher</parameter> </invoke>", allowed); got != AgentProfileResearcher {
-		t.Fatalf("noisy researcher target = %q, want %q", got, AgentProfileResearcher)
+	allowed := []string{agentprofile.Researcher}
+	if got := normalizeDelegateTargetValue("researcher</parameter> </invoke>", allowed); got != agentprofile.Researcher {
+		t.Fatalf("noisy researcher target = %q, want %q", got, agentprofile.Researcher)
 	}
-	if got := normalizeDelegateTargetValue("researcher and texture</invoke>", []string{AgentProfileResearcher, AgentProfileTexture}); got == AgentProfileResearcher || got == AgentProfileTexture {
+	if got := normalizeDelegateTargetValue("researcher and texture</invoke>", []string{agentprofile.Researcher, agentprofile.Texture}); got == agentprofile.Researcher || got == agentprofile.Texture {
 		t.Fatalf("ambiguous noisy target recovered as %q, want unrecovered value", got)
 	}
-	if got := normalizeDelegateTargetValue("researcher please", allowed); got == AgentProfileResearcher {
+	if got := normalizeDelegateTargetValue("researcher please", allowed); got == agentprofile.Researcher {
 		t.Fatalf("plain non-enum text recovered as %q, want allowlist rejection later", got)
 	}
 }
@@ -300,7 +301,7 @@ func TestMustNewToolRegistryPanics(t *testing.T) {
 		}
 	}()
 
-	MustNewToolRegistry(Tool{Name: ""})
+	toolregistry.MustNewToolRegistry(Tool{Name: ""})
 }
 
 func TestToolRegistryToolsSorted(t *testing.T) {
@@ -451,8 +452,8 @@ func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 	run := &types.RunRecord{
 		RunID:        "run-texture",
 		OwnerID:      "owner-1",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 	}
 	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
 		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1"}`)},
@@ -492,8 +493,8 @@ func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
 	run := &types.RunRecord{
 		RunID:        "run-texture",
 		OwnerID:      "owner-1",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 	}
 	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
 		{ID: "call-edit-1", Name: "patch_texture", Arguments: json.RawMessage(`{"doc_id":"doc-1","content":"bad"}`)},
@@ -537,8 +538,8 @@ func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T
 	run := &types.RunRecord{
 		RunID:        "run-texture",
 		OwnerID:      "owner-1",
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 	}
 	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), registry, []types.ToolCall{
 		{ID: "research-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","channel_id":"doc-1","objective":"research current scores"}`)},
@@ -552,13 +553,13 @@ func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T
 	if len(results) != 3 {
 		t.Fatalf("results = %d, want 3", len(results))
 	}
-	if results[0].IsError || results[0].Output != AgentProfileResearcher {
+	if results[0].IsError || results[0].Output != agentprofile.Researcher {
 		t.Fatalf("first spawn result = %#v, want success", results[0])
 	}
 	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate texture researcher spawn") {
 		t.Fatalf("second spawn result = %#v, want non-error duplicate notice", results[1])
 	}
-	if results[2].IsError || results[2].Output != AgentProfileResearcher {
+	if results[2].IsError || results[2].Output != agentprofile.Researcher {
 		t.Fatalf("third spawn result = %#v, want distinct-objective success", results[2])
 	}
 }
@@ -682,7 +683,7 @@ func TestShouldRequireResearchUpdateAfterResearchToolBatches(t *testing.T) {
 	rec := &types.RunRecord{
 		RunID:        "research-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
 	}
 	toolCtx := toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
 	if !shouldRequireResearchUpdateAfterTool(toolCtx, rt) {
@@ -691,7 +692,7 @@ func TestShouldRequireResearchUpdateAfterResearchToolBatches(t *testing.T) {
 	superRec := &types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}
 	if shouldRequireResearchUpdateAfterTool(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRec)), rt) {
 		t.Fatalf("super search should not require update_coagent")
@@ -772,11 +773,11 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	if _, ok := researcherRegistry.Lookup("source_search"); !ok {
 		t.Fatalf("researcher missing source_search")
 	}
-	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	if _, ok := textureRegistry.Lookup("source_search"); ok {
 		t.Fatalf("texture should not have source_search")
 	}
@@ -784,8 +785,8 @@ func TestResearcherSourceSearchCallsSourceServiceAPI(t *testing.T) {
 	rec := &types.RunRecord{
 		RunID:        "researcher-source-search-run",
 		OwnerID:      "owner-source-search",
-		AgentProfile: AgentProfileResearcher,
-		AgentRole:    AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
+		AgentRole:    agentprofile.Researcher,
 	}
 	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), "source_search", json.RawMessage(`{
 		"query": "rates",
@@ -868,11 +869,11 @@ func TestResearcherSourceSearchWithoutConfiguredAPIIsUnavailable(t *testing.T) {
 	if err := rt.InstallDefaultAgentTools(t.TempDir()); err != nil {
 		t.Fatalf("install tools: %v", err)
 	}
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	_, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "researcher-source-search-unconfigured",
 		OwnerID:      "owner-source-search",
-		AgentProfile: AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
 	})), "source_search", json.RawMessage(`{"query":"rates"}`))
 	if err == nil || !strings.Contains(err.Error(), "source search client not configured") {
 		t.Fatalf("source_search err = %v, want source search client not configured", err)
@@ -931,14 +932,14 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 		AgentID:      "texture:" + docID,
 		ChannelID:    docID,
 		OwnerID:      ownerID,
-		AgentProfile: AgentProfileTexture,
-		AgentRole:    AgentProfileTexture,
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
 		State:        types.RunCompleted,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileTexture,
-			runMetadataAgentRole:    AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
 			runMetadataAgentID:      "texture:" + docID,
 			runMetadataChannelID:    docID,
 		},
@@ -952,17 +953,17 @@ func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
 		ChannelID:        docID,
 		RequestedByRunID: parent.RunID,
 		OwnerID:          ownerID,
-		AgentProfile:     AgentProfileResearcher,
-		AgentRole:        AgentProfileResearcher,
+		AgentProfile:     agentprofile.Researcher,
+		AgentRole:        agentprofile.Researcher,
 		State:            types.RunFailed,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileResearcher,
-			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentProfile: agentprofile.Researcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
 			runMetadataAgentID:      "researcher:fallback",
 			runMetadataChannelID:    docID,
-			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_profile":  agentprofile.Texture,
 			"requested_by_agent_id": "texture:" + docID,
 		},
 	}
@@ -1068,17 +1069,17 @@ func TestResearcherCompletionSynthesizesCheckpointAfterSavedEvidence(t *testing.
 		ChannelID:        docID,
 		RequestedByRunID: "run-texture-parent",
 		OwnerID:          ownerID,
-		AgentProfile:     AgentProfileResearcher,
-		AgentRole:        AgentProfileResearcher,
+		AgentProfile:     agentprofile.Researcher,
+		AgentRole:        agentprofile.Researcher,
 		State:            types.RunCompleted,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileResearcher,
-			runMetadataAgentRole:    AgentProfileResearcher,
+			runMetadataAgentProfile: agentprofile.Researcher,
+			runMetadataAgentRole:    agentprofile.Researcher,
 			runMetadataAgentID:      "researcher:completion-fallback",
 			runMetadataChannelID:    docID,
-			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_profile":  agentprofile.Texture,
 			"requested_by_agent_id": "texture:" + docID,
 		},
 	}
@@ -1307,7 +1308,7 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "conductor-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileConductor,
+		AgentProfile: agentprofile.Conductor,
 	}))
 	calls := []types.ToolCall{
 		{ID: "research", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"researcher","objective":"research"}`)},
@@ -1316,13 +1317,13 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 
 	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
-	if len(executed) != 1 || executed[0] != AgentProfileTexture {
+	if len(executed) != 1 || executed[0] != agentprofile.Texture {
 		t.Fatalf("executed = %#v, want only texture", executed)
 	}
 	if results[0].IsError || !strings.Contains(results[0].Output, "texture owns downstream") {
 		t.Fatalf("research spawn result = %#v, want non-error skipped downstream worker notice", results[0])
 	}
-	if results[1].IsError || results[1].Output != AgentProfileTexture {
+	if results[1].IsError || results[1].Output != agentprofile.Texture {
 		t.Fatalf("texture spawn result = %#v, want success", results[1])
 	}
 }
@@ -1352,7 +1353,7 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "vsuper-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
 	}))
 	calls := []types.ToolCall{
 		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
@@ -1406,7 +1407,7 @@ func TestExecuteToolsSuperSkipsDuplicateDelegateWorkerVM(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}))
 	args := json.RawMessage(`{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","objective":"publish exactly one package","profile":"vsuper"}`)
 	results := toolregistry.ExecuteToolBatch(ctx, registry, []types.ToolCall{
@@ -1446,7 +1447,7 @@ func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 	}))
 	args := json.RawMessage(`{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","objective":"run harmless worker proof","profile":"vsuper"}`)
 	results := toolregistry.ExecuteToolBatch(ctx, registry, []types.ToolCall{
@@ -1472,7 +1473,7 @@ func TestExplicitAppChangePackageConstraintsFromRunPrompt(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "worker-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
 		Prompt:       `Use app_id "human-proof-chyron-chyron-seq-123", visibility "unlisted", and include marker "chyron-seq-123".`,
 	}))
 	if got := explicitAppChangePackageAppID(ctx); got != "human-proof-chyron-chyron-seq-123" {
@@ -1508,7 +1509,7 @@ func TestDelegateRequiresAppChangePackageHonorsExplicitNegativeInstruction(t *te
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := delegateRequiresAppChangePackage(AgentProfileVSuper, tt.objective); got != tt.want {
+			if got := delegateRequiresAppChangePackage(agentprofile.VSuper, tt.objective); got != tt.want {
 				t.Fatalf("delegateRequiresAppChangePackage() = %v, want %v", got, tt.want)
 			}
 		})
@@ -1533,7 +1534,7 @@ func TestExecuteToolsCoSuperSkipsDuplicateAppChangePackagePublish(t *testing.T) 
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "cosuper-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileCoSuper,
+		AgentProfile: agentprofile.CoSuper,
 	}))
 	calls := []types.ToolCall{
 		{ID: "export-1", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
@@ -1574,7 +1575,7 @@ func TestExecuteToolsCoSuperSkipsDuplicateBashCommand(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "cosuper-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileCoSuper,
+		AgentProfile: agentprofile.CoSuper,
 	}))
 	calls := []types.ToolCall{
 		{ID: "bash-1", Name: "bash", Arguments: json.RawMessage(`{"command":"go test ./internal/platform","timeout_ms":60000}`)},
@@ -1684,7 +1685,7 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "researcher-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileResearcher,
+		AgentProfile: agentprofile.Researcher,
 	}))
 	calls := []types.ToolCall{
 		{ID: "search-1", Name: "web_search", Arguments: json.RawMessage(`{"query":"ai news may 2026"}`)},
@@ -1728,7 +1729,7 @@ func TestExecuteToolsDoesNotHiddenChainWorkerDelegation(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 		Prompt:       "Full sweep objective goes here.",
 	}))
 	var emitted []string
@@ -1788,7 +1789,7 @@ func TestExecuteToolsDoesNotPropagateHiddenWorkerDelegationBlocker(t *testing.T)
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "super-run",
 		OwnerID:      "owner",
-		AgentProfile: AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
 		Prompt:       "Publish exactly one AppChangePackage.",
 	}))
 	results := toolregistry.ExecuteToolBatch(ctx, registry, []types.ToolCall{
@@ -1831,7 +1832,7 @@ func TestWorkerRunEventSummaryExposesSpawnAndChannelEvidence(t *testing.T) {
 		{Seq: 2, Kind: types.EventChannelMessage, Payload: channelPayload},
 	}
 
-	if got := collectWorkerSpawnProfiles(events); len(got) != 1 || got[0] != AgentProfileCoSuper {
+	if got := collectWorkerSpawnProfiles(events); len(got) != 1 || got[0] != agentprofile.CoSuper {
 		t.Fatalf("spawned profiles = %#v, want co-super", got)
 	}
 	if got := countWorkerChannelMessages(events); got != 1 {

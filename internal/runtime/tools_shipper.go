@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type publishPackageHumanProofInput struct {
@@ -22,7 +23,7 @@ type publishPackageHumanProofInput struct {
 	BehaviorContract  string
 }
 
-func RegisterShipperTools(registry *ToolRegistry, rt *Runtime, cwd string) error {
+func RegisterShipperTools(registry *toolregistry.ToolRegistry, rt *Runtime, cwd string) error {
 	for _, tool := range []Tool{
 		newPublishAppChangePackageTool(rt, cwd),
 	} {
@@ -89,10 +90,10 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 		}, []string{"repo_path", "base_sha"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			profile := toolregistry.ExecutionContextFrom(ctx).Profile
-			if profile != AgentProfileSuper && profile != AgentProfileCoSuper && profile != AgentProfileVSuper {
+			if profile != agentprofile.Super && profile != agentprofile.CoSuper && profile != agentprofile.VSuper {
 				return "", fmt.Errorf("publish_app_change_package is only available to super, co-super, and vsuper agents")
 			}
-			if profile == AgentProfileCoSuper {
+			if profile == agentprofile.CoSuper {
 				if rec := toolregistry.ExecutionContextFrom(ctx).RunRecord; rec != nil {
 					if slot := normalizeVSuperCoSuperSlot(metadataStringValue(rec.Metadata, runMetadataCoSuperSlot)); slot == "verifier" {
 						return "", fmt.Errorf("verifier co-super cannot publish_app_change_package; verifiers may write scratch tests/evidence and must report pass/fail to the implementation worker or vsuper")
@@ -107,7 +108,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				return "", fmt.Errorf("decode publish_app_change_package args: %w", err)
 			}
 			runID := toolregistry.ExecutionContextFrom(ctx).RunID
-			if profile == AgentProfileVSuper && rt != nil && runID != "" {
+			if profile == agentprofile.VSuper && rt != nil && runID != "" {
 				if reusedPackage, found, err := rt.latestTrajectoryCoSuperAppChangePackage(ctx, toolregistry.ExecutionContextFrom(ctx).RunRecord); err != nil {
 					return "", err
 				} else if found {

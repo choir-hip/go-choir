@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // textureAgentRevisionRequest is the JSON payload for
@@ -409,8 +410,8 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 	// so they survive into appagent revision metadata.
 	runMetadata := map[string]any{
 		"type":                 textureAgentRevisionTaskType,
-		"agent_profile":        AgentProfileTexture,
-		"agent_role":           AgentProfileTexture,
+		"agent_profile":        agentprofile.Texture,
+		"agent_role":           agentprofile.Texture,
 		"agent_id":             currentTextureAgentID(doc.DocID),
 		"channel_id":           doc.DocID,
 		"doc_id":               doc.DocID,
@@ -688,7 +689,7 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 		b.WriteString(outline)
 	}
 	hardRequirements := textureHardRequirementHints(metadataString(metadata, "seed_prompt"), req.Prompt, current.Content)
-	hasSuperDelivery := textureWorkerMessagesContainRole(recentWorkerMessages, AgentProfileSuper)
+	hasSuperDelivery := textureWorkerMessagesContainRole(recentWorkerMessages, agentprofile.Super)
 	if !hasSuperDelivery {
 		hardRequirements = textureFilterFinalCommandEvidenceRequirements(hardRequirements)
 		if strings.Contains(metadataString(metadata, "seed_prompt")+req.Prompt+current.Content, "[CMD]") {
@@ -876,7 +877,7 @@ func (rt *Runtime) recentWorkerMessages(ctx context.Context, ownerID, channelID 
 			continue
 		}
 		switch runProfiles[strings.TrimSpace(message.FromRunID)] {
-		case AgentProfileResearcher, AgentProfileSuper, AgentProfileCoSuper:
+		case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
 			filtered = append(filtered, message)
 		}
 	}

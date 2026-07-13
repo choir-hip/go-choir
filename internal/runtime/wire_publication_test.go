@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const retiredUniversalWireEditionSourcePath = "universal-wire/Wire.texture"
@@ -32,7 +33,7 @@ func TestWirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition(t *testing.
 		TrajectoryID:         "traj-publish-slice",
 		Objective:            "resolve wire story candidate",
 		Reason:               "processor opened a wire story Texture route",
-		AuthorityProfile:     AgentProfileTexture,
+		AuthorityProfile:     agentprofile.Texture,
 		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint("traj-publish-slice", story.DocID),
 		CreatedByRunID:       "run-publish-slice",
 		Details:              map[string]any{"kind": "wire_story_resolution", "doc_id": story.DocID},

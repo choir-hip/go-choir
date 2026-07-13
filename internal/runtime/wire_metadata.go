@@ -1,5 +1,7 @@
 package runtime
 
+import "github.com/yusefmosiah/go-choir/internal/agentprofile"
+
 const (
 	textureRevisionRoleInput     = "input"
 	textureRevisionRoleCanonical = "canonical"
@@ -15,9 +17,9 @@ const (
 
 func textureInputOriginForCaller(profile string) string {
 	switch canonicalAgentProfile(profile) {
-	case AgentProfileProcessor:
+	case agentprofile.Processor:
 		return textureInputOriginProcessorHandoff
-	case AgentProfileReconciler:
+	case agentprofile.Reconciler:
 		return textureInputOriginReconcilerHandoff
 	default:
 		return ""

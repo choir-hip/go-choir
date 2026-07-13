@@ -9,6 +9,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type fakeRunSubmissionStore struct {
@@ -44,8 +45,8 @@ func TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt(t *testing.T) {
 		AgentID:   "texture:doc-1",
 		OwnerID:   "user-alice",
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: "doc-1",
 		CreatedAt: createdAt,
 		UpdatedAt: createdAt,

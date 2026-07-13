@@ -2,14 +2,9 @@ package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/toolregistry"
 
-// Re-exported from internal/toolregistry for backward compatibility.
-// New code should import internal/toolregistry directly.
-type (
-	Tool         = toolregistry.Tool
-	ToolRegistry = toolregistry.ToolRegistry
-)
+type Tool = toolregistry.Tool
 
-var MustNewToolRegistry = toolregistry.MustNewToolRegistry
+
 
 // --- Schema helpers (delegated to internal/toolregistry) ---
 
@@ -28,7 +23,7 @@ func cloneSchemaMap(in map[string]any) map[string]any {
 // loop by appending the tool catalog to the base system prompt. This gives
 // the LLM visibility into available tools without requiring separate tool
 // schema negotiation on each turn.
-func buildSystemPromptWithTools(basePrompt string, registry *ToolRegistry) string {
+func buildSystemPromptWithTools(basePrompt string, registry *toolregistry.ToolRegistry) string {
 	if registry == nil || registry.Size() == 0 {
 		return basePrompt
 	}

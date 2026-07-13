@@ -11,6 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/runtime/promptspec"
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 //go:embed prompt_defaults/*.yaml
@@ -33,14 +34,14 @@ func NewPromptStore(root string) *PromptStore {
 
 func promptRoles() []string {
 	return []string{
-		AgentProfileConductor,
-		AgentProfileTexture,
-		AgentProfileResearcher,
-		AgentProfileProcessor,
-		AgentProfileReconciler,
-		AgentProfileSuper,
-		AgentProfileCoSuper,
-		AgentProfileVSuper,
+		agentprofile.Conductor,
+		agentprofile.Texture,
+		agentprofile.Researcher,
+		agentprofile.Processor,
+		agentprofile.Reconciler,
+		agentprofile.Super,
+		agentprofile.CoSuper,
+		agentprofile.VSuper,
 	}
 }
 
@@ -176,7 +177,7 @@ func (ps *PromptStore) ensureDefaults() error {
 	for _, name := range promptDefaultFiles() {
 		path := ps.defaultPromptPath(name)
 		var content []byte
-		if name == AgentProfileTexture {
+		if name == agentprofile.Texture {
 			content = []byte(textureprompts.DefaultSystemPrompt() + "\n")
 		} else {
 			raw, readErr := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("prompt_defaults", name+".yaml")))

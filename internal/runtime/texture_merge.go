@@ -16,6 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 var textureMergePreviewCommentRE = regexp.MustCompile(`(?is)\n*\s*<!--\s*Texture merge preview provenance\b.*?-->\s*`)
@@ -156,7 +157,7 @@ func (rt *Runtime) callTextureSemanticMergeModel(ctx context.Context, ownerID st
 	if err != nil {
 		policySource = "policy_error:" + err.Error()
 	}
-	selection := policy.Resolve(AgentProfileTexture)
+	selection := policy.Resolve(agentprofile.Texture)
 	if strings.TrimSpace(selection.Provider) == "" || strings.TrimSpace(selection.Model) == "" {
 		return textureModelSemanticMergeResult{}, nil, fmt.Errorf("texture model policy did not resolve provider/model")
 	}

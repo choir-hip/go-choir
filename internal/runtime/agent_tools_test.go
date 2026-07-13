@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -23,6 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func toolSchemaStringEnum(schema map[string]any, property string) []string {
@@ -68,14 +70,14 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 		t.Fatalf("install default agent tools: %v", err)
 	}
 
-	super := rt.ToolRegistryForProfile(AgentProfileSuper)
-	coSuper := rt.ToolRegistryForProfile(AgentProfileCoSuper)
-	vSuper := rt.ToolRegistryForProfile(AgentProfileVSuper)
-	conductor := rt.ToolRegistryForProfile(AgentProfileConductor)
-	researcher := rt.ToolRegistryForProfile(AgentProfileResearcher)
-	texture := rt.ToolRegistryForProfile(AgentProfileTexture)
-	processor := rt.ToolRegistryForProfile(AgentProfileProcessor)
-	reconciler := rt.ToolRegistryForProfile(AgentProfileReconciler)
+	super := rt.ToolRegistryForProfile(agentprofile.Super)
+	coSuper := rt.ToolRegistryForProfile(agentprofile.CoSuper)
+	vSuper := rt.ToolRegistryForProfile(agentprofile.VSuper)
+	conductor := rt.ToolRegistryForProfile(agentprofile.Conductor)
+	researcher := rt.ToolRegistryForProfile(agentprofile.Researcher)
+	texture := rt.ToolRegistryForProfile(agentprofile.Texture)
+	processor := rt.ToolRegistryForProfile(agentprofile.Processor)
+	reconciler := rt.ToolRegistryForProfile(agentprofile.Reconciler)
 
 	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "product_api_request", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
 		if _, ok := super.Lookup(name); !ok {
@@ -164,30 +166,30 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	}
 	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "update_coagent", "cancel_agent", "save_evidence", "record_wire_processor_decision"} {
 		if _, ok := processor.Lookup(name); !ok {
-			t.Fatalf("%s missing tool %q", AgentProfileProcessor, name)
+			t.Fatalf("%s missing tool %q", agentprofile.Processor, name)
 		}
 	}
 	for _, forbidden := range []string{"bash", "write_file", "edit_file", "patch_texture", "rewrite_texture", "edit_texture", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
 		if _, ok := processor.Lookup(forbidden); ok {
-			t.Fatalf("%s should not have %s", AgentProfileProcessor, forbidden)
+			t.Fatalf("%s should not have %s", agentprofile.Processor, forbidden)
 		}
 	}
 	for _, name := range []string{"read_file", "web_search", "source_search", "import_document_content", "list_content_item_selectors", "read_content_item_selector", "spawn_agent", "update_coagent", "cancel_agent", "save_evidence"} {
 		if _, ok := reconciler.Lookup(name); !ok {
-			t.Fatalf("%s missing tool %q", AgentProfileReconciler, name)
+			t.Fatalf("%s missing tool %q", agentprofile.Reconciler, name)
 		}
 	}
 	if _, ok := reconciler.Lookup("record_wire_processor_decision"); ok {
-		t.Fatalf("%s should not have record_wire_processor_decision", AgentProfileReconciler)
+		t.Fatalf("%s should not have record_wire_processor_decision", agentprofile.Reconciler)
 	}
 	for _, forbidden := range []string{"bash", "write_file", "edit_file", "patch_texture", "rewrite_texture", "edit_texture", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "delegate_worker_vm"} {
 		if _, ok := reconciler.Lookup(forbidden); ok {
-			t.Fatalf("%s should not have %s", AgentProfileReconciler, forbidden)
+			t.Fatalf("%s should not have %s", agentprofile.Reconciler, forbidden)
 		}
 	}
-	for profile, registry := range map[string]*ToolRegistry{
-		AgentProfileProcessor:  processor,
-		AgentProfileReconciler: reconciler,
+	for profile, registry := range map[string]*toolregistry.ToolRegistry{
+		agentprofile.Processor:  processor,
+		agentprofile.Reconciler: reconciler,
 	} {
 		for _, name := range []string{"spawn_agent"} {
 			if _, ok := registry.Lookup(name); !ok {
@@ -198,7 +200,7 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s missing spawn_agent", profile)
 		}
-		if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileTexture {
+		if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != agentprofile.Texture {
 			t.Fatalf("%s spawn_agent role enum = %#v, want only texture", profile, got)
 		}
 	}
@@ -234,15 +236,15 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 		"submit_" + "coagent_update",
 	}
 	for _, oldName := range retiredToolNames {
-		for profile, registry := range map[string]*ToolRegistry{
-			AgentProfileSuper:      super,
-			AgentProfileCoSuper:    coSuper,
-			AgentProfileVSuper:     vSuper,
-			AgentProfileConductor:  conductor,
-			AgentProfileResearcher: researcher,
-			AgentProfileProcessor:  processor,
-			AgentProfileReconciler: reconciler,
-			AgentProfileTexture:    texture,
+		for profile, registry := range map[string]*toolregistry.ToolRegistry{
+			agentprofile.Super:      super,
+			agentprofile.CoSuper:    coSuper,
+			agentprofile.VSuper:     vSuper,
+			agentprofile.Conductor:  conductor,
+			agentprofile.Researcher: researcher,
+			agentprofile.Processor:  processor,
+			agentprofile.Reconciler: reconciler,
+			agentprofile.Texture:    texture,
 		} {
 			if _, ok := registry.Lookup(oldName); ok {
 				t.Fatalf("%s should not expose retired tool %s", profile, oldName)
@@ -282,13 +284,13 @@ func TestForegroundSuperMutationGuardBlocksWritableTools(t *testing.T) {
 	t.Setenv("RUNTIME_SUPER_FOREGROUND_MUTATION_MODE", "worker_only")
 
 	superRun, err := rt.StartRunWithMetadata(context.Background(), "try foreground mutation", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 	})
 	if err != nil {
 		t.Fatalf("start super run: %v", err)
 	}
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	if _, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "bash", json.RawMessage(`{"command":"touch should-not-exist"}`)); err == nil || !strings.Contains(err.Error(), "blocked for foreground super") {
 		t.Fatalf("super bash error = %v, want foreground mutation guard", err)
 	}
@@ -297,14 +299,14 @@ func TestForegroundSuperMutationGuardBlocksWritableTools(t *testing.T) {
 	}
 
 	workerRun, err := rt.StartRunWithMetadata(context.Background(), "worker mutation", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileCoSuper,
-		runMetadataAgentRole:    AgentProfileCoSuper,
+		runMetadataAgentProfile: agentprofile.CoSuper,
+		runMetadataAgentRole:    agentprofile.CoSuper,
 		runMetadataToolCWD:      cwd,
 	})
 	if err != nil {
 		t.Fatalf("start worker run: %v", err)
 	}
-	workerRegistry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
+	workerRegistry := rt.ToolRegistryForProfile(agentprofile.CoSuper)
 	if _, err := workerRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(workerRun)), "write_file", json.RawMessage(`{"path":"worker-ok.txt","content":"allowed"}`)); err != nil {
 		t.Fatalf("co-super write_file should be allowed: %v", err)
 	}
@@ -317,11 +319,11 @@ func TestPersistentSuperInboxBashRequiresCoagentUpdate(t *testing.T) {
 		RunID:        "run-super-bash",
 		AgentID:      persistentSuperAgentID(ownerID),
 		OwnerID:      ownerID,
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 			runMetadataAgentID:      persistentSuperAgentID(ownerID),
 			"request_source":        "update_coagent",
 		},
@@ -350,15 +352,15 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	}
 
 	parent, err := rt.StartRunWithMetadata(context.Background(), "coordinate work", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 	})
 	if err != nil {
 		t.Fatalf("submit parent task: %v", err)
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	spawnRaw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(parent)), "spawn_agent", json.RawMessage(`{
 		"objective":"research the codebase and report back",
 		"role":"researcher",
@@ -376,8 +378,8 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	if err := json.Unmarshal([]byte(spawnRaw), &spawnResp); err != nil {
 		t.Fatalf("decode spawn response: %v", err)
 	}
-	if spawnResp.Profile != AgentProfileResearcher {
-		t.Fatalf("spawned profile = %q, want %q", spawnResp.Profile, AgentProfileResearcher)
+	if spawnResp.Profile != agentprofile.Researcher {
+		t.Fatalf("spawned profile = %q, want %q", spawnResp.Profile, agentprofile.Researcher)
 	}
 	if spawnResp.ChannelID != "shared-work" {
 		t.Fatalf("spawned channel_id = %q, want shared-work", spawnResp.ChannelID)
@@ -387,8 +389,8 @@ func TestCoagentToolsSupportAddressedCastAcrossProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get child task: %v", err)
 	}
-	if got := child.Metadata[runMetadataAgentProfile]; got != AgentProfileResearcher {
-		t.Fatalf("child agent_profile = %v, want %q", got, AgentProfileResearcher)
+	if got := child.Metadata[runMetadataAgentProfile]; got != agentprofile.Researcher {
+		t.Fatalf("child agent_profile = %v, want %q", got, agentprofile.Researcher)
 	}
 	if child.ChannelID != "shared-work" {
 		t.Fatalf("child channel_id = %q, want shared-work", child.ChannelID)
@@ -450,8 +452,8 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 		RunID:        "super-skip-level",
 		AgentID:      "agent-super",
 		ChannelID:    "skip-level-channel",
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 		OwnerID:      "user-alice",
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
@@ -459,8 +461,8 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 		},
 	}
 	vsuperRun := types.RunRecord{
@@ -468,8 +470,8 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 		AgentID:      "agent-vsuper-skip",
 		ChannelID:    "skip-level-channel",
 		TrajectoryID: "traj-skip-level",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
+		AgentRole:    agentprofile.VSuper,
 		OwnerID:      "user-alice",
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
@@ -477,8 +479,8 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataAgentProfile: agentprofile.VSuper,
+			runMetadataAgentRole:    agentprofile.VSuper,
 			runMetadataTrajectoryID: "traj-skip-level",
 		},
 	}
@@ -488,8 +490,8 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 		ChannelID:        "skip-level-channel",
 		RequestedByRunID: "candidate-world-spawner",
 		TrajectoryID:     vsuperRun.TrajectoryID,
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          "user-alice",
 		SandboxID:        "sandbox-test",
 		State:            types.RunRunning,
@@ -497,15 +499,15 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataTrajectoryID: vsuperRun.TrajectoryID,
 			runMetadataCoSuperSlot:  "implementation",
 		},
 	}
 	for _, agent := range []types.AgentRecord{
-		{AgentID: vsuperRun.AgentID, OwnerID: "user-alice", SandboxID: "sandbox-test", Profile: AgentProfileVSuper, Role: AgentProfileVSuper, ChannelID: "skip-level-channel", CreatedAt: now, UpdatedAt: now},
-		{AgentID: coRun.AgentID, OwnerID: "user-alice", SandboxID: "sandbox-test", Profile: AgentProfileCoSuper, Role: AgentProfileCoSuper, ChannelID: "skip-level-channel", CreatedAt: now, UpdatedAt: now},
+		{AgentID: vsuperRun.AgentID, OwnerID: "user-alice", SandboxID: "sandbox-test", Profile: agentprofile.VSuper, Role: agentprofile.VSuper, ChannelID: "skip-level-channel", CreatedAt: now, UpdatedAt: now},
+		{AgentID: coRun.AgentID, OwnerID: "user-alice", SandboxID: "sandbox-test", Profile: agentprofile.CoSuper, Role: agentprofile.CoSuper, ChannelID: "skip-level-channel", CreatedAt: now, UpdatedAt: now},
 	} {
 		if err := s.UpsertAgent(ctx, agent); err != nil {
 			t.Fatalf("upsert agent: %v", err)
@@ -521,7 +523,7 @@ func TestSuperSkipLevelCastRequiresCopiedVSuper(t *testing.T) {
 	} else if !claimed {
 		t.Fatalf("claim co-super slot: got claimed=false, want true")
 	}
-	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.Super)
 	toolCtx := toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&superRun))
 	_, err := registry.Execute(toolCtx, "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
@@ -571,8 +573,8 @@ func TestChannelCastDoesNotCreateWakeDelivery(t *testing.T) {
 	t.Parallel()
 	rt, s, _ := testRuntimeWithTempCWD(t)
 	parent, err := rt.StartRunWithMetadata(context.Background(), "coordinate repeated work", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:doc-repeat",
 		runMetadataTrajectoryID: "trajectory-repeat",
 	})
@@ -610,7 +612,7 @@ func TestRedirectWorkerDelegationIsNotInstalled(t *testing.T) {
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
 		t.Fatalf("install default tools: %v", err)
 	}
-	if _, ok := rt.ToolRegistryForProfile(AgentProfileSuper).Lookup("redirect_worker_delegation"); ok {
+	if _, ok := rt.ToolRegistryForProfile(agentprofile.Super).Lookup("redirect_worker_delegation"); ok {
 		t.Fatalf("redirect_worker_delegation should be deleted, not advertised as a failing tool")
 	}
 }
@@ -622,8 +624,8 @@ func TestRequestSuperExecutionDedupesSameTextureRun(t *testing.T) {
 		t.Fatalf("install default tools: %v", err)
 	}
 	textureRun, err := rt.StartRunWithMetadata(context.Background(), "request privileged work", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:doc-super-dedupe",
 		runMetadataChannelID:    "doc-super-dedupe",
 		runMetadataTrajectoryID: "trace-super-dedupe",
@@ -631,7 +633,7 @@ func TestRequestSuperExecutionDedupesSameTextureRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start texture run: %v", err)
 	}
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	rawArgs := json.RawMessage(`{"objective":"Run exactly one bounded candidate-world probe.","channel_id":"doc-super-dedupe","model":"gpt-5-codex"}`)
 	firstRaw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", rawArgs)
 	if err != nil {
@@ -687,8 +689,8 @@ func TestRequestSuperExecutionDedupesDifferentObjectivesInSameTextureRun(t *test
 		t.Fatalf("install default tools: %v", err)
 	}
 	textureRun, err := rt.StartRunWithMetadata(context.Background(), "request one privileged turn", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:doc-super-turn-dedupe",
 		runMetadataChannelID:    "doc-super-turn-dedupe",
 		runMetadataTrajectoryID: "trace-super-turn-dedupe",
@@ -696,7 +698,7 @@ func TestRequestSuperExecutionDedupesDifferentObjectivesInSameTextureRun(t *test
 	if err != nil {
 		t.Fatalf("start texture run: %v", err)
 	}
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	firstRaw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
 		"objective":"Run one bounded candidate-world probe for onboarding copy.",
 		"channel_id":"doc-super-turn-dedupe"
@@ -781,10 +783,10 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 		t.Fatalf("install default tools: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	registry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	firstTexture, err := rt.StartRunWithMetadata(context.Background(), "request liquid lane", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:doc-liquid",
 		runMetadataChannelID:    "doc-liquid",
 		runMetadataTrajectoryID: "trace-liquid",
@@ -812,8 +814,8 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 	}
 
 	secondTexture, err := rt.StartRunWithMetadata(context.Background(), "request python lane", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:doc-python",
 		runMetadataChannelID:    "doc-python",
 		runMetadataTrajectoryID: "trace-python",
@@ -881,8 +883,8 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 		RunID:        "blocked-super-run",
 		AgentID:      superAgent.AgentID,
 		ChannelID:    superAgent.ChannelID,
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 		OwnerID:      "user-alice",
 		SandboxID:    rt.cfg.SandboxID,
 		State:        types.RunBlocked,
@@ -891,8 +893,8 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 		CreatedAt:    now.Add(-time.Hour),
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 			runMetadataAgentID:      superAgent.AgentID,
 			"request_source":        "update_coagent",
 		},
@@ -902,8 +904,8 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 	}
 
 	textureRun, err := rt.StartRunWithMetadata(context.Background(), "request fresh super work", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:doc-fresh-super",
 		runMetadataChannelID:    "doc-fresh-super",
 		runMetadataTrajectoryID: "trace-fresh-super",
@@ -911,7 +913,7 @@ func TestPersistentSuperBlockedRunDoesNotStarveFreshInboxDelivery(t *testing.T) 
 	if err != nil {
 		t.Fatalf("start texture run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the fresh Universal Wire product API handoff.",
 		"channel_id":"doc-fresh-super"
 	}`))
@@ -961,7 +963,7 @@ func TestRequestSuperExecutionFreshTextureChannelBypassesOldActorCursor(t *testi
 			TargetAgentID: superAgent.AgentID,
 			ChannelID:     "old-doc",
 			TrajectoryID:  "old-trace",
-			Role:          AgentProfileTexture,
+			Role:          agentprofile.Texture,
 			Packet: newCoagentPacket("execution_request", updateID, nil, nil, []types.CoagentPacketAction{
 				coagentAction("request_worker", updateID, nil, nil, types.CoagentPacketActionSafety{
 					MutationClass: "red",
@@ -997,8 +999,8 @@ func TestRequestSuperExecutionFreshTextureChannelBypassesOldActorCursor(t *testi
 	}
 
 	textureRun, err := rt.StartRunWithMetadata(ctx, "request fresh super work", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:new-doc",
 		runMetadataChannelID:    "new-doc",
 		runMetadataTrajectoryID: "new-trace",
@@ -1006,7 +1008,7 @@ func TestRequestSuperExecutionFreshTextureChannelBypassesOldActorCursor(t *testi
 	if err != nil {
 		t.Fatalf("start texture run: %v", err)
 	}
-	raw, err := rt.ToolRegistryForProfile(AgentProfileTexture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
+	raw, err := rt.ToolRegistryForProfile(agentprofile.Texture).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(textureRun)), "request_super_execution", json.RawMessage(`{
 		"objective":"Process the fresh O5 product-path handoff.",
 		"channel_id":"new-doc"
 	}`))
@@ -1046,22 +1048,22 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	}
 
 	textureTask, err := rt.StartRunWithMetadata(context.Background(), "revise document", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("submit texture task: %v", err)
 	}
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate execution", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 	})
 	if err != nil {
 		t.Fatalf("submit super task: %v", err)
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"handle execution-heavy follow-up",
 		"role":"super",
@@ -1086,8 +1088,8 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	if err := json.Unmarshal([]byte(superRequestRaw), &superRequest); err != nil {
 		t.Fatalf("decode super request: %v", err)
 	}
-	if superRequest.Profile != AgentProfileSuper {
-		t.Fatalf("super request profile = %q, want %q", superRequest.Profile, AgentProfileSuper)
+	if superRequest.Profile != agentprofile.Super {
+		t.Fatalf("super request profile = %q, want %q", superRequest.Profile, agentprofile.Super)
 	}
 	if superRequest.AgentID != persistentSuperAgentID("user-alice") {
 		t.Fatalf("super request agent_id = %q, want %q", superRequest.AgentID, persistentSuperAgentID("user-alice"))
@@ -1096,7 +1098,7 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 		t.Fatalf("super request channel_id = %q, want doc-exec-work", superRequest.ChannelID)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	coSuperRaw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"handle execution subtree",
 		"role":"co-super"
@@ -1111,15 +1113,15 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	if err := json.Unmarshal([]byte(coSuperRaw), &coSuperSpawn); err != nil {
 		t.Fatalf("decode co-super spawn: %v", err)
 	}
-	if coSuperSpawn.Profile != AgentProfileCoSuper {
-		t.Fatalf("co-super profile = %q, want %q", coSuperSpawn.Profile, AgentProfileCoSuper)
+	if coSuperSpawn.Profile != agentprofile.CoSuper {
+		t.Fatalf("co-super profile = %q, want %q", coSuperSpawn.Profile, agentprofile.CoSuper)
 	}
 
 	child, err := s.GetRun(context.Background(), coSuperSpawn.RunID)
 	if err != nil {
 		t.Fatalf("get co-super task: %v", err)
 	}
-	coSuperRegistry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
+	coSuperRegistry := rt.ToolRegistryForProfile(agentprofile.CoSuper)
 	if _, err := coSuperRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&child)), "spawn_agent", json.RawMessage(`{
 		"objective":"try to escape supervision",
 		"role":"super"
@@ -1128,13 +1130,13 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 	}
 
 	researcherTask, err := rt.StartRunWithMetadata(context.Background(), "gather evidence", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 	})
 	if err != nil {
 		t.Fatalf("submit researcher task: %v", err)
 	}
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	saveRaw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "save_evidence", json.RawMessage(`{
 		"kind":"web_page",
 		"source_uri":"https://example.com",
@@ -1211,15 +1213,15 @@ func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 	}
 
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate execution", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 	})
 	if err != nil {
 		t.Fatalf("submit super task: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "fork_desktop", json.RawMessage(`{
 		"desktop_id":"branch-a"
 	}`))
@@ -1335,8 +1337,8 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 	}
 
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate execution", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:primary",
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 	})
@@ -1344,7 +1346,7 @@ func TestSuperRequestWorkerVMReturnsTypedHandle(t *testing.T) {
 		t.Fatalf("submit super task: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "request_worker_vm", json.RawMessage(`{
 		"purpose":"Run background coding task",
 		"machine_class":"worker-medium"
@@ -1445,8 +1447,8 @@ func TestSuperRequestWorkerVMNormalizesStandardMachineClass(t *testing.T) {
 	}
 
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate execution", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:primary",
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 	})
@@ -1454,7 +1456,7 @@ func TestSuperRequestWorkerVMNormalizesStandardMachineClass(t *testing.T) {
 		t.Fatalf("submit super task: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "request_worker_vm", json.RawMessage(`{
 		"purpose":"Run background coding task",
 		"machine_class":"standard"
@@ -1500,8 +1502,8 @@ func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T
 		t.Fatalf("install default agent tools: %v", err)
 	}
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate repeated execution", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:primary",
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 		runMetadataTrajectoryID: "traj-repeat",
@@ -1509,7 +1511,7 @@ func TestSuperRequestWorkerVMReusesActiveLeaseUnlessParallelAllowed(t *testing.T
 	if err != nil {
 		t.Fatalf("submit super task: %v", err)
 	}
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	request := func(raw json.RawMessage) string {
 		t.Helper()
 		out, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "request_worker_vm", raw)
@@ -1562,15 +1564,15 @@ func TestSuperRequestWorkerVMDedupesSameRunByMachineClass(t *testing.T) {
 		t.Fatalf("install default agent tools: %v", err)
 	}
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate one worker lease", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:primary",
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 	})
 	if err != nil {
 		t.Fatalf("submit super task: %v", err)
 	}
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	request := func(raw json.RawMessage) (string, bool) {
 		t.Helper()
 		out, err := superRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "request_worker_vm", raw)
@@ -1629,8 +1631,8 @@ func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *tes
 		t.Fatalf("install default agent tools: %v", err)
 	}
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate worker recovery", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:primary",
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 		runMetadataTrajectoryID: "traj-worker-recovery",
@@ -1638,7 +1640,7 @@ func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *tes
 	if err != nil {
 		t.Fatalf("submit super task: %v", err)
 	}
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask))
 
 	requestRaw := json.RawMessage(`{"purpose":"repair mobile UX substrate","machine_class":"worker-small"}`)
@@ -1708,8 +1710,8 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 		t.Fatalf("install default agent tools: %v", err)
 	}
 	superTask, err := rt.StartRunWithMetadata(context.Background(), "coordinate one worker delegation", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:primary",
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 		runMetadataTrajectoryID: "traj-delegate-dedupe",
@@ -1723,7 +1725,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 		"worker_vm_id":       "vm-duplicate",
 		"worker_sandbox_url": "http://worker-duplicate.test",
 		"loop_id":            "worker-run-existing",
-		"profile":            AgentProfileVSuper,
+		"profile":            agentprofile.VSuper,
 		"state":              string(types.RunCompleted),
 		"app_change_packages": []map[string]any{{
 			"package_id":                   "package-existing",
@@ -1735,7 +1737,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 	}
 	appendRuntimeToolResult(t, s, *superTask, "delegate_worker_vm", existing)
 
-	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "delegate_worker_vm", json.RawMessage(`{
 		"worker_sandbox_url": "http://worker-duplicate.test",
 		"worker_id": "worker-duplicate",
@@ -1778,8 +1780,8 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns(t *testing.T
 	agentID := persistentSuperAgentID(ownerID)
 	trajectoryID := "traj-delegate-trajectory-dedupe"
 	firstRun, err := rt.StartRunWithMetadata(context.Background(), "start worker in first super turn", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      agentID,
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 		runMetadataTrajectoryID: trajectoryID,
@@ -1794,15 +1796,15 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns(t *testing.T
 		"worker_sandbox_url":  "http://worker-trajectory.test",
 		"loop_id":             "worker-run-existing-trajectory",
 		"worker_run_id":       "worker-run-existing-trajectory",
-		"profile":             AgentProfileVSuper,
+		"profile":             agentprofile.VSuper,
 		"state":               string(types.RunRunning),
 		"app_change_packages": []map[string]any{},
 	}
 	appendRuntimeToolResult(t, s, *firstRun, "start_worker_delegation", existing)
 
 	secondRun, err := rt.StartRunWithMetadata(context.Background(), "continue worker supervision in second super turn", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      agentID,
 		runMetadataDesktopID:    types.PrimaryDesktopID,
 		runMetadataTrajectoryID: trajectoryID,
@@ -1810,7 +1812,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerAcrossTrajectoryRuns(t *testing.T
 	if err != nil {
 		t.Fatalf("submit second super task: %v", err)
 	}
-	registry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(secondRun)), "start_worker_delegation", json.RawMessage(`{
 		"worker_sandbox_url": "http://worker-trajectory.test",
 		"worker_id": "worker-trajectory",
@@ -1848,19 +1850,19 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	}
 
 	conductorTask, err := rt.StartRunWithMetadata(context.Background(), "route this request", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileConductor,
-		runMetadataAgentRole:    AgentProfileConductor,
+		runMetadataAgentProfile: agentprofile.Conductor,
+		runMetadataAgentRole:    agentprofile.Conductor,
 	})
 	if err != nil {
 		t.Fatalf("submit conductor task: %v", err)
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	conductorRegistry := rt.ToolRegistryForProfile(AgentProfileConductor)
+	conductorRegistry := rt.ToolRegistryForProfile(agentprofile.Conductor)
 	if spawnTool, ok := conductorRegistry.Lookup("spawn_agent"); !ok {
 		t.Fatal("conductor missing spawn_agent")
-	} else if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != AgentProfileTexture {
-		t.Fatalf("conductor spawn_agent role enum = %#v, want only %q", got, AgentProfileTexture)
+	} else if got := toolSchemaStringEnum(spawnTool.Parameters, "role"); len(got) != 1 || got[0] != agentprofile.Texture {
+		t.Fatalf("conductor spawn_agent role enum = %#v, want only %q", got, agentprofile.Texture)
 	}
 	if _, err := conductorRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(conductorTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"research should be owned by texture, not conductor",
@@ -1894,8 +1896,8 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	if textureSpawn.AgentID != "texture:"+textureSpawn.ChannelID {
 		t.Fatalf("texture spawn agent_id = %q, want texture:%s", textureSpawn.AgentID, textureSpawn.ChannelID)
 	}
-	if textureSpawn.Profile != AgentProfileTexture {
-		t.Fatalf("texture spawn profile = %q, want %q", textureSpawn.Profile, AgentProfileTexture)
+	if textureSpawn.Profile != agentprofile.Texture {
+		t.Fatalf("texture spawn profile = %q, want %q", textureSpawn.Profile, agentprofile.Texture)
 	}
 	if textureSpawn.ChannelID == "" {
 		t.Fatal("texture spawn channel_id should not be empty")
@@ -1958,7 +1960,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	if err := json.Unmarshal([]byte(parentAfterSpawn.Result), &parentDecision); err != nil {
 		t.Fatalf("decode conductor result: %v", err)
 	}
-	if parentDecision.Action != "open_app" || parentDecision.App != AgentProfileTexture {
+	if parentDecision.Action != "open_app" || parentDecision.App != agentprofile.Texture {
 		t.Fatalf("unexpected conductor decision: %+v", parentDecision)
 	}
 	if parentDecision.DocID != textureSpawn.ChannelID {
@@ -1972,8 +1974,8 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	}
 
 	textureTask, err := rt.StartRunWithMetadata(context.Background(), "own a later document step", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      textureSpawn.AgentID,
 		runMetadataChannelID:    textureSpawn.ChannelID,
 		"doc_id":                textureSpawn.ChannelID,
@@ -1981,7 +1983,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start texture run for delegation: %v", err)
 	}
-	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	researchSpawnRaw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureTask)), "spawn_agent", json.RawMessage(`{
 		"objective":"research background facts for the document",
 		"role":"researcher",
@@ -1998,8 +2000,8 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	if err := json.Unmarshal([]byte(researchSpawnRaw), &researchSpawn); err != nil {
 		t.Fatalf("decode researcher spawn: %v", err)
 	}
-	if researchSpawn.Profile != AgentProfileResearcher {
-		t.Fatalf("research spawn profile = %q, want %q", researchSpawn.Profile, AgentProfileResearcher)
+	if researchSpawn.Profile != agentprofile.Researcher {
+		t.Fatalf("research spawn profile = %q, want %q", researchSpawn.Profile, agentprofile.Researcher)
 	}
 	if researchSpawn.ChannelID != textureSpawn.ChannelID {
 		t.Fatalf("research spawn channel_id = %q, want %q", researchSpawn.ChannelID, textureSpawn.ChannelID)
@@ -2035,7 +2037,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	if err := json.Unmarshal([]byte(researchAliasSpawnRaw), &researchAliasSpawn); err != nil {
 		t.Fatalf("decode researcher alias spawn: %v", err)
 	}
-	if researchAliasSpawn.Role != AgentProfileResearcher || researchAliasSpawn.Profile != AgentProfileResearcher {
+	if researchAliasSpawn.Role != agentprofile.Researcher || researchAliasSpawn.Profile != agentprofile.Researcher {
 		t.Fatalf("research alias spawn = role %q profile %q, want researcher/researcher", researchAliasSpawn.Role, researchAliasSpawn.Profile)
 	}
 
@@ -2054,7 +2056,7 @@ func TestConductorCanSpawnTextureAndTextureCanSpawnResearcher(t *testing.T) {
 	if err := json.Unmarshal([]byte(noisyResearchSpawnRaw), &noisyResearchSpawn); err != nil {
 		t.Fatalf("decode noisy researcher spawn: %v", err)
 	}
-	if noisyResearchSpawn.Role != AgentProfileResearcher || noisyResearchSpawn.Profile != AgentProfileResearcher {
+	if noisyResearchSpawn.Role != agentprofile.Researcher || noisyResearchSpawn.Profile != agentprofile.Researcher {
 		t.Fatalf("noisy research spawn = role %q profile %q, want researcher/researcher", noisyResearchSpawn.Role, noisyResearchSpawn.Profile)
 	}
 }
@@ -2097,7 +2099,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start processor run: %v", err)
 	}
-	if processorRun.AgentProfile != AgentProfileProcessor || processorRun.AgentRole != AgentProfileProcessor {
+	if processorRun.AgentProfile != agentprofile.Processor || processorRun.AgentRole != agentprofile.Processor {
 		t.Fatalf("processor run profile/role = %q/%q, want processor/processor", processorRun.AgentProfile, processorRun.AgentRole)
 	}
 	if processorRun.AgentID != "processor:processor-global_firehose-global-gdelt" {
@@ -2107,7 +2109,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		t.Fatalf("processor channel id = %q, want agent id", processorRun.ChannelID)
 	}
 
-	processorRegistry := rt.ToolRegistryForProfile(AgentProfileProcessor)
+	processorRegistry := rt.ToolRegistryForProfile(agentprofile.Processor)
 	if _, err := processorRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(processorRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"verify the strongest claims in this source batch",
 		"role":"researcher"
@@ -2137,7 +2139,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if err := json.Unmarshal([]byte(spawnTextureRaw), &textureSpawn); err != nil {
 		t.Fatalf("decode processor texture spawn: %v", err)
 	}
-	if textureSpawn.Profile != AgentProfileTexture || textureSpawn.Role != AgentProfileTexture {
+	if textureSpawn.Profile != agentprofile.Texture || textureSpawn.Role != agentprofile.Texture {
 		t.Fatalf("processor texture spawn profile/role = %+v", textureSpawn)
 	}
 	if textureSpawn.DocID == "" || textureSpawn.AgentID != "texture:"+textureSpawn.DocID || textureSpawn.ChannelID != textureSpawn.DocID {
@@ -2196,7 +2198,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 		t.Fatalf("list runs after processor texture handoff: %v", err)
 	}
 	for _, run := range runs {
-		if trajectoryIDForRun(&run) == processorRun.TrajectoryID && run.AgentProfile == AgentProfileSuper {
+		if trajectoryIDForRun(&run) == processorRun.TrajectoryID && run.AgentProfile == agentprofile.Super {
 			t.Fatalf("source/article route created super before Texture requested execution: %+v", run)
 		}
 	}
@@ -2286,7 +2288,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal texture edit args: %v", err)
 	}
-	textureRegistry := rt.ToolRegistryForProfile(AgentProfileTexture)
+	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
 	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(textureRun)), "patch_texture", editArgs); err != nil {
 		t.Fatalf("texture article patch: %v", err)
 	}
@@ -2346,13 +2348,13 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start reconciler run: %v", err)
 	}
-	if reconcilerRun.AgentProfile != AgentProfileReconciler || reconcilerRun.AgentRole != AgentProfileReconciler {
+	if reconcilerRun.AgentProfile != agentprofile.Reconciler || reconcilerRun.AgentRole != agentprofile.Reconciler {
 		t.Fatalf("reconciler run profile/role = %q/%q, want reconciler/reconciler", reconcilerRun.AgentProfile, reconcilerRun.AgentRole)
 	}
 	if reconcilerRun.AgentID != "reconciler:story-corpus" {
 		t.Fatalf("reconciler agent id = %q", reconcilerRun.AgentID)
 	}
-	reconcilerRegistry := rt.ToolRegistryForProfile(AgentProfileReconciler)
+	reconcilerRegistry := rt.ToolRegistryForProfile(agentprofile.Reconciler)
 	reconcilerTextureRaw, err := reconcilerRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(reconcilerRun)), "spawn_agent", json.RawMessage(`{
 		"objective":"draft a correction/update Texture from this corpus reconciliation",
 		"role":"texture",
@@ -2420,12 +2422,12 @@ func TestConcurrentConductorTextureSpawnsShareRoute(t *testing.T) {
 		State:        types.RunRunning,
 		Prompt:       "Create one durable texture document.",
 		ChannelID:    "conductor-concurrent-texture",
-		AgentProfile: AgentProfileConductor,
-		AgentRole:    AgentProfileConductor,
+		AgentProfile: agentprofile.Conductor,
+		AgentRole:    agentprofile.Conductor,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileConductor,
-			runMetadataAgentRole:    AgentProfileConductor,
-			"requested_app":         AgentProfileTexture,
+			runMetadataAgentProfile: agentprofile.Conductor,
+			runMetadataAgentRole:    agentprofile.Conductor,
+			"requested_app":         agentprofile.Texture,
 			"seed_prompt":           "Create one durable texture document.",
 		},
 		CreatedAt: time.Now().UTC(),
@@ -2435,7 +2437,7 @@ func TestConcurrentConductorTextureSpawnsShareRoute(t *testing.T) {
 		t.Fatalf("create conductor run: %v", err)
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileConductor)
+	registry := rt.ToolRegistryForProfile(agentprofile.Conductor)
 	rawArgs := json.RawMessage(`{"objective":"Create one durable texture document.","role":"texture","initial_content":"# Durable texture document\n\nInitial conductor-authored abstract."}`)
 	results := make([]string, 2)
 	errs := make([]error, 2)
@@ -2489,7 +2491,7 @@ func TestConcurrentConductorTextureSpawnsShareRoute(t *testing.T) {
 	}
 	textureRuns := 0
 	for _, run := range runs {
-		if run.AgentProfile == AgentProfileTexture {
+		if run.AgentProfile == agentprofile.Texture {
 			textureRuns++
 		}
 	}
@@ -2519,11 +2521,11 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 		Prompt:       "Coordinate worker and verifier co-super agents.",
 		ChannelID:    "worker-channel",
 		TrajectoryID: "traj-vsuper-budget",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
+		AgentRole:    agentprofile.VSuper,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataAgentProfile: agentprofile.VSuper,
+			runMetadataAgentRole:    agentprofile.VSuper,
 			runMetadataTrajectoryID: "traj-vsuper-budget",
 		},
 		CreatedAt: now,
@@ -2540,8 +2542,8 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 			ChannelID:        parent.ChannelID,
 			RequestedByRunID: "other-spawner",
 			TrajectoryID:     parent.TrajectoryID,
-			AgentProfile:     AgentProfileCoSuper,
-			AgentRole:        AgentProfileCoSuper,
+			AgentProfile:     agentprofile.CoSuper,
+			AgentRole:        agentprofile.CoSuper,
 			OwnerID:          parent.OwnerID,
 			SandboxID:        parent.SandboxID,
 			State:            types.RunRunning,
@@ -2549,8 +2551,8 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 			CreatedAt:        now,
 			UpdatedAt:        now,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileCoSuper,
-				runMetadataAgentRole:    AgentProfileCoSuper,
+				runMetadataAgentProfile: agentprofile.CoSuper,
+				runMetadataAgentRole:    agentprofile.CoSuper,
 				runMetadataCoSuperSlot:  "implementation",
 				runMetadataTrajectoryID: parent.TrajectoryID,
 			},
@@ -2561,8 +2563,8 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 			ChannelID:        parent.ChannelID,
 			RequestedByRunID: "other-spawner",
 			TrajectoryID:     parent.TrajectoryID,
-			AgentProfile:     AgentProfileCoSuper,
-			AgentRole:        AgentProfileCoSuper,
+			AgentProfile:     agentprofile.CoSuper,
+			AgentRole:        agentprofile.CoSuper,
 			OwnerID:          parent.OwnerID,
 			SandboxID:        parent.SandboxID,
 			State:            types.RunRunning,
@@ -2570,8 +2572,8 @@ func TestVSuperSpawnAgentEnforcesActiveChildBudget(t *testing.T) {
 			CreatedAt:        now,
 			UpdatedAt:        now,
 			Metadata: map[string]any{
-				runMetadataAgentProfile: AgentProfileCoSuper,
-				runMetadataAgentRole:    AgentProfileCoSuper,
+				runMetadataAgentProfile: agentprofile.CoSuper,
+				runMetadataAgentRole:    agentprofile.CoSuper,
 				runMetadataCoSuperSlot:  "verifier",
 				runMetadataTrajectoryID: parent.TrajectoryID,
 			},
@@ -2623,11 +2625,11 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 		Prompt:       "Coordinate implementation then verification.",
 		ChannelID:    "worker-channel",
 		TrajectoryID: "traj-vsuper-sequencing",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
+		AgentRole:    agentprofile.VSuper,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataAgentProfile: agentprofile.VSuper,
+			runMetadataAgentRole:    agentprofile.VSuper,
 			runMetadataTrajectoryID: "traj-vsuper-sequencing",
 		},
 		CreatedAt: now,
@@ -2644,8 +2646,8 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: parent.RunID,
 		TrajectoryID:     "traj-vsuper-other",
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunCompleted,
@@ -2654,8 +2656,8 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 		UpdatedAt:        otherFinishedAt,
 		FinishedAt:       &otherFinishedAt,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataCoSuperSlot:  "implementation",
 			runMetadataTrajectoryID: "traj-vsuper-other",
 		},
@@ -2669,7 +2671,7 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 		t.Fatalf("claim other trajectory implementation slot: got claimed=false, want true")
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.VSuper)
 	_, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "spawn_agent", json.RawMessage(`{
 		"objective":"verify before implementation",
 		"role":"co-super",
@@ -2685,8 +2687,8 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: "other-spawner",
 		TrajectoryID:     parent.TrajectoryID,
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunRunning,
@@ -2694,8 +2696,8 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataCoSuperSlot:  "implementation",
 			runMetadataTrajectoryID: parent.TrajectoryID,
 		},
@@ -2741,7 +2743,7 @@ func TestVSuperVerifierSpawnRequiresCompletedImplementation(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
 		t.Fatalf("decode verifier spawn: %v", err)
 	}
-	if resp.Profile != AgentProfileCoSuper || resp.Slot != "verifier" {
+	if resp.Profile != agentprofile.CoSuper || resp.Slot != "verifier" {
 		t.Fatalf("verifier response = %+v, want co-super verifier", resp)
 	}
 }
@@ -2763,11 +2765,11 @@ func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
 		Prompt:       "Coordinate worker and verifier co-super agents.",
 		ChannelID:    "worker-channel",
 		TrajectoryID: "traj-vsuper-slot",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
+		AgentRole:    agentprofile.VSuper,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataAgentProfile: agentprofile.VSuper,
+			runMetadataAgentRole:    agentprofile.VSuper,
 			runMetadataTrajectoryID: "traj-vsuper-slot",
 		},
 		CreatedAt: now,
@@ -2783,8 +2785,8 @@ func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: parent.RunID,
 		TrajectoryID:     parent.TrajectoryID,
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunRunning,
@@ -2792,8 +2794,8 @@ func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataCoSuperSlot:  "implementation",
 			runMetadataTrajectoryID: parent.TrajectoryID,
 		},
@@ -2807,7 +2809,7 @@ func TestVSuperSpawnAgentReusesActiveCoSuperSlot(t *testing.T) {
 		t.Fatalf("claim implementation slot: got claimed=false, want true")
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.VSuper)
 	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "spawn_agent", json.RawMessage(`{
 		"objective":"start another implementation co-super for the same candidate checkout",
 		"role":"co-super",
@@ -2853,11 +2855,11 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		Prompt:       "Coordinate worker and verifier co-super agents.",
 		ChannelID:    "worker-channel",
 		TrajectoryID: "traj-vsuper-cancel",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
+		AgentRole:    agentprofile.VSuper,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataAgentProfile: agentprofile.VSuper,
+			runMetadataAgentRole:    agentprofile.VSuper,
 			runMetadataTrajectoryID: "traj-vsuper-cancel",
 		},
 		CreatedAt: now,
@@ -2872,8 +2874,8 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: "candidate-world-spawner",
 		TrajectoryID:     parent.TrajectoryID,
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunRunning,
@@ -2881,8 +2883,8 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataTrajectoryID: parent.TrajectoryID,
 			runMetadataCoSuperSlot:  "implementation",
 		},
@@ -2910,8 +2912,8 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: parent.RunID,
 		TrajectoryID:     "traj-other-vsuper-cancel-same-agent",
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunRunning,
@@ -2919,8 +2921,8 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		CreatedAt:        now.Add(2 * time.Second),
 		UpdatedAt:        now.Add(2 * time.Second),
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataTrajectoryID: "traj-other-vsuper-cancel-same-agent",
 			runMetadataCoSuperSlot:  "implementation",
 		},
@@ -2934,7 +2936,7 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		t.Fatalf("claim same-agent other trajectory slot: got claimed=false, want true")
 	}
 
-	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.VSuper)
 	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "cancel_agent", json.RawMessage(`{
 		"agent_id":"agent-exported-child"
 	}`))
@@ -2973,8 +2975,8 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: "candidate-world-spawner",
 		TrajectoryID:     parent.TrajectoryID,
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunRunning,
@@ -2982,8 +2984,8 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		CreatedAt:        now.Add(3 * time.Second),
 		UpdatedAt:        now.Add(3 * time.Second),
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataTrajectoryID: parent.TrajectoryID,
 			runMetadataCoSuperSlot:  "verifier",
 		},
@@ -3027,8 +3029,8 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: parent.RunID,
 		TrajectoryID:     "traj-other-vsuper-cancel",
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunRunning,
@@ -3036,8 +3038,8 @@ func TestVSuperCancelAgentDoesNotCancelExportedChild(t *testing.T) {
 		CreatedAt:        now.Add(time.Second),
 		UpdatedAt:        now.Add(time.Second),
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataTrajectoryID: "traj-other-vsuper-cancel",
 			runMetadataCoSuperSlot:  "implementation",
 		},
@@ -3091,11 +3093,11 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 		Prompt:       "Coordinate worker and verifier co-super agents.",
 		ChannelID:    "worker-channel",
 		TrajectoryID: "trace-child-export",
-		AgentProfile: AgentProfileVSuper,
-		AgentRole:    AgentProfileVSuper,
+		AgentProfile: agentprofile.VSuper,
+		AgentRole:    agentprofile.VSuper,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileVSuper,
-			runMetadataAgentRole:    AgentProfileVSuper,
+			runMetadataAgentProfile: agentprofile.VSuper,
+			runMetadataAgentRole:    agentprofile.VSuper,
 			runMetadataTrajectoryID: "trace-child-export",
 		},
 		CreatedAt: now,
@@ -3110,8 +3112,8 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: "other-spawner",
 		TrajectoryID:     parent.TrajectoryID,
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunCompleted,
@@ -3119,8 +3121,8 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataCoSuperSlot:  "implementation",
 			runMetadataTrajectoryID: parent.TrajectoryID,
 		},
@@ -3139,8 +3141,8 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 		ChannelID:        parent.ChannelID,
 		RequestedByRunID: parent.RunID,
 		TrajectoryID:     "trace-other-export",
-		AgentProfile:     AgentProfileCoSuper,
-		AgentRole:        AgentProfileCoSuper,
+		AgentProfile:     agentprofile.CoSuper,
+		AgentRole:        agentprofile.CoSuper,
 		OwnerID:          parent.OwnerID,
 		SandboxID:        parent.SandboxID,
 		State:            types.RunCompleted,
@@ -3148,8 +3150,8 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 		CreatedAt:        now.Add(time.Second),
 		UpdatedAt:        now.Add(time.Second),
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataCoSuperSlot:  "implementation",
 			runMetadataTrajectoryID: "trace-other-export",
 		},
@@ -3175,7 +3177,7 @@ func TestVSuperPublishAppChangePackageReusesChildPackage(t *testing.T) {
 		"candidate_head_sha":      "wrong-child-head",
 	})
 
-	registry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.VSuper)
 	raw, err := registry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(&parent)), "publish_app_change_package", json.RawMessage(`{
 		"repo_path":"does-not-exist",
 		"base_sha":"base-sha"
@@ -3208,8 +3210,8 @@ func TestVerifierCoSuperCannotPublishAppChangePackage(t *testing.T) {
 	run := &types.RunRecord{
 		RunID:        "verifier-publish-run",
 		AgentID:      "agent-verifier",
-		AgentProfile: AgentProfileCoSuper,
-		AgentRole:    AgentProfileCoSuper,
+		AgentProfile: agentprofile.CoSuper,
+		AgentRole:    agentprofile.CoSuper,
 		OwnerID:      "user-alice",
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
@@ -3217,12 +3219,12 @@ func TestVerifierCoSuperCannotPublishAppChangePackage(t *testing.T) {
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileCoSuper,
-			runMetadataAgentRole:    AgentProfileCoSuper,
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
 			runMetadataCoSuperSlot:  "verifier",
 		},
 	}
-	registry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.CoSuper)
 	_, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(run)), "publish_app_change_package", json.RawMessage(`{
 		"repo_path":".",
 		"base_sha":"base"
@@ -3264,8 +3266,8 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	}
 
 	textureTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataChannelID:    "doc-1",
 		runMetadataAgentID:      "texture:doc-1",
 	})
@@ -3273,15 +3275,15 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 		t.Fatalf("submit texture task: %v", err)
 	}
 	researcherTask, err := rt.StartCoagentRun(context.Background(), textureTask.RunID, "research the claim", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    "doc-1",
 	})
 	if err != nil {
 		t.Fatalf("submit researcher task: %v", err)
 	}
 
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "update_coagent", json.RawMessage(`{
 		"agent_id":"texture:doc-1",
 		"schema_version":"coagent_source_packet.v1",
@@ -3326,7 +3328,7 @@ func TestResearcherSubmitCoagentUpdatePersistsEvidenceAndDedupes(t *testing.T) {
 	if finding.MessageSeq != resp.Cursor {
 		t.Fatalf("update message_seq = %d, want %d", finding.MessageSeq, resp.Cursor)
 	}
-	if finding.Packet.Kind != "evidence_update" || finding.Role != AgentProfileResearcher {
+	if finding.Packet.Kind != "evidence_update" || finding.Role != agentprofile.Researcher {
 		t.Fatalf("unexpected coagent update role/kind: %+v", finding)
 	}
 
@@ -3390,7 +3392,7 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 		OwnerID:      "user-alice",
 		SourceType:   "derived_transcript",
 		MediaType:    "text/x-youtube-transcript",
-		AppHint:      AgentProfileTexture,
+		AppHint:      agentprofile.Texture,
 		Title:        "Transcript",
 		SourceURL:    "https://www.youtube.com/watch?v=abc12345678",
 		CanonicalURL: "youtube://abc12345678/transcript/en",
@@ -3405,8 +3407,8 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 	}
 
 	textureTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataChannelID:    "doc-1",
 		runMetadataAgentID:      "texture:doc-1",
 	})
@@ -3414,15 +3416,15 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 		t.Fatalf("submit texture task: %v", err)
 	}
 	researcherTask, err := rt.StartCoagentRun(context.Background(), textureTask.RunID, "read source packet", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    "doc-1",
 	})
 	if err != nil {
 		t.Fatalf("submit researcher task: %v", err)
 	}
 
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "read_content_item", json.RawMessage(`{
 		"content_id":"content-transcript-1",
 		"max_text_chars":12,
@@ -3479,8 +3481,8 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 	}
 
 	textureTask, err := rt.StartRunWithMetadata(context.Background(), "own the draft", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataChannelID:    "doc-1",
 		runMetadataAgentID:      "texture:doc-1",
 	})
@@ -3488,15 +3490,15 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 		t.Fatalf("submit texture task: %v", err)
 	}
 	researcherTask, err := rt.StartCoagentRun(context.Background(), textureTask.RunID, "read deck source", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 		runMetadataChannelID:    "doc-1",
 	})
 	if err != nil {
 		t.Fatalf("submit researcher task: %v", err)
 	}
 
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	rawImport, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "import_document_content", json.RawMessage(`{
 		"file_path":"imports/deck.pptx"
 	}`))
@@ -3565,8 +3567,8 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -3575,8 +3577,8 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	}
 
 	superRun, err := rt.StartRunWithMetadata(ctx, "Generate and verify the toy model artifact", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:primary",
 		runMetadataChannelID:    docID,
 		runMetadataTrajectoryID: "traj-structured-worker-update",
@@ -3585,7 +3587,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 		t.Fatalf("start super run: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	rawArgs := json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"execution_result",
@@ -3628,7 +3630,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if update.AgentID != "super:primary" || update.TargetAgentID != "texture:"+docID || update.Role != AgentProfileSuper {
+	if update.AgentID != "super:primary" || update.TargetAgentID != "texture:"+docID || update.Role != agentprofile.Super {
 		t.Fatalf("unexpected worker update identity: %+v", update)
 	}
 	sourceURIs := coagentPacketSourceURIs(update.Packet)
@@ -3652,7 +3654,7 @@ func TestSubmitWorkerUpdatePersistsStructuredNonPatchUpdate(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("messages len = %d, want 1: %+v", len(messages), messages)
 	}
-	if messages[0].Seq != resp.Cursor || messages[0].ToAgentID != "texture:"+docID || messages[0].Role != AgentProfileSuper {
+	if messages[0].Seq != resp.Cursor || messages[0].ToAgentID != "texture:"+docID || messages[0].Role != agentprofile.Super {
 		t.Fatalf("unexpected channel message: %+v", messages[0])
 	}
 	if !strings.Contains(messages[0].Content, "Coagent update ready.") || strings.Contains(strings.ToLower(messages[0].Content), "apply this patch") {
@@ -3744,8 +3746,8 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -3754,8 +3756,8 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 	}
 
 	superRun, err := rt.StartRunWithMetadata(ctx, "Report an artifact", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:authoritative",
 		runMetadataChannelID:    wrongChannelID,
 		runMetadataTrajectoryID: "traj-authoritative-channel",
@@ -3764,7 +3766,7 @@ func TestSubmitWorkerUpdateUsesTargetChannelOverExplicitChannel(t *testing.T) {
 		t.Fatalf("start super run: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"texture:doc-authoritative-channel",
@@ -3830,8 +3832,8 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -3842,8 +3844,8 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 		AgentID:   "researcher:decoy",
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileResearcher,
-		Role:      AgentProfileResearcher,
+		Profile:   agentprofile.Researcher,
+		Role:      agentprofile.Researcher,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -3852,8 +3854,8 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 	}
 
 	textureRun, err := rt.StartRunWithMetadata(ctx, "Own this document", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 		runMetadataAgentID:      "texture:" + docID,
 		runMetadataChannelID:    docID,
 	})
@@ -3861,8 +3863,8 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 		t.Fatalf("start texture run: %v", err)
 	}
 	superRun, err := rt.StartCoagentRun(ctx, textureRun.RunID, "Report a result", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:authoritative-parent",
 		runMetadataChannelID:    docID,
 	})
@@ -3870,7 +3872,7 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 		t.Fatalf("start super child: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"researcher:decoy",
@@ -3909,7 +3911,7 @@ func TestSubmitWorkerUpdateUsesParentAgentOverExplicitAgent(t *testing.T) {
 	}
 	found := false
 	for _, message := range messages {
-		if message.ToAgentID == "texture:"+docID && message.FromRunID == superRun.RunID && message.Role == AgentProfileSuper {
+		if message.ToAgentID == "texture:"+docID && message.FromRunID == superRun.RunID && message.Role == agentprofile.Super {
 			found = true
 			break
 		}
@@ -3943,8 +3945,8 @@ func TestSubmitWorkerUpdateUsesTextureRequesterOverExplicitAgent(t *testing.T) {
 		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -3955,8 +3957,8 @@ func TestSubmitWorkerUpdateUsesTextureRequesterOverExplicitAgent(t *testing.T) {
 		AgentID:   "researcher:decoy-requester",
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileResearcher,
-		Role:      AgentProfileResearcher,
+		Profile:   agentprofile.Researcher,
+		Role:      agentprofile.Researcher,
 		ChannelID: "decoy-channel",
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -3965,19 +3967,19 @@ func TestSubmitWorkerUpdateUsesTextureRequesterOverExplicitAgent(t *testing.T) {
 	}
 
 	superRun, err := rt.StartRunWithMetadata(ctx, "Report requester-scoped work", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:requester-target",
 		runMetadataChannelID:    docID,
 		"requested_by_agent_id": "texture:" + docID,
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 		"request_source":        "texture",
 	})
 	if err != nil {
 		t.Fatalf("start requester super run: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := superRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(superRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"agent_id":"researcher:decoy-requester",
@@ -4023,20 +4025,20 @@ func TestSubmitWorkerUpdateUsesTextureRequesterMetadataWhenAgentMissing(t *testi
 	ownerID := "user-alice"
 	docID := "doc-remote-worker-requester"
 	workerRun, err := rt.StartRunWithMetadata(ctx, "Report from isolated worker", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileVSuper,
-		runMetadataAgentRole:    AgentProfileVSuper,
+		runMetadataAgentProfile: agentprofile.VSuper,
+		runMetadataAgentRole:    agentprofile.VSuper,
 		runMetadataAgentID:      "vsuper:remote-worker",
 		runMetadataChannelID:    docID,
 		runMetadataTrajectoryID: "traj-remote-worker-requester",
 		"requested_by_agent_id": "texture:" + docID,
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 		"request_source":        "worker_vm_delegation",
 	})
 	if err != nil {
 		t.Fatalf("start worker run: %v", err)
 	}
 
-	vSuperRegistry := rt.ToolRegistryForProfile(AgentProfileVSuper)
+	vSuperRegistry := rt.ToolRegistryForProfile(agentprofile.VSuper)
 	raw, err := vSuperRegistry.Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(workerRun)), "update_coagent", json.RawMessage(`{
 		"schema_version":"coagent_source_packet.v1",
 		"kind":"execution_result",
@@ -4063,7 +4065,7 @@ func TestSubmitWorkerUpdateUsesTextureRequesterMetadataWhenAgentMissing(t *testi
 	if err != nil {
 		t.Fatalf("get worker update: %v", err)
 	}
-	if update.TargetAgentID != "texture:"+docID || update.ChannelID != docID || update.Role != AgentProfileVSuper {
+	if update.TargetAgentID != "texture:"+docID || update.ChannelID != docID || update.Role != agentprofile.VSuper {
 		t.Fatalf("worker update target/channel/role = %+v", update)
 	}
 	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "texture:"+docID, 10)
@@ -4086,8 +4088,8 @@ func TestSubmitWorkerUpdateFallsBackToTextureChannelWhenExplicitTargetMissing(t 
 	ownerID := "user-alice"
 	docID := "doc-terminal-blocker"
 	superRun, err := rt.StartRunWithMetadata(ctx, "Report terminal worker blocker", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataAgentID:      "super:terminal-blocker",
 		runMetadataChannelID:    docID,
 		runMetadataTrajectoryID: "traj-terminal-blocker",
@@ -4096,7 +4098,7 @@ func TestSubmitWorkerUpdateFallsBackToTextureChannelWhenExplicitTargetMissing(t 
 		t.Fatalf("start super run: %v", err)
 	}
 
-	superRegistry := rt.ToolRegistryForProfile(AgentProfileSuper)
+	superRegistry := rt.ToolRegistryForProfile(agentprofile.Super)
 	for _, tc := range []struct {
 		name            string
 		explicitAgentID string
@@ -4169,8 +4171,8 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 		RunID:        "super-run-delegate-fallback",
 		AgentID:      "super:" + ownerID,
 		ChannelID:    docID,
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 		OwnerID:      ownerID,
 		SandboxID:    "sandbox-test",
 		State:        types.RunRunning,
@@ -4178,13 +4180,13 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 			runMetadataAgentID:      "super:" + ownerID,
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: "traj-delegate-fallback",
 			"requested_by_agent_id": "texture:" + docID,
-			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_profile":  agentprofile.Texture,
 		},
 	}
 	if err := s.CreateRun(ctx, *superRun); err != nil {
@@ -4194,8 +4196,8 @@ func TestSuperFailureAfterDelegateSynthesizesWorkerUpdate(t *testing.T) {
 		AgentID:   "super:" + ownerID,
 		OwnerID:   ownerID,
 		SandboxID: "sandbox-test",
-		Profile:   AgentProfileSuper,
-		Role:      AgentProfileSuper,
+		Profile:   agentprofile.Super,
+		Role:      agentprofile.Super,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -4312,14 +4314,14 @@ func TestResearcherWebSearchRoutesThroughGateway(t *testing.T) {
 	}
 
 	researcherTask, err := rt.StartRunWithMetadata(context.Background(), "Search the web", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 	})
 	if err != nil {
 		t.Fatalf("submit researcher task: %v", err)
 	}
 
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "web_search", json.RawMessage(`{
 		"query":"latest model releases",
 		"max_results":3
@@ -4386,14 +4388,14 @@ func TestResearcherWebSearchFallsBackToProxyGatewayURL(t *testing.T) {
 	}
 
 	researcherTask, err := rt.StartRunWithMetadata(context.Background(), "Search the web", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 	})
 	if err != nil {
 		t.Fatalf("submit researcher task: %v", err)
 	}
 
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	raw, err := researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "web_search", json.RawMessage(`{
 		"query":"latest model releases"
 	}`))
@@ -4437,14 +4439,14 @@ func TestResearcherWebSearchWithoutGatewayIsUnavailable(t *testing.T) {
 	}
 
 	researcherTask, err := rt.StartRunWithMetadata(context.Background(), "Search the web", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 	})
 	if err != nil {
 		t.Fatalf("submit researcher task: %v", err)
 	}
 
-	researcherRegistry := rt.ToolRegistryForProfile(AgentProfileResearcher)
+	researcherRegistry := rt.ToolRegistryForProfile(agentprofile.Researcher)
 	_, err = researcherRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(researcherTask)), "web_search", json.RawMessage(`{
 		"query":"latest model releases"
 	}`))
@@ -4481,14 +4483,14 @@ func TestPublishAppChangePackageToolPublishesWithoutGitHubPush(t *testing.T) {
 	runGit(t, repo, "commit", "-m", "worker change")
 
 	superRun, err := rt.StartRunWithMetadata(context.Background(), "publish worker AppChangePackage", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileCoSuper,
-		runMetadataAgentRole:    AgentProfileCoSuper,
+		runMetadataAgentProfile: agentprofile.CoSuper,
+		runMetadataAgentRole:    agentprofile.CoSuper,
 		runMetadataTrajectoryID: "trace-export-tool",
 	})
 	if err != nil {
 		t.Fatalf("start co-super run: %v", err)
 	}
-	registry := rt.ToolRegistryForProfile(AgentProfileCoSuper)
+	registry := rt.ToolRegistryForProfile(agentprofile.CoSuper)
 	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "publish_app_change_package", json.RawMessage(fmt.Sprintf(`{
 			"repo_path": "repo",
 			"base_sha": %q,
@@ -4643,17 +4645,17 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to background worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-worker-delegation",
 		runMetadataChannelID:    "doc-worker-delegation",
 		"requested_by_agent_id": "texture:doc-worker-delegation",
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-proof",
@@ -4767,7 +4769,7 @@ func TestStartWorkerDelegationPreloadsReferencedAppChangePackage(t *testing.T) {
 			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
 				RunID:        "worker-run-preload",
 				AgentID:      "worker-agent-preload",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunPending,
 				OwnerID:      "user-alice",
 			})
@@ -4778,13 +4780,13 @@ func TestStartWorkerDelegationPreloadsReferencedAppChangePackage(t *testing.T) {
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate package proof", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "start_worker_delegation", json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-preload",
@@ -4834,8 +4836,8 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "active-sandbox",
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -4897,17 +4899,17 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(ctx, "delegate direct worker update proof", ownerID, map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "traj-worker-submit-mirror",
 		runMetadataChannelID:    docID,
 		"requested_by_agent_id": "texture:" + docID,
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-submit-mirror",
@@ -4985,8 +4987,8 @@ func TestFinishWorkerDelegationDoesNotMirrorLegacyWorkerSubmitUpdate(t *testing.
 		AgentID:   "texture:" + docID,
 		OwnerID:   ownerID,
 		SandboxID: "active-sandbox",
-		Profile:   AgentProfileTexture,
-		Role:      AgentProfileTexture,
+		Profile:   agentprofile.Texture,
+		Role:      agentprofile.Texture,
 		ChannelID: docID,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -4998,17 +5000,17 @@ func TestFinishWorkerDelegationDoesNotMirrorLegacyWorkerSubmitUpdate(t *testing.
 		RunID:        "run-worker-submit-legacy-super",
 		OwnerID:      ownerID,
 		AgentID:      "super:primary",
-		AgentProfile: AgentProfileSuper,
-		AgentRole:    AgentProfileSuper,
+		AgentProfile: agentprofile.Super,
+		AgentRole:    agentprofile.Super,
 		ChannelID:    docID,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: AgentProfileSuper,
-			runMetadataAgentRole:    AgentProfileSuper,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
 			runMetadataAgentID:      "super:primary",
 			runMetadataChannelID:    docID,
 			runMetadataTrajectoryID: trajectoryID,
 			"requested_by_agent_id": "texture:" + docID,
-			"requested_by_profile":  AgentProfileTexture,
+			"requested_by_profile":  agentprofile.Texture,
 		},
 	}
 	events := []types.EventRecord{
@@ -5044,7 +5046,7 @@ func TestFinishWorkerDelegationDoesNotMirrorLegacyWorkerSubmitUpdate(t *testing.
 			Payload:      json.RawMessage(`{"tool":"update_coagent","call_id":"call-worker-legacy","is_error":false,"output":"{\"update_id\":\"worker-legacy-update\"}"}`),
 		},
 	}
-	result := map[string]any{"profile": AgentProfileVSuper, "agent_id": "vsuper:worker-legacy"}
+	result := map[string]any{"profile": agentprofile.VSuper, "agent_id": "vsuper:worker-legacy"}
 	activeRT.mirrorWorkerSubmitUpdates(ctx, superRun, workerRunEvidence{Events: events}, result)
 	if count := intMapValue(result, "mirrored_worker_update_count"); count != 0 {
 		t.Fatalf("legacy worker update was mirrored: result=%+v", result)
@@ -5112,7 +5114,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
 				RunID:        "worker-root",
 				AgentID:      "agent-vsuper",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunPending,
 				OwnerID:      "user-alice",
 			})
@@ -5120,7 +5122,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-root",
 				AgentID:      "agent-vsuper",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
 				Result:       "spawned children; waiting for export",
@@ -5134,7 +5136,7 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-child",
 				AgentID:      "agent-child",
-				AgentProfile: AgentProfileCoSuper,
+				AgentProfile: agentprofile.CoSuper,
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
 				Result:       "published child AppChangePackage",
@@ -5170,16 +5172,16 @@ func TestDelegateWorkerVMFollowsCompletedVSuperChildrenBeforeReturning(t *testin
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate child follow", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-child-follow",
 		runMetadataChannelID:    "doc-child-follow",
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-child-follow",
@@ -5261,7 +5263,7 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
 				RunID:        "worker-root-incomplete",
 				AgentID:      "agent-vsuper-incomplete",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunPending,
 				OwnerID:      "user-alice",
 			})
@@ -5269,7 +5271,7 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-root-incomplete",
 				AgentID:      "agent-vsuper-incomplete",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
 				Result:       "spawned child and ended before export",
@@ -5280,7 +5282,7 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-child-incomplete",
 				AgentID:      "agent-child-incomplete",
-				AgentProfile: AgentProfileCoSuper,
+				AgentProfile: agentprofile.CoSuper,
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
 				Result:       "acknowledgement only",
@@ -5294,16 +5296,16 @@ func TestDelegateWorkerVMMarksCompletedVSuperWithoutExportOrUpdateIncomplete(t *
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate incomplete child", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-child-incomplete",
 		runMetadataChannelID:    "doc-child-incomplete",
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-child-incomplete",
@@ -5370,7 +5372,7 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
 				RunID:        "worker-package-required-no-package",
 				AgentID:      "agent-vsuper-no-package",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunPending,
 				OwnerID:      "user-alice",
 			})
@@ -5378,7 +5380,7 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-package-required-no-package",
 				AgentID:      "agent-vsuper-no-package",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
 				Result:       "completed candidate changes without package publication",
@@ -5392,16 +5394,16 @@ func TestDelegateWorkerVMMarksPackageRequiredVSuperWithoutPackageIncomplete(t *t
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate package-required no-package", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-package-required-no-package",
 		runMetadataChannelID:    "doc-package-required-no-package",
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-package-required-no-package",
@@ -5499,14 +5501,14 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to distinct worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-worker-bootstrap",
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-bootstrap",
@@ -5569,7 +5571,7 @@ func TestPollInternalWorkerRunRetriesTransientStatusTimeout(t *testing.T) {
 		writeAPIJSON(w, http.StatusOK, runStatusResponse{
 			RunID:        "run-transient-timeout",
 			AgentID:      "agent-transient-timeout",
-			AgentProfile: AgentProfileVSuper,
+			AgentProfile: agentprofile.VSuper,
 			State:        types.RunCompleted,
 			OwnerID:      "user-alice",
 		})
@@ -5609,7 +5611,7 @@ func TestPollInternalWorkerRunRetriesTransientStatusCode(t *testing.T) {
 		writeAPIJSON(w, http.StatusOK, runStatusResponse{
 			RunID:        "run-transient-502",
 			AgentID:      "agent-transient-502",
-			AgentProfile: AgentProfileVSuper,
+			AgentProfile: agentprofile.VSuper,
 			State:        types.RunCompleted,
 			OwnerID:      "user-alice",
 		})
@@ -5648,7 +5650,7 @@ func TestPollInternalWorkerRunRetriesTransientNotFound(t *testing.T) {
 		writeAPIJSON(w, http.StatusOK, runStatusResponse{
 			RunID:        "run-transient-404",
 			AgentID:      "agent-transient-404",
-			AgentProfile: AgentProfileCoSuper,
+			AgentProfile: agentprofile.CoSuper,
 			State:        types.RunCompleted,
 			OwnerID:      "user-alice",
 		})
@@ -5727,7 +5729,7 @@ func TestPollInternalWorkerRunRetriesTransientConnectionReset(t *testing.T) {
 		writeAPIJSON(w, http.StatusOK, runStatusResponse{
 			RunID:        "run-transient-reset",
 			AgentID:      "agent-transient-reset",
-			AgentProfile: AgentProfileVSuper,
+			AgentProfile: agentprofile.VSuper,
 			State:        types.RunCompleted,
 			OwnerID:      "user-alice",
 		})
@@ -5776,7 +5778,7 @@ func TestDelegateWorkerVMReportsFailedWorkerRunWithoutSynchronousRetry(t *testin
 			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
 				RunID:        fmt.Sprintf("worker-run-%d", call),
 				AgentID:      fmt.Sprintf("worker-agent-%d", call),
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunPending,
 				OwnerID:      "user-alice",
 			})
@@ -5784,7 +5786,7 @@ func TestDelegateWorkerVMReportsFailedWorkerRunWithoutSynchronousRetry(t *testin
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-run-1",
 				AgentID:      "worker-agent-1",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunFailed,
 				OwnerID:      "user-alice",
 				Error:        "worker exited before acceptance evidence",
@@ -5795,7 +5797,7 @@ func TestDelegateWorkerVMReportsFailedWorkerRunWithoutSynchronousRetry(t *testin
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-run-2",
 				AgentID:      "worker-agent-2",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
 			})
@@ -5808,14 +5810,14 @@ func TestDelegateWorkerVMReportsFailedWorkerRunWithoutSynchronousRetry(t *testin
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate retry", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-worker-retry",
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-retry",
@@ -5898,7 +5900,7 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
 				RunID:        "worker-run-failed",
 				AgentID:      "worker-agent-failed",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunPending,
 				OwnerID:      "user-alice",
 			})
@@ -5906,7 +5908,7 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-run-failed",
 				AgentID:      "worker-agent-failed",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunFailed,
 				OwnerID:      "user-alice",
 				Error:        "tool loop: exceeded 200 iterations without end_turn",
@@ -5920,14 +5922,14 @@ func TestDelegateWorkerVMReturnsFailedRunEvidence(t *testing.T) {
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate failed worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-worker-failed",
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-failed",
@@ -6023,7 +6025,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 			writeAPIJSON(w, http.StatusAccepted, runStatusResponse{
 				RunID:        "worker-run-timeout",
 				AgentID:      "worker-agent-timeout",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunPending,
 				OwnerID:      "user-alice",
 			})
@@ -6031,7 +6033,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-run-timeout",
 				AgentID:      "worker-agent-timeout",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunRunning,
 				OwnerID:      "user-alice",
 			})
@@ -6043,7 +6045,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "child-export-run",
 				AgentID:      "agent-worker-verifier",
-				AgentProfile: AgentProfileCoSuper,
+				AgentProfile: agentprofile.CoSuper,
 				State:        types.RunCompleted,
 				OwnerID:      "user-alice",
 			})
@@ -6056,16 +6058,16 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate timed-out worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-worker-timeout",
 		runMetadataChannelID:    "doc-worker-timeout",
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun))
 	startRaw, err := registry.Execute(toolCtx, "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
@@ -6087,7 +6089,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		"worker_run_id":      stringMapValue(start, "worker_run_id"),
 		"worker_id":          stringMapValue(start, "worker_id"),
 		"vm_id":              stringMapValue(start, "worker_vm_id"),
-		"profile":            AgentProfileVSuper,
+		"profile":            agentprofile.VSuper,
 	}))
 	if err != nil {
 		t.Fatalf("observe_worker_delegation should return structured active evidence, got error: %v", err)
@@ -6209,7 +6211,7 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "worker-run-active",
 				AgentID:      "worker-agent-active",
-				AgentProfile: AgentProfileVSuper,
+				AgentProfile: agentprofile.VSuper,
 				State:        types.RunRunning,
 				OwnerID:      "user-alice",
 			})
@@ -6219,7 +6221,7 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 			writeAPIJSON(w, http.StatusOK, runStatusResponse{
 				RunID:        "child-implementation-active",
 				AgentID:      "agent-worker-impl",
-				AgentProfile: AgentProfileCoSuper,
+				AgentProfile: agentprofile.CoSuper,
 				State:        types.RunRunning,
 				OwnerID:      "user-alice",
 			})
@@ -6232,23 +6234,23 @@ func TestFinishWorkerDelegationActiveIncludesWorkerEvidence(t *testing.T) {
 	defer srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "finish active worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-finish-active",
 		runMetadataChannelID:    "doc-finish-active",
-		"requested_by_profile":  AgentProfileTexture,
+		"requested_by_profile":  agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun))
 	raw, err := registry.Execute(toolCtx, "finish_worker_delegation", mustJSON(t, map[string]any{
 		"worker_sandbox_url": srv.URL,
 		"worker_run_id":      "worker-run-active",
 		"worker_id":          "worker-active",
 		"vm_id":              "vm-worker-active",
-		"profile":            AgentProfileVSuper,
+		"profile":            agentprofile.VSuper,
 		"objective":          "produce an AppChangePackage or precise blocker",
 	}))
 	if err != nil {
@@ -6348,14 +6350,14 @@ func TestDelegateWorkerVMReturnsSubmitFailureEvidence(t *testing.T) {
 	srv.Close()
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to unavailable worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-worker-submit-failed",
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-submit-failed",
@@ -6396,7 +6398,7 @@ func TestPrepareRemoteWorkerRepoBootstrapUsesConfiguredSourceOutsideGit(t *testi
 	t.Setenv("RUNTIME_WORKER_REPO_REMOTE", "git@github.com:yusefmosiah/go-choir.git")
 	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", base+"-dirty")
 
-	bootstrap, err := prepareRemoteWorkerRepoBootstrap(context.Background(), cwd, "http://172.27.0.2:8085", AgentProfileVSuper)
+	bootstrap, err := prepareRemoteWorkerRepoBootstrap(context.Background(), cwd, "http://172.27.0.2:8085", agentprofile.VSuper)
 	if err != nil {
 		t.Fatalf("prepare bootstrap: %v", err)
 	}
@@ -6439,7 +6441,7 @@ func TestPrepareRemoteWorkerRepoBootstrapPrefersConfiguredBaseOverGitHead(t *tes
 	envBase := "0d1527088c5774e74f5e4a796082652c5062eaa0"
 	t.Setenv("RUNTIME_WORKER_REPO_BASE_SHA", envBase)
 
-	bootstrap, err := prepareRemoteWorkerRepoBootstrap(context.Background(), repo, "http://172.27.0.2:8085", AgentProfileVSuper)
+	bootstrap, err := prepareRemoteWorkerRepoBootstrap(context.Background(), repo, "http://172.27.0.2:8085", agentprofile.VSuper)
 	if err != nil {
 		t.Fatalf("prepare bootstrap: %v", err)
 	}
@@ -6489,13 +6491,13 @@ func TestDelegateWorkerVMRefusesSameRuntimeWithoutIsolation(t *testing.T) {
 	t.Setenv("RUNTIME_LOCAL_WORKER_MODE", "")
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to local worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	_, err = registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "delegate_worker_vm", json.RawMessage(`{
 		"worker_sandbox_url": "http://127.0.0.1:8085",
 		"worker_id": "worker-local",
@@ -6608,14 +6610,14 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 	t.Setenv("RUNTIME_LOCAL_WORKER_ROOT", filepath.Join(t.TempDir(), "worktrees"))
 
 	superRun, err := activeRT.StartRunWithMetadata(context.Background(), "delegate to local worker", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 		runMetadataTrajectoryID: "trace-local-worktree",
 	})
 	if err != nil {
 		t.Fatalf("start active super run: %v", err)
 	}
-	registry := activeRT.ToolRegistryForProfile(AgentProfileSuper)
+	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	raw, err := executeWorkerDelegationUntilSettled(t, registry, toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-local-worktree",
@@ -6682,7 +6684,7 @@ func testRuntimeWithTempCWD(t *testing.T) (*Runtime, *store.Store, string) {
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, events.NewEventBus(), NewStubProvider(10*time.Millisecond))
+	}, s, events.NewEventBus(), provider.NewStubProvider(10*time.Millisecond))
 	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {

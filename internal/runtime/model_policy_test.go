@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestParseModelPolicyResolvesRoles(t *testing.T) {
@@ -34,21 +35,21 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	if err != nil {
 		t.Fatalf("parseModelPolicy: %v", err)
 	}
-	super := policy.Resolve(AgentProfileSuper)
+	super := policy.Resolve(agentprofile.Super)
 	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "medium" {
 		t.Fatalf("super selection = %+v", super)
 	}
 	if super.MaxTokens != 24000 {
 		t.Fatalf("super max tokens = %d, want 24000", super.MaxTokens)
 	}
-	texture := policy.Resolve(AgentProfileTexture)
+	texture := policy.Resolve(agentprofile.Texture)
 	if texture.Provider != "fireworks" || texture.Model != "accounts/fireworks/models/deepseek-v4-flash" {
 		t.Fatalf("texture selection = %+v", texture)
 	}
 	if texture.MaxTokens != 12000 {
 		t.Fatalf("texture inherited max tokens = %d, want 12000", texture.MaxTokens)
 	}
-	researcher := policy.Resolve(AgentProfileResearcher)
+	researcher := policy.Resolve(agentprofile.Researcher)
 	if researcher.Provider != "chatgpt" || researcher.Model != "gpt-5.5" || researcher.ReasoningEffort != "low" {
 		t.Fatalf("researcher fallback = %+v", researcher)
 	}
@@ -56,35 +57,35 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 
 func TestFallbackModelPolicyUsesChatGPTCutoverDefaults(t *testing.T) {
 	policy := fallbackModelPolicy(provideriface.Config{})
-	conductor := policy.Resolve(AgentProfileConductor)
+	conductor := policy.Resolve(agentprofile.Conductor)
 	if conductor.Provider != "chatgpt" || conductor.Model != "gpt-5.4-mini" || conductor.ReasoningEffort != "low" {
 		t.Fatalf("conductor selection = %+v", conductor)
 	}
-	super := policy.Resolve(AgentProfileSuper)
+	super := policy.Resolve(agentprofile.Super)
 	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "high" {
 		t.Fatalf("super selection = %+v", super)
 	}
-	texture := policy.Resolve(AgentProfileTexture)
+	texture := policy.Resolve(agentprofile.Texture)
 	if texture.Provider != "chatgpt" || texture.Model != "gpt-5.5" || texture.ReasoningEffort != "low" {
 		t.Fatalf("texture selection = %+v", texture)
 	}
-	researcher := policy.Resolve(AgentProfileResearcher)
+	researcher := policy.Resolve(agentprofile.Researcher)
 	if researcher.Provider != "chatgpt" || researcher.Model != "gpt-5.4-mini" || researcher.ReasoningEffort != "low" {
 		t.Fatalf("researcher selection = %+v", researcher)
 	}
-	processor := policy.Resolve(AgentProfileProcessor)
+	processor := policy.Resolve(agentprofile.Processor)
 	if processor.Provider != "chatgpt" || processor.Model != "gpt-5.5" || processor.ReasoningEffort != "low" {
 		t.Fatalf("processor selection = %+v", processor)
 	}
-	vsuper := policy.Resolve(AgentProfileVSuper)
+	vsuper := policy.Resolve(agentprofile.VSuper)
 	if vsuper.Provider != "deepseek" || vsuper.Model != "deepseek-v4-flash" {
 		t.Fatalf("vsuper selection = %+v", vsuper)
 	}
-	cosuper := policy.Resolve(AgentProfileCoSuper)
+	cosuper := policy.Resolve(agentprofile.CoSuper)
 	if cosuper.Provider != "deepseek" || cosuper.Model != "deepseek-v4-flash" {
 		t.Fatalf("co-super selection = %+v", cosuper)
 	}
-	reconciler := policy.Resolve(AgentProfileReconciler)
+	reconciler := policy.Resolve(agentprofile.Reconciler)
 	if reconciler.Provider != "chatgpt" || reconciler.Model != "gpt-5.5" || reconciler.ReasoningEffort != "low" {
 		t.Fatalf("reconciler selection = %+v", reconciler)
 	}
@@ -110,7 +111,7 @@ func TestGeneratedModelPolicyUsesTextureRoleKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse generated model policy: %v", err)
 	}
-	texture := policy.Resolve(AgentProfileTexture)
+	texture := policy.Resolve(agentprofile.Texture)
 	if texture.Provider != "chatgpt" || texture.Model != "gpt-5.5" || texture.ReasoningEffort != "low" {
 		t.Fatalf("texture selection = %+v, want generated ChatGPT default", texture)
 	}
@@ -137,13 +138,13 @@ func TestDefaultModelPolicyUsesChatGPTCutover(t *testing.T) {
 	if got := policy.Resolve("unknown-role"); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "low" {
 		t.Fatalf("generated fallback selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileConductor); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "low" {
+	if got := policy.Resolve(agentprofile.Conductor); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "low" {
 		t.Fatalf("generated conductor selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileResearcher); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "low" {
+	if got := policy.Resolve(agentprofile.Researcher); got.Provider != "chatgpt" || got.Model != "gpt-5.4-mini" || got.ReasoningEffort != "low" {
 		t.Fatalf("generated researcher selection = %+v", got)
 	}
-	if got := policy.Resolve(AgentProfileSuper); got.Provider != "chatgpt" || got.Model != "gpt-5.5" || got.ReasoningEffort != "high" {
+	if got := policy.Resolve(agentprofile.Super); got.Provider != "chatgpt" || got.Model != "gpt-5.5" || got.ReasoningEffort != "high" {
 		t.Fatalf("generated super selection = %+v", got)
 	}
 }
@@ -161,7 +162,7 @@ func TestEnsureDefaultModelPolicyCreatesCutoverPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse generated policy: %v", err)
 	}
-	if got := policy.Resolve(AgentProfileTexture); got.Provider != "chatgpt" || got.Model != "gpt-5.5" || got.ReasoningEffort != "low" {
+	if got := policy.Resolve(agentprofile.Texture); got.Provider != "chatgpt" || got.Model != "gpt-5.5" || got.ReasoningEffort != "low" {
 		t.Fatalf("generated texture selection = %+v", got)
 	}
 }
@@ -224,8 +225,8 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	rt.cfg.ModelPolicyPath = policyPath
 
 	metadata := rt.ensureResolvedLLMMetadata(context.Background(), "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileResearcher,
-		runMetadataAgentRole:    AgentProfileResearcher,
+		runMetadataAgentProfile: agentprofile.Researcher,
+		runMetadataAgentRole:    agentprofile.Researcher,
 	})
 
 	if got := metadataStringValue(metadata, runMetadataLLMProvider); got != "fireworks" {
@@ -274,8 +275,8 @@ reasoning = "medium"
 	rt.cfg.ModelPolicyPath = policyPath
 
 	metadata := rt.ensureResolvedLLMMetadata(context.Background(), "user-alice", map[string]any{
-		runMetadataAgentProfile:       AgentProfileResearcher,
-		runMetadataAgentRole:          AgentProfileResearcher,
+		runMetadataAgentProfile:       agentprofile.Researcher,
+		runMetadataAgentRole:          agentprofile.Researcher,
 		runMetadataLLMPolicyOverlayID: "mimo-arm",
 	})
 
@@ -328,8 +329,8 @@ model = "mimo-v2.5-pro"
 	rt.cfg.ModelPolicyPath = policyPath
 
 	metadata := rt.ensureResolvedLLMMetadata(context.Background(), "user-alice", map[string]any{
-		runMetadataAgentProfile:       AgentProfileResearcher,
-		runMetadataAgentRole:          AgentProfileResearcher,
+		runMetadataAgentProfile:       agentprofile.Researcher,
+		runMetadataAgentRole:          agentprofile.Researcher,
 		runMetadataLLMPolicyOverlayID: "expired",
 	})
 
@@ -365,16 +366,16 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 	rt.cfg.ModelPolicyPath = policyPath
 
 	parent, err := rt.createRunWithMetadata(ctx, "parent", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileConductor,
-		runMetadataAgentRole:    AgentProfileConductor,
+		runMetadataAgentProfile: agentprofile.Conductor,
+		runMetadataAgentRole:    agentprofile.Conductor,
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 
 	child, err := rt.StartCoagentRun(ctx, parent.RunID, "revise texture", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileTexture,
-		runMetadataAgentRole:    AgentProfileTexture,
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
 	})
 	if err != nil {
 		t.Fatalf("start child: %v", err)
@@ -425,16 +426,16 @@ reasoning = "low"
 	rt.cfg.ModelPolicyPath = policyPath
 
 	parent, err := rt.createRunWithMetadata(ctx, "parent", "user-alice", map[string]any{
-		runMetadataAgentProfile: AgentProfileSuper,
-		runMetadataAgentRole:    AgentProfileSuper,
+		runMetadataAgentProfile: agentprofile.Super,
+		runMetadataAgentRole:    agentprofile.Super,
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 
 	child, err := rt.StartCoagentRun(ctx, parent.RunID, "research under gpt mini", "user-alice", map[string]any{
-		runMetadataAgentProfile:       AgentProfileResearcher,
-		runMetadataAgentRole:          AgentProfileResearcher,
+		runMetadataAgentProfile:       agentprofile.Researcher,
+		runMetadataAgentRole:          agentprofile.Researcher,
 		runMetadataLLMPolicyOverlayID: "gpt-mini-arm",
 	})
 	if err != nil {
@@ -485,7 +486,7 @@ reasoning = "medium"
 	if err == nil {
 		t.Fatalf("expected invalid policy warning")
 	}
-	super := policy.Resolve(AgentProfileSuper)
+	super := policy.Resolve(agentprofile.Super)
 	if super.Provider != "chatgpt" || super.Model != "gpt-5.5" || super.ReasoningEffort != "medium" {
 		t.Fatalf("cached super policy = %+v", super)
 	}

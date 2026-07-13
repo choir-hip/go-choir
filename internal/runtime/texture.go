@@ -38,6 +38,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 var (
@@ -2100,7 +2101,7 @@ func (h *APIHandler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *htt
 
 	var parent *types.RunRecord
 	for i := len(runs) - 1; i >= 0; i-- {
-		if agentProfileForRun(&runs[i]) == AgentProfileTexture {
+		if agentProfileForRun(&runs[i]) == agentprofile.Texture {
 			parent = &runs[i]
 			break
 		}
@@ -2112,10 +2113,10 @@ func (h *APIHandler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *htt
 
 	role := strings.TrimSpace(req.Role)
 	if role == "" {
-		role = AgentProfileSuper
+		role = agentprofile.Super
 	}
 	switch role {
-	case AgentProfileResearcher, AgentProfileSuper, AgentProfileVSuper, AgentProfileCoSuper:
+	case agentprofile.Researcher, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
 	default:
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "role must be researcher, super, vsuper, or co-super"})
 		return

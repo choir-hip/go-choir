@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const (
@@ -21,7 +22,6 @@ const (
 	runMetadataLLMPolicyError     = "llm_policy_error"
 	runMetadataLLMPolicyOverlayID = "llm_policy_overlay_id"
 
-	defaultModelPolicyRelativePath = "System/model-policy.toml"
 	modelPolicyOverlayRelativeDir  = "System/model-policy-overlays"
 
 	// Keep generated foreground defaults on broadly available gateway providers.
@@ -68,13 +68,6 @@ type modelPolicyOverlay struct {
 	Source    string
 }
 
-func DefaultModelPolicyPath(filesRoot string) string {
-	root := strings.TrimSpace(filesRoot)
-	if root == "" {
-		return ""
-	}
-	return filepath.Join(root, filepath.FromSlash(defaultModelPolicyRelativePath))
-}
 
 func defaultModelPolicyText(_ provideriface.Config) string {
 	return fmt.Sprintf(`# Choir model policy
@@ -166,14 +159,14 @@ func fallbackModelPolicy(_ provideriface.Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			AgentProfileConductor:        chatGPTMini,
-			AgentProfileSuper:            chatGPTForeground,
-			AgentProfileVSuper:           {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
-			AgentProfileCoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
-			AgentProfileResearcher:       chatGPTMini,
-			AgentProfileTexture:          chatGPTWire,
-			AgentProfileProcessor:        chatGPTWire,
-			AgentProfileReconciler:       chatGPTWire,
+			agentprofile.Conductor:        chatGPTMini,
+			agentprofile.Super:            chatGPTForeground,
+			agentprofile.VSuper:           {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
+			agentprofile.CoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
+			agentprofile.Researcher:       chatGPTMini,
+			agentprofile.Texture:          chatGPTWire,
+			agentprofile.Processor:        chatGPTWire,
+			agentprofile.Reconciler:       chatGPTWire,
 			modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},
@@ -194,7 +187,7 @@ func (rt *Runtime) ensureResolvedLLMMetadata(ctx context.Context, ownerID string
 		role = metadataStringValue(metadata, runMetadataAgentProfile)
 	}
 	if role == "" {
-		role = AgentProfileConductor
+		role = agentprofile.Conductor
 	}
 
 	policy, err := rt.loadModelPolicyForMetadata(ctx, ownerID, metadata)
@@ -552,9 +545,9 @@ func applyModelPolicyValue(sel *LLMSelection, key, value string) {
 func normalizeModelPolicyRole(role string) string {
 	switch strings.TrimSpace(strings.ToLower(role)) {
 	case "cosuper", "co_super", "co-super", "cosuper_coding", "co-super-coding":
-		return AgentProfileCoSuper
+		return agentprofile.CoSuper
 	case "texture", "texture-agent":
-		return AgentProfileTexture
+		return agentprofile.Texture
 	case "verifier", "verifier-text", "verifier_text":
 		return modelPolicyRoleVerifier
 	case "verifier-multimodal", "verifier_multimodal":
