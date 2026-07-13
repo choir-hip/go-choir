@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: ef77becf
+  journal_expected_parent_sha: 3b10893c
   orchestrator_lock:
     holder: Main
     epoch: 24
     expires_at: 2026-07-13T09:00:11Z
-    expected_parent_sha: ef77becf
+    expected_parent_sha: 3b10893c
     lock_transition_id: s3-lock-renewal-242
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -2153,16 +2153,16 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 24
-      status: dispatched
+      status: verifying
       dispatch_nonce: s3-runtime-dissolution-i16-nonce-01
       dispatch_ref: S3I16Implementer
       agent_session_ref: agent://S3I16Implementer
       dispatch_prompt_ref: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md#exact-mutation-lock
       implementer_job_ref: S3I16Implementer
-      implementer_output_ref: pending_agent_return
-      verifier_job_ref: pending_independent_verification
-      verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: pending_S3I16Implementer_isolated
+      implementer_output_ref: agent://S3I16Implementer
+      verifier_job_ref: S3I16Verifier
+      verifier_output_ref: pending_S3I16Verifier
+      worktree_or_branch_ref: s3-i16-route-ownership@1794f26cfa32390d205ebaf29b3f565556fd7030
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -2171,10 +2171,12 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I16_landing
       stage_started_at: 2026-07-13T07:00:11Z
       transition_id: s3-i16-dispatch-intent-243
-      expected_parent_sha: ef77becf
+      expected_parent_sha: 3b10893c
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i16-dispatch-intent-243, recorded_at: 2026-07-13T07:00:11Z, actor: Main, expected_parent_sha: 560f0942, precondition: S3_I15_landed_bootstrap_and_wrapper_removed, postcondition: exact_apihandler_route_authority_extraction_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i16-dispatched-244, recorded_at: 2026-07-13T07:03:30Z, actor: Main, expected_parent_sha: ef77becf, precondition: canonical_problem_boundary_and_live_epoch_24, postcondition: S3I16Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s3-i16-implementation-returned-245, recorded_at: 2026-07-13T07:26:35Z, actor: Main, expected_parent_sha: 3b10893c, precondition: clean_isolated_commit_1794f26c_descends_from_dispatch_ef77becf, postcondition: exact_46_slot_route_authority_moved_runtime_registrars_deleted_focused_tests_ratchet_PASS, external_operation_id: not_applicable}
+        - {status: verifying, transition_id: s3-i16-verifier-dispatched-246, recorded_at: 2026-07-13T07:26:35Z, actor: Main, expected_parent_sha: 3b10893c, precondition: canonical_implementation_and_open_metric_adjudication_recorded, postcondition: independent_S3I16Verifier_authorized, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T09:00:11Z
       mutation_class: orange
       protected_surfaces: []
@@ -2182,7 +2184,7 @@ run_checkpoint_and_resumption_state:
       forbidden_targets: [APIHandler_method_or_body_move, app_domain_behavior, route_path_or_order_change, runtime_method_config_provider_store_trace_actor_lifecycle_change, step4, new_package, interface, callback_table, generic_constraint_facade, reflection, alias, accessor, forwarder, wrapper, test_only_registrar_copy, compatibility_shim, dual_registration_path, second_server_or_mux]
       authority_edges_locked: [internal_apihandler_sole_live_route_table_owner, internal_runtime_zero_registrar_declarations, internal_sandbox_one_canonical_registrar_call, product_tool_same_canonical_server]
       implementer_agent: S3I16Implementer
-      verifier_agent: pending_independent_verifier
+      verifier_agent: S3I16Verifier
       pre_mutation_sha: 560f0942
       rollback_commit_or_ref: 560f0942
       accepted_slice_dependency_refs: [S3-I15@887bbdde]
@@ -2190,22 +2192,22 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_public_product_API
       expected_precondition: runtime_owns_live_route_table_sandbox_calls_runtime_registrar
-      observed_postcondition: pending
+      observed_postcondition: apihandler_sole_live_route_registrar_runtime_registrars_deleted_exact_46_slot_order_preserved
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: pending
-      implementation_commit_sha: pending
-      push_ref: pending
+      implementation_sha_or_dirty_snapshot: 3b10893c
+      implementation_commit_sha: 3b10893c
+      push_ref: 3b10893c
       ci_run_ref: pending
       deploy_ref: pending
       deployed_sha: pending
       acceptance_ref: pending
       acceptance_contract: apihandler_sole_exact_route_table_owner_runtime_registrars_deleted_behavior_preserved
-      evidence_refs: [docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md]
-      open_findings: [same_package_runtime_test_import_cycle_requires_clean_nonduplicating_migration]
+      evidence_refs: [docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md, agent://S3I16Implementer]
+      open_findings: [importer_and_wrapper_heuristics_3_to_4_require_independent_adjudication]
       landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-13T07:03:30Z
-      reconciliation_result: one_matching_planned_agent_dispatch_S3I16Implementer
+      adjudication: focused_tests_ratchet_PASS_exact_route_equality_independent_verification_pending
+      last_reconciled_at: 2026-07-13T07:26:35Z
+      reconciliation_result: isolated_commit_1794f26c_integrated_as_3b10893c_ready_for_independent_verification
       close_condition: route_authority_cutover_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

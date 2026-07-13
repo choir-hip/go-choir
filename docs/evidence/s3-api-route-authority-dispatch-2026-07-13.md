@@ -37,3 +37,13 @@ Forbidden: any `APIHandler` method/body move; app/domain/route behavior or path 
 - Same canonical `server.Server` remains bound to the product API tool.
 - Focused apihandler/runtime/sandbox tests and runtime ratchet pass; routes/tools are flat, runtime production LOC and export/caller edges decrease, and every other authority count is non-increasing except classified durable citers.
 - Independent verification, full CI, deploy identity, authenticated public product-path smoke, consensus, and adjudication pass before closure.
+
+## S3-I16 Implementation Receipt
+
+- Integrated isolated commit `1794f26cfa32390d205ebaf29b3f565556fd7030` as canonical `3b10893c`.
+- `internal/apihandler/routes.go` now owns the sole live registrar. Runtime `RegisterRoutes`, `RegisterTextureRoutes`, and `RegisterCandidatePackageReviewSurfaceRoutes` declarations/calls are zero; sandbox has the sole production call and passes its already loaded test-API boolean.
+- A prospective overlay reproduced the predicted same-package test import cycle. The repair moved registrar ownership coverage to `internal/apihandler/routes_test.go`; runtime behavior tests now invoke concrete handler methods without importing apihandler or duplicating a route table. The obsolete spawn route-absence file was consolidated into the canonical apihandler inventory.
+- Programmatic before/after comparison expanded old subregistrars and proved `46` slots in exact equal order: one health override plus `45` routes. Focused inventory and test-gate coverage exercises all slots, exclusions, and test APIs both disabled and enabled.
+- Focused apihandler/runtime/sandbox behavior tests and the runtime ratchet pass after canonical integration. The same server is passed to the route registrar and product API tool.
+- Ratchet: Go files `144 -> 143`, test files `69 -> 68`, production LOC `44024 -> 43944`, test LOC `50141 -> 50065`, exports `1012 -> 1006`, caller edges `365 -> 363`, runtime-scoped routes `47 -> 2`; tools, unused-export debt, compatibility markers, store calls, and interface candidates are flat. Citers increased only from classified dispatch evidence (`245 -> 249`).
+- Open ratchet adjudication: production importers `3 -> 4` and wrapper heuristic `3 -> 4` because the new canonical apihandler registrar necessarily imports runtime and names `runtime.APIHandler`. No forwarding wrapper, interface, callback, accessor, or compatibility seam exists. This conflicts literally with the dispatch's non-increasing-count sentence and requires independent verifier/consensus adjudication; it is not silently normalized as a pass.
