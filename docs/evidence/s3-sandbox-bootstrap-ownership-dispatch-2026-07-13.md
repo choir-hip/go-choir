@@ -65,3 +65,10 @@ This is a deletion-bearing step-3 prerequisite. Runtime still owns `APIHandler` 
 - GitHub Actions run `29228634606` attempt `2` passed every default, integration, race, ratchet, SBOM, and deploy gate for head `887bbdde2f06d2a0b3636cd4e8186227498da304`.
 - Deploy job `86749938685` completed successfully.
 - Authenticated public `GET https://choir.news/api/texture/documents` returned `200`.
+
+## S3-I15 Final Consensus
+
+- Codex, Gemini, GPT-5.5, and OpenCode returned four `PASS` verdicts with no blocking findings and confidence `0.95-1.0`.
+- All four authorize only the next ordered S3 step-3 prerequisite/iteration.
+- Known nonattributable staging gateway readiness degradation remains carried; it is not introduced by this slice.
+- Adjudication: `PASS`. Close S3-I15 only. Runtime API ownership extraction and the remainder of S3 stay open.
