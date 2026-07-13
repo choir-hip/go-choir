@@ -42,3 +42,15 @@ Preserve stub delay/cancellation/progress/error/result/policy behavior, conducto
 ## Dispatch Substrate Reconciliation
 
 The implementer returned a clean named branch commit but switched the shared repository worktree onto that branch rather than using the required isolated worktree. No uncommitted or conflicting paths existed. The orchestrator skipped the resulting empty cherry-pick, switched the shared worktree back to canonical `main`, and integrated the same commit as `08049400`. This is a discovered delegation-substrate conformance defect, not a source mutation or unresolved result conflict; the branch commit and canonical integration match.
+
+## S3-I13 Independent Verification
+
+- Independent `S3I13Verifier` returned `PASS` at confidence `0.96` with no findings.
+- Verified sandbox import deletion, canonical profile/registry/model-path authorities, exact stub delay/cancellation/event/failure/result/policy/Texture-decision behavior, and absence of duplicate aliases, forwarders, callbacks, fallbacks, constructors, or replacement seams.
+- Moving `ConductorSeedPrompt` and `InitialTextureTitle` preserves one authority: runtime declarations are deleted and all callers converge on the provider-owned pure implementations required by exact stub behavior.
+
+## S3-I13 CI, Deploy, and Acceptance
+
+- GitHub Actions run `29220365255` attempt `2` passed every default, integration, race, ratchet, SBOM, and deploy gate for head `7c014386aca694949516d60c380580e47b01f5b6`.
+- Deploy job `86725820359` completed successfully.
+- Staging health returned `200`/`status=ok`; authenticated `GET https://choir.news/api/agent/loops` returned `200`.
