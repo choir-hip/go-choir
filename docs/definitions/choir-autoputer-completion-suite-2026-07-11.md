@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 9ee58796
+  journal_expected_parent_sha: 2bec85dc
   orchestrator_lock:
     holder: Main
     epoch: 22
     expires_at: 2026-07-13T06:40:01Z
-    expected_parent_sha: 9ee58796
+    expected_parent_sha: 2bec85dc
     lock_transition_id: s3-lock-renewal-226
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -2026,16 +2026,16 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 22
-      status: dispatch_intent
+      status: dispatched
       dispatch_nonce: s3-runtime-dissolution-i14-nonce-01
-      dispatch_ref: pending_S3I14Implementer
-      agent_session_ref: pending_agent_dispatch
+      dispatch_ref: S3I14Implementer
+      agent_session_ref: agent://S3I14Implementer
       dispatch_prompt_ref: docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md#exact-mutation-lock
-      implementer_job_ref: pending_agent_dispatch
+      implementer_job_ref: S3I14Implementer
       implementer_output_ref: pending_agent_return
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: pending_isolated_S3I14Implementer
+      worktree_or_branch_ref: pending_S3I14Implementer_isolated
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
       mutation_delivery_mode: isolated_worktree_or_patch
       direct_shared_worktree_allowed: false
@@ -2044,16 +2044,17 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I14_landing
       stage_started_at: 2026-07-13T04:40:01Z
       transition_id: s3-i14-dispatch-intent-225
-      expected_parent_sha: 9ee58796
+      expected_parent_sha: 2bec85dc
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i14-dispatch-intent-225, recorded_at: 2026-07-13T04:40:01Z, actor: Main, expected_parent_sha: 9ee58796, precondition: S3_I13_landed_step3_continues_fresh_caller_map_complete, postcondition: exact_product_API_tool_duplicate_route_authority_prerequisite_canonical, external_operation_id: not_applicable}
+        - {status: dispatched, transition_id: s3-i14-dispatched-227, recorded_at: 2026-07-13T04:41:58Z, actor: Main, expected_parent_sha: 2bec85dc, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_22, postcondition: S3I14Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T06:40:01Z
       mutation_class: orange
       protected_surfaces: []
       exact_files_packages_routes_state_authorities: [internal/runtime/tools_product_api.go, internal/runtime/tools_product_api_test.go, internal/runtime/tool_profiles.go, internal/apihandler/product_api_tool.go, internal/apihandler/product_api_tool_test.go, cmd/sandbox/main.go, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [runtime_APIHandler, apihandler_wrapper, route_changes, app_domain_code, actor_lifecycle, provider_selection, state, models, step4, aliases, interfaces, callbacks, forwarders, accessors, fallback_registration, second_server_or_mux, new_package]
       authority_edges_locked: [one_canonical_server_route_table, apihandler_owns_product_API_tool_transport, runtime_no_production_API_constructor_caller, super_only_owner_scoped_product_tool_behavior_preserved]
-      implementer_agent: pending_S3I14Implementer
+      implementer_agent: S3I14Implementer
       verifier_agent: pending_independent_verifier
       pre_mutation_sha: 9ee58796
       rollback_commit_or_ref: 9ee58796
@@ -2076,8 +2077,8 @@ run_checkpoint_and_resumption_state:
       open_findings: []
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-13T04:40:01Z
-      reconciliation_result: no_prior_matching_dispatch_found
+      last_reconciled_at: 2026-07-13T04:41:58Z
+      reconciliation_result: one_matching_planned_agent_dispatch_S3I14Implementer
       close_condition: prerequisite_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
