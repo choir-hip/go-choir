@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/qdrant"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
@@ -26,7 +27,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // Runtime is the core runtime engine that manages run lifecycle, event
@@ -2050,7 +2050,6 @@ type conductorDecision struct {
 	InitialLoopID        string `json:"initial_loop_id,omitempty"`
 }
 
-
 func conductorRequestedApp(rec *types.RunRecord) string {
 	if rec == nil {
 		return agentprofile.Texture
@@ -2221,7 +2220,6 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 func ptrBool(v bool) *bool {
 	return &v
 }
-
 
 func fallbackPromptBarInitialContent(rec *types.RunRecord, decision conductorDecision) string {
 	if rec == nil || metadataStringValue(rec.Metadata, "input_source") != "prompt_bar" {

@@ -15,7 +15,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-
 const (
 	runMetadataAgentProfile        = "agent_profile"
 	runMetadataChannelID           = "channel_id"

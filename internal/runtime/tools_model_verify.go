@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/modelcatalog"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 type verifyModelCapabilityArgs struct {

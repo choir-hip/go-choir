@@ -11,9 +11,9 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const productAPIToolMaxBodyBytes = 1 << 20

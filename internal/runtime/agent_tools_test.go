@@ -18,13 +18,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func toolSchemaStringEnum(schema map[string]any, property string) []string {
@@ -4343,7 +4343,7 @@ func TestResearcherWebSearchRoutesThroughGateway(t *testing.T) {
 	// web_search now returns a tool-output projection envelope; the
 	// model-visible payload carries the gateway provider and result cards.
 	var projection struct {
-		Sentinel   bool            `json:"__choir_tool_projection"`
+		Sentinel    bool            `json:"__choir_tool_projection"`
 		ModelOutput json.RawMessage `json:"model_output"`
 	}
 	if err := json.Unmarshal([]byte(raw), &projection); err != nil || !projection.Sentinel || len(projection.ModelOutput) == 0 {
@@ -4408,7 +4408,7 @@ func TestResearcherWebSearchFallsBackToProxyGatewayURL(t *testing.T) {
 	}
 
 	var projection struct {
-		Sentinel   bool            `json:"__choir_tool_projection"`
+		Sentinel    bool            `json:"__choir_tool_projection"`
 		ModelOutput json.RawMessage `json:"model_output"`
 	}
 	if err := json.Unmarshal([]byte(raw), &projection); err != nil || !projection.Sentinel || len(projection.ModelOutput) == 0 {

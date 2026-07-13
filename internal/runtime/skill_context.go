@@ -1,10 +1,10 @@
 package runtime
 
 import (
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"os"
 	"path/filepath"
 	"strings"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const maxSkillPromptExtractBytes = 1200

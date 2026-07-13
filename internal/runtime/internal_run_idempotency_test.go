@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func processorHandoffSubmissionFixture(ownerID, requestID, requestKind string, sourceItemIDs []string) internalRunSubmitRequest {

@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/runtime/promptspec"
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 //go:embed prompt_defaults/*.yaml

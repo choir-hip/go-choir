@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent(t *testing.T) {

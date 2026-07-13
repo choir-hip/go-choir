@@ -6,7 +6,7 @@ counts:
     go_files: 146
     production_files: 76
     test_files: 70
-    production_loc: 44224
+    production_loc: 44216
     test_loc: 50223
     exports: 1014
     export_caller_edges: 372
@@ -142,7 +142,7 @@ files:
       loc: 86
     - id: internal/runtime/model_policy.go [production]
       disposition: model
-      loc: 668
+      loc: 667
     - id: internal/runtime/model_policy_test.go [test]
       disposition: model
       loc: 548
@@ -184,7 +184,7 @@ files:
       loc: 47
     - id: internal/runtime/provider.go [production]
       disposition: core
-      loc: 31
+      loc: 30
     - id: internal/runtime/qdrant_dedup.go [production]
       disposition: core
       loc: 186
@@ -211,7 +211,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3650
+      loc: 3648
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -343,7 +343,7 @@ files:
       loc: 57
     - id: internal/runtime/tool_profiles.go [production]
       disposition: tools
-      loc: 665
+      loc: 664
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
       loc: 405
@@ -352,7 +352,7 @@ files:
       loc: 898
     - id: internal/runtime/tools.go [production]
       disposition: tools
-      loc: 43
+      loc: 41
     - id: internal/runtime/tools_capsule.go [production]
       disposition: tools
       loc: 547
@@ -409,7 +409,7 @@ files:
       loc: 98
     - id: internal/runtime/tools_worker_update.go [production]
       disposition: tools
-      loc: 1000
+      loc: 999
     - id: internal/runtime/trace_helpers.go [production]
       disposition: core
       loc: 259

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
 func TestParseModelPolicyResolvesRoles(t *testing.T) {

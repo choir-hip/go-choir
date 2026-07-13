@@ -61,3 +61,9 @@ The implementer returned a clean named branch commit but switched the shared rep
 - Source blocker: `gofmt -l` found `80` changed Go files non-clean, `53` newly unformatted relative to the parent, including malformed import grouping and an indented `done:` label. The semantic cutover passes, but canonical Go formatting is required before closure.
 - Evidence blocker: the implementation receipt incorrectly said every other gate was flat. `citers` increased `236 -> 241` from canonical S3-I13 definition/evidence references. The executable ratchet intentionally permits citer growth while classifying every new citer; this is not source authority growth, but the receipt must state it exactly.
 - Smallest repair: correct the receipt, format only changed S3-I13 Go files, rerun focused packages and ratchet, then request final verifier/consensus recheck.
+
+## S3-I13 Formatter Repair Receipt
+
+- Formatted exactly the Go files changed by `6ee86dd1..08049400`; `gofmt -l` is empty afterward.
+- Focused tests passed for `internal/runtime`, `cmd/sandbox`, `internal/provider`, `internal/provideriface`, `internal/actorruntime`, and `internal/gatewayruntime`.
+- Canonical inventory regenerated for formatting-only line removal: production LOC `44224 -> 44216`; every semantic authority count is unchanged. The runtime ratchet passes.

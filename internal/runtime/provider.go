@@ -2,7 +2,6 @@ package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/provideriface"
 
-
 func providerPolicyForRuntime(provider provideriface.Provider) provideriface.ProviderPolicy {
 	if provider == nil {
 		return provideriface.ProviderPolicy{

@@ -322,11 +322,11 @@ func newCommitTransactionTool() Tool {
 			// If the record is rejected (unknown paths), do not append to tape.
 			if record.Rejected {
 				return toolResultJSON(map[string]any{
-					"capsule_id":   in.CapsuleID,
-					"change_count": len(changes),
-					"rejected":     true,
+					"capsule_id":    in.CapsuleID,
+					"change_count":  len(changes),
+					"rejected":      true,
 					"reject_reason": record.RejectReason,
-					"tape_append":  false,
+					"tape_append":   false,
 				})
 			}
 
@@ -342,15 +342,15 @@ func newCommitTransactionTool() Tool {
 			}
 
 			return toolResultJSON(map[string]any{
-				"capsule_id":        in.CapsuleID,
-				"change_count":      len(changes),
+				"capsule_id":         in.CapsuleID,
+				"change_count":       len(changes),
 				"classifier_version": record.ClassifierV,
-				"classifier_digest": record.ClassifierDigest,
-				"groups":            record.Groups,
-				"ignored_count":     len(record.Ignored),
-				"tape_append":       ctc.TransactionTape != nil,
-				"tape_hash":         tapeHash,
-				"tape_length":       tapeLen,
+				"classifier_digest":  record.ClassifierDigest,
+				"groups":             record.Groups,
+				"ignored_count":      len(record.Ignored),
+				"tape_append":        ctc.TransactionTape != nil,
+				"tape_hash":          tapeHash,
+				"tape_length":        tapeLen,
 			})
 		},
 	}

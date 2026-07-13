@@ -2,8 +2,8 @@ package runtime
 
 import (
 	"context"
-	"testing"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"testing"
 )
 
 func TestEnsureTextureHandoffCorpusWakeRequiresChannelID(t *testing.T) {

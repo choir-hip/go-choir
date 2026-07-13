@@ -1,9 +1,9 @@
 package runtime
 
 import (
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"strings"
 	"testing"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestPromptStoreSeedsDefaults(t *testing.T) {

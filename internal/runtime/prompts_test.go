@@ -4,12 +4,12 @@ package runtime
 
 import (
 	"encoding/json"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func testPromptAPISetup(t *testing.T) (*Runtime, *APIHandler) {

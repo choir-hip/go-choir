@@ -179,11 +179,11 @@ func TestHandlerCancelPassivatedRun(t *testing.T) {
 
 	// Create a run and manually set it to RunPassivated.
 	rec := types.RunRecord{
-		RunID:    "run-cancel-test",
-		OwnerID:  "user-cancel",
-		AgentID:  "agent-cancel-test",
-		Prompt:   "test cancel",
-		State:    types.RunPassivated,
+		RunID:   "run-cancel-test",
+		OwnerID: "user-cancel",
+		AgentID: "agent-cancel-test",
+		Prompt:  "test cancel",
+		State:   types.RunPassivated,
 	}
 	if err := env.store.CreateRun(env.ctx, rec); err != nil {
 		t.Fatalf("CreateRun: %v", err)
@@ -246,12 +246,12 @@ func TestHandlerCoagentResultForCompletedRun(t *testing.T) {
 
 	// Create a completed run.
 	rec := types.RunRecord{
-		RunID:    "run-completed-test",
-		OwnerID:  ownerID,
-		AgentID:  agentID,
-		Prompt:   "test completed",
-		State:    types.RunCompleted,
-		Result:   "done",
+		RunID:   "run-completed-test",
+		OwnerID: ownerID,
+		AgentID: agentID,
+		Prompt:  "test completed",
+		State:   types.RunCompleted,
+		Result:  "done",
 	}
 	now := time.Now().UTC()
 	rec.FinishedAt = &now
@@ -295,12 +295,12 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 
 	// Create a blocked run.
 	rec := types.RunRecord{
-		RunID:    "run-blocked-test",
-		OwnerID:  ownerID,
-		AgentID:  agentID,
-		Prompt:   "test blocked",
-		State:    types.RunBlocked,
-		Error:    "provider rate limit",
+		RunID:   "run-blocked-test",
+		OwnerID: ownerID,
+		AgentID: agentID,
+		Prompt:  "test blocked",
+		State:   types.RunBlocked,
+		Error:   "provider rate limit",
 	}
 	if err := env.store.CreateRun(env.ctx, rec); err != nil {
 		t.Fatalf("CreateRun: %v", err)
@@ -356,10 +356,10 @@ func TestHandlerUnknownUpdateKind(t *testing.T) {
 // actorUpdate creates an actor.Update for testing.
 func actorUpdate(kind, toAgentID, content string) actor.Update {
 	return actor.Update{
-		UpdateID:    "test-update-id",
-		ToAgentID:   toAgentID,
-		Kind:        kind,
-		Content:     content,
-		CreatedAt:   time.Now().UTC(),
+		UpdateID:  "test-update-id",
+		ToAgentID: toAgentID,
+		Kind:      kind,
+		Content:   content,
+		CreatedAt: time.Now().UTC(),
 	}
 }

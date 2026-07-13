@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
-	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func RegisterCoagentUpdateTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
@@ -285,7 +285,6 @@ func stringArraySchema() map[string]any {
 		"items": map[string]any{"type": "string"},
 	}
 }
-
 
 func workerUpdateEmpty(update types.CoagentSourcePacket) bool {
 	return coagentPacketPayloadEmpty(update.Packet)

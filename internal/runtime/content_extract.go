@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"html"
 	"io"
 	"os"
@@ -16,7 +17,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 const contentExtractionAdapterVersion = 1

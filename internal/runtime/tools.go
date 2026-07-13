@@ -4,8 +4,6 @@ import "github.com/yusefmosiah/go-choir/internal/toolregistry"
 
 type Tool = toolregistry.Tool
 
-
-
 // --- Schema helpers (delegated to internal/toolregistry) ---
 
 // jsonSchemaObject creates a JSON Schema object with the given properties,

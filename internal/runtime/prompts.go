@@ -8,9 +8,9 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
-	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type promptDescriptorResponse struct {
@@ -138,14 +138,14 @@ func (h *APIHandler) promptResponse(ownerID string, prompt PromptDescriptor) (pr
 			"This role cannot spawn child agents, so it cannot request model overrides through spawn_agent.")
 	}
 	return promptDescriptorResponse{
-		Role:                         prompt.Role,
-		Content:                      prompt.Content,
-		Source:                       prompt.Source,
-		SourceLabel:                  promptSourceLabel(prompt.Source),
-		EffectiveSystemPrompt:        effective,
-		Tools:                        toolResponsesForRegistry(registry),
-		RolePolicy:                   rolePolicy,
-		ProviderPolicy:               providerPolicy,
+		Role:                  prompt.Role,
+		Content:               prompt.Content,
+		Source:                prompt.Source,
+		SourceLabel:           promptSourceLabel(prompt.Source),
+		EffectiveSystemPrompt: effective,
+		Tools:                 toolResponsesForRegistry(registry),
+		RolePolicy:            rolePolicy,
+		ProviderPolicy:        providerPolicy,
 	}, nil
 }
 

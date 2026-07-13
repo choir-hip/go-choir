@@ -2,11 +2,11 @@ package runtime
 
 import (
 	"encoding/json"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"log"
 	"net/http"
 	"strings"
-	"github.com/yusefmosiah/go-choir/internal/provider"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 // texturePromptEvalKind marks conductor runs created by the overlay-pinned

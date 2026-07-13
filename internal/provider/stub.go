@@ -75,7 +75,7 @@ func (p *StubProvider) Execute(ctx context.Context, task *types.RunRecord, emit 
 		}
 	}
 
- done:
+done:
 	if p.FailErr != nil {
 		return p.FailErr
 	}

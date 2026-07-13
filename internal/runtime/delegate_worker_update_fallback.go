@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func (rt *Runtime) synthesizeDelegateWorkerUpdateOnSuperFailure(ctx context.Context, rec *types.RunRecord, runErr error) error {

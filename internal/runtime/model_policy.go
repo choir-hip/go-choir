@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 	runMetadataLLMPolicyError     = "llm_policy_error"
 	runMetadataLLMPolicyOverlayID = "llm_policy_overlay_id"
 
-	modelPolicyOverlayRelativeDir  = "System/model-policy-overlays"
+	modelPolicyOverlayRelativeDir = "System/model-policy-overlays"
 
 	// Keep generated foreground defaults on broadly available gateway providers.
 	// Per-computer policy files may still override these roles through product state.
@@ -67,7 +67,6 @@ type modelPolicyOverlay struct {
 	Roles     map[string]LLMSelection
 	Source    string
 }
-
 
 func defaultModelPolicyText(_ provideriface.Config) string {
 	return fmt.Sprintf(`# Choir model policy
@@ -159,14 +158,14 @@ func fallbackModelPolicy(_ provideriface.Config) ModelPolicy {
 	return ModelPolicy{
 		Defaults: defaults,
 		Roles: map[string]LLMSelection{
-			agentprofile.Conductor:        chatGPTMini,
-			agentprofile.Super:            chatGPTForeground,
-			agentprofile.VSuper:           {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
-			agentprofile.CoSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
-			agentprofile.Researcher:       chatGPTMini,
-			agentprofile.Texture:          chatGPTWire,
-			agentprofile.Processor:        chatGPTWire,
-			agentprofile.Reconciler:       chatGPTWire,
+			agentprofile.Conductor:       chatGPTMini,
+			agentprofile.Super:           chatGPTForeground,
+			agentprofile.VSuper:          {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
+			agentprofile.CoSuper:         {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
+			agentprofile.Researcher:      chatGPTMini,
+			agentprofile.Texture:         chatGPTWire,
+			agentprofile.Processor:       chatGPTWire,
+			agentprofile.Reconciler:      chatGPTWire,
 			modelPolicyRoleVerifier:      {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			modelPolicyRoleVerifierMulti: {Provider: defaultXiaomiProvider, Model: defaultMultimodalVerifierModel, Source: "platform_fallback"},
 		},

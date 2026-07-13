@@ -17,11 +17,11 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
-	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 )
 
 func TestSubmitTaskReturnsStableHandle(t *testing.T) {
