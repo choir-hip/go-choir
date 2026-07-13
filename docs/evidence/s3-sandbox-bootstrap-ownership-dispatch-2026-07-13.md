@@ -38,3 +38,9 @@ This is a deletion-bearing step-3 prerequisite. Runtime still owns `APIHandler` 
 - Focused sandbox command/package, runtime live workflow, apihandler product tool, and actor-runtime tests pass.
 - Wrapper count and command-level authority edges decrease; routes/tools/product behavior remain flat; every other gated authority count is non-increasing except classified durable citers.
 - Independent verification, full CI, deploy identity, authenticated public product-path smoke, consensus, and adjudication pass before closure.
+
+## S3-I15 Compile-Proven Cycle Blocker
+
+- The exact bootstrap move exposed an existing reverse dependency: runtime Texture import code calls sandbox-owned `ResolveFilesRoot` at three production sites. Once the existing sandbox package owns bootstrap and imports runtime, that reverse edge creates an illegal Go package cycle.
+- This is a pre-existing ownership defect revealed by the cutover, not a reason to restore the wrapper.
+- Smallest deletion-bearing repair: move `DefaultFilesRoot` and `ResolveFilesRoot` into the existing provider-interface configuration authority, migrate sandbox and runtime callers, add exact explicit/environment/default precedence coverage, and delete the sandbox declarations. No alias, forwarder, duplicate resolver, callback, interface, or new package is permitted.

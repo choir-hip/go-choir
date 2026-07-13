@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: ced98b5b
+  journal_expected_parent_sha: 9caf31c6
   orchestrator_lock:
     holder: Main
     epoch: 23
     expires_at: 2026-07-13T07:52:40Z
-    expected_parent_sha: ced98b5b
+    expected_parent_sha: 9caf31c6
     lock_transition_id: s3-lock-renewal-234
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -2089,7 +2089,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 23
-      status: dispatched
+      status: blocked_incomplete
       dispatch_nonce: s3-runtime-dissolution-i15-nonce-01
       dispatch_ref: S3I15Implementer
       agent_session_ref: agent://S3I15Implementer
@@ -2107,14 +2107,15 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I15_landing
       stage_started_at: 2026-07-13T05:52:40Z
       transition_id: s3-i15-dispatch-intent-233
-      expected_parent_sha: ced98b5b
+      expected_parent_sha: 9caf31c6
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i15-dispatch-intent-233, recorded_at: 2026-07-13T05:52:40Z, actor: Main, expected_parent_sha: 3c651e58, precondition: S3_I14_landed_duplicate_API_constructor_deleted, postcondition: exact_sandbox_bootstrap_ownership_and_apihandler_wrapper_deletion_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i15-dispatched-235, recorded_at: 2026-07-13T05:54:27Z, actor: Main, expected_parent_sha: ced98b5b, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_23, postcondition: S3I15Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
+        - {status: blocked_incomplete, transition_id: s3-i15-cycle-blocker-236, recorded_at: 2026-07-13T06:02:57Z, actor: Main, expected_parent_sha: 9caf31c6, precondition: exact_bootstrap_move_compile_probe, postcondition: preexisting_runtime_to_sandbox_ResolveFilesRoot_reverse_edge_documented_provideriface_ownership_repair_required, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T07:52:40Z
       mutation_class: orange
       protected_surfaces: []
-      exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/sandbox/run.go, internal/sandbox/run_test.go, internal/apihandler/api.go, internal/runtime/api.go, internal/runtime/texture_live_llm_workflow_test.go, docs/runtime-dissolution-inventory.yaml]
+      exact_files_packages_routes_state_authorities: [cmd/sandbox/main.go, cmd/sandbox/main_test.go, internal/sandbox/run.go, internal/sandbox/run_test.go, internal/sandbox/files.go, internal/apihandler/api.go, internal/provideriface/config.go, internal/provideriface/config_test.go, internal/runtime/api.go, internal/runtime/texture_import.go, internal/runtime/texture_live_llm_workflow_test.go, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [runtime_APIHandler_method_move, app_domain_code, routes, actor_lifecycle, provider_semantics, state, models, health_policy, deployment_config, step4, new_package, aliases, interfaces, callbacks, accessors, forwarders, fallback_bootstrap, second_server_or_mux, compatibility_shims]
       authority_edges_locked: [internal_sandbox_sole_bootstrap_composition_owner, cmd_sandbox_process_entry_only, apihandler_wrapper_deleted, one_runtime_API_declaration_and_route_path, product_tool_same_canonical_server]
       implementer_agent: S3I15Implementer
@@ -2137,11 +2138,11 @@ run_checkpoint_and_resumption_state:
       acceptance_ref: pending
       acceptance_contract: sandbox_package_sole_bootstrap_owner_cmd_entry_only_apihandler_wrapper_deleted_behavior_preserved
       evidence_refs: [docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md, /tmp/choir-s3-i14-api-boundary-consensus-20260713]
-      open_findings: [nonattributable_staging_gateway_readiness_local_runtime_dolt_ollama_refused]
+      open_findings: [preexisting_runtime_to_sandbox_ResolveFilesRoot_cycle_blocker_provideriface_move_authorized_after_problem_record, nonattributable_staging_gateway_readiness_local_runtime_dolt_ollama_refused]
       landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-13T05:54:27Z
-      reconciliation_result: one_matching_planned_agent_dispatch_S3I15Implementer
+      adjudication: compile_proven_cycle_blocker_documented_before_widened_fix_commit
+      last_reconciled_at: 2026-07-13T06:02:57Z
+      reconciliation_result: isolated_uncommitted_cycle_repair_paused_pending_canonical_problem_record
       close_condition: bootstrap_cutover_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
