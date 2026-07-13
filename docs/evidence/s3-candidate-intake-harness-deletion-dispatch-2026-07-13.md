@@ -51,3 +51,11 @@ Allowed files: `internal/runtime/api_candidate_package_intake.go`, direct candid
 - Read-only review authorization, method rejection, owner scope, and no-mutation behavior remain covered.
 - Direct domain tests preserve creation, review, adoption boundary/review, promotion switch, rollback, roll-forward, acceptance, and review-surface behavior.
 - Focused candidate-intake, apihandler, and ratchet tests pass. No staging deployment is manufactured because live behavior does not change; independent verification, consensus, adjudication, and durable closure remain required.
+
+## S3-I17 Compile-Proven Ratchet Blocker
+
+- The isolated implementer reproduced the exact deletion, rewrote candidate fixtures to direct Runtime operations, and passed focused candidate-intake, live route, and ratchet unit tests.
+- The executable ratchet blocked the slice: deleting the eleven HTTP receivers removes the only production callers of eleven exported Runtime candidate-intake domain operations. Initial unused-export debt changes `16 -> 26` (one deleted registrar debt offset by eleven newly stranded exports), violating canonical no-growth authority.
+- Proof deltas from the discarded experiment: routes `2 -> 0`, APIHandler receivers `128 -> 117`, production LOC `43944 -> 43563`, test LOC `50065 -> 47276`, exports `1006 -> 985`, caller edges `363 -> 349`; importers, wrappers, and interface candidates flat. The otherwise strong deletion does not override the debt violation.
+- The worktree is clean and no commit exists. Lowercasing, deleting, or moving the eleven domain operations changes deferred candidate/promotion authority outside this orange lock; adding a caller, registrar, wrapper, interface, or seam would only hide the debt.
+- Required parent-plan change: carry these production-called receivers through the atomic handler ownership cutover, or authorize the protected candidate/promotion domain ownership/visibility cutover first. Slice-local ratchet weakening is not authorized.
