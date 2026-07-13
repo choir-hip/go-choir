@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 560f0942
+  journal_expected_parent_sha: ef77becf
   orchestrator_lock:
     holder: Main
     epoch: 24
     expires_at: 2026-07-13T09:00:11Z
-    expected_parent_sha: 560f0942
+    expected_parent_sha: ef77becf
     lock_transition_id: s3-lock-renewal-242
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -2153,12 +2153,12 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 24
-      status: dispatch_intent
+      status: dispatched
       dispatch_nonce: s3-runtime-dissolution-i16-nonce-01
-      dispatch_ref: pending_S3I16Implementer
-      agent_session_ref: pending_agent_dispatch
+      dispatch_ref: S3I16Implementer
+      agent_session_ref: agent://S3I16Implementer
       dispatch_prompt_ref: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md#exact-mutation-lock
-      implementer_job_ref: pending_agent_dispatch
+      implementer_job_ref: S3I16Implementer
       implementer_output_ref: pending_agent_return
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
@@ -2171,16 +2171,17 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I16_landing
       stage_started_at: 2026-07-13T07:00:11Z
       transition_id: s3-i16-dispatch-intent-243
-      expected_parent_sha: 560f0942
+      expected_parent_sha: ef77becf
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i16-dispatch-intent-243, recorded_at: 2026-07-13T07:00:11Z, actor: Main, expected_parent_sha: 560f0942, precondition: S3_I15_landed_bootstrap_and_wrapper_removed, postcondition: exact_apihandler_route_authority_extraction_slice_canonical, external_operation_id: not_applicable}
+        - {status: dispatched, transition_id: s3-i16-dispatched-244, recorded_at: 2026-07-13T07:03:30Z, actor: Main, expected_parent_sha: ef77becf, precondition: canonical_problem_boundary_and_live_epoch_24, postcondition: S3I16Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T09:00:11Z
       mutation_class: orange
       protected_surfaces: []
       exact_files_packages_routes_state_authorities: [internal/apihandler/routes.go, internal/runtime/api.go, internal/runtime/api_candidate_package_intake.go, internal/sandbox/run.go, directly_affected_route_registration_tests, docs/runtime-dissolution-inventory.yaml]
       forbidden_targets: [APIHandler_method_or_body_move, app_domain_behavior, route_path_or_order_change, runtime_method_config_provider_store_trace_actor_lifecycle_change, step4, new_package, interface, callback_table, generic_constraint_facade, reflection, alias, accessor, forwarder, wrapper, test_only_registrar_copy, compatibility_shim, dual_registration_path, second_server_or_mux]
       authority_edges_locked: [internal_apihandler_sole_live_route_table_owner, internal_runtime_zero_registrar_declarations, internal_sandbox_one_canonical_registrar_call, product_tool_same_canonical_server]
-      implementer_agent: pending_S3I16Implementer
+      implementer_agent: S3I16Implementer
       verifier_agent: pending_independent_verifier
       pre_mutation_sha: 560f0942
       rollback_commit_or_ref: 560f0942
@@ -2203,8 +2204,8 @@ run_checkpoint_and_resumption_state:
       open_findings: [same_package_runtime_test_import_cycle_requires_clean_nonduplicating_migration]
       landed_commit_sha: pending
       adjudication: pending
-      last_reconciled_at: 2026-07-13T07:00:11Z
-      reconciliation_result: no_prior_matching_dispatch_found
+      last_reconciled_at: 2026-07-13T07:03:30Z
+      reconciliation_result: one_matching_planned_agent_dispatch_S3I16Implementer
       close_condition: route_authority_cutover_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
