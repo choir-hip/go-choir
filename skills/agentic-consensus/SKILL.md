@@ -312,7 +312,7 @@ Manifest statuses:
 ```text
 ok                     agent completed with exit 0
 failed                 agent command exited non-zero
-timed-out              GNU timeout ended the agent at its deadline
+timed-out              GNU timeout killed the agent at its hard deadline
 skipped-missing-cli    required CLI binary was not found
 dry-run                command was rendered but not executed
 ```

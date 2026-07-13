@@ -275,14 +275,14 @@ run_one() {
   local started=$SECONDS
   (
     cd "$CWD" || exit 2
-    timeout --signal=TERM --kill-after=5 "$TIMEOUT_SECONDS" \
-      bash -c '"$@"; code=$?; [[ $code -eq 124 ]] && exit 123; exit "$code"' _ "${CMD[@]}"
+    timeout --signal=KILL "$TIMEOUT_SECONDS" \
+      bash -c '"$@"; code=$?; [[ $code -eq 124 ]] && exit 123; [[ $code -eq 137 ]] && exit 136; exit "$code"' _ "${CMD[@]}"
   ) </dev/null >"$out" 2>&1
   local code=$?
   local duration=$((SECONDS - started))
   if [[ $code -eq 0 ]]; then
     append_manifest "$agent" "ok" "$code" "$duration" "$out" "$rendered"
-  elif [[ $code -eq 124 ]]; then
+  elif [[ $code -eq 124 || $code -eq 137 ]]; then
     append_manifest "$agent" "timed-out" "$code" "$duration" "$out" "$rendered"
   else
     append_manifest "$agent" "failed" "$code" "$duration" "$out" "$rendered"
