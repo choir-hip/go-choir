@@ -54,3 +54,14 @@ This is a deletion-bearing step-3 prerequisite. Runtime still owns `APIHandler` 
 - Runtime's false apihandler deprecation pointers are removed, and the build-tagged live workflow uses the one runtime handler constructor directly.
 - Focused provider-interface, sandbox command/package, apihandler, actor-runtime, integration-tagged live workflow, full runtime, runtime-ratchet tests, sandbox build, and end-to-end `zot-session` entry smoke pass.
 - Ratchet deltas: production LOC `44032 -> 44024`, test LOC `50142 -> 50141`, caller edges `368 -> 365`, wrappers `5 -> 3`, compatibility markers `10 -> 8`; files, exports, debt, routes, tools, importers, store calls, and interface candidates are flat. One durable citer is classified (`244 -> 245`).
+
+## S3-I15 Independent Verification
+
+- Independent `S3I15Verifier` returned `PASS` with no findings at confidence `0.98`.
+- Verified process-entry-only command, sole sandbox bootstrap, deleted wrapper, one runtime API path, same canonical product-tool server, provider-interface files-root authority, migrated callers, precedence coverage, and semantic preservation of startup order and `zot-session`.
+
+## S3-I15 CI, Deploy, and Acceptance
+
+- GitHub Actions run `29228634606` attempt `2` passed every default, integration, race, ratchet, SBOM, and deploy gate for head `887bbdde2f06d2a0b3636cd4e8186227498da304`.
+- Deploy job `86749938685` completed successfully.
+- Authenticated public `GET https://choir.news/api/texture/documents` returned `200`.
