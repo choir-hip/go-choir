@@ -38,16 +38,6 @@ func candidatePackageIntakeWriteRoutesDisabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("CHOIR_MODE")), "cloud")
 }
 
-// RegisterCandidatePackageReviewSurfaceRoutes mounts only the deployed-read,
-// non-promoting candidate-package review surface. It deliberately does not
-// expose intake creation, owner-review mutation, publication drafts,
-// source-lineage switch, rollback/roll-forward, acceptance synthesis, package
-// publication, AppAdoption mutation, RunAcceptanceRecord creation, auth/session
-// changes, staging claims, or VM lifecycle behavior.
-func RegisterCandidatePackageReviewSurfaceRoutes(s *server.Server, h *APIHandler) {
-	s.HandleFunc("/api/candidate-package-intakes/", h.HandleCandidatePackageReviewSurfaceReadOnly)
-}
-
 func (h *APIHandler) HandleCandidatePackageReviewSurfaceReadOnly(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {

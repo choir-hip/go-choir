@@ -43,7 +43,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal package: %v", err)
 	}
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", string(packageBytes), ownerID)
+	pkgW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", string(packageBytes), ownerID)
 	if pkgW.Code != http.StatusCreated {
 		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
 	}
@@ -66,7 +66,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 		"target_candidate_id":"candidate-user-b-podcast",
 		"trace_id":"` + traceID + `"
 	}`
-	adoptW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/computers/user-b-computer/adoptions", adoptBody, ownerID)
+	adoptW := runtimeHandlerRequest(t, handler.HandleComputersRouter, http.MethodPost, "/api/computers/user-b-computer/adoptions", adoptBody, ownerID)
 	if adoptW.Code != http.StatusCreated {
 		t.Fatalf("adoption status = %d body=%s", adoptW.Code, adoptW.Body.String())
 	}
@@ -87,7 +87,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 		"merge_strategy":"rebase",
 		"merge_conflicts":[]
 	}`
-	verifyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/verify", verifyBody, ownerID)
+	verifyW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/verify", verifyBody, ownerID)
 	if verifyW.Code != http.StatusOK {
 		t.Fatalf("verify status = %d body=%s", verifyW.Code, verifyW.Body.String())
 	}
@@ -107,23 +107,23 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	if adoption.ForegroundTailMergeResult != "no-conflict" || adoption.TargetActiveSourceRefAtCutover == adoption.TargetActiveSourceRefAtCandidateStart {
 		t.Fatalf("foreground-tail accounting missing: %+v", adoption)
 	}
-	previewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID+"/preview", "", ownerID)
+	previewW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID+"/preview", "", ownerID)
 	if previewW.Code != http.StatusOK {
 		t.Fatalf("preview status = %d body=%s", previewW.Code, previewW.Body.String())
 	}
 	if !strings.Contains(previewW.Body.String(), "/api/adoptions/"+adoption.AdoptionID+"/preview/assets/app.js") {
 		t.Fatalf("preview index did not rewrite asset path: %s", previewW.Body.String())
 	}
-	assetW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID+"/preview/assets/app.js", "", ownerID)
+	assetW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID+"/preview/assets/app.js", "", ownerID)
 	if assetW.Code != http.StatusOK || !strings.Contains(assetW.Body.String(), "candidate app") {
 		t.Fatalf("preview asset status = %d body=%s", assetW.Code, assetW.Body.String())
 	}
 
-	prematurePromoteW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/promote", `{}`, ownerID)
+	prematurePromoteW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/promote", `{}`, ownerID)
 	if prematurePromoteW.Code != http.StatusBadRequest {
 		t.Fatalf("promote without owner approval must be rejected: status = %d body=%s", prematurePromoteW.Code, prematurePromoteW.Body.String())
 	}
-	approveW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/approve", `{}`, ownerID)
+	approveW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/approve", `{}`, ownerID)
 	if approveW.Code != http.StatusOK {
 		t.Fatalf("approve status = %d body=%s", approveW.Code, approveW.Body.String())
 	}
@@ -134,7 +134,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 		t.Fatalf("approved adoption status = %q", adoption.Status)
 	}
 
-	promoteW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/promote", `{}`, ownerID)
+	promoteW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/promote", `{}`, ownerID)
 	if promoteW.Code != http.StatusOK {
 		t.Fatalf("promote status = %d body=%s", promoteW.Code, promoteW.Body.String())
 	}
@@ -147,7 +147,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	if !strings.Contains(string(adoption.RollbackProfileJSON), "refs/computers/user-b-computer/active-foreground-tail") {
 		t.Fatalf("promoted adoption missing rollback source ref: %s", string(adoption.RollbackProfileJSON))
 	}
-	lineageW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/computers/user-b-computer/source-lineage", "", ownerID)
+	lineageW := runtimeHandlerRequest(t, handler.HandleComputersRouter, http.MethodGet, "/api/computers/user-b-computer/source-lineage", "", ownerID)
 	if lineageW.Code != http.StatusOK {
 		t.Fatalf("lineage status = %d body=%s", lineageW.Code, lineageW.Body.String())
 	}
@@ -166,7 +166,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 		"default_base_profile":"platform-default-with-podcast-v0",
 		"trace_id":"` + traceID + `"
 	}`
-	platformW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/computers/platform-default/adoptions", platformBody, ownerID)
+	platformW := runtimeHandlerRequest(t, handler.HandleComputersRouter, http.MethodPost, "/api/computers/platform-default/adoptions", platformBody, ownerID)
 	if platformW.Code != http.StatusCreated {
 		t.Fatalf("platform adoption status = %d body=%s", platformW.Code, platformW.Body.String())
 	}
@@ -174,19 +174,19 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	if err := json.Unmarshal(platformW.Body.Bytes(), &platformAdoption); err != nil {
 		t.Fatalf("decode platform adoption: %v", err)
 	}
-	verifyPlatform := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, ownerID)
+	verifyPlatform := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, ownerID)
 	if verifyPlatform.Code != http.StatusOK {
 		t.Fatalf("verify platform status = %d body=%s", verifyPlatform.Code, verifyPlatform.Body.String())
 	}
-	approvePlatform := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/approve", `{}`, ownerID)
+	approvePlatform := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/approve", `{}`, ownerID)
 	if approvePlatform.Code != http.StatusOK {
 		t.Fatalf("approve platform status = %d body=%s", approvePlatform.Code, approvePlatform.Body.String())
 	}
-	promotePlatform := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/promote", `{}`, ownerID)
+	promotePlatform := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+platformAdoption.AdoptionID+"/promote", `{}`, ownerID)
 	if promotePlatform.Code != http.StatusOK {
 		t.Fatalf("promote platform status = %d body=%s", promotePlatform.Code, promotePlatform.Body.String())
 	}
-	platformLineageW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/computers/platform-default/source-lineage?kind=platform", "", ownerID)
+	platformLineageW := runtimeHandlerRequest(t, handler.HandleComputersRouter, http.MethodGet, "/api/computers/platform-default/source-lineage?kind=platform", "", ownerID)
 	if platformLineageW.Code != http.StatusOK {
 		t.Fatalf("platform lineage status = %d body=%s", platformLineageW.Code, platformLineageW.Body.String())
 	}
@@ -198,7 +198,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 		t.Fatalf("platform default base not updated: %+v", platformLineage)
 	}
 
-	traceW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/trace/trajectories/"+traceID, "", ownerID)
+	traceW := runtimeHandlerRequest(t, http.NotFound, http.MethodGet, "/api/trace/trajectories/"+traceID, "", ownerID)
 	if traceW.Code != http.StatusOK {
 		t.Fatalf("trace status = %d body=%s", traceW.Code, traceW.Body.String())
 	}
@@ -210,7 +210,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	}
 
 	acceptanceBody := `{"target_mission_id":"mission-campaign-compiler-selfdev-v0","trajectory_id":"` + traceID + `","source_prompt_or_objective":"make the first podcast app migrate"}`
-	acceptanceW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", acceptanceBody, ownerID)
+	acceptanceW := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", acceptanceBody, ownerID)
 	if acceptanceW.Code != http.StatusAccepted {
 		t.Fatalf("acceptance status = %d body=%s", acceptanceW.Code, acceptanceW.Body.String())
 	}
@@ -245,7 +245,7 @@ func TestPrivateAppChangePackageIsNotVisibleAcrossOwners(t *testing.T) {
 		"ui_source_delta":"ui delta",
 		"app_protocol_contract":"contract"
 	}`
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	pkgW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", body, "user-alice")
 	if pkgW.Code != http.StatusCreated {
 		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
 	}
@@ -253,7 +253,7 @@ func TestPrivateAppChangePackageIsNotVisibleAcrossOwners(t *testing.T) {
 	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v", err)
 	}
-	otherW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+pkg.PackageID, "", "user-bob")
+	otherW := runtimeHandlerRequest(t, handler.HandleAppChangePackageDetail, http.MethodGet, "/api/app-change-packages/"+pkg.PackageID, "", "user-bob")
 	if otherW.Code != http.StatusNotFound {
 		t.Fatalf("private package visible to other owner: status=%d body=%s", otherW.Code, otherW.Body.String())
 	}
@@ -271,7 +271,7 @@ func TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances(t
 		"ui_source_delta":"ui delta",
 		"app_protocol_contract":"contract"
 	}`
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	pkgW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", body, "user-alice")
 	if pkgW.Code != http.StatusCreated {
 		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
 	}
@@ -321,13 +321,13 @@ func TestAppChangePackageReviewEvidenceReturnsRedactedPackageScopedAcceptances(t
 		t.Fatalf("seed unrelated acceptance: %v", err)
 	}
 
-	detailW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/run-acceptances/runacc-package-visible", "", "user-charlie")
+	detailW := runtimeHandlerRequest(t, handler.HandleRunAcceptanceDetail, http.MethodGet, "/api/run-acceptances/runacc-package-visible", "", "user-charlie")
 	if detailW.Code != http.StatusNotFound {
 		t.Fatalf("cross-owner full acceptance detail visible: status=%d body=%s", detailW.Code, detailW.Body.String())
 	}
 
 	reviewPath := "/api/app-change-packages/" + pkg.PackageID + "/review-evidence?acceptance_id=runacc-package-visible&acceptance_id=runacc-unrelated"
-	reviewW := registeredRuntimeRequest(t, handler, http.MethodGet, reviewPath, "", "user-charlie")
+	reviewW := runtimeHandlerRequest(t, handler.HandleAppChangePackageDetail, http.MethodGet, reviewPath, "", "user-charlie")
 	if reviewW.Code != http.StatusOK {
 		t.Fatalf("review evidence status = %d body=%s", reviewW.Code, reviewW.Body.String())
 	}
@@ -375,7 +375,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 			"screenshot_refs":["test-results/human-proof.png"]
 		}
 	}`
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	pkgW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", body, "user-alice")
 	if pkgW.Code != http.StatusCreated {
 		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
 	}
@@ -383,7 +383,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 	if err := json.Unmarshal(pkgW.Body.Bytes(), &pkg); err != nil {
 		t.Fatalf("decode package: %v", err)
 	}
-	reviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+pkg.PackageID+"/review-evidence", "", "user-alice")
+	reviewW := runtimeHandlerRequest(t, handler.HandleAppChangePackageDetail, http.MethodGet, "/api/app-change-packages/"+pkg.PackageID+"/review-evidence", "", "user-alice")
 	if reviewW.Code != http.StatusOK {
 		t.Fatalf("review evidence status = %d body=%s", reviewW.Code, reviewW.Body.String())
 	}
@@ -413,7 +413,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 			"screenshot_refs":["test-results/legacy-proof.png"]
 		}
 	}` // texture-cutover-allow: legacy AppChangePackage provenance refs remain reviewable until package provenance migration.
-	legacyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", legacyNarrative, "user-alice")
+	legacyW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", legacyNarrative, "user-alice")
 	if legacyW.Code != http.StatusCreated {
 		t.Fatalf("legacy narrative package status = %d body=%s", legacyW.Code, legacyW.Body.String())
 	}
@@ -421,7 +421,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 	if err := json.Unmarshal(legacyW.Body.Bytes(), &legacyPkg); err != nil {
 		t.Fatalf("decode legacy narrative package: %v", err)
 	}
-	legacyReviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+legacyPkg.PackageID+"/review-evidence", "", "user-alice")
+	legacyReviewW := runtimeHandlerRequest(t, handler.HandleAppChangePackageDetail, http.MethodGet, "/api/app-change-packages/"+legacyPkg.PackageID+"/review-evidence", "", "user-alice")
 	if legacyReviewW.Code != http.StatusOK {
 		t.Fatalf("legacy review evidence status = %d body=%s", legacyReviewW.Code, legacyReviewW.Body.String())
 	}
@@ -446,7 +446,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 			"screenshot_refs":["test-results/summary-only.png"]
 		}
 	}`
-	summaryOnlyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", summaryOnlyNarrative, "user-alice")
+	summaryOnlyW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", summaryOnlyNarrative, "user-alice")
 	if summaryOnlyW.Code != http.StatusCreated {
 		t.Fatalf("summary-only package status = %d body=%s", summaryOnlyW.Code, summaryOnlyW.Body.String())
 	}
@@ -454,7 +454,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 	if err := json.Unmarshal(summaryOnlyW.Body.Bytes(), &summaryOnlyPkg); err != nil {
 		t.Fatalf("decode summary-only package: %v", err)
 	}
-	summaryOnlyReviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+summaryOnlyPkg.PackageID+"/review-evidence", "", "user-alice")
+	summaryOnlyReviewW := runtimeHandlerRequest(t, handler.HandleAppChangePackageDetail, http.MethodGet, "/api/app-change-packages/"+summaryOnlyPkg.PackageID+"/review-evidence", "", "user-alice")
 	if summaryOnlyReviewW.Code != http.StatusOK {
 		t.Fatalf("summary-only review evidence status = %d body=%s", summaryOnlyReviewW.Code, summaryOnlyReviewW.Body.String())
 	}
@@ -487,7 +487,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 			]
 		}
 	}`
-	blockedW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", blockedBenchmarkOnly, "user-alice")
+	blockedW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", blockedBenchmarkOnly, "user-alice")
 	if blockedW.Code != http.StatusCreated {
 		t.Fatalf("blocked benchmark package status = %d body=%s", blockedW.Code, blockedW.Body.String())
 	}
@@ -495,7 +495,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 	if err := json.Unmarshal(blockedW.Body.Bytes(), &blockedPkg); err != nil {
 		t.Fatalf("decode blocked benchmark package: %v", err)
 	}
-	blockedReviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+blockedPkg.PackageID+"/review-evidence", "", "user-alice")
+	blockedReviewW := runtimeHandlerRequest(t, handler.HandleAppChangePackageDetail, http.MethodGet, "/api/app-change-packages/"+blockedPkg.PackageID+"/review-evidence", "", "user-alice")
 	if blockedReviewW.Code != http.StatusOK {
 		t.Fatalf("blocked benchmark review evidence status = %d body=%s", blockedReviewW.Code, blockedReviewW.Body.String())
 	}
@@ -528,7 +528,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 			]
 		}
 	}`
-	launderedW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", launderedBuildProof, "user-alice")
+	launderedW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", launderedBuildProof, "user-alice")
 	if launderedW.Code != http.StatusCreated {
 		t.Fatalf("laundered build proof package status = %d body=%s", launderedW.Code, launderedW.Body.String())
 	}
@@ -536,7 +536,7 @@ func TestAppChangePackageReviewEvidenceRequiresNarrativeAndMediaForHumanReview(t
 	if err := json.Unmarshal(launderedW.Body.Bytes(), &launderedPkg); err != nil {
 		t.Fatalf("decode laundered build proof package: %v", err)
 	}
-	launderedReviewW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/app-change-packages/"+launderedPkg.PackageID+"/review-evidence", "", "user-alice")
+	launderedReviewW := runtimeHandlerRequest(t, handler.HandleAppChangePackageDetail, http.MethodGet, "/api/app-change-packages/"+launderedPkg.PackageID+"/review-evidence", "", "user-alice")
 	if launderedReviewW.Code != http.StatusOK {
 		t.Fatalf("laundered build proof review evidence status = %d body=%s", launderedReviewW.Code, launderedReviewW.Body.String())
 	}
@@ -567,7 +567,7 @@ func TestInternalAppChangePackageDetailRequiresInternalCaller(t *testing.T) {
 		"ui_source_delta":"ui delta from worker",
 		"app_protocol_contract":"contract"
 	}`
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	pkgW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", body, "user-alice")
 	if pkgW.Code != http.StatusCreated {
 		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
 	}
@@ -638,7 +638,7 @@ func TestAppChangePackageRejectsPrivateSourceMarkers(t *testing.T) {
 		"ui_source_delta":"ui delta",
 		"app_protocol_contract":"contract"
 	}`
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", body, "user-alice")
+	pkgW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", body, "user-alice")
 	if pkgW.Code != http.StatusBadRequest {
 		t.Fatalf("private source marker accepted: status=%d body=%s", pkgW.Code, pkgW.Body.String())
 	}

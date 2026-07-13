@@ -281,7 +281,7 @@ reasoning = "medium"
 	rt.cfg.ModelPolicyPath = policyPath
 
 	body := `{"text":"Write a briefing about new AI infra in 2026 with live evidence.","model_policy_overlay_id":"glm-medium"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/evals/texture-prompt", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleTexturePromptEval, http.MethodPost, "/api/evals/texture-prompt", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want 202; body=%s", w.Code, w.Body.String())
 	}
@@ -335,7 +335,7 @@ func TestHandleTexturePromptEvalRejectsMissingOverlay(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
 	body := `{"text":"hello"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/evals/texture-prompt", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleTexturePromptEval, http.MethodPost, "/api/evals/texture-prompt", body, "user-alice")
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
 	}
@@ -348,7 +348,7 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 	seedRunAcceptanceTrajectory(t, rt)
 
 	body := `{"target_mission_id":"mission-run-acceptance-v0","trajectory_id":"traj-acceptance"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -404,7 +404,7 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 		t.Fatalf("loaded acceptance id mismatch: %+v", loaded)
 	}
 
-	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/run-acceptances?trajectory_id=traj-acceptance", "", "user-alice")
+	listW := runtimeHandlerRequest(t, handler.HandleRunAcceptancesRoot, http.MethodGet, "/api/run-acceptances?trajectory_id=traj-acceptance", "", "user-alice")
 	if listW.Code != http.StatusOK {
 		t.Fatalf("list status = %d, body=%s", listW.Code, listW.Body.String())
 	}
@@ -416,7 +416,7 @@ func TestRunAcceptanceSynthesizeDerivesExportLevelRecord(t *testing.T) {
 		t.Fatalf("list response mismatch: %+v", list)
 	}
 
-	otherW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/run-acceptances/"+rec.AcceptanceID, "", "user-bob")
+	otherW := runtimeHandlerRequest(t, handler.HandleRunAcceptanceDetail, http.MethodGet, "/api/run-acceptances/"+rec.AcceptanceID, "", "user-bob")
 	if otherW.Code != http.StatusNotFound {
 		t.Fatalf("other owner status = %d, want 404", otherW.Code)
 	}
@@ -428,7 +428,7 @@ func TestRunAcceptanceSynthesizeDoesNotAcceptPromptTextureOnlySmoke(t *testing.T
 
 	prompt := "Mission lifecycle cutover staging smoke creates a prompt-bar Texture route."
 	submitBody := fmt.Sprintf(`{"text":%q}`, prompt)
-	submitW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", submitBody, "user-alice")
+	submitW := runtimeHandlerRequest(t, handler.HandlePromptBar, http.MethodPost, "/api/prompt-bar", submitBody, "user-alice")
 	if submitW.Code != http.StatusAccepted {
 		t.Fatalf("prompt-bar status = %d, body=%s", submitW.Code, submitW.Body.String())
 	}
@@ -440,7 +440,7 @@ func TestRunAcceptanceSynthesizeDoesNotAcceptPromptTextureOnlySmoke(t *testing.T
 	for _, targetMissionID := range []string{"mission-lifecycle-cutover-v0", "mission-lifecycle-cutover-m3.1-v0"} {
 		t.Run(targetMissionID, func(t *testing.T) {
 			body := fmt.Sprintf(`{"target_mission_id":%q,"trajectory_id":%q,"source_prompt_or_objective":%q}`, targetMissionID, submitted.SubmissionID, prompt)
-			w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+			w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 			if w.Code != http.StatusAccepted {
 				t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 			}
@@ -475,7 +475,7 @@ func TestRunAcceptanceSynthesizeCountsTimedOutDelegateWithReviewableExport(t *te
 	seedRunAcceptanceExportedTimeoutTrajectory(t, rt)
 
 	body := `{"target_mission_id":"mission-run-acceptance-timeout-export","trajectory_id":"traj-acceptance"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -504,7 +504,7 @@ func TestRunAcceptanceSynthesizeAcceptsSourcePackageWithoutRecipientAdoption(t *
 	seedRunAcceptanceSourcePackageOnlyTrajectory(t, rt)
 
 	body := `{"target_mission_id":"mission-run-acceptance-source-package","trajectory_id":"traj-source-package"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -536,7 +536,7 @@ func TestRunAcceptanceSynthesizeAcceptsRuntimeSupervisionWithoutAppPackage(t *te
 	seedRunAcceptanceRuntimeSupervisionTrajectory(t, rt)
 
 	body := `{"target_mission_id":"mission-runtime-supervision","trajectory_id":"traj-runtime-supervision"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -570,7 +570,7 @@ func TestRunAcceptanceSynthesizeRecordsWorkerDelegateBlocker(t *testing.T) {
 	seedRunAcceptanceBlockedDelegationTrajectory(t, rt)
 
 	body := `{"target_mission_id":"mission-run-acceptance-blocked","trajectory_id":"traj-acceptance"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -640,7 +640,7 @@ func TestRunAcceptanceSynthesizePreservesStructuredFailedAndPendingDelegateEvide
 	})
 
 	body := `{"target_mission_id":"mission-run-acceptance-structured-failed","trajectory_id":"traj-acceptance"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -687,7 +687,7 @@ func TestRunAcceptanceSynthesizeRecordsPendingWorkerDelegateInvocation(t *testin
 	seedRunAcceptancePendingDelegationTrajectory(t, rt)
 
 	body := `{"target_mission_id":"mission-run-acceptance-pending-delegate","trajectory_id":"traj-pending-delegate"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -722,7 +722,7 @@ func TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel(t *te
 	seedRunAcceptanceTrajectory(t, rt)
 
 	body := `{"target_mission_id":"mission-run-acceptance-v0","trajectory_id":"traj-acceptance"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -751,7 +751,7 @@ func TestRunAcceptanceSynthesizeRequiresAdoptionPromotionForPromotionLevel(t *te
 		Kind:         types.EventAppAdoptionPromoted,
 		Payload:      json.RawMessage(`{"adoption_id":"adoption-acceptance","package_id":"pkg-acceptance","target_computer_id":"computer-b","candidate_source_ref":"refs/computers/computer-b/candidates/adoption-acceptance","runtime_artifact_digest":"runtime-recipient-digest-b","ui_artifact_digest":"ui-recipient-digest-b","route_profile":"primary","default_base_profile":"primary","rollback_source_ref":"refs/computers/computer-b/active-before-adoption"}`),
 	})
-	w = registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w = runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize promoted status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -807,7 +807,7 @@ func TestRunAcceptanceSynthesizeAcceptsDirectProductAdoptionEvidence(t *testing.
 	}
 
 	body := `{"target_mission_id":"mission-direct-package","trajectory_id":"traj-direct-package"}`
-	w := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunAcceptanceSynthesize, http.MethodPost, "/api/run-acceptances/synthesize", body, "user-alice")
 	if w.Code != http.StatusAccepted {
 		t.Fatalf("synthesize status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -1838,7 +1838,7 @@ fi
 	}
 	rt.cfg.ObscuraPath = bin
 
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	createW := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
 	}
@@ -1850,12 +1850,12 @@ fi
 		t.Fatalf("unexpected created session: %+v", created)
 	}
 
-	otherUserW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/browser/sessions/"+created.SessionID, "", "user-bob")
+	otherUserW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodGet, "/api/browser/sessions/"+created.SessionID, "", "user-bob")
 	if otherUserW.Code != http.StatusNotFound {
 		t.Fatalf("other user status = %d, want %d", otherUserW.Code, http.StatusNotFound)
 	}
 
-	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/path#fragment"}`, "user-alice")
+	navigateW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/path#fragment"}`, "user-alice")
 	if navigateW.Code != http.StatusOK {
 		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
 	}
@@ -1911,7 +1911,7 @@ fi
 func TestBrowserSessionRejectsDirectWorldBinding(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
-	forged := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{"vm_id":"vm-forged"}`, "user-alice")
+	forged := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{"vm_id":"vm-forged"}`, "user-alice")
 	if forged.Code != http.StatusBadRequest {
 		t.Fatalf("forged vm_id status = %d, want 400; body=%s", forged.Code, forged.Body.String())
 	}
@@ -1943,7 +1943,7 @@ exit 2
 	}
 	rt.cfg.ObscuraPath = bin
 
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	createW := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
 	}
@@ -1952,7 +1952,7 @@ exit 2
 		t.Fatalf("decode create: %v", err)
 	}
 
-	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	navigateW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
 	if navigateW.Code != http.StatusOK {
 		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
 	}
@@ -2027,7 +2027,7 @@ fi
 	}
 	rt.cfg.ObscuraPath = bin
 
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	createW := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
 	}
@@ -2036,7 +2036,7 @@ fi
 		t.Fatalf("decode create: %v", err)
 	}
 
-	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	navigateW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
 	if navigateW.Code != http.StatusOK {
 		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
 	}
@@ -2118,7 +2118,7 @@ fi
 	}
 	rt.cfg.ObscuraPath = bin
 
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	createW := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
 	}
@@ -2127,7 +2127,7 @@ fi
 		t.Fatalf("decode create: %v", err)
 	}
 
-	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	navigateW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
 	if navigateW.Code != http.StatusOK {
 		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
 	}
@@ -2210,7 +2210,7 @@ fi
 	}
 	rt.cfg.ObscuraPath = bin
 
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	createW := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
 	}
@@ -2219,7 +2219,7 @@ fi
 		t.Fatalf("decode create: %v", err)
 	}
 
-	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	navigateW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
 	if navigateW.Code != http.StatusOK {
 		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusOK, navigateW.Body.String())
 	}
@@ -2274,7 +2274,7 @@ printf 'optional artifact should not matter\n'
 	}
 	rt.cfg.ObscuraPath = bin
 
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	createW := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
 	}
@@ -2283,7 +2283,7 @@ printf 'optional artifact should not matter\n'
 		t.Fatalf("decode create: %v", err)
 	}
 
-	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
+	navigateW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com/source"}`, "user-alice")
 	if navigateW.Code != http.StatusBadGateway {
 		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusBadGateway, navigateW.Body.String())
 	}
@@ -2306,7 +2306,7 @@ func TestBrowserSessionNavigateFailsClosedWhenBackendUnavailable(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
 
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	createW := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
 	}
@@ -2318,7 +2318,7 @@ func TestBrowserSessionNavigateFailsClosedWhenBackendUnavailable(t *testing.T) {
 		t.Fatalf("created state = %q, want unavailable", created.State)
 	}
 
-	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com"}`, "user-alice")
+	navigateW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com"}`, "user-alice")
 	if navigateW.Code != http.StatusServiceUnavailable {
 		t.Fatalf("navigate status = %d, want %d; body: %s", navigateW.Code, http.StatusServiceUnavailable, navigateW.Body.String())
 	}
@@ -2363,7 +2363,7 @@ esac
 	}
 	rt.cfg.ObscuraPath = bin
 
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
+	createW := runtimeHandlerRequest(t, handler.HandleBrowserSessionsRoot, http.MethodPost, "/api/browser/sessions", `{}`, "user-alice")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want %d; body: %s", createW.Code, http.StatusCreated, createW.Body.String())
 	}
@@ -2372,12 +2372,12 @@ esac
 		t.Fatalf("decode create: %v", err)
 	}
 
-	otherCloseW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-bob")
+	otherCloseW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-bob")
 	if otherCloseW.Code != http.StatusNotFound {
 		t.Fatalf("other user close status = %d, want %d", otherCloseW.Code, http.StatusNotFound)
 	}
 
-	closeW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-alice")
+	closeW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-alice")
 	if closeW.Code != http.StatusOK {
 		t.Fatalf("close status = %d, want %d; body: %s", closeW.Code, http.StatusOK, closeW.Body.String())
 	}
@@ -2389,12 +2389,12 @@ esac
 		t.Fatalf("closed state = %q, want %q", closed.State, types.BrowserSessionClosed)
 	}
 
-	closeAgainW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-alice")
+	closeAgainW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/close", `{}`, "user-alice")
 	if closeAgainW.Code != http.StatusOK {
 		t.Fatalf("close again status = %d, want %d; body: %s", closeAgainW.Code, http.StatusOK, closeAgainW.Body.String())
 	}
 
-	navigateW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com"}`, "user-alice")
+	navigateW := runtimeHandlerRequest(t, handler.HandleBrowserSessionRouter, http.MethodPost, "/api/browser/sessions/"+created.SessionID+"/navigate", `{"url":"https://example.com"}`, "user-alice")
 	if navigateW.Code != http.StatusConflict {
 		t.Fatalf("navigate closed status = %d, want %d; body: %s", navigateW.Code, http.StatusConflict, navigateW.Body.String())
 	}
@@ -2432,7 +2432,7 @@ func TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		w := registeredRuntimeRequest(t, handler, tc.method, tc.path, tc.body, "user-alice")
+		w := runtimeHandlerRequest(t, http.NotFound, tc.method, tc.path, tc.body, "user-alice")
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("%s %s: got status %d, want 404; body=%s", tc.method, tc.path, w.Code, w.Body.String())
 		}
@@ -2443,12 +2443,12 @@ func TestRegisteredPromptBarRouteAcceptsIntentOnly(t *testing.T) {
 	t.Parallel()
 	_, handler := testAPISetup(t)
 
-	ok := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", `{"text":"build a document"}`, "user-alice")
+	ok := runtimeHandlerRequest(t, handler.HandlePromptBar, http.MethodPost, "/api/prompt-bar", `{"text":"build a document"}`, "user-alice")
 	if ok.Code != http.StatusAccepted {
 		t.Fatalf("prompt-bar status: got %d, want %d; body=%s", ok.Code, http.StatusAccepted, ok.Body.String())
 	}
 
-	bad := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/prompt-bar", `{"text":"build","agent_profile":"super"}`, "user-alice")
+	bad := runtimeHandlerRequest(t, handler.HandlePromptBar, http.MethodPost, "/api/prompt-bar", `{"text":"build","agent_profile":"super"}`, "user-alice")
 	if bad.Code != http.StatusBadRequest {
 		t.Fatalf("prompt-bar metadata status: got %d, want %d", bad.Code, http.StatusBadRequest)
 	}

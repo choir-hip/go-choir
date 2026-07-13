@@ -47,7 +47,7 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal package body: %v", err)
 	}
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", string(bodyBytes), "user-build")
+	pkgW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", string(bodyBytes), "user-build")
 	if pkgW.Code != http.StatusCreated {
 		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
 	}
@@ -60,7 +60,7 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 	}
 
 	adoptBody := `{"package_id":"` + pkg.PackageID + `","target_candidate_id":"candidate-user-b-podcast-build","trace_id":"traj-app-build"}`
-	adoptW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/computers/user-b-computer/adoptions", adoptBody, "user-build")
+	adoptW := runtimeHandlerRequest(t, handler.HandleComputersRouter, http.MethodPost, "/api/computers/user-b-computer/adoptions", adoptBody, "user-build")
 	if adoptW.Code != http.StatusCreated {
 		t.Fatalf("adoption status = %d body=%s", adoptW.Code, adoptW.Body.String())
 	}
@@ -68,7 +68,7 @@ func TestAppAdoptionRequiresActualRecipientBuild(t *testing.T) {
 	if err := json.Unmarshal(adoptW.Body.Bytes(), &adoption); err != nil {
 		t.Fatalf("decode adoption: %v", err)
 	}
-	verifyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, "user-build")
+	verifyW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, "user-build")
 	if verifyW.Code != http.StatusOK {
 		t.Fatalf("verify status = %d body=%s", verifyW.Code, verifyW.Body.String())
 	}
@@ -121,7 +121,7 @@ func TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure(t *testing.T
 	if err != nil {
 		t.Fatalf("marshal package body: %v", err)
 	}
-	pkgW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/app-change-packages", string(bodyBytes), "user-build-failure")
+	pkgW := runtimeHandlerRequest(t, handler.HandleAppChangePackagesRoot, http.MethodPost, "/api/app-change-packages", string(bodyBytes), "user-build-failure")
 	if pkgW.Code != http.StatusCreated {
 		t.Fatalf("package status = %d body=%s", pkgW.Code, pkgW.Body.String())
 	}
@@ -131,7 +131,7 @@ func TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure(t *testing.T
 	}
 
 	adoptBody := `{"package_id":"` + pkg.PackageID + `","target_candidate_id":"candidate-user-b-podcast-build-failure","trace_id":"traj-app-build-failure"}`
-	adoptW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/computers/user-b-computer/adoptions", adoptBody, "user-build-failure")
+	adoptW := runtimeHandlerRequest(t, handler.HandleComputersRouter, http.MethodPost, "/api/computers/user-b-computer/adoptions", adoptBody, "user-build-failure")
 	if adoptW.Code != http.StatusCreated {
 		t.Fatalf("adoption status = %d body=%s", adoptW.Code, adoptW.Body.String())
 	}
@@ -139,11 +139,11 @@ func TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure(t *testing.T
 	if err := json.Unmarshal(adoptW.Body.Bytes(), &adoption); err != nil {
 		t.Fatalf("decode adoption: %v", err)
 	}
-	verifyW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, "user-build-failure")
+	verifyW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodPost, "/api/adoptions/"+adoption.AdoptionID+"/verify", `{"foreground_tail_merge_result":"no-conflict","merge_strategy":"rebase"}`, "user-build-failure")
 	if verifyW.Code != http.StatusBadRequest {
 		t.Fatalf("verify status = %d body=%s", verifyW.Code, verifyW.Body.String())
 	}
-	detailW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID, "", "user-build-failure")
+	detailW := runtimeHandlerRequest(t, handler.HandleAppAdoptionDetail, http.MethodGet, "/api/adoptions/"+adoption.AdoptionID, "", "user-build-failure")
 	if detailW.Code != http.StatusOK {
 		t.Fatalf("adoption detail status = %d body=%s", detailW.Code, detailW.Body.String())
 	}

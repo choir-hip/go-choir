@@ -13,16 +13,13 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestLiveWSPublishesOwnerScopedProductEvents(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
-	srv := server.NewServer("runtime-live-ws-test", "0")
-	RegisterRoutes(srv, handler)
-	httpSrv := httptest.NewServer(srv)
+	httpSrv := httptest.NewServer(http.HandlerFunc(handler.HandleLiveWS))
 	defer httpSrv.Close()
 
 	conn := dialLiveWS(t, httpSrv.URL, "/api/ws?desktop_id=branch-a", "user-live")
@@ -58,9 +55,7 @@ func TestLiveWSPublishesOwnerScopedProductEvents(t *testing.T) {
 func TestLiveWSCatchesUpAfterStreamSeq(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
-	srv := server.NewServer("runtime-live-ws-test", "0")
-	RegisterRoutes(srv, handler)
-	httpSrv := httptest.NewServer(srv)
+	httpSrv := httptest.NewServer(http.HandlerFunc(handler.HandleLiveWS))
 	defer httpSrv.Close()
 
 	first, err := rt.EmitProductEvent(context.Background(), "user-live", "primary", types.EventThemeUpdated, map[string]any{

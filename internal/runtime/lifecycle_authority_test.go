@@ -14,7 +14,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-
 type lateCompletionProvider struct {
 	started  chan struct{}
 	release  chan struct{}
@@ -175,7 +174,7 @@ func TestRunListAndCancelRoutesAreWiredAndOwnerScoped(t *testing.T) {
 		t.Fatalf("create bob run: %v", err)
 	}
 
-	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/agent/loops?limit=20", "", "user-alice")
+	listW := runtimeHandlerRequest(t, handler.HandleRunList, http.MethodGet, "/api/agent/loops?limit=20", "", "user-alice")
 	if listW.Code != http.StatusOK {
 		t.Fatalf("run list status = %d, want 200; body=%s", listW.Code, listW.Body.String())
 	}
@@ -187,26 +186,12 @@ func TestRunListAndCancelRoutesAreWiredAndOwnerScoped(t *testing.T) {
 		t.Fatalf("owner-scoped run list = %+v, want only %s", listResp.Runs, alice.RunID)
 	}
 
-	foreignW := registeredRuntimeRequest(
-		t,
-		handler,
-		http.MethodPost,
-		"/api/agent/cancel",
-		`{"loop_id":"`+bob.RunID+`"}`,
-		"user-alice",
-	)
+	foreignW := runtimeHandlerRequest(t, handler.HandleCancel, http.MethodPost, "/api/agent/cancel", `{"loop_id":"`+bob.RunID+`"}`, "user-alice")
 	if foreignW.Code != http.StatusNotFound {
 		t.Fatalf("foreign cancel status = %d, want 404; body=%s", foreignW.Code, foreignW.Body.String())
 	}
 
-	cancelW := registeredRuntimeRequest(
-		t,
-		handler,
-		http.MethodPost,
-		"/api/agent/cancel",
-		`{"loop_id":"`+alice.RunID+`"}`,
-		"user-alice",
-	)
+	cancelW := runtimeHandlerRequest(t, handler.HandleCancel, http.MethodPost, "/api/agent/cancel", `{"loop_id":"`+alice.RunID+`"}`, "user-alice")
 	if cancelW.Code != http.StatusOK {
 		t.Fatalf("owner cancel status = %d, want 200; body=%s", cancelW.Code, cancelW.Body.String())
 	}

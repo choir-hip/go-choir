@@ -183,7 +183,7 @@ func Run() {
 
 	// Register runtime API routes (overrides default /health).
 	apiHandler := runtime.NewAPIHandler(rt.Runtime)
-	runtime.RegisterRoutes(s, apiHandler)
+	apihandler.RegisterRoutes(s, apiHandler, rtRuntimeCfg.EnableTestAPIs)
 	if toolsEnabled {
 		superRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super)
 		if err := apihandler.RegisterProductAPIRequestTool(s, superRegistry); err != nil {

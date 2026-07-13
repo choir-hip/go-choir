@@ -17,7 +17,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -114,13 +113,11 @@ func authenticatedRequest(method, path, body, user string) *http.Request {
 	return req
 }
 
-func registeredRuntimeRequest(t *testing.T, handler *APIHandler, method, path, body, user string) *httptest.ResponseRecorder {
+func runtimeHandlerRequest(t *testing.T, handler http.HandlerFunc, method, path, body, user string) *httptest.ResponseRecorder {
 	t.Helper()
-	srv := server.NewServer("runtime-api-test", "0")
-	RegisterRoutes(srv, handler)
 	req := authenticatedRequest(method, path, body, user)
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
+	handler.ServeHTTP(w, req)
 	return w
 }
 

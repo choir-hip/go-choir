@@ -479,12 +479,12 @@ func TestCandidatePackageIntakePromotionSwitchReviewSurfaceRouteReturnsReadOnlyP
 	assertCandidatePackageIntakeTargetLineageSwitch(t, rt, "user-alice", fixture.TargetComputerID, approved.CandidateSourceRef, approved.AdoptionID, fixture.Draft.PackageID, approved.CandidateSourceRef)
 }
 
-func TestCandidatePackageIntakeDeployedRegisterRoutesServesOnlyReviewSurface(t *testing.T) {
+func TestCandidatePackageIntakeDeployedReviewHandlerServesOnlyReviewSurface(t *testing.T) {
 	t.Parallel()
 	rt, handler := testAPISetup(t)
 	localSrv := candidatePackageIntakeTestServer(handler)
-	deployedSrv := candidatePackageIntakeDeployedTestServer(handler)
-	intakeID := "intake-deployed-register-routes-review-surface"
+	deployedSrv := http.HandlerFunc(handler.HandleCandidatePackageReviewSurfaceReadOnly)
+	intakeID := "intake-deployed-review-handler-surface"
 
 	fixture := createCandidatePackageIntakePromotionSwitchReviewThroughRoute(t, rt, localSrv, "user-alice", intakeID)
 	approved := approveCandidatePackageIntakePromotionSwitchReviewThroughRoute(t, localSrv, fixture)
@@ -621,7 +621,7 @@ func TestCandidatePackageIntakeDeployedRegisterRoutesServesOnlyReviewSurface(t *
 				return
 			}
 			if w.Code == tc.forbiddenStatus || (w.Code >= 200 && w.Code < 300) {
-				t.Fatalf("%s status = %d, want deployed RegisterRoutes to reject; body=%s", tc.name, w.Code, w.Body.String())
+				t.Fatalf("%s status = %d, want deployed review handler to reject; body=%s", tc.name, w.Code, w.Body.String())
 			}
 		})
 	}
@@ -642,18 +642,6 @@ func TestRegisterCandidatePackageIntakeRoutesPanicsWhenDeployedEnvSet(t *testing
 		}
 	}()
 	RegisterCandidatePackageIntakeRoutes(srv, handler)
-}
-
-func TestRegisterCandidatePackageReviewSurfaceRoutesRegistersWhenDeployedEnvSet(t *testing.T) {
-	t.Setenv("CHOIR_DEPLOYED_RUNTIME", "true")
-	_, handler := testAPISetup(t)
-	srv := choirserver.NewServer("candidate-package-review-surface-deployed-route-test", "0")
-
-	RegisterCandidatePackageReviewSurfaceRoutes(srv, handler)
-	w := serveCandidatePackageIntakeRequest(srv, http.MethodPost, "/api/candidate-package-intakes/intake-review-surface-only/review", `{}`, "user-alice")
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("review-surface-only route status = %d, want 405; body=%s", w.Code, w.Body.String())
-	}
 }
 
 func TestCandidatePackageIntakePromotionSwitchReviewSurfaceRouteRejectsWithoutMutation(t *testing.T) {
@@ -1982,12 +1970,6 @@ func candidatePackageIntakeTestServer(handler *APIHandler) *choirserver.Server {
 	return srv
 }
 
-func candidatePackageIntakeDeployedTestServer(handler *APIHandler) *choirserver.Server {
-	srv := choirserver.NewServer("candidate-package-intake-deployed-api-test", "0")
-	RegisterRoutes(srv, handler)
-	return srv
-}
-
 type candidatePackageIntakeDeployedRouteSnapshot struct {
 	Intakes       []types.CandidatePackageIntakeRecord     `json:"intakes"`
 	Acceptance    candidatePackageIntakeAcceptanceSnapshot `json:"acceptance"`
@@ -2022,7 +2004,7 @@ func assertCandidatePackageIntakeDeployedRouteSnapshotUnchanged(t *testing.T, rt
 	}
 }
 
-func serveCandidatePackageIntakeRequest(srv *choirserver.Server, method, path, body, ownerID string) *httptest.ResponseRecorder {
+func serveCandidatePackageIntakeRequest(srv http.Handler, method, path, body, ownerID string) *httptest.ResponseRecorder {
 	req := authenticatedRequest(method, path, body, ownerID)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

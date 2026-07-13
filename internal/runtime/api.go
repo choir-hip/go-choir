@@ -21,7 +21,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/provider"
-	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -1232,64 +1231,6 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// RegisterRoutes registers runtime API routes on the given server.
-// The health handler overrides the default server health handler to
-// report runtime readiness.
-func RegisterRoutes(s *server.Server, h *APIHandler) {
-	s.SetHealthHandler(h.HandleHealth)
-	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
-	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
-	s.HandleFunc("/api/agent/loops", h.HandleRunList)
-	s.HandleFunc("/api/agent/cancel", h.HandleCancel)
-	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
-	s.HandleFunc("/api/costs", h.HandleCosts)
-	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)
-	s.HandleFunc("/api/podcast/subscriptions", h.HandlePodcastSubscriptions)
-	s.HandleFunc("/api/podcast/search", h.HandlePodcastSearch)
-	s.HandleFunc("/api/content/items", h.HandleContentItemsRoot)
-	s.HandleFunc("/api/content/", h.HandleContentRouter)
-	s.HandleFunc("/api/ws", h.HandleLiveWS)
-	s.HandleFunc("/api/browser/capabilities", h.HandleBrowserCapabilities)
-	s.HandleFunc("/api/browser/sessions", h.HandleBrowserSessionsRoot)
-	s.HandleFunc("/api/browser/sessions/", h.HandleBrowserSessionRouter)
-	s.HandleFunc("/api/desktop/state", h.HandleDesktopState)
-	s.HandleFunc("/api/media/progress", h.HandleMediaProgress)
-	s.HandleFunc("/api/media/recents", h.HandleMediaRecents)
-	s.HandleFunc("/api/preferences/theme", h.HandleThemePreference)
-	s.HandleFunc("/api/computers/", h.HandleComputersRouter)
-	s.HandleFunc("/api/app-change-packages", h.HandleAppChangePackagesRoot)
-	s.HandleFunc("/api/app-change-packages/", h.HandleAppChangePackageDetail)
-	s.HandleFunc("/api/adoptions", h.HandleAppAdoptionsRoot)
-	s.HandleFunc("/api/adoptions/", h.HandleAppAdoptionDetail)
-	RegisterCandidatePackageReviewSurfaceRoutes(s, h)
-	s.HandleFunc("/api/trajectories", h.HandleTrajectoriesRoot)
-	s.HandleFunc("/api/trajectories/", h.HandleTrajectoryDetail)
-	s.HandleFunc("/api/run-acceptances", h.HandleRunAcceptancesRoot)
-	s.HandleFunc("/api/run-acceptances/synthesize", h.HandleRunAcceptanceSynthesize)
-	s.HandleFunc("/api/run-acceptances/", h.HandleRunAcceptanceDetail)
-	s.HandleFunc("/api/evals/texture-prompt", h.HandleTexturePromptEval)
-	s.HandleFunc("/internal/runtime/app-change-packages", h.HandleInternalAppChangePackagesRoot)
-	s.HandleFunc("/internal/runtime/app-change-packages/", h.HandleInternalAppChangePackageDetail)
-	s.HandleFunc("/internal/runtime/channel-casts", h.HandleInternalChannelCast)
-	s.HandleFunc("/internal/runtime/refresh", h.HandleInternalRuntimeRefresh)
-	s.HandleFunc("/internal/runtime/runs", h.HandleInternalRunSubmission)
-	s.HandleFunc("/internal/runtime/runs/", h.HandleInternalRuntimeRunRouter)
-	s.HandleFunc("/internal/texture/documents/", h.HandleInternalTextureDocument)
-	s.HandleFunc("/internal/texture/revisions/", h.HandleInternalTextureRevision)
-	s.HandleFunc("/internal/texture/proposals", h.HandleInternalTextureProposalDelivery)
-	if h.rt.cfg.EnableTestAPIs {
-		s.HandleFunc("/api/prompts", h.HandlePromptList)
-		s.HandleFunc("/api/prompts/", h.HandlePromptRole)
-		s.HandleFunc("/api/test/texture/worker-update", h.HandleTestTextureWorkerUpdate)
-	}
-
-	// Texture document/revision/history/diff/blame APIs.
-	// All routes are dispatched from a single prefix handler that inspects
-	// the URL path and method to route to the correct handler. This avoids
-	// ambiguity with Go's ServeMux prefix matching.
-	RegisterTextureRoutes(s, h)
-}
-
 // HandleInternalRuntimeRunRouter dispatches internal service-to-service run
 // status and event requests. It is intentionally separate from /api/*.
 func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *http.Request) {
@@ -1302,17 +1243,6 @@ func (h *APIHandler) HandleInternalRuntimeRunRouter(w http.ResponseWriter, r *ht
 		return
 	}
 	h.HandleInternalRunStatus(w, r)
-}
-
-// RegisterTextureRoutes registers the Texture API routes on the given server.
-// These routes expose document CRUD, revision, history, snapshot, diff,
-// and blame APIs through the authenticated same-origin proxy path.
-func RegisterTextureRoutes(s *server.Server, h *APIHandler) {
-	// Exact match for document collection (create/list).
-	s.HandleFunc("/api/texture/documents", h.HandleTextureDocumentsRoot)
-
-	// Prefix match for all other Texture routes.
-	s.HandleFunc("/api/texture/", h.HandleTextureRouter)
 }
 
 const (

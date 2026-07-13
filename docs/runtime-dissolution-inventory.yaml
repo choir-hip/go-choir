@@ -3,44 +3,41 @@ canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 144
+    go_files: 143
     production_files: 75
-    test_files: 69
-    production_loc: 44024
-    test_loc: 50141
-    exports: 1012
-    export_caller_edges: 365
+    test_files: 68
+    production_loc: 43944
+    test_loc: 50065
+    exports: 1006
+    export_caller_edges: 363
     initial_unused_export_debt: 16
-    routes: 47
+    routes: 2
     tools: 48
-    production_importers: 3
-    wrappers: 3
+    production_importers: 4
+    wrappers: 4
     compatibility_markers: 8
     store_calls: 443
     interface_candidates: 4
-    citers: 245
+    citers: 249
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
       loc: 6785
     - id: internal/runtime/api.go [production]
       disposition: api
-      loc: 1462
+      loc: 1392
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
       loc: 858
     - id: internal/runtime/api_candidate_package_intake.go [production]
       disposition: candidate_package
-      loc: 440
+      loc: 430
     - id: internal/runtime/api_costs.go [production]
       disposition: api
       loc: 119
     - id: internal/runtime/api_costs_test.go [test]
       disposition: api
       loc: 257
-    - id: internal/runtime/api_spawn_test.go [test]
-      disposition: api
-      loc: 20
     - id: internal/runtime/api_test.go [test]
       disposition: api
       loc: 3186
@@ -76,7 +73,7 @@ files:
       loc: 1697
     - id: internal/runtime/candidate_package_intake_test.go [test]
       disposition: candidate_package
-      loc: 3419
+      loc: 3401
     - id: internal/runtime/channel_store.go [production]
       disposition: lifecycle
       loc: 76
@@ -118,7 +115,7 @@ files:
       loc: 618
     - id: internal/runtime/failure_isolation_test.go [test]
       disposition: core
-      loc: 1140
+      loc: 1133
     - id: internal/runtime/internal_run_event_api_test.go [test]
       disposition: lifecycle
       loc: 93
@@ -127,13 +124,13 @@ files:
       loc: 371
     - id: internal/runtime/lifecycle_authority_test.go [test]
       disposition: core
-      loc: 220
+      loc: 205
     - id: internal/runtime/live_ws.go [production]
       disposition: core
       loc: 189
     - id: internal/runtime/live_ws_test.go [test]
       disposition: core
-      loc: 127
+      loc: 122
     - id: internal/runtime/media_state.go [production]
       disposition: media
       loc: 287
@@ -256,7 +253,7 @@ files:
       loc: 195
     - id: internal/runtime/test_helpers_test.go [test]
       disposition: core
-      loc: 332
+      loc: 329
     - id: internal/runtime/texture.go [production]
       disposition: texture
       loc: 2168
@@ -421,7 +418,7 @@ files:
       loc: 30
     - id: internal/runtime/universal_wire_test.go [test]
       disposition: wire
-      loc: 71
+      loc: 63
     - id: internal/runtime/update_coagent_cutover_test.go [test]
       disposition: core
       loc: 2311
@@ -599,26 +596,18 @@ exports:
       disposition: api
       production_callers:
         - internal/sandbox/run.go
-    - id: internal/runtime/api.go:func:RegisterRoutes
-      disposition: api
-      production_callers:
-        - internal/sandbox/run.go
-    - id: internal/runtime/api.go:func:RegisterTextureRoutes
-      disposition: api
-      production_callers:
-        - internal/runtime/api.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleCancel
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleHealth
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalChannelCast
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunCancel
       disposition: api
       production_callers:
@@ -634,11 +623,11 @@ exports:
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRunSubmission
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleInternalRuntimeRunRouter
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleModelPolicyResolve
       disposition: api
       production_callers:
@@ -646,42 +635,43 @@ exports:
     - id: internal/runtime/api.go:method(*APIHandler):HandleModelPolicyRouter
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandlePromptBar
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandlePromptBarSubmission
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptanceDetail
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptanceSynthesize
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunAcceptancesRoot
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleRunList
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleTextureDocumentsRoot
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:method(*APIHandler):HandleTextureRouter
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api.go:type:APIHandler
       disposition: api
       production_callers:
+        - internal/apihandler/routes.go
         - internal/runtime/api.go
         - internal/runtime/api_app_promotion.go
         - internal/runtime/api_candidate_package_intake.go
@@ -705,37 +695,33 @@ exports:
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionDetail
       disposition: promotion
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppAdoptionsRoot
       disposition: promotion
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppChangePackageDetail
       disposition: promotion
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleAppChangePackagesRoot
       disposition: promotion
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleComputersRouter
       disposition: promotion
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleInternalAppChangePackageDetail
       disposition: promotion
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_app_promotion.go:method(*APIHandler):HandleInternalAppChangePackagesRoot
       disposition: promotion
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_candidate_package_intake.go:func:RegisterCandidatePackageIntakeRoutes
       disposition: candidate_package
-    - id: internal/runtime/api_candidate_package_intake.go:func:RegisterCandidatePackageReviewSurfaceRoutes
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api.go
     - id: internal/runtime/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageIntakeDetail
       disposition: candidate_package
       production_callers:
@@ -747,11 +733,11 @@ exports:
     - id: internal/runtime/api_candidate_package_intake.go:method(*APIHandler):HandleCandidatePackageReviewSurfaceReadOnly
       disposition: candidate_package
       production_callers:
-        - internal/runtime/api_candidate_package_intake.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_costs.go:method(*APIHandler):HandleCosts
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_costs_test.go:func:TestHandleCostsDetailIncludesEntries
       disposition: api
     - id: internal/runtime/api_costs_test.go:func:TestHandleCostsModelsFlagIncludesPricing
@@ -767,8 +753,6 @@ exports:
     - id: internal/runtime/api_costs_test.go:func:TestHandleCostsTimeWindowFilter
       disposition: api
     - id: internal/runtime/api_costs_test.go:func:TestLLMCostPackageIntegration
-      disposition: api
-    - id: internal/runtime/api_spawn_test.go:func:TestSpawnRouteNotBrowserRegistered
       disposition: api
     - id: internal/runtime/api_test.go:func:TestAuthenticateUserMissing
       disposition: api
@@ -865,15 +849,15 @@ exports:
     - id: internal/runtime/api_texture_prompt_eval.go:method(*APIHandler):HandleTexturePromptEval
       disposition: texture
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_trajectory.go:method(*APIHandler):HandleTrajectoriesRoot
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/api_trajectory.go:method(*APIHandler):HandleTrajectoryDetail
       disposition: api
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/app_promotion.go:method(*Runtime):ApproveAppAdoption
       disposition: promotion
       production_callers:
@@ -950,7 +934,7 @@ exports:
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserCapabilities
       disposition: browser
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionClose
       disposition: browser
       production_callers:
@@ -966,11 +950,11 @@ exports:
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionRouter
       disposition: browser
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionsRoot
       disposition: browser
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/browser.go:method(*Runtime):BrowserCapabilities
       disposition: browser
       production_callers:
@@ -1042,7 +1026,7 @@ exports:
       disposition: candidate_package
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionReviewRouteRejectsUnsafeTransitions
       disposition: candidate_package
-    - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeDeployedRegisterRoutesServesOnlyReviewSurface
+    - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeDeployedReviewHandlerServesOnlyReviewSurface
       disposition: candidate_package
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeOptInRoutesCreateListAndGetOwnerScopedRecord
       disposition: candidate_package
@@ -1079,8 +1063,6 @@ exports:
     - id: internal/runtime/candidate_package_intake_test.go:func:TestNormalizeRouteProfile
       disposition: candidate_package
     - id: internal/runtime/candidate_package_intake_test.go:func:TestRegisterCandidatePackageIntakeRoutesPanicsWhenDeployedEnvSet
-      disposition: candidate_package
-    - id: internal/runtime/candidate_package_intake_test.go:func:TestRegisterCandidatePackageReviewSurfaceRoutesRegistersWhenDeployedEnvSet
       disposition: candidate_package
     - id: internal/runtime/channel_store.go:method(*Runtime):ChannelCast
       disposition: lifecycle
@@ -1158,7 +1140,7 @@ exports:
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentItemsRoot
       disposition: content
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentList
       disposition: content
       production_callers:
@@ -1166,7 +1148,7 @@ exports:
     - id: internal/runtime/content.go:method(*APIHandler):HandleContentRouter
       disposition: content
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/content.go:method(*Runtime):ImportFileContent
       disposition: content
       production_callers:
@@ -1230,7 +1212,7 @@ exports:
     - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopState
       disposition: desktop
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopStateGet
       disposition: desktop
       production_callers:
@@ -1346,7 +1328,7 @@ exports:
     - id: internal/runtime/live_ws.go:method(*APIHandler):HandleLiveWS
       disposition: core
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/live_ws_test.go:func:TestLiveWSCatchesUpAfterStreamSeq
       disposition: core
     - id: internal/runtime/live_ws_test.go:func:TestLiveWSPublishesOwnerScopedProductEvents
@@ -1354,7 +1336,7 @@ exports:
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgress
       disposition: media
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgressGet
       disposition: media
       production_callers:
@@ -1366,7 +1348,7 @@ exports:
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecents
       disposition: media
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecentsGet
       disposition: media
       production_callers:
@@ -1378,7 +1360,7 @@ exports:
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreference
       disposition: media
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreferenceGet
       disposition: media
       production_callers:
@@ -1439,15 +1421,15 @@ exports:
     - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSearch
       disposition: podcast
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSubscriptions
       disposition: podcast
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSubscriptionsRefresh
       disposition: podcast
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/podcast_test.go:func:TestPodcastRefreshSeedsExistingRSSContent
       disposition: podcast
     - id: internal/runtime/podcast_test.go:func:TestPodcastSearchFallsBackToLibrary
@@ -1522,11 +1504,11 @@ exports:
     - id: internal/runtime/prompts.go:method(*APIHandler):HandlePromptList
       disposition: model
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/prompts.go:method(*APIHandler):HandlePromptRole
       disposition: model
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/prompts_test.go:func:TestHandlePromptListReturnsEffectivePrompts
       disposition: model
     - id: internal/runtime/prompts_test.go:func:TestHandlePromptRoleSupportsSaveAndReset
@@ -1809,7 +1791,7 @@ exports:
     - id: internal/runtime/runtime_refresh.go:method(*APIHandler):HandleInternalRuntimeRefresh
       disposition: lifecycle
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/runtime_refresh_test.go:func:TestHandleInternalRuntimeRefreshRequiresInternalCaller
       disposition: lifecycle
     - id: internal/runtime/runtime_refresh_test.go:func:TestHandleInternalRuntimeRefreshSchedulesServiceRestart
@@ -2003,15 +1985,15 @@ exports:
     - id: internal/runtime/texture.go:method(*APIHandler):HandleInternalTextureDocument
       disposition: texture
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleInternalTextureRevision
       disposition: texture
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTestTextureWorkerUpdate
       disposition: texture
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/texture.go:method(*APIHandler):HandleTextureBlame
       disposition: texture
       production_callers:
@@ -2179,7 +2161,7 @@ exports:
     - id: internal/runtime/texture_proposals.go:method(*APIHandler):HandleInternalTextureProposalDelivery
       disposition: texture
       production_callers:
-        - internal/runtime/api.go
+        - internal/apihandler/routes.go
     - id: internal/runtime/texture_real_llm_test.go:func:TestRealLLMProviderInfo
       disposition: texture
     - id: internal/runtime/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLM
@@ -2936,8 +2918,6 @@ exports:
       disposition: core
     - id: internal/runtime/trajectory_test.go:func:TestTrajectoryObligationsAnswersWaitingOn
       disposition: core
-    - id: internal/runtime/universal_wire_test.go:func:TestRuntimeDoesNotRegisterUniversalWireStories
-      disposition: wire
     - id: internal/runtime/universal_wire_test.go:func:TestRuntimeTextureReadsRemainOwnerScopedAfterWireCutover
       disposition: wire
     - id: internal/runtime/update_coagent_cutover_test.go:func:TestCoagentRewarmIgnoresBlockedHistoricalActivation
@@ -3092,97 +3072,7 @@ initial_unused_export_debt:
     - id: internal/runtime/tools_vmctl.go:method(*workerRunPollError):Error
       disposition: delete
 routes:
-    - id: internal/runtime/api.go:HandleFunc:/api/adoptions/:h.HandleAppAdoptionDetail
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/adoptions:h.HandleAppAdoptionsRoot
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/agent/cancel:h.HandleCancel
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/agent/loops:h.HandleRunList
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/app-change-packages/:h.HandleAppChangePackageDetail
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/app-change-packages:h.HandleAppChangePackagesRoot
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/browser/capabilities:h.HandleBrowserCapabilities
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/browser/sessions/:h.HandleBrowserSessionRouter
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/browser/sessions:h.HandleBrowserSessionsRoot
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/computers/:h.HandleComputersRouter
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/content/:h.HandleContentRouter
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/content/items:h.HandleContentItemsRoot
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/costs:h.HandleCosts
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/desktop/state:h.HandleDesktopState
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/evals/texture-prompt:h.HandleTexturePromptEval
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/media/progress:h.HandleMediaProgress
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/media/recents:h.HandleMediaRecents
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/model-policy/:h.HandleModelPolicyRouter
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/podcast/search:h.HandlePodcastSearch
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/podcast/subscriptions/refresh:h.HandlePodcastSubscriptionsRefresh
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/podcast/subscriptions:h.HandlePodcastSubscriptions
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/preferences/theme:h.HandleThemePreference
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/prompt-bar/submissions/:h.HandlePromptBarSubmission
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/prompt-bar:h.HandlePromptBar
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/prompts/:h.HandlePromptRole
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/prompts:h.HandlePromptList
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/run-acceptances/:h.HandleRunAcceptanceDetail
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/run-acceptances/synthesize:h.HandleRunAcceptanceSynthesize
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/run-acceptances:h.HandleRunAcceptancesRoot
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/test/texture/worker-update:h.HandleTestTextureWorkerUpdate
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/texture/:h.HandleTextureRouter
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/texture/documents:h.HandleTextureDocumentsRoot
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/trajectories/:h.HandleTrajectoryDetail
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/trajectories:h.HandleTrajectoriesRoot
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/api/ws:h.HandleLiveWS
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/runtime/app-change-packages/:h.HandleInternalAppChangePackageDetail
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/runtime/app-change-packages:h.HandleInternalAppChangePackagesRoot
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/runtime/channel-casts:h.HandleInternalChannelCast
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/runtime/refresh:h.HandleInternalRuntimeRefresh
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/runtime/runs/:h.HandleInternalRuntimeRunRouter
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/runtime/runs:h.HandleInternalRunSubmission
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/texture/documents/:h.HandleInternalTextureDocument
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/texture/proposals:h.HandleInternalTextureProposalDelivery
-      disposition: api
-    - id: internal/runtime/api.go:HandleFunc:/internal/texture/revisions/:h.HandleInternalTextureRevision
-      disposition: api
     - id: internal/runtime/api_candidate_package_intake.go:HandleFunc:/api/candidate-package-intakes/:h.HandleCandidatePackageIntakeDetail
-      disposition: candidate_package
-    - id: internal/runtime/api_candidate_package_intake.go:HandleFunc:/api/candidate-package-intakes/:h.HandleCandidatePackageReviewSurfaceReadOnly
       disposition: candidate_package
     - id: internal/runtime/api_candidate_package_intake.go:HandleFunc:/api/candidate-package-intakes:h.HandleCandidatePackageIntakesRoot
       disposition: candidate_package
@@ -3288,6 +3178,8 @@ production_importers:
       disposition: delete
     - id: internal/actorruntime/handler.go
       disposition: delete
+    - id: internal/apihandler/routes.go
+      disposition: delete
     - id: internal/sandbox/run.go
       disposition: delete
 wrappers:
@@ -3296,6 +3188,8 @@ wrappers:
     - id: internal/actorruntime/handler.go:field:runtime.Runtime
       disposition: delete
     - id: internal/actorruntime/handler.go:field:runtime.Runtime#2
+      disposition: delete
+    - id: internal/apihandler/routes.go:field:runtime.APIHandler
       disposition: delete
 compatibility_markers:
     - id: internal/runtime/app_promotion.go:462:Legacy records without the captured base skip the check.
@@ -4413,6 +4307,8 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sourcecycled, internal/cycle/web_capture_graph.go, internal/proxy/platform_objectgraph.go, internal/platform/objectgraph_handlers.go, internal/runti… [sha256:2549ae29a8205c9d40642e75fdb52d0a57ffd8ba620d7d73bc89ef3463077988]'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/apihandler/routes.go, internal/runtime/api.go, internal/runtime/api_candidate_package_intake.go, internal/sandbox/run.go, directly_affected_rou… [sha256:02840826d5772800db955ac244086e96b40d0bd73c24f4470edb7646fb390f64]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/platform, internal/proxy, internal/runtime/universal_wire.go, internal/runtime/wire_publication.go, /api/universal-wire/stories, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/provideriface/provider.go, internal/runtime/config.go, internal/runtime/config_test.go, internal/runtime/runtime.go, internal/runtime/runtime_t… [sha256:6687142f5f443a6b310a9f2e13c056a098144518f9b1b26089320ac72c8da3d5]'
@@ -4564,6 +4460,12 @@ citers:
     - id: 'docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:Change: replace the sourcecycled runtime projection target with the existing corpusd object-graph HTTP service through the host service/proxy path; remove `/internal/runtime/objectgraph/web-captures` … [sha256:ead26837bfd20889d399cdb596ce7458eb284f39d02654aac64744a9df79e153]'
       disposition: historical_evidence
     - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:The Codex finding was concrete and was repaired rather than outvoted. Commits `981bd74a` and `b7b1262e` remove the stale import/runtime-store claims from `internal/store/store.go`, `internal/runtime/c… [sha256:ab07aa27be75e130458a6a85cf9f02f8c68c2f08e5df6df6ba86b2cefd918419]
+      disposition: historical_evidence
+    - id: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md:- `internal/runtime/api.go` (delete registrar declarations only)
+      disposition: historical_evidence
+    - id: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md:- `internal/runtime/api_candidate_package_intake.go` (delete registrar declaration only)
+      disposition: historical_evidence
+    - id: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md:S3-I15 deleted the `internal/apihandler` wrapper and moved complete process composition to `internal/sandbox`, but `internal/runtime` still owns the live HTTP route table through `RegisterRoutes`, `Re… [sha256:16050d4be13cdee46396fd607bb65c4b3917b843962671580b3d14a797619530]
       disposition: historical_evidence
     - id: docs/evidence/s3-batch-executor-extraction-dispatch-2026-07-12.md:- `internal/runtime/tools.go`, `tool_profiles.go`, and direct executor/context consumers/tests;
       disposition: historical_evidence

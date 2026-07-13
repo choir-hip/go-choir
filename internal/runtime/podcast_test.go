@@ -30,7 +30,7 @@ func TestPodcastSearchUsesConfiguredProvider(t *testing.T) {
 	t.Setenv("CHOIR_PODCAST_SEARCH_URL", provider.URL+"/search")
 
 	_, handler := testAPISetup(t)
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/podcast/search?q=mission%20gradient&limit=5", "", "user-podcast")
+	w := runtimeHandlerRequest(t, handler.HandlePodcastSearch, http.MethodGet, "/api/podcast/search?q=mission%20gradient&limit=5", "", "user-podcast")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -57,11 +57,11 @@ func TestPodcastSearchFallsBackToLibrary(t *testing.T) {
 		"source_url":"https://example.com/mission-gradient.rss",
 		"text_content":"<rss><channel><title>Mission Gradient Radio</title></channel></rss>"
 	}`
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/content/items", createBody, "user-podcast")
+	createW := runtimeHandlerRequest(t, handler.HandleContentItemsRoot, http.MethodPost, "/api/content/items", createBody, "user-podcast")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create content status = %d body=%s", createW.Code, createW.Body.String())
 	}
-	searchW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/podcast/search?q=Mission&limit=5", "", "user-podcast")
+	searchW := runtimeHandlerRequest(t, handler.HandlePodcastSearch, http.MethodGet, "/api/podcast/search?q=Mission&limit=5", "", "user-podcast")
 	if searchW.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", searchW.Code, searchW.Body.String())
 	}
@@ -95,12 +95,12 @@ func TestPodcastRefreshSeedsExistingRSSContent(t *testing.T) {
 		"source_url":` + strconv.Quote(feed.URL+"/feed.rss") + `,
 		"text_content":"<rss><channel><title>Existing Feed</title></channel></rss>"
 	}`
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/content/items", createBody, "user-podcast")
+	createW := runtimeHandlerRequest(t, handler.HandleContentItemsRoot, http.MethodPost, "/api/content/items", createBody, "user-podcast")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create content status = %d body=%s", createW.Code, createW.Body.String())
 	}
 
-	refreshW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/podcast/subscriptions/refresh?limit=10", `{}`, "user-podcast")
+	refreshW := runtimeHandlerRequest(t, handler.HandlePodcastSubscriptionsRefresh, http.MethodPost, "/api/podcast/subscriptions/refresh?limit=10", `{}`, "user-podcast")
 	if refreshW.Code != http.StatusOK {
 		t.Fatalf("refresh status = %d body=%s", refreshW.Code, refreshW.Body.String())
 	}
@@ -127,7 +127,7 @@ func TestPodcastSubscriptionsPersistAndListContent(t *testing.T) {
 
 	_, handler := testAPISetup(t)
 	body := `{"feed_url":` + strconv.Quote(feed.URL+"/feed.rss") + `,"title":"Mission Gradient Radio"}`
-	createW := registeredRuntimeRequest(t, handler, http.MethodPost, "/api/podcast/subscriptions", body, "user-podcast")
+	createW := runtimeHandlerRequest(t, handler.HandlePodcastSubscriptions, http.MethodPost, "/api/podcast/subscriptions", body, "user-podcast")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("subscribe status = %d body=%s", createW.Code, createW.Body.String())
 	}
@@ -142,7 +142,7 @@ func TestPodcastSubscriptionsPersistAndListContent(t *testing.T) {
 		t.Fatalf("content app hint = %q", created.Subscription.ContentItem.AppHint)
 	}
 
-	listW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/podcast/subscriptions?limit=10", "", "user-podcast")
+	listW := runtimeHandlerRequest(t, handler.HandlePodcastSubscriptions, http.MethodGet, "/api/podcast/subscriptions?limit=10", "", "user-podcast")
 	if listW.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", listW.Code, listW.Body.String())
 	}

@@ -19,14 +19,6 @@ func runtimeTestTextureBodyDoc(t *testing.T, docID, revisionID, content string) 
 	return bodyDoc
 }
 
-func TestRuntimeDoesNotRegisterUniversalWireStories(t *testing.T) {
-	_, handler := testAPISetup(t)
-	w := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/universal-wire/stories", "", "reader-1")
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("GET /api/universal-wire/stories status = %d body=%s, want runtime route absent", w.Code, w.Body.String())
-	}
-}
-
 func TestRuntimeTextureReadsRemainOwnerScopedAfterWireCutover(t *testing.T) {
 	rt, handler := testAPISetup(t)
 	now := time.Now().UTC()
@@ -63,7 +55,7 @@ func TestRuntimeTextureReadsRemainOwnerScopedAfterWireCutover(t *testing.T) {
 		"/api/texture/documents/" + doc.DocID + "/history",
 		"/api/texture/documents/" + doc.DocID + "/stream",
 	} {
-		w := registeredRuntimeRequest(t, handler, http.MethodGet, path, "", "reader-1")
+		w := runtimeHandlerRequest(t, handler.HandleTextureRouter, http.MethodGet, path, "", "reader-1")
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("GET %s status = %d body=%s, want owner-scoped not found", path, w.Code, w.Body.String())
 		}

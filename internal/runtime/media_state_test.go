@@ -16,7 +16,7 @@ func TestMediaProgressAPIStoresAndEmitsEvent(t *testing.T) {
 	ch := rt.EventBus().SubscribeWithBuffer(8)
 	defer rt.EventBus().Unsubscribe(ch)
 
-	w := registeredRuntimeRequest(t, handler, http.MethodPut, "/api/media/progress", `{
+	w := runtimeHandlerRequest(t, handler.HandleMediaProgress, http.MethodPut, "/api/media/progress", `{
 		"kind":"audio",
 		"identity":"file:/song.mp3",
 		"current_time":42,
@@ -36,7 +36,7 @@ func TestMediaProgressAPIStoresAndEmitsEvent(t *testing.T) {
 		t.Fatalf("event scope/seq = owner %q stream %d", ev.Record.OwnerID, ev.Record.StreamSeq)
 	}
 
-	getW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/media/progress?kind=audio&identity=file:%2Fsong.mp3", "", "user-media")
+	getW := runtimeHandlerRequest(t, handler.HandleMediaProgress, http.MethodGet, "/api/media/progress?kind=audio&identity=file:%2Fsong.mp3", "", "user-media")
 	if getW.Code != http.StatusOK {
 		t.Fatalf("get status: got %d body=%s", getW.Code, getW.Body.String())
 	}
@@ -58,7 +58,7 @@ func TestThemePreferenceAPIStoresAndEmitsEvent(t *testing.T) {
 	ch := rt.EventBus().SubscribeWithBuffer(8)
 	defer rt.EventBus().Unsubscribe(ch)
 
-	w := registeredRuntimeRequest(t, handler, http.MethodPut, "/api/preferences/theme", `{
+	w := runtimeHandlerRequest(t, handler.HandleThemePreference, http.MethodPut, "/api/preferences/theme", `{
 		"theme":{"id":"next-workstation","schema_version":1}
 	}`, "user-theme")
 	if w.Code != http.StatusOK {
@@ -70,7 +70,7 @@ func TestThemePreferenceAPIStoresAndEmitsEvent(t *testing.T) {
 		t.Fatalf("event kind = %q, want %q", ev.Record.Kind, types.EventThemeUpdated)
 	}
 
-	getW := registeredRuntimeRequest(t, handler, http.MethodGet, "/api/preferences/theme", "", "user-theme")
+	getW := runtimeHandlerRequest(t, handler.HandleThemePreference, http.MethodGet, "/api/preferences/theme", "", "user-theme")
 	if getW.Code != http.StatusOK {
 		t.Fatalf("get status: got %d body=%s", getW.Code, getW.Body.String())
 	}
