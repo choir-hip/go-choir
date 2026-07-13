@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-13T23:19:49Z
+  updated_at: 2026-07-13T23:29:41Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@948c514d7b6bdcc56b0ee79189e0e253c75c4c04
+  expected_parent_or_authority_ref: refs/heads/main@origin@95d1cfce89c9661dd94ef384137d3ff7be9bfb67
   status: working
   current_subgoal: R1-promptspec-package-cutover-01
   active_phase: R1-runtime-dissolution
@@ -433,7 +433,7 @@ state_capsule:
         - Move direct tests with the owner and cut every production import in the same landing.
         - Add no alias, forwarding package, wrapper, accessor, callback, interface, duplicate implementation, or compatibility path.
         - Keep prompt defaults, route registrations, tool registrations, state authorities, provider routing, and model policy unchanged.
-        - Regenerate the runtime inventory without weakening unused-export debt authority. The implementation may rebaseline documentation citers from the stale canonical 249 to exactly the mechanically observed post-Define value 269; production files, production LOC, exports, export caller edges, initial unused-export debt, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, legacy state writers, and legacy store reads may not increase, while runtime Go files and runtime LOC must decrease.
+        - Regenerate the runtime inventory without weakening unused-export debt authority. The implementation may rebaseline documentation citers from the stale canonical 249 to exactly the mechanically observed implementation-candidate value 270; production files, production LOC, exports, export caller edges, initial unused-export debt, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, legacy state writers, and legacy store reads may not increase, while runtime Go files and runtime LOC must decrease.
       protected_surfaces: []
       admissible_evidence:
         - E0 clean canonical source identity
@@ -518,13 +518,13 @@ state_capsule:
     - S3 whole-handler transport-first cutover is compile-falsified by private domain dependencies.
     - The first domain-operation boundary must be selected from the current mechanical dependency graph.
     - Staging gateway readiness failures caused by local runtime/Dolt/Ollama refusal remain non-attributable to the deployed product until reproduced there.
-    - The runtime dissolution inventory is structurally source-current but has documentation citer drift (249 baseline versus 257 observed) after the mission-authority cutover; its next generated refresh must preserve historical-evidence dispositions and may not mask source-count growth.
+    - The runtime dissolution inventory is structurally source-current but has documentation citer drift (249 baseline versus 257 observed) after the mission-authority cutover; the reviewed Define lock raised the pre-move observation to 269, and the mechanically regenerated implementation candidate observes 270. The authorized refresh must preserve historical-evidence dispositions and may not mask source-count growth.
   belief_changes:
     - The predecessor's transport-before-domain S3 order was not executable at the observed boundary.
     - Repeated orchestration receipts increased context and commit volume without increasing product evidence.
     - Domain-first cohesive extraction followed by thin transport cutover is the current evidence-backed route.
   highest_impact_remaining_uncertainty: Whether the promptspec atomic package cutover preserves every parser/rendering behavior and decreases the executable ratchet without creating a compatibility seam.
-  next_executable_probe: Freeze and review the R1-promptspec-package-cutover-01 Define boundary, commit it as the code-free problem and mutation authority, then implement the exact package move and verify its ratchet and focused behavior.
+  next_executable_probe: Commit this code-free correction to the observed citer target, then resume the already bounded promptspec package move, regenerate the inventory at 270 citers, and run focused behavior plus independent verification.
   evidence_index_refs:
     - docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
     - docs/runtime-dissolution-inventory.yaml
