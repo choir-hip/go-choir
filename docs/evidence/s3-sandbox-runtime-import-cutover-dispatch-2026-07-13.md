@@ -30,3 +30,15 @@ Preserve stub delay/cancellation/progress/error/result/policy behavior, conducto
 - focused stub, provider policy, sandbox bootstrap, runtime, actorruntime, gatewayruntime, and build-tag caller behavior passes;
 - runtime production LOC/exports/caller edges/production importers decrease and every gated authority count is non-increasing;
 - independent verification, full CI, staging identity/product smoke, consensus, and adjudication pass.
+
+## S3-I13 Implementation Receipt
+
+- Integrated source `08049400` from returned branch commit `6efcae63e2abd4a8fb83503966f137c0eefe183c`.
+- `cmd/sandbox` has no runtime import; profiles use `agentprofile`, registries use `toolregistry`, model-policy path derivation is provideriface-owned, and `internal/provider` solely owns complete StubProvider behavior plus shared pure Texture-decision helpers.
+- Runtime StubProvider, model-path, nine AgentProfile compatibility constants, ToolRegistry alias, and MustNewToolRegistry forwarder are deleted; every caller is migrated and no replacement seam remains. The pre-existing runtime `Tool` alias remains explicitly outside this slice.
+- Focused runtime/sandbox/provider/provideriface/actorruntime/gatewayruntime and exact stub/config/bootstrap tests pass.
+- Ratchet passed after canonical regeneration and removal of three fulfilled initial-unused-export debts: production LOC `44338 -> 44224`, exports `1031 -> 1014`, caller edges `520 -> 372`, initial unused-export debt `19 -> 16`, production importers `4 -> 3`, compatibility markers `12 -> 10`; every other gate is flat.
+
+## Dispatch Substrate Reconciliation
+
+The implementer returned a clean named branch commit but switched the shared repository worktree onto that branch rather than using the required isolated worktree. No uncommitted or conflicting paths existed. The orchestrator skipped the resulting empty cherry-pick, switched the shared worktree back to canonical `main`, and integrated the same commit as `08049400`. This is a discovered delegation-substrate conformance defect, not a source mutation or unresolved result conflict; the branch commit and canonical integration match.

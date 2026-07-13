@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 9b8af38b
+  journal_expected_parent_sha: 08049400
   orchestrator_lock:
     holder: Main
     epoch: 20
     expires_at: 2026-07-13T03:54:52Z
-    expected_parent_sha: 9b8af38b
+    expected_parent_sha: 08049400
     lock_transition_id: s3-lock-renewal-209
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1956,28 +1956,29 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 20
-      status: dispatched
+      status: committed
       dispatch_nonce: s3-runtime-dissolution-i13-nonce-01
       dispatch_ref: S3I13Implementer
       agent_session_ref: agent://S3I13Implementer
       dispatch_prompt_ref: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md#exact-mutation-lock
       implementer_job_ref: S3I13Implementer
-      implementer_output_ref: pending_agent_return
+      implementer_output_ref: agent://S3I13Implementer
       verifier_job_ref: pending_independent_verification
       verifier_output_ref: pending_independent_verification
-      worktree_or_branch_ref: pending_S3I13Implementer_isolated_worktree
-      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
-      mutation_delivery_mode: isolated_worktree_or_patch
+      worktree_or_branch_ref: s3-i13-sandbox-runtime-import-cutover@6efcae63e2abd4a8fb83503966f137c0eefe183c
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, named_branch_in_shared_worktree]
+      mutation_delivery_mode: named_branch_in_shared_worktree_reconciled_nonconforming
       direct_shared_worktree_allowed: false
       direct_shared_worktree_justification: not_applicable
       lock_acquired_ref: 6ee86dd1
       lock_release_ref: pending_S3_I13_landing
       stage_started_at: 2026-07-13T01:56:13Z
       transition_id: s3-i13-dispatch-intent-210
-      expected_parent_sha: 9b8af38b
+      expected_parent_sha: 08049400
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i13-dispatch-intent-210, recorded_at: 2026-07-13T01:56:13Z, actor: Main, expected_parent_sha: 6ee86dd1, precondition: S3_I12_landed_config_authority_extracted_step3_continues, postcondition: exact_sandbox_runtime_import_cutover_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i13-dispatched-211, recorded_at: 2026-07-13T01:57:59Z, actor: Main, expected_parent_sha: 9b8af38b, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_20, postcondition: S3I13Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
+        - {status: committed, transition_id: s3-i13-implementation-returned-212, recorded_at: 2026-07-13T02:49:31Z, actor: Main, expected_parent_sha: 08049400, precondition: clean_named_branch_commit_returned_with_shared_worktree_switch_detected, postcondition: canonical_main_restored_same_commit_integrated_focused_tests_and_ratchet_PASS_substrate_defect_reconciled, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T03:54:52Z
       mutation_class: orange
       protected_surfaces: []
@@ -1993,10 +1994,10 @@ run_checkpoint_and_resumption_state:
       effect_authority: canonical_git_ref_then_staging_sandbox
       receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_product_API
       expected_precondition: cmd_sandbox_directly_imports_runtime_for_stub_profiles_registry_and_model_policy_path
-      observed_postcondition: pending
+      observed_postcondition: cmd_sandbox_runtime_import_deleted_stub_profiles_registry_model_path_moved_to_canonical_owners_ratchet_decreased
       external_operation_idempotent: true
-      implementation_sha_or_dirty_snapshot: pending
-      implementation_commit_sha: pending
+      implementation_sha_or_dirty_snapshot: 08049400
+      implementation_commit_sha: 08049400
       push_ref: pending
       ci_run_ref: pending
       deploy_ref: pending
@@ -2006,9 +2007,9 @@ run_checkpoint_and_resumption_state:
       evidence_refs: [docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md]
       open_findings: []
       landed_commit_sha: pending
-      adjudication: pending
-      last_reconciled_at: 2026-07-13T01:57:59Z
-      reconciliation_result: one_matching_planned_agent_dispatch_S3I13Implementer
+      adjudication: source_PASS_substrate_delivery_defect_reconciled_independent_verification_pending
+      last_reconciled_at: 2026-07-13T02:49:31Z
+      reconciliation_result: shared_worktree_branch_switch_recovered_canonical_integration_08049400_focused_tests_and_ratchet_PASS
       close_condition: cutover_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
