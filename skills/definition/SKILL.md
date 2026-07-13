@@ -226,20 +226,34 @@ until a required durability boundary. A changed belief, next probe, worker
 return, verifier dispatch, CI status, deploy receipt, consensus result, report
 refresh, or lock heartbeat is not by itself a reason to commit.
 
-For ordinary surprise-free work, use a natural two-beat rhythm:
+For ordinary surprise-free work, use a natural two-beat rhythm. Consensus is an
+assurance operation on a proposed boundary, not a third beat:
 
-1. **Define.** One code-free boundary closes the prior slice and defines the
-   next: problem and evidence, authority, rollback anchor, mutation boundary,
-   and dispatch authorization. Commit it before its corresponding Implement
-   beat. This satisfies problem-documentation-first.
-2. **Implement.** One implementation boundary carries code, tests, generated
-   artifacts, capsule changes, local evidence, and returned worker identity.
+1. **Define.** Prepare one code-free boundary closing the prior slice and
+   defining the next problem/evidence, authority, rollback, mutation boundary,
+   and dispatch. When assurance requires consensus, freeze, review, adjudicate,
+   revise, then commit the accepted Define before Implement. This satisfies
+   problem-documentation-first.
+2. **Implement.** Prepare code, tests, generated artifacts, capsule changes,
+   local evidence, and worker identity. Run checks and independent verification;
+   when assurance requires consensus, freeze, review, adjudicate, repair, then
+   commit. A confirmed new platform-behavior problem instead requires the next
+   commit to be a code-free Define boundary authorizing repair.
 
-After CI, deploy, product proof, independent verification, or consensus, update
-working state but normally fold those receipts and the prior closure into the
-next Define beat. They are not separate beats. If the mission stops, hands off,
-or cannot rely on externally durable receipts, emit one final Define beat with
-terminal state, last known evidence, and rollback anchor.
+Bind review to a frozen candidate identity containing base revision, path scope,
+content digest, and evidence refs. Use a content-addressed patch/bundle, read-only
+snapshot, or isolated candidate commit; the latter is review substrate, not
+canonical mission state. Freeze scoped mutation. Material semantic change
+invalidates review; skip deterministic formatting/generated refresh reruns only
+with a content-neutral rationale.
+The accepted boundary must bind candidate identity, consensus/evidence refs,
+adjudication, and no-rerun rationale in included state or commit metadata. After
+commit, gather external receipts and normally fold them into the next Define.
+Post-boundary observation does not itself require consensus; use another panel
+only when unavailable evidence or surprise can change the graph, evidence class,
+authority, mutation boundary, escalation, route, or stopping condition. On
+stop/handoff without durable receipts, emit a final Define beat with terminal
+state, evidence, and rollback anchor.
 
 Do not create separate commits merely for dispatch intent, dispatch receipt,
 worker return, verifier dispatch, CI status, deploy receipt, consensus result,
@@ -264,11 +278,12 @@ external-effect domains. Serialize mutations sharing state, an authority edge,
 canonical journal parent, deployment routing, rollback surface, or protected
 external effect.
 
-After an immutable implementation identity exists, fan out independent CI,
-source verification, bounded second opinions, and read-only next-frontier
-preparation. Separate worktrees may prepare genuinely disjoint patches, but one
-integration authority lands them. Any surprise, shared dependency, dissent, or
-ratchet drift dissolves the batch and returns to serial control.
+After a frozen candidate identity exists, fan out independent source checks,
+bounded second opinions, and read-only preparation. After its canonical
+boundary, fan out CI and external verification. Separate worktrees may prepare
+genuinely disjoint patches, but one integration authority lands them. Any
+candidate drift, surprise, shared dependency, dissent, or ratchet drift
+dissolves the batch and returns to serial control.
 
 ## Conjectures, Progress, Realism, And Evidence
 
@@ -305,8 +320,9 @@ recommendation using the authoring schema.
 ## Assurance Profiles And Second Opinions
 
 Attach an assurance profile to each active mutation or settlement class. Map
-project-specific mutation classes into the profile instead of imposing one
-universal ceremony. Record risk, novelty, evidence floor, independent-verifier
+panel tiers onto project-specific mutation classes and ceremony; consensus
+supplements those rules and never replaces them or creates a competing risk
+taxonomy. Record risk, novelty, evidence floor, independent-verifier
 requirement, panel tier/diversity, hard timeout/budget, and escalation triggers
 using the authoring schema.
 

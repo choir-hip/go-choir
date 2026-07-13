@@ -298,6 +298,11 @@ Default output directory:
 
 Use `--out-dir DIR` to pin the location.
 
+`/tmp` is session diagnostics, not resumable evidence. When resumption or audit
+requires durability, archive the prompt, manifest, candidate identity,
+adjudicated findings, and reviewer-health telemetry under a durable referenced
+identity. Raw transcripts need not become their own Git commit.
+
 Every agent has a 180-second hard deadline by default. Override it with
 `--timeout-seconds N`.
 
@@ -373,13 +378,45 @@ Return only actionable risks and fixes.
 
 ## Workflow
 
-1. Build a prompt file when the prompt is long, quote-heavy, or includes code/diffs.
-2. Run the bundled script with the default panel or requested `--include`/`--exclude` set.
-3. Read `manifest.tsv` first.
-4. Read each successful `<agent>.out`.
-5. Treat failures/skips as panel metadata, not fatal if `--keep-going` was intentional.
-6. Synthesize; do not concatenate.
-7. Locally verify any high-impact code claim before presenting it as fact.
+When reviewing work governed by a Definition, consensus is an assurance
+operation, not a separate Git beat. If the assurance profile requires a panel
+for a canonical Define or Implement boundary:
+
+1. Prepare the decision-complete diff and its available evidence.
+2. Bind review to a frozen identity containing base revision, complete included
+   and excluded path scope, content digest, and evidence refs. Use a
+   content-addressed patch/bundle, read-only snapshot, or isolated candidate
+   commit; a candidate commit is review substrate, not canonical mission state.
+3. Freeze scoped mutation, then run the risk-tiered panel. Map panel breadth to
+   the project's existing mutation classes and ceremony; never substitute the
+   panel for required evidence, rollback, protected-surface, or authority work.
+4. Read `manifest.tsv` and successful outputs, synthesize rather than
+   concatenate, and locally verify high-impact claims.
+5. Adjudicate findings into the candidate. A confirmed new behavior problem
+   requires a code-free problem/Define boundary before repair when the project
+   uses problem-documentation-first.
+6. Compare the accepted candidate identity before the canonical commit.
+   Material semantic change makes the review stale; rerun proportionately.
+   Record why any deterministic formatting or generated delta is content-neutral.
+7. Durably bind the accepted candidate identity, consensus/evidence refs,
+   adjudication, and any no-rerun rationale in the reviewed artifact or commit
+   metadata. Do not create standalone consensus-intent, output, or adjudication
+   commits.
+
+After commit, CI, deployment, production, migration, restart, credential,
+provider, VM, promotion, rollback, and other external observations may be newly
+available. Run post-boundary consensus only when interpreting such evidence or
+a surprise can change the graph, evidence class, authority, mutation boundary,
+escalation, route, or stopping condition; otherwise fold receipts into the next
+natural Define boundary.
+
+For any other consensus task:
+
+1. Build a prompt file when the prompt is long, quote-heavy, or includes diffs.
+2. Run the bundled script with the chosen panel.
+3. Read the manifest and successful outputs; treat intentional partial-panel
+   failures as metadata.
+4. Synthesize and locally verify high-impact claims.
 
 ## Synthesis Template
 
