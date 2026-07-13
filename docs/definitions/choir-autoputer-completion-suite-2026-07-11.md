@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 2daeba54
+  journal_expected_parent_sha: 560f0942
   orchestrator_lock:
     holder: Main
     epoch: 24
     expires_at: 2026-07-13T09:00:11Z
-    expected_parent_sha: 2daeba54
+    expected_parent_sha: 560f0942
     lock_transition_id: s3-lock-renewal-242
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -721,8 +721,8 @@ run_checkpoint_and_resumption_state:
     staging_ref: authenticated_public_texture_documents_200_at_2026-07-13T06:46:41Z
     product_proof_refs: [docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md#s3-i15-ci-deploy-and-acceptance]
     consensus_ref: /tmp/choir-s3-i15-final-consensus-20260713
-    open_findings: [S3_step3_runtime_APIHandler_authority_extraction_remains, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
-    adjudication_ref: S3_I15_PASS_next_step3_extraction_boundary_mapping
+    open_findings: [S3_I16_route_authority_dispatch_intent, staging_gateway_readiness_local_runtime_dolt_ollama_refused_nonattributable]
+    adjudication_ref: S3_I15_PASS_S3_I16_dispatch_pending
   delegation_ledger_schema:
     required_fields:
       - slice_id
@@ -2149,6 +2149,63 @@ run_checkpoint_and_resumption_state:
       last_reconciled_at: 2026-07-13T06:54:31Z
       reconciliation_result: landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
       close_condition: bootstrap_cutover_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
+    - slice_id: S3-I16-api-route-authority
+      subgoal: S3
+      suite_run_id: choir-autoputer-completion-2026-07-11-01
+      orchestrator_lock_epoch: 24
+      status: dispatch_intent
+      dispatch_nonce: s3-runtime-dissolution-i16-nonce-01
+      dispatch_ref: pending_S3I16Implementer
+      agent_session_ref: pending_agent_dispatch
+      dispatch_prompt_ref: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md#exact-mutation-lock
+      implementer_job_ref: pending_agent_dispatch
+      implementer_output_ref: pending_agent_return
+      verifier_job_ref: pending_independent_verification
+      verifier_output_ref: pending_independent_verification
+      worktree_or_branch_ref: pending_S3I16Implementer_isolated
+      declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, isolated_worktree_or_patch]
+      mutation_delivery_mode: isolated_worktree_or_patch
+      direct_shared_worktree_allowed: false
+      direct_shared_worktree_justification: not_applicable
+      lock_acquired_ref: 560f0942
+      lock_release_ref: pending_S3_I16_landing
+      stage_started_at: 2026-07-13T07:00:11Z
+      transition_id: s3-i16-dispatch-intent-243
+      expected_parent_sha: 560f0942
+      stage_history:
+        - {status: dispatch_intent, transition_id: s3-i16-dispatch-intent-243, recorded_at: 2026-07-13T07:00:11Z, actor: Main, expected_parent_sha: 560f0942, precondition: S3_I15_landed_bootstrap_and_wrapper_removed, postcondition: exact_apihandler_route_authority_extraction_slice_canonical, external_operation_id: not_applicable}
+      lock_expires_at: 2026-07-13T09:00:11Z
+      mutation_class: orange
+      protected_surfaces: []
+      exact_files_packages_routes_state_authorities: [internal/apihandler/routes.go, internal/runtime/api.go, internal/runtime/api_candidate_package_intake.go, internal/sandbox/run.go, directly_affected_route_registration_tests, docs/runtime-dissolution-inventory.yaml]
+      forbidden_targets: [APIHandler_method_or_body_move, app_domain_behavior, route_path_or_order_change, runtime_method_config_provider_store_trace_actor_lifecycle_change, step4, new_package, interface, callback_table, generic_constraint_facade, reflection, alias, accessor, forwarder, wrapper, test_only_registrar_copy, compatibility_shim, dual_registration_path, second_server_or_mux]
+      authority_edges_locked: [internal_apihandler_sole_live_route_table_owner, internal_runtime_zero_registrar_declarations, internal_sandbox_one_canonical_registrar_call, product_tool_same_canonical_server]
+      implementer_agent: pending_S3I16Implementer
+      verifier_agent: pending_independent_verifier
+      pre_mutation_sha: 560f0942
+      rollback_commit_or_ref: 560f0942
+      accepted_slice_dependency_refs: [S3-I15@887bbdde]
+      external_operation_id: not_applicable
+      effect_authority: canonical_git_ref_then_staging_sandbox
+      receipt_lookup: git_history_agent_job_record_GitHub_Actions_staging_public_product_API
+      expected_precondition: runtime_owns_live_route_table_sandbox_calls_runtime_registrar
+      observed_postcondition: pending
+      external_operation_idempotent: true
+      implementation_sha_or_dirty_snapshot: pending
+      implementation_commit_sha: pending
+      push_ref: pending
+      ci_run_ref: pending
+      deploy_ref: pending
+      deployed_sha: pending
+      acceptance_ref: pending
+      acceptance_contract: apihandler_sole_exact_route_table_owner_runtime_registrars_deleted_behavior_preserved
+      evidence_refs: [docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md]
+      open_findings: [same_package_runtime_test_import_cycle_requires_clean_nonduplicating_migration]
+      landed_commit_sha: pending
+      adjudication: pending
+      last_reconciled_at: 2026-07-13T07:00:11Z
+      reconciliation_result: no_prior_matching_dispatch_found
+      close_condition: route_authority_cutover_landed_deployed_public_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}
     - {path: internal/runtime/runtime.go, symbols: [ExecuteActivationSync, CancelRun], disposition: core, reason: single_lifecycle_authority_budget_and_immediate_terminal_cancel}
@@ -2185,14 +2242,15 @@ run_checkpoint_and_resumption_state:
     - Wire authority split and VM fate-sharing
     - internal/runtime god package and compatibility wrappers
     - audited-computer/operator/receipt/run-truth/self-development/containment gaps
-  highest_impact_remaining_uncertainty: The smallest acyclic deletion-bearing boundary that transfers live HTTP/API ownership out of runtime without moving app/domain behavior or introducing an interface, callback, facade, or dual route authority.
-  next_executable_probe: Map current APIHandler private dependencies and caller ownership after S3-I15, then persist and dispatch the smallest atomic S3 step-3 extraction slice.
+  highest_impact_remaining_uncertainty: Whether route-table authority can move atomically to apihandler while preserving same-package runtime route integration tests without a duplicate registrar, import cycle, facade, or altered behavior.
+  next_executable_probe: Implement S3-I16 canonical route-table ownership extraction or return the compile-proven minimum prerequisite before mutation.
   suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
   evidence_artifact_refs:
     - docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md
     - docs/evidence/s3-step2-phase-gate-2026-07-13.md
     - docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md
     - docs/evidence/s3-product-api-tool-ownership-dispatch-2026-07-13.md
+    - docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md
     - docs/evidence/s3-sandbox-bootstrap-ownership-dispatch-2026-07-13.md
   rollback_refs: []
   superseded_by: ''
