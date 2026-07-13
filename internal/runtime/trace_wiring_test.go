@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -81,7 +82,7 @@ func newTraceWiringRuntime(t *testing.T, traceStore trace.Store) (*Runtime, func
 	}
 
 	opts := []RuntimeOption{WithTraceStore(traceStore)}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-trace-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,

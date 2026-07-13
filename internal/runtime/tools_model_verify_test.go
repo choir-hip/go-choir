@@ -39,7 +39,7 @@ func (p *capturingModelVerifyProvider) CallWithTools(ctx context.Context, req pr
 
 func TestVerifyModelCapabilityExplicitTextOnlyOmitFireworksMaxTokens(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
-	rt := New(Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
+	rt := New(provideriface.Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-text",
@@ -77,7 +77,7 @@ func TestVerifyModelCapabilityExplicitTextOnlyOmitFireworksMaxTokens(t *testing.
 
 func TestVerifyModelCapabilityRejectsImageForTextOnlyModel(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
-	rt := New(Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
+	rt := New(provideriface.Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-image-blocker",
@@ -102,7 +102,7 @@ func TestVerifyModelCapabilityRejectsImageForTextOnlyModel(t *testing.T) {
 func TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
 	dir := t.TempDir()
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		StorePath:       filepath.Join(dir, "runtime.db"),
 		ModelPolicyPath: filepath.Join(dir, "System", "model-policy.toml"),
 	}, nil, nil, provider)
@@ -134,7 +134,7 @@ func TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier(t *testing.T) {
 func TestVerifyModelCapabilityUsesPolicyForMiMoImage(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
 	dir := t.TempDir()
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		StorePath:       filepath.Join(dir, "runtime.db"),
 		ModelPolicyPath: filepath.Join(dir, "System", "model-policy.toml"),
 	}, nil, nil, provider)
@@ -171,7 +171,7 @@ func TestVerifyModelCapabilityUsesPolicyForMiMoImage(t *testing.T) {
 func TestVerifyModelCapabilityUsesDeterministicImageFixture(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
 	dir := t.TempDir()
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		StorePath:       filepath.Join(dir, "runtime.db"),
 		ModelPolicyPath: filepath.Join(dir, "System", "model-policy.toml"),
 	}, nil, nil, provider)
@@ -206,7 +206,7 @@ func TestVerifyModelCapabilityUsesDeterministicImageFixture(t *testing.T) {
 
 func TestVerifyModelCapabilityRejectsMalformedImageInput(t *testing.T) {
 	provider := &capturingModelVerifyProvider{}
-	rt := New(Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
+	rt := New(provideriface.Config{StorePath: filepath.Join(t.TempDir(), "runtime.db")}, nil, nil, provider)
 	tool := newVerifyModelCapabilityTool(rt)
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "run-verify-bad-image",

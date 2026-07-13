@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -78,7 +79,7 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 		t.Fatalf("open store: %v", err)
 	}
 
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
@@ -203,7 +204,7 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 		t.Fatalf("open store: %v", err)
 	}
 
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
@@ -261,7 +262,7 @@ func testPromptRuntime(t *testing.T) *Runtime {
 	t.Helper()
 	promptRoot := filepath.Join(t.TempDir(), "prompts")
 	return &Runtime{
-		cfg: Config{
+		cfg: provideriface.Config{
 			SandboxID:           "sandbox-prompt-test",
 			PromptRoot:          promptRoot,
 			SupervisionInterval: time.Hour,

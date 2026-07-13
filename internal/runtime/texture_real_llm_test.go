@@ -269,7 +269,7 @@ func textureRealLLMSetup(t *testing.T) (*APIHandler, *store.Store, *Runtime, str
 	t.Cleanup(func() { _ = s.Close() })
 
 	bus := events.NewEventBus()
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-texture-real-llm",
 		StorePath:           dbPath,
 		ProviderTimeout:     60 * time.Second,

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
 func TestCaptureObscuraCDPScreenshotLive(t *testing.T) {
@@ -59,7 +61,7 @@ func TestRuntimeControlsObscuraCDPSessionLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve obscura: %v", err)
 	}
-	rt := New(Config{PromptRoot: t.TempDir()}, nil, nil, nil)
+	rt := New(provideriface.Config{PromptRoot: t.TempDir()}, nil, nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	if _, _, err := rt.captureBrowserCDPScreenshot(ctx, "browser-control-live", resolved, "https://httpbin.org/forms/post"); err != nil {
@@ -111,7 +113,7 @@ func TestRuntimeReusesObscuraCDPSessionLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve obscura: %v", err)
 	}
-	rt := New(Config{PromptRoot: t.TempDir()}, nil, nil, nil)
+	rt := New(provideriface.Config{PromptRoot: t.TempDir()}, nil, nil, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	first, firstSessionID, err := rt.captureBrowserCDPScreenshot(ctx, "browser-session-live", resolved, "https://example.com")

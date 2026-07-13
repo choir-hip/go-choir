@@ -519,7 +519,7 @@ func TestPromptBarToWorkerWorktreeAppAdoptionsDeterministic(t *testing.T) {
 			Text:       "Published product-path AppChangePackage.",
 		},
 	)
-	workerRT := New(Config{
+	workerRT := New(provideriface.Config{
 		SandboxID:           "sandbox-prompt-product-worker",
 		StorePath:           filepath.Join(workerDir, "worker.db"),
 		ProviderTimeout:     5 * time.Second,

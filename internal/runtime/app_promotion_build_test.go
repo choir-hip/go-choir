@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -282,11 +283,11 @@ func TestAppPromotionBuildEnvUsesWorkspaceScratchPaths(t *testing.T) {
 
 func TestDefaultAppPromotionBuildCommandsUseBuildCapableMemoryCaps(t *testing.T) {
 	t.Parallel()
-	if !strings.Contains(DefaultAppPromotionRuntimeBuildCommand, "GOMEMLIMIT=1024MiB") {
-		t.Fatalf("runtime promotion build command should use the build-capable memory cap: %s", DefaultAppPromotionRuntimeBuildCommand)
+	if !strings.Contains(provideriface.DefaultAppPromotionRuntimeBuildCommand, "GOMEMLIMIT=1024MiB") {
+		t.Fatalf("runtime promotion build command should use the build-capable memory cap: %s", provideriface.DefaultAppPromotionRuntimeBuildCommand)
 	}
-	if !strings.Contains(DefaultAppPromotionUIBuildCommand, "--max-old-space-size=768") {
-		t.Fatalf("UI promotion build command should use the build-capable memory cap: %s", DefaultAppPromotionUIBuildCommand)
+	if !strings.Contains(provideriface.DefaultAppPromotionUIBuildCommand, "--max-old-space-size=768") {
+		t.Fatalf("UI promotion build command should use the build-capable memory cap: %s", provideriface.DefaultAppPromotionUIBuildCommand)
 	}
 }
 

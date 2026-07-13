@@ -860,7 +860,7 @@ func TestProviderFailureSurfacesStructuredOutcome(t *testing.T) {
 		Result:  "",
 	}
 
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
@@ -996,7 +996,7 @@ func TestTaskRecoveryAcrossRestart(t *testing.T) {
 	}
 
 	bus1 := events.NewEventBus()
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
@@ -1092,7 +1092,7 @@ func TestInterruptedRunningTasksPassivatedOnStart(t *testing.T) {
 	}
 
 	bus := events.NewEventBus()
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
@@ -1166,7 +1166,7 @@ func TestInterruptedActivationPassivationDrainsBatches(t *testing.T) {
 		}
 	}
 
-	rt := New(Config{SandboxID: "sandbox-test"}, s, events.NewEventBus(), NewStubProvider(0))
+	rt := New(provideriface.Config{SandboxID: "sandbox-test"}, s, events.NewEventBus(), NewStubProvider(0))
 	setTestDispatch(rt, s)
 	rt.passivateInterruptedActivations(ctx)
 
@@ -1431,7 +1431,7 @@ func testRuntimeWithBridge(t *testing.T, bridge provideriface.Provider) (*Runtim
 	}
 
 	bus := events.NewEventBus()
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-bridge-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,

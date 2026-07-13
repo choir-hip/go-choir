@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/sandbox"
 )
 
@@ -13,7 +13,7 @@ func TestBuildRuntimeConfigPreservesHostServiceURLs(t *testing.T) {
 		SandboxID: "vm-test",
 		StorePath: "/tmp/runtime.db",
 	}
-	loaded := runtime.Config{
+	loaded := provideriface.Config{
 		PromptRoot:           "/prompts",
 		SkillsRoot:           "/skills",
 		ProviderTimeout:      7 * time.Second,

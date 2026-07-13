@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
 
 func TestParseModelPolicyResolvesRoles(t *testing.T) {
@@ -53,7 +55,7 @@ model = "accounts/fireworks/models/deepseek-v4-flash"
 }
 
 func TestFallbackModelPolicyUsesChatGPTCutoverDefaults(t *testing.T) {
-	policy := fallbackModelPolicy(Config{})
+	policy := fallbackModelPolicy(provideriface.Config{})
 	conductor := policy.Resolve(AgentProfileConductor)
 	if conductor.Provider != "chatgpt" || conductor.Model != "gpt-5.4-mini" || conductor.ReasoningEffort != "low" {
 		t.Fatalf("conductor selection = %+v", conductor)
@@ -97,7 +99,7 @@ func TestFallbackModelPolicyUsesChatGPTCutoverDefaults(t *testing.T) {
 }
 
 func TestGeneratedModelPolicyUsesTextureRoleKey(t *testing.T) {
-	raw := defaultModelPolicyText(Config{})
+	raw := defaultModelPolicyText(provideriface.Config{})
 	if !strings.Contains(raw, "[roles.texture]") {
 		t.Fatalf("generated model policy missing [roles.texture]:\n%s", raw)
 	}
@@ -127,7 +129,7 @@ func TestNormalizeModelPolicyRoleSeparatesVerifierModalities(t *testing.T) {
 }
 
 func TestDefaultModelPolicyUsesChatGPTCutover(t *testing.T) {
-	raw := defaultModelPolicyText(Config{LLMProvider: "chatgpt", LLMModel: "gpt-5.5", LLMReasoningEffort: "low"})
+	raw := defaultModelPolicyText(provideriface.Config{LLMProvider: "chatgpt", LLMModel: "gpt-5.5", LLMReasoningEffort: "low"})
 	policy, err := parseModelPolicy(raw, "generated")
 	if err != nil {
 		t.Fatalf("parse generated policy: %v", err)
@@ -148,7 +150,7 @@ func TestDefaultModelPolicyUsesChatGPTCutover(t *testing.T) {
 
 func TestEnsureDefaultModelPolicyCreatesCutoverPolicy(t *testing.T) {
 	policyPath := filepath.Join(t.TempDir(), "System", "model-policy.toml")
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
+	if err := ensureDefaultModelPolicyFile(policyPath, provideriface.Config{}); err != nil {
 		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
 	}
 	raw, err := os.ReadFile(policyPath)
@@ -190,7 +192,7 @@ reasoning = "high"
 	if err := os.WriteFile(policyPath, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := ensureDefaultModelPolicyFile(policyPath, Config{}); err != nil {
+	if err := ensureDefaultModelPolicyFile(policyPath, provideriface.Config{}); err != nil {
 		t.Fatalf("ensureDefaultModelPolicyFile: %v", err)
 	}
 	kept, err := os.ReadFile(policyPath)

@@ -819,7 +819,7 @@ func TestTextureSemanticMergeUsesProviderBackedJSON(t *testing.T) {
 			"preview": "client control"
 		}]
 	}`}
-	rt := New(Config{}, nil, nil, provider)
+	rt := New(provideriface.Config{}, nil, nil, provider)
 	source := types.Revision{RevisionID: "rev-source", Content: "# Proposal\n\nClients control the system."}
 	target := types.Revision{RevisionID: "rev-target", Content: "# Proposal\n\nThe system has current evidence."}
 
@@ -1040,7 +1040,7 @@ func textureToolCommitRuntime(t *testing.T) (*store.Store, *Runtime) {
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-texture-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,

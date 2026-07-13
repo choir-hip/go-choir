@@ -31,7 +31,7 @@ var (
 type runMemoryManager struct {
 	store                     *runtimestore.Store
 	rec                       *types.RunRecord
-	cfg                       Config
+	cfg                       provideriface.Config
 	emit                      provideriface.EventEmitFunc
 	provider                  provideriface.ToolLoopProvider
 	llmConfig                 LLMSelection
@@ -40,11 +40,11 @@ type runMemoryManager struct {
 	compactionInProgress      bool
 }
 
-func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg Config, emit provideriface.EventEmitFunc) *runMemoryManager {
+func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg provideriface.Config, emit provideriface.EventEmitFunc) *runMemoryManager {
 	return &runMemoryManager{
 		store: store,
 		rec:   rec,
-		cfg:   normalizeConfig(cfg),
+		cfg:   provideriface.NormalizeConfig(cfg),
 		emit:  emit,
 	}
 }
@@ -546,9 +546,9 @@ func (m *runMemoryManager) effectiveContextThresholdTokens() int {
 	if window <= 0 {
 		window = modelcatalog.DefaultContextWindowTokens
 	}
-	threshold := int(float64(window) * DefaultRunMemoryContextThresholdRatio)
+	threshold := int(float64(window) * provideriface.DefaultRunMemoryContextThresholdRatio)
 	if threshold <= 0 {
-		return DefaultRunMemoryPromptReserveTokens
+		return provideriface.DefaultRunMemoryPromptReserveTokens
 	}
 	return threshold
 }
@@ -556,7 +556,7 @@ func (m *runMemoryManager) effectiveContextThresholdTokens() int {
 func (m *runMemoryManager) estimatePromptPressureTokens(entries []types.RunMemoryEntry) int {
 	return estimateRawMessagesTokens(buildRunMemoryContext(entries)) +
 		m.promptOverheadTokens +
-		DefaultRunMemoryPromptReserveTokens
+		provideriface.DefaultRunMemoryPromptReserveTokens
 }
 
 func (m *runMemoryManager) generateLLMCompaction(ctx context.Context, plan runMemoryCompactionPlan) (runMemoryLLMCompaction, error) {

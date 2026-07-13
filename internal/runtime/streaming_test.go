@@ -85,7 +85,7 @@ func testStreamingRuntime(t *testing.T, provider provideriface.Provider) (*Runti
 	}
 
 	bus := events.NewEventBus()
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-streaming-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Second,

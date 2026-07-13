@@ -56,7 +56,7 @@ func main() {
 	sandbox.RegisterSuperConsoleRoutes(s, superConsoleHandler)
 
 	// Initialize the runtime engine with persisted state.
-	rtRuntimeCfg := runtime.LoadConfig()
+	rtRuntimeCfg := provideriface.LoadConfig()
 	rtCfg := buildRuntimeConfig(cfg, rtRuntimeCfg, filesRoot)
 
 	// Ensure the store directory exists.
@@ -223,8 +223,8 @@ func storeDir(path string) string {
 	return "."
 }
 
-func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg runtime.Config, filesRoot string) runtime.Config {
-	rtCfg := runtime.Config{
+func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg provideriface.Config, filesRoot string) provideriface.Config {
+	rtCfg := provideriface.Config{
 		SandboxID:                       cfg.SandboxID,
 		StorePath:                       cfg.StorePath,
 		PromptRoot:                      rtRuntimeCfg.PromptRoot,
@@ -262,7 +262,7 @@ func buildRuntimeConfig(cfg sandbox.Config, rtRuntimeCfg runtime.Config, filesRo
 		TracePersistenceEnabled:         rtRuntimeCfg.TracePersistenceEnabled,
 	}
 	if rtCfg.StorePath == "" {
-		rtCfg.StorePath = runtime.DefaultStorePath
+		rtCfg.StorePath = provideriface.DefaultStorePath
 	}
 	if strings.TrimSpace(rtCfg.ModelPolicyPath) == "" {
 		rtCfg.ModelPolicyPath = runtime.DefaultModelPolicyPath(filesRoot)

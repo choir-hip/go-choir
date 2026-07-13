@@ -764,7 +764,7 @@ func TestPersistentSuperProcessesConcurrentInboxDeliveriesInFollowupRun(t *testi
 		t.Fatalf("open store: %v", err)
 	}
 	provider := newBlockingExecuteProvider()
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Second,
@@ -4617,7 +4617,7 @@ func TestDelegateWorkerVMToolRunsWorkerRuntimeAndCollectsExport(t *testing.T) {
 			Text:       "Published background worker AppChangePackage.",
 		},
 	)
-	workerRT := New(Config{
+	workerRT := New(provideriface.Config{
 		SandboxID:           "vm-worker-proof",
 		StorePath:           filepath.Join(workerDir, "worker.db"),
 		ProviderTimeout:     5 * time.Second,
@@ -4872,7 +4872,7 @@ func TestFinishWorkerDelegationMirrorsWorkerSubmitUpdateToActiveTexture(t *testi
 			Text:       "Submitted direct worker update.",
 		},
 	)
-	workerRT := New(Config{
+	workerRT := New(provideriface.Config{
 		SandboxID:           "vm-worker-submit-mirror",
 		StorePath:           filepath.Join(workerDir, "worker.db"),
 		ProviderTimeout:     5 * time.Second,
@@ -5474,7 +5474,7 @@ func TestDelegateWorkerVMAddsRemoteRepoBootstrapForDistinctWorker(t *testing.T) 
 		StopReason: "end_turn",
 		Text:       "Received bootstrap instructions.",
 	})
-	workerRT := New(Config{
+	workerRT := New(provideriface.Config{
 		SandboxID:           "vm-worker-bootstrap",
 		StorePath:           filepath.Join(workerDir, "worker.db"),
 		ProviderTimeout:     5 * time.Second,
@@ -6578,7 +6578,7 @@ func TestDelegateWorkerVMLocalWorktreeIsolationUsesToolCWD(t *testing.T) {
 			Text:       "Published local worktree AppChangePackage.",
 		},
 	)
-	workerRT := New(Config{
+	workerRT := New(provideriface.Config{
 		SandboxID:           "sandbox-local-runtime",
 		StorePath:           filepath.Join(workerDir, "worker.db"),
 		ProviderTimeout:     5 * time.Second,
@@ -6677,7 +6677,7 @@ func testRuntimeWithTempCWD(t *testing.T) (*Runtime, *store.Store, string) {
 		t.Fatalf("open store: %v", err)
 	}
 
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Second,

@@ -47,7 +47,7 @@ func testConcurrentSetup(t *testing.T) (*Runtime, *APIHandler, string) {
 	bus := events.NewEventBus()
 	// Use a slow provider so runs stay running for concurrent observation.
 	provider := NewStubProvider(500 * time.Millisecond)
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-concurrent-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     2 * time.Second,
@@ -620,7 +620,7 @@ func TestConcurrentWorkers_TasksActuallyRunConcurrently(t *testing.T) {
 	bus := events.NewEventBus()
 	// Each task takes 200ms.
 	provider := NewStubProvider(200 * time.Millisecond)
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-concurrent-timing",
 		StorePath:           dbPath,
 		ProviderTimeout:     200 * time.Millisecond,
@@ -771,7 +771,7 @@ func TestConcurrentWorkers_FailedChildPostsErrorToParentChannel(t *testing.T) {
 		Delay:   10 * time.Millisecond,
 		FailErr: fmt.Errorf("simulated provider failure"),
 	}
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-fail-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     10 * time.Millisecond,
@@ -992,7 +992,7 @@ func TestConcurrentWorkers_SpawnWithSlowProvider_HighConcurrency(t *testing.T) {
 
 	bus := events.NewEventBus()
 	provider := NewStubProvider(300 * time.Millisecond)
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-high-concurrency",
 		StorePath:           dbPath,
 		ProviderTimeout:     300 * time.Millisecond,
@@ -1130,7 +1130,7 @@ func TestConcurrentWorkers_MixedPassFailWorkers(t *testing.T) {
 		result:     "Task completed successfully.",
 	}
 
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-mixed-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,

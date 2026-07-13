@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -3056,7 +3057,7 @@ func TestProviderFailureDoesNotCrashRuntime(t *testing.T) {
 		Delay:   10 * time.Millisecond,
 		FailErr: errors.New("provider connection refused"),
 	}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
@@ -3151,7 +3152,7 @@ func TestHandleHealthReportsBridgeProvider(t *testing.T) {
 	// Use a mock bridge provider instead of the stub.
 	bridge := &mockBridgeProvider{name: "bedrock", result: "test"}
 
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,

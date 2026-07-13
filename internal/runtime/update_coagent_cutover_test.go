@@ -313,7 +313,7 @@ func TestStartSweepsAssignedOpenWorkItemsAfterPassivation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store 2: %v", err)
 	}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
@@ -478,7 +478,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 	if err != nil {
 		t.Fatalf("open store 2: %v", err)
 	}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
@@ -661,7 +661,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store 2: %v", err)
 	}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
@@ -872,7 +872,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open store 2: %v", err)
 	}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     time.Second,
@@ -1206,7 +1206,7 @@ func runM3RestartStartProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open start store: %v", err)
 	}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Minute,
@@ -1258,7 +1258,7 @@ func runM3SpawnRestartStartProcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open spawned start store: %v", err)
 	}
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Minute,
@@ -1311,7 +1311,7 @@ func runM3SpawnRestartRecoverProcess(t *testing.T) {
 		t.Fatalf("open spawned recovery store: %v", err)
 	}
 	defer func() { _ = s.Close() }()
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Minute,
@@ -1405,7 +1405,7 @@ func runM3RestartRecoverProcess(t *testing.T) {
 		t.Fatalf("open recovery store: %v", err)
 	}
 	defer func() { _ = s.Close() }()
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Minute,

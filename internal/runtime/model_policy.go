@@ -76,7 +76,7 @@ func DefaultModelPolicyPath(filesRoot string) string {
 	return filepath.Join(root, filepath.FromSlash(defaultModelPolicyRelativePath))
 }
 
-func defaultModelPolicyText(_ Config) string {
+func defaultModelPolicyText(_ provideriface.Config) string {
 	return fmt.Sprintf(`# Choir model policy
 # This computer-owned file maps agent roles to provider/model choices.
 # Provider secrets stay server-owned; this file names models only.
@@ -138,7 +138,7 @@ requires = ["image", "tool_use"]
 `)
 }
 
-func fallbackModelPolicy(_ Config) ModelPolicy {
+func fallbackModelPolicy(_ provideriface.Config) ModelPolicy {
 	defaults := LLMSelection{
 		Provider:        defaultChatGPTProvider,
 		Model:           defaultChatGPTMiniModel,
@@ -347,7 +347,7 @@ func isSafeModelPolicyOverlayID(id string) bool {
 	return true
 }
 
-func ensureDefaultModelPolicyFile(path string, cfg Config) error {
+func ensureDefaultModelPolicyFile(path string, cfg provideriface.Config) error {
 	if _, err := os.Stat(path); err == nil {
 		return nil
 	} else if !os.IsNotExist(err) {
@@ -469,7 +469,7 @@ func isEmptySelection(sel LLMSelection) bool {
 }
 
 func parseModelPolicy(raw, source string) (ModelPolicy, error) {
-	policy := fallbackModelPolicy(Config{})
+	policy := fallbackModelPolicy(provideriface.Config{})
 	policy.Source = source
 	policy.Defaults.Source = source
 	policy.Roles = map[string]LLMSelection{}
@@ -564,7 +564,7 @@ func normalizeModelPolicyRole(role string) string {
 	}
 }
 
-func runtimeConfigFallbackSelection(cfg Config) LLMSelection {
+func runtimeConfigFallbackSelection(cfg provideriface.Config) LLMSelection {
 	provider := strings.TrimSpace(cfg.LLMProvider)
 	model := strings.TrimSpace(cfg.LLMModel)
 	reasoning := strings.TrimSpace(cfg.LLMReasoningEffort)

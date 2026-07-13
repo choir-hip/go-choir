@@ -32,7 +32,7 @@ import (
 // the store so that run handles and events survive sandbox process restarts
 // (VAL-RUNTIME-010).
 type Runtime struct {
-	cfg         Config
+	cfg         provideriface.Config
 	store       *store.Store
 	bus         *events.EventBus
 	provider    provideriface.Provider
@@ -99,8 +99,8 @@ type textureWakeTimer interface {
 // provider. The runtime is idle until Start is called.
 // If a tool registry is provided, the runtime will use the tool-calling
 // loop for run execution instead of the simple provider bridge path.
-func New(cfg Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, opts ...RuntimeOption) *Runtime {
-	cfg = normalizeConfig(cfg)
+func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, opts ...RuntimeOption) *Runtime {
+	cfg = provideriface.NormalizeConfig(cfg)
 	rt := &Runtime{
 		cfg:              cfg,
 		store:            s,

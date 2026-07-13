@@ -52,7 +52,7 @@ func failureIsolationSetup(t *testing.T, provider provideriface.Provider) (*Runt
 	}
 
 	bus := events.NewEventBus()
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-failure-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     500 * time.Millisecond,
@@ -948,7 +948,7 @@ func TestRecovery_InterruptedTasksPassivatedOnRestart(t *testing.T) {
 		t.Fatalf("open store 2: %v", err)
 	}
 	bus2 := events.NewEventBus()
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-recovery-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     500 * time.Millisecond,
@@ -1031,7 +1031,7 @@ func TestRecovery_RecoveredTasksEmitPassivatedEvents(t *testing.T) {
 		t.Fatalf("open store 2: %v", err)
 	}
 	bus2 := events.NewEventBus()
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-recovery-events",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,
@@ -1107,7 +1107,7 @@ func TestRecovery_RuntimeAcceptsNewTasksAfterRecovery(t *testing.T) {
 	}
 	bus2 := events.NewEventBus()
 	fastProvider := NewStubProvider(50 * time.Millisecond)
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-recovery-accept",
 		StorePath:           dbPath,
 		ProviderTimeout:     50 * time.Millisecond,

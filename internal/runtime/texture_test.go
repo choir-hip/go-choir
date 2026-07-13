@@ -52,7 +52,7 @@ func textureAPISetup(t *testing.T) (*APIHandler, *store.Store) {
 		_ = os.RemoveAll(promptRoot)
 	})
 
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-texture-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
@@ -1560,7 +1560,7 @@ func textureAPISetupWithProviderAndOptions(t *testing.T, provider provideriface.
 		_ = os.RemoveAll(promptRoot)
 	})
 
-	cfg := Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-texture-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
@@ -5386,7 +5386,7 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 	}
 	provider := newTextureEditToolProvider(textureReplaceAllResult("Recovered after restart and integrated the durable finding."))
 	provider.delay = 20 * time.Millisecond
-	rt := New(Config{
+	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-texture-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,

@@ -1,17 +1,4 @@
-// Package runtime provides the host-process runtime engine for the go-choir
-// sandbox. It manages task lifecycle, event emission, health state, and the
-// HTTP API surface consumed through the authenticated proxy.
-//
-// Design decisions:
-//   - Runs execute as direct goroutines, not subprocess CLI loops or
-//     adapter-wrapper processes.
-//   - Provider is an interface; the stub provider simulates execution until
-//     the Bedrock/Z.AI bridge feature replaces it with a real provider.
-//   - Product state is persisted through the store package's embedded Dolt
-//     workspace so task handles and events survive sandbox process restarts.
-//   - Health, degradation, and recovery are externally visible through the
-//     /health endpoint and event stream.
-package runtime
+package provideriface
 
 import (
 	"os"
@@ -19,12 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
 )
-
-// Re-exported from internal/provideriface for backward compatibility.
-type Config = provideriface.Config
 
 const (
 	// DefaultStorePath is the local marker path used to derive the embedded Dolt
@@ -113,7 +95,7 @@ const (
 // LoadConfig resolves runtime configuration from environment variables.
 func LoadConfig() Config {
 	storePath := envOr("RUNTIME_STORE_PATH", DefaultStorePath)
-	return normalizeConfig(Config{
+	return NormalizeConfig(Config{
 		SandboxID:           envOr("SANDBOX_ID", "sandbox-dev"),
 		StorePath:           storePath,
 		PromptRoot:          envOr("RUNTIME_PROMPT_ROOT", defaultPromptRoot(storePath)),
@@ -183,7 +165,8 @@ func LoadConfig() Config {
 	})
 }
 
-func normalizeConfig(cfg Config) Config {
+// NormalizeConfig applies runtime defaults to a directly constructed Config.
+func NormalizeConfig(cfg Config) Config {
 	if strings.TrimSpace(cfg.StorePath) == "" {
 		cfg.StorePath = DefaultStorePath
 	}

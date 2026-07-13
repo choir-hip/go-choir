@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -36,7 +37,7 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 	}
 	t.Cleanup(func() { _ = s.Close() })
 
-	cfg := runtime.Config{
+	cfg := provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,

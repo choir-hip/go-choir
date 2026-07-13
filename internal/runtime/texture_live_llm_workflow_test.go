@@ -18,6 +18,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	choirruntime "github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -80,7 +81,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	rt := choirruntime.New(choirruntime.Config{
+	rt := choirruntime.New(provideriface.Config{
 		SandboxID:           "sandbox-live-llm",
 		StorePath:           filepath.Join(dir, "runtime.db"),
 		PromptRoot:          filepath.Join(dir, "prompts"),

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -169,7 +170,7 @@ func TestRunMemoryInitializeSeedsPriorActorSnapshot(t *testing.T) {
 		t.Fatalf("create current run: %v", err)
 	}
 
-	memory := newRunMemoryManager(s, &current, Config{}, nil)
+	memory := newRunMemoryManager(s, &current, provideriface.Config{}, nil)
 	messages, err := memory.initialize(ctx, []json.RawMessage{
 		json.RawMessage(`{"role":"user","content":"new wake update"}`),
 	})
@@ -417,7 +418,7 @@ func TestRunMemoryCompactionPromptIncludesObjectiveAndRetrievalInstructions(t *t
 }
 
 func TestRunMemoryEffectiveThresholdUsesModelContextWindow(t *testing.T) {
-	manager := newRunMemoryManager(nil, &types.RunRecord{}, Config{}, nil).
+	manager := newRunMemoryManager(nil, &types.RunRecord{}, provideriface.Config{}, nil).
 		withLLMCompactor(nil, LLMSelection{Model: "deepseek-v4-flash"}, 0)
 	if got := manager.effectiveContextThresholdTokens(); got != 700000 {
 		t.Fatalf("threshold = %d, want 700000", got)
