@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-13T23:29:41Z
+  updated_at: 2026-07-13T23:31:10Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@95d1cfce89c9661dd94ef384137d3ff7be9bfb67
+  expected_parent_or_authority_ref: refs/heads/main@origin@f4d47c1b5cd412333384de7ef516a7d723c443b3
   status: working
   current_subgoal: R1-promptspec-package-cutover-01
   active_phase: R1-runtime-dissolution
@@ -404,7 +404,7 @@ state_capsule:
     - R1-promptspec-package-cutover-01
   locks:
     - id: R1-promptspec-package-cutover-01
-      status: defined
+      status: verified_local
       mutation_class: orange
       classification_rationale: Runtime ownership changes are orange under this mission even when the leaf move is behavior-preserving; no red protected surface is touched.
       conjecture: The standalone prompt specification parser and renderer can move atomically to the top-level internal/promptspec owner without changing prompt content, rendering semantics, routes, tools, state authority, or provider behavior.
@@ -440,15 +440,35 @@ state_capsule:
         - E1 zero Go imports of internal/runtime/promptspec, absent old filesystem package, and runtime ratchet PASS with decreased runtime file and LOC counts; old path strings may remain only where the generated inventory classifies immutable predecessor or evidence documents as historical_evidence or pre-existing block citers
         - E2 focused promptspec, prompt_store, runtimeprompts, textureprompts, and runtime tests
         - E6 independent immutable-candidate verification
-      rollback_ref: 948c514d7b6bdcc56b0ee79189e0e253c75c4c04
-      close_condition: The old directory and all Go imports are absent, the new owner contains the implementation and direct tests, focused behavior passes, the regenerated ratchet passes with only the explicitly authorized documentation-citer rebaseline and no source-category growth, and an independent verifier finds no forbidden seam or behavior delta.
+      rollback_ref: f4d47c1b5cd412333384de7ef516a7d723c443b3
+      close_condition: The old directory and all Go imports are absent, the new owner contains the implementation and direct tests, focused behavior passes, the regenerated ratchet passes with only the explicitly authorized documentation-citer rebaseline and no source-category growth, an independent verifier finds no forbidden seam or behavior delta, and canonical CI/deploy/product-path receipts bind the landed commit.
       assurance:
         independent_verifier: required
         panel: compact
         review_binding: frozen base, exact diff digest, commands, and ratchet delta
+        review_result:
+          candidate_diff_sha256: dddfa386f6431deafd2701247c8040959bc5b70187e2d14c55ea451c227893c5
+          reviewers:
+            - opencode/hy3-free: PASS
+            - google-antigravity/gemini-3.5-flash: PASS
+          adjudication: No blocking finding remained. Both reviewers independently verified byte-identical moved content, exactly three caller rewrites, absent forbidden seams, the corrected canonical parent, ratchet counts, and focused behavior.
+          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed source, inventory, lock, graph, evidence floor, or stopping condition.
+      local_evidence:
+        - class: E0
+          observation: canonical parent f4d47c1b5cd412333384de7ef516a7d723c443b3; all pre-existing implementation WIP is attributable to this lock
+        - class: E1
+          observation: old Go import search returned no matches; runtime ratchet PASS at go_files 141, production_files 74, test_files 67, production_loc 43883, test_loc 50018, exports 998, export_caller_edges 354, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, citers 270
+        - class: E2
+          observation: direct tests for the new promptspec owner plus both nested prompt packages passed
+          artifact_ref: artifact://17
+        - class: E2
+          observation: focused prompt-store and system-prompt behavior tests passed in the parent package
+          artifact_ref: artifact://19
+        - class: E2
+          observation: gopls reported no diagnostics in internal/promptspec
       heresy_delta:
         discovered:
-          - The authority cutover added eight net documentation citers after the last generated runtime inventory, so canonical source already observed 257 versus the stale 249 baseline before this Define candidate; the candidate itself mechanically observes 269 because its exact mutation lock names the affected paths.
+          - The authority cutover added eight net documentation citers after the last generated runtime inventory; the reviewed Define lock observed 269 and the implementation candidate mechanically observes the authorized 270.
         introduced: []
         repaired:
           - nested runtime ownership of the standalone prompt specification domain
@@ -487,7 +507,7 @@ state_capsule:
       rollback_refs: [b7b1262e455a779ca00c8d968ef28b3fa6af9b50]
       imported_effect: Already-landed extraction and ratchet reductions remain canonical; the failed whole-handler candidate does not.
   artifact_identity:
-    source: refs/heads/main@origin@948c514d7b6bdcc56b0ee79189e0e253c75c4c04
+    source: refs/heads/main@origin@f4d47c1b5cd412333384de7ef516a7d723c443b3
     build: https://github.com/choir-hip/go-choir/actions/runs/29288352505
     deploy: 3b10893c13a9d79b7ab4219dc6b9377c6d0ed1fd
     staging: authenticated_public_texture_documents_200_at_2026-07-13T08:13:45Z
@@ -524,7 +544,7 @@ state_capsule:
     - Repeated orchestration receipts increased context and commit volume without increasing product evidence.
     - Domain-first cohesive extraction followed by thin transport cutover is the current evidence-backed route.
   highest_impact_remaining_uncertainty: Whether the promptspec atomic package cutover preserves every parser/rendering behavior and decreases the executable ratchet without creating a compatibility seam.
-  next_executable_probe: Commit this code-free correction to the observed citer target, then resume the already bounded promptspec package move, regenerate the inventory at 270 citers, and run focused behavior plus independent verification.
+  next_executable_probe: Freeze the complete implementation diff, run compact independent review, commit the accepted candidate, push origin/main, monitor canonical CI and staging deployment identity, then exercise an authenticated prompt path that parses the moved prompt specification before closing this slice.
   evidence_index_refs:
     - docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
     - docs/runtime-dissolution-inventory.yaml

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yusefmosiah/go-choir/internal/runtime/promptspec"
+	"github.com/yusefmosiah/go-choir/internal/promptspec"
 )
 
 //go:embed texture.yaml

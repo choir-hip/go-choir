@@ -3,13 +3,13 @@ canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 143
-    production_files: 75
-    test_files: 68
-    production_loc: 43944
-    test_loc: 50065
-    exports: 1006
-    export_caller_edges: 363
+    go_files: 141
+    production_files: 74
+    test_files: 67
+    production_loc: 43883
+    test_loc: 50018
+    exports: 998
+    export_caller_edges: 354
     initial_unused_export_debt: 16
     routes: 2
     tools: 48
@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 8
     store_calls: 443
     interface_candidates: 4
-    citers: 249
+    citers: 270
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -173,12 +173,6 @@ files:
     - id: internal/runtime/prompts_test.go [test]
       disposition: model
       loc: 122
-    - id: internal/runtime/promptspec/promptspec.go [production]
-      disposition: model
-      loc: 61
-    - id: internal/runtime/promptspec/promptspec_test.go [test]
-      disposition: model
-      loc: 47
     - id: internal/runtime/provider.go [production]
       disposition: core
       loc: 30
@@ -1512,36 +1506,6 @@ exports:
     - id: internal/runtime/prompts_test.go:func:TestHandlePromptListReturnsEffectivePrompts
       disposition: model
     - id: internal/runtime/prompts_test.go:func:TestHandlePromptRoleSupportsSaveAndReset
-      disposition: model
-    - id: internal/runtime/promptspec/promptspec.go:func:Parse
-      disposition: model
-      production_callers:
-        - internal/runtime/prompt_store.go
-        - internal/runtime/promptspec/promptspec.go
-        - internal/runtime/textureprompts/prompts.go
-    - id: internal/runtime/promptspec/promptspec.go:func:ParseAndRender
-      disposition: model
-      production_callers:
-        - internal/runtime/runtimeprompts/prompts.go
-        - internal/runtime/textureprompts/prompts.go
-    - id: internal/runtime/promptspec/promptspec.go:method(Document):BodyText
-      disposition: model
-      production_callers:
-        - internal/runtime/prompt_store.go
-        - internal/runtime/textureprompts/prompts.go
-    - id: internal/runtime/promptspec/promptspec.go:method(Document):Render
-      disposition: model
-      production_callers:
-        - internal/runtime/promptspec/promptspec.go
-    - id: internal/runtime/promptspec/promptspec.go:type:Document
-      disposition: model
-      production_callers:
-        - internal/runtime/promptspec/promptspec.go
-    - id: internal/runtime/promptspec/promptspec_test.go:func:TestParseRequiresVersionAndBody
-      disposition: model
-    - id: internal/runtime/promptspec/promptspec_test.go:func:TestParseTrimsBody
-      disposition: model
-    - id: internal/runtime/promptspec/promptspec_test.go:func:TestRenderConditionalTemplate
       disposition: model
     - id: internal/runtime/qdrant_runtime.go:const:ProductionQdrantCollection
       disposition: core
@@ -4137,7 +4101,7 @@ citers:
       disposition: block
     - id: cmd/choir/main.go:// wireStoriesResponse mirrors internal/runtime.universalWireStoriesResponse.
       disposition: block
-    - id: docs/ACTIVE.md:5. iteratively dissolve `internal/runtime`, with atomic caller cutover and
+    - id: docs/ACTIVE.md:1. dissolve `internal/runtime` by extracting finite cohesive domain operations
       disposition: block
     - id: docs/choir-doctrine.md:[internal/runtime/api.go](../internal/runtime/api.go).
       disposition: block
@@ -4273,6 +4237,36 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:`/internal/runtime/runs`). Every attempt executing that definition therefore
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- E1 zero Go imports of internal/runtime/promptspec, absent old filesystem package, and runtime ratchet PASS with decreased runtime file and LOC counts; old path strings may remain only where the gene… [sha256:be6b073bd190ace25366b1671b307ca63db62fb6e8d5b8cf00a237267c7a1866]
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec/promptspec.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec/promptspec.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec/promptspec_test.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec/promptspec_test.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtimeprompts/prompts.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtimeprompts/prompts.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/textureprompts/prompts.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/textureprompts/prompts.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:1. dissolve `internal/runtime` into cohesive owners and delete it;
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:`internal/runtime` and make the ratchet extinction target pass.
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:object: internal/runtime/promptspec package ownership'
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- claim: The historical target deletes internal/runtime after moving only live core and app behavior.'
@@ -4286,8 +4280,6 @@ citers:
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- non-test and test LOC under `internal/runtime`;
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- production packages importing `internal/runtime`;
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/api.go, symbols: [RegisterRoutes], routes: [/api/agent/loops, /api/agent/cancel], disposition: core, reason: connect_existing_owner_scoped_operator_handlers}'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}'
       disposition: block
@@ -4307,6 +4299,8 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [cmd/sourcecycled, internal/cycle/web_capture_graph.go, internal/proxy/platform_objectgraph.go, internal/platform/objectgraph_handlers.go, internal/runti… [sha256:2549ae29a8205c9d40642e75fdb52d0a57ffd8ba620d7d73bc89ef3463077988]'
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/apihandler, internal/runtime/api.go, internal/runtime/api_app_promotion.go, internal/runtime/api_candidate_package_intake.go, internal/runtime/… [sha256:6870beb4529de2524e696078923aaed741bb03829dea35ca3ce9b21a900e364d]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/apihandler/routes.go, internal/runtime/api.go, internal/runtime/api_candidate_package_intake.go, internal/sandbox/run.go, directly_affected_rou… [sha256:02840826d5772800db955ac244086e96b40d0bd73c24f4470edb7646fb390f64]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/platform, internal/proxy, internal/runtime/universal_wire.go, internal/runtime/wire_publication.go, /api/universal-wire/stories, docs/runtime-dissolution-inventory.yaml]'
@@ -4314,6 +4308,8 @@ citers:
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/provideriface/provider.go, internal/runtime/config.go, internal/runtime/config_test.go, internal/runtime/runtime.go, internal/runtime/runtime_t… [sha256:6687142f5f443a6b310a9f2e13c056a098144518f9b1b26089320ac72c8da3d5]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/api.go, internal/runtime/api_spawn_test.go, internal/runtime/api_test.go, internal/runtime/concurrent_workers_test.go, internal/runtime… [sha256:facf8de6a54e72478edc949782fe5bf44be7e22663d1225dc5813d5363c23434]'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/api_candidate_package_intake.go, internal/runtime/candidate_package_intake_test.go, direct_candidate_intake_tests, internal/apihandler/… [sha256:838fdc24096d8da1d0d57af50ef1e10c3db7c3cd74ecfba262467f4777f85b51]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:exact_files_packages_routes_state_authorities: [internal/runtime/config.go, internal/runtime/config_test.go, internal/provideriface, all_direct_config_callers_and_tests, docs/runtime-dissolution-inventory.yaml]'
       disposition: block
@@ -4343,15 +4339,11 @@ citers:
       disposition: block
     - id: docs/definitions/choir-product-completion-2026-07-10.md:BuildIngestionHandoff plus /internal/runtime/runs is already the typed,
       disposition: block
-    - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:- Before landing, record every added `internal/runtime` file, symbol, test,
-      disposition: block
-    - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:- Implement progress deadline + sweep in `internal/runtime`.
-      disposition: block
     - id: docs/definitions/choir-run-deploy-unblock-2026-07-11.md:1. `go test ./internal/runtime ./cmd/choir -run 'Deadline|Cancel|Sweep'`.
       disposition: block
     - id: 'docs/definitions/choir-run-deploy-unblock-2026-07-11.md:6. Observed source: `internal/runtime/runtime.go`, `internal/runtime/api.go`,'
       disposition: block
-    - id: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md:recreate `internal/runtime`.
+    - id: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md:boundary, not recreate `internal/runtime`.
       disposition: block
     - id: docs/definitions/choir-seam-repair-2026-07-10.md:- Run `go test ./internal/proxy ./internal/runtime -run 'Route|Lineage|Promotion'`.
       disposition: block
@@ -4381,7 +4373,7 @@ citers:
       disposition: block
     - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:- `internal/runtime/wire_publication.go` (edition/alias bootstrap in the
       disposition: block
-    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:`internal/runtime` surface and it is not S5 observation completion.
+    - id: docs/definitions/choir-wire-store-conformance-2026-07-11.md:`internal/runtime` surface and it is not R3 observation completion.
       disposition: block
     - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:- internal/runtime/app_promotion.go: RollForwardAppAdoption; a rolled-back version may be promoted again only by a fresh validated CAS command'
       disposition: block
@@ -4461,6 +4453,16 @@ citers:
       disposition: historical_evidence
     - id: docs/evidence/s2-wire-authority-cutover-dispatch-2026-07-12.md:The Codex finding was concrete and was repaired rather than outvoted. Commits `981bd74a` and `b7b1262e` remove the stale import/runtime-store claims from `internal/store/store.go`, `internal/runtime/c… [sha256:ab07aa27be75e130458a6a85cf9f02f8c68c2f08e5df6df6ba86b2cefd918419]
       disposition: historical_evidence
+    - id: docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md:- After discarding the diagnostic, `go test ./internal/apihandler ./internal/runtime ./internal/sandbox -run '^$'` passed (`artifact://2618`), focused route tests passed (`artifact://2625`), and the i… [sha256:7446a8cecc259c2a69e93cc62e30109abb2b7c00e27ede03cb5c1d3c0b5f5a69]
+      disposition: historical_evidence
+    - id: docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md:- `go test -gcflags=all=-e ./internal/runtime -run '^$'` against the diagnostic split failed with 38 errors across eleven same-package test files. Those tests directly name the old handler and private… [sha256:586dc17d695c5ed16575858dfee4b78b97859a2612344e3b34c28287932b997b]
+      disposition: historical_evidence
+    - id: docs/evidence/s3-api-handler-ownership-dispatch-2026-07-13.md:**Conjecture:** the existing `internal/apihandler` owner can own the one live `APIHandler` type, constructor, HTTP-only DTOs/helpers, and every receiver method in one atomic cutover while `internal/ru… [sha256:186454dacff7515ece2ed220daa670ebc62de18f211aa87a11f9d298f62b1adb]
+      disposition: historical_evidence
+    - id: docs/evidence/s3-api-handler-ownership-dispatch-2026-07-13.md:**Repaired heresy target:** zero `runtime.APIHandler`, `runtime.NewAPIHandler`, or APIHandler receiver methods in `internal/runtime`; one canonical apihandler type and constructor; all live routes retain exact behavior.
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-api-handler-ownership-dispatch-2026-07-13.md:Allowed production paths: `internal/apihandler/**`, the twenty named `internal/runtime` files only for moving/deleting handler-owned declarations and minimal cohesive Runtime operation visibility requ… [sha256:9354f975bbf5d41695701141035a737cdf89b7d0483565ec896f36f1d01a4dd1]'
+      disposition: historical_evidence
     - id: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md:- `internal/runtime/api.go` (delete registrar declarations only)
       disposition: historical_evidence
     - id: docs/evidence/s3-api-route-authority-dispatch-2026-07-13.md:- `internal/runtime/api_candidate_package_intake.go` (delete registrar declaration only)
@@ -4472,6 +4474,10 @@ citers:
     - id: docs/evidence/s3-batch-executor-extraction-dispatch-2026-07-12.md:Move the complete live batch execution policy from `internal/runtime/tools.go` into `internal/toolregistry`. Move the tool-execution context values needed by that policy to one typed context object ow… [sha256:ae8dadc58d450d766268da6d2bca9c337c18cfa73d223552cf7d173348cd52a3]
       disposition: historical_evidence
     - id: docs/evidence/s3-batch-executor-extraction-dispatch-2026-07-12.md:S3-I9 moved the storage-independent provider/tool-loop state machine into `internal/toolregistry`, but `internal/runtime/tools.go` still owns the required batch executor supplied to that loop. The rem… [sha256:eef64c0e6125bee89e23e39607b7394ed03516dcacb992c494ea17747335d1eb]
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md:Allowed files: `internal/runtime/api_candidate_package_intake.go`, direct candidate-intake tests, `internal/apihandler/routes_test.go` only if an exclusion assertion is required, and `docs/runtime-dis… [sha256:2fc41658ba6c3530c0cee9f64382ff4eeb8f51f25848fe47fbe9861d938f8a8e]'
+      disposition: historical_evidence
+    - id: 'docs/evidence/s3-candidate-intake-harness-deletion-dispatch-2026-07-13.md:Production deletion in `internal/runtime/api_candidate_package_intake.go`:'
       disposition: historical_evidence
     - id: 'docs/evidence/s3-new-tool-registry-test-callers-dispatch-2026-07-12.md:Allowed source paths: `internal/runtime/tools.go` and only test files containing a `NewToolRegistry()` caller under `internal/runtime` or `internal/provider`.'
       disposition: historical_evidence

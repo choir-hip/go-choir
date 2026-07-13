@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/runtime/promptspec"
+	"github.com/yusefmosiah/go-choir/internal/promptspec"
 	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
 )
 
