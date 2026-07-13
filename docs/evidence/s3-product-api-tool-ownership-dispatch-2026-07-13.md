@@ -1,0 +1,44 @@
+# S3 Product API Tool Ownership Dispatch
+
+- Suite: `choir-autoputer-completion-2026-07-11-01`
+- Slice: `S3-I14-product-api-tool-ownership`
+- Dispatch nonce: `s3-runtime-dissolution-i14-nonce-01`
+- Transition: `s3-i14-dispatch-intent-225`
+- Canonical parent: `9ee58796`
+- Mutation class: orange
+- Rollback: `9ee58796`
+
+## Problem Record
+
+Fresh caller mapping found a production dependency-cycle blocker beneath the false `apihandler` wrapper. The Super-only `product_api_request` tool is implemented in `internal/runtime/tools_product_api.go`; every tool call constructs a private `server.Server`, constructs the runtime `APIHandler`, and registers the complete route table again. Runtime therefore remains a production caller of its own HTTP constructor and registrar. Moving HTTP ownership to `internal/apihandler` now would create the illegal cycle `apihandler -> runtime -> apihandler`, while deleting or renaming only the current wrapper would not reduce authority.
+
+The duplicate per-call route table is also false product authority. The sandbox already owns one production `server.Server` with the canonical route table. The product tool must execute against that server rather than constructing a second mux whose route set can drift.
+
+This is a substrate prerequisite, not S3 step-3 completion. The wrapper remains until a later atomic HTTP-ownership extraction; step 4 remains unauthorized.
+
+## Boundary Review
+
+A four-runner architecture panel completed. Codex identified the hidden production caller and recommended removing it as the smallest deletion-bearing prerequisite at confidence `0.92`. Gemini recommended moving the larger sandbox bootstrap into the existing sandbox package; OpenCode recommended an actor-adapter registrar. Those alternatives either miss the runtime-owned duplicate route constructor or relocate the false seam. The orchestrator adjudicates the hidden production caller as the first dependency because deleting it makes the later ownership graph acyclic without adding a facade.
+
+## Exact Mutation Lock
+
+- Move the complete `product_api_request` tool implementation and behavioral tests from runtime to `internal/apihandler`.
+- Bind the tool to the already constructed canonical `*server.Server`; it must not construct a server, mux, handler, or route table.
+- Register the tool exactly once into the existing Super registry from `cmd/sandbox/main.go` after default tool installation and canonical route registration.
+- Remove runtime's default-tool registration of `newProductAPIRequestTool`.
+- Delete `internal/runtime/tools_product_api.go` and `internal/runtime/tools_product_api_test.go` after all behavior assertions move.
+- Use canonical `toolregistry.Tool` directly. Preserve name, description, JSON schema, method/path normalization, product-route allowlist, execution-context/profile/owner enforcement, auth headers, JSON content type, response body cap, truncation marker, status/error result shape, and tool-disabled behavior.
+- Preserve one route set and all API/domain behavior. Do not alter `runtime.APIHandler`, the current `apihandler.Handler`, routes, app/domain code, actor lifecycle, provider selection, state, models, or step 4.
+- Do not add aliases, interfaces, callbacks, forwarders, accessors, fallback registrations, a second server/mux, or a new package.
+- Update `docs/runtime-dissolution-inventory.yaml` only after focused behavior passes and classify this durable dispatch citer.
+
+## Acceptance
+
+- Runtime has no production call to `NewAPIHandler` or `RegisterRoutes` outside their declarations/registration implementation.
+- `product_api_request` uses the canonical server passed at startup; no per-call mux exists.
+- Allowed owner-scoped public Texture request succeeds with authenticated owner identity.
+- Internal, test, agent, prompt-config, raw-event, non-Super, missing-owner, invalid-method/path, oversized-body, and oversized-response cases retain exact rejection/truncation behavior.
+- Disabled tools leave the product API tool absent; enabled tools register it once, and duplicate registration fails explicitly.
+- Focused `internal/apihandler`, runtime, sandbox, and actor-runtime tests pass.
+- Runtime production LOC and API constructor caller edges decrease; routes/tools remain flat; wrappers do not increase; every other gated authority count is non-increasing except classified durable citers.
+- Independent verification, full CI, deploy identity, authenticated public product-path smoke, consensus, and adjudication pass before closure.
