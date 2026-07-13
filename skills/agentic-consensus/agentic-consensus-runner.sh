@@ -30,7 +30,7 @@ Model overrides, optional:
   --omp-glm52-model MODEL       Default: zai/glm-5.2.
   --omp-gpt55-thinking LEVEL    Default: high.
   --omp-gemini-thinking LEVEL   Default: high.
-  --omp-glm52-thinking LEVEL    Default: high.
+  --omp-glm52-thinking LEVEL    Default: low (override to high for deep gates).
 
 Execution:
   --cwd DIR                     Working directory/context root. Default: current directory.
@@ -39,6 +39,7 @@ Execution:
   --dry-run                     Print commands but do not run them.
   --keep-going                  Return 0 if at least one agent succeeds. Default: fail if any selected agent fails.
   --no-tools-omp                Add --no-tools to OMP runs. Default: OMP tools enabled.
+  --timeout-seconds N           Hard deadline for each agent. Default: 180.
   --help                       Show this help.
 
 Output:
@@ -62,6 +63,7 @@ SEQUENTIAL=0
 DRY_RUN=0
 KEEP_GOING=0
 NO_TOOLS_OMP=0
+TIMEOUT_SECONDS=180
 
 CODEX_MODEL=""
 DEVIN_MODEL=""
@@ -73,7 +75,7 @@ OMP_GEMINI_MODEL="google-antigravity/gemini-3.5-flash"
 OMP_GLM52_MODEL="zai/glm-5.2"
 OMP_GPT55_THINKING="high"
 OMP_GEMINI_THINKING="high"
-OMP_GLM52_THINKING="high"
+OMP_GLM52_THINKING="low"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -132,6 +134,9 @@ while [[ $# -gt 0 ]]; do
     --dry-run) DRY_RUN=1; shift ;;
     --keep-going) KEEP_GOING=1; shift ;;
     --no-tools-omp) NO_TOOLS_OMP=1; shift ;;
+    --timeout-seconds)
+      [[ $# -ge 2 ]] || { echo "--timeout-seconds requires a value" >&2; exit 2; }
+      TIMEOUT_SECONDS="$2"; shift 2 ;;
     --list-agents)
       printf '%s\n' "${SUPPORTED_AGENTS[@]}"; exit 0 ;;
     --help|-h) usage; exit 0 ;;
@@ -152,13 +157,14 @@ if [[ -z "$PROMPT" ]]; then
   usage >&2
   exit 2
 fi
+[[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout-seconds must be a positive integer" >&2; exit 2; }
 [[ -d "$CWD" ]] || { echo "--cwd is not a directory: $CWD" >&2; exit 2; }
 if [[ -z "$OUT_DIR" ]]; then
   OUT_DIR="/tmp/agentic-consensus-$(date +%Y%m%d-%H%M%S)"
 fi
 mkdir -p "$OUT_DIR" || exit 2
 printf '%s\n' "$PROMPT" > "$OUT_DIR/prompt.md"
-printf 'agent\tstatus\texit_code\toutput\tcommand\n' > "$OUT_DIR/manifest.tsv"
+printf 'agent\tstatus\texit_code\tduration_seconds\toutput\tcommand\n' > "$OUT_DIR/manifest.tsv"
 
 contains_csv() {
   local csv=",$1,"
@@ -182,8 +188,8 @@ quote_cmd() {
 }
 
 append_manifest() {
-  local agent="$1" status="$2" code="$3" output="$4" command="$5"
-  printf '%s\t%s\t%s\t%s\t%s\n' "$agent" "$status" "$code" "$output" "$command" >> "$OUT_DIR/manifest.tsv"
+  local agent="$1" status="$2" code="$3" duration="$4" output="$5" command="$6"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$agent" "$status" "$code" "$duration" "$output" "$command" >> "$OUT_DIR/manifest.tsv"
 }
 
 build_cmd() {
@@ -195,7 +201,7 @@ build_cmd() {
       [[ -n "$CODEX_MODEL" ]] && CMD+=(-m "$CODEX_MODEL")
       CMD+=("$PROMPT") ;;
     devin)
-      CMD=(devin --permission-mode auto)
+      CMD=(devin --permission-mode auto --respect-workspace-trust false)
       [[ -n "$DEVIN_MODEL" ]] && CMD+=(--model "$DEVIN_MODEL")
       CMD+=(-p "$PROMPT") ;;
     claude)
@@ -211,15 +217,15 @@ build_cmd() {
       [[ -n "$OPENCODE_MODEL" ]] && CMD+=(-m "$OPENCODE_MODEL")
       CMD+=("$PROMPT") ;;
     omp-gpt55)
-      CMD=(omp -p --mode text --model "$OMP_GPT55_MODEL" --thinking "$OMP_GPT55_THINKING" --no-session)
+      CMD=(omp -p --mode text --model "$OMP_GPT55_MODEL" --thinking "$OMP_GPT55_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$PROMPT") ;;
     omp-gemini35)
-      CMD=(omp -p --mode text --model "$OMP_GEMINI_MODEL" --thinking "$OMP_GEMINI_THINKING" --no-session)
+      CMD=(omp -p --mode text --model "$OMP_GEMINI_MODEL" --thinking "$OMP_GEMINI_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$PROMPT") ;;
     omp-glm52)
-      CMD=(omp -p --mode text --model "$OMP_GLM52_MODEL" --thinking "$OMP_GLM52_THINKING" --no-session)
+      CMD=(omp -p --mode text --model "$OMP_GLM52_MODEL" --thinking "$OMP_GLM52_THINKING" --no-session --max-time "$TIMEOUT_SECONDS" --auto-approve)
       [[ "$NO_TOOLS_OMP" -eq 1 ]] && CMD+=(--no-tools)
       CMD+=("$PROMPT") ;;
     *) return 2 ;;
@@ -239,7 +245,7 @@ run_one() {
   esac
 
   if ! command -v "$bin" >/dev/null 2>&1; then
-    append_manifest "$agent" "skipped-missing-cli" "127" "$out" "$bin not found"
+    append_manifest "$agent" "skipped-missing-cli" "127" "0" "$out" "$bin not found"
     printf '%s\n' "SKIPPED: $bin not found" > "$out"
     return 127
   fi
@@ -250,20 +256,28 @@ run_one() {
   printf '%s\n' "$rendered" > "$cmdfile"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    append_manifest "$agent" "dry-run" "0" "$out" "$rendered"
+    append_manifest "$agent" "dry-run" "0" "0" "$out" "$rendered"
     printf '%s\n' "$rendered" > "$out"
     return 0
   fi
 
+  local started=$SECONDS
   (
     cd "$CWD" || exit 2
-    "${CMD[@]}"
+    if command -v timeout >/dev/null 2>&1; then
+      timeout --signal=TERM --kill-after=5 "$TIMEOUT_SECONDS" "${CMD[@]}"
+    else
+      "${CMD[@]}"
+    fi
   ) </dev/null >"$out" 2>&1
   local code=$?
+  local duration=$((SECONDS - started))
   if [[ $code -eq 0 ]]; then
-    append_manifest "$agent" "ok" "$code" "$out" "$rendered"
+    append_manifest "$agent" "ok" "$code" "$duration" "$out" "$rendered"
+  elif [[ $code -eq 124 || $code -eq 137 ]]; then
+    append_manifest "$agent" "timed-out" "$code" "$duration" "$out" "$rendered"
   else
-    append_manifest "$agent" "failed" "$code" "$out" "$rendered"
+    append_manifest "$agent" "failed" "$code" "$duration" "$out" "$rendered"
   fi
   return "$code"
 }

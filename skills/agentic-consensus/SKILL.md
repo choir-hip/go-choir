@@ -25,7 +25,8 @@ The default panel is:
 4. `opencode` CLI with its configured default model.
 5. OMP `openai-codex/gpt-5.5` with `--thinking high`.
 6. OMP `google-antigravity/gemini-3.5-flash` with `--thinking high`.
-7. OMP `zai/glm-5.2` with `--thinking high`.
+7. OMP `zai/glm-5.2` with `--thinking low` by default; raise it explicitly for
+   deep phase gates.
 
 `claude` is supported but intentionally excluded from the default panel because its token rate limits are lower. Add it explicitly with `--include claude,...` when needed.
 
@@ -153,6 +154,7 @@ Notes:
 - `--mode ask` is read-only Q&A style.
 - `--trust` suppresses headless workspace trust prompts.
 - `--force` automatically approves all commands/permissions.
+- `--yolo` is an alias for `--force`; passing both is unnecessary.
 - `--approve-mcps` automatically approves all MCP servers.
 - The runner redirects stdin from `/dev/null` so the agent never sees a TTY;
   without this, Cursor detects an interactive terminal and prompts for command
@@ -197,8 +199,11 @@ Runner contracts:
 ```bash
 omp -p --mode text --model openai-codex/gpt-5.5 --thinking high --no-session "$PROMPT"
 omp -p --mode text --model google-antigravity/gemini-3.5-flash --thinking high --no-session "$PROMPT"
-omp -p --mode text --model zai/glm-5.2 --thinking high --no-session "$PROMPT"
+omp -p --mode text --model zai/glm-5.2 --thinking low --no-session "$PROMPT"
 ```
+
+The runner also passes `--auto-approve` and `--max-time` to OMP so a tool call
+cannot block on an invisible approval prompt or run without a deadline.
 
 Optional overrides:
 
@@ -280,7 +285,7 @@ The script writes:
 
 ```text
 <out-dir>/prompt.md      exact prompt sent to agents
-<out-dir>/manifest.tsv   agent, status, exit code, output path, command
+<out-dir>/manifest.tsv   agent, status, exit code, duration, output path, command
 <out-dir>/<agent>.out    combined stdout/stderr for each run
 <out-dir>/<agent>.cmd    shell-quoted command for reproducibility
 ```
@@ -293,11 +298,15 @@ Default output directory:
 
 Use `--out-dir DIR` to pin the location.
 
+Every agent has a 180-second hard deadline by default. Override it with
+`--timeout-seconds N`.
+
 Manifest statuses:
 
 ```text
 ok                   agent completed with exit 0
 failed               agent command exited non-zero
+timed-out            agent exceeded its hard deadline
 skipped-missing-cli  required CLI binary was not found
 dry-run              command was rendered but not executed
 ```
