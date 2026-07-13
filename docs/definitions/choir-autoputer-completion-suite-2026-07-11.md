@@ -693,12 +693,12 @@ run_checkpoint_and_resumption_state:
     adjudication_ref: docs/evidence/choir-autoputer-completion-suite-consensus-2026-07-11.md#definition-gate-result
   suite_run_id: choir-autoputer-completion-2026-07-11-01
   canonical_journal_ref: refs/heads/main@origin
-  journal_expected_parent_sha: 2c04d346
+  journal_expected_parent_sha: d73aad3b
   orchestrator_lock:
     holder: Main
     epoch: 21
     expires_at: 2026-07-13T05:21:50Z
-    expected_parent_sha: 2c04d346
+    expected_parent_sha: d73aad3b
     lock_transition_id: s3-lock-renewal-214
   suite_authority_sha: 008a7b88cf200119c0f762cc51cfba6be3007445
   subgoal_status:
@@ -1956,7 +1956,7 @@ run_checkpoint_and_resumption_state:
       subgoal: S3
       suite_run_id: choir-autoputer-completion-2026-07-11-01
       orchestrator_lock_epoch: 21
-      status: verifying
+      status: blocked_incomplete
       dispatch_nonce: s3-runtime-dissolution-i13-nonce-01
       dispatch_ref: S3I13Implementer
       agent_session_ref: agent://S3I13Implementer
@@ -1964,7 +1964,7 @@ run_checkpoint_and_resumption_state:
       implementer_job_ref: S3I13Implementer
       implementer_output_ref: agent://S3I13Implementer
       verifier_job_ref: S3I13RepairVerifier
-      verifier_output_ref: pending_S3I13RepairVerifier
+      verifier_output_ref: agent://S3I13RepairVerifier
       worktree_or_branch_ref: s3-i13-sandbox-runtime-import-cutover@6efcae63e2abd4a8fb83503966f137c0eefe183c
       declared_reconciliation_substrates: [canonical_git_ref, agent_job_record, agent_output_artifact, named_branch_in_shared_worktree]
       mutation_delivery_mode: named_branch_in_shared_worktree_reconciled_nonconforming
@@ -1974,7 +1974,7 @@ run_checkpoint_and_resumption_state:
       lock_release_ref: pending_S3_I13_landing
       stage_started_at: 2026-07-13T01:56:13Z
       transition_id: s3-i13-dispatch-intent-210
-      expected_parent_sha: 2c04d346
+      expected_parent_sha: d73aad3b
       stage_history:
         - {status: dispatch_intent, transition_id: s3-i13-dispatch-intent-210, recorded_at: 2026-07-13T01:56:13Z, actor: Main, expected_parent_sha: 6ee86dd1, precondition: S3_I12_landed_config_authority_extracted_step3_continues, postcondition: exact_sandbox_runtime_import_cutover_slice_canonical, external_operation_id: not_applicable}
         - {status: dispatched, transition_id: s3-i13-dispatched-211, recorded_at: 2026-07-13T01:57:59Z, actor: Main, expected_parent_sha: 9b8af38b, precondition: canonical_problem_record_exact_mutation_lock_and_live_epoch_20, postcondition: S3I13Implementer_authorized_with_recorded_nonce, external_operation_id: not_applicable}
@@ -1984,6 +1984,7 @@ run_checkpoint_and_resumption_state:
         - {status: accepted, transition_id: s3-i13-ci-deploy-accepted-216, recorded_at: 2026-07-13T03:24:02Z, actor: Main, expected_parent_sha: 3824d10f, precondition: full_CI_attempt_2_deploy_receipt_and_product_smoke_complete, postcondition: deployed_7c014386_staging_health_and_authenticated_run_list_200_consensus_pending, external_operation_id: github_actions_29220365255_attempt_2}
         - {status: blocked_incomplete, transition_id: s3-i13-consensus-blocked-217, recorded_at: 2026-07-13T03:34:57Z, actor: Main, expected_parent_sha: f79c0957, precondition: four_reviewer_final_panel_completed, postcondition: three_PASS_one_BLOCKING_gofmt_and_receipt_accuracy_repairs_required, external_operation_id: consensus_tmp_choir_s3_i13_final_consensus_20260713}
         - {status: committed, transition_id: s3-i13-formatter-repair-218, recorded_at: 2026-07-13T03:40:38Z, actor: Main, expected_parent_sha: 2c04d346, precondition: blocker_documented_at_a2e9d4e7, postcondition: changed_Go_files_gofmt_clean_focused_tests_PASS_ratchet_PASS_receipt_corrected, external_operation_id: not_applicable}
+        - {status: blocked_incomplete, transition_id: s3-i13-repair-verifier-blocked-219, recorded_at: 2026-07-13T03:43:45Z, actor: S3I13RepairVerifier, expected_parent_sha: d73aad3b, precondition: formatter_and_receipt_repair_independently_rechecked, postcondition: gofmt_clean_semantic_neutral_tests_PASS_authority_intact_but_receipt_added_unclassified_citer_242, external_operation_id: not_applicable}
       lock_expires_at: 2026-07-13T05:21:50Z
       mutation_class: orange
       protected_surfaces: []
@@ -2010,11 +2011,11 @@ run_checkpoint_and_resumption_state:
       acceptance_ref: docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md#s3-i13-ci-deploy-and-acceptance
       acceptance_contract: cmd_sandbox_runtime_import_deleted_stub_and_bootstrap_symbols_moved_to_canonical_owners_behavior_preserved
       evidence_refs: [docs/evidence/s3-sandbox-runtime-import-cutover-dispatch-2026-07-13.md, docs/evidence/s3-runtime-config-extraction-dispatch-2026-07-13.md, agent://S3I13Implementer, agent://S3I13Verifier, https://github.com/choir-hip/go-choir/actions/runs/29220365255#attempt-2]
-      open_findings: [formatter_and_receipt_repairs_pending_independent_reverification]
+      open_findings: [repair_receipt_code_formatted_package_name_adds_unclassified_citer_241_to_242]
       landed_commit_sha: pending
-      adjudication: final_consensus_blockers_repaired_independent_reverification_pending
-      last_reconciled_at: 2026-07-13T03:40:38Z
-      reconciliation_result: formatter_repair_2c04d346_focused_tests_and_ratchet_PASS_ready_for_independent_reverification
+      adjudication: formatter_repair_valid_receipt_citer_blocker_documented_smallest_reword_required
+      last_reconciled_at: 2026-07-13T03:43:45Z
+      reconciliation_result: repair_verifier_BLOCKING_confidence_1_incidental_evidence_citer_must_be_removed
       close_condition: cutover_landed_deployed_product_accepted_independently_verified_consensus_adjudicated_ratchet_decreased
   s1_runtime_exception_disposition:
     - {path: internal/runtime/config.go, symbols: [DefaultActivationBudget, LoadConfig, normalizeConfig], disposition: core, reason: bounded_activation_configuration}

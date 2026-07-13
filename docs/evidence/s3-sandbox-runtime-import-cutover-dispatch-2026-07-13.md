@@ -67,3 +67,8 @@ The implementer returned a clean named branch commit but switched the shared rep
 - Formatted exactly the Go files changed by `6ee86dd1..08049400`; `gofmt -l` is empty afterward.
 - Focused tests passed for `internal/runtime`, `cmd/sandbox`, `internal/provider`, `internal/provideriface`, `internal/actorruntime`, and `internal/gatewayruntime`.
 - Canonical inventory regenerated for formatting-only line removal: production LOC `44224 -> 44216`; every semantic authority count is unchanged. The runtime ratchet passes.
+
+## S3-I13 Repair Verification Blocker
+
+- Independent repair verification found formatting clean, semantic diff neutral, focused tests passing, original authority contract intact, but the repair receipt's code-formatted runtime package name created one new unclassified historical citer (`241 -> 242`).
+- Smallest repair: describe the focused package set without a detector-matching source path; do not normalize incidental documentation growth by regenerating the baseline.
