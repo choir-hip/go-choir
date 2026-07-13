@@ -30,7 +30,7 @@ Model overrides, optional:
   --omp-glm52-model MODEL       Default: zai/glm-5.2.
   --omp-gpt55-thinking LEVEL    Default: high.
   --omp-gemini-thinking LEVEL   Default: high.
-  --omp-glm52-thinking LEVEL    Default: low (override to high for deep gates).
+  --omp-glm52-thinking LEVEL    Default: high.
 
 Execution:
   --cwd DIR                     Working directory/context root. Default: current directory.
@@ -75,7 +75,7 @@ OMP_GEMINI_MODEL="google-antigravity/gemini-3.5-flash"
 OMP_GLM52_MODEL="zai/glm-5.2"
 OMP_GPT55_THINKING="high"
 OMP_GEMINI_THINKING="high"
-OMP_GLM52_THINKING="low"
+OMP_GLM52_THINKING="high"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

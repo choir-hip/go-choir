@@ -25,8 +25,7 @@ The default panel is:
 4. `opencode` CLI with its configured default model.
 5. OMP `openai-codex/gpt-5.5` with `--thinking high`.
 6. OMP `google-antigravity/gemini-3.5-flash` with `--thinking high`.
-7. OMP `zai/glm-5.2` with `--thinking low` by default; raise it explicitly for
-   deep phase gates.
+7. OMP `zai/glm-5.2` with `--thinking high`.
 
 `claude` is supported but intentionally excluded from the default panel because its token rate limits are lower. Add it explicitly with `--include claude,...` when needed.
 
@@ -199,7 +198,7 @@ Runner contracts:
 ```bash
 omp -p --mode text --model openai-codex/gpt-5.5 --thinking high --no-session "$PROMPT"
 omp -p --mode text --model google-antigravity/gemini-3.5-flash --thinking high --no-session "$PROMPT"
-omp -p --mode text --model zai/glm-5.2 --thinking low --no-session "$PROMPT"
+omp -p --mode text --model zai/glm-5.2 --thinking high --no-session "$PROMPT"
 ```
 
 The runner also passes `--auto-approve` and `--max-time` to OMP so a tool call
