@@ -159,9 +159,16 @@ if [[ -z "$PROMPT" ]]; then
 fi
 [[ "$TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] || { echo "--timeout-seconds must be a positive integer" >&2; exit 2; }
 [[ -d "$CWD" ]] || { echo "--cwd is not a directory: $CWD" >&2; exit 2; }
-if [[ "$DRY_RUN" -eq 0 ]] && ! command -v timeout >/dev/null 2>&1; then
-  echo "GNU timeout is required for bounded agent execution; install coreutils or use --dry-run" >&2
-  exit 2
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  if ! command -v timeout >/dev/null 2>&1; then
+    echo "GNU timeout is required for bounded agent execution; install coreutils or use --dry-run" >&2
+    exit 2
+  fi
+  TIMEOUT_VERSION="$(timeout --version 2>&1 || true)"
+  if [[ "$TIMEOUT_VERSION" != *"GNU coreutils"* ]]; then
+    echo "GNU coreutils timeout is required; found an incompatible timeout implementation" >&2
+    exit 2
+  fi
 fi
 if [[ -z "$OUT_DIR" ]]; then
   OUT_DIR="/tmp/agentic-consensus-$(date +%Y%m%d-%H%M%S)"
@@ -268,7 +275,8 @@ run_one() {
   local started=$SECONDS
   (
     cd "$CWD" || exit 2
-    timeout --signal=TERM --kill-after=5 "$TIMEOUT_SECONDS" "${CMD[@]}"
+    timeout --signal=TERM --kill-after=5 "$TIMEOUT_SECONDS" \
+      bash -c '"$@"; code=$?; [[ $code -eq 124 ]] && exit 123; exit "$code"' _ "${CMD[@]}"
   ) </dev/null >"$out" 2>&1
   local code=$?
   local duration=$((SECONDS - started))
@@ -276,8 +284,6 @@ run_one() {
     append_manifest "$agent" "ok" "$code" "$duration" "$out" "$rendered"
   elif [[ $code -eq 124 ]]; then
     append_manifest "$agent" "timed-out" "$code" "$duration" "$out" "$rendered"
-  elif [[ $code -eq 137 && $duration -ge $TIMEOUT_SECONDS ]]; then
-    append_manifest "$agent" "killed-after-deadline" "$code" "$duration" "$out" "$rendered"
   else
     append_manifest "$agent" "failed" "$code" "$duration" "$out" "$rendered"
   fi

@@ -304,16 +304,15 @@ identity. Raw transcripts need not become their own Git commit.
 
 Every agent has a 180-second hard deadline by default. Override it with
 `--timeout-seconds N`.
-The runner requires GNU `timeout` (provided by `coreutils`) and fails before
-launch rather than silently running an unbounded panel when it is unavailable.
+The runner requires GNU `timeout` (provided by `coreutils`), verifies that
+implementation before launch, and fails rather than running an unbounded panel.
 
 Manifest statuses:
 
 ```text
 ok                     agent completed with exit 0
 failed                 agent command exited non-zero
-timed-out              agent exceeded its deadline and exited on TERM
-killed-after-deadline  agent required KILL after the deadline
+timed-out              GNU timeout ended the agent at its deadline
 skipped-missing-cli    required CLI binary was not found
 dry-run                command was rendered but not executed
 ```
