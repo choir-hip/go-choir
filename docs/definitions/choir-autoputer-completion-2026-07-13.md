@@ -394,15 +394,64 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-13T22:24:16Z
+  updated_at: 2026-07-13T23:19:49Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@30ddd8e69c65a3eb9668842e676140a26a84c926
+  expected_parent_or_authority_ref: refs/heads/main@origin@948c514d7b6bdcc56b0ee79189e0e253c75c4c04
   status: working
-  current_subgoal: R1-boundary-compilation
+  current_subgoal: R1-promptspec-package-cutover-01
   active_phase: R1-runtime-dissolution
   active_frontier:
-    - R1-boundary-compilation
-  locks: []
+    - R1-promptspec-package-cutover-01
+  locks:
+    - id: R1-promptspec-package-cutover-01
+      status: defined
+      mutation_class: orange
+      classification_rationale: Runtime ownership changes are orange under this mission even when the leaf move is behavior-preserving; no red protected surface is touched.
+      conjecture: The standalone prompt specification parser and renderer can move atomically to the top-level internal/promptspec owner without changing prompt content, rendering semantics, routes, tools, state authority, or provider behavior.
+      object: internal/runtime/promptspec package ownership
+      selection_rationale: The package has no dependency on the parent runtime package, owns one typed parser/renderer domain with direct tests, and has exactly three production importers; moving it decreases the runtime directory without creating a new behavioral boundary.
+      exact_source_scope:
+        - internal/runtime/promptspec/promptspec.go
+        - internal/runtime/promptspec/promptspec_test.go
+        - internal/promptspec/promptspec.go
+        - internal/promptspec/promptspec_test.go
+        - internal/runtime/prompt_store.go
+        - internal/runtime/runtimeprompts/prompts.go
+        - internal/runtime/textureprompts/prompts.go
+        - docs/runtime-dissolution-inventory.yaml
+        - docs/definitions/choir-autoputer-completion-2026-07-13.md
+      production_callers:
+        - internal/runtime/prompt_store.go
+        - internal/runtime/runtimeprompts/prompts.go
+        - internal/runtime/textureprompts/prompts.go
+      exact_deletions:
+        - internal/runtime/promptspec/promptspec.go
+        - internal/runtime/promptspec/promptspec_test.go
+        - internal/runtime/promptspec
+      invariants:
+        - Preserve promptspec Parse, ParseAndRender, Document.BodyText, and Document.Render behavior exactly.
+        - Move direct tests with the owner and cut every production import in the same landing.
+        - Add no alias, forwarding package, wrapper, accessor, callback, interface, duplicate implementation, or compatibility path.
+        - Keep prompt defaults, route registrations, tool registrations, state authorities, provider routing, and model policy unchanged.
+        - Regenerate the runtime inventory without weakening unused-export debt authority. The implementation may rebaseline documentation citers from the stale canonical 249 to exactly the mechanically observed post-Define value 269; production files, production LOC, exports, export caller edges, initial unused-export debt, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, legacy state writers, and legacy store reads may not increase, while runtime Go files and runtime LOC must decrease.
+      protected_surfaces: []
+      admissible_evidence:
+        - E0 clean canonical source identity
+        - E1 zero Go imports of internal/runtime/promptspec, absent old filesystem package, and runtime ratchet PASS with decreased runtime file and LOC counts; old path strings may remain only where the generated inventory classifies immutable predecessor or evidence documents as historical_evidence or pre-existing block citers
+        - E2 focused promptspec, prompt_store, runtimeprompts, textureprompts, and runtime tests
+        - E6 independent immutable-candidate verification
+      rollback_ref: 948c514d7b6bdcc56b0ee79189e0e253c75c4c04
+      close_condition: The old directory and all Go imports are absent, the new owner contains the implementation and direct tests, focused behavior passes, the regenerated ratchet passes with only the explicitly authorized documentation-citer rebaseline and no source-category growth, and an independent verifier finds no forbidden seam or behavior delta.
+      assurance:
+        independent_verifier: required
+        panel: compact
+        review_binding: frozen base, exact diff digest, commands, and ratchet delta
+      heresy_delta:
+        discovered:
+          - The authority cutover added eight net documentation citers after the last generated runtime inventory, so canonical source already observed 257 versus the stale 249 baseline before this Define candidate; the candidate itself mechanically observes 269 because its exact mutation lock names the affected paths.
+        introduced: []
+        repaired:
+          - nested runtime ownership of the standalone prompt specification domain
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin
@@ -438,7 +487,7 @@ state_capsule:
       rollback_refs: [b7b1262e455a779ca00c8d968ef28b3fa6af9b50]
       imported_effect: Already-landed extraction and ratchet reductions remain canonical; the failed whole-handler candidate does not.
   artifact_identity:
-    source: refs/heads/main@origin@30ddd8e69c65a3eb9668842e676140a26a84c926
+    source: refs/heads/main@origin@948c514d7b6bdcc56b0ee79189e0e253c75c4c04
     build: https://github.com/choir-hip/go-choir/actions/runs/29288352505
     deploy: 3b10893c13a9d79b7ab4219dc6b9377c6d0ed1fd
     staging: authenticated_public_texture_documents_200_at_2026-07-13T08:13:45Z
@@ -469,12 +518,13 @@ state_capsule:
     - S3 whole-handler transport-first cutover is compile-falsified by private domain dependencies.
     - The first domain-operation boundary must be selected from the current mechanical dependency graph.
     - Staging gateway readiness failures caused by local runtime/Dolt/Ollama refusal remain non-attributable to the deployed product until reproduced there.
+    - The runtime dissolution inventory is structurally source-current but has documentation citer drift (249 baseline versus 257 observed) after the mission-authority cutover; its next generated refresh must preserve historical-evidence dispositions and may not mask source-count growth.
   belief_changes:
     - The predecessor's transport-before-domain S3 order was not executable at the observed boundary.
     - Repeated orchestration receipts increased context and commit volume without increasing product evidence.
     - Domain-first cohesive extraction followed by thin transport cutover is the current evidence-backed route.
-  highest_impact_remaining_uncertainty: Which finite typed domain-operation group is the smallest clean first R1 cutover at current source.
-  next_executable_probe: Recompute the runtime dependency/disposition map at canonical source, select the smallest cohesive typed domain-operation candidate, and fold its exact mutation lock plus admissible evidence into this capsule before implementation.
+  highest_impact_remaining_uncertainty: Whether the promptspec atomic package cutover preserves every parser/rendering behavior and decreases the executable ratchet without creating a compatibility seam.
+  next_executable_probe: Freeze and review the R1-promptspec-package-cutover-01 Define boundary, commit it as the code-free problem and mutation authority, then implement the exact package move and verify its ratchet and focused behavior.
   evidence_index_refs:
     - docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
     - docs/runtime-dissolution-inventory.yaml
