@@ -157,12 +157,12 @@ now:
     rollback_ref: 4f8032d52b9d3bef90b9e81d1bb832e272550b75
     conjecture_delta: "The direct app-adoption state machine can leave runtime when one promotion service owns its store transitions, recipient build, freshness guard, Dolt tag/reset integration, and events while transports and tools call it directly. Candidate-package intake retains its explicitly blocked source-lineage-only review path for the next ownership slice."
     heresy_delta:
-      discovered: "Operational direct app-adoption authority lived on Runtime even though computerversion already owned inert evidence schemas and the Dolt adapter. Candidate-package intake also depends on shared ref/profile semantics but remains a separate blocked review owner pending its named extraction slice."
+      discovered: "Operational direct app-adoption authority lived on Runtime even though computerversion already owned inert evidence schemas and the Dolt adapter. Candidate-package intake also depends on shared ref/profile semantics but remains a separate blocked review owner pending its named extraction slice. Deployed acceptance runacc-9704ea95ef27a1b1c0f4 blocks a completed publish/build/verify/promote/rollback/roll-forward trajectory because its superseded verification_started checkpoint remains pending and checkpoint_causal_order rejects the repeated promoted observation despite its own contract saying superseded async probes and repeated observations are tolerated."
       introduced: none
       repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, event, and non-candidate package import now enters internal/promotion.Service; API, worker mirror, candidate-intake lineage setup, and shipper callers are direct; the dead Runtime adapter option and all Runtime promotion methods are deleted."
   candidate:
     id: R1-promotion-owner-cutover-11
-    state: landing_ci_timeout_documented_retry_required
+    state: deployed_acceptance_state_machine_blocker_documented
     ref: refs/heads/autoputer-definition-v2@0dc665f2
     owner: orchestrator
     base: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
@@ -194,8 +194,14 @@ now:
     - "atomic-transition-review:ACCEPT 0dc665f2; all eight config fields, subprocesses, CAS, adapter ordering, async lifetime, events, rollback/roll-forward, imports, and candidate-intake boundary preserved"
     - "atomic-owner-security-review:ACCEPT 0dc665f2; one private promotion.Service owner, no Runtime facade/adapter seam/write bypass, owner/auth isolation intact"
     - "landing-ci:FAIL https://github.com/choir-hip/go-choir/actions/runs/29337911803 job 87101791105; internal/runtime shard 2 reached the command deadline with no failed test and an empty still-running list after reporting selected tests PASS"
-  blocker_or_risk: "Landing CI 29337911803 timed out only in internal/runtime shard 2; the log reports no failed test and no named still-running test, while the same frozen source passed full local internal/runtime and all other CI compile/test lanes. Deployment was correctly gated. This is documented before any repair; a clean retry must distinguish transient runner timing from a reproducible suite deadline regression."
-  next_action: "Commit and push this problem receipt without code changes, monitor the resulting clean CI retry, and repair code only if the deadline failure reproduces with a named or locally reproducible cause."
+    - "landing-ci-retry:PASS https://github.com/choir-hip/go-choir/actions/runs/29337911803 attempt 2; deploy job 87104286862"
+    - "staging-activation:fe6f0844d70cad36ec544f642335c46fb2730a5a at 2026-07-14T13:58:29Z; sandbox/corpusd/gateway active"
+    - "staging-package:c81c9e67-157d-45b1-bff3-e1090be31849; manifest 434ccfee47520b4c58164416730fa9d8e0d3e585cbdfd997394ab8f6e4b9856a; durable detail/list HTTP 200"
+    - "staging-adoption:74e7ccba-e929-445c-822b-37f33cd9e72b; actual recipient build PASS; runtime sha256:72a8818b1947af1ac83dde7f12f0b1d8175657b69ae72048fc32017d82312b31; UI sha256:9e96baefded5987db7dd566f3123fb9ed2defb35c8590785c393451d35822146"
+    - "staging-lifecycle:owner_approved -> adopted -> rolled_back -> adopted; final source lineage refs/computers/acceptance-target-20260714140154206/candidates/candidate-target-20260714140154206"
+    - "staging-run-acceptance:runacc-9704ea95ef27a1b1c0f4 promotion-level BLOCKED; package/verified/promoted/rollback checkpoints pass, but superseded verifying stays pending and checkpoint_causal_order blocks repeated promoted evidence"
+  blocker_or_risk: "The promotion product path itself is deployed and passes package persistence, actual recipient rebuild, owner approval, promotion, rollback, roll-forward, and final lineage checks. Run acceptance is not accepted: runacc-9704ea95ef27a1b1c0f4 remains blocked by an acceptance-state-machine contradiction—superseded verification_started stays pending and repeated promotion after rollback trips causal order even though the invariant contract says both are tolerated. This problem is documented before repair."
+  next_action: "Commit and push this deployed problem receipt before code repair. Then trace the run-acceptance checkpoint reducer and causal-order invariant, add a focused regression for this exact event sequence, repair the single state authority, and repeat CI/deploy/authenticated acceptance."
 
 receipts:
   - id: predecessor-B0-authority
