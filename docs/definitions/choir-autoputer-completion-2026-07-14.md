@@ -138,44 +138,46 @@ measures:
 
 now:
   status: working
-  slice: "extract content and media ownership from internal/runtime"
-  question: "Can a canonical content service and media-state handler own all content import, extraction, source validation, transcript/search fallback, content/media persistence, event, and HTTP contracts while Runtime retains only explicit caller composition and no wrappers or direct store authority?"
+  slice: "land and accept content/media owner cutover"
+  question: "Does the reviewed content/media owner cutover preserve deployed owner-scoped import, extraction, provider fallback, persistence, event, and HTTP behavior while leaving Runtime with composition-only authority?"
   reconciliation:
-    observed_at: 2026-07-14T16:40:18Z
-    source_ref: refs/remotes/origin/main@a0b7c9d904be618c8ace59d0b19b6d10bb7d4226
-    deploy_identity: "CI 29349986819 PASS; deploy job 87144519480; activation receipt a0b7c9d904be618c8ace59d0b19b6d10bb7d4226 at 2026-07-14T16:38:25Z; authenticated staging sandbox routes report a0b7c9d9"
+    observed_at: 2026-07-14T17:22:35Z
+    source_ref: refs/heads/autoputer-definition-v2@5fbe4d50
+    deploy_identity: "Predecessor a0b7c9d904be618c8ace59d0b19b6d10bb7d4226 remains deployed; candidate 5fbe4d50 is locally accepted and not yet pushed."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-      - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
+      - docs/runtime-dissolution-inventory.yaml@canonical_parent:b3d8205fe3047ccbde392abbaed681a2e60dbee1
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: owner_boundary_frozen
+    status: accepted_local_ready_to_land
     protected_surfaces: [content_items, url_source_validation, file_source_boundary, document_extraction, youtube_transcripts, searxng_discovery, content_events, media_progress, media_recents, theme_preferences, user_isolation]
-    admissible_evidence: "Exact route/caller/store/event/provider/helper map; owner-scoped content/media transitions; URL/file boundary and transcript/provider failure tests; byte-equivalent HTTP contracts; direct runtime caller migration with no import wrappers; focused content/media tests; scoped runtime callers and ratchet; independent transition and authority review; green CI, staging identity, and authenticated deployed acceptance."
+    admissible_evidence: "Canonical owner package tests; direct route/composition compile; scoped runtime shard; exact runtime dissolution ratchet; stale wrapper/store-write searches; frozen independent transition and authority reviews; green CI, staging identity, and authenticated deployed acceptance."
     rollback_ref: b3d8205fe3047ccbde392abbaed681a2e60dbee1
-    conjecture_delta: "Content import/extraction and media state are product services, not runtime orchestration. A content owner may expose direct ImportURL/ImportFile methods to remaining runtime callers through explicit composition, while a media handler can remain route-only; shared pure media/source classification must have one canonical home rather than be copied back into Runtime."
+    conjecture_delta: "Confirmed locally: content import/extraction and media state can leave Runtime without changing their owner-scoped contracts. A direct injected content Service serves remaining podcast, Texture, and researcher callers; media state is route-owned; shared source/media/document helpers have one canonical content home."
     heresy_delta:
-      discovered: "internal/runtime/content.go owns 1,984 lines of content HTTP, URL/file import, sourcefetch validation, readability/document extraction, YouTube transcript provider and InnerTube fallback, SearXNG discovery, dedupe, store writes, and content events; content_extract.go owns 552 lines of document adapters. Runtime podcast, Texture media-source, and researcher tools call Runtime.ImportURLContent/ImportFileContent wrappers; api.go calls content intent classification; Texture files share content media/hash/source-path helpers. internal/runtime/media_state.go owns 287 lines of authenticated media progress, recents, theme preference store transitions and product events. No existing content or media server owner package exists."
+      discovered: "The cutover exposed two comprehensive-test-only helpers that had moved with the owner tests while retained Runtime tests still cited them; the retained tests now carry their narrow local fixture/network setup. Independently stale comprehensive prompt and Texture tests remain outside this slice and are not counted as introduced."
       introduced: none
-      repaired: "The preceding browser/desktop cutover is deployed and accepted: staging a0b7c9d9 returned authenticated HTTP 200 for capabilities, sessions, and desktop state, then created/listed/closed browser session 7e28e2bb-a20e-40b6-b30c-53951b0dcbb8 with idle-to-closed lifecycle."
+      repaired: "internal/content now solely owns content HTTP/import/extraction/store/event/provider behavior and internal/mediastate solely owns media-state HTTP/store/event behavior. Routes dispatch directly to those owners; sandbox composes them; Runtime has only an injected content Service and direct caller use. Legacy runtime content/media files, import wrappers, duplicate helpers, direct writes, and handler authority are deleted."
   candidate:
     id: R1-content-media-owner-cutover-14
-    state: owner_boundary_frozen_ready_to_implement
-    ref: refs/heads/autoputer-definition-v2@a0b7c9d904be618c8ace59d0b19b6d10bb7d4226
+    state: accepted_local_ready_to_land
+    ref: refs/heads/autoputer-definition-v2@5fbe4d50
     owner: orchestrator
     base: refs/remotes/origin/main@a0b7c9d904be618c8ace59d0b19b6d10bb7d4226
-    digest: "Create internal/content as the sole content HTTP/import/extraction/store/event/provider owner and internal/mediastate as the sole media-state HTTP/store/event owner. Register handlers directly in apihandler; construct owners in sandbox; inject the content service explicitly into runtime core callers; replace every Runtime.ImportURLContent/ImportFileContent call with direct owner calls and delete those wrappers. Move shared pure content/media/source classification to one canonical content package and migrate remaining Runtime/Texture callers rather than duplicating helpers. Delete runtime content/media production files and move/split focused tests."
+    digest: "32 files, +1305/-959. Added canonical internal/content Service and internal/mediastate Handler; direct apihandler/sandbox/runtime composition; migrated podcast, Texture, researcher, and intent callers; deleted runtime content/media owners and wrappers; regenerated the exact runtime inventory."
     scope: [content_http, content_items, url_import, file_import, document_extraction, source_validation, transcript_fetch, search_discovery, content_events, media_progress, media_recents, theme_preferences, shared_content_classification]
   evidence_refs:
-    - "content-map: internal/runtime/content.go; content_extract.go; content_test.go; content_extract_test.go; internal/apihandler/routes.go content routes; Runtime callers in podcast.go, texture_media_sources.go, tools_research.go, api.go"
-    - "content-shared-map: runtime Texture callers of normalize/detect/appHint/media/hash/source-path helpers in texture.go, texture_import.go, texture_media_sources.go, texture_lineage.go, texture_diagnosis.go; general firstNonEmptyString remains runtime-owned"
-    - "media-map: internal/runtime/media_state.go; media_state_test.go; internal/apihandler/routes.go media progress/recents/theme routes; store media/preference methods; product events"
-    - "replacement-check: no internal/content, internal/mediastate, or equivalent server owner exists; internal/desktop is unrelated client sync"
-    - "preceding-deploy: https://github.com/choir-hip/go-choir/actions/runs/29349986819; deploy-job:87144519480; activation-receipt:a0b7c9d904be618c8ace59d0b19b6d10bb7d4226@2026-07-14T16:38:25Z"
-  blocker_or_risk: "No execution blocker. Highest risk is hidden shared-helper authority: moving content files without migrating Runtime/Texture classification and source-path callers would either fail compilation or create a second convention. Content provider/network behavior, 2/25 MiB bounds, 300 KiB text cap, SSRF validation, owner dedupe, YouTube provider auth/redaction, SearXNG alternate ordering, and event payloads must remain exact. Runtime may hold only an injected content service pointer for direct callers; no Runtime import method, adapter pass-through, API wrapper, or direct content/media store write may remain."
-  next_action: "Commit this terminal browser/desktop receipt and frozen content/media problem-owner boundary before behavior-changing code. Then extract content and media owners in an isolated candidate, migrate shared helpers and every direct caller, regenerate the inventory, and prove focused contracts before frozen independent review."
+    - "go-test: -tags comprehensive ./internal/content ./internal/mediastate PASS"
+    - "go-test: ./internal/apihandler ./internal/sandbox ./internal/actorruntime PASS; ./internal/runtime -run ^$ PASS"
+    - "runtime-shard-1/4: 69/277 PASS"
+    - "runtime-ratchet: PASS; go_files=117 production_files=60 test_files=57 production_loc=35248 test_loc=47507 exports=830 export_caller_edges=226"
+    - "authority-search: no Runtime ImportURLContent/ImportFileContent wrappers or direct content/media store writes"
+    - "content-media-transition-review: ACCEPT confidence 0.93"
+    - "content-media-authority-review: ACCEPT confidence 0.97"
+  blocker_or_risk: "Deployment-only acceptance remains. Candidate 5fbe4d50 is locally frozen and independently accepted but has not passed canonical CI, deployed to staging, reported its build identity, or exercised authenticated content/media routes. The repository-wide comprehensive runtime tag remains independently stale in prompt/Texture tests; this cutover's missing retained helpers were repaired and default CI/runtime shard proof passes."
+  next_action: "Commit this local acceptance receipt, push the coherent candidate to origin/main, monitor CI and staging identity, then exercise authenticated URL/file content and media state transitions before marking the slice complete."
 
 receipts:
   - id: predecessor-B0-authority
@@ -277,6 +279,13 @@ receipts:
     proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29349986819", "deploy-job:87144519480", "activation-receipt:a0b7c9d904be618c8ace59d0b19b6d10bb7d4226@2026-07-14T16:38:25Z", "browser-owner-tests:PASS", "desktop-owner-tests:PASS", "runtime-shard-0/4:PASS", "runtime-ratchet:PASS", "browser-transition-review:ACCEPT", "desktop-authority-review:ACCEPT", "staging-browser-capabilities:HTTP-200-ready", "staging-browser-sessions:HTTP-200", "staging-browser-lifecycle:7e28e2bb-a20e-40b6-b30c-53951b0dcbb8-idle-to-closed", "staging-desktop-state:HTTP-200-owner-scoped"]
     rollback_ref: b3d8205fe3047ccbde392abbaed681a2e60dbee1
     disposition: complete
+
+  - id: R1-content-media-owner-cutover-14
+    boundary: implement
+    commit_or_artifact: 5fbe4d50
+    proof_refs: ["content-owner-tests:PASS", "media-owner-tests:PASS", "apihandler-sandbox-actorruntime:PASS", "runtime-shard-1/4:PASS", "runtime-ratchet:PASS", "authority-residue-search:PASS", "content-media-transition-review:ACCEPT", "content-media-authority-review:ACCEPT"]
+    rollback_ref: b3d8205fe3047ccbde392abbaed681a2e60dbee1
+    disposition: accepted_local_ready_to_land
 
 view:
   path: none
