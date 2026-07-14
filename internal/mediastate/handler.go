@@ -1,16 +1,34 @@
-package runtime
+// Package mediastate owns the authenticated media-state HTTP control plane.
+package mediastate
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+// Handler owns media-state HTTP behavior, persistence, and product events.
+type Handler struct {
+	store *store.Store
+	bus   *events.EventBus
+}
+
+// NewHandler constructs the media-state control plane.
+func NewHandler(s *store.Store, bus *events.EventBus) *Handler {
+	return &Handler{store: s, bus: bus}
+}
 
 type mediaProgressRequest struct {
 	Kind            string  `json:"kind"`
@@ -45,7 +63,12 @@ type themePreferenceResponse struct {
 	UpdatedAt string         `json:"updated_at,omitempty"`
 }
 
-func (h *APIHandler) HandleMediaProgress(w http.ResponseWriter, r *http.Request) {
+type apiError struct {
+	Error string `json:"error"`
+}
+
+// HandleMediaProgress routes authenticated media progress reads and writes.
+func (h *Handler) HandleMediaProgress(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		h.HandleMediaProgressGet(w, r)
@@ -56,7 +79,8 @@ func (h *APIHandler) HandleMediaProgress(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (h *APIHandler) HandleMediaProgressGet(w http.ResponseWriter, r *http.Request) {
+// HandleMediaProgressGet returns progress scoped to the authenticated owner.
+func (h *Handler) HandleMediaProgressGet(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -68,7 +92,7 @@ func (h *APIHandler) HandleMediaProgressGet(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "kind and identity are required"})
 		return
 	}
-	rec, err := h.rt.Store().GetMediaProgress(r.Context(), ownerID, kind, identity)
+	rec, err := h.store.GetMediaProgress(r.Context(), ownerID, kind, identity)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusOK, types.MediaProgress{
@@ -85,7 +109,8 @@ func (h *APIHandler) HandleMediaProgressGet(w http.ResponseWriter, r *http.Reque
 	writeAPIJSON(w, http.StatusOK, rec)
 }
 
-func (h *APIHandler) HandleMediaProgressPut(w http.ResponseWriter, r *http.Request) {
+// HandleMediaProgressPut stores progress scoped to the authenticated owner.
+func (h *Handler) HandleMediaProgressPut(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -112,12 +137,12 @@ func (h *APIHandler) HandleMediaProgressPut(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "kind and identity are required"})
 		return
 	}
-	saved, err := h.rt.Store().UpsertMediaProgress(r.Context(), rec)
+	saved, err := h.store.UpsertMediaProgress(r.Context(), rec)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save media progress"})
 		return
 	}
-	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventMediaProgressUpdated, map[string]any{
+	_, _ = h.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventMediaProgressUpdated, map[string]any{
 		"kind":              saved.Kind,
 		"identity":          saved.Identity,
 		"current_time":      saved.CurrentTime,
@@ -130,7 +155,8 @@ func (h *APIHandler) HandleMediaProgressPut(w http.ResponseWriter, r *http.Reque
 	writeAPIJSON(w, http.StatusOK, saved)
 }
 
-func (h *APIHandler) HandleMediaRecents(w http.ResponseWriter, r *http.Request) {
+// HandleMediaRecents routes authenticated recent-media reads and writes.
+func (h *Handler) HandleMediaRecents(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		h.HandleMediaRecentsGet(w, r)
@@ -141,7 +167,8 @@ func (h *APIHandler) HandleMediaRecents(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *APIHandler) HandleMediaRecentsGet(w http.ResponseWriter, r *http.Request) {
+// HandleMediaRecentsGet lists recent media scoped to the authenticated owner.
+func (h *Handler) HandleMediaRecentsGet(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -153,7 +180,7 @@ func (h *APIHandler) HandleMediaRecentsGet(w http.ResponseWriter, r *http.Reques
 			limit = n
 		}
 	}
-	items, err := h.rt.Store().ListMediaRecents(r.Context(), ownerID, strings.TrimSpace(r.URL.Query().Get("kind")), limit)
+	items, err := h.store.ListMediaRecents(r.Context(), ownerID, strings.TrimSpace(r.URL.Query().Get("kind")), limit)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list media recents"})
 		return
@@ -161,7 +188,8 @@ func (h *APIHandler) HandleMediaRecentsGet(w http.ResponseWriter, r *http.Reques
 	writeAPIJSON(w, http.StatusOK, mediaRecentListResponse{Items: items})
 }
 
-func (h *APIHandler) HandleMediaRecentsPut(w http.ResponseWriter, r *http.Request) {
+// HandleMediaRecentsPut records recently opened media for the authenticated owner.
+func (h *Handler) HandleMediaRecentsPut(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -190,12 +218,12 @@ func (h *APIHandler) HandleMediaRecentsPut(w http.ResponseWriter, r *http.Reques
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "kind and identity are required"})
 		return
 	}
-	saved, err := h.rt.Store().UpsertMediaRecent(r.Context(), rec)
+	saved, err := h.store.UpsertMediaRecent(r.Context(), rec)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save media recent"})
 		return
 	}
-	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventMediaRecentUpdated, map[string]any{
+	_, _ = h.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventMediaRecentUpdated, map[string]any{
 		"kind":             saved.Kind,
 		"identity":         saved.Identity,
 		"title":            saved.Title,
@@ -210,7 +238,8 @@ func (h *APIHandler) HandleMediaRecentsPut(w http.ResponseWriter, r *http.Reques
 	writeAPIJSON(w, http.StatusOK, saved)
 }
 
-func (h *APIHandler) HandleThemePreference(w http.ResponseWriter, r *http.Request) {
+// HandleThemePreference routes authenticated theme reads and writes.
+func (h *Handler) HandleThemePreference(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		h.HandleThemePreferenceGet(w, r)
@@ -221,13 +250,14 @@ func (h *APIHandler) HandleThemePreference(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (h *APIHandler) HandleThemePreferenceGet(w http.ResponseWriter, r *http.Request) {
+// HandleThemePreferenceGet returns the authenticated owner's theme preference.
+func (h *Handler) HandleThemePreferenceGet(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	rec, err := h.rt.Store().GetUserPreference(r.Context(), ownerID, "theme")
+	rec, err := h.store.GetUserPreference(r.Context(), ownerID, "theme")
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusOK, themePreferenceResponse{Theme: map[string]any{}})
@@ -242,7 +272,8 @@ func (h *APIHandler) HandleThemePreferenceGet(w http.ResponseWriter, r *http.Req
 	})
 }
 
-func (h *APIHandler) HandleThemePreferencePut(w http.ResponseWriter, r *http.Request) {
+// HandleThemePreferencePut stores the authenticated owner's theme preference.
+func (h *Handler) HandleThemePreferencePut(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -258,7 +289,7 @@ func (h *APIHandler) HandleThemePreferencePut(w http.ResponseWriter, r *http.Req
 	if req.Theme == nil {
 		req.Theme = map[string]any{}
 	}
-	rec, err := h.rt.Store().SaveUserPreference(r.Context(), types.UserPreference{
+	rec, err := h.store.SaveUserPreference(r.Context(), types.UserPreference{
 		OwnerID:       ownerID,
 		PreferenceKey: "theme",
 		Value:         req.Theme,
@@ -268,7 +299,7 @@ func (h *APIHandler) HandleThemePreferencePut(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save theme preference"})
 		return
 	}
-	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventThemeUpdated, map[string]any{
+	_, _ = h.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventThemeUpdated, map[string]any{
 		"theme":            rec.Value,
 		"updated_at":       rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		"source_device_id": strings.TrimSpace(r.Header.Get("X-Choir-Device")),
@@ -277,6 +308,75 @@ func (h *APIHandler) HandleThemePreferencePut(w http.ResponseWriter, r *http.Req
 		Theme:     rec.Value,
 		UpdatedAt: rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	})
+}
+
+func authenticateUser(r *http.Request) (string, error) {
+	user := r.Header.Get("X-Authenticated-User")
+	if user == "" {
+		return "", fmt.Errorf("missing authenticated user identity")
+	}
+	return user, nil
+}
+
+func writeAPIJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("runtime api: json encode error: %v", err)
+	}
+}
+
+func requestDesktopID(r *http.Request) string {
+	if r == nil {
+		return types.PrimaryDesktopID
+	}
+	if desktopID := strings.TrimSpace(r.URL.Query().Get("desktop_id")); desktopID != "" {
+		return desktopID
+	}
+	if desktopID := strings.TrimSpace(r.Header.Get("X-Choir-Desktop")); desktopID != "" {
+		return desktopID
+	}
+	return types.PrimaryDesktopID
+}
+
+func (h *Handler) emitProductEvent(ctx context.Context, ownerID, desktopID string, kind types.EventKind, payload map[string]any) (types.EventRecord, error) {
+	if h == nil || h.store == nil {
+		return types.EventRecord{}, fmt.Errorf("runtime store unavailable")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return types.EventRecord{}, fmt.Errorf("owner_id is required")
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	desktopID = strings.TrimSpace(desktopID)
+	if desktopID != "" {
+		payload["desktop_id"] = desktopID
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return types.EventRecord{}, fmt.Errorf("marshal product event payload: %w", err)
+	}
+	rec := types.EventRecord{
+		EventID:   uuid.New().String(),
+		OwnerID:   ownerID,
+		Timestamp: time.Now().UTC(),
+		Kind:      kind,
+		Phase:     "product",
+		Payload:   raw,
+	}
+	if err := h.store.AppendEvent(ctx, &rec); err != nil {
+		return types.EventRecord{}, fmt.Errorf("append product event: %w", err)
+	}
+	if h.bus != nil {
+		h.bus.Publish(events.RuntimeEvent{
+			Record: rec,
+			Actor:  events.ActorRuntime,
+			Cause:  events.CauseHostAction,
+		})
+	}
+	return rec, nil
 }
 
 func sanitizeFloat(value float64) float64 {

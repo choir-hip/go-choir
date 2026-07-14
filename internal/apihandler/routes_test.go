@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
+	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/server"
@@ -115,6 +117,8 @@ func registerRoutesForTest(srv *server.Server, enableTestAPIs bool) {
 		NewHandler(nil),
 		browsercontrol.NewHandler(provideriface.Config{}, nil, events.NewEventBus()),
 		desktopstate.NewHandler(nil, events.NewEventBus()),
+		content.NewService(nil, events.NewEventBus()),
+		mediastate.NewHandler(nil, events.NewEventBus()),
 		enableTestAPIs,
 	)
 }

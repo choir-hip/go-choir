@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -430,7 +431,7 @@ func (h *APIHandler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 
 	requestedApp := agentprofile.Texture
 	var contentSourceURL, contentMediaType, contentAppHint string
-	if appHint, sourceURL, mediaType, ok := classifyPromptBarContentIntent(text); ok {
+	if appHint, sourceURL, mediaType, ok := contentowner.ClassifyPromptBarContentIntent(text); ok {
 		requestedApp = appHint
 		contentSourceURL = sourceURL
 		contentMediaType = mediaType

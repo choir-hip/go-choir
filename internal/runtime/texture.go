@@ -35,6 +35,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -376,7 +377,7 @@ func (rt *Runtime) canonicalizeAliasedTextureDocumentTitle(ctx context.Context, 
 }
 
 func canonicalizeAliasedTextureDocumentTitle(ctx context.Context, st *store.Store, ownerID string, doc *types.Document, updatedAt time.Time) error {
-	if doc == nil || isTextureShortcutPath(doc.Title) {
+	if doc == nil || contentowner.IsTextureShortcutPath(doc.Title) {
 		return nil
 	}
 	if st == nil {
@@ -472,13 +473,17 @@ func (h *APIHandler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
+	if h.rt == nil || h.rt.content == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "content service not configured"})
+		return
+	}
 
 	var req textureMarkdownLineageImportRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	sourcePath := normalizeTextureSourcePath(req.SourcePath)
+	sourcePath := contentowner.NormalizeSourcePath(req.SourcePath)
 	if sourcePath == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_path is required"})
 		return
@@ -560,7 +565,7 @@ func (h *APIHandler) HandleTextureImportMarkdownLineage(w http.ResponseWriter, r
 			versionNow = parsed.UTC()
 		}
 		item := buildMarkdownLineageContentItem(ownerID, sourcePath, title, version, resolvedVersions[i].Content, versionNow)
-		if err := h.rt.Store().CreateContentItem(r.Context(), item); err != nil {
+		if err := h.rt.content.CreateItem(r.Context(), ownerID, item); err != nil {
 			log.Printf("texture api: preserve markdown lineage snapshot %s: %v", sourcePath, err)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to preserve markdown source snapshot"})
 			return
@@ -652,13 +657,17 @@ func (h *APIHandler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Reques
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
+	if h.rt == nil || h.rt.content == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "content service not configured"})
+		return
+	}
 
 	var req textureOpenFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
 		return
 	}
-	sourcePath := normalizeTextureSourcePath(req.SourcePath)
+	sourcePath := contentowner.NormalizeSourcePath(req.SourcePath)
 	if sourcePath == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "source_path is required"})
 		return
@@ -694,7 +703,7 @@ func (h *APIHandler) HandleTextureOpenFile(w http.ResponseWriter, r *http.Reques
 	now := time.Now().UTC()
 	projection := buildTextureFileImportProjection(sourcePath, req.InitialContent)
 	var original *types.ContentItem
-	if !isTextureShortcutPath(sourcePath) {
+	if !contentowner.IsTextureShortcutPath(sourcePath) {
 		item, err := h.ensureTextureOriginalContentItem(r.Context(), ownerID, title, projection, now)
 		if err != nil {
 			log.Printf("texture api: preserve original content item for %s: %v", sourcePath, err)
@@ -847,7 +856,7 @@ func (h *APIHandler) HandleTextureExportDocument(w http.ResponseWriter, r *http.
 		MediaType:   mediaType,
 		Filename:    textureDocumentExportFilename(doc.Title, format),
 		Content:     content,
-		ContentHash: contentHash(content),
+		ContentHash: contentowner.ContentHash(content),
 	})
 }
 

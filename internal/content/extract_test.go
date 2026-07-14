@@ -1,4 +1,4 @@
-package runtime
+package content
 
 import (
 	"archive/zip"
@@ -14,7 +14,7 @@ func TestExtractPPTXDocumentCreatesSlideSelectors(t *testing.T) {
 		"Choir source substrate\nDocuments become citeable source artifacts",
 		"Compaction eval\nFrozen corpus beats search quota burn",
 	})
-	extracted := extractContentDocument(context.Background(), "deck.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", raw)
+	extracted := ExtractDocument(context.Background(), "deck.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", raw)
 	if extracted.AppHint != "slides" {
 		t.Fatalf("app hint = %q, want slides", extracted.AppHint)
 	}
@@ -37,7 +37,7 @@ func TestExtractDOCXDocumentFallsBackToOOXMLSelectors(t *testing.T) {
 		{"Term", "Definition"},
 		{"Source", "Durable artifact"},
 	})
-	extracted := extractContentDocument(context.Background(), "brief.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", raw)
+	extracted := ExtractDocument(context.Background(), "brief.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", raw)
 	if !strings.Contains(extracted.Text, "Proposal Title") || !strings.Contains(extracted.Text, "| Term | Definition |") {
 		t.Fatalf("docx extracted text = %q", extracted.Text)
 	}

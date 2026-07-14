@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -50,7 +51,7 @@ var textureHTTPURLRE = regexp.MustCompile(`https?://[^\s<>"'` + "`" + `]+`)
 // nodes rather than markdown source links.
 var textureRawSourceServiceItemIDRE = regexp.MustCompile(`\bsrcitem_[A-Za-z0-9_-]+\b`)
 
-func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, ownerID, content string, existing []textureSourceEntity) ([]textureSourceEntity, bool) {
+func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, ownerID, content string, existing []textureSourceEntity) ([]textureSourceEntity, bool, error) {
 	entities := append([]textureSourceEntity{}, existing...)
 	seen := make(map[string]bool, len(entities))
 	for _, entity := range entities {
@@ -58,8 +59,15 @@ func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, owner
 			seen[key] = true
 		}
 	}
+	rawURLs := extractTextureMediaSourceURLs(content)
+	if len(rawURLs) == 0 {
+		return entities, false, nil
+	}
+	if rt == nil || rt.content == nil {
+		return nil, false, fmt.Errorf("content service not configured")
+	}
 	added := false
-	for _, rawURL := range extractTextureMediaSourceURLs(content) {
+	for _, rawURL := range rawURLs {
 		kind, canonicalURL, videoID := classifyTextureMediaSourceURL(rawURL)
 		if kind == "" || canonicalURL == "" {
 			continue
@@ -68,7 +76,7 @@ func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, owner
 		if entityKind == "" || seen[entityKind+"|"+canonicalURL] {
 			continue
 		}
-		item, err := rt.ImportURLContent(ctx, ownerID, rawURL, "")
+		item, err := rt.content.ImportURL(ctx, ownerID, rawURL, "")
 		if err != nil {
 			continue
 		}
@@ -92,7 +100,7 @@ func (rt *Runtime) registerTextureMediaSourceEntities(ctx context.Context, owner
 			added = true
 		}
 	}
-	return entities, added
+	return entities, added, nil
 }
 
 func extractTextureMediaSourceURLs(content string) []string {
@@ -115,12 +123,12 @@ func extractTextureMediaSourceURLs(content string) []string {
 }
 
 func classifyTextureMediaSourceURL(raw string) (kind, canonicalURL, videoID string) {
-	normalized, err := normalizeHTTPURL(raw)
+	normalized, err := contentowner.NormalizeHTTPURL(raw)
 	if err != nil {
 		return "", "", ""
 	}
-	if isYouTubeURL(normalized) {
-		videoID = youtubeVideoID(normalized)
+	if contentowner.IsYouTubeURL(normalized) {
+		videoID = contentowner.YouTubeVideoID(normalized)
 		if videoID == "" {
 			return "", "", ""
 		}
@@ -162,11 +170,11 @@ func contentItemTextureMediaSourceRef(item types.ContentItem) textureMediaSource
 	if len(item.Metadata) > 0 {
 		_ = json.Unmarshal(item.Metadata, &metadata)
 	}
-	if isYouTubeURL(firstNonEmpty(ref.CanonicalURL, ref.URL)) || item.MediaType == "video/youtube" {
+	if contentowner.IsYouTubeURL(firstNonEmpty(ref.CanonicalURL, ref.URL)) || item.MediaType == "video/youtube" {
 		ref.Kind = "youtube"
 		ref.VideoID = metadataString(metadata, "video_id")
 		if ref.VideoID == "" {
-			ref.VideoID = youtubeVideoID(firstNonEmpty(ref.CanonicalURL, ref.URL))
+			ref.VideoID = contentowner.YouTubeVideoID(firstNonEmpty(ref.CanonicalURL, ref.URL))
 		}
 		ref.TranscriptContentID = metadataString(metadata, "transcript_content_id")
 		ref.TranscriptAvailability = metadataString(metadata, "transcript_availability")
@@ -175,7 +183,7 @@ func contentItemTextureMediaSourceRef(item types.ContentItem) textureMediaSource
 		}
 		return ref
 	}
-	if strings.HasPrefix(normalizeMediaType(item.MediaType), "image/") || item.AppHint == "image" {
+	if strings.HasPrefix(contentowner.NormalizeMediaType(item.MediaType), "image/") || item.AppHint == "image" {
 		ref.Kind = "image"
 		return ref
 	}

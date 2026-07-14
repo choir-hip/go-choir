@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -247,6 +248,9 @@ func newImportDocumentContentTool(rt *Runtime) toolregistry.Tool {
 			if rt == nil {
 				return "", fmt.Errorf("runtime not configured")
 			}
+			if rt.content == nil {
+				return "", fmt.Errorf("content service not configured")
+			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode import_document_content args: %w", err)
@@ -263,14 +267,14 @@ func newImportDocumentContentTool(rt *Runtime) toolregistry.Tool {
 			var item types.ContentItem
 			var err error
 			if urlValue != "" {
-				item, err = rt.ImportURLContent(ctx, ownerID, urlValue, strings.TrimSpace(in.Query))
+				item, err = rt.content.ImportURL(ctx, ownerID, urlValue, strings.TrimSpace(in.Query))
 			} else {
-				item, err = rt.ImportFileContent(ctx, ownerID, filePath)
+				item, err = rt.content.ImportFile(ctx, ownerID, filePath)
 			}
 			if err != nil {
 				return "", err
 			}
-			selectors := selectorsFromContentMetadata(item.Metadata)
+			selectors := contentowner.SelectorsFromMetadata(item.Metadata)
 			result := map[string]any{
 				"content_id":     item.ContentID,
 				"source_type":    item.SourceType,
@@ -343,6 +347,9 @@ func newImportURLContentTool(rt *Runtime) toolregistry.Tool {
 			if rt == nil {
 				return "", fmt.Errorf("runtime not configured")
 			}
+			if rt.content == nil {
+				return "", fmt.Errorf("content service not configured")
+			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
 				return "", fmt.Errorf("decode import_url_content args: %w", err)
@@ -351,7 +358,7 @@ func newImportURLContentTool(rt *Runtime) toolregistry.Tool {
 			if ownerID == "" {
 				return "", fmt.Errorf("import_url_content missing owner context")
 			}
-			item, err := rt.ImportURLContent(ctx, ownerID, strings.TrimSpace(in.URL), strings.TrimSpace(in.Query))
+			item, err := rt.content.ImportURL(ctx, ownerID, strings.TrimSpace(in.URL), strings.TrimSpace(in.Query))
 			if err != nil {
 				return "", err
 			}
@@ -485,7 +492,7 @@ func newListContentItemSelectorsTool(rt *Runtime) toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
-			selectors := selectorsFromContentMetadata(item.Metadata)
+			selectors := contentowner.SelectorsFromMetadata(item.Metadata)
 			previews := make([]map[string]any, 0, len(selectors))
 			for _, selector := range selectors {
 				previews = append(previews, map[string]any{
@@ -493,7 +500,7 @@ func newListContentItemSelectorsTool(rt *Runtime) toolregistry.Tool {
 					"kind":       selector.Kind,
 					"label":      selector.Label,
 					"text_chars": len(selector.Text),
-					"preview":    truncateString(strings.TrimSpace(selector.Text), 500),
+					"preview":    contentowner.TruncateString(strings.TrimSpace(selector.Text), 500),
 				})
 			}
 			result := map[string]any{
@@ -541,8 +548,8 @@ func newReadContentItemSelectorTool(rt *Runtime) toolregistry.Tool {
 			if selectorID == "" {
 				return "", fmt.Errorf("selector_id must not be empty")
 			}
-			var selected *contentSelector
-			selectors := selectorsFromContentMetadata(item.Metadata)
+			var selected *contentowner.Selector
+			selectors := contentowner.SelectorsFromMetadata(item.Metadata)
 			for i := range selectors {
 				if selectors[i].ID == selectorID {
 					selected = &selectors[i]
@@ -817,7 +824,7 @@ func compactWebSearchProjection(full map[string]any, resp *search.Response, requ
 			"rank":     idx + 1,
 			"title":    stringValue(result["title"]),
 			"url":      stringValue(result["url"]),
-			"snippet":  truncateString(stringValue(result["snippet"]), maxSnippetChars),
+			"snippet":  contentowner.TruncateString(stringValue(result["snippet"]), maxSnippetChars),
 			"provider": stringValue(result["provider"]),
 		}
 		if published := stringValue(result["published_at"]); published != "" {
@@ -840,7 +847,7 @@ func compactWebSearchProjection(full map[string]any, resp *search.Response, requ
 		if status := stringValue(attempt["status"]); status != "" && status != "success" {
 			degraded = true
 			if errText := stringValue(attempt["error"]); errText != "" {
-				compact["error"] = truncateString(errText, 160)
+				compact["error"] = contentowner.TruncateString(errText, 160)
 			}
 		}
 		attempts = append(attempts, compact)
@@ -908,7 +915,7 @@ func compactSourceSearchProjection(full map[string]any, resp *sourceSearchRespon
 			"canonical_url":    stringValue(result["canonical_url"]),
 			"published_at":     stringValue(result["published_at"]),
 			"fetched_at":       stringValue(result["fetched_at"]),
-			"body_excerpt":     truncateString(stringValue(result["body"]), maxBodyChars),
+			"body_excerpt":     contentowner.TruncateString(stringValue(result["body"]), maxBodyChars),
 			"content_hash":     stringValue(result["content_hash"]),
 			"body_kind":        stringValue(result["body_kind"]),
 			"body_length":      result["body_length"],
@@ -955,7 +962,7 @@ func compactSourceSearchProjection(full map[string]any, resp *sourceSearchRespon
 
 func compactFetchURLProjection(full map[string]any, content string, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
 	const maxContentChars = 4000
-	visibleContent := truncateString(content, maxContentChars)
+	visibleContent := contentowner.TruncateString(content, maxContentChars)
 	model := map[string]any{
 		"url":               full["url"],
 		"status_code":       full["status_code"],
@@ -1001,14 +1008,6 @@ func boolValue(value any) bool {
 	default:
 		return false
 	}
-}
-
-func truncateString(value string, maxChars int) string {
-	value = strings.TrimSpace(value)
-	if maxChars <= 0 || len(value) <= maxChars {
-		return value
-	}
-	return strings.TrimSpace(value[:maxChars]) + "..."
 }
 
 func researchMustJSON(value any) string {

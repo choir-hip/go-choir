@@ -1,11 +1,10 @@
 //go:build comprehensive
 
-package runtime
+package content
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,8 +14,9 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -26,6 +26,40 @@ func allowPrivateSourceFetchForTest(t *testing.T) {
 	t.Cleanup(func() {
 		sourcefetch.SetAllowPrivateNetworkForTests(previous)
 	})
+}
+
+func testAPISetup(t *testing.T) (*store.Store, *Service) {
+	t.Helper()
+	dbPath := filepath.Join(t.TempDir(), "content.db")
+	st, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open content store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = st.Close()
+	})
+	return st, NewService(st, events.NewEventBus())
+}
+
+func authenticatedRequest(method, requestPath, body, user string) *http.Request {
+	var req *http.Request
+	if body != "" {
+		req = httptest.NewRequest(method, requestPath, strings.NewReader(body))
+	} else {
+		req = httptest.NewRequest(method, requestPath, nil)
+	}
+	if user != "" {
+		req.Header.Set("X-Authenticated-User", user)
+	}
+	return req
+}
+
+func strconvQuote(value string) string {
+	encoded, err := json.Marshal(strings.TrimSpace(value))
+	if err != nil {
+		return strings.TrimSpace(value)
+	}
+	return string(encoded)
 }
 
 func TestContentImportURLCreatesProvenanceRecord(t *testing.T) {
@@ -142,7 +176,8 @@ func TestContentImportURLCreatesPlainTextSelectors(t *testing.T) {
 	if item.Metadata["raw_content_hash"] == "" || item.Metadata["extracted_text_hash"] == "" {
 		t.Fatalf("hash metadata missing: %#v", item.Metadata)
 	}
-	if item.ContentHash != strings.TrimPrefix(stringMapValue(item.Metadata, "raw_content_hash"), "sha256:") {
+	rawHash, _ := item.Metadata["raw_content_hash"].(string)
+	if item.ContentHash != strings.TrimPrefix(rawHash, "sha256:") {
 		t.Fatalf("content_hash = %q, raw metadata = %#v", item.ContentHash, item.Metadata["raw_content_hash"])
 	}
 	if count, _ := item.Metadata["selector_count"].(float64); count < 2 {
@@ -278,7 +313,7 @@ func TestContentImportURLRefreshesEmptyExistingReadableItem(t *testing.T) {
 	defer source.Close()
 
 	now := time.Now().UTC()
-	if err := rt.Store().CreateContentItem(context.Background(), types.ContentItem{
+	if err := rt.CreateContentItem(context.Background(), types.ContentItem{
 		ContentID:    "empty-existing",
 		OwnerID:      "user-content",
 		SourceType:   "extracted_url",
@@ -288,7 +323,7 @@ func TestContentImportURLRefreshesEmptyExistingReadableItem(t *testing.T) {
 		SourceURL:    source.URL,
 		CanonicalURL: source.URL,
 		TextContent:  "",
-		ContentHash:  contentHash(""),
+		ContentHash:  ContentHash(""),
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}); err != nil {
@@ -334,7 +369,7 @@ func TestContentImportURLRefreshesLegacyBrowserIdentityReaderItem(t *testing.T) 
 	defer source.Close()
 
 	now := time.Now().UTC()
-	if err := rt.Store().CreateContentItem(context.Background(), types.ContentItem{
+	if err := rt.CreateContentItem(context.Background(), types.ContentItem{
 		ContentID:    "legacy-browser-readable",
 		OwnerID:      "user-content",
 		SourceType:   "extracted_url",
@@ -344,7 +379,7 @@ func TestContentImportURLRefreshesLegacyBrowserIdentityReaderItem(t *testing.T) 
 		SourceURL:    source.URL,
 		CanonicalURL: source.URL,
 		TextContent:  "Old readable text stored with browser identity.",
-		ContentHash:  contentHash("Old readable text stored with browser identity."),
+		ContentHash:  ContentHash("Old readable text stored with browser identity."),
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}); err != nil {
@@ -464,7 +499,7 @@ func TestContentImportFileCreatesExtractedPPTXContentItem(t *testing.T) {
 	if item.MediaType != "application/vnd.openxmlformats-officedocument.presentationml.presentation" || item.AppHint != "slides" {
 		t.Fatalf("presentation identity = %s/%s", item.MediaType, item.AppHint)
 	}
-	if item.ContentHash != contentHashBytes(pptxBytes) {
+	if item.ContentHash != ContentHashBytes(pptxBytes) {
 		t.Fatalf("content_hash = %q, want raw hash", item.ContentHash)
 	}
 	if !strings.Contains(item.TextContent, "Frozen corpus slide one") || !strings.Contains(item.TextContent, "ALPHA-42") {
@@ -477,17 +512,17 @@ func TestContentImportFileCreatesExtractedPPTXContentItem(t *testing.T) {
 	if metadata["extraction_adapter"] != "pptx_ooxml_slide_text_projection" {
 		t.Fatalf("extraction_adapter = %#v", metadata["extraction_adapter"])
 	}
-	if metadata["raw_content_hash"] != "sha256:"+contentHashBytes(pptxBytes) {
+	if metadata["raw_content_hash"] != "sha256:"+ContentHashBytes(pptxBytes) {
 		t.Fatalf("raw_content_hash = %#v", metadata["raw_content_hash"])
 	}
 	if metadata["extracted_text_hash"] == "" {
 		t.Fatalf("extracted_text_hash missing: %#v", metadata)
 	}
-	selectors := selectorsFromContentMetadata(item.Metadata)
+	selectors := SelectorsFromMetadata(item.Metadata)
 	if len(selectors) != 2 || selectors[0].ID != "slide-1" || selectors[1].ID != "slide-2" {
 		t.Fatalf("selectors = %#v", selectors)
 	}
-	stored, err := rt.Store().GetContentItem(context.Background(), "user-content", item.ContentID)
+	stored, err := rt.GetContentItem(context.Background(), "user-content", item.ContentID)
 	if err != nil {
 		t.Fatalf("load stored content item: %v", err)
 	}
@@ -807,129 +842,6 @@ func TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript(t *testing
 	}
 	if text != "Nested line one.\nNested line two." {
 		t.Fatalf("text = %q", text)
-	}
-}
-
-func TestPromptBarBareURLRoutesToDisplayApp(t *testing.T) {
-	t.Parallel()
-	_, handler := testAPISetup(t)
-	body := `{"text":"https://example.com/report.pdf"}`
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", body, "user-content")
-	w := httptest.NewRecorder()
-	handler.HandlePromptBar(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
-	}
-	var submitted promptBarSubmitResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &submitted); err != nil {
-		t.Fatalf("decode submission: %v", err)
-	}
-
-	var status promptBarSubmissionStatusResponse
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		statusReq := authenticatedRequest(http.MethodGet, submitted.StatusURL, "", "user-content")
-		statusW := httptest.NewRecorder()
-		handler.HandlePromptBarSubmission(statusW, statusReq)
-		if statusW.Code != http.StatusOK {
-			t.Fatalf("status lookup = %d body=%s", statusW.Code, statusW.Body.String())
-		}
-		if err := json.Unmarshal(statusW.Body.Bytes(), &status); err != nil {
-			t.Fatalf("decode status: %v", err)
-		}
-		if status.Decision != nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if status.Decision == nil {
-		t.Fatalf("timed out waiting for conductor decision: %#v", status)
-	}
-	if status.Decision.App != "pdf" {
-		t.Fatalf("decision app = %q, want pdf", status.Decision.App)
-	}
-	if status.Decision.SourceURL != "https://example.com/report.pdf" {
-		t.Fatalf("source_url = %q", status.Decision.SourceURL)
-	}
-}
-
-func TestPromptBarBareURLDoesNotRequireProvider(t *testing.T) {
-	t.Parallel()
-	rt, handler := testAPISetup(t)
-	rt.provider = &provider.StubProvider{Delay: 10 * time.Millisecond, FailErr: errors.New("provider unavailable")}
-	body := `{"text":"https://example.com/report.pdf"}`
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", body, "user-content")
-	w := httptest.NewRecorder()
-	handler.HandlePromptBar(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
-	}
-	var submitted promptBarSubmitResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &submitted); err != nil {
-		t.Fatalf("decode submission: %v", err)
-	}
-
-	statusReq := authenticatedRequest(http.MethodGet, submitted.StatusURL, "", "user-content")
-	statusW := httptest.NewRecorder()
-	handler.HandlePromptBarSubmission(statusW, statusReq)
-	if statusW.Code != http.StatusOK {
-		t.Fatalf("status lookup = %d body=%s", statusW.Code, statusW.Body.String())
-	}
-	var status promptBarSubmissionStatusResponse
-	if err := json.Unmarshal(statusW.Body.Bytes(), &status); err != nil {
-		t.Fatalf("decode status: %v", err)
-	}
-	if status.State != types.RunCompleted {
-		t.Fatalf("state = %q, want completed", status.State)
-	}
-	if status.Decision == nil || status.Decision.App != "pdf" {
-		t.Fatalf("decision = %#v, want pdf decision", status.Decision)
-	}
-	if strings.Contains(status.Error, "provider unavailable") {
-		t.Fatalf("bare URL routing leaked provider error: %q", status.Error)
-	}
-}
-
-func TestPromptBarContextualURLRoutesToTexture(t *testing.T) {
-	t.Parallel()
-	_, handler := testAPISetup(t)
-	body := `{"text":"Summarize https://example.com/report.pdf for a research note"}`
-	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", body, "user-content")
-	w := httptest.NewRecorder()
-	handler.HandlePromptBar(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
-	}
-	var submitted promptBarSubmitResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &submitted); err != nil {
-		t.Fatalf("decode submission: %v", err)
-	}
-
-	var status promptBarSubmissionStatusResponse
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		statusReq := authenticatedRequest(http.MethodGet, submitted.StatusURL, "", "user-content")
-		statusW := httptest.NewRecorder()
-		handler.HandlePromptBarSubmission(statusW, statusReq)
-		if statusW.Code != http.StatusOK {
-			t.Fatalf("status lookup = %d body=%s", statusW.Code, statusW.Body.String())
-		}
-		if err := json.Unmarshal(statusW.Body.Bytes(), &status); err != nil {
-			t.Fatalf("decode status: %v", err)
-		}
-		if status.Decision != nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if status.Decision == nil {
-		t.Fatalf("timed out waiting for conductor decision: %#v", status)
-	}
-	if status.Decision.App != "texture" {
-		t.Fatalf("decision app = %q, want texture", status.Decision.App)
-	}
-	if status.Decision.SourceURL != "" {
-		t.Fatalf("contextual URL should not be routed as bare source_url, got %q", status.Decision.SourceURL)
 	}
 }
 

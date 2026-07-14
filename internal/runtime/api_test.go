@@ -1710,7 +1710,6 @@ func acceptanceCheckpoint(rec types.RunAcceptanceRecord, kind, state string) *ty
 
 func TestRegisteredPublicRoutesExcludeLegacyRuntimeAPIs(t *testing.T) {
 	t.Parallel()
-	_, handler := testAPISetup(t)
 
 	cases := []struct {
 		method string

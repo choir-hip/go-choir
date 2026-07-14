@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 )
 
 func TestPodcastSearchUsesConfiguredProvider(t *testing.T) {
@@ -48,7 +50,7 @@ func TestPodcastSearchUsesConfiguredProvider(t *testing.T) {
 
 func TestPodcastSearchFallsBackToLibrary(t *testing.T) {
 	t.Setenv("CHOIR_PODCAST_SEARCH_URL", "http://127.0.0.1:1/search")
-	_, handler := testAPISetup(t)
+	rt, handler := testAPISetup(t)
 	createBody := `{
 		"source_type":"url",
 		"media_type":"application/rss+xml",
@@ -57,7 +59,7 @@ func TestPodcastSearchFallsBackToLibrary(t *testing.T) {
 		"source_url":"https://example.com/mission-gradient.rss",
 		"text_content":"<rss><channel><title>Mission Gradient Radio</title></channel></rss>"
 	}`
-	createW := runtimeHandlerRequest(t, handler.HandleContentItemsRoot, http.MethodPost, "/api/content/items", createBody, "user-podcast")
+	createW := runtimeHandlerRequest(t, rt.content.HandleContentItemsRoot, http.MethodPost, "/api/content/items", createBody, "user-podcast")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create content status = %d body=%s", createW.Code, createW.Body.String())
 	}
@@ -86,7 +88,7 @@ func TestPodcastRefreshSeedsExistingRSSContent(t *testing.T) {
 	}))
 	defer feed.Close()
 
-	_, handler := testAPISetup(t)
+	rt, handler := testAPISetup(t)
 	createBody := `{
 		"source_type":"url",
 		"media_type":"application/rss+xml",
@@ -95,7 +97,7 @@ func TestPodcastRefreshSeedsExistingRSSContent(t *testing.T) {
 		"source_url":` + strconv.Quote(feed.URL+"/feed.rss") + `,
 		"text_content":"<rss><channel><title>Existing Feed</title></channel></rss>"
 	}`
-	createW := runtimeHandlerRequest(t, handler.HandleContentItemsRoot, http.MethodPost, "/api/content/items", createBody, "user-podcast")
+	createW := runtimeHandlerRequest(t, rt.content.HandleContentItemsRoot, http.MethodPost, "/api/content/items", createBody, "user-podcast")
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create content status = %d body=%s", createW.Code, createW.Body.String())
 	}
@@ -114,7 +116,8 @@ func TestPodcastRefreshSeedsExistingRSSContent(t *testing.T) {
 }
 
 func TestPodcastSubscriptionsPersistAndListContent(t *testing.T) {
-	allowPrivateSourceFetchForTest(t)
+	previous := sourcefetch.SetAllowPrivateNetworkForTests(true)
+	t.Cleanup(func() { sourcefetch.SetAllowPrivateNetworkForTests(previous) })
 	feed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
 		_, _ = w.Write([]byte(`<?xml version="1.0"?>

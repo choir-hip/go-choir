@@ -1,4 +1,4 @@
-package runtime
+package content
 
 import (
 	"archive/zip"
@@ -19,9 +19,9 @@ import (
 	"time"
 )
 
-const contentExtractionAdapterVersion = 1
+const ExtractionAdapterVersion = 1
 
-type contentSelector struct {
+type Selector struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
 	Label     string `json:"label,omitempty"`
@@ -30,28 +30,26 @@ type contentSelector struct {
 	EndChar   int    `json:"end_char,omitempty"`
 }
 
-type contentExtraction struct {
+type Extraction struct {
 	MediaType string
 	AppHint   string
 	Title     string
 	Text      string
 	Adapter   string
 	Warnings  []string
-	Selectors []contentSelector
+	Selectors []Selector
 	Metadata  map[string]any
 }
 
-func extractContentDocument(ctx context.Context, sourceName, mediaType string, raw []byte) contentExtraction {
-	mediaType = normalizeMediaType(mediaType)
+func ExtractDocument(ctx context.Context, sourceName, mediaType string, raw []byte) Extraction {
+	mediaType = NormalizeMediaType(mediaType)
 	if mediaType == "" {
-		mediaType = detectMediaType("", sourceName, "")
+		mediaType = DetectMediaType("", sourceName, "")
 	}
-	extraction := contentExtraction{
-		MediaType: mediaType,
-		AppHint:   appHintForMedia(mediaType, "", sourceName),
-		Adapter:   "document_unhandled",
-		Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
-	}
+	extraction := Extraction{MediaType: mediaType,
+		AppHint:  AppHintForMedia(mediaType, "", sourceName),
+		Adapter:  "document_unhandled",
+		Metadata: map[string]any{"source_name": strings.TrimSpace(sourceName)}}
 	switch mediaType {
 	case "application/pdf":
 		extraction = extractPDFDocument(ctx, sourceName, raw)
@@ -63,28 +61,24 @@ func extractContentDocument(ctx context.Context, sourceName, mediaType string, r
 		extraction = extractPPTXDocument(ctx, sourceName, raw)
 	case "text/html", "application/xhtml+xml":
 		title, text := extractReadableHTML(raw)
-		extraction = contentExtraction{
-			MediaType: mediaType,
-			AppHint:   "browser",
-			Title:     title,
-			Text:      text,
-			Adapter:   "html_readability_lite",
-			Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
-		}
+		extraction = Extraction{MediaType: mediaType,
+			AppHint:  "browser",
+			Title:    title,
+			Text:     text,
+			Adapter:  "html_readability_lite",
+			Metadata: map[string]any{"source_name": strings.TrimSpace(sourceName)}}
 	default:
 		if isTextMedia(mediaType) {
 			text := strings.TrimSpace(string(raw))
-			extraction = contentExtraction{
-				MediaType: mediaType,
-				AppHint:   appHintForMedia(mediaType, "", sourceName),
-				Text:      text,
-				Adapter:   "plain_text_decode",
-				Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
-			}
+			extraction = Extraction{MediaType: mediaType,
+				AppHint:  AppHintForMedia(mediaType, "", sourceName),
+				Text:     text,
+				Adapter:  "plain_text_decode",
+				Metadata: map[string]any{"source_name": strings.TrimSpace(sourceName)}}
 		}
 	}
-	extraction.MediaType = firstNonEmptyString(extraction.MediaType, mediaType)
-	extraction.AppHint = normalizeAppHint(firstNonEmptyString(extraction.AppHint, appHintForMedia(extraction.MediaType, "", sourceName)))
+	extraction.MediaType = firstNonEmpty(extraction.MediaType, mediaType)
+	extraction.AppHint = NormalizeAppHint(firstNonEmpty(extraction.AppHint, AppHintForMedia(extraction.MediaType, "", sourceName)))
 	extraction.Text = strings.TrimSpace(extraction.Text)
 	if len(extraction.Text) > maxStoredExtractedText {
 		extraction.Text = extraction.Text[:maxStoredExtractedText]
@@ -97,7 +91,7 @@ func extractContentDocument(ctx context.Context, sourceName, mediaType string, r
 		extraction.Metadata = map[string]any{}
 	}
 	extraction.Metadata["extraction_adapter"] = extraction.Adapter
-	extraction.Metadata["extraction_adapter_version"] = contentExtractionAdapterVersion
+	extraction.Metadata["extraction_adapter_version"] = ExtractionAdapterVersion
 	extraction.Metadata["extraction_warnings"] = extraction.Warnings
 	extraction.Metadata["selectors"] = extraction.Selectors
 	extraction.Metadata["selector_count"] = len(extraction.Selectors)
@@ -107,13 +101,11 @@ func extractContentDocument(ctx context.Context, sourceName, mediaType string, r
 	return extraction
 }
 
-func extractPDFDocument(ctx context.Context, sourceName string, raw []byte) contentExtraction {
-	extraction := contentExtraction{
-		MediaType: "application/pdf",
-		AppHint:   "pdf",
-		Adapter:   "pdf_poppler_pdftotext",
-		Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
-	}
+func extractPDFDocument(ctx context.Context, sourceName string, raw []byte) Extraction {
+	extraction := Extraction{MediaType: "application/pdf",
+		AppHint:  "pdf",
+		Adapter:  "pdf_poppler_pdftotext",
+		Metadata: map[string]any{"source_name": strings.TrimSpace(sourceName)}}
 	text, warnings := runDocumentToolOnTempFile(ctx, "pdftotext", []string{"-layout"}, ".pdf", raw, []string{"-"})
 	extraction.Warnings = append(extraction.Warnings, warnings...)
 	if strings.TrimSpace(text) != "" {
@@ -126,7 +118,7 @@ func extractPDFDocument(ctx context.Context, sourceName string, raw []byte) cont
 		extraction.Warnings = append(extraction.Warnings, infoWarnings...)
 	}
 	if strings.TrimSpace(extraction.Text) == "" {
-		if fallback := strings.TrimSpace(extractPDFLiteralText(raw)); fallback != "" {
+		if fallback := strings.TrimSpace(ExtractPDFLiteralText(raw)); fallback != "" {
 			extraction.Adapter = "pdf_literal_text_projection_fallback"
 			extraction.Text = fallback
 			extraction.Selectors = pdfPageSelectors(extraction.Text)
@@ -139,13 +131,11 @@ func extractPDFDocument(ctx context.Context, sourceName string, raw []byte) cont
 	return extraction
 }
 
-func extractDOCXDocument(ctx context.Context, sourceName string, raw []byte) contentExtraction {
-	extraction := contentExtraction{
-		MediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		AppHint:   agentprofile.Texture,
-		Adapter:   "docx_pandoc_markdown",
-		Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
-	}
+func extractDOCXDocument(ctx context.Context, sourceName string, raw []byte) Extraction {
+	extraction := Extraction{MediaType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		AppHint:  agentprofile.Texture,
+		Adapter:  "docx_pandoc_markdown",
+		Metadata: map[string]any{"source_name": strings.TrimSpace(sourceName)}}
 	text, warnings := runDocumentToolOnTempFile(ctx, "pandoc", []string{"-f", "docx", "-t", "markdown"}, ".docx", raw, nil)
 	extraction.Warnings = append(extraction.Warnings, warnings...)
 	if strings.TrimSpace(text) == "" {
@@ -161,13 +151,11 @@ func extractDOCXDocument(ctx context.Context, sourceName string, raw []byte) con
 	return extraction
 }
 
-func extractEPUBDocument(ctx context.Context, sourceName string, raw []byte) contentExtraction {
-	extraction := contentExtraction{
-		MediaType: "application/epub+zip",
-		AppHint:   "epub",
-		Adapter:   "epub_pandoc_markdown",
-		Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
-	}
+func extractEPUBDocument(ctx context.Context, sourceName string, raw []byte) Extraction {
+	extraction := Extraction{MediaType: "application/epub+zip",
+		AppHint:  "epub",
+		Adapter:  "epub_pandoc_markdown",
+		Metadata: map[string]any{"source_name": strings.TrimSpace(sourceName)}}
 	text, warnings := runDocumentToolOnTempFile(ctx, "pandoc", []string{"-f", "epub", "-t", "markdown"}, ".epub", raw, nil)
 	extraction.Warnings = append(extraction.Warnings, warnings...)
 	if strings.TrimSpace(text) == "" {
@@ -183,14 +171,12 @@ func extractEPUBDocument(ctx context.Context, sourceName string, raw []byte) con
 	return extraction
 }
 
-func extractPPTXDocument(ctx context.Context, sourceName string, raw []byte) contentExtraction {
+func extractPPTXDocument(ctx context.Context, sourceName string, raw []byte) Extraction {
 	_ = ctx
-	extraction := contentExtraction{
-		MediaType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-		AppHint:   "slides",
-		Adapter:   "pptx_ooxml_slide_text_projection",
-		Metadata:  map[string]any{"source_name": strings.TrimSpace(sourceName)},
-	}
+	extraction := Extraction{MediaType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		AppHint:  "slides",
+		Adapter:  "pptx_ooxml_slide_text_projection",
+		Metadata: map[string]any{"source_name": strings.TrimSpace(sourceName)}}
 	slides, notes, warnings := extractPPTXSlidesFromOOXML(raw)
 	extraction.Warnings = append(extraction.Warnings, warnings...)
 	var parts []string
@@ -201,12 +187,10 @@ func extractPPTXDocument(ctx context.Context, sourceName string, raw []byte) con
 			continue
 		}
 		parts = append(parts, label+"\n\n"+body)
-		extraction.Selectors = append(extraction.Selectors, contentSelector{
-			ID:    fmt.Sprintf("slide-%d", i+1),
+		extraction.Selectors = append(extraction.Selectors, Selector{ID: fmt.Sprintf("slide-%d", i+1),
 			Kind:  "slide",
 			Label: label,
-			Text:  body,
-		})
+			Text:  body})
 		if extraction.Title == "" {
 			extraction.Title = firstLine(body)
 		}
@@ -215,12 +199,10 @@ func extractPPTXDocument(ctx context.Context, sourceName string, raw []byte) con
 		if strings.TrimSpace(note) == "" {
 			continue
 		}
-		extraction.Selectors = append(extraction.Selectors, contentSelector{
-			ID:    fmt.Sprintf("notes-%d", i+1),
+		extraction.Selectors = append(extraction.Selectors, Selector{ID: fmt.Sprintf("notes-%d", i+1),
 			Kind:  "speaker_notes",
 			Label: fmt.Sprintf("Speaker notes %d", i+1),
-			Text:  strings.TrimSpace(note),
-		})
+			Text:  strings.TrimSpace(note)})
 	}
 	extraction.Text = strings.TrimSpace(strings.Join(parts, "\n\n---\n\n"))
 	extraction.Metadata["slide_count"] = len(slides)
@@ -260,7 +242,7 @@ func runDocumentToolOnTempFile(ctx context.Context, tool string, prefixArgs []st
 	if err != nil {
 		warning := tool + "_failed"
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			warning += ": " + truncateString(msg, 500)
+			warning += ": " + TruncateString(msg, 500)
 		} else {
 			warning += ": " + err.Error()
 		}
@@ -293,7 +275,7 @@ func extractDOCXTextFromOOXML(raw []byte) string {
 	if len(documentXML) == 0 {
 		return ""
 	}
-	return strings.TrimSpace(docxDocumentXMLToMarkdown(documentXML))
+	return strings.TrimSpace(DOCXDocumentXMLToMarkdown(documentXML))
 }
 
 func extractEPUBTextFromZip(raw []byte) string {
@@ -411,10 +393,10 @@ func trailingNumber(value string) int {
 	return n
 }
 
-func pdfPageSelectors(text string) []contentSelector {
+func pdfPageSelectors(text string) []Selector {
 	if strings.Contains(text, "\f") {
 		pages := strings.Split(text, "\f")
-		selectors := make([]contentSelector, 0, len(pages))
+		selectors := make([]Selector, 0, len(pages))
 		offset := 0
 		for i, page := range pages {
 			page = strings.TrimSpace(page)
@@ -422,14 +404,12 @@ func pdfPageSelectors(text string) []contentSelector {
 				offset += len(pages[i]) + 1
 				continue
 			}
-			selectors = append(selectors, contentSelector{
-				ID:        fmt.Sprintf("page-%d", i+1),
+			selectors = append(selectors, Selector{ID: fmt.Sprintf("page-%d", i+1),
 				Kind:      "page",
 				Label:     fmt.Sprintf("Page %d", i+1),
 				Text:      page,
 				StartChar: offset,
-				EndChar:   offset + len(pages[i]),
-			})
+				EndChar:   offset + len(pages[i])})
 			offset += len(pages[i]) + 1
 		}
 		return selectors
@@ -437,8 +417,8 @@ func pdfPageSelectors(text string) []contentSelector {
 	return chunkContentSelectors(text, "page", 12000)
 }
 
-func markdownStructureSelectors(text string) []contentSelector {
-	var selectors []contentSelector
+func markdownStructureSelectors(text string) []Selector {
+	var selectors []Selector
 	headingRE := regexp.MustCompile(`(?m)^(#{1,6})\s+(.+)$`)
 	matches := headingRE.FindAllStringSubmatchIndex(text, -1)
 	for i, match := range matches {
@@ -448,14 +428,12 @@ func markdownStructureSelectors(text string) []contentSelector {
 			end = matches[i+1][0]
 		}
 		label := strings.TrimSpace(text[match[4]:match[5]])
-		selectors = append(selectors, contentSelector{
-			ID:        fmt.Sprintf("section-%d", i+1),
+		selectors = append(selectors, Selector{ID: fmt.Sprintf("section-%d", i+1),
 			Kind:      "section",
 			Label:     label,
 			Text:      strings.TrimSpace(text[start:end]),
 			StartChar: start,
-			EndChar:   end,
-		})
+			EndChar:   end})
 	}
 	if len(selectors) == 0 {
 		return chunkContentSelectors(text, "chunk", 12000)
@@ -463,7 +441,7 @@ func markdownStructureSelectors(text string) []contentSelector {
 	return selectors
 }
 
-func chunkContentSelectors(text, kind string, chunkSize int) []contentSelector {
+func chunkContentSelectors(text, kind string, chunkSize int) []Selector {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil
@@ -471,20 +449,18 @@ func chunkContentSelectors(text, kind string, chunkSize int) []contentSelector {
 	if chunkSize <= 0 {
 		chunkSize = 12000
 	}
-	var selectors []contentSelector
+	var selectors []Selector
 	for start, idx := 0, 1; start < len(text); idx++ {
 		end := start + chunkSize
 		if end > len(text) {
 			end = len(text)
 		}
-		selectors = append(selectors, contentSelector{
-			ID:        fmt.Sprintf("%s-%d", kind, idx),
+		selectors = append(selectors, Selector{ID: fmt.Sprintf("%s-%d", kind, idx),
 			Kind:      kind,
 			Label:     fmt.Sprintf("%s %d", strings.Title(kind), idx),
 			Text:      strings.TrimSpace(text[start:end]),
 			StartChar: start,
-			EndChar:   end,
-		})
+			EndChar:   end})
 		start = end
 	}
 	return selectors
@@ -511,7 +487,7 @@ func parsePDFInfo(raw string) map[string]any {
 	return out
 }
 
-func selectorsFromContentMetadata(metadata json.RawMessage) []contentSelector {
+func SelectorsFromMetadata(metadata json.RawMessage) []Selector {
 	var envelope map[string]any
 	if len(metadata) == 0 || json.Unmarshal(metadata, &envelope) != nil {
 		return nil
@@ -524,7 +500,7 @@ func selectorsFromContentMetadata(metadata json.RawMessage) []contentSelector {
 	if err != nil {
 		return nil
 	}
-	var selectors []contentSelector
+	var selectors []Selector
 	if err := json.Unmarshal(data, &selectors); err != nil {
 		return nil
 	}

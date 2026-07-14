@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -71,7 +72,7 @@ func revisionStructureSummaryFromRecord(rev types.Revision) textureRevisionStruc
 		AuthorKind:        rev.AuthorKind,
 		AuthorLabel:       rev.AuthorLabel,
 		CreatedAt:         rev.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		ContentHash:       "sha256:" + contentHash(rev.Content),
+		ContentHash:       "sha256:" + contentowner.ContentHash(rev.Content),
 		LineCount:         len(lines),
 		SourceMarkerCount: textureRevisionSourceMarkerCount(rev),
 	}
@@ -129,7 +130,7 @@ func textureTableStructureSummaries(lines []string) []textureTableStructureSumma
 			return
 		}
 		current.EndLine = endLine
-		current.Signature = "sha256:" + contentHash(strings.Join(signatureCells, "\n"))
+		current.Signature = "sha256:" + contentowner.ContentHash(strings.Join(signatureCells, "\n"))
 		tables = append(tables, *current)
 		current = nil
 		signatureCells = nil

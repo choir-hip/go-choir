@@ -2,7 +2,9 @@ package apihandler
 
 import (
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
+	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
+	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -10,7 +12,7 @@ import (
 // RegisterRoutes registers the canonical sandbox API route table.
 // The health handler overrides the default server health handler to report
 // runtime readiness.
-func RegisterRoutes(s *server.Server, h *runtime.APIHandler, api *Handler, browser *browsercontrol.Handler, desktop *desktopstate.Handler, enableTestAPIs bool) {
+func RegisterRoutes(s *server.Server, h *runtime.APIHandler, api *Handler, browser *browsercontrol.Handler, desktop *desktopstate.Handler, contentOwner *content.Service, mediaOwner *mediastate.Handler, enableTestAPIs bool) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
@@ -21,16 +23,16 @@ func RegisterRoutes(s *server.Server, h *runtime.APIHandler, api *Handler, brows
 	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)
 	s.HandleFunc("/api/podcast/subscriptions", h.HandlePodcastSubscriptions)
 	s.HandleFunc("/api/podcast/search", h.HandlePodcastSearch)
-	s.HandleFunc("/api/content/items", h.HandleContentItemsRoot)
-	s.HandleFunc("/api/content/", h.HandleContentRouter)
+	s.HandleFunc("/api/content/items", contentOwner.HandleContentItemsRoot)
+	s.HandleFunc("/api/content/", contentOwner.HandleContentRouter)
 	s.HandleFunc("/api/ws", h.HandleLiveWS)
 	s.HandleFunc("/api/browser/capabilities", browser.HandleBrowserCapabilities)
 	s.HandleFunc("/api/browser/sessions", browser.HandleBrowserSessionsRoot)
 	s.HandleFunc("/api/browser/sessions/", browser.HandleBrowserSessionRouter)
 	s.HandleFunc("/api/desktop/state", desktop.HandleDesktopState)
-	s.HandleFunc("/api/media/progress", h.HandleMediaProgress)
-	s.HandleFunc("/api/media/recents", h.HandleMediaRecents)
-	s.HandleFunc("/api/preferences/theme", h.HandleThemePreference)
+	s.HandleFunc("/api/media/progress", mediaOwner.HandleMediaProgress)
+	s.HandleFunc("/api/media/recents", mediaOwner.HandleMediaRecents)
+	s.HandleFunc("/api/preferences/theme", mediaOwner.HandleThemePreference)
 	s.HandleFunc("/api/computers/", h.HandleComputersRouter)
 	s.HandleFunc("/api/app-change-packages", h.HandleAppChangePackagesRoot)
 	s.HandleFunc("/api/app-change-packages/", h.HandleAppChangePackageDetail)

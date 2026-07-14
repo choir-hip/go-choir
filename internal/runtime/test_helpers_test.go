@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -81,13 +82,14 @@ func testAPISetup(t *testing.T) (*Runtime, *APIHandler) {
 		t.Fatalf("open store: %v", err)
 	}
 
+	bus := events.NewEventBus()
 	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, events.NewEventBus(), provider.NewStubProvider(0))
+	}, s, bus, provider.NewStubProvider(0), WithContentService(contentowner.NewService(s, bus)))
 	setTestDispatch(rt, s)
 	handler := NewAPIHandler(rt)
 
@@ -204,13 +206,14 @@ func testRuntime(t *testing.T) (*Runtime, *store.Store) {
 		t.Fatalf("open store: %v", err)
 	}
 
+	bus := events.NewEventBus()
 	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		PromptRoot:          promptRoot,
 		ProviderTimeout:     time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, events.NewEventBus(), provider.NewStubProvider(0))
+	}, s, bus, provider.NewStubProvider(0), WithContentService(contentowner.NewService(s, bus)))
 
 	setTestDispatch(rt, s)
 

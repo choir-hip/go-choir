@@ -3,13 +3,17 @@
 package runtime
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -19,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -3468,6 +3473,38 @@ func TestResearcherReadContentItemReturnsPrivateSourceArtifact(t *testing.T) {
 	}
 }
 
+func buildRuntimeMinimalPPTX(t *testing.T, slides []string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	add := func(name, body string) {
+		t.Helper()
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("create pptx part %s: %v", name, err)
+		}
+		if _, err := w.Write([]byte(body)); err != nil {
+			t.Fatalf("write pptx part %s: %v", name, err)
+		}
+	}
+	add("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>`)
+	for i, slide := range slides {
+		var body strings.Builder
+		body.WriteString(`<?xml version="1.0" encoding="UTF-8"?><p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree>`)
+		for _, line := range strings.Split(slide, "\n") {
+			body.WriteString(`<p:sp><p:txBody><a:p><a:r><a:t>`)
+			body.WriteString(html.EscapeString(line))
+			body.WriteString(`</a:t></a:r></a:p></p:txBody></p:sp>`)
+		}
+		body.WriteString(`</p:spTree></p:cSld></p:sld>`)
+		add("ppt/slides/slide"+strconv.Itoa(i+1)+".xml", body.String())
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close pptx zip: %v", err)
+	}
+	return buf.Bytes()
+}
+
 func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 	rt, _, cwd := testRuntimeWithTempCWD(t)
 	if err := rt.InstallDefaultAgentTools(cwd); err != nil {
@@ -3478,7 +3515,7 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(filesRoot, "imports"), 0o755); err != nil {
 		t.Fatalf("create imports dir: %v", err)
 	}
-	pptxBytes := buildMinimalPPTX(t, []string{
+	pptxBytes := buildRuntimeMinimalPPTX(t, []string{
 		"Mission gradient\nFrozen source corpus",
 		"Recall check\nExact slide detail",
 	})
@@ -3519,7 +3556,7 @@ func TestResearcherDocumentSelectorToolsReadPPTXSourceArtifact(t *testing.T) {
 	if contentID == "" || imported["app_hint"] != "slides" {
 		t.Fatalf("imported = %#v", imported)
 	}
-	expectedHash := contentHashBytes(pptxBytes)
+	expectedHash := contentowner.ContentHashBytes(pptxBytes)
 	if imported["content_hash"] != expectedHash {
 		t.Fatalf("content_hash = %#v, want raw artifact hash %s", imported["content_hash"], expectedHash)
 	}
@@ -6685,12 +6722,13 @@ func testRuntimeWithTempCWD(t *testing.T) (*Runtime, *store.Store, string) {
 		t.Fatalf("open store: %v", err)
 	}
 
+	bus := events.NewEventBus()
 	rt := New(provideriface.Config{
 		SandboxID:           "sandbox-test",
 		StorePath:           dbPath,
 		ProviderTimeout:     5 * time.Second,
 		SupervisionInterval: time.Hour,
-	}, s, events.NewEventBus(), provider.NewStubProvider(10*time.Millisecond))
+	}, s, bus, provider.NewStubProvider(10*time.Millisecond), WithContentService(contentowner.NewService(s, bus)))
 	setTestDispatch(rt, s)
 
 	t.Cleanup(func() {

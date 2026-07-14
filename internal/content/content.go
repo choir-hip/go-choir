@@ -1,4 +1,4 @@
-package runtime
+package content
 
 import (
 	"bytes"
@@ -22,10 +22,24 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+type Service struct {
+	store *store.Store
+	bus   *events.EventBus
+}
+
+func NewService(st *store.Store, bus *events.EventBus) *Service {
+	return &Service{store: st, bus: bus}
+}
+
+type apiError struct {
+	Error string `json:"error"`
+}
 
 const maxImportedContentBytes = 2 * 1024 * 1024
 const maxImportedDocumentBytes = 25 * 1024 * 1024
@@ -88,7 +102,7 @@ type fetchedURLContent struct {
 	RawBytes    int
 	Rungs       []extractionRung
 	Warnings    []string
-	Extraction  *contentExtraction
+	Extraction  *Extraction
 }
 
 type youtubeTranscriptSegment struct {
@@ -120,35 +134,35 @@ type youtubeCaptionTrack struct {
 	Kind         string `json:"kind"`
 }
 
-func (h *APIHandler) HandleContentItemsRoot(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleContentItemsRoot(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		h.HandleContentList(w, r)
+		s.HandleContentList(w, r)
 	case http.MethodPost:
-		h.HandleContentCreate(w, r)
+		s.HandleContentCreate(w, r)
 	default:
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 	}
 }
 
-func (h *APIHandler) HandleContentRouter(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleContentRouter(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/api/content/import-url" {
-		h.HandleContentImportURL(w, r)
+		s.HandleContentImportURL(w, r)
 		return
 	}
 	if r.URL.Path == "/api/content/import-file" {
-		h.HandleContentImportFile(w, r)
+		s.HandleContentImportFile(w, r)
 		return
 	}
 	const prefix = "/api/content/items/"
 	if strings.HasPrefix(r.URL.Path, prefix) {
-		h.HandleContentItem(w, r)
+		s.HandleContentItem(w, r)
 		return
 	}
 	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "content endpoint not found"})
 }
 
-func (h *APIHandler) HandleContentList(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleContentList(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -160,7 +174,7 @@ func (h *APIHandler) HandleContentList(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	items, err := h.rt.Store().ListContentItems(r.Context(), ownerID, limit)
+	items, err := s.store.ListContentItems(r.Context(), ownerID, limit)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list content items"})
 		return
@@ -168,7 +182,7 @@ func (h *APIHandler) HandleContentList(w http.ResponseWriter, r *http.Request) {
 	writeAPIJSON(w, http.StatusOK, contentItemListResponse{Items: items})
 }
 
-func (h *APIHandler) HandleContentItem(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleContentItem(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -183,7 +197,7 @@ func (h *APIHandler) HandleContentItem(w http.ResponseWriter, r *http.Request) {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "content item not found"})
 		return
 	}
-	item, err := h.rt.Store().GetContentItem(r.Context(), ownerID, contentID)
+	item, err := s.store.GetContentItem(r.Context(), ownerID, contentID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "content item not found"})
@@ -195,7 +209,7 @@ func (h *APIHandler) HandleContentItem(w http.ResponseWriter, r *http.Request) {
 	writeAPIJSON(w, http.StatusOK, item)
 }
 
-func (h *APIHandler) HandleContentCreate(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleContentCreate(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -213,15 +227,15 @@ func (h *APIHandler) HandleContentCreate(w http.ResponseWriter, r *http.Request)
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
-	if err := h.rt.Store().CreateContentItem(r.Context(), item); err != nil {
+	if err := s.CreateItem(r.Context(), ownerID, item); err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create content item"})
 		return
 	}
-	_, _ = h.rt.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventContentItemCreated, contentItemEventPayload(item))
+	_, _ = s.emitProductEvent(r.Context(), ownerID, requestDesktopID(r), types.EventContentItemCreated, contentItemEventPayload(item))
 	writeAPIJSON(w, http.StatusCreated, item)
 }
 
-func (h *APIHandler) HandleContentImportURL(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleContentImportURL(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -238,7 +252,7 @@ func (h *APIHandler) HandleContentImportURL(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid URL import request"})
 		return
 	}
-	item, err := h.rt.ImportURLContent(r.Context(), ownerID, strings.TrimSpace(req.URL), strings.TrimSpace(req.Query))
+	item, err := s.ImportURL(r.Context(), ownerID, strings.TrimSpace(req.URL), strings.TrimSpace(req.Query))
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
 		return
@@ -246,7 +260,7 @@ func (h *APIHandler) HandleContentImportURL(w http.ResponseWriter, r *http.Reque
 	writeAPIJSON(w, http.StatusCreated, item)
 }
 
-func (h *APIHandler) HandleContentImportFile(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HandleContentImportFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -263,7 +277,7 @@ func (h *APIHandler) HandleContentImportFile(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid file import request"})
 		return
 	}
-	item, err := h.rt.ImportFileContent(r.Context(), ownerID, strings.TrimSpace(req.FilePath))
+	item, err := s.ImportFile(r.Context(), ownerID, strings.TrimSpace(req.FilePath))
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadGateway, apiError{Error: err.Error()})
 		return
@@ -280,7 +294,7 @@ func buildContentItem(ownerID string, req contentCreateRequest) (types.ContentIt
 	filePath := strings.TrimSpace(req.FilePath)
 	text := strings.TrimSpace(req.TextContent)
 	if sourceType == "url" || sourceType == "extracted_url" {
-		if _, err := normalizeHTTPURL(sourceURL); err != nil {
+		if _, err := NormalizeHTTPURL(sourceURL); err != nil {
 			return types.ContentItem{}, err
 		}
 	}
@@ -293,17 +307,17 @@ func buildContentItem(ownerID string, req contentCreateRequest) (types.ContentIt
 		return types.ContentItem{}, fmt.Errorf("content item needs source_url, file_path, or text_content")
 	}
 	now := time.Now().UTC()
-	mediaType := normalizeMediaType(req.MediaType)
+	mediaType := NormalizeMediaType(req.MediaType)
 	if mediaType == "" {
-		mediaType = detectMediaType(sourceURL, filePath, "")
+		mediaType = DetectMediaType(sourceURL, filePath, "")
 	}
-	hash := contentHash(text)
+	hash := ContentHash(text)
 	item := types.ContentItem{
 		ContentID:    uuid.NewString(),
 		OwnerID:      ownerID,
 		SourceType:   sourceType,
 		MediaType:    mediaType,
-		AppHint:      normalizeAppHint(nonEmpty(req.AppHint, appHintForMedia(mediaType, sourceURL, filePath))),
+		AppHint:      NormalizeAppHint(nonEmpty(req.AppHint, AppHintForMedia(mediaType, sourceURL, filePath))),
 		Title:        strings.TrimSpace(req.Title),
 		SourceURL:    sourceURL,
 		CanonicalURL: strings.TrimSpace(req.CanonicalURL),
@@ -316,23 +330,23 @@ func buildContentItem(ownerID string, req contentCreateRequest) (types.ContentIt
 		UpdatedAt:    now,
 	}
 	if item.Title == "" {
-		item.Title = fallbackContentTitle(item)
+		item.Title = FallbackContentTitle(item)
 	}
 	return item, nil
 }
 
-func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query string) (types.ContentItem, error) {
-	normalizedURL, err := normalizeHTTPURL(rawURL)
+func (s *Service) ImportURL(ctx context.Context, ownerID, rawURL, query string) (types.ContentItem, error) {
+	normalizedURL, err := NormalizeHTTPURL(rawURL)
 	if err != nil {
 		return types.ContentItem{}, err
 	}
 	if err := sourcefetch.ValidateURL(normalizedURL); err != nil {
 		return types.ContentItem{}, err
 	}
-	if isYouTubeURL(normalizedURL) {
-		return rt.importYouTubeURLContent(ctx, ownerID, normalizedURL)
+	if IsYouTubeURL(normalizedURL) {
+		return s.importYouTubeURLContent(ctx, ownerID, normalizedURL)
 	}
-	if existing, ok := rt.findExistingURLContentItem(ctx, ownerID, normalizedURL, ""); ok && reusableImportedURLContent(existing) {
+	if existing, ok := s.findExistingURLContentItem(ctx, ownerID, normalizedURL, ""); ok && reusableImportedURLContent(existing) {
 		return existing, nil
 	}
 	started := time.Now().UTC()
@@ -382,7 +396,7 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 		"hash_algorithm": "sha256",
 	})
 	sourceMediaType := selected.MediaType
-	sourceAppHint := appHintForMedia(sourceMediaType, selected.URL, "")
+	sourceAppHint := AppHintForMedia(sourceMediaType, selected.URL, "")
 	originalMediaType := ""
 	if isHTMLMedia(selected.MediaType) && strings.TrimSpace(selected.Text) != "" {
 		originalMediaType = selected.MediaType
@@ -402,7 +416,7 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 			metadataFields[key] = value
 		}
 		metadataFields["source_media_type"] = selected.MediaType
-		metadataFields["extracted_text_hash"] = contentHash(selected.Text)
+		metadataFields["extracted_text_hash"] = ContentHash(selected.Text)
 	}
 	if originalMediaType != "" {
 		metadataFields["original_media_type"] = originalMediaType
@@ -433,40 +447,40 @@ func (rt *Runtime) ImportURLContent(ctx context.Context, ownerID, rawURL, query 
 	} else if item.ContentHash == "" {
 		item.ContentHash = selected.RawHash
 	}
-	if err := rt.Store().CreateContentItem(ctx, item); err != nil {
+	if err := s.CreateItem(ctx, ownerID, item); err != nil {
 		return types.ContentItem{}, err
 	}
-	_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(item))
+	_, _ = s.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(item))
 	return item, nil
 }
 
-func (rt *Runtime) ImportFileContent(ctx context.Context, ownerID, filePath string) (types.ContentItem, error) {
-	filePath = normalizeTextureSourcePath(filePath)
-	if filePath == "" || isTextureShortcutPath(filePath) {
+func (s *Service) ImportFile(ctx context.Context, ownerID, filePath string) (types.ContentItem, error) {
+	filePath = NormalizeSourcePath(filePath)
+	if filePath == "" || IsTextureShortcutPath(filePath) {
 		return types.ContentItem{}, fmt.Errorf("file_path is required")
 	}
-	if existing, ok := rt.findExistingFileContentItem(ctx, ownerID, filePath); ok {
+	if existing, ok := s.findExistingFileContentItem(ctx, ownerID, filePath); ok {
 		return existing, nil
 	}
-	raw, ok := readTextureSourceFileBytes(filePath)
+	raw, ok := ReadSourceFileBytes(filePath)
 	if !ok {
 		return types.ContentItem{}, fmt.Errorf("file content unavailable for %s", filePath)
 	}
 	now := time.Now().UTC()
-	mediaType := detectMediaType("", filePath, "")
-	extracted := extractContentDocument(ctx, filePath, mediaType, raw)
+	mediaType := DetectMediaType("", filePath, "")
+	extracted := ExtractDocument(ctx, filePath, mediaType, raw)
 	provenance, _ := json.Marshal(map[string]any{
 		"source_path":           filePath,
 		"imported_at":           now.Format(time.RFC3339Nano),
-		"raw_content_hash":      contentHashBytes(raw),
+		"raw_content_hash":      ContentHashBytes(raw),
 		"hash_algorithm":        "sha256",
 		"untrusted_source_text": true,
 	})
 	metadataFields := map[string]any{
 		"source_path":         filePath,
 		"source_media_type":   mediaType,
-		"raw_content_hash":    "sha256:" + contentHashBytes(raw),
-		"extracted_text_hash": contentHash(extracted.Text),
+		"raw_content_hash":    "sha256:" + ContentHashBytes(raw),
+		"extracted_text_hash": ContentHash(extracted.Text),
 	}
 	for key, value := range extracted.Metadata {
 		metadataFields[key] = value
@@ -476,7 +490,7 @@ func (rt *Runtime) ImportFileContent(ctx context.Context, ownerID, filePath stri
 		SourceType:  "file",
 		MediaType:   mediaType,
 		AppHint:     extracted.AppHint,
-		Title:       firstNonEmptyString(extracted.Title, path.Base(filePath)),
+		Title:       firstNonEmpty(extracted.Title, path.Base(filePath)),
 		FilePath:    filePath,
 		TextContent: extracted.Text,
 		Metadata:    metadata,
@@ -486,24 +500,24 @@ func (rt *Runtime) ImportFileContent(ctx context.Context, ownerID, filePath stri
 	if err != nil {
 		return types.ContentItem{}, err
 	}
-	item.ContentHash = contentHashBytes(raw)
-	if err := rt.Store().CreateContentItem(ctx, item); err != nil {
+	item.ContentHash = ContentHashBytes(raw)
+	if err := s.CreateItem(ctx, ownerID, item); err != nil {
 		return types.ContentItem{}, err
 	}
-	_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(item))
+	_, _ = s.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(item))
 	return item, nil
 }
 
-func (rt *Runtime) findExistingFileContentItem(ctx context.Context, ownerID, filePath string) (types.ContentItem, bool) {
-	if rt == nil || rt.Store() == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(filePath) == "" {
+func (s *Service) findExistingFileContentItem(ctx context.Context, ownerID, filePath string) (types.ContentItem, bool) {
+	if s == nil || s.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(filePath) == "" {
 		return types.ContentItem{}, false
 	}
-	items, err := rt.Store().ListContentItems(ctx, ownerID, 1000)
+	items, err := s.store.ListContentItems(ctx, ownerID, 1000)
 	if err != nil {
 		return types.ContentItem{}, false
 	}
 	for _, item := range items {
-		if item.SourceType == "file" && normalizeTextureSourcePath(item.FilePath) == filePath {
+		if item.SourceType == "file" && NormalizeSourcePath(item.FilePath) == filePath {
 			return item, true
 		}
 	}
@@ -545,10 +559,10 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	contentType := normalizeMediaType(resp.Header.Get("Content-Type"))
-	mediaType := detectMediaType(targetURL, "", contentType)
+	contentType := NormalizeMediaType(resp.Header.Get("Content-Type"))
+	mediaType := DetectMediaType(targetURL, "", contentType)
 	readLimit := maxImportedContentBytes
-	if isDocumentMedia(mediaType) {
+	if IsDocumentMedia(mediaType) {
 		readLimit = maxImportedDocumentBytes
 	}
 	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(readLimit)+1))
@@ -561,7 +575,7 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 	}
 	result.StatusCode = resp.StatusCode
 	result.ContentType = contentType
-	result.RawHash = contentHashBytes(raw)
+	result.RawHash = ContentHashBytes(raw)
 	result.RawBytes = len(raw)
 	result.Rungs = append(result.Rungs, extractionRung{
 		Name:        fetchRungName,
@@ -577,14 +591,14 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 
 	result.MediaType = mediaType
 	if isHTMLMedia(result.MediaType) {
-		extracted := extractContentDocument(ctx, targetURL, result.MediaType, raw)
+		extracted := ExtractDocument(ctx, targetURL, result.MediaType, raw)
 		result.Title = extracted.Title
 		result.Text = extracted.Text
 		result.Extraction = &extracted
 		result.Warnings = append(result.Warnings, extracted.Warnings...)
 		result.Rungs = append(result.Rungs, extractionRung{Name: htmlRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
 	} else if isTextMedia(result.MediaType) {
-		extracted := extractContentDocument(ctx, targetURL, result.MediaType, raw)
+		extracted := ExtractDocument(ctx, targetURL, result.MediaType, raw)
 		result.Title = extracted.Title
 		result.Text = extracted.Text
 		result.Extraction = &extracted
@@ -593,8 +607,8 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 			result.Title = extractRSSFeedTitle(raw)
 		}
 		result.Rungs = append(result.Rungs, extractionRung{Name: textRungName, Status: statusForText(result.Text), TextChars: len(result.Text)})
-	} else if isDocumentMedia(result.MediaType) {
-		extracted := extractContentDocument(ctx, targetURL, result.MediaType, raw)
+	} else if IsDocumentMedia(result.MediaType) {
+		extracted := ExtractDocument(ctx, targetURL, result.MediaType, raw)
 		result.Text = extracted.Text
 		result.Title = extracted.Title
 		result.Extraction = &extracted
@@ -612,13 +626,13 @@ func fetchAndExtractURL(ctx context.Context, client *http.Client, targetURL, fet
 	return result, nil
 }
 
-func (rt *Runtime) importYouTubeURLContent(ctx context.Context, ownerID, normalizedURL string) (types.ContentItem, error) {
-	videoID := youtubeVideoID(normalizedURL)
+func (s *Service) importYouTubeURLContent(ctx context.Context, ownerID, normalizedURL string) (types.ContentItem, error) {
+	videoID := YouTubeVideoID(normalizedURL)
 	if videoID == "" {
 		return types.ContentItem{}, fmt.Errorf("youtube url is missing a video id")
 	}
 	canonicalURL := "https://www.youtube.com/watch?v=" + videoID
-	if existing, ok := rt.findExistingURLContentItem(ctx, ownerID, canonicalURL, "video/youtube"); ok {
+	if existing, ok := s.findExistingURLContentItem(ctx, ownerID, canonicalURL, "video/youtube"); ok {
 		return existing, nil
 	}
 
@@ -656,16 +670,16 @@ func (rt *Runtime) importYouTubeURLContent(ctx context.Context, ownerID, normali
 		Title:        "YouTube " + videoID,
 		SourceURL:    normalizedURL,
 		CanonicalURL: canonicalURL,
-		ContentHash:  contentHash(canonicalURL),
+		ContentHash:  ContentHash(canonicalURL),
 		Metadata:     videoMetadata,
 		Provenance:   videoProvenance,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-	if err := rt.Store().CreateContentItem(ctx, videoItem); err != nil {
+	if err := s.CreateItem(ctx, ownerID, videoItem); err != nil {
 		return types.ContentItem{}, err
 	}
-	_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(videoItem))
+	_, _ = s.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(videoItem))
 
 	if transcriptContentID != "" {
 		transcriptMetadata, _ := json.Marshal(map[string]any{
@@ -695,34 +709,34 @@ func (rt *Runtime) importYouTubeURLContent(ctx context.Context, ownerID, normali
 			SourceURL:    canonicalURL,
 			CanonicalURL: "youtube://" + videoID + "/transcript/" + firstNonEmpty(transcript.Language, "unknown"),
 			TextContent:  strings.TrimSpace(transcript.Text),
-			ContentHash:  contentHash(strings.TrimSpace(transcript.Text)),
+			ContentHash:  ContentHash(strings.TrimSpace(transcript.Text)),
 			Metadata:     transcriptMetadata,
 			Provenance:   transcriptProvenance,
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}
 		if transcriptItem.ContentHash == "" {
-			transcriptItem.ContentHash = contentHash(transcriptItem.CanonicalURL + ":" + firstNonEmpty(transcript.Availability, "unavailable") + ":" + transcript.Error)
+			transcriptItem.ContentHash = ContentHash(transcriptItem.CanonicalURL + ":" + firstNonEmpty(transcript.Availability, "unavailable") + ":" + transcript.Error)
 		}
-		if err := rt.Store().CreateContentItem(ctx, transcriptItem); err != nil {
+		if err := s.CreateItem(ctx, ownerID, transcriptItem); err != nil {
 			return types.ContentItem{}, err
 		}
-		_, _ = rt.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(transcriptItem))
+		_, _ = s.emitProductEvent(ctx, ownerID, types.PrimaryDesktopID, types.EventContentItemCreated, contentItemEventPayload(transcriptItem))
 	}
 	return videoItem, nil
 }
 
-func (rt *Runtime) findExistingURLContentItem(ctx context.Context, ownerID, canonicalURL, mediaType string) (types.ContentItem, bool) {
-	if rt == nil || rt.Store() == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(canonicalURL) == "" {
+func (s *Service) findExistingURLContentItem(ctx context.Context, ownerID, canonicalURL, mediaType string) (types.ContentItem, bool) {
+	if s == nil || s.store == nil || strings.TrimSpace(ownerID) == "" || strings.TrimSpace(canonicalURL) == "" {
 		return types.ContentItem{}, false
 	}
-	items, err := rt.Store().ListContentItems(ctx, ownerID, 1000)
+	items, err := s.store.ListContentItems(ctx, ownerID, 1000)
 	if err != nil {
 		return types.ContentItem{}, false
 	}
-	normalizedMedia := normalizeMediaType(mediaType)
+	normalizedMedia := NormalizeMediaType(mediaType)
 	for _, item := range items {
-		if normalizedMedia != "" && normalizeMediaType(item.MediaType) != normalizedMedia {
+		if normalizedMedia != "" && NormalizeMediaType(item.MediaType) != normalizedMedia {
 			continue
 		}
 		if sameNormalizedURL(item.CanonicalURL, canonicalURL) || sameNormalizedURL(item.SourceURL, canonicalURL) || strings.TrimSpace(item.CanonicalURL) == strings.TrimSpace(canonicalURL) {
@@ -733,7 +747,7 @@ func (rt *Runtime) findExistingURLContentItem(ctx context.Context, ownerID, cano
 }
 
 func reusableImportedURLContent(item types.ContentItem) bool {
-	mediaType := normalizeMediaType(item.MediaType)
+	mediaType := NormalizeMediaType(item.MediaType)
 	if isHTMLMedia(mediaType) {
 		return false
 	}
@@ -1604,7 +1618,7 @@ func extractSearXNGHTMLCandidates(source, originalURL string) []searxngCandidate
 }
 
 func usableCandidateURL(candidateURL, originalURL string) string {
-	normalized, err := normalizeHTTPURL(candidateURL)
+	normalized, err := NormalizeHTTPURL(candidateURL)
 	if err != nil {
 		return ""
 	}
@@ -1618,8 +1632,8 @@ func usableCandidateURL(candidateURL, originalURL string) string {
 }
 
 func sameNormalizedURL(a, b string) bool {
-	na, errA := normalizeHTTPURL(a)
-	nb, errB := normalizeHTTPURL(b)
+	na, errA := NormalizeHTTPURL(a)
+	nb, errB := NormalizeHTTPURL(b)
 	if errA != nil || errB != nil {
 		return strings.TrimSpace(a) == strings.TrimSpace(b)
 	}
@@ -1665,7 +1679,7 @@ func errString(err error) string {
 	return err.Error()
 }
 
-func normalizeHTTPURL(raw string) (string, error) {
+func NormalizeHTTPURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", fmt.Errorf("url is required")
@@ -1681,17 +1695,17 @@ func normalizeHTTPURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
-func classifyPromptBarContentIntent(text string) (appHint, sourceURL, mediaType string, ok bool) {
+func ClassifyPromptBarContentIntent(text string) (appHint, sourceURL, mediaType string, ok bool) {
 	fields := strings.Fields(strings.TrimSpace(text))
 	if len(fields) != 1 {
 		return "", "", "", false
 	}
-	normalizedURL, err := normalizeHTTPURL(fields[0])
+	normalizedURL, err := NormalizeHTTPURL(fields[0])
 	if err != nil {
 		return "", "", "", false
 	}
-	mediaType = detectMediaType(normalizedURL, "", "")
-	appHint = appHintForMedia(mediaType, normalizedURL, "")
+	mediaType = DetectMediaType(normalizedURL, "", "")
+	appHint = AppHintForMedia(mediaType, normalizedURL, "")
 	if appHint == "files" {
 		appHint = "browser"
 	}
@@ -1707,7 +1721,7 @@ func normalizeContentSourceType(value string) string {
 	}
 }
 
-func normalizeMediaType(value string) string {
+func NormalizeMediaType(value string) string {
 	value = strings.TrimSpace(strings.ToLower(value))
 	if value == "" {
 		return ""
@@ -1718,11 +1732,11 @@ func normalizeMediaType(value string) string {
 	return value
 }
 
-func detectMediaType(sourceURL, filePath, contentType string) string {
-	if isYouTubeURL(sourceURL) {
+func DetectMediaType(sourceURL, filePath, contentType string) string {
+	if IsYouTubeURL(sourceURL) {
 		return "video/youtube"
 	}
-	if normalized := normalizeMediaType(contentType); normalized != "" && normalized != "application/octet-stream" {
+	if normalized := NormalizeMediaType(contentType); normalized != "" && normalized != "application/octet-stream" {
 		if normalized == "application/xml" && strings.Contains(strings.ToLower(sourceURL), "rss") {
 			return "application/rss+xml"
 		}
@@ -1768,10 +1782,10 @@ func detectMediaType(sourceURL, filePath, contentType string) string {
 	return "application/octet-stream"
 }
 
-func appHintForMedia(mediaType, sourceURL, filePath string) string {
-	mediaType = normalizeMediaType(mediaType)
+func AppHintForMedia(mediaType, sourceURL, filePath string) string {
+	mediaType = NormalizeMediaType(mediaType)
 	switch {
-	case isYouTubeURL(sourceURL), strings.HasPrefix(mediaType, "video/"):
+	case IsYouTubeURL(sourceURL), strings.HasPrefix(mediaType, "video/"):
 		return "video"
 	case strings.HasPrefix(mediaType, "image/"):
 		return "image"
@@ -1796,7 +1810,7 @@ func appHintForMedia(mediaType, sourceURL, filePath string) string {
 	}
 }
 
-func normalizeAppHint(value string) string {
+func NormalizeAppHint(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "texture", "browser", "content", "files", "pdf", "epub", "slides", "image", "video", "audio", "podcast":
 		return strings.ToLower(strings.TrimSpace(value))
@@ -1805,22 +1819,22 @@ func normalizeAppHint(value string) string {
 	}
 }
 
-func isAllowedProductApp(value string) bool {
-	return normalizeAppHint(value) == strings.ToLower(strings.TrimSpace(value))
+func IsAllowedProductApp(value string) bool {
+	return NormalizeAppHint(value) == strings.ToLower(strings.TrimSpace(value))
 }
 
 func isHTMLMedia(mediaType string) bool {
-	mediaType = normalizeMediaType(mediaType)
+	mediaType = NormalizeMediaType(mediaType)
 	return mediaType == "text/html" || mediaType == "application/xhtml+xml"
 }
 
 func isTextMedia(mediaType string) bool {
-	mediaType = normalizeMediaType(mediaType)
+	mediaType = NormalizeMediaType(mediaType)
 	return strings.HasPrefix(mediaType, "text/") || mediaType == "application/json" || mediaType == "application/xml" || mediaType == "application/rss+xml"
 }
 
-func isDocumentMedia(mediaType string) bool {
-	switch normalizeMediaType(mediaType) {
+func IsDocumentMedia(mediaType string) bool {
+	switch NormalizeMediaType(mediaType) {
 	case "application/pdf",
 		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 		"application/epub+zip",
@@ -1831,7 +1845,7 @@ func isDocumentMedia(mediaType string) bool {
 	}
 }
 
-func isYouTubeURL(raw string) bool {
+func IsYouTubeURL(raw string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return false
@@ -1840,7 +1854,7 @@ func isYouTubeURL(raw string) bool {
 	return host == "youtube.com" || host == "www.youtube.com" || host == "youtu.be" || host == "m.youtube.com"
 }
 
-func youtubeVideoID(raw string) string {
+func YouTubeVideoID(raw string) string {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
 		return ""
@@ -1946,19 +1960,19 @@ func ensureJSONObject(raw json.RawMessage) json.RawMessage {
 	return json.RawMessage(`{}`)
 }
 
-func contentHash(text string) string {
+func ContentHash(text string) string {
 	if text == "" {
 		return ""
 	}
-	return contentHashBytes([]byte(text))
+	return ContentHashBytes([]byte(text))
 }
 
-func contentHashBytes(data []byte) string {
+func ContentHashBytes(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
 
-func fallbackContentTitle(item types.ContentItem) string {
+func FallbackContentTitle(item types.ContentItem) string {
 	switch {
 	case item.FilePath != "":
 		return path.Base(item.FilePath)

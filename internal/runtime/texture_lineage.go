@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -486,7 +487,7 @@ func buildMarkdownLineageContentItem(ownerID, sourcePath, title string, version 
 	if label == "" {
 		label = "snapshot"
 	}
-	hash := contentHash(content)
+	hash := contentowner.ContentHash(content)
 	meta, _ := json.Marshal(map[string]any{
 		"source_path":        sourcePath,
 		"source_label":       label,
@@ -539,7 +540,7 @@ func (h *APIHandler) resolveMarkdownLineageVersion(ctx context.Context, ownerID 
 	resolved := resolvedMarkdownLineageVersion{
 		Version:       version,
 		Content:       version.Content,
-		ContentHash:   contentHash(version.Content),
+		ContentHash:   contentowner.ContentHash(version.Content),
 		ContentSource: "request_content",
 	}
 	contentItemID := strings.TrimSpace(version.ContentItemID)
@@ -559,7 +560,7 @@ func (h *APIHandler) resolveMarkdownLineageVersion(ctx context.Context, ownerID 
 	}
 	hash := strings.TrimSpace(item.ContentHash)
 	if hash == "" {
-		hash = contentHash(content)
+		hash = contentowner.ContentHash(content)
 	}
 	resolved.Content = item.TextContent
 	resolved.ContentItem = &item

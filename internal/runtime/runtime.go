@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/candidatepackage"
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
@@ -88,6 +89,7 @@ type Runtime struct {
 	promotion         *promotion.Service
 	candidatePackages *candidatepackage.Service
 	desktopState      *desktopstate.Handler
+	content           *contentowner.Service
 }
 
 type textureWakeTimer interface {
@@ -426,6 +428,14 @@ func WithTraceStore(s trace.Store) RuntimeOption {
 func WithDesktopStateOwner(owner *desktopstate.Handler) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.desktopState = owner
+	}
+}
+
+// WithContentService composes Runtime tools and Texture integrations with the
+// canonical content owner. Runtime never constructs a fallback owner.
+func WithContentService(service *contentowner.Service) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.content = service
 	}
 }
 
@@ -2218,7 +2228,7 @@ func normalizeConductorDecision(rec *types.RunRecord) string {
 				}
 			case "open_app":
 				parsed = fillConductorDecisionFromRun(rec, parsed)
-				if !isAllowedProductApp(strings.TrimSpace(parsed.App)) {
+				if !contentowner.IsAllowedProductApp(strings.TrimSpace(parsed.App)) {
 					parsed.App = defaultDecision.App
 				}
 			default:

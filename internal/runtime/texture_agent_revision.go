@@ -376,7 +376,10 @@ func (rt *Runtime) submitTextureAgentRevisionRun(ctx context.Context, doc types.
 
 	if currentRevisionLoaded {
 		currentSources := decodeTextureSourceEntities(currentRevision.SourceEntities)
-		mediaSourceEntities, addedMediaSourceEntities := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, currentSources)
+		mediaSourceEntities, addedMediaSourceEntities, err := rt.registerTextureMediaSourceEntities(ctx, ownerID, currentRevision.Content, currentSources)
+		if err != nil {
+			return nil, err
+		}
 		sourceEntities, changedSourceEntities := normalizeTextureSourceEntities(metadata, mediaSourceEntities)
 		evidenceEntities, sourceRejections := rt.evidenceSourceEntitiesAndRejectionsFromPendingUpdates(ctx, ownerID, currentTextureAgentID(doc.DocID), 12)
 		if len(evidenceEntities) > 0 {

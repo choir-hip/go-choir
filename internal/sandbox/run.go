@@ -14,10 +14,12 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
+	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/health"
+	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
@@ -99,6 +101,8 @@ func Run() {
 	browserHandler := browsercontrol.NewHandler(rtRuntimeCfg, db, bus)
 	defer browserHandler.Close()
 	desktopHandler := desktopstate.NewHandler(db, bus)
+	contentService := content.NewService(db, bus)
+	mediaHandler := mediastate.NewHandler(db, bus)
 
 	// Resolve the runtime provider. VM guests route through the host-side
 	// gateway so provider credentials and upstream adapter code stay out of
@@ -128,7 +132,10 @@ func Run() {
 
 	// Compose product owners into the runtime core explicitly; adapter options
 	// remain limited to actor-lifecycle concerns.
-	coreOpts := []runtime.RuntimeOption{runtime.WithDesktopStateOwner(desktopHandler)}
+	coreOpts := []runtime.RuntimeOption{
+		runtime.WithDesktopStateOwner(desktopHandler),
+		runtime.WithContentService(contentService),
+	}
 	var rtOpts []actorruntime.RuntimeOption
 
 	// Mount the Dolt-backed trace observability store when enabled. The store
@@ -191,7 +198,7 @@ func Run() {
 	// Register canonical API routes (overrides default /health).
 	runtimeHandler := runtime.NewAPIHandler(rt.Runtime)
 	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
-	apihandler.RegisterRoutes(s, runtimeHandler, apiHandler, browserHandler, desktopHandler, rtRuntimeCfg.EnableTestAPIs)
+	apihandler.RegisterRoutes(s, runtimeHandler, apiHandler, browserHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
 	if toolsEnabled {
 		superRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super)
 		if err := apihandler.RegisterProductAPIRequestTool(s, superRegistry); err != nil {

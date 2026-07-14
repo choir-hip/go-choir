@@ -13,13 +13,13 @@ import (
 	"os"
 	pathpkg "path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/google/uuid"
 
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -53,15 +53,6 @@ const (
 	defaultTextureFileStem  = "texture"
 )
 
-func normalizeTextureSourcePath(raw string) string {
-	cleaned := pathpkg.Clean("/" + strings.TrimSpace(raw))
-	cleaned = strings.TrimPrefix(cleaned, "/")
-	if cleaned == "." {
-		return ""
-	}
-	return cleaned
-}
-
 func canonicalTextureImportTitle(sourcePath, requestedTitle string) string {
 	base := strings.TrimSpace(requestedTitle)
 	if base == "" {
@@ -73,7 +64,7 @@ func canonicalTextureImportTitle(sourcePath, requestedTitle string) string {
 	}
 	base = pathpkg.Base(base)
 	ext := pathpkg.Ext(base)
-	if isTextureShortcutPath(base) {
+	if contentowner.IsTextureShortcutPath(base) {
 		return base
 	}
 	stem := strings.TrimSpace(strings.TrimSuffix(base, ext))
@@ -125,11 +116,6 @@ func shortDocIDSuffix(docID string) string {
 	return base
 }
 
-func isTextureShortcutPath(sourcePath string) bool {
-	ext := pathpkg.Ext(strings.TrimSpace(sourcePath))
-	return strings.EqualFold(ext, textureShortcutExt)
-}
-
 func marshalTextureShortcutFile(doc types.Document, sourcePath string) ([]byte, error) {
 	return json.MarshalIndent(textureShortcutFile{
 		Kind:       textureShortcutFileKind,
@@ -143,7 +129,7 @@ func buildFileOpenTextureMetadata(projection textureFileImportProjection, origin
 	content := projection.ProjectionContent
 	mediaType := projection.MediaType
 	if mediaType == "" {
-		mediaType = detectMediaType("", sourcePath, "")
+		mediaType = contentowner.DetectMediaType("", sourcePath, "")
 	}
 	sourcePath = strings.TrimSpace(sourcePath)
 	sum := sha256.Sum256([]byte(content))
@@ -233,7 +219,7 @@ func buildFileOpenTextureMetadata(projection textureFileImportProjection, origin
 }
 
 func buildTextLikeFileOpenMigrationManifest(sourcePath, ext, mediaType, projectionHash string) map[string]any {
-	mediaType = normalizeMediaType(mediaType)
+	mediaType = contentowner.NormalizeMediaType(mediaType)
 	var sourceKind, adapter, gapPolicy string
 	switch mediaType {
 	case "text/markdown":
@@ -255,7 +241,7 @@ func buildTextLikeFileOpenMigrationManifest(sourcePath, ext, mediaType, projecti
 		sourceKind = "markdown"
 	}
 	if projectionHash == "" {
-		projectionHash = "sha256:" + contentHash("")
+		projectionHash = "sha256:" + contentowner.ContentHash("")
 	}
 	return map[string]any{
 		"source_path":           sourcePath,
@@ -270,14 +256,17 @@ func buildTextLikeFileOpenMigrationManifest(sourcePath, ext, mediaType, projecti
 	}
 }
 func (h *APIHandler) ensureTextureOriginalContentItem(ctx context.Context, ownerID, title string, projection textureFileImportProjection, now time.Time) (types.ContentItem, error) {
+	if h == nil || h.rt == nil || h.rt.content == nil {
+		return types.ContentItem{}, fmt.Errorf("content service not configured")
+	}
 	sourcePath := strings.TrimSpace(projection.SourcePath)
 	mediaType := projection.MediaType
 	hash := projection.OriginalContentHash
 	if hash == "" {
-		hash = contentHash(projection.ProjectionContent)
+		hash = contentowner.ContentHash(projection.ProjectionContent)
 	}
 	if hash == "" {
-		hash = contentHash(sourcePath)
+		hash = contentowner.ContentHash(sourcePath)
 	}
 	items, err := h.rt.Store().ListContentItems(ctx, ownerID, 1000)
 	if err == nil {
@@ -290,7 +279,7 @@ func (h *APIHandler) ensureTextureOriginalContentItem(ctx context.Context, owner
 		log.Printf("texture api: list content items for original file %s: %v", sourcePath, err)
 	}
 	projectionText := projection.ProjectionContent
-	if !textureFileTypeCanStoreTextProjection(mediaType) && !isDocumentMedia(mediaType) {
+	if !textureFileTypeCanStoreTextProjection(mediaType) && !contentowner.IsDocumentMedia(mediaType) {
 		projectionText = ""
 	}
 	item := types.ContentItem{
@@ -298,7 +287,7 @@ func (h *APIHandler) ensureTextureOriginalContentItem(ctx context.Context, owner
 		OwnerID:     ownerID,
 		SourceType:  "file",
 		MediaType:   mediaType,
-		AppHint:     normalizeAppHint(appHintForMedia(mediaType, "", sourcePath)),
+		AppHint:     contentowner.NormalizeAppHint(contentowner.AppHintForMedia(mediaType, "", sourcePath)),
 		Title:       strings.TrimSpace(title),
 		FilePath:    sourcePath,
 		TextContent: projectionText,
@@ -309,16 +298,16 @@ func (h *APIHandler) ensureTextureOriginalContentItem(ctx context.Context, owner
 		UpdatedAt:   now,
 	}
 	if item.Title == "" {
-		item.Title = fallbackContentTitle(item)
+		item.Title = contentowner.FallbackContentTitle(item)
 	}
-	if err := h.rt.Store().CreateContentItem(ctx, item); err != nil {
+	if err := h.rt.content.CreateItem(ctx, ownerID, item); err != nil {
 		return types.ContentItem{}, err
 	}
 	return item, nil
 }
 
 func textureFileTypeCanStoreTextProjection(mediaType string) bool {
-	switch normalizeMediaType(mediaType) {
+	switch contentowner.NormalizeMediaType(mediaType) {
 	case "text/plain", "text/markdown", "text/html":
 		return true
 	default:
@@ -328,7 +317,7 @@ func textureFileTypeCanStoreTextProjection(mediaType string) bool {
 
 func buildTextureFileImportProjection(sourcePath, initialContent string) textureFileImportProjection {
 	sourcePath = strings.TrimSpace(sourcePath)
-	mediaType := detectMediaType("", sourcePath, "")
+	mediaType := contentowner.DetectMediaType("", sourcePath, "")
 	projection := textureFileImportProjection{
 		SourcePath:           sourcePath,
 		MediaType:            mediaType,
@@ -337,9 +326,9 @@ func buildTextureFileImportProjection(sourcePath, initialContent string) texture
 		ImportAdapterVersion: 1,
 		Warnings:             []string{},
 	}
-	if bytes, ok := readTextureSourceFileBytes(sourcePath); ok {
+	if bytes, ok := contentowner.ReadSourceFileBytes(sourcePath); ok {
 		projection.OriginalBytes = bytes
-		projection.OriginalContentHash = contentHashBytes(bytes)
+		projection.OriginalContentHash = contentowner.ContentHashBytes(bytes)
 		projection.OriginalContentHashState = "available_from_original_bytes"
 		switch mediaType {
 		case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -373,7 +362,7 @@ func buildTextureFileImportProjection(sourcePath, initialContent string) texture
 				projection.ImportAdapterVersion = 1
 			}
 		}
-	} else if initialContent == "" && !isTextureShortcutPath(sourcePath) {
+	} else if initialContent == "" && !contentowner.IsTextureShortcutPath(sourcePath) {
 		projection.Warnings = append(projection.Warnings, "source_file_bytes_unavailable_projection_empty")
 	}
 	if projection.ImportAdapter == "" {
@@ -382,7 +371,7 @@ func buildTextureFileImportProjection(sourcePath, initialContent string) texture
 	if projection.ImportAdapterVersion <= 0 {
 		projection.ImportAdapterVersion = 1
 	}
-	projection.ProjectionContentHash = contentHash(projection.ProjectionContent)
+	projection.ProjectionContentHash = contentowner.ContentHash(projection.ProjectionContent)
 	if projection.OriginalContentHashState == "" {
 		if projection.OriginalContentHash != "" {
 			projection.OriginalContentHashState = "available_from_original_bytes"
@@ -408,7 +397,7 @@ func buildTextureFileImportProjection(sourcePath, initialContent string) texture
 }
 
 func extractTextureProjectionFromDocument(ctx context.Context, sourcePath, mediaType string, data []byte) textureFileImportProjection {
-	extracted := extractContentDocument(ctx, sourcePath, mediaType, data)
+	extracted := contentowner.ExtractDocument(ctx, sourcePath, mediaType, data)
 	lossiness := 20
 	if strings.TrimSpace(extracted.Text) == "" {
 		lossiness = 95
@@ -417,9 +406,9 @@ func extractTextureProjectionFromDocument(ctx context.Context, sourcePath, media
 		SourcePath:            sourcePath,
 		MediaType:             extracted.MediaType,
 		ProjectionContent:     extracted.Text,
-		ProjectionContentHash: contentHash(extracted.Text),
+		ProjectionContentHash: contentowner.ContentHash(extracted.Text),
 		ImportAdapter:         extracted.Adapter,
-		ImportAdapterVersion:  contentExtractionAdapterVersion,
+		ImportAdapterVersion:  contentowner.ExtractionAdapterVersion,
 		LossinessScore:        lossiness,
 		Warnings:              extracted.Warnings,
 		ExtractionMetadata:    extracted.Metadata,
@@ -432,7 +421,7 @@ func (p textureFileImportProjection) withProjectionFallback(initialContent strin
 		p.Warnings = appendIfMissing(p.Warnings, "projection_used_caller_supplied_initial_content")
 	}
 	if p.ProjectionContentHash == "" {
-		p.ProjectionContentHash = contentHash(p.ProjectionContent)
+		p.ProjectionContentHash = contentowner.ContentHash(p.ProjectionContent)
 	}
 	if p.ImportAdapter == "" {
 		p.ImportAdapter = "texture_file_open_projection"
@@ -441,35 +430,6 @@ func (p textureFileImportProjection) withProjectionFallback(initialContent strin
 		p.ImportAdapterVersion = 1
 	}
 	return p
-}
-
-func readTextureSourceFileBytes(sourcePath string) ([]byte, bool) {
-	sourcePath = normalizeTextureSourcePath(sourcePath)
-	if sourcePath == "" || isTextureShortcutPath(sourcePath) {
-		return nil, false
-	}
-	filesRoot := provideriface.ResolveFilesRoot("")
-	absPath := filepath.Join(filesRoot, filepath.FromSlash(sourcePath))
-	cleanRoot, err := filepath.Abs(filesRoot)
-	if err != nil {
-		return nil, false
-	}
-	cleanPath, err := filepath.Abs(absPath)
-	if err != nil {
-		return nil, false
-	}
-	if cleanPath != cleanRoot && !strings.HasPrefix(cleanPath, cleanRoot+string(os.PathSeparator)) {
-		return nil, false
-	}
-	info, err := os.Stat(cleanPath)
-	if err != nil || info.IsDir() || info.Size() > 25*1024*1024 {
-		return nil, false
-	}
-	data, err := os.ReadFile(cleanPath)
-	if err != nil {
-		return nil, false
-	}
-	return data, true
 }
 
 func appendIfMissing(values []string, value string) []string {
@@ -519,114 +479,9 @@ func extractTextureProjectionFromDOCX(data []byte) textureFileImportProjection {
 		projection.Warnings = append(projection.Warnings, "docx_document_xml_missing")
 		return projection
 	}
-	projection.ProjectionContent = strings.TrimSpace(docxDocumentXMLToMarkdown(documentXML))
-	projection.ProjectionContentHash = contentHash(projection.ProjectionContent)
+	projection.ProjectionContent = strings.TrimSpace(contentowner.DOCXDocumentXMLToMarkdown(documentXML))
+	projection.ProjectionContentHash = contentowner.ContentHash(projection.ProjectionContent)
 	return projection
-}
-
-func docxDocumentXMLToMarkdown(data []byte) string {
-	text := string(data)
-	tableRE := regexp.MustCompile(`(?is)<w:tbl\b.*?</w:tbl>`)
-	paragraphRE := regexp.MustCompile(`(?is)<w:p\b.*?</w:p>`)
-	var out strings.Builder
-	last := 0
-	for _, loc := range tableRE.FindAllStringIndex(text, -1) {
-		for _, paragraph := range paragraphRE.FindAllString(text[last:loc[0]], -1) {
-			if paragraphText := strings.TrimSpace(docxParagraphText(paragraph)); paragraphText != "" {
-				out.WriteString(paragraphText)
-				out.WriteString("\n\n")
-			}
-		}
-		rows := docxTableRows(text[loc[0]:loc[1]])
-		if len(rows) > 0 {
-			out.WriteString(markdownTable(rows))
-			out.WriteString("\n\n")
-		}
-		last = loc[1]
-	}
-	for _, paragraph := range paragraphRE.FindAllString(text[last:], -1) {
-		if paragraphText := strings.TrimSpace(docxParagraphText(paragraph)); paragraphText != "" {
-			out.WriteString(paragraphText)
-			out.WriteString("\n\n")
-		}
-	}
-	return strings.TrimSpace(out.String())
-}
-
-func docxParagraphText(xmlFragment string) string {
-	textRE := regexp.MustCompile(`(?is)<w:t(?:\s+[^>]*)?>(.*?)</w:t>`)
-	var parts []string
-	for _, match := range textRE.FindAllStringSubmatch(xmlFragment, -1) {
-		parts = append(parts, htmlEntityText(match[1]))
-	}
-	return strings.Join(parts, "")
-}
-
-func docxTableRows(tableXML string) [][]string {
-	rowRE := regexp.MustCompile(`(?is)<w:tr\b.*?</w:tr>`)
-	cellRE := regexp.MustCompile(`(?is)<w:tc\b.*?</w:tc>`)
-	var rows [][]string
-	for _, rowXML := range rowRE.FindAllString(tableXML, -1) {
-		var row []string
-		for _, cellXML := range cellRE.FindAllString(rowXML, -1) {
-			row = append(row, strings.TrimSpace(docxParagraphText(cellXML)))
-		}
-		if len(row) > 0 {
-			rows = append(rows, row)
-		}
-	}
-	return rows
-}
-
-func markdownTable(rows [][]string) string {
-	if len(rows) == 0 {
-		return ""
-	}
-	cols := 0
-	for _, row := range rows {
-		if len(row) > cols {
-			cols = len(row)
-		}
-	}
-	if cols == 0 {
-		return ""
-	}
-	normalize := func(row []string) []string {
-		out := make([]string, cols)
-		for i := 0; i < cols; i++ {
-			if i < len(row) {
-				out[i] = strings.ReplaceAll(row[i], "|", "\\|")
-			}
-		}
-		return out
-	}
-	var b strings.Builder
-	b.WriteString("| ")
-	b.WriteString(strings.Join(normalize(rows[0]), " | "))
-	b.WriteString(" |\n| ")
-	separators := make([]string, cols)
-	for i := range separators {
-		separators[i] = "---"
-	}
-	b.WriteString(strings.Join(separators, " | "))
-	b.WriteString(" |")
-	for _, row := range rows[1:] {
-		b.WriteString("\n| ")
-		b.WriteString(strings.Join(normalize(row), " | "))
-		b.WriteString(" |")
-	}
-	return b.String()
-}
-
-func htmlEntityText(text string) string {
-	replacements := strings.NewReplacer(
-		"&amp;", "&",
-		"&lt;", "<",
-		"&gt;", ">",
-		"&quot;", "\"",
-		"&apos;", "'",
-	)
-	return replacements.Replace(text)
 }
 
 func extractTextureProjectionFromPDF(data []byte) textureFileImportProjection {
@@ -636,63 +491,15 @@ func extractTextureProjectionFromPDF(data []byte) textureFileImportProjection {
 		LossinessScore:       80,
 		Warnings:             []string{"pdf_layout_is_best_effort"},
 	}
-	text := extractPDFLiteralText(data)
+	text := contentowner.ExtractPDFLiteralText(data)
 	if strings.TrimSpace(text) == "" {
 		projection.LossinessScore = 95
 		projection.Warnings = append(projection.Warnings, "pdf_text_extraction_empty")
 	} else {
 		projection.ProjectionContent = strings.TrimSpace(text)
 	}
-	projection.ProjectionContentHash = contentHash(projection.ProjectionContent)
+	projection.ProjectionContentHash = contentowner.ContentHash(projection.ProjectionContent)
 	return projection
-}
-
-func extractPDFLiteralText(data []byte) string {
-	raw := string(data)
-	literalRE := regexp.MustCompile(`\((?:\\.|[^\\()])+\)\s*Tj`)
-	arrayRE := regexp.MustCompile(`\[(?s:.*?)\]\s*TJ`)
-	stringRE := regexp.MustCompile(`\((?:\\.|[^\\()])+\)`)
-	var parts []string
-	for _, match := range literalRE.FindAllString(raw, -1) {
-		if loc := stringRE.FindStringIndex(match); loc != nil {
-			parts = append(parts, decodePDFLiteralString(match[loc[0]:loc[1]]))
-		}
-	}
-	for _, array := range arrayRE.FindAllString(raw, -1) {
-		for _, lit := range stringRE.FindAllString(array, -1) {
-			parts = append(parts, decodePDFLiteralString(lit))
-		}
-	}
-	return strings.Join(parts, "\n")
-}
-
-func decodePDFLiteralString(literal string) string {
-	literal = strings.TrimPrefix(strings.TrimSuffix(literal, ")"), "(")
-	var b strings.Builder
-	escaped := false
-	for _, r := range literal {
-		if escaped {
-			switch r {
-			case 'n':
-				b.WriteRune('\n')
-			case 'r':
-				b.WriteRune('\r')
-			case 't':
-				b.WriteRune('\t')
-			case 'b', 'f':
-			default:
-				b.WriteRune(r)
-			}
-			escaped = false
-			continue
-		}
-		if r == '\\' {
-			escaped = true
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
 }
 
 func buildOriginalFileContentMetadata(projection textureFileImportProjection) json.RawMessage {
@@ -700,7 +507,7 @@ func buildOriginalFileContentMetadata(projection textureFileImportProjection) js
 	mediaType := projection.MediaType
 	projectionHash := projection.ProjectionContentHash
 	if projectionHash == "" {
-		projectionHash = contentHash(projection.ProjectionContent)
+		projectionHash = contentowner.ContentHash(projection.ProjectionContent)
 	}
 	originalHash := projection.OriginalContentHash
 	if originalHash == "" && projection.OriginalContentHashState != "unavailable_until_binary_bytes_adapter" {
@@ -722,7 +529,7 @@ func buildOriginalFileContentMetadata(projection textureFileImportProjection) js
 	}
 	if originalHash == "" {
 		metadata["original_content_hash"] = ""
-		metadata["original_identity_hash"] = "sha256:" + contentHash(sourcePath)
+		metadata["original_identity_hash"] = "sha256:" + contentowner.ContentHash(sourcePath)
 	} else {
 		metadata["original_content_hash"] = "sha256:" + originalHash
 	}
@@ -749,7 +556,7 @@ func (rt *Runtime) ensureCanonicalTextureProjectionPath(ctx context.Context, own
 	if err != nil {
 		return "", err
 	}
-	if !isTextureShortcutPath(sourcePath) {
+	if !contentowner.IsTextureShortcutPath(sourcePath) {
 		return "", fmt.Errorf("manifest path %q is not a Texture shortcut", sourcePath)
 	}
 	return sourcePath, nil
@@ -770,7 +577,7 @@ func ensureTextureManifest(ctx context.Context, st *store.Store, ownerID string,
 	if err != nil && err != store.ErrNotFound {
 		return "", err
 	}
-	if err == store.ErrNotFound || !isTextureShortcutPath(sourcePath) {
+	if err == store.ErrNotFound || !contentowner.IsTextureShortcutPath(sourcePath) {
 		sourcePath, err = allocateTextureManifestPath(ctx, st, ownerID, doc)
 		if err != nil {
 			return "", err
@@ -821,7 +628,7 @@ func (h *APIHandler) ensureCanonicalTextureProjectionPath(ctx context.Context, o
 	if err != nil {
 		return "", err
 	}
-	if !isTextureShortcutPath(sourcePath) {
+	if !contentowner.IsTextureShortcutPath(sourcePath) {
 		return "", fmt.Errorf("manifest path %q is not a Texture shortcut", sourcePath)
 	}
 	return sourcePath, nil

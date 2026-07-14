@@ -3,29 +3,29 @@ canonical_parent: db1ea597cf862b77f5ccb288f8eb76a08309b64d
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 122
-    production_files: 63
-    test_files: 59
-    production_loc: 38228
-    test_loc: 48526
-    exports: 870
-    export_caller_edges: 252
+    go_files: 117
+    production_files: 60
+    test_files: 57
+    production_loc: 35248
+    test_loc: 47507
+    exports: 830
+    export_caller_edges: 226
     initial_unused_export_debt: 14
     routes: 2
     tools: 48
     production_importers: 4
     wrappers: 4
     compatibility_markers: 6
-    store_calls: 374
+    store_calls: 357
     interface_candidates: 4
     citers: 1349
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
-      loc: 6788
+      loc: 6790
     - id: internal/runtime/api.go [production]
       disposition: api
-      loc: 1393
+      loc: 1394
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
       loc: 859
@@ -62,18 +62,9 @@ files:
     - id: internal/runtime/concurrent_workers_test.go [test]
       disposition: core
       loc: 1250
-    - id: internal/runtime/content.go [production]
+    - id: internal/runtime/content_prompt_test.go [test]
       disposition: content
-      loc: 1984
-    - id: internal/runtime/content_extract.go [production]
-      disposition: content
-      loc: 552
-    - id: internal/runtime/content_extract_test.go [test]
-      disposition: content
-      loc: 123
-    - id: internal/runtime/content_test.go [test]
-      disposition: content
-      loc: 948
+      loc: 139
     - id: internal/runtime/delegate_worker_update_fallback.go [production]
       disposition: core
       loc: 1025
@@ -101,12 +92,6 @@ files:
     - id: internal/runtime/live_ws_test.go [test]
       disposition: core
       loc: 122
-    - id: internal/runtime/media_state.go [production]
-      disposition: media
-      loc: 287
-    - id: internal/runtime/media_state_test.go [test]
-      disposition: media
-      loc: 86
     - id: internal/runtime/model_policy.go [production]
       disposition: model
       loc: 667
@@ -115,13 +100,13 @@ files:
       loc: 548
     - id: internal/runtime/podcast.go [production]
       disposition: podcast
-      loc: 444
+      loc: 448
     - id: internal/runtime/podcast_test.go [test]
       disposition: podcast
       loc: 156
     - id: internal/runtime/podcast_unit_test.go [test]
       disposition: podcast
-      loc: 77
+      loc: 66
     - id: internal/runtime/product_events.go [production]
       disposition: core
       loc: 60
@@ -163,7 +148,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3668
+      loc: 3678
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -196,13 +181,13 @@ files:
       loc: 195
     - id: internal/runtime/test_helpers_test.go [test]
       disposition: core
-      loc: 330
+      loc: 333
     - id: internal/runtime/texture.go [production]
       disposition: texture
-      loc: 2168
+      loc: 2177
     - id: internal/runtime/texture_agent_revision.go [production]
       disposition: texture
-      loc: 1282
+      loc: 1285
     - id: internal/runtime/texture_controller.go [production]
       disposition: texture
       loc: 235
@@ -211,7 +196,7 @@ files:
       loc: 166
     - id: internal/runtime/texture_diagnosis.go [production]
       disposition: texture
-      loc: 215
+      loc: 216
     - id: internal/runtime/texture_evidence_sources.go [production]
       disposition: texture
       loc: 825
@@ -229,10 +214,10 @@ files:
       loc: 101
     - id: internal/runtime/texture_import.go [production]
       disposition: texture
-      loc: 858
+      loc: 665
     - id: internal/runtime/texture_lineage.go [production]
       disposition: texture
-      loc: 571
+      loc: 572
     - id: internal/runtime/texture_lineage_structured_test.go [test]
       disposition: texture
       loc: 65
@@ -241,7 +226,7 @@ files:
       loc: 501
     - id: internal/runtime/texture_media_sources.go [production]
       disposition: texture
-      loc: 890
+      loc: 898
     - id: internal/runtime/texture_merge.go [production]
       disposition: texture
       loc: 536
@@ -265,7 +250,7 @@ files:
       loc: 16
     - id: internal/runtime/texture_test.go [test]
       disposition: texture
-      loc: 9818
+      loc: 9823
     - id: internal/runtime/texture_tool_unit_test.go [test]
       disposition: texture
       loc: 1063
@@ -310,7 +295,7 @@ files:
       loc: 231
     - id: internal/runtime/tools_research.go [production]
       disposition: research
-      loc: 1092
+      loc: 1091
     - id: internal/runtime/tools_researcher.go [production]
       disposition: research
       loc: 268
@@ -614,9 +599,7 @@ exports:
         - internal/runtime/api_candidate_package_intake.go
         - internal/runtime/api_texture_prompt_eval.go
         - internal/runtime/api_trajectory.go
-        - internal/runtime/content.go
         - internal/runtime/live_ws.go
-        - internal/runtime/media_state.go
         - internal/runtime/podcast.go
         - internal/runtime/prompts.go
         - internal/runtime/runtime_refresh.go
@@ -869,91 +852,11 @@ exports:
       disposition: core
     - id: internal/runtime/concurrent_workers_test.go:method(*conditionalFailProvider):ProviderName
       disposition: core
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentCreate
+    - id: internal/runtime/content_prompt_test.go:func:TestPromptBarBareURLDoesNotRequireProvider
       disposition: content
-      production_callers:
-        - internal/runtime/content.go
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentImportFile
+    - id: internal/runtime/content_prompt_test.go:func:TestPromptBarBareURLRoutesToDisplayApp
       disposition: content
-      production_callers:
-        - internal/runtime/content.go
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentImportURL
-      disposition: content
-      production_callers:
-        - internal/runtime/content.go
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentItem
-      disposition: content
-      production_callers:
-        - internal/runtime/content.go
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentItemsRoot
-      disposition: content
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentList
-      disposition: content
-      production_callers:
-        - internal/runtime/content.go
-    - id: internal/runtime/content.go:method(*APIHandler):HandleContentRouter
-      disposition: content
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/content.go:method(*Runtime):ImportFileContent
-      disposition: content
-      production_callers:
-        - internal/runtime/content.go
-        - internal/runtime/tools_research.go
-    - id: internal/runtime/content.go:method(*Runtime):ImportURLContent
-      disposition: content
-      production_callers:
-        - internal/runtime/content.go
-        - internal/runtime/podcast.go
-        - internal/runtime/texture_media_sources.go
-        - internal/runtime/tools_research.go
-    - id: internal/runtime/content_extract_test.go:func:TestExtractDOCXDocumentFallsBackToOOXMLSelectors
-      disposition: content
-    - id: internal/runtime/content_extract_test.go:func:TestExtractPPTXDocumentCreatesSlideSelectors
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestChooseYouTubeCaptionTrackPrefersHumanEnglish
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentCreateSupportsDurableMediaReferences
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportFileCreatesExtractedPPTXContentItem
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportURLCleansReaderChrome
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportURLCreatesPlainTextSelectors
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportURLCreatesProvenanceRecord
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportURLDedupesYouTubeSourcePackets
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportURLRefreshesEmptyExistingReadableItem
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportURLRefreshesLegacyBrowserIdentityReaderItem
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportURLStoresConfiguredTranscriptItem
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestContentImportURLUsesSearXNGAlternateWhenPrimaryLowContent
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestFetchConfiguredYouTubeTranscriptRejectsForbiddenProviderURL
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestFetchYouTubeTranscriptFromInnerTubeRejectsForbiddenCaptionURL
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestFetchYouTubeTranscriptFromInnerTubeRejectsForbiddenPlayerURL
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestFetchYouTubeTranscriptUsesConfiguredProvider
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestFetchYouTubeTranscriptUsesInnerTubeAndroidFallback
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestParseYouTubeTranscriptProviderPayloadHandlesNestedTranscript
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestPromptBarBareURLDoesNotRequireProvider
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestPromptBarBareURLRoutesToDisplayApp
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestPromptBarContextualURLRoutesToTexture
-      disposition: content
-    - id: internal/runtime/content_test.go:func:TestYouTubeJSON3CaptionURLForcesFormat
+    - id: internal/runtime/content_prompt_test.go:func:TestPromptBarContextualURLRoutesToTexture
       disposition: content
     - id: internal/runtime/delegate_worker_update_fallback_test.go:func:TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages
       disposition: core
@@ -1047,46 +950,6 @@ exports:
       disposition: core
     - id: internal/runtime/live_ws_test.go:func:TestLiveWSPublishesOwnerScopedProductEvents
       disposition: core
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgress
-      disposition: media
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgressGet
-      disposition: media
-      production_callers:
-        - internal/runtime/media_state.go
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaProgressPut
-      disposition: media
-      production_callers:
-        - internal/runtime/media_state.go
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecents
-      disposition: media
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecentsGet
-      disposition: media
-      production_callers:
-        - internal/runtime/media_state.go
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleMediaRecentsPut
-      disposition: media
-      production_callers:
-        - internal/runtime/media_state.go
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreference
-      disposition: media
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreferenceGet
-      disposition: media
-      production_callers:
-        - internal/runtime/media_state.go
-    - id: internal/runtime/media_state.go:method(*APIHandler):HandleThemePreferencePut
-      disposition: media
-      production_callers:
-        - internal/runtime/media_state.go
-    - id: internal/runtime/media_state_test.go:func:TestMediaProgressAPIStoresAndEmitsEvent
-      disposition: media
-    - id: internal/runtime/media_state_test.go:func:TestThemePreferenceAPIStoresAndEmitsEvent
-      disposition: media
     - id: internal/runtime/model_policy.go:method(ModelPolicy):Resolve
       disposition: model
       production_callers:
@@ -1153,8 +1016,6 @@ exports:
     - id: internal/runtime/podcast_test.go:func:TestPodcastSubscriptionsPersistAndListContent
       disposition: podcast
     - id: internal/runtime/podcast_unit_test.go:func:TestContentTextLooksRSSFeed
-      disposition: podcast
-    - id: internal/runtime/podcast_unit_test.go:func:TestExtractRSSFeedTitle
       disposition: podcast
     - id: internal/runtime/podcast_unit_test.go:func:TestPodcastSubscriptionTitleNeedsRefresh
       disposition: podcast
@@ -1261,6 +1122,10 @@ exports:
       disposition: lifecycle
       production_callers:
         - internal/actorruntime/adapter.go
+    - id: internal/runtime/runtime.go:func:WithContentService
+      disposition: lifecycle
+      production_callers:
+        - internal/sandbox/run.go
     - id: internal/runtime/runtime.go:func:WithDesktopStateOwner
       disposition: lifecycle
       production_callers:
@@ -1366,9 +1231,7 @@ exports:
       production_callers:
         - internal/actorruntime/handler.go
         - internal/runtime/api.go
-        - internal/runtime/content.go
         - internal/runtime/live_ws.go
-        - internal/runtime/media_state.go
         - internal/runtime/podcast.go
         - internal/runtime/texture.go
         - internal/runtime/texture_agent_revision.go
@@ -1386,7 +1249,6 @@ exports:
         - internal/runtime/api.go
         - internal/runtime/api_app_promotion.go
         - internal/runtime/channel_store.go
-        - internal/runtime/content.go
         - internal/runtime/delegate_worker_update_fallback.go
         - internal/runtime/model_policy.go
         - internal/runtime/product_events.go
@@ -2674,9 +2536,9 @@ wrappers:
     - id: internal/apihandler/routes.go:field:runtime.APIHandler
       disposition: delete
 compatibility_markers:
-    - id: internal/runtime/runtime.go:1976:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1986:This is the legacy execution path used when no tool registry is configured
       disposition: delete
-    - id: internal/runtime/runtime.go:97:New creates a new Runtime with the given config, store, event bus, and
+    - id: internal/runtime/runtime.go:99:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
     - id: internal/runtime/tools_capsule.go:297:This preserves backward compatibility with existing callers.
       disposition: delete
@@ -2727,24 +2589,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/channel_store.go:ChannelRead:internal/store.method:Store.ListChannelMessages
       disposition: read
-    - id: internal/runtime/content.go:HandleContentCreate:internal/store.method:Store.CreateContentItem
-      disposition: wire
-    - id: internal/runtime/content.go:HandleContentItem:internal/store.method:Store.GetContentItem
-      disposition: read
-    - id: internal/runtime/content.go:HandleContentList:internal/store.method:Store.ListContentItems
-      disposition: read
-    - id: internal/runtime/content.go:ImportFileContent:internal/store.method:Store.CreateContentItem
-      disposition: wire
-    - id: internal/runtime/content.go:ImportURLContent:internal/store.method:Store.CreateContentItem
-      disposition: wire
-    - id: internal/runtime/content.go:findExistingFileContentItem:internal/store.method:Store.ListContentItems
-      disposition: read
-    - id: internal/runtime/content.go:findExistingURLContentItem:internal/store.method:Store.ListContentItems
-      disposition: read
-    - id: internal/runtime/content.go:importYouTubeURLContent:internal/store.method:Store.CreateContentItem
-      disposition: wire
-    - id: internal/runtime/content.go:importYouTubeURLContent:internal/store.method:Store.CreateContentItem#2
-      disposition: wire
     - id: internal/runtime/delegate_worker_update_fallback.go:dispatchDelegateWorkerUpdate:internal/store.method:Store.DispatchWorkerUpdate
       disposition: lifecycle
     - id: internal/runtime/delegate_worker_update_fallback.go:enqueueDelegateWorkerSuperContinuation:internal/store.method:Store.DispatchWorkerUpdate
@@ -2757,18 +2601,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/live_ws.go:HandleLiveWS:internal/store.method:Store.ListEventsByOwnerAfter
       disposition: read
-    - id: internal/runtime/media_state.go:HandleMediaProgressGet:internal/store.method:Store.GetMediaProgress
-      disposition: read
-    - id: internal/runtime/media_state.go:HandleMediaProgressPut:internal/store.method:Store.UpsertMediaProgress
-      disposition: lifecycle
-    - id: internal/runtime/media_state.go:HandleMediaRecentsGet:internal/store.method:Store.ListMediaRecents
-      disposition: read
-    - id: internal/runtime/media_state.go:HandleMediaRecentsPut:internal/store.method:Store.UpsertMediaRecent
-      disposition: lifecycle
-    - id: internal/runtime/media_state.go:HandleThemePreferenceGet:internal/store.method:Store.GetUserPreference
-      disposition: read
-    - id: internal/runtime/media_state.go:HandleThemePreferencePut:internal/store.method:Store.SaveUserPreference
-      disposition: lifecycle
     - id: internal/runtime/podcast.go:listPodcastSubscriptionsWithContent:internal/store.method:Store.GetContentItem
       disposition: read
     - id: internal/runtime/podcast.go:listPodcastSubscriptionsWithContent:internal/store.method:Store.ListPodcastSubscriptions
@@ -3063,8 +2895,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/texture.go:HandleTextureHistory:internal/store.method:Store.GetHistory
       disposition: read
-    - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateContentItem
-      disposition: wire
     - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateDocument
       disposition: wire
     - id: internal/runtime/texture.go:HandleTextureImportMarkdownLineage:internal/store.method:Store.CreateRevision
@@ -3220,8 +3050,6 @@ store_calls:
     - id: internal/runtime/texture_import.go:ensureTextureManifest:internal/store.method:Store.GetDocumentAliasSourcePath
       disposition: read
     - id: internal/runtime/texture_import.go:ensureTextureManifest:internal/store.method:Store.UpsertDocumentAlias
-      disposition: wire
-    - id: internal/runtime/texture_import.go:ensureTextureOriginalContentItem:internal/store.method:Store.CreateContentItem
       disposition: wire
     - id: internal/runtime/texture_import.go:ensureTextureOriginalContentItem:internal/store.method:Store.ListContentItems
       disposition: read

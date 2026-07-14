@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -180,7 +181,7 @@ func (h *APIHandler) subscribePodcastFeed(ctx context.Context, ownerID string, r
 	if feedURL == "" {
 		return types.PodcastSubscription{}, fmt.Errorf("feed_url is required")
 	}
-	normalizedURL, err := normalizeHTTPURL(feedURL)
+	normalizedURL, err := contentowner.NormalizeHTTPURL(feedURL)
 	if err != nil {
 		return types.PodcastSubscription{}, err
 	}
@@ -198,8 +199,11 @@ func (h *APIHandler) subscribePodcastFeed(ctx context.Context, ownerID string, r
 }
 
 func (h *APIHandler) refreshPodcastSubscription(ctx context.Context, sub types.PodcastSubscription) (types.PodcastSubscription, error) {
+	if h == nil || h.rt == nil || h.rt.content == nil {
+		return sub, fmt.Errorf("content service not configured")
+	}
 	query := firstNonEmptyPromotion(sub.Title, sub.FeedURL)
-	item, err := h.rt.ImportURLContent(ctx, sub.OwnerID, sub.FeedURL, query)
+	item, err := h.rt.content.ImportURL(ctx, sub.OwnerID, sub.FeedURL, query)
 	if err != nil {
 		return sub, err
 	}

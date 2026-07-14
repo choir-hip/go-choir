@@ -26,6 +26,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/markdownstructure"
 	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
@@ -64,7 +65,7 @@ func textureAPISetup(t *testing.T) (*APIHandler, *store.Store) {
 
 	bus := events.NewEventBus()
 	provider := provider.NewStubProvider(2 * time.Second)
-	rt := New(cfg, s, bus, provider)
+	rt := New(cfg, s, bus, provider, WithContentService(contentowner.NewService(s, bus)))
 	setTestDispatch(rt, s)
 
 	return NewAPIHandler(rt), s
@@ -1572,6 +1573,7 @@ func textureAPISetupWithProviderAndOptions(t *testing.T, provider provideriface.
 	}
 
 	bus := events.NewEventBus()
+	opts = append([]RuntimeOption{WithContentService(contentowner.NewService(s, bus))}, opts...)
 	rt := New(cfg, s, bus, provider, opts...)
 	setTestDispatch(rt, s)
 	if installTools {
@@ -6861,7 +6863,7 @@ func TestTextureImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 		Title:       "legal-cloud.md v44",
 		FilePath:    "proposals/legal-cloud-content-backed.md#v44",
 		TextContent: oldContent,
-		ContentHash: contentHash(oldContent),
+		ContentHash: contentowner.ContentHash(oldContent),
 		Metadata:    json.RawMessage(`{"source":"fixture"}`),
 		Provenance:  json.RawMessage(`{"created_from":"content_item_fixture"}`),
 		CreatedAt:   now.Add(-time.Hour),
@@ -6876,7 +6878,7 @@ func TestTextureImportMarkdownLineageUsesExistingContentItems(t *testing.T) {
 		Title:       "legal-cloud.md v49",
 		FilePath:    "proposals/legal-cloud-content-backed.md#v49",
 		TextContent: latestContent,
-		ContentHash: contentHash(latestContent),
+		ContentHash: contentowner.ContentHash(latestContent),
 		Metadata:    json.RawMessage(`{"source":"fixture"}`),
 		Provenance:  json.RawMessage(`{"created_from":"content_item_fixture"}`),
 		CreatedAt:   now,
@@ -7175,10 +7177,10 @@ func TestTextureOpenFileImportsDocxAndPDFBytesFromFilesRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("docx original item: %v", err)
 	}
-	if docxItem.ContentHash != contentHashBytes(docxBytes) || !strings.Contains(docxItem.TextContent, "Proposal Title") {
+	if docxItem.ContentHash != contentowner.ContentHashBytes(docxBytes) || !strings.Contains(docxItem.TextContent, "Proposal Title") {
 		t.Fatalf("docx original item hash/text = %#v", docxItem)
 	}
-	if selectors := selectorsFromContentMetadata(docxItem.Metadata); len(selectors) == 0 {
+	if selectors := contentowner.SelectorsFromMetadata(docxItem.Metadata); len(selectors) == 0 {
 		t.Fatalf("docx original item missing selectors: %s", string(docxItem.Metadata))
 	}
 	docxManifest := decodeRevisionMetadata(docxRevs[0].Metadata)["import_manifest"].(map[string]any)
@@ -7188,7 +7190,7 @@ func TestTextureOpenFileImportsDocxAndPDFBytesFromFilesRoot(t *testing.T) {
 	if docxManifest["original_content_hash_state"] != "available_from_original_bytes" {
 		t.Fatalf("docx manifest = %#v", docxManifest)
 	}
-	if docxManifest["original_content_hash"] != "sha256:"+contentHashBytes(docxBytes) {
+	if docxManifest["original_content_hash"] != "sha256:"+contentowner.ContentHashBytes(docxBytes) {
 		t.Fatalf("docx original hash = %#v", docxManifest)
 	}
 
@@ -7206,10 +7208,10 @@ func TestTextureOpenFileImportsDocxAndPDFBytesFromFilesRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("pdf original item: %v", err)
 	}
-	if pdfItem.ContentHash != contentHashBytes(pdfBytes) || !strings.Contains(pdfItem.TextContent, "Imported PDF sentence") {
+	if pdfItem.ContentHash != contentowner.ContentHashBytes(pdfBytes) || !strings.Contains(pdfItem.TextContent, "Imported PDF sentence") {
 		t.Fatalf("pdf original item hash/text = %#v", pdfItem)
 	}
-	if selectors := selectorsFromContentMetadata(pdfItem.Metadata); len(selectors) == 0 {
+	if selectors := contentowner.SelectorsFromMetadata(pdfItem.Metadata); len(selectors) == 0 {
 		t.Fatalf("pdf original item missing selectors: %s", string(pdfItem.Metadata))
 	}
 	pdfManifest := decodeRevisionMetadata(pdfRevs[0].Metadata)["import_manifest"].(map[string]any)
@@ -7219,7 +7221,7 @@ func TestTextureOpenFileImportsDocxAndPDFBytesFromFilesRoot(t *testing.T) {
 	if pdfManifest["original_content_hash_state"] != "available_from_original_bytes" {
 		t.Fatalf("pdf manifest = %#v", pdfManifest)
 	}
-	if pdfManifest["original_content_hash"] != "sha256:"+contentHashBytes(pdfBytes) {
+	if pdfManifest["original_content_hash"] != "sha256:"+contentowner.ContentHashBytes(pdfBytes) {
 		t.Fatalf("pdf original hash = %#v", pdfManifest)
 	}
 }
@@ -7338,7 +7340,7 @@ func TestTextureShortcutFileKindPreservesLegacyTextureCompatibility(t *testing.T
 		{name: "current texture", sourcePath: "shortcut-kind.texture", wantKind: "texture"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if !isTextureShortcutPath(tc.sourcePath) {
+			if !contentowner.IsTextureShortcutPath(tc.sourcePath) {
 				t.Fatalf("%s should be recognized as a Texture shortcut", tc.sourcePath)
 			}
 			bytes, err := marshalTextureShortcutFile(doc, tc.sourcePath)
@@ -8306,8 +8308,8 @@ func TestTextureAppagentEditCanonicalizesAliasedMarkdownTitle(t *testing.T) {
 			SourcePath:            "proposals/legacy-proposal.md",
 			MediaType:             "text/markdown",
 			ProjectionContent:     "# Legacy Proposal\n\nImported Markdown body.",
-			ProjectionContentHash: contentHash("# Legacy Proposal\n\nImported Markdown body."),
-			OriginalContentHash:   contentHash("# Legacy Proposal\n\nImported Markdown body."),
+			ProjectionContentHash: contentowner.ContentHash("# Legacy Proposal\n\nImported Markdown body."),
+			OriginalContentHash:   contentowner.ContentHash("# Legacy Proposal\n\nImported Markdown body."),
 			ImportAdapter:         "texture_file_open_projection",
 			ImportAdapterVersion:  1,
 		}, nil),
@@ -9634,7 +9636,10 @@ func TestTextureAgentRevisionRegistersMediaSourceEntities(t *testing.T) {
 		entitiesByKind["image"].Evidence.State != "available" {
 		t.Fatalf("image source entity = %#v", entitiesByKind["image"])
 	}
-	dedupedEntities, added := rt.registerTextureMediaSourceEntities(context.Background(), "user-1", content, sourceEntities)
+	dedupedEntities, added, err := rt.registerTextureMediaSourceEntities(context.Background(), "user-1", content, sourceEntities)
+	if err != nil {
+		t.Fatalf("re-register media sources: %v", err)
+	}
 	if added || len(dedupedEntities) != 2 {
 		t.Fatalf("re-register added=%v len=%d, want no new entities and len 2: %#v", added, len(dedupedEntities), dedupedEntities)
 	}
