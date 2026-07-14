@@ -6,23 +6,22 @@ This document supplies storage, promotion, heresy-detector, and deletion
 contracts to:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-Do not invoke it independently while the grand suite is `working`. Runtime,
-Wire, continuation, parent-child, acceptance, promotion, and vocabulary
-mutations execute only through the suite's S2/S3/S6/S7/S9 subgoals. Historical
-conclusions and evidence remain load-bearing; they do not create a second
-orchestrator or resumption state.
+Do not invoke it independently while the active mission is `working`. Runtime,
+Wire, lifecycle, acceptance, promotion, and vocabulary mutations execute only
+through R1/R4/R5/R7. Historical conclusions and evidence remain load-bearing;
+they do not create a second orchestrator or state capsule.
 
 This document previously superseded the deleted 2026-07-07 program and heresy
 paradocs. Their conclusions remain absorbed here as historical evidence. The
-grand suite now supersedes this document's independent execution authority.
+active mission now supersedes this document's independent execution authority.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` for
-   active execution order, delegation, checkpoints, and resumption.
+1. `docs/definitions/choir-autoputer-completion-2026-07-13.md` for
+   active execution order, evidence, checkpoints, and resumption.
 2. This document's detector, deletion, and historical evidence contracts.
 3. Owner statements 2026-07-07/08: object graph becomes canonical by hard
    cutover; Dolt version-control features become load-bearing; all named
@@ -83,7 +82,7 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 **Non-purpose:**
 
 - Runtime business-logic extraction is now owned by
-  `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` S3. This
+  `docs/definitions/choir-autoputer-completion-2026-07-13.md` R1. This
   Definition supplies subordinate detector/deletion contracts; it is not a
   competing `/goal` spine.
 - Not the grip/RL research program; that retired narrative remains in Git
@@ -240,10 +239,10 @@ execution_effect:
 ```yaml
 id: dolt-store-taxonomy
 kind: term
-status: superseded_by_grand_suite_route_ledger_topology
+status: superseded_by_active_mission_two_store_topology
 source: orchestrator-settled synthesis, unratified; owner two-store directive governs
 superseded_claim: A distinct third Dolt domain owns ComputerVersion route control.
-superseded_by: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md#route-ledger-topology
+superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
 term: Dolt store taxonomy
 definition: >-
   The live topology has exactly two product-state Dolt stores: (1) the
@@ -361,7 +360,7 @@ kind: boundary
 status: settled_cas_semantics / superseded_third_store_persistence / violated_implementation
 source: CAS/receipt semantics retained; orchestrator-settled third-store synthesis was unratified and is demoted by owner two-store authority
 superseded_claim: A distinct Dolt-backed platform-control ledger is required.
-superseded_by: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md#route-ledger-topology
+superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
 authority_object:
   id: computer-version-route-ledger
   name: ComputerVersion route ledger
@@ -521,7 +520,7 @@ kind: term
 status: settled_product_state / superseded_route_store_consequence
 source: owner all-in-on-Dolt authority for product state; orchestrator-added third route-store consequence was unratified
 superseded_claim: Route control requires a distinct Dolt persistence domain.
-superseded_by: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md#route-ledger-topology
+superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
 definition: >-
   Choir commits to Dolt as the load-bearing persistence substrate for durable
   product state. ComputerVersion route-control rows live as tables on the
@@ -766,11 +765,11 @@ determined_state:
       source: observed (`executeTextureEditTool` → `requiredContinuationAfterTextureEdit` → `extractEmailDraftIntent`, 2026-07-10)
       execution_effect: M3.1b is settled by deletion, inverted tests, CI, Node B identity, and a deployed Texture proof; broader H010/H024/H026 work remains.
     - claim: Historical D-ROUTE third-store topology is superseded; retained CAS/receipt semantics assign ordinary served-route authority to corpusd sql-server route-slot tables with vmctl as sole writer.
-      source: owner two-store directive, applied by grand-suite route-ledger-topology adjudication
+      source: owner two-store directive, applied by the active mission's two-store-topology node
       superseded_claim: one distinct durable Dolt-backed ComputerVersion route-control domain
-      superseded_by: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md#route-ledger-topology
+      superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
       execution_effect: >-
-        Grand S7 owns implementation. Receipt projection, fail-closed truth,
+        R5 owns implementation. Receipt projection, fail-closed truth,
         idempotency, and sole-writer contracts remain subordinate inputs.
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
@@ -956,30 +955,30 @@ yellow/green auto-proceed rule.
 
 | Open edge | Disposition | Reason / pointer |
 |---|---|---|
-| actor/runtime business-logic extraction | absorbed: grand suite S3 | `choir-autoputer-completion-suite-2026-07-11.md` owns the live caller cutovers, ratchets, and final directory extinction. |
-| Texture product-loop, transclusion, and durable-thread gaps | subordinate evidence for grand S3/S6 | Resume only through the grand suite from current code and staging evidence. |
-| source-system follow-ups | external dependency | Requires a fresh Definition if the grand suite does not absorb it. |
-| Wire staging and substrate proof | absorbed: grand suite S2 | D-WIRE conformance is the first runtime-authority cutover. |
-| lifecycle-cutover residues (texture forcing / parent-child) | absorbed: grand suite S3 | This Definition's H009–H012 and H001–H005 detector contracts remain the deletion bar. |
-| lifecycle-cutover residues (continuations / acceptance) | split: grand S3/S6 | S3 deletes continuation/parent-child residue; S6 establishes the surviving acceptance authority. |
-| conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E surface cleanup (H019–H029). |
+| actor/runtime business-logic extraction | absorbed: R1 | `choir-autoputer-completion-2026-07-13.md` owns live caller cutovers, ratchets, and final directory extinction. |
+| Texture product-loop, transclusion, and durable-thread gaps | subordinate evidence for R1/R4 | Resume only through the active mission from current code and staging evidence. |
+| source-system follow-ups | external dependency | Requires a fresh Definition if the active mission does not absorb it. |
+| Wire staging and substrate proof | settled predecessor receipt | D-WIRE conformance is imported without rerunning it. |
+| lifecycle-cutover residues (texture forcing / parent-child) | absorbed: R1 | This Definition's H009-H012 and H001-H005 detector contracts remain the deletion bar. |
+| lifecycle-cutover residues (continuations / acceptance) | split: R1/R4 | R1 deletes continuation/parent-child residue; R4 establishes the surviving acceptance authority. |
+| conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E surface cleanup (H019-H029). |
 | docs truth drift | external: documentation authority Definition | Governed by `documentation-authority-reduction-2026-07-09.md`. |
 | node-B fail-closed auth | external dependency | Platform/auth operations are not og-dolt work. |
-| sandbox→computer rename | absorbed: Phase E | og-dolt Phase E surface cleanup / rename machinery. |
+| sandbox→computer rename | absorbed: Phase E | og-dolt Phase E supplies detectors; active mission R7 owns the cutover. |
 | SQLite/sourcecycled cleanup | external dependency | Object-graph consolidation remains outside og-dolt scope; no live successor Definition owns it. |
 | node-B retention, news, orchestrator, autoradio, and cross-substrate gaps | external dependencies | Their checkpoint chains were removed; any resumed work requires fresh Definitions from current evidence. |
 | wire-on-settlement | external dependency | Route-switch evidence gate is not og-dolt work. |
-| continuation-deletion sequencing | absorbed: grand suite S3 | H006–H008 deletion executes inside runtime dissolution after zero production callers are verified. |
+| continuation-deletion sequencing | absorbed: R1 | H006-H008 deletion executes inside runtime dissolution after zero production callers are verified. |
 
 Phase A exit bar (what the gate panel reviews): detectors reporting in CI;
 timeouts proven in staging; all corrections committed; S1 settled or
 explicitly scoped; triage table full. Then the Phase Gate Protocol runs and,
 on clear, execution continues directly into Phase B.
 
-Grand-suite ownership update (2026-07-11): Phases B/C/E remain authoritative
+Active-mission ownership update (2026-07-13): Phases B/C/E remain authoritative
 detector and deletion specifications, but overlapping runtime, continuation,
-parent-child, acceptance, and vocabulary mutations execute only as grand-suite
-S3/S6/S9 subgoals. A direct `/goal` on this document must not race or duplicate
+parent-child, acceptance, promotion, and vocabulary mutations execute only as
+R1/R4/R5/R7 work. A direct `/goal` on this document must not race or duplicate
 those cutovers.
 
 ### Phase B — Heresy kill wave 1 (M3.1, M3.2) + Dolt audit reads
@@ -1015,33 +1014,33 @@ bar; continuations code and routes deleted with zero production callers
 verified; every cold entity reading from OG by default in production with
 SQL fallback exercised; detector families for these clusters enforcing.
 
-### Phase D — Historical promotion contract, executed only by grand S7
+### Phase D — Historical promotion contract, consumed only by R5
 
-Do not execute this phase independently. Grand S7 consumes its retained
-fail-closed truth, sole-writer CAS, immutable receipt, idempotency, failure, and
-projection contracts under the owner-settled topology: route-slot/receipt
-tables on the corpusd sql-server with vmctl as sole writer. The former distinct
-Dolt-backed third-ledger implementation is superseded.
+Do not execute this phase independently. R5 consumes its retained fail-closed
+truth, sole-writer CAS, immutable receipt, idempotency, failure, and projection
+contracts under the owner-settled topology: route-slot/receipt tables on the
+corpusd sql-server with vmctl as sole writer. The former distinct Dolt-backed
+third-ledger implementation is superseded.
 
-Grand S7 deletes duplicate roll-forward and candidate switch/rollback mutation
-paths with their callers; rewrites `promotion_protocol.tla` around one
-route-slot → ComputerVersion CAS plus immutable receipt; implements vmctl-only
-read/write APIs; cuts proxy routing to route-slot read → ComputerVersion →
-materializer; and proves an old → new → old sequence with explicit receipts and
-generations. Branch merge/tag remains preparation, never activation.
+R5 deletes duplicate roll-forward and candidate switch/rollback mutation paths
+with their callers; rewrites `promotion_protocol.tla` around one route-slot →
+ComputerVersion CAS plus immutable receipt; implements vmctl-only read/write
+APIs; cuts proxy routing to route-slot read → ComputerVersion → materializer;
+and proves an old → new → old sequence with explicit receipts and generations.
+Branch merge/tag remains preparation, never activation.
 
 The retained exit contract requires concurrency, idempotency, injected-failure,
 restart, failed-writer/materializer negative projection, and zero-caller
-evidence for deleted mutation surfaces. Only the grand-suite checkpoint can
-mark S7 complete.
+evidence for deleted mutation surfaces. Only the active mission capsule may
+record R5 complete.
 
-### Phase E — Historical cleanup contract, executed only by grand S9
+### Phase E — Historical cleanup contract, consumed only by R7
 
-Do not execute this phase independently. Grand S9 consumes its detector and
-surface-deletion contracts for H019–H029, Universal→World Wire, and
-sandbox→autoputer vocabulary. Any non-rename deletion still owned by grand S3
-must already be complete. Grand S9 owns iteration ordering, staging proof,
-alias removal, consensus, and completion state.
+Do not execute this phase independently. R7 consumes its detector and
+surface-deletion contracts for H019-H029, Universal→World Wire, and
+sandbox→autoputer vocabulary. Any non-rename deletion still owned by R1 must
+already be complete. R7 owns atomic iteration ordering, staging proof,
+independent review, and completion state; compatibility aliases are forbidden.
 
 ## Dense Feedback Channels
 
@@ -1224,7 +1223,7 @@ Per the definition skill. Specific bindings:
   command_or_observation: >-
     go test ./internal/runtime -run
     'TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches|TestExplicitNoWorkerDecisionParsesWithoutNarrativeRouteOracle|TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims'
-    -count=1; go test ./internal/runtime/textureprompts -count=1;
+    -count=1; go test ./internal/textureprompts -count=1;
     scripts/check-heresies.sh --fail-on-regression; temporary production marker
     negative proof; CI run 29074494439; Node B /health; real-passkey staging
     create/revision/revise/poll/delete probe.
@@ -1423,14 +1422,14 @@ run_checkpoint_and_resumption_state:
   remaining_error_field: see Variant below
   highest_impact_remaining_uncertainty: remaining H009/H010 forcing sites + M3.2 authority residues
   next_executable_probe: >-
-    Return control to grand S0/S3. Reconcile remaining H009/H010 and M3.2
-    detector hits against current production callers before any deletion.
+    Return control to R1. Reconcile remaining H009/H010 and M3.2 detector hits
+    against current production callers before any deletion.
   queued_phase_d_executable_slice: >-
-    Grand S7 consumes D-ROUTE's fail-closed truth gate and sole-writer contract.
+    R5 consumes D-ROUTE's fail-closed truth gate and sole-writer contract.
     It must prevent adoption, lineage, UI, Trace, and run acceptance from
     advancing without durable receipt read-back and must delete duplicate
     roll-forward/switch/rollback mutators atomically.
-  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md"
+  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-2026-07-13.md"
   evidence_artifact_refs:
     - this Definition's adjudicated evidence ledger
     - https://github.com/choir-hip/go-choir/actions/runs/29072918594
@@ -1447,5 +1446,5 @@ run_checkpoint_and_resumption_state:
 ## Suggested Goal String
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```

@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 
 	"github.com/google/uuid"
 
@@ -38,7 +40,7 @@ type Runtime struct {
 	store       *store.Store
 	bus         *events.EventBus
 	provider    provideriface.Provider
-	promptStore *PromptStore
+	promptStore *promptstore.Store
 
 	// traceStore is the optional Dolt-backed observability store. When set,
 	// every event emitted via emitEvent/persistEvent/persistSubmittedRun is
@@ -110,7 +112,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		provider:         provider,
 		health:           types.HealthReady,
 		running:          make(map[string]context.CancelFunc),
-		promptStore:      NewPromptStore(cfg.PromptRoot),
+		promptStore:      promptstore.New(cfg.PromptRoot),
 		textureWakeAfter: func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
 		browserOps:       make(map[string]*sync.Mutex),
 		browserCDP:       make(map[string]*browserCDPSession),
@@ -347,7 +349,7 @@ func resolveRunIdentity(ownerID, sandboxID string, metadata map[string]any, pare
 			profile = agentProfileForRun(&types.RunRecord{Metadata: metadata})
 		}
 	}
-	profile = canonicalAgentProfile(profile)
+	profile = agentprofile.Canonical(profile)
 	if strings.EqualFold(strings.TrimSpace(rawProfile), agentprofile.Texture) {
 		profile = agentprofile.Texture
 	}
@@ -356,7 +358,7 @@ func resolveRunIdentity(ownerID, sandboxID string, metadata map[string]any, pare
 	if role == "" {
 		role = profile
 	} else {
-		role = canonicalAgentProfile(role)
+		role = agentprofile.Canonical(role)
 	}
 	if strings.EqualFold(strings.TrimSpace(rawRole), agentprofile.Texture) {
 		role = agentprofile.Texture
@@ -396,7 +398,7 @@ func ensureDesktopID(metadata map[string]any, parent *types.RunRecord, fallback 
 	return metadata
 }
 
-func (rt *Runtime) PromptStore() *PromptStore {
+func (rt *Runtime) PromptStore() *promptstore.Store {
 	return rt.promptStore
 }
 
@@ -508,7 +510,7 @@ func shouldLogWireLifecycle(rec *types.RunRecord) bool {
 	if rec == nil {
 		return false
 	}
-	profile := canonicalAgentProfile(agentProfileForRun(rec))
+	profile := agentprofile.Canonical(agentProfileForRun(rec))
 	if profile == agentprofile.Processor || profile == agentprofile.Texture || profile == agentprofile.Researcher || profile == agentprofile.CoSuper {
 		if metadataStringValue(rec.Metadata, runMetadataProcessorKey) != "" || strings.TrimSpace(rec.OwnerID) == vmctl.UniversalWirePlatformOwnerID {
 			return true
@@ -521,7 +523,7 @@ func wireLifecycleSummary(rec *types.RunRecord) string {
 	if rec == nil {
 		return ""
 	}
-	return fmt.Sprintf("run=%s profile=%s requested_by=%s channel=%s processor_key=%s state=%s", rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), strings.TrimSpace(rec.RequestedByRunID), strings.TrimSpace(rec.ChannelID), metadataStringValue(rec.Metadata, runMetadataProcessorKey), rec.State)
+	return fmt.Sprintf("run=%s profile=%s requested_by=%s channel=%s processor_key=%s state=%s", rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), strings.TrimSpace(rec.RequestedByRunID), strings.TrimSpace(rec.ChannelID), metadataStringValue(rec.Metadata, runMetadataProcessorKey), rec.State)
 }
 
 func (rt *Runtime) StartRunWithMetadata(ctx context.Context, prompt, ownerID string, metadata map[string]any) (*types.RunRecord, error) {
@@ -569,7 +571,7 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 	if err := persistSubmittedRun(ctx, rt.store, rt.bus, agentRec, rec, len(prompt), rt.traceStore); err != nil {
 		return nil, err
 	}
-	if canonicalAgentProfile(agentProfileForRun(rec)) == agentprofile.Processor {
+	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor {
 		if _, err := rt.beginWireProcessorDecisionWorkItem(ctx, rec); err != nil {
 			log.Printf("runtime: wire processor decision work item run=%s: %v", rec.RunID, err)
 		}
@@ -695,9 +697,9 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
 
 	if rt.coagentSpawnBudgetApplies(&requesterRec) {
-		coagentProfile := canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile))
+		coagentProfile := agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile))
 		if coagentProfile == "" {
-			coagentProfile = canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentRole))
+			coagentProfile = agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentRole))
 		}
 		slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))
 		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && coagentProfile == agentprofile.CoSuper {
@@ -739,7 +741,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	claimedCoSuperTrajectoryID := ""
 	claimedCoSuperSlotName := ""
 	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
-		canonicalAgentProfile(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
+		agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
 		rt.coagentSpawnBudgetApplies(&requesterRec) {
 		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
 		existing, claimed, err := rt.store.ClaimCoSuperSlot(ctx, ownerID, trajectoryID, slot, runID, agentRec.AgentID, requesterRunID)
@@ -792,7 +794,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		return nil, releaseCoSuperSlotClaim(fmt.Errorf("persist spawned coagent work item: %w", err))
 	} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
 		log.Printf("runtime: spawned coagent work item not created for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
-			rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
+			rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
 	}
 
 	if err := rt.store.CreateRun(ctx, *rec); err != nil {
@@ -807,7 +809,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	})
 	rt.emitEvent(ctx, rec, types.EventRunSubmitted, events.CauseTaskLifecycle, objectiveLenPayload)
 	if shouldLogWireLifecycle(rec) || shouldLogWireLifecycle(&requesterRec) {
-		log.Printf("runtime: started coagent %s requested by %s requester_profile=%s", wireLifecycleSummary(rec), requesterRec.RunID, canonicalAgentProfile(agentProfileForRun(&requesterRec)))
+		log.Printf("runtime: started coagent %s requested by %s requester_profile=%s", wireLifecycleSummary(rec), requesterRec.RunID, agentprofile.Canonical(agentProfileForRun(&requesterRec)))
 	}
 	if err := rt.recordExplicitInitialTextureDecisionIfNeeded(ctx, rec); err != nil {
 		rt.handleExecutionError(ctx, rec, err)
@@ -826,7 +828,7 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 	if rt == nil || rt.store == nil || rec == nil {
 		return types.WorkItemRecord{}, nil
 	}
-	profile := canonicalAgentProfile(agentProfileForRun(rec))
+	profile := agentprofile.Canonical(agentProfileForRun(rec))
 	if !spawnedCoagentWorkItemProfile(profile) {
 		return types.WorkItemRecord{}, nil
 	}
@@ -861,7 +863,7 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 		details["channel_id"] = channelID
 	}
 	if requester != nil {
-		if requesterProfile := canonicalAgentProfile(agentProfileForRun(requester)); requesterProfile != "" {
+		if requesterProfile := agentprofile.Canonical(agentProfileForRun(requester)); requesterProfile != "" {
 			details["requested_by_agent_profile"] = requesterProfile
 		}
 	}
@@ -876,13 +878,13 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 		AuthorityProfile:     profile,
 		AssignedAgentID:      agentID,
 		CreatedByRunID:       requesterRunID,
-		ObjectiveFingerprint: "spawned_coagent:" + objectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
+		ObjectiveFingerprint: "spawned_coagent:" + workitem.ObjectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
 		Details:              details,
 	})
 }
 
 func inheritTextureRequesterMetadata(metadata map[string]any, requesterRun *types.RunRecord) map[string]any {
-	if requesterRun == nil || canonicalAgentProfile(agentProfileForRun(requesterRun)) != agentprofile.Texture {
+	if requesterRun == nil || agentprofile.Canonical(agentProfileForRun(requesterRun)) != agentprofile.Texture {
 		return metadata
 	}
 	metadata = cloneMetadata(metadata)
@@ -945,7 +947,7 @@ func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 }
 
 func spawnedCoagentWorkItemProfile(profile string) bool {
-	switch canonicalAgentProfile(profile) {
+	switch agentprofile.Canonical(profile) {
 	case agentprofile.Researcher, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
 		return true
 	default:
@@ -981,7 +983,7 @@ func (rt *Runtime) coagentSpawnBudgetApplies(requesterRec *types.RunRecord) bool
 	if requesterRec == nil {
 		return false
 	}
-	return canonicalAgentProfile(agentProfileForRun(requesterRec)) == agentprofile.VSuper
+	return agentprofile.Canonical(agentProfileForRun(requesterRec)) == agentprofile.VSuper
 }
 
 func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, requesterRec *types.RunRecord) error {
@@ -1325,10 +1327,10 @@ func (rt *Runtime) RunningCountByProfile(ctx context.Context, profile string) in
 		log.Printf("runtime: count running %s runs: %v", profile, err)
 		return rt.RunningCount()
 	}
-	profile = canonicalAgentProfile(profile)
+	profile = agentprofile.Canonical(profile)
 	count := 0
 	for i := range runs {
-		if canonicalAgentProfile(runs[i].AgentProfile) != profile {
+		if agentprofile.Canonical(runs[i].AgentProfile) != profile {
 			continue
 		}
 		if profile == agentprofile.Processor && !rt.processorRunOccupiesAdmission(ctx, runs[i]) {
@@ -1348,7 +1350,7 @@ func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.
 	if ownerID == "" || trajectoryID == "" {
 		return true
 	}
-	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
+	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 	if err != nil || !found {
 		return true
 	}
@@ -1390,7 +1392,7 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 					log.Printf("runtime: boot passivation: create spawned work item for run %s: %v", rec.RunID, err)
 				} else if item.WorkItemID == "" && spawnedCoagentWorkItemProfile(agentProfileForRun(rec)) {
 					log.Printf("runtime: boot passivation: spawned work item skipped for run=%s profile=%s trajectory=%s agent=%s requested_by=%s",
-						rec.RunID, canonicalAgentProfile(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
+						rec.RunID, agentprofile.Canonical(agentProfileForRun(rec)), trajectoryIDForRun(rec), rec.AgentID, rec.RequestedByRunID)
 				}
 
 				if err := rt.store.UpdateRun(ctx, *rec); err != nil {
@@ -1519,7 +1521,7 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 		}
 		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
 	}
-	profile := canonicalAgentProfile(firstNonEmpty(agent.Profile, first.AuthorityProfile))
+	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
 	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Texture {
 		return nil, nil
 	}

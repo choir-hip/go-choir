@@ -8,12 +8,12 @@ foliation record that separated correctness, deletion, and rename work.
 Its executable successor is:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-The successor is one resumable grand mission suite. It treats the former
-members below as subordinate specifications where still applicable, places
-runtime dissolution inside the broader autoputer sequence, and preserves the
+The successor is one resumable product mission. It treats the former members
+below as subordinate specifications where still applicable, places runtime
+dissolution inside the broader autoputer sequence, and preserves the
 owner-settled rule that Autoputer precedes Choir-in-Choir and Autopaper.
 
 ## Why this suite exists
@@ -40,12 +40,11 @@ This sequence is preserved as evidence, not current execution authority:
 The sequence was incomplete because it jumped from Autoputer Phase 0 directly
 to run truth, left audited-computer and observation phases outside the spine,
 and left runtime business-logic extraction as an unowned external dependency.
-The grand suite repairs those omissions.
+The active mission repairs those omissions.
 
-Do not chain-execute these members from this document. The grand-suite
-orchestrator reads them as subordinate contracts, delegates their execution
-and micro-verification, runs agentic consensus at phase checkpoints, and
-updates one durable resumption state.
+Do not chain-execute these members from this document. The active mission reads
+them as subordinate contracts, applies its assurance profiles at Define and
+Implement boundaries, and updates one canonical state capsule.
 
 ## Atomic coupling rules
 
@@ -61,26 +60,26 @@ updates one durable resumption state.
 The following exclusions applied only to the former run-truth foliation. Current
 ownership is:
 
-- continuation, parent/child, and result-channel production deletion: grand
-  S3, using OG/Dolt detector contracts;
-- surviving acceptance and lifecycle truth: grand S6;
+- continuation, parent/child, and result-channel production deletion: R1,
+  using OG/Dolt detector contracts;
+- surviving acceptance and lifecycle truth: R4;
 - audited-computer, operator, self-development, and containment CLI work:
-  grand S4–S8;
-- vocabulary/surface cleanup: grand S9, coordinated with OG/Dolt Phase E.
+  R2-R6;
+- vocabulary/surface cleanup: R7, coordinated with OG/Dolt Phase E.
 
 ## Historical Completion Criterion
 
 The former suite would have completed when members 1–4 each reported
 `complete`. That criterion is superseded and cannot authorize current
-execution or completion; the grand suite's S0–S9 completion semantics govern.
+execution or completion; the active mission's R1-R7 completion semantics govern.
 
 ## Supersession Status
 
 - **Status:** `superseded`.
-- **Successor:** `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
-- **Reason:** owner direction requires one executable, resumable grand suite;
-  runtime dissolution is one subgoal among Deploy, Wire, audited-computer,
-  observation, run truth, self-development, containment, and vocabulary work.
+- **Successor:** `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+- **Reason:** owner direction requires one executable, resumable product mission;
+  runtime dissolution is one phase among audited-computer, observation, run
+  truth, self-development, containment, and vocabulary work.
 - **Evidence retained:** correctness/deletion/rename foliation and atomic
   coupling rules below remain useful constraints.
 

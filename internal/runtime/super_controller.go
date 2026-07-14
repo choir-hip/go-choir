@@ -366,7 +366,7 @@ func (rt *Runtime) reconcileUpdatedCoagentActor(ctx context.Context, ownerID, ag
 		return nil, nil
 	}
 	first := updates[0]
-	profile := canonicalAgentProfile(firstNonEmpty(agent.Profile, first.Role))
+	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.Role))
 	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Super {
 		return nil, nil
 	}

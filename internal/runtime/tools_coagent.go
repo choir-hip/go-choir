@@ -16,7 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func RegisterCoAgentTools(registry *toolregistry.ToolRegistry, rt *Runtime, spec AgentRoleSpec) error {
+func RegisterCoAgentTools(registry *toolregistry.ToolRegistry, rt *Runtime, spec agentprofile.Policy) error {
 	tools := []Tool{
 		newCancelAgentTool(rt),
 	}
@@ -31,7 +31,7 @@ func RegisterCoAgentTools(registry *toolregistry.ToolRegistry, rt *Runtime, spec
 	return nil
 }
 
-func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
+func newSpawnAgentTool(rt *Runtime, spec agentprofile.Policy) Tool {
 	type args struct {
 		Objective            string   `json:"objective"`
 		Role                 string   `json:"role"`
@@ -91,7 +91,7 @@ func newSpawnAgentTool(rt *Runtime, spec AgentRoleSpec) Tool {
 			if profile == "" {
 				profile = role
 			}
-			if !canDelegateTo(callerProfile, profile) {
+			if !agentprofile.CanDelegate(callerProfile, profile) {
 				return "", fmt.Errorf("%s cannot delegate to %s", callerProfile, profile)
 			}
 			slot := normalizeVSuperCoSuperSlot(in.Slot)
@@ -236,7 +236,7 @@ func (rt *Runtime) ensureCoagentTextureRevisionRoute(ctx context.Context, parent
 	if parentRec == nil {
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires a parent run")
 	}
-	callerProfile := canonicalAgentProfile(req.CallerProfile)
+	callerProfile := agentprofile.Canonical(req.CallerProfile)
 	if callerProfile != agentprofile.Processor && callerProfile != agentprofile.Reconciler {
 		return coagentTextureRouteDecision{}, fmt.Errorf("texture route requires processor or reconciler caller")
 	}
@@ -344,7 +344,7 @@ func (rt *Runtime) existingReconcilerTextureHandoff(ctx context.Context, parentR
 		return types.RunRecord{}, false, fmt.Errorf("list existing reconciler Texture handoffs: %w", err)
 	}
 	for _, run := range runs {
-		if canonicalAgentProfile(agentProfileForRun(&run)) != agentprofile.Texture ||
+		if agentprofile.Canonical(agentProfileForRun(&run)) != agentprofile.Texture ||
 			strings.TrimSpace(run.RequestedByRunID) != strings.TrimSpace(parentRec.RunID) ||
 			metadataStringValue(run.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 			continue
@@ -369,7 +369,7 @@ func (rt *Runtime) verifyRequiredTextureRevisions(ctx context.Context, rec *type
 	written := make(map[string]struct{})
 	for _, child := range runs {
 		if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
-			canonicalAgentProfile(agentProfileForRun(&child)) != agentprofile.Texture ||
+			agentprofile.Canonical(agentProfileForRun(&child)) != agentprofile.Texture ||
 			metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 			continue
 		}
@@ -417,7 +417,7 @@ func (rt *Runtime) awaitRequiredTextureRevisions(ctx context.Context, rec *types
 		active := false
 		for _, child := range runs {
 			if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
-				canonicalAgentProfile(agentProfileForRun(&child)) != agentprofile.Texture ||
+				agentprofile.Canonical(agentProfileForRun(&child)) != agentprofile.Texture ||
 				metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
 				continue
 			}
@@ -483,7 +483,7 @@ func (rt *Runtime) coagentTextureTargetDocument(ctx context.Context, parentRec *
 		"revision_role":                  textureRevisionRoleInput,
 		"input_origin":                   textureInputOriginForCaller(req.CallerProfile),
 		"texture_version_stage":          "pre_article_brief",
-		"created_from":                   canonicalAgentProfile(req.CallerProfile),
+		"created_from":                   agentprofile.Canonical(req.CallerProfile),
 		"requested_by_run_id":            parentRec.RunID,
 		"requested_by_agent_id":          strings.TrimSpace(parentRec.AgentID),
 		"requested_by_channel_id":        strings.TrimSpace(parentRec.ChannelID),
@@ -509,7 +509,7 @@ func (rt *Runtime) coagentTextureTargetDocument(ctx context.Context, parentRec *
 		AuthorKind: types.AuthorAppAgent,
 		AuthorLabel: strings.TrimSpace(firstNonEmpty(
 			parentRec.AgentID,
-			canonicalAgentProfile(req.CallerProfile),
+			agentprofile.Canonical(req.CallerProfile),
 		)),
 		Content:        projectedContent,
 		BodyDoc:        bodyDoc,
@@ -711,7 +711,7 @@ func (rt *Runtime) coagentTextureSourceEntities(ctx context.Context, parentRec *
 			continue
 		}
 		entity := contentItemRefToSourceEntity(item)
-		entity.Provenance.CreatedBy = firstNonEmpty(canonicalAgentProfile(req.CallerProfile), entity.Provenance.CreatedBy)
+		entity.Provenance.CreatedBy = firstNonEmpty(agentprofile.Canonical(req.CallerProfile), entity.Provenance.CreatedBy)
 		entities, _ = mergeTextureSourceEntities(entities, []textureSourceEntity{entity})
 	}
 	return entities
@@ -904,7 +904,7 @@ func normalizeDelegateTargetValue(raw string, allowedTargets []string) string {
 	if raw == "" {
 		return ""
 	}
-	direct := canonicalAgentProfile(raw)
+	direct := agentprofile.Canonical(raw)
 	if delegateTargetAllowed(direct, allowedTargets) {
 		return direct
 	}
@@ -916,7 +916,7 @@ func normalizeDelegateTargetValue(raw string, allowedTargets []string) string {
 	for _, token := range strings.FieldsFunc(raw, func(r rune) bool {
 		return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-' || r == '_')
 	}) {
-		candidate := canonicalAgentProfile(token)
+		candidate := agentprofile.Canonical(token)
 		if !delegateTargetAllowed(candidate, allowedTargets) || seen[candidate] {
 			continue
 		}
@@ -933,9 +933,9 @@ func normalizeDelegateTargetValue(raw string, allowedTargets []string) string {
 }
 
 func delegateTargetAllowed(candidate string, allowedTargets []string) bool {
-	candidate = canonicalAgentProfile(candidate)
+	candidate = agentprofile.Canonical(candidate)
 	for _, allowed := range allowedTargets {
-		if candidate == canonicalAgentProfile(allowed) {
+		if candidate == agentprofile.Canonical(allowed) {
 			return true
 		}
 	}
@@ -963,7 +963,7 @@ func canonicalAllowedDelegateTargets(targets []string) []string {
 	for _, target := range targets {
 		target = strings.TrimSpace(target)
 		if target != agentprofile.Texture {
-			target = canonicalAgentProfile(target)
+			target = agentprofile.Canonical(target)
 		}
 		if target == "" || seen[target] {
 			continue

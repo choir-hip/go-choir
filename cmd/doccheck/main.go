@@ -25,25 +25,25 @@ const (
 )
 
 var highRead = map[string]bool{
-	"README.md":                                     true,
-	"AGENTS.md":                                     true,
-	"docs/README.md":                                true,
-	"docs/choir-doctrine.md":                        true,
-	"docs/semantic-registry.md":                     true,
-	"docs/NOW.md":                                   true,
-	"docs/ACTIVE.md":                                true,
-	"docs/current-architecture.md":                  true,
-	"docs/platform-os-app-state.md":                 true,
-	"docs/conjecture-assertion-ledger-2026-06.md":   true,
-	"docs/heresy-detectors.md":                      true,
-	"docs/agent-product-doctrine.md":                true,
-	"docs/choir-prompting-invariants.md":            true,
-	"docs/memo-problem-documentation-first.md":      true,
-	"docs/computer-ontology.md":                     true,
-	"docs/runtime-invariants.md":                    true,
-	"docs/texture-agentic-invariants-2026-06-13.md": true,
-	"docs/source-external-data-publication.md":      true,
-	"docs/definitions/choir-autoputer-completion-suite-2026-07-11.md": true,
+	"README.md":                                                 true,
+	"AGENTS.md":                                                 true,
+	"docs/README.md":                                            true,
+	"docs/choir-doctrine.md":                                    true,
+	"docs/semantic-registry.md":                                 true,
+	"docs/NOW.md":                                               true,
+	"docs/ACTIVE.md":                                            true,
+	"docs/current-architecture.md":                              true,
+	"docs/platform-os-app-state.md":                             true,
+	"docs/conjecture-assertion-ledger-2026-06.md":               true,
+	"docs/heresy-detectors.md":                                  true,
+	"docs/agent-product-doctrine.md":                            true,
+	"docs/choir-prompting-invariants.md":                        true,
+	"docs/memo-problem-documentation-first.md":                  true,
+	"docs/computer-ontology.md":                                 true,
+	"docs/runtime-invariants.md":                                true,
+	"docs/texture-agentic-invariants-2026-06-13.md":             true,
+	"docs/source-external-data-publication.md":                  true,
+	"docs/definitions/choir-autoputer-completion-2026-07-13.md": true,
 }
 
 // defaultReadPacket is intentionally small. It includes the docs router plus
@@ -62,7 +62,7 @@ var defaultReadPacket = []string{
 	"docs/runtime-invariants.md",
 	"docs/texture-agentic-invariants-2026-06-13.md",
 	"docs/source-external-data-publication.md",
-	"docs/definitions/choir-autoputer-completion-suite-2026-07-11.md",
+	"docs/definitions/choir-autoputer-completion-2026-07-13.md",
 }
 
 type manifestFile struct {
@@ -333,6 +333,9 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 		if reachable[info.Path] {
 			continue
 		}
+		if isExpectedUnreachableHistoricalEvidence(info) {
+			continue
+		}
 		switch {
 		case info.IsEvidence:
 			warnings = append(warnings, warning{Rule: "R3", Severity: "info", Path: info.Path, Message: "evidence doc is not reachable from current entry roots"})
@@ -397,7 +400,7 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 	} else {
 		warnings = append(warnings, textureWarnings...)
 	}
-	runtimeMarkdownWarnings, err := scanForbiddenRuntimeMarkdown()
+	runtimeMarkdownWarnings, err := scanForbiddenSourceMarkdown()
 	if err != nil {
 		warnings = append(warnings, warning{Rule: "P1", Severity: "warning", Message: fmt.Sprintf("runtime markdown scan failed: %v", err)})
 	} else {
@@ -478,6 +481,8 @@ func classifyDoc(path string, md manifestDoc, manifested, exists bool) docInfo {
 func inferClassification(path string) (string, bool) {
 	base := filepath.Base(path)
 	switch {
+	case isHistoricalArchive(path):
+		return "historical", true
 	case strings.HasPrefix(path, "docs/mission-") && strings.HasSuffix(path, ".ledger.md"):
 		return "historical", true
 	case strings.HasPrefix(path, "docs/mission-"):
@@ -489,6 +494,17 @@ func inferClassification(path string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func isHistoricalArchive(path string) bool {
+	return strings.HasPrefix(cleanPath(path), "docs/archive/")
+}
+
+// Archive documents are deliberately searchable historical evidence, not part
+// of the current entry graph. Reporting one unreachable-document warning per
+// archive file would obscure live documentation drift without adding signal.
+func isExpectedUnreachableHistoricalEvidence(info *docInfo) bool {
+	return info.IsEvidence && isHistoricalArchive(info.Path)
 }
 
 func normalizeRootKinds(v interface{}) []string {
@@ -1223,36 +1239,41 @@ func classifyHeresyContext(path, line string, docs map[string]*docInfo) string {
 	return "current-violation"
 }
 
-func scanForbiddenRuntimeMarkdown() ([]warning, error) {
+func scanForbiddenSourceMarkdown() ([]warning, error) {
 	var warnings []warning
-	err := filepath.WalkDir("internal/runtime", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
+	for _, root := range []string{"internal/runtime", "internal/promptstore/defaults"} {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if filepath.Ext(path) != ".md" {
+				return nil
+			}
+			warnings = append(warnings, warning{
+				Rule:     "P1",
+				Severity: "warning",
+				Path:     cleanPath(path),
+				Message:  "runtime source and prompt defaults must not contain markdown; docs belong in docs/ and agent prompts belong in YAML",
+				Hint:     "use internal/promptstore/defaults/*.yaml or internal/textureprompts/*.yaml",
+			})
 			return nil
-		}
-		if filepath.Ext(path) != ".md" {
-			return nil
-		}
-		warnings = append(warnings, warning{
-			Rule:     "P1",
-			Severity: "warning",
-			Path:     cleanPath(path),
-			Message:  "internal/runtime must not contain markdown; docs belong in docs/ and agent prompts belong in YAML",
-			Hint:     "use internal/runtime/prompt_defaults/*.yaml or internal/runtime/textureprompts/*.yaml",
 		})
-		return nil
-	})
-	return warnings, err
+		if err != nil {
+			return nil, err
+		}
+	}
+	return warnings, nil
 }
 
 func classifySurface(path string) string {
 	switch {
 	case strings.HasPrefix(path, "docs/") || path == "README.md" || path == "AGENTS.md":
 		return "docs"
-	case strings.HasPrefix(path, "internal/runtime/prompt_defaults/") ||
-		strings.HasPrefix(path, "internal/runtime/textureprompts/"):
+	case strings.HasPrefix(path, "internal/promptstore/defaults/") ||
+		strings.HasPrefix(path, "internal/textureprompts/"):
 		return "runtime-prompt"
 	case strings.HasSuffix(path, ".go"):
 		return "go"

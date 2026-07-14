@@ -23,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
 // apiError is a JSON error envelope for API responses.
@@ -380,8 +381,8 @@ func (h *APIHandler) runStatusWithTrajectory(ctx context.Context, rec *types.Run
 		WaitingOn:         append([]string(nil), obligations.WaitingOn...),
 		OpenWorkItemCount: len(obligations.OpenWorkItems),
 	}
-	if canonicalAgentProfile(agentProfileForRun(rec)) == agentprofile.Processor && ownerID != "" {
-		item, found, err := h.rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
+	if agentprofile.Canonical(agentProfileForRun(rec)) == agentprofile.Processor && ownerID != "" {
+		item, found, err := h.rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 		if err == nil && found {
 			resp.ProcessorResolution = &runProcessorResolutionStatusResponse{
 				WorkItemID:              item.WorkItemID,
@@ -738,7 +739,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]any)
 	}
-	profile := canonicalAgentProfile(metadataStringValue(req.Metadata, runMetadataAgentProfile))
+	profile := agentprofile.Canonical(metadataStringValue(req.Metadata, runMetadataAgentProfile))
 	if profile == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "agent_profile is required"})
 		return

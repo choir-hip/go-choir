@@ -10,6 +10,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
 func TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdict(t *testing.T) {
@@ -50,7 +51,7 @@ func TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdic
 		t.Fatalf("unexpected decision response: %+v", resp)
 	}
 
-	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(run.TrajectoryID))
+	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, workitem.ProcessorDecisionFingerprint(run.TrajectoryID))
 	if err != nil {
 		t.Fatalf("find processor request work item: %v", err)
 	}
@@ -64,7 +65,7 @@ func TestRecordWireProcessorDecisionToolRecordsPerSourceItemNonPublicationVerdic
 		t.Fatalf("processor request details = %+v", requestItem.Details)
 	}
 
-	sourceItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorSourceItemDecisionWorkItemFingerprint(run.TrajectoryID, "source-item-1"))
+	sourceItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, workitem.SourceItemDecisionFingerprint(run.TrajectoryID, "source-item-1"))
 	if err != nil {
 		t.Fatalf("find source-item work item: %v", err)
 	}
@@ -170,7 +171,7 @@ func TestRecordWireProcessorDecisionToolCancelsExplicitNoStoryTerminalBranch(t *
 		t.Fatalf("unexpected decision response: %+v", resp)
 	}
 
-	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(run.TrajectoryID))
+	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, workitem.ProcessorDecisionFingerprint(run.TrajectoryID))
 	if err != nil {
 		t.Fatalf("find processor request work item: %v", err)
 	}
@@ -232,7 +233,7 @@ func TestRecordWireProcessorDecisionToolKeepsDeferredBranchOpen(t *testing.T) {
 		t.Fatalf("unexpected deferred decision response: %+v", resp)
 	}
 
-	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(run.TrajectoryID))
+	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, workitem.ProcessorDecisionFingerprint(run.TrajectoryID))
 	if err != nil {
 		t.Fatalf("find processor request work item: %v", err)
 	}
@@ -307,7 +308,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 		t.Fatalf("ensure processor texture route: %v", err)
 	}
 
-	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(run.TrajectoryID))
+	requestItem, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, workitem.ProcessorDecisionFingerprint(run.TrajectoryID))
 	if err != nil {
 		t.Fatalf("find processor request work item: %v", err)
 	}
@@ -333,7 +334,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 		t.Fatalf("record_wire_processor_decision: %v", err)
 	}
 
-	requestItem, found, err = s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(run.TrajectoryID))
+	requestItem, found, err = s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, workitem.ProcessorDecisionFingerprint(run.TrajectoryID))
 	if err != nil {
 		t.Fatalf("reload processor request work item: %v", err)
 	}
@@ -344,7 +345,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 		t.Fatalf("request item after mixed decisions = %+v", requestItem)
 	}
 
-	sourceItem1, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorSourceItemDecisionWorkItemFingerprint(run.TrajectoryID, "source-item-1"))
+	sourceItem1, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, workitem.SourceItemDecisionFingerprint(run.TrajectoryID, "source-item-1"))
 	if err != nil {
 		t.Fatalf("find source-item-1 work item: %v", err)
 	}
@@ -352,7 +353,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 		t.Fatalf("source-item-1 decision item = %+v", sourceItem1)
 	}
 
-	sourceItem2, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, wireProcessorSourceItemDecisionWorkItemFingerprint(run.TrajectoryID, "source-item-2"))
+	sourceItem2, found, err := s.FindWorkItemByFingerprint(ctx, "user-alice", run.TrajectoryID, workitem.SourceItemDecisionFingerprint(run.TrajectoryID, "source-item-2"))
 	if err != nil {
 		t.Fatalf("find source-item-2 work item: %v", err)
 	}
@@ -367,7 +368,7 @@ func TestProcessorMixedPerItemDecisionsCompleteRequestOnceStoryRouteExists(t *te
 	if err != nil {
 		t.Fatalf("list open work items: %v", err)
 	}
-	if len(open) != 1 || open[0].ObjectiveFingerprint != wireStoryResolutionWorkItemFingerprint(run.TrajectoryID, route.DocID) {
+	if len(open) != 1 || open[0].ObjectiveFingerprint != workitem.StoryResolutionFingerprint(run.TrajectoryID, route.DocID) {
 		t.Fatalf("open work items after mixed decisions = %+v", open)
 	}
 }

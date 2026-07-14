@@ -8,6 +8,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
 func TestSpawnMintsTrajectoryAndChildJoinsIt(t *testing.T) {
@@ -118,13 +119,13 @@ func TestProcessorSpawnMintsPublicationTrajectory(t *testing.T) {
 	sawSourceItems := map[string]bool{}
 	for _, item := range workItems {
 		switch item.ObjectiveFingerprint {
-		case wireProcessorDecisionWorkItemFingerprint(run.TrajectoryID):
+		case workitem.ProcessorDecisionFingerprint(run.TrajectoryID):
 			sawRequest = true
 			if item.Details["kind"] != "wire_processor_request_resolution" || item.Details["request_id"] != "processor-request-1" {
 				t.Fatalf("processor request decision details = %+v", item.Details)
 			}
-		case wireProcessorSourceItemDecisionWorkItemFingerprint(run.TrajectoryID, "srcitem-1"),
-			wireProcessorSourceItemDecisionWorkItemFingerprint(run.TrajectoryID, "srcitem-2"):
+		case workitem.SourceItemDecisionFingerprint(run.TrajectoryID, "srcitem-1"),
+			workitem.SourceItemDecisionFingerprint(run.TrajectoryID, "srcitem-2"):
 			sourceItemID, _ := item.Details["source_item_id"].(string)
 			sawSourceItems[sourceItemID] = true
 			if item.Details["kind"] != "wire_source_item_resolution" || item.Details["request_id"] != "processor-request-1" {

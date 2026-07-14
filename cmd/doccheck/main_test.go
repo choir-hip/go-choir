@@ -86,7 +86,7 @@ func TestValidateAssertionRegisterExtractsSections(t *testing.T) {
 	}
 }
 
-func TestScanForbiddenRuntimeMarkdownAllowsYAMLPrompts(t *testing.T) {
+func TestScanForbiddenSourceMarkdownAllowsYAMLPrompts(t *testing.T) {
 	dir := t.TempDir()
 	oldwd, err := os.Getwd()
 	if err != nil {
@@ -98,21 +98,34 @@ func TestScanForbiddenRuntimeMarkdownAllowsYAMLPrompts(t *testing.T) {
 	t.Cleanup(func() {
 		_ = os.Chdir(oldwd)
 	})
-	if err := os.MkdirAll("internal/runtime/prompt_defaults", 0755); err != nil {
+	if err := os.MkdirAll("internal/runtime", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("internal/runtime/prompt_defaults/texture.yaml", []byte("version: 1\nbody: |\n  hello\n"), 0644); err != nil {
+	if err := os.MkdirAll("internal/promptstore/defaults", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("internal/runtime/prompt_defaults/legacy.md", []byte("# no\n"), 0644); err != nil {
+	if err := os.WriteFile("internal/promptstore/defaults/texture.yaml", []byte("version: 1\nbody: |\n  hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	warnings, err := scanForbiddenRuntimeMarkdown()
+	for _, path := range []string{
+		"internal/runtime/legacy.md",
+		"internal/promptstore/defaults/legacy.md",
+	} {
+		if err := os.WriteFile(path, []byte("# no\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	warnings, err := scanForbiddenSourceMarkdown()
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	if !hasWarningPath(warnings, "internal/runtime/prompt_defaults/legacy.md") {
-		t.Fatalf("expected legacy.md warning, got %#v", warnings)
+	for _, path := range []string{
+		"internal/runtime/legacy.md",
+		"internal/promptstore/defaults/legacy.md",
+	} {
+		if !hasWarningPath(warnings, path) {
+			t.Fatalf("expected %s warning, got %#v", path, warnings)
+		}
 	}
 }
 
@@ -123,6 +136,23 @@ func hasWarningPath(warnings []warning, path string) bool {
 		}
 	}
 	return false
+}
+
+func TestClassifySurfaceRecognizesCurrentPromptPathsOnly(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"internal/promptstore/defaults/texture.yaml", "runtime-prompt"},
+		{"internal/textureprompts/texture.yaml", "runtime-prompt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := classifySurface(tt.path); got != tt.want {
+				t.Fatalf("classifySurface(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestClassifyHeresyContext(t *testing.T) {
@@ -144,6 +174,19 @@ func TestClassifyHeresyContext(t *testing.T) {
 		if got := classifyHeresyContext(tt.path, tt.line, docs); got != tt.want {
 			t.Fatalf("classifyHeresyContext(%q, %q) = %q, want %q", tt.path, tt.line, got, tt.want)
 		}
+	}
+}
+
+func TestInferClassificationTreatsArchiveAsHistoricalEvidence(t *testing.T) {
+	scope, evidence := inferClassification("docs/archive/north-star.md")
+	if scope != "historical" || !evidence {
+		t.Fatalf("inferClassification(archive) = (%q, %v), want (historical, true)", scope, evidence)
+	}
+	if !isExpectedUnreachableHistoricalEvidence(&docInfo{Path: "docs/archive/north-star.md", IsEvidence: true}) {
+		t.Fatal("historical archive evidence should not require current-entry reachability")
+	}
+	if isExpectedUnreachableHistoricalEvidence(&docInfo{Path: "docs/current.md", IsEvidence: true}) {
+		t.Fatal("non-archive evidence should retain its reachability diagnostic")
 	}
 }
 
@@ -236,7 +279,7 @@ func completeLivePacketReport() report {
 			Exists:      true,
 			Annotations: map[string]string{},
 		}
-		if path == "docs/definitions/choir-autoputer-completion-suite-2026-07-11.md" {
+		if path == "docs/definitions/choir-autoputer-completion-2026-07-13.md" {
 			doc.Annotations["doc_role"] = "definition"
 			doc.IsRoot = []string{"authority", "entry"}
 		}

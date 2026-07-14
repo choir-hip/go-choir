@@ -2,34 +2,31 @@
 
 ## Subordinate Invocation Semantics
 
-This document is the bounded S1 subgoal specification of:
+This document is the settled Deploy receipt imported by:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-Do not invoke it as an independent mission. The grand-suite orchestrator
-delegates its execution and micro-verification, runs the phase-checkpoint
-consensus, and records durable evidence and resumption state in the suite.
+Do not invoke it as an independent mission. Its accepted evidence remains a
+predecessor receipt; the active mission does not rerun it during resumption.
 
 ## Why this mission exists
 
-`docs/ACTIVE.md` Remaining Error: `Deploy to Staging (Node B)` fails because
-`vm-universal-wire-platform` reports `running_runs: 1`. The run is **`running`**,
-not `blocked`. The post-mortem's original three freeze modes did not cover a
-run that stays `running` forever. Hot-refresh waits on sandbox `/health` with
-the new commit and cannot complete while admission is occupied.
+Historical failure evidence recorded that `Deploy to Staging (Node B)` was
+blocked because `vm-universal-wire-platform` reported `running_runs: 1`. The
+run was **`running`**, not `blocked`; hot-refresh waited for sandbox `/health`
+with the new commit while admission remained occupied.
 
-The `sourcecycled` `blocked`→terminal fix (`f1ceba5`) does not drain this run.
-CI may already ignore `skills/*` for sandbox deploy classify (`d8fe4336`); that
-is not this mission's scope. This mission only restores Deploy by giving
-`RunRunning` a progress deadline and an operator cancel path.
+The later accepted receipt restored Deploy with a progress deadline, operator
+cancel path, and drained run. This failure is no longer current state. The
+details remain here to define what the settled receipt proved.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
-2. This subordinate Definition within S1 scope.
-3. `docs/ACTIVE.md` Remaining Error evidence.
+1. `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+2. This settled subordinate Definition as a predecessor receipt.
+3. This section's historical Deploy failure evidence.
 4. `docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`
    for inherited semantics only; its implementation phase is later.
 5. `docs/standing-questions.md`, `AGENTS.md`, `docs/choir-doctrine.md`.
@@ -38,9 +35,9 @@ is not this mission's scope. This mission only restores Deploy by giving
 
 ## Settled Inputs (do not re-litigate)
 
-- Single lifecycle authority default is `RunRecord.State` (suite member 3 owns
-  full projection alignment; this mission only needs terminal transitions that
-  release admission).
+- Single lifecycle authority default is `RunRecord.State` (R4 owns full
+  projection alignment; this settled receipt only covers terminal transitions
+  that release admission).
 - Doctrine rejects lease as a control concept (H019). New identifiers use
   **progress deadline** / **activation budget** only.
 - Continuation / parent-child / channel deletion is out of scope (og-dolt).
@@ -53,9 +50,9 @@ is not this mission's scope. This mission only restores Deploy by giving
 
 ## Mission Non-Purpose
 
-- No admission counter rewrite, retry policy, or artifact-verified completion (suite member 3).
-- No wire-store conformance (suite member 2).
-- No vocabulary purges or renames (suite member 4 / og-dolt E).
+- No admission counter rewrite, retry policy, or artifact-verified completion (R4).
+- No wire-store conformance (the settled Wire receipt owns it).
+- No vocabulary purges or renames (R7 / og-dolt E).
 - No VM reprovisioning; instance name `vm-universal-wire-platform` stays.
 
 ## Open Decisions (agent discretion)
@@ -78,51 +75,27 @@ Complete when all are observed on staging:
 3. The stuck platform VM run is drained (`running_runs: 0`).
 4. Staging deploy hot-refresh successfully accepts and verifies subsequent commits.
 5. Unit/integration tests cover cancellation and timeout capacity release.
-## Sequencing and Gates
+## Settled Receipt Verification
 
-This subordinate inherits the grand-suite behavior-phase checkpoint protocol.
-An optional pre-mutation review may be recorded as planning evidence, but it is
-advisory and cannot replace the mandatory post-acceptance consensus and
-orchestrator adjudication. All prompts, outputs, receipts, and decisions are
-durable grand-suite ledger refs, never only `/tmp`.
+This work is complete and must not be re-executed during resumption. Its
+accepted commit, CI/deploy evidence, staging proof, independent verification,
+and rollback ref are imported by the active mission capsule.
 
-Required focused proof:
+Historical focused proof:
 
 1. `go test ./internal/runtime ./cmd/choir -run 'Deadline|Cancel|Sweep'`.
-2. Landing loop per `AGENTS.md` (push `origin/main`, monitor CI + deploy).
-3. Drain the stuck run; prove Deploy green; record run IDs and Deploy URL.
-4. On red CI, identity mismatch, or QA failure, document and repair or revert
-   the smallest atomic landing to its recorded pre-mutation SHA.
+2. Landing Loop per `AGENTS.md`.
+3. Product CLI/API cancellation, timeout capacity release, drained
+   `running_runs`, and a successful later deploy refresh.
 
-## Execution
-
-### Phase 0 — Optional Planning Review (green/yellow)
-
-If run, persist it as advisory suite evidence; no code mutation and no phase
-status advancement.
-
-### Phase A — Deadline, cancel, drain, Deploy proof (red)
-
-- Implement progress deadline + sweep in `internal/runtime`.
-  Reuse `Runtime.CancelRun` and the existing authenticated cancellation API;
-  add no second lifecycle state machine.
-- Implement `choir run cancel` in `cmd/choir`.
-- Before landing, record every added `internal/runtime` file, symbol, test,
-  route, configuration field, and production caller in the grand suite's
-  `s1_runtime_exception_disposition`; the orchestrator enforces this gate.
-- Land; drain staging; prove Deploy.
-
-On success, propose the `docs/ACTIVE.md` Remaining Error update and return all
-receipts to the grand-suite orchestrator. This subordinate document may record
-S1 evidence but cannot advance suite state. Only the grand checkpoint marks S1
-complete after deployed proof, independent verification, consensus
-adjudication, and durable state.
+A reproduced regression returns to the active mission as a new code-free Define
+boundary. This document cannot authorize a mutation, reopen the settled Deploy
+receipt, or maintain a second evidence ledger.
 
 ## Follow-on
 
-- Grand S2: `choir-wire-store-conformance-2026-07-11.md`.
-- Grand S6 inherits that deadlines/cancel exist; it must not re-litigate them
-  unless staging regresses.
+- R4 inherits that deadlines/cancel exist and must not re-litigate them unless
+  staging reproduces a regression.
 
 ## Supersession Record
 

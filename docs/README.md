@@ -7,8 +7,8 @@ file. Choir documentation has four lanes:
 2. **NOW** — dated, evidence-scoped facts about the checked-out system and
    staging.
 3. **ACTIVE** — the currently confirmed work surface.
-4. **History** — deliberate Git archaeology for retired evidence and designs;
-   it is not indexed as current worktree prose.
+4. **History** — an opt-in historical corpus for retired designs, missions, and
+   evidence; it is visible in the worktree but never current authority.
 
 Do not infer current authority from a document's existence, filename, or
 archive location. `docs/choir-doctrine.md` is the apex doctrine and `AGENTS.md`
@@ -36,8 +36,8 @@ They are the whole default packet; historical material is opt-in.
    — canonical artifact contract.
 10. [`source-external-data-publication.md`](source-external-data-publication.md)
     — source, provenance, and publication contract.
-11. [`definitions/choir-autoputer-completion-suite-2026-07-11.md`](definitions/choir-autoputer-completion-suite-2026-07-11.md)
-    — the sole active top-level product Definition and suite orchestrator.
+11. [`definitions/choir-autoputer-completion-2026-07-13.md`](definitions/choir-autoputer-completion-2026-07-13.md)
+    — the sole active top-level product Definition and mission orchestrator.
 
 The compact registry and views point to the source documents; none can override
 the doctrine, operating contract, or an explicitly promoted domain contract.
@@ -76,10 +76,17 @@ it.
 
 ## Historical Material
 
-Historical missions, ledgers, raw evidence, reviews, and superseded proposals
-were removed from the worktree because generic retrieval treated their
-prose as current context. Git history remains the recovery and forensic
-surface; it is deliberately not part of the ordinary reading packet.
+[`archive/`](archive/README.md) is a deliberately restored, searchable corpus
+of historical designs, missions, reviews, and hypotheses. It exists because
+old thinking can hold future value; it is **not** executable mission authority,
+current doctrine, or part of the default reading packet. When a historical
+claim matters, verify it against the current doctrine, domain contracts,
+Definition, and observed system state before acting on it.
+
+The pre-purge raw process-evidence and ledger corpus remains outside the
+worktree; bounded current evidence receipts remain where the active Definition
+requires them. Git history is still the forensic recovery surface for material
+not represented in the historical corpus.
 
 [`doc-authority-manifest.yaml`](doc-authority-manifest.yaml) is slim
 machine-readable navigation metadata, not a second doctrine or a historical

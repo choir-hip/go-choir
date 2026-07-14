@@ -6,13 +6,13 @@ This document supplies the external-operator, self-development, and containment
 contracts for:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-Do not invoke it as a separate spine. The grand suite sequences runtime
+Do not invoke it as a separate spine. The active mission sequences runtime
 dissolution, audited-computer proof, observation, run truth, self-development,
-and contained Choir-in-Choir authority under one orchestrator and one durable
-resumption state.
+and contained Choir-in-Choir authority under one orchestrator and one canonical
+state capsule.
 
 ## Standing Dictum (owner, restated 2026-07-11)
 
@@ -20,11 +20,11 @@ resumption state.
 self-development, precedes automatic publication. The canonical sequence
 (owner, reversed/confirmed 2026-07-11) is:
 
-1. **Audited computer works** — grand S4 explicitly unpauses PC-5 pre-wiring
+1. **Audited computer works** — mission R2 explicitly unpauses PC-5 pre-wiring
    rows 572–581 plus the computer-ontology Candidate Contract for
    `ComputerVersion(CodeRef, ArtifactProgramRef)` materialization. PC-5
-   post-gate service ownership remains paused; grand S7 alone proves real
-   promotion. Wire conformance first removes VM-local Wire state so
+   post-gate service ownership remains paused; R5 alone proves real promotion.
+   Wire conformance first removes VM-local Wire state so
    `computer = f(code, state)` is well-defined. Candidate computers are
    capsules over substrate-independent audited computers, not VMs.
 2. **Choir-CLI autoputer** — an external agent (e.g. Claude in a harness)
@@ -41,13 +41,13 @@ step 2 requires.
 Twelve autopaper attempts failed by shortcutting this sequence
 (`docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`).
 The deleted `docs/mission-autoputer-before-autopaper-v0.md` is historical
-evidence. The grand suite is now the executable successor to that doctrine;
+evidence. The active mission is now the executable successor to that doctrine;
 this document remains its operator-contract specification.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
-2. This subordinate operator-contract Definition within S4–S8 scope.
+1. `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+2. This subordinate operator-contract Definition within R2/R3/R5/R6 scope.
 3. `docs/definitions/choir-wire-store-conformance-2026-07-11.md`.
 4. `AGENTS.md`, `docs/choir-doctrine.md`, `docs/computer-ontology.md`,
    `docs/agent-product-doctrine.md`.
@@ -117,23 +117,24 @@ is open.
 
 ## Sequence Context And Owned Phase Mapping
 
-The grand suite owns execution order. S2 and S3 are prerequisite context, not
-phases owned by this subordinate contract:
+The active mission owns execution order. Settled Deploy and Wire receipts plus
+R1 runtime extinction are prerequisite context, not phases owned by this
+subordinate contract:
 
-1. **Grand S2:** Wire-store conformance and thin observation.
-2. **Grand S3:** runtime dissolution to directory extinction; this prerequisite
+1. **Settled receipts:** Deploy restoration and Wire-store conformance.
+2. **R1:** runtime dissolution to directory extinction; this prerequisite
    prevents audited-computer/operator work from extending the god package or
    creating compatibility facades.
-3. **Grand S4 / former Phase 1:** audited computer proven.
-4. **Grand S5 / former Phase 2:** observation and trustworthy receipts.
-5. **Grand S6 / former Phase 3:** run truth.
-6. **Grand S7 / former Phase 4:** self-development.
-7. **Grand S8 / former Phase 5:** contained credentials and Choir-in-Choir.
+3. **R2 / former Phase 1:** audited computer proven.
+4. **R3 / former Phase 2:** observation and trustworthy receipts.
+5. **R4 / former Phase 3:** run truth, consuming this document's operator test.
+6. **R5 / former Phase 4:** self-development.
+7. **R6 / former Phase 5:** contained credentials and Choir-in-Choir.
 
-Autopaper editorial remains a successor mission after the grand suite.
-Acceptance is the corresponding external/co-super operator test on staging,
-recorded in the grand suite. Unit tests or SSH observation alone cannot
-complete a phase.
+Autopaper editorial remains a successor mission after R7. Acceptance is the
+corresponding external/co-super operator test on staging, referenced from the
+active mission capsule. Unit tests or SSH observation alone cannot complete a
+phase.
 
 ## Introspection Contract (safe limit for no-SSH debugging)
 
@@ -167,8 +168,8 @@ The observable set is derived empirically, then bounded by authority scope:
 
 - No autopaper/editorial work rides along.
 - No new services; no capsule wiring; no rename ceremonies.
-- No co-super key issuance before grand-suite S8.
-- The route-slot table established for S7 promotion must not grow into a
+- No co-super key issuance before mission R6.
+- The route-slot table established for R5 promotion must not grow into a
   general control store.
 
 ## Supersession Record
@@ -176,7 +177,7 @@ The observable set is derived empirically, then bounded by authority scope:
 - Preserves the external-operator and containment contracts from the restored
   autoputer-before-autopaper doctrine.
 - Is subordinate to
-  `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md`.
+  `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
 - Consumes post-mortem cornerstones C2–C5 from
-  `choir-autopaper-activation-attempt-report-2026-07-11.md`; the grand suite,
+  `choir-autopaper-activation-attempt-report-2026-07-11.md`; the active mission,
   not this document, owns execution order and resumption.

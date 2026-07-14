@@ -1,8 +1,8 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-11. Every claim is marked **Live**, **Target**, or
+**Last updated:** 2026-07-13. Every claim is marked **Live**, **Target**, or
 **Retired**. Current execution authority is
-[docs/definitions/choir-autoputer-completion-suite-2026-07-11.md](definitions/choir-autoputer-completion-suite-2026-07-11.md);
+[docs/definitions/choir-autoputer-completion-2026-07-13.md](definitions/choir-autoputer-completion-2026-07-13.md);
 the OG/Dolt Definition supplies subordinate detector/deletion/history contracts
 only. Earlier assessments and hard-cutover sources remain absorbed historical
 evidence.

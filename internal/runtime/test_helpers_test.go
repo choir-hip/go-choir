@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -266,7 +267,7 @@ func testPromptRuntime(t *testing.T) *Runtime {
 			PromptRoot:          promptRoot,
 			SupervisionInterval: time.Hour,
 		},
-		promptStore:   NewPromptStore(promptRoot),
+		promptStore:   promptstore.New(promptRoot),
 		modelPolicies: make(map[string]ModelPolicy),
 	}
 }

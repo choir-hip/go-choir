@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/yusefmosiah/go-choir/internal/provider"
-	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -1062,6 +1064,10 @@ func TestStartCoagentRunCompletesSpawnedWorkItem(t *testing.T) {
 	item, err := s.GetWorkItem(ctx, ownerID, workItemIDs[0])
 	if err != nil {
 		t.Fatalf("get spawned work item: %v", err)
+	}
+	wantFingerprint := "spawned_coagent:" + workitem.ObjectiveFingerprint(ownerID, trajectoryID, child.RunID, "research successful spawn work")
+	if item.ObjectiveFingerprint != wantFingerprint {
+		t.Fatalf("spawned work item fingerprint = %q, want %q", item.ObjectiveFingerprint, wantFingerprint)
 	}
 	if item.Status != types.WorkItemOpen || item.AssignedAgentID != child.AgentID || item.CreatedByRunID != parentID {
 		t.Fatalf("spawned work item = %+v, want open assigned item created by parent", item)

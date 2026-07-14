@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -613,7 +614,7 @@ func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t
 }
 
 func TestCompactWebSearchProjectionGuidesResearchUpdateCheckpoint(t *testing.T) {
-	resp := &webSearchResponse{
+	resp := &search.Response{
 		Query:    "nba update",
 		Provider: "mock",
 		Results: []map[string]any{{
@@ -645,7 +646,7 @@ func TestCompactWebSearchProjectionGuidesResearchUpdateCheckpoint(t *testing.T) 
 }
 
 func TestCompactWebSearchProjectionSurfacesGatewayOutage(t *testing.T) {
-	resp := &webSearchResponse{
+	resp := &search.Response{
 		Query:  "ai news",
 		Outage: true,
 		Code:   "search_outage",

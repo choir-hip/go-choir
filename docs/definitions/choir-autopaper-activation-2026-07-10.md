@@ -6,15 +6,15 @@ This document is a historical Autopaper attempt record. Resume current product
 work only through:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```
 
-Do not execute this topology. Autopaper remains blocked until the grand suite
+Do not execute this topology. Autopaper remains blocked until the active mission
 completes Autoputer and explicitly authorizes a successor editorial mission.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-suite-2026-07-11.md` for
+1. `docs/definitions/choir-autoputer-completion-2026-07-13.md` for
    current execution and successor authority.
 2. This Definition as historical attempt evidence only.
 3. `AGENTS.md` and `docs/choir-doctrine.md`.
@@ -1403,9 +1403,9 @@ run_checkpoint_and_resumption_state:
   highest_impact_remaining_uncertainty: historical reconciler-owned same-channel Texture rewarm completion
   next_executable_probe: >-
     None in this Definition. Preserve the evidence and resume only through the
-    grand suite; Autopaper requires an explicitly authorized successor after
+    active mission; Autopaper requires an explicitly authorized successor after
     Autoputer completion.
-  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-2026-07-13.md
   evidence_artifact_refs:
     - Evidence Ledger entry for the 2026-07-10T18:30Z-19:31Z Node B observation.
     - CI run 29118850649 and Node B deploy job 86450906080 for c6b422bb.
@@ -1457,5 +1457,5 @@ run_checkpoint_and_resumption_state:
 ## Suggested Goal String
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
 ```

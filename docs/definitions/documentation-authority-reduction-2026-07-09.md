@@ -1,5 +1,40 @@
 # Documentation Authority Reduction
 
+## 2026-07-14 Owner Authority Correction — Visible Historical Corpus
+
+```yaml
+id: visible-historical-corpus
+kind: authority_correction
+status: settled
+source: owner-stated, 2026-07-14
+settled_by: owner
+definition: >-
+  docs/archive/** is restored as a searchable, opt-in historical corpus. It
+  preserves potentially useful designs, missions, reviews, and hypotheses in
+  the worktree without making them current doctrine, executable Definition
+  authority, or part of the default reading packet.
+non_definition:
+  - Restoring the pre-purge raw process-evidence and ledger corpus, or creating
+    a second current-authority corpus.
+  - Treating archive location or a historical claim as a reason to bypass
+    current doctrine, domain contracts, the active Definition, or evidence.
+execution_effect:
+  - Generic search may return archive files; readers must verify any claim
+    against current authority before acting on it.
+  - doccheck classifies docs/archive/** as historical evidence rather than live
+    authority.
+  - This does not restore D1's historical raw evidence/ledger corpus; bounded
+    current evidence receipts remain governed by the active Definition.
+supersedes: [cold_history, deletion_qualified, retrieval_pollution, D2-archive]
+settlement: Owner direction, 2026-07-14.
+```
+
+This correction supersedes the earlier in-worktree archive-deletion rationale
+only. It does not rewrite the historical deletion receipt or restore the
+pre-purge raw evidence and ledger corpus. Where the completed text below says
+that archive material is absent from the worktree or available only through Git
+history, this correction governs.
+
 ## Harness Invocation Semantics
 
 ```text
@@ -15,13 +50,18 @@ directory, is the retrieval boundary.
 
 ## Source Authority Order
 
-1. This Definition for documentation-authority reduction.
-2. Owner direction, 2026-07-09/10: settle a minimal permanent semantic set and
+1. Owner direction, 2026-07-14: restore `docs/archive/**` as visible,
+   non-authoritative historical context. This overrides earlier deletion
+   direction only for the in-worktree archive.
+2. This Definition for documentation-authority reduction, including the owner
+   correction above.
+3. Owner direction, 2026-07-09/10: settle a minimal permanent semantic set and
    delete historical material from the retrievable worktree because old docs
-   corrupt search/retrieval. Git history is the rollback surface; an archive
-   directory inside the worktree is not retained merely for nostalgia.
-3. `docs/choir-doctrine.md` and `AGENTS.md`.
-4. Pre-purge Git history at `b6fbd598` for the settled docs-truth evidence and
+   corrupt search/retrieval. It remains in force for the pre-purge raw process
+   evidence/ledger corpus and other un-restored material; bounded current
+   evidence receipts are separately retained when active authority requires.
+4. `docs/choir-doctrine.md` and `AGENTS.md`.
+5. Pre-purge Git history at `b6fbd598` for the settled docs-truth evidence and
    unpromoted Beads proposal; neither is current authority.
 6. Observed repository state from `cmd/doccheck`, the authority manifest, and
    the mission graph.
