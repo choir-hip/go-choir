@@ -47,6 +47,44 @@ func (rt *Handler) Start(ctx context.Context) {
 	}
 }
 
+// ReconcileActorWake resolves a Texture actor from canonical document state,
+// persists its durable identity when first seen, and reconciles its mailbox.
+// This path does not depend on a pre-existing generic agents row.
+func (rt *Handler) ReconcileActorWake(ctx context.Context, agentID string) (*types.RunRecord, error) {
+	agentID = strings.TrimSpace(agentID)
+	if rt == nil || rt.Store == nil || rt.Core == nil || agentID == "" {
+		return nil, fmt.Errorf("resolve Texture actor wake: incomplete owner state")
+	}
+	docs, err := rt.Store.ListAllDocuments(ctx, 100000)
+	if err != nil {
+		return nil, fmt.Errorf("resolve Texture actor wake: list documents: %w", err)
+	}
+	for _, doc := range docs {
+		if currentTextureAgentID(doc.DocID) != agentID {
+			continue
+		}
+		if _, err := rt.Store.GetAgent(ctx, agentID); errors.Is(err, store.ErrNotFound) {
+			now := time.Now().UTC()
+			if err := rt.Store.UpsertAgent(ctx, types.AgentRecord{
+				AgentID:   agentID,
+				OwnerID:   doc.OwnerID,
+				SandboxID: rt.Core.TextureSandboxID(),
+				Profile:   agentprofile.Texture,
+				Role:      agentprofile.Texture,
+				ChannelID: doc.DocID,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}); err != nil {
+				return nil, fmt.Errorf("persist Texture actor identity: %w", err)
+			}
+		} else if err != nil {
+			return nil, fmt.Errorf("load Texture actor identity: %w", err)
+		}
+		return rt.ReconcileAgentWake(ctx, doc.OwnerID, doc.DocID)
+	}
+	return nil, fmt.Errorf("resolve Texture actor wake: document not found")
+}
+
 // ReconcileAgentWake starts or reuses a Texture activation when pending
 // update_coagent records are addressed to texture:<docID>. Delivery uses the
 // same typed coagent update packets as other actors; integrate intent only

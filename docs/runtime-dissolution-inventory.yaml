@@ -6,19 +6,19 @@ counts:
     go_files: 128
     production_files: 70
     test_files: 58
-    production_loc: 34501
+    production_loc: 34539
     test_loc: 46475
-    exports: 823
-    export_caller_edges: 271
+    exports: 824
+    export_caller_edges: 272
     initial_unused_export_debt: 10
     routes: 2
     tools: 37
     production_importers: 0
     wrappers: 0
     compatibility_markers: 6
-    store_calls: 359
+    store_calls: 362
     interface_candidates: 4
-    citers: 1334
+    citers: 1331
 files:
     - id: internal/agentcore/agent_tools_test.go [test]
       disposition: tools
@@ -319,7 +319,7 @@ files:
       loc: 1299
     - id: internal/textureowner/texture_controller.go [production]
       disposition: texture
-      loc: 230
+      loc: 268
     - id: internal/textureowner/texture_controller_restart_test.go [test]
       disposition: texture
       loc: 103
@@ -1369,6 +1369,7 @@ exports:
     - id: internal/agentcore/texture_lifecycle_api.go:method(*Runtime):TextureSandboxID
       disposition: texture
       production_callers:
+        - internal/textureowner/texture_controller.go
         - internal/textureowner/texture_handoff.go
     - id: internal/agentcore/texture_lifecycle_api.go:type:TextureActorToolLoopBudgetSpend
       disposition: texture
@@ -1945,10 +1946,13 @@ exports:
       disposition: texture
       production_callers:
         - internal/textureowner/router.go
-    - id: internal/textureowner/texture_controller.go:method(*Handler):ReconcileAgentWake
+    - id: internal/textureowner/texture_controller.go:method(*Handler):ReconcileActorWake
       disposition: texture
       production_callers:
         - internal/actorruntime/handler.go
+    - id: internal/textureowner/texture_controller.go:method(*Handler):ReconcileAgentWake
+      disposition: texture
+      production_callers:
         - internal/textureowner/texture_controller.go
     - id: internal/textureowner/texture_controller.go:method(*Handler):Start
       disposition: texture
@@ -3181,6 +3185,12 @@ store_calls:
       disposition: read
     - id: internal/textureowner/texture_agent_revision.go:userRevisionDiffSummaries:internal/store.method:Store.ListRevisionsByDoc
       disposition: read
+    - id: internal/textureowner/texture_controller.go:ReconcileActorWake:internal/store.method:Store.GetAgent
+      disposition: read
+    - id: internal/textureowner/texture_controller.go:ReconcileActorWake:internal/store.method:Store.ListAllDocuments
+      disposition: read
+    - id: internal/textureowner/texture_controller.go:ReconcileActorWake:internal/store.method:Store.UpsertAgent
+      disposition: lifecycle
     - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.GetDocument
       disposition: read
     - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.GetPendingAgentMutationByDoc
@@ -5647,13 +5657,7 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "internal/runtime, a compatibility facade, or dual ownership remains"
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "source-proof: internal/runtime is absent; repository Go imports contain no github.com/yusefmosiah/go-choir/internal/runtime; direct composition is agentcore + textureowner + coagentowner."'
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:admissible_evidence: "Exact type/API/store/tool/caller map; settled authority conformance; deletion-first owner boundary; no internal/runtime imports or files; focused Texture and agentcore contracts;… [sha256:e75f3061ee5e3ca125bc45d829790906f90a5f6b9737874006a1f43b2c5f211f]'
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:conjecture_delta: "Confirmed by implementation and tests: a one-way textureowner -> agentcore dependency preserves the canonical Texture API, revisions, sources, prompts, tools, actor wake, and user i… [sha256:91d9f972a51f89bc2f5bf5021cd9e5e48d38e9a4cbc84ff3237cb3d142ad668f]'
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:repaired: "Pending. The candidate already retires internal/runtime and moves canonical Texture behavior/tests to internal/textureowner, but it is not accepted until every blocking behavior and detecto… [sha256:1b3109e4b5176adc2d9140fabd9ea4a23c2556f0cb7b3598eef7049fe121f0c1]'
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block

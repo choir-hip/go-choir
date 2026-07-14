@@ -27,6 +27,27 @@ type adapterTestEnv struct {
 	cancel  context.CancelFunc
 }
 
+type startupBlockingProvider struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p *startupBlockingProvider) Execute(ctx context.Context, task *types.RunRecord, _ provideriface.EventEmitFunc) error {
+	select {
+	case p.started <- struct{}{}:
+	default:
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-p.release:
+		task.Result = "startup recovery completed"
+		return nil
+	}
+}
+
+func (p *startupBlockingProvider) ProviderName() string { return "startup-blocking" }
+
 func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 	t.Helper()
 	dir := t.TempDir()
@@ -58,6 +79,119 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 	adapter.Start(ctx)
 
 	return &adapterTestEnv{t: t, adapter: adapter, store: s, ctx: ctx, cancel: cancel}
+}
+
+func TestAdapterStartSerializesTextureOwnerRecoveryBeforeActorDelivery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "startup.db")
+	s, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	blocking := &startupBlockingProvider{
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	cfg := provideriface.Config{
+		SandboxID:           "sandbox-startup",
+		StorePath:           dbPath,
+		PromptRoot:          filepath.Join(dir, "prompts"),
+		ProviderTimeout:     10 * time.Second,
+		SupervisionInterval: time.Hour,
+	}
+	adapter := New(cfg, s, events.NewEventBus(), blocking, nil)
+	t.Cleanup(func() {
+		adapter.Stop()
+		adapter.cleanupLog()
+		_ = s.Close()
+	})
+	t.Cleanup(func() { close(blocking.release) })
+
+	const (
+		ownerID = "user-startup-recovery"
+		docID   = "doc-startup-recovery"
+		agentID = "texture:" + docID
+	)
+	now := time.Now().UTC()
+	if err := s.CreateDocument(ctx, types.Document{
+		DocID: docID, OwnerID: ownerID, Title: "Startup target", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create document: %v", err)
+	}
+	if err := s.CreateRevision(ctx, types.Revision{
+		RevisionID:  "rev-startup-recovery",
+		DocID:       docID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "user",
+		Content:     "Durable startup content",
+		CreatedAt:   now,
+	}); err != nil {
+		t.Fatalf("create revision: %v", err)
+	}
+	update := types.CoagentSourcePacket{
+		UpdateID:      "update-startup-recovery",
+		OwnerID:       ownerID,
+		AgentID:       "researcher:startup-recovery",
+		TargetAgentID: agentID,
+		ChannelID:     docID,
+		Role:          "researcher",
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       "durable startup finding",
+		},
+		Content:   "Durable startup finding",
+		CreatedAt: now.Add(time.Millisecond),
+	}
+	message := types.ChannelMessage{
+		ChannelID:   docID,
+		FromAgentID: update.AgentID,
+		ToAgentID:   agentID,
+		Role:        update.Role,
+		Content:     update.Content,
+		Timestamp:   update.CreatedAt,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("dispatch durable startup update: %v", err)
+	}
+	if _, err := s.GetAgent(ctx, agentID); err == nil {
+		t.Fatal("fixture unexpectedly has a Texture agent identity before startup")
+	}
+
+	owner := textureowner.NewHandler(adapter.Runtime)
+	if err := adapter.BindTextureOwner(owner); err != nil {
+		t.Fatalf("bind Texture owner: %v", err)
+	}
+	adapter.Start(ctx)
+	select {
+	case <-blocking.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Texture activation did not start after owner recovery")
+	}
+
+	agent, err := s.GetAgent(ctx, agentID)
+	if err != nil {
+		t.Fatalf("load recovered Texture identity: %v", err)
+	}
+	if agent.OwnerID != ownerID || agent.ChannelID != docID {
+		t.Fatalf("recovered Texture identity = %+v", agent)
+	}
+	runs, err := s.ListRunsByOwner(ctx, ownerID, 20)
+	if err != nil {
+		t.Fatalf("list startup recovery runs: %v", err)
+	}
+	textureRuns := 0
+	for _, run := range runs {
+		if run.AgentID == agentID && run.ChannelID == docID {
+			textureRuns++
+		}
+	}
+	if textureRuns != 1 {
+		t.Fatalf("startup recovery created %d Texture runs, want exactly one: %+v", textureRuns, runs)
+	}
 }
 
 // waitForRunState polls the store until the run reaches the target state or
@@ -228,11 +362,6 @@ func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
 		t.Fatalf("dispatch Texture update: %v", err)
 	}
 
-	if err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
-		AgentID: agentID, OwnerID: ownerID, SandboxID: "sandbox-test", Profile: "texture",
-	}); err != nil {
-		t.Fatalf("upsert Texture agent identity: %v", err)
-	}
 	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
 	memory, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate("coagent_result", agentID, update.Content), nil)
 	if err != nil {
@@ -240,6 +369,13 @@ func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
 	}
 	if memory != nil {
 		t.Fatalf("cold Texture wake memory = %v, want nil", memory)
+	}
+	agent, err := env.store.GetAgent(env.ctx, agentID)
+	if err != nil {
+		t.Fatalf("load first-wake Texture identity: %v", err)
+	}
+	if agent.OwnerID != ownerID || agent.ChannelID != docID {
+		t.Fatalf("first-wake Texture identity = %+v", agent)
 	}
 	runs, err := env.store.ListRunsByOwner(env.ctx, ownerID, 20)
 	if err != nil {
@@ -256,7 +392,7 @@ func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
 func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
 	env := newAdapterTestEnv(t)
 	_, err := newActorHandler(env.adapter.Runtime, nil).reconcileCoagentWake(
-		env.ctx, "user-texture-wake", "texture:doc-texture-wake",
+		env.ctx, "texture:doc-texture-wake",
 	)
 	if err == nil || err.Error() != "Texture owner is not bound" {
 		t.Fatalf("Texture wake error = %v, want explicit unbound-owner failure", err)

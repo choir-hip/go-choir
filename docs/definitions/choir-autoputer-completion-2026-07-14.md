@@ -137,12 +137,12 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: blocked_review
-  slice: "repair four second-round frozen-review regressions before landing Texture owner cutover"
-  question: "Does the next frozen repair serialize owner recovery before actor delivery, resolve first-ever Texture identity from durable owner state, reject explicit profiles exactly, and detect every legal owner alias/embed spelling?"
+  status: reviewing
+  slice: "freeze and independently re-review the complete Texture owner cutover"
+  question: "Does the frozen candidate now preserve exactly one boot/wake authority, durable first-wake identity, exact delegation validation, and exhaustive owner-wrapper detection?"
   reconciliation:
-    observed_at: 2026-07-14T23:07:17Z
-    source_ref: commit:0b26dad13fd181187e7074a9c3a649b2dedb23bd
+    observed_at: 2026-07-14T23:27:23Z
+    source_ref: staged-repair@sha256:00691ed69781f2ae9ff9879e845f897f3edcaaad96b2c03317cb288ff799ec46
     deploy_identity: blocked_before_landing
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -151,35 +151,32 @@ now:
       - docs/runtime-dissolution-inventory.yaml@production_importers:0,wrappers:0,tools:37
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: repair_candidate_review_blocked
+    status: candidate_implemented_local_review_pending
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact owner/caller map; focused production-order restart tests; exact delegation validation tests; exhaustive legal-Go ratchet fixtures; all four agentcore and Texture owner shards; frozen independent review; CI, staging identity, and deployed product-path acceptance."
     rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    conjecture_delta: "The first repair restored canonical Revision completion evidence, direct publication, typed lifecycle events, and a concrete Texture owner route, but review falsified the assumption that separately correct boot paths are safely composable: Runtime.Start dispatches actors before Texture owner reconciliation and the durable owner can exist before an agents row. Exact-input and detector completeness also require testing adversarial legal spellings, not only empty/ordinary forms."
+    conjecture_delta: "Concrete composition is safe when actor delivery remains paused across both generic and Texture recovery, then flushes durable boot dispatches with retry before the actor-log sweep. Texture actor identity can be resolved by the canonical owner from document identity rather than assuming a pre-existing generic agents row. Explicit profile inputs and structural detectors must use exact legal syntax, while fuzzy normalization remains limited to the role convenience field."
     heresy_delta:
-      discovered: "Second frozen review found four additional candidate defects: explicit invalid spawn profiles containing an allowed token still normalize open; Runtime.Start races actor wake against Texture owner boot reconciliation; first-ever durable Texture wakes can lack an agents row and poison the actor mailbox head; and dot imports plus parenthesized aliases evade the owner-wrapper ratchet."
+      discovered: "Frozen review found ten candidate-only regressions across two rounds: six deleted behavior contracts and four composition/adversarial-syntax gaps."
       introduced: "None in canonical source; all findings remain confined to the unpushed candidate lineage."
-      repaired: "The six first-round blockers are repaired in 0b26dad1 and independently accepted for canonical completion evidence, publication, and lifecycle event projection. The four second-round blockers are documented but not yet repaired."
+      repaired: "All ten findings now have source-level repairs and focused regression coverage: exact spawn profile validation; paused/retried boot dispatch; owner-resolved first Texture identity; canonical Revision completion evidence; direct publication; typed lifecycle events; and wrapper detection for qualified, dot-imported, pointer, embedded, and parenthesized owner types."
   candidate:
     id: R1-texture-owner-cutover-16
-    state: review_blocked_second_repair_required
-    ref: commit:0b26dad13fd181187e7074a9c3a649b2dedb23bd
+    state: implemented_local_review_pending
+    ref: staged-repair@sha256:00691ed69781f2ae9ff9879e845f897f3edcaaad96b2c03317cb288ff799ec46
     owner: orchestrator
     base: refs/remotes/origin/main@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    digest: pending_repair_freeze
+    digest: sha256:00691ed69781f2ae9ff9879e845f897f3edcaaad96b2c03317cb288ff799ec46
     scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
   evidence_refs:
     - "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."
     - "test-proof: scripts/go-test-runtime-shards passed all four agentcore shards plus all four Texture owner shards; go build ./... and git diff --check passed; focused actor-wake, owner-restart, lifecycle-event, completion-evidence, publication, spawn, and ratchet tests passed."
-    - "ratchet-proof: runtime dissolution inventory PASS with go_files=128, production_files=70, test_files=58, production_loc=34501, test_loc=46475, exports=823, export_caller_edges=271, initial_unused_export_debt=10, routes=2, tools=37, production_importers=0, wrappers=0, compatibility_markers=6, store_calls=359, interface_candidates=4, citers=1334."
+    - "ratchet-proof: runtime dissolution inventory PASS with go_files=128, production_files=70, test_files=58, production_loc=34539, test_loc=46475, exports=824, export_caller_edges=272, initial_unused_export_debt=10, routes=2, tools=37, production_importers=0, wrappers=0, compatibility_markers=6, store_calls=362, interface_candidates=4, citers=1331."
     - "suite-load-risk: two concurrent full go test ./... runs reached a context deadline in TestCancelRunTrajectoryDrainsMoreThanOneActivePage; the exact test passed standalone and every agentcore/Texture shard passed. Live search-provider tests were disabled for the isolated run."
-    - "independent-review:accepted event/publication projection and canonical Revision completion evidence with confidence 0.93."
-    - "independent-review:blocking P2 at internal/coagentowner/spawn_tool.go:72-77; fuzzy normalizeTarget accepts an explicit invalid profile such as texture researcher when researcher is allowed."
-    - "independent-review:blocking P1 at internal/actorruntime/adapter.go:244-252; Runtime.Start dispatches actors before Texture owner Start, racing duplicate non-atomic reconciliation for the same durable backlog."
-    - "independent-review:blocking P1 at internal/actorruntime/handler.go:98-108,170-183; ownerForAgent fails before the Texture branch when a first-ever durable document/update has no agents row, permanently retrying the mailbox head."
-    - "independent-review:blocking ratchet escape at cmd/runtime-ratchet/inventory.go: dot imports are dropped from dissolutionImports and parenthesized owner aliases are not unwrapped."
-  blocker_or_risk: "The second frozen review has four blocking findings. The candidate remains ineligible to land until startup ownership is serialized, durable Texture identity is resolved before generic agent lookup, explicit profile validation is exact, both legal-Go ratchet escapes are closed, focused production-order tests pass, and a new exact commit is independently re-reviewed."
-  next_action: "Repair the four documented findings without callbacks or duplicate authority, add focused adversarial and production-order tests, regenerate the inventory once, freeze a new commit, and obtain final independent re-review before landing."
+    - "independent-review:first-round event/publication projection and canonical Revision completion evidence accepted with confidence 0.93; four second-round blockers were documented in commit ffcf3592 before repair."
+    - "repair-proof: go test ./internal/actorruntime ./internal/coagentowner ./internal/agentcore ./internal/textureowner ./internal/sandbox ./cmd/runtime-ratchet -count=1 passed; focused startup serialization, first-wake identity, adversarial explicit profile, and legal-Go wrapper fixtures passed; go test -race startup serialization passed."
+  blocker_or_risk: "No local execution blocker. The frozen candidate still requires exact-commit independent re-review, canonical landing, CI/deploy identity, and deployed persistent-computer acceptance. The concurrent whole-suite Dolt timeout remains a disclosed load risk; standalone and sharded coverage pass."
+  next_action: "Commit the repaired candidate and this compact state, obtain final independent exact-commit re-review, then land and execute the deployed acceptance path."
 
 receipts:
   - id: predecessor-B0-authority

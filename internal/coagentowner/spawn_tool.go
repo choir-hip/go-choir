@@ -71,11 +71,13 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			if role == "" {
 				return "", fmt.Errorf("role must be one of %s", strings.Join(allowed, ", "))
 			}
-			profile := normalizeTarget(in.Profile, allowed)
-			if strings.TrimSpace(in.Profile) != "" && profile == "" {
-				return "", fmt.Errorf("profile must be one of %s", strings.Join(allowed, ", "))
-			}
-			if profile == "" {
+			profile := ""
+			if strings.TrimSpace(in.Profile) != "" {
+				profile = exactTarget(in.Profile, allowed)
+				if profile == "" {
+					return "", fmt.Errorf("profile must be one of %s", strings.Join(allowed, ", "))
+				}
+			} else {
 				profile = role
 			}
 			callerProfile := agentprofile.Canonical(exec.Profile)
@@ -164,6 +166,16 @@ func canonicalTargets(values []string) []string {
 		}
 	}
 	return out
+}
+
+func exactTarget(raw string, allowed []string) string {
+	target := agentprofile.Canonical(raw)
+	for _, value := range allowed {
+		if target == value {
+			return target
+		}
+	}
+	return ""
 }
 
 func normalizeTarget(raw string, allowed []string) string {

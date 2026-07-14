@@ -132,6 +132,10 @@ type Adapter struct {
 
 	startOnce sync.Once
 	started   bool
+
+	dispatchMu     sync.Mutex
+	dispatchReady  bool
+	bootDispatches []actor.Update
 }
 
 // New creates a runtime business-logic core and its actor-based lifecycle
@@ -221,7 +225,54 @@ func (a *Adapter) dispatch(ctx context.Context, toAgentID, kind, content, trajec
 		TrajectoryID: trajectoryID,
 		CreatedAt:    time.Now().UTC(),
 	}
+	a.dispatchMu.Lock()
+	if !a.dispatchReady {
+		a.bootDispatches = append(a.bootDispatches, u)
+		a.dispatchMu.Unlock()
+		return nil
+	}
+	a.dispatchMu.Unlock()
 	return a.actorRT.Send(ctx, u)
+}
+
+func (a *Adapter) flushBootDispatches(ctx context.Context) error {
+	for {
+		a.dispatchMu.Lock()
+		if len(a.bootDispatches) == 0 {
+			a.dispatchReady = true
+			a.dispatchMu.Unlock()
+			return nil
+		}
+		pending := a.bootDispatches
+		a.bootDispatches = nil
+		a.dispatchMu.Unlock()
+
+		for index, update := range pending {
+			attempt := 0
+			for {
+				err := a.actorRT.Send(ctx, update)
+				if err == nil {
+					break
+				}
+				attempt++
+				if attempt == 1 || attempt%20 == 0 {
+					log.Printf("actorruntime: retry boot dispatch to %s: %v", update.ToAgentID, err)
+				}
+				timer := time.NewTimer(50 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+					if !timer.Stop() {
+						<-timer.C
+					}
+					a.dispatchMu.Lock()
+					a.bootDispatches = append(pending[index:], a.bootDispatches...)
+					a.dispatchMu.Unlock()
+					return ctx.Err()
+				case <-timer.C:
+				}
+			}
+		}
+	}
 }
 
 // BindTextureOwner installs the concrete Texture lifecycle owner before actor
@@ -238,13 +289,17 @@ func (a *Adapter) BindTextureOwner(owner *textureowner.Handler) error {
 	return nil
 }
 
-// Start recovers the generic lifecycle core, lets the concrete Texture owner
-// reconcile durable documents, then sweeps the actor log for unprocessed
-// mailbox entries from a previous process.
+// Start keeps actor delivery paused while the generic core and concrete Texture
+// owner reconcile durable state. Only after both scans finish are boot
+// dispatches released and the actor log swept.
 func (a *Adapter) Start(ctx context.Context) {
 	a.Runtime.Start(ctx)
 	if a.textureOwner != nil {
 		a.textureOwner.Start(ctx)
+	}
+	if err := a.flushBootDispatches(ctx); err != nil {
+		log.Printf("actorruntime: boot dispatch flush stopped: %v", err)
+		return
 	}
 	if err := a.actorRT.Sweep(ctx); err != nil {
 		log.Printf("actorruntime: boot sweep: %v", err)

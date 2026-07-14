@@ -347,7 +347,7 @@ func dissolutionImports(file *ast.File) map[string]string {
 		if imp.Name != nil {
 			name = imp.Name.Name
 		}
-		if name != "_" && name != "." {
+		if name != "_" {
 			imports[name] = path
 		}
 	}
@@ -731,6 +731,8 @@ func runtimeSurfaceType(expr ast.Expr, aliases map[string]string) string {
 	switch x := expr.(type) {
 	case *ast.StarExpr:
 		return runtimeSurfaceType(x.X, aliases)
+	case *ast.ParenExpr:
+		return runtimeSurfaceType(x.X, aliases)
 	case *ast.SelectorExpr:
 		id, ok := x.X.(*ast.Ident)
 		if !ok {
@@ -739,6 +741,11 @@ func runtimeSurfaceType(expr ast.Expr, aliases map[string]string) string {
 		_, imported := aliases[id.Name]
 		if imported && (x.Sel.Name == "Runtime" || x.Sel.Name == "APIHandler" || x.Sel.Name == "Handler") {
 			return id.Name + "." + x.Sel.Name
+		}
+	case *ast.Ident:
+		if _, imported := aliases["."]; imported &&
+			(x.Name == "Runtime" || x.Name == "APIHandler" || x.Name == "Handler") {
+			return x.Name
 		}
 	}
 	return ""

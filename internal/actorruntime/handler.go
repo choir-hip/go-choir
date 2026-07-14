@@ -100,11 +100,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		// mailbox. Create a new run via the reconcile logic, which
 		// calls rt.activate(rec) → sends an initial_dispatch actor
 		// message. The actor loop will process it next.
-		ownerID, err := h.ownerForAgent(ctx, u.ToAgentID)
-		if err != nil {
-			return nil, fmt.Errorf("actorruntime: lookup owner for coagent_result: %w", err)
-		}
-		if _, err := h.reconcileCoagentWake(ctx, ownerID, u.ToAgentID); err != nil {
+		if _, err := h.reconcileCoagentWake(ctx, u.ToAgentID); err != nil {
 			return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
 		}
 		// Return nil memory — the new run will be started by the
@@ -157,28 +153,27 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 
 	// Run is terminal (completed/failed/cancelled) — create a new run
 	// for the coagent update via the reconcile path.
-	ownerID, err := h.ownerForAgent(ctx, u.ToAgentID)
-	if err != nil {
-		return nil, fmt.Errorf("actorruntime: lookup owner for coagent_result: %w", err)
-	}
-	if _, err := h.reconcileCoagentWake(ctx, ownerID, u.ToAgentID); err != nil {
+	if _, err := h.reconcileCoagentWake(ctx, u.ToAgentID); err != nil {
 		return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
 	}
 	return nil, nil
 }
 
-func (h *actorHandler) reconcileCoagentWake(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+func (h *actorHandler) reconcileCoagentWake(ctx context.Context, agentID string) (*types.RunRecord, error) {
 	agentID = strings.TrimSpace(agentID)
 	prefix := agentprofile.Texture + ":"
 	if strings.HasPrefix(agentID, prefix) {
 		if h.textureOwner == nil {
 			return nil, fmt.Errorf("Texture owner is not bound")
 		}
-		docID := strings.TrimSpace(strings.TrimPrefix(agentID, prefix))
-		if docID == "" {
+		if strings.TrimSpace(strings.TrimPrefix(agentID, prefix)) == "" {
 			return nil, fmt.Errorf("Texture agent id has no document id")
 		}
-		return h.textureOwner.ReconcileAgentWake(ctx, ownerID, docID)
+		return h.textureOwner.ReconcileActorWake(ctx, agentID)
+	}
+	ownerID, err := h.ownerForAgent(ctx, agentID)
+	if err != nil {
+		return nil, fmt.Errorf("lookup owner for coagent_result: %w", err)
 	}
 	return h.rt.ReconcileCoagentWake(ctx, ownerID, agentID)
 }

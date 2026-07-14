@@ -93,11 +93,13 @@ func TestSpawnAgentRejectsInvalidExplicitProfile(t *testing.T) {
 		RunID: "parent-run", OwnerID: "user-alice", Profile: agentprofile.Super,
 	})
 
-	_, err := registry.Execute(ctx, "spawn_agent", json.RawMessage(`{"objective":"Research the subject.","role":"researcher","profile":"texture"}`))
-	if err == nil {
-		t.Fatal("spawn_agent accepted an explicit profile outside the caller's allowed targets")
-	}
-	if got := err.Error(); got != "profile must be one of researcher, co-super" {
-		t.Fatalf("spawn_agent error = %q", got)
+	for _, profile := range []string{"texture", "texture researcher"} {
+		_, err := registry.Execute(ctx, "spawn_agent", json.RawMessage(`{"objective":"Research the subject.","role":"researcher","profile":"`+profile+`"}`))
+		if err == nil {
+			t.Fatalf("spawn_agent accepted explicit profile %q outside the caller's allowed targets", profile)
+		}
+		if got := err.Error(); got != "profile must be one of researcher, co-super" {
+			t.Fatalf("spawn_agent profile %q error = %q", profile, got)
+		}
 	}
 }

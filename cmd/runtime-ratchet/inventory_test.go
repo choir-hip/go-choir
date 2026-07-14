@@ -137,6 +137,7 @@ import (
 
 type RuntimeAlias = core.Runtime
 type HandlerAlias = texture.Handler
+type ParenthesizedRuntimeAlias = (core.Runtime)
 
 type promotedRuntime struct {
 	*core.Runtime
@@ -153,6 +154,16 @@ type composedOwners struct {
 
 func composeOwners(runtime *core.Runtime, texture *texture.Handler) {}
 `)
+	writeFixture(t, root, "cmd/dot-wrappers/main.go", `package main
+
+import . "github.com/yusefmosiah/go-choir/internal/agentcore"
+
+type DotRuntimeAlias = Runtime
+type ParenthesizedDotRuntimeAlias = (Runtime)
+type promotedDotRuntime struct {
+	Runtime
+}
+`)
 	writeFixture(t, root, "cmd/string-only/owners.go", `package main
 
 const agentCoreText = "github.com/yusefmosiah/go-choir/internal/agentcore"
@@ -161,10 +172,14 @@ const textureOwnerText = "github.com/yusefmosiah/go-choir/internal/textureowner"
 
 	inv := mustScan(t, root)
 	want := map[string]bool{
-		"cmd/wrappers/main.go:alias:HandlerAlias:texture.Handler": true,
-		"cmd/wrappers/main.go:alias:RuntimeAlias:core.Runtime":    true,
-		"cmd/wrappers/main.go:embedded:core.Runtime":              true,
-		"cmd/wrappers/main.go:embedded:texture.Handler":           true,
+		"cmd/wrappers/main.go:alias:HandlerAlias:texture.Handler":             true,
+		"cmd/wrappers/main.go:alias:RuntimeAlias:core.Runtime":                true,
+		"cmd/wrappers/main.go:alias:ParenthesizedRuntimeAlias:core.Runtime":   true,
+		"cmd/dot-wrappers/main.go:alias:DotRuntimeAlias:Runtime":              true,
+		"cmd/dot-wrappers/main.go:alias:ParenthesizedDotRuntimeAlias:Runtime": true,
+		"cmd/dot-wrappers/main.go:embedded:Runtime":                           true,
+		"cmd/wrappers/main.go:embedded:core.Runtime":                          true,
+		"cmd/wrappers/main.go:embedded:texture.Handler":                       true,
 	}
 	if len(inv.Wrappers) != len(want) {
 		t.Fatalf("wrappers = %+v, want aliases and anonymous embedded owner types only", inv.Wrappers)
