@@ -138,12 +138,12 @@ measures:
 
 now:
   status: working
-  slice: "land and accept model and research owner cutover"
-  question: "Does the direct modelpolicy/researchtools owner cutover preserve all model-selection, verification, source/search/content tool, and researcher checkpoint contracts without Runtime wrappers?"
+  slice: "map Texture ownership boundary out of internal/runtime"
+  question: "Which canonical Texture owner can absorb revision APIs, structured editing, merge/proposal logic, source attachment, lifecycle wake integration, and document identity without moving canonical write authority into Runtime callbacks?"
   reconciliation:
-    observed_at: 2026-07-14T18:38:48Z
-    source_ref: refs/heads/autoputer-definition-v2@28a20326
-    deploy_identity: "Predecessor 0f905ffcfeba3db85f0958382d9beb68f013a498 is deployed; independently accepted candidate 28a20326 is local and not pushed."
+    observed_at: 2026-07-14T18:51:56Z
+    source_ref: refs/remotes/origin/main@36caa912d9a2855cfa473d88e3393bc39c64c74e
+    deploy_identity: "CI 29358737663 PASS; deploy job 87174088250; activation receipt 36caa912d9a2855cfa473d88e3393bc39c64c74e@2026-07-14T18:46:29Z; sandbox, active computers, ordinary guest, playwright guest, and gateway report the landed commit."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,30 +151,29 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: accepted_local_ready_to_land
-    protected_surfaces: [model_policy, provider_routing, verifier_calls, researcher_tools, search_gateway, source_artifacts, content_service, evidence_state, user_isolation, texture_authority]
-    admissible_evidence: "Exact caller/provider/store/tool map; policy parsing/cache/overlay and model verification contracts; research tool schemas/results/content/source behavior; direct registry composition; no runtime wrappers; modelpolicy/researchtools tests; all four runtime shards; owner composition packages; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed model-policy/research acceptance."
-    rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
-    conjecture_delta: "Confirmed: model selection is a computer-owned modelpolicy service and generic research tooling is a direct-dependency researchtools service. Runtime now composes both owners without callbacks or compatibility wrappers; prompt enrichment and researcher settlement remain deliberately local to later core/Texture slices."
+    status: mapping
+    protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation]
+    admissible_evidence: "Exact type/API/store/tool/caller map; settled authority conformance; deletion-first owner boundary; focused Texture contracts; all four runtime shards; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed Texture product-path acceptance."
+    rollback_ref: 36caa912d9a2855cfa473d88e3393bc39c64c74e
+    conjecture_delta: "Unresolved: Texture is the canonical write authority, but its API, structured editing, merge, proposal, source-graph, tool, and wake integration currently remain embedded in internal/runtime. Mapping must distinguish canonical Texture ownership from actor lifecycle and generic Runtime composition before choosing a deletion boundary."
     heresy_delta:
-      discovered: "Both initial frozen reviews found and the first repair closed the same modelpolicy fixture defect. The second contract re-review found one remaining P1 test-quality defect: deleting obsolete AuthorKind/AuthorLabel fields from textureCreateRevisionRequest literals also stopped three hostile-authorship tests from actually sending hostile JSON fields, weakening the negative authority ratchet even though production requests still correctly omit and ignore those fields."
-      introduced: "7c838d90 removed stale compile-time request fields too broadly inside tests, preserving their assertions but deleting the hostile inputs that made them meaningful. Production authority remained correct."
-      repaired: "Modelpolicy fixture synchronization is accepted by independent re-review. The three negative Texture contracts now send hostile author_kind/author_label values through raw map bodies while production textureCreateRevisionRequest remains authority-free; each proves the server persists authenticated-user authorship. Focused comprehensive authority/model/research contracts and comprehensive compile pass; ratchet remains exact at test_loc 46495 and citer count 1347."
+      discovered: none
+      introduced: none
+      repaired: none
   candidate:
-    id: R1-model-research-owner-cutover-15
-    state: accepted_local_ready_to_land
-    ref: refs/heads/autoputer-definition-v2@28a20326
+    id: R1-texture-owner-cutover-16
+    state: mapping
+    ref: none
     owner: orchestrator
-    base: refs/remotes/origin/main@0f905ffcfeba3db85f0958382d9beb68f013a498
-    digest: "Create internal/modelpolicy Manager as sole policy file/default/parser/overlay/cache/metadata owner and move model verification tool construction beside it. Create internal/researchtools as sole generic research tool registration/implementation owner with explicit Store/content/search/source/HTTP dependencies. Runtime composes and calls these owners directly; delete model_policy.go, tools_model_verify.go, and tools_research.go after every caller migrates. Retain prompts.go, tools_researcher.go, and researcher_checkpoint_fallback.go for later core/Texture settlement cutovers; do not add callbacks or wrappers."
-    scope: [model_policy, policy_overlay, llm_metadata_resolution, model_verification_tool, web_search, source_search, content_import_tools, content_selector_tools, wire_corpus_search, research_checkpoint_pressure]
+    base: refs/remotes/origin/main@36caa912d9a2855cfa473d88e3393bc39c64c74e
+    digest: "Map every Texture-owned type, route, structured edit, proposal, source graph, tool, identity, and wake caller; inspect existing owner packages and settled decisions; freeze the smallest deletion-first boundary before implementation."
+    scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake]
   evidence_refs:
-    - "model-map: internal/runtime/model_policy.go; tools_model_verify.go; callers in runtime.go, api.go, api_texture_prompt_eval.go, texture_merge.go, run start paths, tool_profiles.go"
-    - "research-map: internal/runtime/tools_research.go nine tools; direct dependencies content Service, Store, search.Client, source client, HTTP; registration in tool_profiles.go"
-    - "replacement-check: internal/modelcatalog is static capability metadata only; promptstore already owns prompt persistence; search/source/content own substrates; no model-policy or research-tool owner package exists"
-    - "deferred-settlement: tools_researcher.go and researcher_checkpoint_fallback.go retain lifecycle/evidence/channel/Texture wake authority for later cutover"
-  blocker_or_risk: "No local blocker. Final independent review accepts both modelpolicy fixture synchronization and the repaired hostile-authorship ratchet; production owner semantics and Texture authority remain unchanged. Remaining gates are canonical CI/deploy identity and authenticated staging model-policy/research acceptance."
-  next_action: "Commit this acceptance receipt, push the coherent candidate to origin/main, monitor CI/deploy identity, then execute authenticated staging model-policy and researcher product-path acceptance."
+    - "deployed-model-policy: HTTP-200 researcher=chatgpt/gpt-5.4-mini/medium source=/mnt/persistent/files/System/model-policy.toml; sandbox header 36caa912"
+    - "deployed-researcher: trajectory e6283f92-7167-4426-a21a-a13d64b9b04b; researcher run 1af42058-a64d-45b3-a7a3-863265d401a0 completed with official OpenAI Responses API source URL; model-policy metadata chatgpt/gpt-5.4-mini/medium"
+    - "deferred-settlement: researcher result completed but no later Texture incorporation run appeared during the acceptance window; wake/settlement remains in the explicitly deferred Texture/core boundary"
+  blocker_or_risk: "No current execution blocker. Highest risk is creating a second Texture authority by extracting helpers without moving canonical methods and their source/evidence invariants together."
+  next_action: "Map Texture files, symbols, store calls, routes, tools, actor wake paths, existing owner packages, and settled decisions; freeze a deletion-first owner boundary before behavior-changing code."
 
 receipts:
   - id: predecessor-B0-authority
@@ -286,10 +285,10 @@ receipts:
 
   - id: R1-model-research-owner-cutover-15
     boundary: implement
-    commit_or_artifact: 28a20326
-    proof_refs: ["modelpolicy-tests:PASS", "researchtools-tests:PASS", "runtime-shard-1/4:PASS", "runtime-shard-2/4:PASS", "runtime-shard-3/4:PASS", "runtime-shard-4/4:PASS", "runtime-ratchet:PASS", "model-research-authority-review:ACCEPT", "model-research-behavior-review:ACCEPT", "owner-contract-repair-review:ACCEPT", "final-owner-authority-review:ACCEPT"]
+    commit_or_artifact: 36caa912d9a2855cfa473d88e3393bc39c64c74e
+    proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29358737663", "deploy-job:87174088250", "activation-receipt:36caa912d9a2855cfa473d88e3393bc39c64c74e@2026-07-14T18:46:29Z", "modelpolicy-tests:PASS", "researchtools-tests:PASS", "runtime-shard-1/4:PASS", "runtime-shard-2/4:PASS", "runtime-shard-3/4:PASS", "runtime-shard-4/4:PASS", "runtime-ratchet:PASS", "model-research-authority-review:ACCEPT", "model-research-behavior-review:ACCEPT", "owner-contract-repair-review:ACCEPT", "final-owner-authority-review:ACCEPT", "staging-model-policy-resolve:HTTP-200:researcher=chatgpt/gpt-5.4-mini/medium", "staging-trajectory:e6283f92-7167-4426-a21a-a13d64b9b04b", "staging-researcher-run:1af42058-a64d-45b3-a7a3-863265d401a0:completed"]
     rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
-    disposition: accepted_local_ready_to_land
+    disposition: complete
 
 view:
   path: none
