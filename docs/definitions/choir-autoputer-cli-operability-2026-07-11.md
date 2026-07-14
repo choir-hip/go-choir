@@ -6,7 +6,7 @@ This document supplies the external-operator, self-development, and containment
 contracts for:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```
 
 Do not invoke it as a separate spine. The active mission sequences runtime
@@ -46,7 +46,7 @@ this document remains its operator-contract specification.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+1. `docs/definitions/choir-autoputer-completion-2026-07-14.md`.
 2. This subordinate operator-contract Definition within R2/R3/R5/R6 scope.
 3. `docs/definitions/choir-wire-store-conformance-2026-07-11.md`.
 4. `AGENTS.md`, `docs/choir-doctrine.md`, `docs/computer-ontology.md`,
@@ -177,7 +177,7 @@ The observable set is derived empirically, then bounded by authority scope:
 - Preserves the external-operator and containment contracts from the restored
   autoputer-before-autopaper doctrine.
 - Is subordinate to
-  `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+  `docs/definitions/choir-autoputer-completion-2026-07-14.md`.
 - Consumes post-mortem cornerstones C2–C5 from
   `choir-autopaper-activation-attempt-report-2026-07-11.md`; the active mission,
   not this document, owns execution order and resumption.

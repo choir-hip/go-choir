@@ -29,6 +29,7 @@ status: active
 nodes:
   - id: a
     title: A
+    entrypoint: true
     path: ""
     ledger: ""
     status: working
@@ -48,6 +49,70 @@ nodes:
 	_, warnings := validateMissionGraph("docs/mission-graph.yaml", nil)
 	if !hasWarningMessage(warnings, "dependency cycle") {
 		t.Fatalf("expected cycle warning, got %#v", warnings)
+	}
+}
+
+func TestValidateMissionGraphEntrypointCardinality(t *testing.T) {
+	tests := []struct {
+		name        string
+		nodes       string
+		wantWarning bool
+		wantCount   string
+	}{
+		{
+			name: "zero rejected",
+			nodes: `  - id: a
+    title: A
+    status: working
+    kind: spine
+`,
+			wantWarning: true,
+			wantCount:   "found 0",
+		},
+		{
+			name: "exactly one accepted",
+			nodes: `  - id: a
+    title: A
+    entrypoint: true
+    status: working
+    kind: spine
+`,
+		},
+		{
+			name: "duplicate rejected",
+			nodes: `  - id: a
+    title: A
+    entrypoint: true
+    status: working
+    kind: spine
+  - id: b
+    title: B
+    entrypoint: true
+    status: planned
+    kind: spine
+`,
+			wantWarning: true,
+			wantCount:   "found 2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "mission-graph.yaml")
+			graph := "schema_version: 0\nstatus: active\nnodes:\n" + tt.nodes
+			if err := os.WriteFile(path, []byte(graph), 0644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, warnings := validateMissionGraph(path, nil)
+			gotWarning := hasWarningMessage(warnings, "expected exactly one mission graph entrypoint")
+			if gotWarning != tt.wantWarning {
+				t.Fatalf("entrypoint cardinality warning = %v, want %v: %#v", gotWarning, tt.wantWarning, warnings)
+			}
+			if tt.wantCount != "" && !hasWarningMessage(warnings, tt.wantCount) {
+				t.Fatalf("expected entrypoint count %q in warnings: %#v", tt.wantCount, warnings)
+			}
+		})
 	}
 }
 
@@ -269,6 +334,39 @@ func TestValidateLiveReadPathRejectsMissingRouterLink(t *testing.T) {
 	}
 }
 
+func TestValidateLiveReadPathRejectsInvalidMissionGraphEntrypointCardinality(t *testing.T) {
+	tests := []struct {
+		name      string
+		nodes     []missionGraphNode
+		wantCount string
+	}{
+		{name: "zero", wantCount: "found 0"},
+		{
+			name: "duplicate",
+			nodes: []missionGraphNode{
+				{ID: "old", EntryPoint: true},
+				{ID: "current", EntryPoint: true},
+			},
+			wantCount: "found 2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rep := completeLivePacketReport()
+			rep.MissionGraph.Nodes = tt.nodes
+
+			failures := validateLiveReadPath(rep)
+			if len(failures) != 1 {
+				t.Fatalf("validateLiveReadPath() failure count = %d, want 1: %#v", len(failures), failures)
+			}
+			if failures[0].Rule != "L5" || !strings.Contains(failures[0].Message, tt.wantCount) {
+				t.Fatalf("validateLiveReadPath() failure = %#v, want L5 containing %q", failures[0], tt.wantCount)
+			}
+		})
+	}
+}
+
 func completeLivePacketReport() report {
 	rep := report{}
 	for _, path := range defaultReadPacket {
@@ -279,7 +377,7 @@ func completeLivePacketReport() report {
 			Exists:      true,
 			Annotations: map[string]string{},
 		}
-		if path == "docs/definitions/choir-autoputer-completion-2026-07-13.md" {
+		if path == "docs/definitions/choir-autoputer-completion-2026-07-14.md" {
 			doc.Annotations["doc_role"] = "definition"
 			doc.IsRoot = []string{"authority", "entry"}
 		}
@@ -287,6 +385,10 @@ func completeLivePacketReport() report {
 		if path != "docs/README.md" {
 			rep.Edges = append(rep.Edges, edge{From: "docs/README.md", To: path, Kind: "markdown"})
 		}
+	}
+	rep.MissionGraph = graphReport{
+		Path:  defaultGraph,
+		Nodes: []missionGraphNode{{ID: "current", EntryPoint: true}},
 	}
 	return rep
 }

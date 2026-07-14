@@ -5,7 +5,7 @@
 This document is the R7 rename specification of:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```
 
 Do not invoke it independently. It runs only after R1-R6 are complete, so
@@ -27,7 +27,7 @@ behavior change, stop, return it to the owning phase, and resume rename later.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+1. `docs/definitions/choir-autoputer-completion-2026-07-14.md`.
 2. This subordinate Definition within R7 scope.
 3. `docs/choir-doctrine.md` and
    `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` Phase E.

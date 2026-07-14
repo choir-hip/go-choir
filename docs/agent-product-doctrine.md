@@ -5,7 +5,7 @@ loaded on demand when a mission touches authority boundaries, harness behavior,
 Texture, runtime configuration, product-path verification, or run acceptance.
 Long-running missions now execute as Definition documents (`/goal <doc>.md`);
 see [skills/definition/SKILL.md](../skills/definition/SKILL.md) and
-[docs/definitions/choir-autoputer-completion-2026-07-13.md](definitions/choir-autoputer-completion-2026-07-13.md)
+[docs/definitions/choir-autoputer-completion-2026-07-14.md](definitions/choir-autoputer-completion-2026-07-14.md)
 for the current umbrella mission.
 It inherits [Choir Doctrine](choir-doctrine.md) and must not become a competing
 doctrine source.

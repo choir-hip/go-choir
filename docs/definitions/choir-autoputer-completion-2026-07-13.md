@@ -1,5 +1,7 @@
 # Choir Autoputer Completion
 
+> **Superseded 2026-07-14.** Successor: [`docs/definitions/choir-autoputer-completion-2026-07-14.md`](choir-autoputer-completion-2026-07-14.md), executable only as `/goal docs/definitions/choir-autoputer-completion-2026-07-14.md`; this file remains historical evidence.
+
 ## Invocation And Status
 
 ```text

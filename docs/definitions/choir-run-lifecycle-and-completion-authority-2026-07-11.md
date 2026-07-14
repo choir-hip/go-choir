@@ -5,7 +5,7 @@
 This document is the R4 run-truth specification of:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```
 
 Do not invoke it independently. The active mission executes it only after R1
@@ -46,7 +46,7 @@ freeze mode (`running` forever); R4 re-verifies it.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-2026-07-13.md`.
+1. `docs/definitions/choir-autoputer-completion-2026-07-14.md`.
 2. This subordinate Definition within R4 scope.
 3. `docs/definitions/choir-autoputer-cli-operability-2026-07-11.md`
    (operator test and Introspection Contract).
@@ -259,7 +259,7 @@ Docs-only commits use the docs-only landing path.
 
 ## Supersession Record
 
-- Subordinate to `choir-autoputer-completion-2026-07-13.md` R4.
+- Subordinate to `choir-autoputer-completion-2026-07-14.md` R4.
 - Investigation basis: autopaper activation attempt report.
 - Amended 2026-07-11: Dependency Truth, fourth freeze mode, gates, phases A-E,
   autonomous contract.

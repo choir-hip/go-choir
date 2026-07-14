@@ -5,13 +5,19 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definitions
 
-[`definitions/choir-autoputer-completion-2026-07-13.md`](definitions/choir-autoputer-completion-2026-07-13.md)
+[`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md)
 is the one active top-level product Definition and the only `/goal` entrypoint
-for current product work. It imports the predecessor's completed Deploy, Wire,
-and already-landed runtime-extraction receipts, then continues through
+for current product work. It reconciles the predecessor's completed Deploy,
+Wire, and already-landed runtime-extraction receipts, then continues through
 dependency-ordered runtime dissolution, audited-computer proof, external
 operator truth, run truth, self-development, containment, Choir-in-Choir, and
 vocabulary cutover.
+
+The superseded
+[`definitions/choir-autoputer-completion-2026-07-13.md`](definitions/choir-autoputer-completion-2026-07-13.md)
+remains discoverable as historical evidence, including its references to the
+[`runtime-dissolution-inventory.yaml`](runtime-dissolution-inventory.yaml).
+Do not execute it.
 
 [`definitions/og-dolt-heresy-completion-2026-07-08.md`](definitions/og-dolt-heresy-completion-2026-07-08.md)
 remains load-bearing for storage, promotion, and heresy detector/deletion
@@ -31,7 +37,7 @@ is **superseded in topology** (2026-07-11): the post-mortem
 showed its Real Artifact contradicted the settled D-WIRE decision. Its
 evidence ledger remains valid history; do not execute its topology sections.
 Successor authority:
-[`definitions/choir-autoputer-completion-2026-07-13.md`](definitions/choir-autoputer-completion-2026-07-13.md).
+[`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md).
 The former
 [`definitions/choir-autoputer-completion-suite-2026-07-11.md`](definitions/choir-autoputer-completion-suite-2026-07-11.md)
 and
@@ -53,7 +59,7 @@ proved per-service `/health` identity and RouteProfile promotion/rollback on
 The next and only product invocation is:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```
 
 The same command resumes after interruption. The mission reconciles one
@@ -100,7 +106,7 @@ authority.
 ## Settled Deploy Receipt
 
 The former `running_runs: 1` hot-refresh blockage is repaired and imported as
-the successor capsule's `predecessor-S1-deploy` receipt at
+the active 2026-07-14 capsule's `predecessor-S1-deploy` receipt at
 `9dff369044c2147140782958de3e91971caed6bc`. Evidence:
 `docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md`.
 

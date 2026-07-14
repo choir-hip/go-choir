@@ -5,7 +5,7 @@
 This settled Definition is evidence and a subordinate source for:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```
 
 Do not invoke this document independently. Its completed seam receipts remain
@@ -13,7 +13,7 @@ load-bearing; its checkpoint cannot authorize new product mutations.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-2026-07-13.md` for any current
+1. `docs/definitions/choir-autoputer-completion-2026-07-14.md` for any current
    execution or resumption.
 2. This Definition as settled seam evidence.
 3. `AGENTS.md` and `docs/choir-doctrine.md`.
@@ -763,7 +763,7 @@ run_checkpoint_and_resumption_state:
   next_executable_probe: >-
     Settled. Any remaining product work resumes only through the active mission;
     this checkpoint cannot authorize another mutation.
-  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+  suggested_goal_string: /goal docs/definitions/choir-autoputer-completion-2026-07-14.md
   evidence_artifact_refs:
     - caf16a88 (mission start)
     - a1073731 (pre-delete rollback)
@@ -781,5 +781,5 @@ run_checkpoint_and_resumption_state:
 ## Suggested Goal String
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```

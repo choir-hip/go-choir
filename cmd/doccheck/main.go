@@ -43,7 +43,7 @@ var highRead = map[string]bool{
 	"docs/runtime-invariants.md":                                true,
 	"docs/texture-agentic-invariants-2026-06-13.md":             true,
 	"docs/source-external-data-publication.md":                  true,
-	"docs/definitions/choir-autoputer-completion-2026-07-13.md": true,
+	"docs/definitions/choir-autoputer-completion-2026-07-14.md": true,
 }
 
 // defaultReadPacket is intentionally small. It includes the docs router plus
@@ -62,7 +62,7 @@ var defaultReadPacket = []string{
 	"docs/runtime-invariants.md",
 	"docs/texture-agentic-invariants-2026-06-13.md",
 	"docs/source-external-data-publication.md",
-	"docs/definitions/choir-autoputer-completion-2026-07-13.md",
+	"docs/definitions/choir-autoputer-completion-2026-07-14.md",
 }
 
 type manifestFile struct {
@@ -148,15 +148,16 @@ type missionGraphFile struct {
 }
 
 type missionGraphNode struct {
-	ID        string   `yaml:"id" json:"id"`
-	Title     string   `yaml:"title" json:"title"`
-	Path      string   `yaml:"path" json:"path,omitempty"`
-	Ledger    string   `yaml:"ledger" json:"ledger,omitempty"`
-	Status    string   `yaml:"status" json:"status"`
-	Kind      string   `yaml:"kind" json:"kind"`
-	DependsOn []string `yaml:"depends_on" json:"depends_on,omitempty"`
-	Enables   []string `yaml:"enables" json:"enables,omitempty"`
-	Sources   []string `yaml:"sources" json:"sources,omitempty"`
+	ID         string   `yaml:"id" json:"id"`
+	Title      string   `yaml:"title" json:"title"`
+	Path       string   `yaml:"path" json:"path,omitempty"`
+	EntryPoint bool     `yaml:"entrypoint" json:"entrypoint"`
+	Ledger     string   `yaml:"ledger" json:"ledger,omitempty"`
+	Status     string   `yaml:"status" json:"status"`
+	Kind       string   `yaml:"kind" json:"kind"`
+	DependsOn  []string `yaml:"depends_on" json:"depends_on,omitempty"`
+	Enables    []string `yaml:"enables" json:"enables,omitempty"`
+	Sources    []string `yaml:"sources" json:"sources,omitempty"`
 }
 
 type graphReport struct {
@@ -746,7 +747,7 @@ func reachableDocs(docs map[string]*docInfo, edges []edge) map[string]bool {
 
 // validateLiveReadPath deliberately checks only the authority surface a new
 // agent is expected to read. Historical graph/index problems remain visible in
-// --mode=full, but cannot make the current packet un-runnable forever.
+// --mode=full, except entrypoint cardinality, which makes the live packet ambiguous.
 func validateLiveReadPath(rep report) []warning {
 	docs := map[string]docInfo{}
 	for _, doc := range rep.Documents {
@@ -807,6 +808,16 @@ func validateLiveReadPath(rep report) []warning {
 		failures = append(failures, warning{Rule: "L4", Severity: "error", Path: "docs/doc-authority-manifest.yaml", Message: fmt.Sprintf("expected exactly one current authority-root product Definition, found %d", productDefinitions)})
 	}
 
+	entrypoints := 0
+	for _, node := range rep.MissionGraph.Nodes {
+		if node.EntryPoint {
+			entrypoints++
+		}
+	}
+	if entrypoints != 1 {
+		failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("expected exactly one mission graph entrypoint, found %d", entrypoints)})
+	}
+
 	return failures
 }
 
@@ -855,10 +866,14 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 	rep.Nodes = mf.Nodes
 	rep.StatusCounts = map[string]int{}
 	rep.KindCounts = map[string]int{}
+	entrypoints := 0
 	ids := map[string]missionGraphNode{}
 	validStatus := map[string]bool{"planned": true, "working": true, "open_handoff": true, "settled": true, "superseded": true, "blocked": true}
 	validKind := map[string]bool{"spine": true, "side": true, "product_completion": true, "docs_truth": true, "evidence": true, "superseded": true}
 	for _, n := range mf.Nodes {
+		if n.EntryPoint {
+			entrypoints++
+		}
 		if n.ID == "" {
 			warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "mission graph node has no id"})
 			continue
@@ -897,6 +912,9 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 				warnings = append(warnings, warning{Rule: "R5", Severity: "info", Path: path, Message: fmt.Sprintf("mission graph node %q source %s is not present", n.ID, source)})
 			}
 		}
+	}
+	if entrypoints != 1 {
+		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("expected exactly one mission graph entrypoint, found %d", entrypoints)})
 	}
 	for _, n := range mf.Nodes {
 		for _, dep := range n.DependsOn {

@@ -6,7 +6,7 @@ This document supplies storage, promotion, heresy-detector, and deletion
 contracts to:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```
 
 Do not invoke it independently while the active mission is `working`. Runtime,
@@ -20,7 +20,7 @@ active mission now supersedes this document's independent execution authority.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-2026-07-13.md` for
+1. `docs/definitions/choir-autoputer-completion-2026-07-14.md` for
    active execution order, evidence, checkpoints, and resumption.
 2. This document's detector, deletion, and historical evidence contracts.
 3. Owner statements 2026-07-07/08: object graph becomes canonical by hard
@@ -82,7 +82,7 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 **Non-purpose:**
 
 - Runtime business-logic extraction is now owned by
-  `docs/definitions/choir-autoputer-completion-2026-07-13.md` R1. This
+  `docs/definitions/choir-autoputer-completion-2026-07-14.md` R1. This
   Definition supplies subordinate detector/deletion contracts; it is not a
   competing `/goal` spine.
 - Not the grip/RL research program; that retired narrative remains in Git
@@ -955,7 +955,7 @@ yellow/green auto-proceed rule.
 
 | Open edge | Disposition | Reason / pointer |
 |---|---|---|
-| actor/runtime business-logic extraction | absorbed: R1 | `choir-autoputer-completion-2026-07-13.md` owns live caller cutovers, ratchets, and final directory extinction. |
+| actor/runtime business-logic extraction | absorbed: R1 | `choir-autoputer-completion-2026-07-14.md` owns live caller cutovers, ratchets, and final directory extinction. |
 | Texture product-loop, transclusion, and durable-thread gaps | subordinate evidence for R1/R4 | Resume only through the active mission from current code and staging evidence. |
 | source-system follow-ups | external dependency | Requires a fresh Definition if the active mission does not absorb it. |
 | Wire staging and substrate proof | settled predecessor receipt | D-WIRE conformance is imported without rerunning it. |
@@ -1429,7 +1429,7 @@ run_checkpoint_and_resumption_state:
     It must prevent adoption, lineage, UI, Trace, and run acceptance from
     advancing without durable receipt read-back and must delete duplicate
     roll-forward/switch/rollback mutators atomically.
-  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-2026-07-13.md"
+  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-2026-07-14.md"
   evidence_artifact_refs:
     - this Definition's adjudicated evidence ledger
     - https://github.com/choir-hip/go-choir/actions/runs/29072918594
@@ -1446,5 +1446,5 @@ run_checkpoint_and_resumption_state:
 ## Suggested Goal String
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-13.md
+/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```

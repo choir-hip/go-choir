@@ -39,7 +39,7 @@ nodes:
     status: working
     kind: subordinate_contract
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-13
+    member_of: choir-autoputer-completion-2026-07-14
     suite_phases: [R1, R4, R5, R7]
     execution_mode: subordinate_only
     depends_on: []
@@ -71,10 +71,10 @@ nodes:
     kind: product_completion
     entrypoint: false
     depends_on:
-      - choir-autoputer-completion-2026-07-13
+      - choir-autoputer-completion-2026-07-14
     enables: []
     sources:
-      - docs/definitions/choir-autoputer-completion-2026-07-13.md
+      - docs/definitions/choir-autoputer-completion-2026-07-14.md
       - docs/choir-doctrine.md
       - AGENTS.md
       - docs/computer-ontology.md
@@ -118,18 +118,34 @@ nodes:
     kind: docs_truth
     entrypoint: false
     depends_on:
-      - choir-autoputer-completion-2026-07-13
+      - choir-autoputer-completion-2026-07-14
     enables: []
     note: >-
       Superseded after S3's transport-before-domain topology was compile-falsified.
       Completed B0-S2 and landed S3 receipts are imported by the successor.
     sources:
-      - docs/definitions/choir-autoputer-completion-2026-07-13.md
+      - docs/definitions/choir-autoputer-completion-2026-07-14.md
       - docs/choir-doctrine.md
       - AGENTS.md
   - id: choir-autoputer-completion-2026-07-13
-    title: Choir Autoputer Completion
+    title: Choir Autoputer Completion (superseded evidence)
     path: docs/definitions/choir-autoputer-completion-2026-07-13.md
+    ledger: ''
+    status: superseded
+    kind: spine
+    entrypoint: false
+    depends_on:
+      - choir-autoputer-completion-2026-07-14
+    enables: []
+    note: >-
+      Superseded by the reconciled 2026-07-14 Definition. Retained as a
+      discovery tombstone for its historical receipts and evidence pointers.
+    sources:
+      - docs/definitions/choir-autoputer-completion-2026-07-14.md
+      - docs/ACTIVE.md
+  - id: choir-autoputer-completion-2026-07-14
+    title: Choir Autoputer Completion — Reconciled v2
+    path: docs/definitions/choir-autoputer-completion-2026-07-14.md
     ledger: ''
     status: working
     kind: spine
@@ -138,8 +154,8 @@ nodes:
     depends_on: []
     enables: []
     note: >-
-      Sole executable product mission. One canonical capsule owns phase order,
-      resumption, evidence pointers, and the dependency-ordered runtime frontier.
+      Sole executable product mission. One compact Definition owns resumption,
+      phase order, evidence pointers, and the dependency-ordered runtime frontier.
     sources:
       - docs/ACTIVE.md
       - docs/standing-questions.md
@@ -156,7 +172,7 @@ nodes:
     kind: docs_truth
     entrypoint: false
     depends_on:
-      - choir-autoputer-completion-2026-07-13
+      - choir-autoputer-completion-2026-07-14
     enables: []
     sources:
       - docs/ACTIVE.md
@@ -170,7 +186,7 @@ nodes:
     status: settled
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-13
+    member_of: choir-autoputer-completion-2026-07-14
     suite_phases: [predecessor-receipt]
     execution_mode: subordinate_only
     depends_on: []
@@ -188,7 +204,7 @@ nodes:
     status: settled
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-13
+    member_of: choir-autoputer-completion-2026-07-14
     suite_phases: [predecessor-receipt]
     execution_mode: subordinate_only
     depends_on: []
@@ -200,7 +216,7 @@ nodes:
     status: working
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-13
+    member_of: choir-autoputer-completion-2026-07-14
     suite_phases: [R2, R3, R5, R6]
     execution_mode: subordinate_only
     depends_on: []
@@ -225,7 +241,7 @@ nodes:
     status: working
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-13
+    member_of: choir-autoputer-completion-2026-07-14
     suite_phases: [R4]
     execution_mode: subordinate_only
     depends_on: []
@@ -247,7 +263,7 @@ nodes:
     status: working
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-13
+    member_of: choir-autoputer-completion-2026-07-14
     suite_phases: [R7]
     execution_mode: subordinate_only
     depends_on: []
