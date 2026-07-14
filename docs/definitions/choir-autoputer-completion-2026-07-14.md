@@ -137,13 +137,13 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: working
-  slice: "land the independently accepted Texture owner cutover"
-  question: "Will canonical CI, staging identity, and the deployed persistent-computer path accept commit 7782227e plus its terminal state receipt?"
+  status: blocked_ci
+  slice: "repair the stale integration-tagged Texture API owner after canonical CI exposed it"
+  question: "Will the comprehensive/integration Texture real-LLM contract compile against textureowner without reintroducing an agentcore API facade?"
   reconciliation:
-    observed_at: 2026-07-14T23:39:41Z
-    source_ref: commit:7782227eca698e79312232e6eac103b613b8ffb0
-    deploy_identity: blocked_before_landing
+    observed_at: 2026-07-14T23:46:41Z
+    source_ref: commit:e278b8022e872ea26d503b9c7430e5dad66fae48
+    deploy_identity: not_deployed_ci_blocked
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,22 +151,22 @@ now:
       - docs/runtime-dissolution-inventory.yaml@production_importers:0,wrappers:0,tools:37
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: candidate_accepted_ready_to_land
+    status: canonical_landed_ci_failed
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact owner/caller map; focused production-order restart tests; exact delegation validation tests; exhaustive legal-Go ratchet fixtures; all four agentcore and Texture owner shards; frozen independent review; CI, staging identity, and deployed product-path acceptance."
     rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    conjecture_delta: "The explicit profile override can enforce its enum contract by comparing strings.TrimSpace(raw) directly to the canonical allowlist. Fuzzy agentprofile.Canonical normalization remains confined to role and omitted-profile convenience behavior."
+    conjecture_delta: "Canonical CI exercised the integration-tagged smoke path omitted by the local non-tagged build. The production owner cutover is intact; one integration-only real-LLM contract still compiles inside agentcore and calls deleted Texture API methods/types. The correct repair is to move the contract to textureowner and compose exported agentcore runtime capability, not restore a facade."
     heresy_delta:
-      discovered: "Final review found one additional candidate-only explicit-profile alias bypass after the ten prior findings."
-      introduced: "None in canonical source; all findings remain confined to the unpushed candidate lineage."
-      repaired: "All eleven candidate-only findings have source-level repairs and focused regression coverage. Independent final focused review accepted the explicit-profile repair with confidence 0.99 and no blockers."
+      discovered: "CI run 29376823215 failed job 87231968694 because internal/agentcore/texture_real_llm_test.go still owns Texture HTTP tests and references deleted agentcore HandleTexture* methods and texture* response/request types."
+      introduced: "The stale integration-test ownership reached origin/main in e278b802; staging deployment was correctly blocked, so no product runtime regression was deployed."
+      repaired: "The eleven reviewed candidate findings remain repaired. The integration-tagged owner mismatch is documented but not yet repaired."
   candidate:
     id: R1-texture-owner-cutover-16
-    state: accepted_ready_to_land
-    ref: commit:7782227eca698e79312232e6eac103b613b8ffb0
+    state: canonical_landed_ci_failed_integration_owner
+    ref: commit:e278b8022e872ea26d503b9c7430e5dad66fae48
     owner: orchestrator
     base: refs/remotes/origin/main@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    digest: commit:7782227eca698e79312232e6eac103b613b8ffb0
+    digest: commit:e278b8022e872ea26d503b9c7430e5dad66fae48
     scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
   evidence_refs:
     - "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."
@@ -179,8 +179,9 @@ now:
     - "independent-review:blocking P1 at internal/coagentowner/spawn_tool.go:168-174; exactTarget canonicalizes aliases such as research into an allowed explicit researcher profile."
     - "alias-repair-proof: TestSpawnAgentRejectsInvalidExplicitProfile and full internal/coagentowner passed; runtime dissolution ratchet PASS with unchanged counts; git diff --check passed."
     - "independent-review:focused exact diff 6f63fdd7..7782227e accepted with confidence 0.99 and no blockers; explicit aliases/case/token variants reject before StartCoagentRun while fuzzy role and omitted-profile paths remain unchanged."
-  blocker_or_risk: "No candidate blocker. Canonical push, CI/deploy identity, and deployed persistent-computer acceptance remain outstanding. Residual nonblocking risks: first Texture identity resolution scans a bounded 100,000-document list; persistent boot-send errors retry until startup context cancellation; full concurrent suite can exceed the Dolt load deadline although standalone and sharded contracts pass."
-  next_action: "Commit this acceptance receipt, push the accepted lineage to origin/main, monitor CI and deploy identity, then run the deployed acceptance path."
+    - "ci-failure:https://github.com/choir-hip/go-choir/actions/runs/29376823215 job 87231968694; non-tagged agentcore/textureowner shard passed, then integration-tagged agentcore build failed on deleted HandleTextureCreateDocument, HandleTextureRevisions, HandleTextureAgentRevision, and unexported texture payload types; deploy job skipped."
+  blocker_or_risk: "Canonical CI is red and staging was not deployed. Production compiles and focused owner contracts pass, but the integration/comprehensive build contract is broken until the stale real-LLM test moves to textureowner or otherwise composes the new owner without a reverse dependency."
+  next_action: "Commit this CI problem receipt before repair code, move the integration-tagged Texture real-LLM contract to textureowner with direct owner composition, run the exact tagged smoke locally, then push and re-enter the CI/deploy loop."
 
 receipts:
   - id: predecessor-B0-authority
