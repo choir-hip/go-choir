@@ -843,7 +843,7 @@ func domainDisposition(path string) string {
 }
 
 func citerDisposition(rel string) string {
-	if strings.HasPrefix(rel, "docs/evidence/") {
+	if strings.HasPrefix(rel, "docs/evidence/") || strings.HasPrefix(rel, "docs/archive/") {
 		return "historical_evidence"
 	}
 	return "block"

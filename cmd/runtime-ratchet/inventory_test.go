@@ -578,6 +578,22 @@ func TestInventoryUsesAuthoritativeFilesAndStableCiterIdentities(t *testing.T) {
 		}
 	})
 }
+
+func TestCiterDispositionSeparatesHistoricalAndLiveDocs(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{path: "docs/evidence/history.md", want: "historical_evidence"},
+		{path: "docs/archive/mission-v0.md", want: "historical_evidence"},
+		{path: "docs/definitions/active.md", want: "block"},
+	} {
+		if got := citerDisposition(tc.path); got != tc.want {
+			t.Errorf("citerDisposition(%q) = %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
 func TestRebasedExportRequiresProductionCaller(t *testing.T) {
 	t.Run("unused export fails after baseline rebase", func(t *testing.T) {
 		root := fixtureRepository(t)

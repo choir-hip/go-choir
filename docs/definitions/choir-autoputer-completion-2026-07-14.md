@@ -72,8 +72,8 @@ finish:
     - "Autopaper is treated as automatically authorized"
 
 boundaries:
-  mutation_class: yellow
-  reclassification_rule: "The landed toolregistry clean cutover was orange with source rollback ba90974c19a5ca1bdcd861302a225aa318087f56. The active evidence-and-ratchet reconciliation is yellow and may change no runtime behavior. Later implementation slices are classified independently, with red ceremony when they touch a protected surface."
+  mutation_class: red
+  reclassification_rule: "The archive-citer classifier repair is yellow and rolls back to 9aa0b39c. The active trajectory terminalization slice is red because it changes work-item and trajectory authority plus an owner product API; implementation rollback is 9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0."
   authority_sources:
     - "owner direction recorded for this 2026-07-14 reconciliation"
     - AGENTS.md
@@ -137,13 +137,13 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: checkpoint_incomplete
-  slice: "document the toolregistry landing evidence and ratchet reconciliation gaps"
-  question: "Which landed claims are directly proved by staging, and which ratchet deltas require separate authorization before the slice can close?"
+  status: working
+  slice: "terminalize autonomous wire publication failures through one trajectory authority"
+  question: "Can every failed publication fate-share with its work-item claim and can the owner safely cancel an already-stuck trajectory without SSH or direct store access?"
   reconciliation:
-    observed_at: 2026-07-14T09:48:00Z
-    source_ref: refs/heads/main@fd049fc5462f9f16d142986c0c2323d15b66d172
-    deploy_identity: "CI 29321638256; deploy job 87049067469"
+    observed_at: 2026-07-14T10:05:00Z
+    source_ref: refs/heads/main@9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0
+    deploy_identity: "toolregistry CI 29321638256; deploy job 87049067469"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,34 +151,41 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: reconciliation_required
+    status: reconciled
+    protected_surfaces: [trajectory_status, work_item_status, wire_publication, owner_product_api]
+    admissible_evidence: "Focused authority, handler, CLI, and publication-failure contracts; runtime shards; green CI and staging deploy identity; authenticated staging cancellation of the observed stuck trajectory followed by a fetched terminal trajectory receipt."
+    rollback_ref: 9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0
+    conjecture_delta: "A single shared trajectory-cancellation authority can close both explicit owner cancellation and in-process publication failure without falsely settling failed work or cancelling an unrelated trajectory."
+    heresy_delta:
+      discovered: "A publication side effect can open a durable work item, fail, and return without a terminal state; the document cancel route refuses to act once its pending mutation is gone."
+      introduced: none
+      repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; the exact 1345-citer baseline passes."
   candidate:
-    id: R1-toolregistry-facade-extinction-08-rebuild
-    state: landed_repair_required
-    ref: refs/heads/main@fd049fc5462f9f16d142986c0c2323d15b66d172
+    id: R1-wire-publication-terminalization-09
+    state: authorized_build
+    ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
-    base: refs/heads/autoputer-definition-v2@db1ea597cf862b77f5ccb288f8eb76a08309b64d
-    digest: sha256:faa525991e2f80344ea2629e5fbbfbe7fa2640cdb1904769e646c26c9552a827
-    scope: [toolregistry_facade_clean_cutover]
+    base: refs/heads/main@9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0
+    digest: pending_candidate_build
+    scope: [trajectory_cancellation_authority, wire_publication_failure_terminalization, owner_trajectory_cancel_api]
   decision:
-    selected: "Do not roll back the source cutover. Before evidence closeout, repair the ratchet's archive-citer classifier: restored historical mission documents are evidence, not live deletion blockers."
+    selected: "Extract the trajectory/work-item state transition behind existing run-based cancellation into one shared authority. Explicit owner cancellation also stops active runs; in-process publication failure uses the same authority transition without cancelling its currently executing activation. Expose owner-scoped POST cancellation and a Choir CLI command."
     kind: operational
     status: settled
     source: orchestrator
-    evidence_ref: "code reviewer ACCEPT; evidence reviewer REPAIR at frozen commit fd049fc5462f9f16d142986c0c2323d15b66d172; exact citer set reconciliation sha256:1dc6b844515d4a5f2087f69eb1d7b4d1343305db1c2efd2241b540b8f91bc5ff"
+    evidence_ref: "staging trajectory a57593ae-3ab1-4dd6-b4d3-88f1d851ef31 and work item c9812e4a-79a7-462e-a04d-faba6dd77908; source inspection of publication error exits and document-cancel no-pending branch"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T09:48:00Z
-    consequence: "The stale 333-entry baseline omitted 1013 source citers already present at its canonical parent: 952 under docs/archive and 61 in active Definitions. All 1013 were mechanically regenerated as block, but the scanner only recognizes docs/evidence as historical evidence; treating restored docs/archive missions as live blockers would prevent clean deletion based on superseded history. The repair is detector-only: classify docs/archive citers as historical evidence, preserve active Definition blockers, remove the one now-absent citer, and regenerate the exact current baseline."
+    recorded_at: 2026-07-14T10:05:00Z
+    consequence: "Failure must cancel every open claim and mark the trajectory cancelled with durable owner-visible state; it must never report settled. The owner API is trajectory-addressed and owner-scoped. Existing run-addressed cancellation delegates to the same authority, and activation cancellation remains outside the authority transition so publication cleanup cannot cancel itself."
   evidence_refs:
-    - "https://github.com/choir-hip/go-choir/actions/runs/29321638256"
-    - "deploy-job:87049067469"
+    - "ratchet-test:go test ./cmd/runtime-ratchet"
+    - "ratchet-command:go run ./cmd/runtime-ratchet -root ."
+    - "ratchet-citers:1345"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
-    - "researcher-run:30f88fa3-7766-486d-b6d1-305a99ee9f87"
-    - "work-item:0a62fefa-9438-47b9-aaa5-5072688c185b"
+    - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-    - "texture-revision-hash:rev2:07a51c69cad5e791cf228cab37c105e77c00a1da9d475f5f9dbcb60e656d776c"
-  blocker_or_risk: "The detector misclassifies 952 restored archive citations as live blockers; one 7/14 Definition citer retained in the baseline no longer exists; staging helper-byte claims require bounded wording; and autonomous publication item c9812e4a-79a7-462e-a04d-faba6dd77908 has no supported terminal owner path after its creating revision completed."
-  next_action: "Commit this classifier problem receipt, then teach the ratchet that docs/archive is historical evidence, add focused classification coverage, regenerate the exact baseline, and re-run the ratchet before closing the toolregistry evidence boundary."
+  blocker_or_risk: "The observed trajectory remains live with one unassigned open publication item. The only current owner cancellation surface is run-addressed or pending-document-addressed, so neither can safely disposition this completed-run/no-pending state."
+  next_action: "Commit the verified ratchet repair, then build the shared cancellation authority, owner API/CLI, and publication-failure terminalization in isolated file scopes with focused contracts."
 
 receipts:
   - id: predecessor-B0-authority
