@@ -932,6 +932,7 @@ func (s *Store) rejectActiveRunOnTerminalTrajectory(ctx context.Context, rec typ
 func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
+	rec.TrajectoryID = runTrajectoryID(rec)
 
 	if err := s.rejectActiveRunOnTerminalTrajectory(ctx, rec, "create"); err != nil {
 		return err
@@ -951,6 +952,7 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 	}
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
+	rec.TrajectoryID = runTrajectoryID(rec)
 
 	existing, err := s.GetRunOG(ctx, rec.RunID)
 	if err != nil {

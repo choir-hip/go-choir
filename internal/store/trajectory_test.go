@@ -880,16 +880,23 @@ func TestListActiveRunsByTrajectoryExhaustsPagesBeforeResultLimit(t *testing.T) 
 	}
 }
 
-func TestListActiveRunsByTrajectoryNormalizesLegacyBodyIdentity(t *testing.T) {
+func TestUpdateRunPreservesLegacyTrajectoryIndexOnReactivation(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
 	const trajectoryID = "traj-legacy-body"
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: trajectoryID,
+		OwnerID:      "user-alice",
+		Kind:         types.TrajectoryKindTask,
+	}); err != nil {
+		t.Fatalf("create live trajectory: %v", err)
+	}
 
 	rec := types.RunRecord{
 		RunID:        "run-legacy-body",
 		OwnerID:      "user-alice",
 		TrajectoryID: trajectoryID,
-		State:        types.RunPending,
+		State:        types.RunPassivated,
 		Metadata:     map[string]any{"trajectory_id": trajectoryID},
 	}
 	if err := s.CreateRunOG(ctx, rec); err != nil {
@@ -907,6 +914,17 @@ func TestListActiveRunsByTrajectoryNormalizesLegacyBodyIdentity(t *testing.T) {
 	obj.Body = body
 	if err := s.ogStore.PutObject(ctx, obj); err != nil {
 		t.Fatalf("persist legacy run body: %v", err)
+	}
+	rec.State = types.RunPending
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatalf("reactivate indexed legacy run: %v", err)
+	}
+	stored, err := s.GetRun(ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("get reactivated legacy run: %v", err)
+	}
+	if stored.TrajectoryID != trajectoryID {
+		t.Fatalf("reactivated trajectory_id = %q, want %q", stored.TrajectoryID, trajectoryID)
 	}
 
 	active, err := s.ListActiveRunsByTrajectory(ctx, rec.OwnerID, trajectoryID, 0)

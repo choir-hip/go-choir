@@ -162,11 +162,11 @@ now:
       repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; trajectory cancellation, CreateRun, and inactive-to-active UpdateRun admission share one authority lock; work-item, active-run, and boot-recovery reads exhaust canonical-ID keyset pages; decoded legacy run identity is normalized before owner/state filtering."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: legacy_reactivation_reindex_repair_required
+    state: verified_legacy_reindex_repair_local
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
-    digest: frozen_commit:1bd90936c69f7ed599c367fc9ff57ae9eb77e5d7; atomic_repair_commit:c7827b3e; cardinality_repair_commit:b90dcf0d; lifecycle_repair_delta_sha256:a807442e633dd06ec5bc72e7684809adfc271f3b3217be6283e9d0f4e92d3ac0
+    digest: frozen_commit:1bd90936c69f7ed599c367fc9ff57ae9eb77e5d7; atomic_repair_commit:c7827b3e; cardinality_repair_commit:b90dcf0d; lifecycle_repair_commit:3bdd1597; legacy_reindex_delta_sha256:9b04303a828a8c691e3fd04472971717b5dfb3da301361f2a2f4d71fea548afb
     scope: [trajectory_cancellation_authority, wire_publication_failure_terminalization, owner_trajectory_cancel_api]
   decision:
     selected: "Extract the trajectory/work-item state transition behind existing run-based cancellation into one shared authority. Explicit owner cancellation also stops active runs; in-process publication failure uses the same authority transition without cancelling its currently executing activation. Expose owner-scoped POST cancellation and a Choir CLI command."
@@ -202,11 +202,14 @@ now:
     - "lifecycle-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
     - "final-owner-security-rereview:ACCEPT; legacy sibling drain, owner isolation, terminal truth, and reactivation guard accepted"
     - "final-atomic-cardinality-rereview:REPAIR; successful live reactivation of an indexed legacy body rewrites object metadata from empty TrajectoryID and erases the drain index"
+    - "legacy-reindex-repair:full store PASS; live indexed legacy reactivation persists canonical TrajectoryID and remains queryable; terminal reactivation remains rejected"
+    - "legacy-reindex-runtime:280/280 shard tests PASS; legacy-addressed sibling drain and 205-run drain PASS"
+    - "legacy-reindex-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "Owner/security re-review accepts the repair. Atomic re-review found one persistence escape: UpdateRun admission resolves legacy trajectory identity for the guard but does not write it into rec.TrajectoryID, so UpdateRunOG can erase the indexed trajectory_id during a permitted live reactivation and make the active run invisible to later cancellation."
-  next_action: "Commit this persistence blocker before repair. Normalize rec.TrajectoryID under trajectoryMu before any permitted active UpdateRun persistence, preserve the indexed identity, add live legacy reactivation-then-cancellation coverage, and repeat atomic review."
+  blocker_or_risk: "The reindex escape is repaired and locally verified: active CreateRun and UpdateRun paths normalize fallback trajectory identity under trajectoryMu before persistence, preserving the ObjectGraph index. Owner/security is ACCEPT; atomic review must confirm the frozen repair. Residual risks remain process-local locking, retry-dependent 30-second drain, and log-and-retry orphan recovery."
+  next_action: "Commit the legacy reindex repair, obtain final atomic ACCEPT on the frozen commit, then push and execute the landing loop."
 
 receipts:
   - id: predecessor-B0-authority

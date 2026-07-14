@@ -240,10 +240,11 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 	sibling.AgentID = "agent-legacy-sibling"
 	sibling.TrajectoryID = trajectoryID
 	sibling.Prompt = "current-schema sibling on legacy-addressed trajectory"
-	for _, rec := range []types.RunRecord{run, sibling} {
-		if err := s.CreateRun(ctx, rec); err != nil {
-			t.Fatalf("create legacy run %s: %v", rec.RunID, err)
-		}
+	if err := s.CreateRunOG(ctx, run); err != nil {
+		t.Fatalf("seed legacy run %s: %v", run.RunID, err)
+	}
+	if err := s.CreateRun(ctx, sibling); err != nil {
+		t.Fatalf("create sibling run %s: %v", sibling.RunID, err)
 	}
 
 	cancelled, err := rt.CancelRunTrajectory(ctx, run.RunID, run.OwnerID)
