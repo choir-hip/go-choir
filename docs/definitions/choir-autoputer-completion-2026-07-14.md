@@ -138,12 +138,12 @@ measures:
 
 now:
   status: working
-  slice: "land and accept content/media owner cutover"
-  question: "Does the reviewed content/media owner cutover preserve deployed owner-scoped import, extraction, provider fallback, persistence, event, and HTTP behavior while leaving Runtime with composition-only authority?"
+  slice: "map model and research ownership from internal/runtime"
+  question: "Which canonical owners can absorb model policy, prompt/default configuration, researcher/search/browser-source tools, and their route/provider/store contracts without recreating a runtime facade or moving Texture authority prematurely?"
   reconciliation:
-    observed_at: 2026-07-14T17:22:35Z
-    source_ref: refs/heads/autoputer-definition-v2@5fbe4d50
-    deploy_identity: "Predecessor a0b7c9d904be618c8ace59d0b19b6d10bb7d4226 remains deployed; candidate 5fbe4d50 is locally accepted and not yet pushed."
+    observed_at: 2026-07-14T17:35:05Z
+    source_ref: refs/heads/autoputer-definition-v2@474b9b70214ba6c063e6e3231430ce75474e014c
+    deploy_identity: "CI 29353600501 PASS; deploy job 87156686176; activation receipt 474b9b70214ba6c063e6e3231430ce75474e014c at 2026-07-14T17:31:15Z; authenticated staging sandbox reports 474b9b70."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,33 +151,30 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:b3d8205fe3047ccbde392abbaed681a2e60dbee1
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: accepted_local_ready_to_land
-    protected_surfaces: [content_items, url_source_validation, file_source_boundary, document_extraction, youtube_transcripts, searxng_discovery, content_events, media_progress, media_recents, theme_preferences, user_isolation]
-    admissible_evidence: "Canonical owner package tests; direct route/composition compile; scoped runtime shard; exact runtime dissolution ratchet; stale wrapper/store-write searches; frozen independent transition and authority reviews; green CI, staging identity, and authenticated deployed acceptance."
-    rollback_ref: b3d8205fe3047ccbde392abbaed681a2e60dbee1
-    conjecture_delta: "Confirmed locally: content import/extraction and media state can leave Runtime without changing their owner-scoped contracts. A direct injected content Service serves remaining podcast, Texture, and researcher callers; media state is route-owned; shared source/media/document helpers have one canonical content home."
+    status: content_media_complete_next_boundary_unobserved
+    protected_surfaces: [model_policy, prompt_defaults, provider_routing, researcher_tools, search_gateway, source_artifacts, user_isolation, content_service, texture_authority]
+    admissible_evidence: "Exact model/research route/caller/provider/store/tool map; settled authority conformance; existing replacement check; focused owner contracts; runtime ratchet; frozen independent reviews; green CI, staging identity, and authenticated deployed acceptance."
+    rollback_ref: 5fbe4d50
+    conjecture_delta: "Content/media ownership is deployed and confirmed: authenticated URL import produced content item 0b807e44-8b7a-4ce7-846a-0b7c046e1e65 through html_readability_lite, then list/get recovered it; media progress and recents round-tripped owner-scoped state. The next unknown is whether model policy and researcher tooling share an owner boundary or require separate packages."
     heresy_delta:
-      discovered: "The cutover exposed two comprehensive-test-only helpers that had moved with the owner tests while retained Runtime tests still cited them; the retained tests now carry their narrow local fixture/network setup. Independently stale comprehensive prompt and Texture tests remain outside this slice and are not counted as introduced."
+      discovered: "The next model/research boundary has not yet been mapped; do not infer an owner from filenames. Independently stale comprehensive prompt and Texture tests predate the completed content/media slice."
       introduced: none
-      repaired: "internal/content now solely owns content HTTP/import/extraction/store/event/provider behavior and internal/mediastate solely owns media-state HTTP/store/event behavior. Routes dispatch directly to those owners; sandbox composes them; Runtime has only an injected content Service and direct caller use. Legacy runtime content/media files, import wrappers, duplicate helpers, direct writes, and handler authority are deleted."
+      repaired: "Content/media cutover is deployed: internal/content and internal/mediastate are sole owners; authenticated staging returned content import HTTP 201, list/get HTTP 200, media progress PUT/GET HTTP 200 with exact 42.5/120/1.25 state, and recents PUT/GET HTTP 200."
   candidate:
-    id: R1-content-media-owner-cutover-14
-    state: accepted_local_ready_to_land
-    ref: refs/heads/autoputer-definition-v2@5fbe4d50
+    id: R1-model-research-owner-boundary-15
+    state: mapping
+    ref: refs/heads/autoputer-definition-v2@474b9b70214ba6c063e6e3231430ce75474e014c
     owner: orchestrator
-    base: refs/remotes/origin/main@a0b7c9d904be618c8ace59d0b19b6d10bb7d4226
-    digest: "32 files, +1305/-959. Added canonical internal/content Service and internal/mediastate Handler; direct apihandler/sandbox/runtime composition; migrated podcast, Texture, researcher, and intent callers; deleted runtime content/media owners and wrappers; regenerated the exact runtime inventory."
-    scope: [content_http, content_items, url_import, file_import, document_extraction, source_validation, transcript_fetch, search_discovery, content_events, media_progress, media_recents, theme_preferences, shared_content_classification]
+    base: refs/remotes/origin/main@474b9b70214ba6c063e6e3231430ce75474e014c
+    digest: unknown_pending_source_map
+    scope: [model_policy, prompts, provider_selection, researcher_tools, search_tools, source_artifacts, browser_source_reading]
   evidence_refs:
-    - "go-test: -tags comprehensive ./internal/content ./internal/mediastate PASS"
-    - "go-test: ./internal/apihandler ./internal/sandbox ./internal/actorruntime PASS; ./internal/runtime -run ^$ PASS"
-    - "runtime-shard-1/4: 69/277 PASS"
-    - "runtime-ratchet: PASS; go_files=117 production_files=60 test_files=57 production_loc=35248 test_loc=47507 exports=830 export_caller_edges=226"
-    - "authority-search: no Runtime ImportURLContent/ImportFileContent wrappers or direct content/media store writes"
-    - "content-media-transition-review: ACCEPT confidence 0.93"
-    - "content-media-authority-review: ACCEPT confidence 0.97"
-  blocker_or_risk: "Deployment-only acceptance remains. Candidate 5fbe4d50 is locally frozen and independently accepted but has not passed canonical CI, deployed to staging, reported its build identity, or exercised authenticated content/media routes. The repository-wide comprehensive runtime tag remains independently stale in prompt/Texture tests; this cutover's missing retained helpers were repaired and default CI/runtime shard proof passes."
-  next_action: "Commit this local acceptance receipt, push the coherent candidate to origin/main, monitor CI and staging identity, then exercise authenticated URL/file content and media state transitions before marking the slice complete."
+    - "preceding-ci: https://github.com/choir-hip/go-choir/actions/runs/29353600501"
+    - "preceding-deploy: deploy-job:87156686176; activation-receipt:474b9b70214ba6c063e6e3231430ce75474e014c@2026-07-14T17:31:15Z"
+    - "preceding-content-acceptance: HTTP-401 unauthenticated list; HTTP-201 URL import; content-item:0b807e44-8b7a-4ce7-846a-0b7c046e1e65; HTTP-200 list/get; extraction_adapter:html_readability_lite"
+    - "preceding-media-acceptance: progress PUT/GET HTTP-200 exact state; recents PUT/GET HTTP-200 present; sandbox-build:474b9b70"
+  blocker_or_risk: "No current execution blocker. The model/research surface may conceal settled provider-routing authority, direct store writes, tool registration coupling, and Texture-specific source behavior. Mapping and replacement checks must precede any owner decision or code mutation."
+  next_action: "Map model-policy/prompt routes, provider/store contracts, researcher/search/source tools, registrations, tests, and every caller; check existing owner packages and settled decisions; then freeze the smallest deletion-first owner boundary before behavior-changing code."
 
 receipts:
   - id: predecessor-B0-authority
@@ -283,9 +280,9 @@ receipts:
   - id: R1-content-media-owner-cutover-14
     boundary: implement
     commit_or_artifact: 5fbe4d50
-    proof_refs: ["content-owner-tests:PASS", "media-owner-tests:PASS", "apihandler-sandbox-actorruntime:PASS", "runtime-shard-1/4:PASS", "runtime-ratchet:PASS", "authority-residue-search:PASS", "content-media-transition-review:ACCEPT", "content-media-authority-review:ACCEPT"]
+    proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29353600501", "deploy-job:87156686176", "activation-receipt:474b9b70214ba6c063e6e3231430ce75474e014c@2026-07-14T17:31:15Z", "content-owner-tests:PASS", "media-owner-tests:PASS", "runtime-shard-1/4:PASS", "runtime-ratchet:PASS", "content-media-transition-review:ACCEPT", "content-media-authority-review:ACCEPT", "staging-content-import:HTTP-201:0b807e44-8b7a-4ce7-846a-0b7c046e1e65", "staging-content-list-get:HTTP-200", "staging-media-progress-put-get:HTTP-200", "staging-media-recents-put-get:HTTP-200"]
     rollback_ref: b3d8205fe3047ccbde392abbaed681a2e60dbee1
-    disposition: accepted_local_ready_to_land
+    disposition: complete
 
 view:
   path: none
