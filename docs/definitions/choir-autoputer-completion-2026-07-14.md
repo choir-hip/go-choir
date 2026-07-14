@@ -137,12 +137,12 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: reviewing
-  slice: "freeze and focused-review the minimal explicit-profile repair"
-  question: "Does the two-line repair reject canonical aliases and case variants while preserving canonical explicit profiles and fuzzy role convenience?"
+  status: working
+  slice: "land the independently accepted Texture owner cutover"
+  question: "Will canonical CI, staging identity, and the deployed persistent-computer path accept commit 7782227e plus its terminal state receipt?"
   reconciliation:
-    observed_at: 2026-07-14T23:37:32Z
-    source_ref: staged-repair@sha256:4e8cd0a2401700ce22296a363e2d311ae1f29e3dea222ede8b9fbddbbdd65fec
+    observed_at: 2026-07-14T23:39:41Z
+    source_ref: commit:7782227eca698e79312232e6eac103b613b8ffb0
     deploy_identity: blocked_before_landing
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -151,7 +151,7 @@ now:
       - docs/runtime-dissolution-inventory.yaml@production_importers:0,wrappers:0,tools:37
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: alias_repair_implemented_review_pending
+    status: candidate_accepted_ready_to_land
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact owner/caller map; focused production-order restart tests; exact delegation validation tests; exhaustive legal-Go ratchet fixtures; all four agentcore and Texture owner shards; frozen independent review; CI, staging identity, and deployed product-path acceptance."
     rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
@@ -159,14 +159,14 @@ now:
     heresy_delta:
       discovered: "Final review found one additional candidate-only explicit-profile alias bypass after the ten prior findings."
       introduced: "None in canonical source; all findings remain confined to the unpushed candidate lineage."
-      repaired: "All eleven candidate-only findings now have source-level repairs and focused regression coverage; the final repair rejects research, research-agent, Researcher, coagent, token-fuzzy, and out-of-set explicit profiles before spawn side effects."
+      repaired: "All eleven candidate-only findings have source-level repairs and focused regression coverage. Independent final focused review accepted the explicit-profile repair with confidence 0.99 and no blockers."
   candidate:
     id: R1-texture-owner-cutover-16
-    state: alias_repair_implemented_review_pending
-    ref: staged-repair@sha256:4e8cd0a2401700ce22296a363e2d311ae1f29e3dea222ede8b9fbddbbdd65fec
+    state: accepted_ready_to_land
+    ref: commit:7782227eca698e79312232e6eac103b613b8ffb0
     owner: orchestrator
     base: refs/remotes/origin/main@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    digest: sha256:4e8cd0a2401700ce22296a363e2d311ae1f29e3dea222ede8b9fbddbbdd65fec
+    digest: commit:7782227eca698e79312232e6eac103b613b8ffb0
     scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
   evidence_refs:
     - "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."
@@ -178,8 +178,9 @@ now:
     - "independent-review:final wake ordering and first-identity recovery accepted with confidence 0.95; full cutover found no additional blocker beyond explicit-profile aliases."
     - "independent-review:blocking P1 at internal/coagentowner/spawn_tool.go:168-174; exactTarget canonicalizes aliases such as research into an allowed explicit researcher profile."
     - "alias-repair-proof: TestSpawnAgentRejectsInvalidExplicitProfile and full internal/coagentowner passed; runtime dissolution ratchet PASS with unchanged counts; git diff --check passed."
-  blocker_or_risk: "No local blocker. The minimal alias repair requires frozen focused review before the candidate can land; canonical CI, staging identity, and deployed persistent-computer acceptance remain outstanding."
-  next_action: "Commit the minimal alias repair and compact state, obtain focused exact-diff acceptance, then land the accepted candidate."
+    - "independent-review:focused exact diff 6f63fdd7..7782227e accepted with confidence 0.99 and no blockers; explicit aliases/case/token variants reject before StartCoagentRun while fuzzy role and omitted-profile paths remain unchanged."
+  blocker_or_risk: "No candidate blocker. Canonical push, CI/deploy identity, and deployed persistent-computer acceptance remain outstanding. Residual nonblocking risks: first Texture identity resolution scans a bounded 100,000-document list; persistent boot-send errors retry until startup context cancellation; full concurrent suite can exceed the Dolt load deadline although standalone and sharded contracts pass."
+  next_action: "Commit this acceptance receipt, push the accepted lineage to origin/main, monitor CI and deploy identity, then run the deployed acceptance path."
 
 receipts:
   - id: predecessor-B0-authority
