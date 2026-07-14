@@ -72,8 +72,8 @@ finish:
     - "Autopaper is treated as automatically authorized"
 
 boundaries:
-  mutation_class: orange
-  reclassification_rule: "The completed authority/registry migration was yellow. The active toolregistry clean-cutover slice changes runtime harness behavior and is orange; rollback restores ba90974c19a5ca1bdcd861302a225aa318087f56. Later slices are classified independently, with red ceremony when they touch a protected surface."
+  mutation_class: yellow
+  reclassification_rule: "The landed toolregistry clean cutover was orange with source rollback ba90974c19a5ca1bdcd861302a225aa318087f56. The active evidence-and-ratchet reconciliation is yellow and may change no runtime behavior. Later implementation slices are classified independently, with red ceremony when they touch a protected surface."
   authority_sources:
     - "owner direction recorded for this 2026-07-14 reconciliation"
     - AGENTS.md
@@ -137,13 +137,13 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: working
-  slice: "land the verified toolregistry clean cutover"
-  question: "Does pushed staging preserve product-path tool execution after the runtime facade is deleted?"
+  status: checkpoint_incomplete
+  slice: "document the toolregistry landing evidence and ratchet reconciliation gaps"
+  question: "Which landed claims are directly proved by staging, and which ratchet deltas require separate authorization before the slice can close?"
   reconciliation:
-    observed_at: 2026-07-14T09:24:01Z
-    source_ref: refs/heads/autoputer-definition-v2@db1ea597cf862b77f5ccb288f8eb76a08309b64d
-    deploy_identity: unknown
+    observed_at: 2026-07-14T09:48:00Z
+    source_ref: refs/heads/main@fd049fc5462f9f16d142986c0c2323d15b66d172
+    deploy_identity: "CI 29321638256; deploy job 87049067469"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,33 +151,34 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: reconciled
+    status: reconciliation_required
   candidate:
     id: R1-toolregistry-facade-extinction-08-rebuild
-    state: verified_local
-    ref: /Users/wiz/go-choir-autoputer-v2
+    state: landed_repair_required
+    ref: refs/heads/main@fd049fc5462f9f16d142986c0c2323d15b66d172
     owner: orchestrator
     base: refs/heads/autoputer-definition-v2@db1ea597cf862b77f5ccb288f8eb76a08309b64d
     digest: sha256:faa525991e2f80344ea2629e5fbbfbe7fa2640cdb1904769e646c26c9552a827
     scope: [toolregistry_facade_clean_cutover]
   decision:
-    selected: "Accept the rebuilt candidate for landing: internal/toolregistry is the sole owner, focused owner contracts were preserved, the complete runtime shard suite passed, and the scoped ratchet is exact."
+    selected: "Do not roll back the source cutover; independently accepted source and owner tests remain green. Repair the evidence scope and ratchet provenance before closing the slice."
     kind: operational
     status: settled
     source: orchestrator
-    evidence_ref: "toolregistry tests PASS; runtime focused tests PASS; runtime shards 272/272 PASS; runtime-ratchet PASS"
+    evidence_ref: "code reviewer ACCEPT; evidence reviewer REPAIR at frozen commit fd049fc5462f9f16d142986c0c2323d15b66d172"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T09:24:01Z
-    consequence: "Land and prove staging before selecting another ownership slice. Conjecture delta: direct canonical ownership preserves tool execution without runtime facades. Heresy delta: discovered missing owner-test migration in the protected candidate; introduced none; repaired the test-authority and stale-inventory gaps."
+    recorded_at: 2026-07-14T09:48:00Z
+    consequence: "Staging directly proves registry-driven researcher completion, exact durable result, and patch_texture execution/result. Exact schema, prompt-catalog, result-envelope, and projection bytes remain source-and-golden-test claims; they were not exposed by staging. The ratchet's citer increase from 333 to 1346 reflects previously un-reconciled archive and active-Definition surfaces and was not separately authorized before the baseline rewrite."
   evidence_refs:
-    - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
-    - sha256:faa525991e2f80344ea2629e5fbbfbe7fa2640cdb1904769e646c26c9552a827
-    - "go test ./internal/toolregistry: PASS"
-    - "go test ./internal/runtime -run focused-tool-and-run-memory-contracts: PASS"
-    - "scripts/go-test-runtime-shards: 272/272 PASS"
-    - "go run ./cmd/runtime-ratchet -root .: PASS"
-  blocker_or_risk: "The candidate has only local source/test evidence; pushed identity, CI, staging deploy identity, and authenticated product-path acceptance are still missing."
-  next_action: "Commit and push the verified candidate to origin/main, monitor CI and staging deployment for that SHA, then run an authenticated staging product-path tool operation and fetch its durable artifact."
+    - "https://github.com/choir-hip/go-choir/actions/runs/29321638256"
+    - "deploy-job:87049067469"
+    - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
+    - "researcher-run:30f88fa3-7766-486d-b6d1-305a99ee9f87"
+    - "work-item:0a62fefa-9438-47b9-aaa5-5072688c185b"
+    - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
+    - "texture-revision-hash:rev2:07a51c69cad5e791cf228cab37c105e77c00a1da9d475f5f9dbcb60e656d776c"
+  blocker_or_risk: "The committed card is stale; the 1013-citer baseline increase lacks a separate reconciliation boundary; staging did not expose raw moved-helper bytes; and trajectory a57593ae-3ab1-4dd6-b4d3-88f1d851ef31 is not settlement-ready because autonomous wire-publication item c9812e4a-79a7-462e-a04d-faba6dd77908 remains open."
+  next_action: "Commit this code-free problem receipt, then separately reconcile and authorize the archive-derived citer baseline, bound staging claims to fetched artifacts, and close or safely disposition the open publication work item before deciding the slice."
 
 receipts:
   - id: predecessor-B0-authority
