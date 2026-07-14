@@ -195,10 +195,12 @@ func scanGo(root string, files []string, citerOrdinals map[string]int, typePacka
 		if !isTest {
 			typePackages[filepath.Dir(rel)] = true
 		}
-		imports := runtimeImports(file)
-		if !inOwnershipPackage && !isTest && len(imports) > 0 {
+		retiredImports := retiredRuntimeImports(file)
+		if !inOwnershipPackage && !isTest && len(retiredImports) > 0 {
 			inv.ProductionImporters = append(inv.ProductionImporters, Entry{ID: rel, Disposition: "delete"})
-			scanWrappers(rel, file, imports, inv)
+		}
+		if !isTest {
+			scanWrappers(rel, file, dissolutionImports(file), inv)
 		}
 		scanGoCommentCiters(rel, file, citerOrdinals, inv)
 	}
@@ -283,6 +285,9 @@ func isToolCompositeType(expr ast.Expr) bool {
 	}
 }
 
+// scanWrappers inventories owner types that are re-exported through aliases or
+// promoted through anonymous embedding. Named fields and function parameters are
+// direct composition, not wrappers, and must remain outside this detector.
 func scanWrappers(rel string, file *ast.File, aliases map[string]string, inv *Inventory) {
 	ordinals := map[string]int{}
 	ast.Inspect(file, func(n ast.Node) bool {
@@ -290,8 +295,10 @@ func scanWrappers(rel string, file *ast.File, aliases map[string]string, inv *In
 		var label string
 		switch x := n.(type) {
 		case *ast.Field:
-			typ = x.Type
-			label = "field"
+			if len(x.Names) == 0 {
+				typ = x.Type
+				label = "embedded"
+			}
 		case *ast.TypeSpec:
 			if x.Assign.IsValid() {
 				typ = x.Type
@@ -309,11 +316,31 @@ func scanWrappers(rel string, file *ast.File, aliases map[string]string, inv *In
 	})
 }
 
-func runtimeImports(file *ast.File) map[string]string {
+// retiredRuntimeImports is intentionally independent from owner-wrapper
+// discovery: any return of the extinct import path remains a production error.
+func retiredRuntimeImports(file *ast.File) map[string]string {
 	imports := map[string]string{}
 	for _, imp := range file.Imports {
 		path, err := strconv.Unquote(imp.Path.Value)
 		if err != nil || (path != retiredRuntimeImport && !strings.HasPrefix(path, retiredRuntimeImport+"/")) {
+			continue
+		}
+		name := filepath.Base(path)
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		if name != "_" && name != "." {
+			imports[name] = path
+		}
+	}
+	return imports
+}
+
+func dissolutionImports(file *ast.File) map[string]string {
+	imports := map[string]string{}
+	for _, imp := range file.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		if err != nil || !isDissolutionImport(path) {
 			continue
 		}
 		name := filepath.Base(path)
@@ -710,7 +737,7 @@ func runtimeSurfaceType(expr ast.Expr, aliases map[string]string) string {
 			return ""
 		}
 		_, imported := aliases[id.Name]
-		if imported && (x.Sel.Name == "Runtime" || x.Sel.Name == "APIHandler") {
+		if imported && (x.Sel.Name == "Runtime" || x.Sel.Name == "APIHandler" || x.Sel.Name == "Handler") {
 			return id.Name + "." + x.Sel.Name
 		}
 	}

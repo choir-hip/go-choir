@@ -3,12 +3,14 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -90,4 +92,80 @@ func TestInternalRunEventAppendAcceptsOnlyEmailEvidenceEvents(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("unsupported append status = %d, want %d; body=%s", w.Code, http.StatusBadRequest, w.Body.String())
 	}
+}
+
+func TestTextureRunProjectsLifecycleEvents(t *testing.T) {
+	rt, _ := testAPISetup(t)
+	rec, err := rt.StartRunWithMetadata(context.Background(), "revise the document", "user-texture-events", map[string]any{
+		runMetadataAgentProfile: agentprofile.Texture,
+		runMetadataAgentRole:    agentprofile.Texture,
+		runMetadataAgentID:      "texture:doc-event-projection",
+		runMetadataChannelID:    "doc-event-projection",
+		"doc_id":                "doc-event-projection",
+	})
+	if err != nil {
+		t.Fatalf("start Texture run: %v", err)
+	}
+	progress := waitForTextureLifecycleEvent(t, rt, rec.RunID, types.EventTextureAgentRevisionProgress)
+	var progressPayload map[string]string
+	if err := json.Unmarshal(progress.Payload, &progressPayload); err != nil {
+		t.Fatalf("decode Texture progress: %v", err)
+	}
+	if progressPayload["doc_id"] != "doc-event-projection" ||
+		progressPayload["loop_id"] != rec.RunID ||
+		progressPayload["phase"] == "" {
+		t.Fatalf("Texture progress payload = %#v", progressPayload)
+	}
+
+	now := time.Now().UTC()
+	failed := types.RunRecord{
+		RunID:     "run-texture-failure-projection",
+		OwnerID:   "user-texture-events",
+		AgentID:   "texture:doc-failure-projection",
+		ChannelID: "doc-failure-projection",
+		State:     types.RunRunning,
+		Prompt:    "fail the Texture revision",
+		CreatedAt: now,
+		UpdatedAt: now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.Texture,
+			runMetadataAgentRole:    agentprofile.Texture,
+			runMetadataAgentID:      "texture:doc-failure-projection",
+			runMetadataChannelID:    "doc-failure-projection",
+			"doc_id":                "doc-failure-projection",
+		},
+	}
+	if err := rt.Store().CreateRun(context.Background(), failed); err != nil {
+		t.Fatalf("create failing Texture run: %v", err)
+	}
+	rt.handleExecutionError(context.Background(), &failed, errors.New("provider failed"))
+	failure := waitForTextureLifecycleEvent(t, rt, failed.RunID, types.EventTextureAgentRevisionFailed)
+	var failurePayload map[string]string
+	if err := json.Unmarshal(failure.Payload, &failurePayload); err != nil {
+		t.Fatalf("decode Texture failure: %v", err)
+	}
+	if failurePayload["doc_id"] != "doc-failure-projection" ||
+		failurePayload["loop_id"] != failed.RunID ||
+		failurePayload["error"] != "provider failed" {
+		t.Fatalf("Texture failure payload = %#v", failurePayload)
+	}
+}
+
+func waitForTextureLifecycleEvent(t *testing.T, rt *Runtime, runID string, kind types.EventKind) types.EventRecord {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		records, err := rt.Store().ListEvents(context.Background(), runID, 100)
+		if err != nil {
+			t.Fatalf("list Texture lifecycle events: %v", err)
+		}
+		for _, record := range records {
+			if record.Kind == kind {
+				return record
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for Texture lifecycle event %q", kind)
+	return types.EventRecord{}
 }

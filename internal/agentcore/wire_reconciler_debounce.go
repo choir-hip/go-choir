@@ -265,14 +265,14 @@ func (rt *Runtime) dispatchStoryCorpusReconcilerFromPublishBatch(ctx context.Con
 	}
 	prompt += rt.wirePublishBatchDocumentContext(ctx, ownerID, batch)
 	metadata := map[string]any{
-		runMetadataAgentProfile:    agentprofile.Reconciler,
-		runMetadataAgentRole:       agentprofile.Reconciler,
-		runMetadataReconcilerScope: "story-corpus",
-		"activation_origin":        "publish_batch",
-		"request_source":           "wire_publish_debouncer",
-		"published_doc_ids":        batch.DocIDs,
-		"published_revision_ids":   batch.RevisionIDs,
-		"required_child_runs":      1,
+		runMetadataAgentProfile:      agentprofile.Reconciler,
+		runMetadataAgentRole:         agentprofile.Reconciler,
+		runMetadataReconcilerScope:   "story-corpus",
+		"activation_origin":          "publish_batch",
+		"request_source":             "wire_publish_debouncer",
+		"published_doc_ids":          batch.DocIDs,
+		"published_revision_ids":     batch.RevisionIDs,
+		"required_texture_revisions": 1,
 	}
 	if !batch.MixedLineage && strings.TrimSpace(batch.CycleID) != "" {
 		reconcilerRequestID := wirePublishReconcilerRequestID(batch.CycleID)

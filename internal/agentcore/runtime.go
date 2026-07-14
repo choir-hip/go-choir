@@ -1670,6 +1670,17 @@ func (rt *Runtime) executeActivation(ctx context.Context, rec *types.RunRecord) 
 		if kind == types.EventToolInvoked || kind == types.EventToolResult {
 			cause = events.CauseToolExecution
 		}
+		if runHasProfile(rec, agentprofile.Texture) && kind == types.EventRunProgress {
+			if docID := metadataStringValue(rec.Metadata, "doc_id"); docID != "" {
+				progressPayload, _ := json.Marshal(map[string]string{
+					"doc_id":  docID,
+					"loop_id": rec.RunID,
+					"phase":   phase,
+				})
+				rt.emitEvent(ctx, rec, types.EventTextureAgentRevisionProgress,
+					events.CauseProviderProgress, progressPayload)
+			}
+		}
 		rt.emitEvent(ctx, rec, kind, cause, payload)
 	}
 
@@ -2857,6 +2868,15 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 				rec.Metadata = map[string]any{}
 			}
 			rec.Metadata["texture_revision_failed_no_write"] = true
+		}
+		if docID := metadataStringValue(rec.Metadata, "doc_id"); docID != "" {
+			failPayload, _ := json.Marshal(map[string]string{
+				"doc_id":  docID,
+				"loop_id": rec.RunID,
+				"error":   err.Error(),
+			})
+			rt.emitEvent(persistCtx, rec, types.EventTextureAgentRevisionFailed,
+				events.CauseProviderFailure, failPayload)
 		}
 	}
 

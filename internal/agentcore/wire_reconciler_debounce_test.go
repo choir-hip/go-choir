@@ -122,8 +122,11 @@ func TestDispatchStoryCorpusReconcilerCarriesSingleCycleLineage(t *testing.T) {
 		if got := metadataStringValue(run.Metadata, "source_network_request_id"); got != "processor-1" {
 			t.Fatalf("source request id = %q, want processor-1", got)
 		}
-		if got := metadataIntValue(run.Metadata, "required_child_runs"); got != 1 {
-			t.Fatalf("required texture revisions = %d, want 1", got)
+		if got := metadataIntValue(run.Metadata, "required_texture_revisions"); got != 1 {
+			t.Fatalf("required Texture revisions = %d, want 1", got)
+		}
+		if got := metadataIntValue(run.Metadata, "required_child_runs"); got != 0 {
+			t.Fatalf("generic required child runs = %d, want 0", got)
 		}
 		for _, want := range []string{
 			"must produce one reconciler-owned canonical Texture revision",

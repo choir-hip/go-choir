@@ -42,8 +42,51 @@ func (rt *Runtime) verifyRequiredChildRuns(ctx context.Context, rec *types.RunRe
 	return nil
 }
 
-func (rt *Runtime) awaitRequiredChildRuns(ctx context.Context, rec *types.RunRecord, timeout time.Duration) error {
-	if rec == nil || metadataIntValue(rec.Metadata, "required_child_runs") <= 0 {
+func (rt *Runtime) verifyRequiredTextureRevisions(ctx context.Context, rec *types.RunRecord) error {
+	if rt == nil || rt.store == nil || rec == nil {
+		return nil
+	}
+	required := metadataIntValue(rec.Metadata, "required_texture_revisions")
+	if required <= 0 {
+		return nil
+	}
+	runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
+	if err != nil {
+		return fmt.Errorf("verify required Texture revisions: list runs: %w", err)
+	}
+	written := make(map[string]struct{})
+	for _, child := range runs {
+		if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
+			agentprofile.Canonical(agentProfileForRun(&child)) != agentprofile.Texture ||
+			metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
+			continue
+		}
+		docID := strings.TrimSpace(firstNonEmpty(metadataStringValue(child.Metadata, "doc_id"), child.ChannelID))
+		if docID == "" {
+			continue
+		}
+		revisions, err := rt.store.ListRevisionsByDoc(ctx, docID, rec.OwnerID, 200)
+		if err != nil {
+			return fmt.Errorf("verify required Texture revisions for doc %s: %w", docID, err)
+		}
+		for _, revision := range revisions {
+			metadata := decodeRevisionMetadata(revision.Metadata)
+			if metadataString(metadata, "loop_id") != child.RunID ||
+				metadataString(metadata, "revision_role") != textureRevisionRoleCanonical ||
+				metadataString(metadata, "input_origin") != textureInputOriginReconcilerHandoff {
+				continue
+			}
+			written[revision.RevisionID] = struct{}{}
+		}
+	}
+	if len(written) < required {
+		return fmt.Errorf("required reconciler Texture revisions missing: wrote %d, require %d", len(written), required)
+	}
+	return nil
+}
+
+func (rt *Runtime) awaitRequiredTextureRevisions(ctx context.Context, rec *types.RunRecord, timeout time.Duration) error {
+	if rec == nil || metadataIntValue(rec.Metadata, "required_texture_revisions") <= 0 {
 		return nil
 	}
 	if timeout <= 0 {
@@ -51,8 +94,61 @@ func (rt *Runtime) awaitRequiredChildRuns(ctx context.Context, rec *types.RunRec
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		if err := rt.verifyRequiredChildRuns(ctx, rec); err == nil {
+		if err := rt.verifyRequiredTextureRevisions(ctx, rec); err == nil {
 			return nil
+		}
+		runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
+		if err != nil {
+			return fmt.Errorf("await required Texture revisions: list runs: %w", err)
+		}
+		children := 0
+		active := false
+		for _, child := range runs {
+			if strings.TrimSpace(child.RequestedByRunID) != strings.TrimSpace(rec.RunID) ||
+				agentprofile.Canonical(agentProfileForRun(&child)) != agentprofile.Texture ||
+				metadataStringValue(child.Metadata, "request_intent") != "universal_wire_reconciler_article_revision" {
+				continue
+			}
+			children++
+			if child.State.Active() {
+				active = true
+			}
+		}
+		if children == 0 {
+			return fmt.Errorf("required reconciler Texture revisions missing: no reconciler-owned Texture handoff")
+		}
+		if !active {
+			return fmt.Errorf("required reconciler Texture revisions missing: all %d Texture handoff(s) terminated without the required canonical write", children)
+		}
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("required reconciler Texture revisions timed out after %s", timeout)
+		}
+		timer := time.NewTimer(500 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func (rt *Runtime) awaitRequiredChildRuns(ctx context.Context, rec *types.RunRecord, timeout time.Duration) error {
+	if rec == nil {
+		return nil
+	}
+	if metadataIntValue(rec.Metadata, "required_child_runs") <= 0 {
+		return rt.awaitRequiredTextureRevisions(ctx, rec, timeout)
+	}
+	if timeout <= 0 {
+		timeout = 5 * time.Minute
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := rt.verifyRequiredChildRuns(ctx, rec); err == nil {
+			return rt.awaitRequiredTextureRevisions(ctx, rec, timeout)
 		}
 		runs, err := rt.store.ListRunsByOwner(ctx, rec.OwnerID, 500)
 		if err != nil {

@@ -4827,7 +4827,7 @@ func TestTextureWakeStartsIntegrationForCompletedThreadHistory(t *testing.T) {
 	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
 		t.Fatalf("dispatch update: %v", err)
 	}
-	rec, err := rt.reconcileTextureAgentWake(ctx, "user-1", docID)
+	rec, err := NewHandler(rt).ReconcileAgentWake(ctx, "user-1", docID)
 	if err != nil {
 		t.Fatalf("reconcile texture wake: %v", err)
 	}
@@ -5320,6 +5320,10 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 	if err := rt.InstallDefaultAgentTools(""); err != nil {
 		t.Fatalf("install default agent tools after restart: %v", err)
 	}
+	texture := NewHandler(rt)
+	if err := RegisterTools(rt.ToolRegistryForProfile(agentprofile.Texture), texture); err != nil {
+		t.Fatalf("register Texture tools after restart: %v", err)
+	}
 
 	t.Cleanup(func() {
 		rt.Stop()
@@ -5327,6 +5331,7 @@ func TestRestartRecoveryReactivatesInterruptedTextureRun(t *testing.T) {
 		_ = os.RemoveAll(promptRoot)
 	})
 	rt.Start(ctx)
+	texture.Start(ctx)
 
 	revs := waitForRevisionCount(t, s2, doc.DocID, "user-1", 2, 5*time.Second)
 	waitForTextureQuiescent(t, rt, s2, "user-1", doc.DocID, uint64(message.Seq), 5*time.Second)

@@ -59,7 +59,7 @@ func TestWirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition(t *testing.
 			SourceRevisionHash:   "revhash-wire-test",
 		}, nil
 	}
-	handler.rt.maybeAutonomousPublishWireArticle(ctx, story, rev, rec)
+	handler.rt.MaybeAutonomousPublishWireArticle(ctx, story, rev, rec)
 
 	editionDoc, err := handler.rt.Store().GetDocument(ctx, "local-wire-edition-sentinel", universalWirePlatformOwnerID())
 	if err != nil {
@@ -164,7 +164,7 @@ func TestWirePublicationFailureCancelsClaimsWithoutCancellingActivation(t *testi
 		publisherCalled = true
 		return nil, errors.New("platform publication failed")
 	}
-	handler.rt.maybeAutonomousPublishWireArticle(activationCtx, story, rev, rec)
+	handler.rt.MaybeAutonomousPublishWireArticle(activationCtx, story, rev, rec)
 	if !publisherCalled {
 		t.Fatal("failing platform publisher was not called")
 	}
@@ -460,7 +460,7 @@ func TestWirePublicationDoesNotBootstrapLocalEdition(t *testing.T) {
 	handler.rt.wirePlatformPublisher = func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
 		return &wirepublish.PublishTextureResponse{PublicationID: "pub-2", PublicationVersionID: "pubver-2", RoutePath: "/pub/texture/no-edition"}, nil
 	}
-	handler.rt.maybeAutonomousPublishWireArticle(ctx, story, rev, rec)
+	handler.rt.MaybeAutonomousPublishWireArticle(ctx, story, rev, rec)
 	if _, err := handler.rt.Store().GetDocumentAlias(ctx, universalWirePlatformOwnerID(), retiredUniversalWireEditionSourcePath); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("local Wire.texture alias err = %v, want not found after successful corpusd publication", err)
 	}

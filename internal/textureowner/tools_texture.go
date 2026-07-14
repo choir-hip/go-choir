@@ -773,9 +773,7 @@ func (rt *Handler) commitTextureToolEdit(ctx context.Context, rec *types.RunReco
 	})
 	rt.emitTextureAgentEvent(ctx, rec, types.EventTextureAgentRevisionCompleted,
 		events.CauseToolExecution, completedPayload)
-	if rt.CanonicalRevisionCommitted != nil {
-		rt.CanonicalRevisionCommitted(ctx, doc, storedRev, rec)
-	}
+	rt.Core.MaybeAutonomousPublishWireArticle(ctx, doc, storedRev, rec)
 	return storedRev, nil
 }
 

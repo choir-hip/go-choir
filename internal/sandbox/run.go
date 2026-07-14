@@ -198,6 +198,9 @@ func Run() {
 	}
 
 	textureHandler := textureowner.NewHandler(rt.Runtime)
+	if err := rt.BindTextureOwner(textureHandler); err != nil {
+		log.Fatalf("sandbox: bind Texture lifecycle owner: %v", err)
+	}
 	if toolsEnabled {
 		if err := textureowner.RegisterTools(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture), textureHandler); err != nil {
 			log.Fatalf("sandbox: register Texture tools: %v", err)

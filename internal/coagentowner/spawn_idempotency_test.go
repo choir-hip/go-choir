@@ -83,3 +83,21 @@ func TestReconcilerTextureHandoffIsIdempotentPerParentAndDocument(t *testing.T) 
 		t.Fatalf("child requester=%q, want %q", child.RequestedByRunID, parent.RunID)
 	}
 }
+
+func TestSpawnAgentRejectsInvalidExplicitProfile(t *testing.T) {
+	registry := toolregistry.NewToolRegistry()
+	if err := RegisterSpawnTool(registry, nil, nil, agentprofile.PolicyFor(agentprofile.Super)); err != nil {
+		t.Fatal(err)
+	}
+	ctx := toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+		RunID: "parent-run", OwnerID: "user-alice", Profile: agentprofile.Super,
+	})
+
+	_, err := registry.Execute(ctx, "spawn_agent", json.RawMessage(`{"objective":"Research the subject.","role":"researcher","profile":"texture"}`))
+	if err == nil {
+		t.Fatal("spawn_agent accepted an explicit profile outside the caller's allowed targets")
+	}
+	if got := err.Error(); got != "profile must be one of researcher, co-super" {
+		t.Fatalf("spawn_agent error = %q", got)
+	}
+}

@@ -42,7 +42,7 @@ func (rt *Runtime) recoverOpenWirePublicationClaims(ctx context.Context) {
 	}
 }
 
-func (rt *Runtime) maybeAutonomousPublishWireArticle(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) {
+func (rt *Runtime) MaybeAutonomousPublishWireArticle(ctx context.Context, doc types.Document, rev types.Revision, rec *types.RunRecord) {
 	if rt == nil || !wireCanonicalRevisionEligibleForPublication(doc, rev, rec) {
 		return
 	}

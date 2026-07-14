@@ -3,22 +3,22 @@ canonical_parent: 0f905ffcfeba3db85f0958382d9beb68f013a498
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 126
+    go_files: 128
     production_files: 70
-    test_files: 56
-    production_loc: 34394
-    test_loc: 46079
-    exports: 816
-    export_caller_edges: 265
+    test_files: 58
+    production_loc: 34501
+    test_loc: 46475
+    exports: 823
+    export_caller_edges: 271
     initial_unused_export_debt: 10
     routes: 2
     tools: 37
     production_importers: 0
     wrappers: 0
     compatibility_markers: 6
-    store_calls: 356
+    store_calls: 359
     interface_candidates: 4
-    citers: 1336
+    citers: 1334
 files:
     - id: internal/agentcore/agent_tools_test.go [test]
       disposition: tools
@@ -76,7 +76,7 @@ files:
       loc: 1133
     - id: internal/agentcore/internal_run_event_api_test.go [test]
       disposition: lifecycle
-      loc: 93
+      loc: 171
     - id: internal/agentcore/internal_run_idempotency_test.go [test]
       disposition: lifecycle
       loc: 371
@@ -136,7 +136,7 @@ files:
       loc: 443
     - id: internal/agentcore/runtime.go [production]
       disposition: lifecycle
-      loc: 3015
+      loc: 3035
     - id: internal/agentcore/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 107
@@ -202,7 +202,10 @@ files:
       loc: 527
     - id: internal/agentcore/tools_coagent.go [production]
       disposition: tools
-      loc: 172
+      loc: 268
+    - id: internal/agentcore/tools_coagent_completion_test.go [test]
+      disposition: tools
+      loc: 207
     - id: internal/agentcore/tools_coding.go [production]
       disposition: tools
       loc: 630
@@ -274,7 +277,7 @@ files:
       loc: 341
     - id: internal/agentcore/wire_reconciler_debounce_test.go [test]
       disposition: wire
-      loc: 270
+      loc: 273
     - id: internal/agentcore/wire_source_items.go [production]
       disposition: wire
       loc: 85
@@ -295,7 +298,7 @@ files:
       loc: 572
     - id: internal/textureowner/handler.go [production]
       disposition: texture
-      loc: 241
+      loc: 239
     - id: internal/textureowner/prompt_bar.go [production]
       disposition: texture
       loc: 149
@@ -316,7 +319,10 @@ files:
       loc: 1299
     - id: internal/textureowner/texture_controller.go [production]
       disposition: texture
-      loc: 235
+      loc: 230
+    - id: internal/textureowner/texture_controller_restart_test.go [test]
+      disposition: texture
+      loc: 103
     - id: internal/textureowner/texture_decision_test.go [test]
       disposition: texture
       loc: 176
@@ -373,7 +379,7 @@ files:
       loc: 219
     - id: internal/textureowner/texture_test.go [test]
       disposition: texture
-      loc: 9693
+      loc: 9698
     - id: internal/textureowner/texture_tool_unit_test.go [test]
       disposition: texture
       loc: 1082
@@ -388,7 +394,7 @@ files:
       loc: 81
     - id: internal/textureowner/tools_texture.go [production]
       disposition: texture
-      loc: 1962
+      loc: 1960
     - id: internal/textureowner/tools_texture_provenance_test.go [test]
       disposition: texture
       loc: 66
@@ -899,6 +905,8 @@ exports:
     - id: internal/agentcore/failure_isolation_test.go:func:TestRecovery_RuntimeAcceptsNewTasksAfterRecovery
       disposition: core
     - id: internal/agentcore/internal_run_event_api_test.go:func:TestInternalRunEventAppendAcceptsOnlyEmailEvidenceEvents
+      disposition: lifecycle
+    - id: internal/agentcore/internal_run_event_api_test.go:func:TestTextureRunProjectsLifecycleEvents
       disposition: lifecycle
     - id: internal/agentcore/internal_run_idempotency_test.go:func:TestHandleInternalRunSubmissionConcurrentRetriesCreateOneProcessorRun
       disposition: lifecycle
@@ -1493,6 +1501,10 @@ exports:
       disposition: tools
       production_callers:
         - internal/agentcore/tool_profiles.go
+    - id: internal/agentcore/tools_coagent_completion_test.go:func:TestRequiredGenericChildCompletionRemainsIndependent
+      disposition: tools
+    - id: internal/agentcore/tools_coagent_completion_test.go:func:TestRequiredTextureRevisionRejectsCompletedChildWithoutCanonicalWrite
+      disposition: tools
     - id: internal/agentcore/tools_coding.go:func:RegisterCodingTools
       disposition: tools
       production_callers:
@@ -1733,6 +1745,10 @@ exports:
       disposition: wire
     - id: internal/agentcore/wire_processor_decision_test.go:func:TestRecordWireProcessorDecisionToolRejectsAlreadyCoveredWithoutPublishedDoc
       disposition: wire
+    - id: internal/agentcore/wire_publication.go:method(*Runtime):MaybeAutonomousPublishWireArticle
+      disposition: wire
+      production_callers:
+        - internal/textureowner/tools_texture.go
     - id: internal/agentcore/wire_publication_test.go:func:TestRecoverOpenWirePublicationClaimsCancelsOrphanedTrajectoryClaims
       disposition: wire
     - id: internal/agentcore/wire_publication_test.go:func:TestRecoverOpenWirePublicationClaimsLeavesFailedMarkerOpenForRetry
@@ -1798,6 +1814,8 @@ exports:
     - id: internal/textureowner/handler.go:type:Handler
       disposition: texture
       production_callers:
+        - internal/actorruntime/adapter.go
+        - internal/actorruntime/handler.go
         - internal/apihandler/routes.go
         - internal/coagentowner/spawn_tool.go
         - internal/textureowner/api_texture_prompt_eval.go
@@ -1927,6 +1945,17 @@ exports:
       disposition: texture
       production_callers:
         - internal/textureowner/router.go
+    - id: internal/textureowner/texture_controller.go:method(*Handler):ReconcileAgentWake
+      disposition: texture
+      production_callers:
+        - internal/actorruntime/handler.go
+        - internal/textureowner/texture_controller.go
+    - id: internal/textureowner/texture_controller.go:method(*Handler):Start
+      disposition: texture
+      production_callers:
+        - internal/actorruntime/adapter.go
+    - id: internal/textureowner/texture_controller_restart_test.go:func:TestTextureOwnerStartRecoversDurableWakeAfterRestart
+      disposition: texture
     - id: internal/textureowner/texture_decision_test.go:func:TestRecordTextureDecisionToolPersistsAndEmitsReadableEvent
       disposition: texture
     - id: internal/textureowner/texture_decision_test.go:func:TestTextureDiagnosisAndTraceLogsIncludeDecisionRecords
@@ -2555,7 +2584,7 @@ tools:
 production_importers: []
 wrappers: []
 compatibility_markers:
-    - id: internal/agentcore/runtime.go:1977:This is the legacy execution path used when no tool registry is configured
+    - id: internal/agentcore/runtime.go:1988:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/agentcore/runtime.go:99:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
@@ -2565,7 +2594,7 @@ compatibility_markers:
       disposition: delete
     - id: internal/agentcore/universal_wire.go:13:"platformd_route_path" key for backward compatibility with existing
       disposition: delete
-    - id: internal/textureowner/tools_texture.go:1635:source_ref display_mode enum after the hard cutover. Legacy expanded
+    - id: internal/textureowner/tools_texture.go:1633:source_ref display_mode enum after the hard cutover. Legacy expanded
       disposition: delete
 store_calls:
     - id: internal/agentcore/api.go:HandleInternalRunEvents:internal/store.method:Store.ListEvents
@@ -2842,6 +2871,8 @@ store_calls:
       disposition: read
     - id: internal/agentcore/tools_coagent.go:awaitRequiredChildRuns:internal/store.method:Store.ListRunsByOwner
       disposition: read
+    - id: internal/agentcore/tools_coagent.go:awaitRequiredTextureRevisions:internal/store.method:Store.ListRunsByOwner
+      disposition: read
     - id: internal/agentcore/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.CoSuperSlotByAgentAndTrajectory
       disposition: read
     - id: internal/agentcore/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.GetLatestActiveRunByAgent
@@ -2851,6 +2882,10 @@ store_calls:
     - id: internal/agentcore/tools_coagent.go:newCancelAgentTool:internal/store.method:Store.ListEvents
       disposition: read
     - id: internal/agentcore/tools_coagent.go:verifyRequiredChildRuns:internal/store.method:Store.ListRunsByOwner
+      disposition: read
+    - id: internal/agentcore/tools_coagent.go:verifyRequiredTextureRevisions:internal/store.method:Store.ListRevisionsByDoc
+      disposition: read
+    - id: internal/agentcore/tools_coagent.go:verifyRequiredTextureRevisions:internal/store.method:Store.ListRunsByOwner
       disposition: read
     - id: internal/agentcore/tools_evidence.go:newGetRunMemoryEntryTool:internal/store.method:Store.GetRunMemoryEntry
       disposition: read
@@ -3146,6 +3181,14 @@ store_calls:
       disposition: read
     - id: internal/textureowner/texture_agent_revision.go:userRevisionDiffSummaries:internal/store.method:Store.ListRevisionsByDoc
       disposition: read
+    - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.GetDocument
+      disposition: read
+    - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.GetPendingAgentMutationByDoc
+      disposition: read
+    - id: internal/textureowner/texture_controller.go:ReconcileAgentWake:internal/store.method:Store.ListCoagentMailboxBacklog
+      disposition: read
+    - id: internal/textureowner/texture_controller.go:Start:internal/store.method:Store.ListAllDocuments
+      disposition: read
     - id: internal/textureowner/texture_controller.go:isEligibleWorkerMessage:internal/store.method:Store.GetRun
       disposition: read
     - id: internal/textureowner/texture_controller.go:latestEligibleWorkerMessage:internal/store.method:Store.ListChannelMessages
@@ -3158,14 +3201,6 @@ store_calls:
       disposition: lifecycle
     - id: internal/textureowner/texture_controller.go:reactivatePassivatedTextureRun:internal/store.method:Store.UpdateRun
       disposition: lifecycle
-    - id: internal/textureowner/texture_controller.go:reconcileAllTextureDocuments:internal/store.method:Store.ListAllDocuments
-      disposition: read
-    - id: internal/textureowner/texture_controller.go:reconcileTextureAgentWake:internal/store.method:Store.GetDocument
-      disposition: read
-    - id: internal/textureowner/texture_controller.go:reconcileTextureAgentWake:internal/store.method:Store.GetPendingAgentMutationByDoc
-      disposition: read
-    - id: internal/textureowner/texture_controller.go:reconcileTextureAgentWake:internal/store.method:Store.ListCoagentMailboxBacklog
-      disposition: read
     - id: internal/textureowner/texture_evidence_sources.go:evidenceSourceEntitiesAndRejectionsFromPendingUpdates:internal/store.method:Store.ListCoagentMailboxBacklog
       disposition: read
     - id: internal/textureowner/texture_evidence_sources.go:evidenceSourceEntitiesFromWorkerUpdateIDs:internal/store.method:Store.GetWorkerUpdate
@@ -5618,11 +5653,7 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:conjecture_delta: "Confirmed by implementation and tests: a one-way textureowner -> agentcore dependency preserves the canonical Texture API, revisions, sources, prompts, tools, actor wake, and user i… [sha256:91d9f972a51f89bc2f5bf5021cd9e5e48d38e9a4cbc84ff3237cb3d142ad668f]'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:discovered: "The prior lifecycle/core boundary receipt left the package named internal/runtime and actorruntime still importing it; ownership was named but package extinction was not complete. Deploye… [sha256:15560483fa5e9212d5df9c6ab52cdd694e3d30d3ff93813b0324a4435273e1d4]'
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:repaired: "Retired the internal/runtime package/import path; moved canonical Texture behavior and tests to internal/textureowner; renamed the generic lifecycle core to internal/agentcore; removed the … [sha256:a42ef2fafd3d257e1681ba864294774b791dc56c6194c5f38ef2284d25bed185]'
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:slice: "review and land Texture owner cutover with internal/runtime extinct"'
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:repaired: "Pending. The candidate already retires internal/runtime and moves canonical Texture behavior/tests to internal/textureowner, but it is not accepted until every blocking behavior and detecto… [sha256:1b3109e4b5176adc2d9140fabd9ea4a23c2556f0cb7b3598eef7049fe121f0c1]'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block

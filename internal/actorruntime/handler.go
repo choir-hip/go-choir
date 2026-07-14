@@ -10,6 +10,8 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
 	"github.com/yusefmosiah/go-choir/internal/agentcore"
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -35,13 +37,14 @@ type resumeState struct {
 // The tool loop loads the persisted conversation, injects the new update via
 // injectUserTurns, and resumes from the park point.
 type actorHandler struct {
-	rt *agentcore.Runtime
+	rt           *agentcore.Runtime
+	textureOwner *textureowner.Handler
 }
 
 // newActorHandler creates the handler. The rt must have its store, provider,
 // and tool registry configured before runs are dispatched.
-func newActorHandler(rt *agentcore.Runtime) *actorHandler {
-	return &actorHandler{rt: rt}
+func newActorHandler(rt *agentcore.Runtime, textureOwner *textureowner.Handler) *actorHandler {
+	return &actorHandler{rt: rt, textureOwner: textureOwner}
 }
 
 // HandleUpdate is the execution boundary. One call per incoming update.
@@ -101,7 +104,7 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 		if err != nil {
 			return nil, fmt.Errorf("actorruntime: lookup owner for coagent_result: %w", err)
 		}
-		if _, err := h.rt.ReconcileCoagentWake(ctx, ownerID, u.ToAgentID); err != nil {
+		if _, err := h.reconcileCoagentWake(ctx, ownerID, u.ToAgentID); err != nil {
 			return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
 		}
 		// Return nil memory — the new run will be started by the
@@ -158,10 +161,26 @@ func (h *actorHandler) handleCoagentResult(ctx context.Context, u actor.Update, 
 	if err != nil {
 		return nil, fmt.Errorf("actorruntime: lookup owner for coagent_result: %w", err)
 	}
-	if _, err := h.rt.ReconcileCoagentWake(ctx, ownerID, u.ToAgentID); err != nil {
+	if _, err := h.reconcileCoagentWake(ctx, ownerID, u.ToAgentID); err != nil {
 		return nil, fmt.Errorf("actorruntime: reconcile coagent wake: %w", err)
 	}
 	return nil, nil
+}
+
+func (h *actorHandler) reconcileCoagentWake(ctx context.Context, ownerID, agentID string) (*types.RunRecord, error) {
+	agentID = strings.TrimSpace(agentID)
+	prefix := agentprofile.Texture + ":"
+	if strings.HasPrefix(agentID, prefix) {
+		if h.textureOwner == nil {
+			return nil, fmt.Errorf("Texture owner is not bound")
+		}
+		docID := strings.TrimSpace(strings.TrimPrefix(agentID, prefix))
+		if docID == "" {
+			return nil, fmt.Errorf("Texture agent id has no document id")
+		}
+		return h.textureOwner.ReconcileAgentWake(ctx, ownerID, docID)
+	}
+	return h.rt.ReconcileCoagentWake(ctx, ownerID, agentID)
 }
 
 // handleCancel aborts a parked run.

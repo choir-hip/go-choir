@@ -124,6 +124,60 @@ const notAnImport = "github.com/yusefmosiah/go-choir/internal/runtime"
 		t.Fatalf("production importers = %+v, string literal must not count as import", inv.ProductionImporters)
 	}
 }
+
+func TestDissolutionOwnerWrapperInventory(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/textureowner/handler.go", "package textureowner\n\ntype Handler struct{}\n")
+	writeFixture(t, root, "cmd/wrappers/main.go", `package main
+
+import (
+	core "github.com/yusefmosiah/go-choir/internal/agentcore"
+	texture "github.com/yusefmosiah/go-choir/internal/textureowner"
+)
+
+type RuntimeAlias = core.Runtime
+type HandlerAlias = texture.Handler
+
+type promotedRuntime struct {
+	*core.Runtime
+}
+
+type promotedHandler struct {
+	texture.Handler
+}
+
+type composedOwners struct {
+	Runtime *core.Runtime
+	Texture *texture.Handler
+}
+
+func composeOwners(runtime *core.Runtime, texture *texture.Handler) {}
+`)
+	writeFixture(t, root, "cmd/string-only/owners.go", `package main
+
+const agentCoreText = "github.com/yusefmosiah/go-choir/internal/agentcore"
+const textureOwnerText = "github.com/yusefmosiah/go-choir/internal/textureowner"
+`)
+
+	inv := mustScan(t, root)
+	want := map[string]bool{
+		"cmd/wrappers/main.go:alias:HandlerAlias:texture.Handler": true,
+		"cmd/wrappers/main.go:alias:RuntimeAlias:core.Runtime":    true,
+		"cmd/wrappers/main.go:embedded:core.Runtime":              true,
+		"cmd/wrappers/main.go:embedded:texture.Handler":           true,
+	}
+	if len(inv.Wrappers) != len(want) {
+		t.Fatalf("wrappers = %+v, want aliases and anonymous embedded owner types only", inv.Wrappers)
+	}
+	for _, wrapper := range inv.Wrappers {
+		if !want[wrapper.ID] {
+			t.Fatalf("unexpected wrapper %q; named composition fields, parameters, and string constants must remain clean", wrapper.ID)
+		}
+	}
+	if len(inv.ProductionImporters) != 0 {
+		t.Fatalf("production importers = %+v, owner imports must not weaken the retired-runtime import detector", inv.ProductionImporters)
+	}
+}
 func TestTypeAwareStateWriterInventory(t *testing.T) {
 	root := fixtureRepository(t)
 	writeFixture(t, root, "internal/store/store.go", `package store

@@ -1,7 +1,6 @@
 package textureowner
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -34,13 +33,12 @@ const (
 // Handler owns Texture's HTTP and lifecycle behavior while using agentcore as
 // the concrete execution substrate.
 type Handler struct {
-	Core                       *agentcore.Runtime
-	Store                      *store.Store
-	Bus                        *events.EventBus
-	Content                    *contentowner.Service
-	ModelPolicy                *modelpolicy.Manager
-	Provider                   provideriface.Provider
-	CanonicalRevisionCommitted func(context.Context, types.Document, types.Revision, *types.RunRecord)
+	Core        *agentcore.Runtime
+	Store       *store.Store
+	Bus         *events.EventBus
+	Content     *contentowner.Service
+	ModelPolicy *modelpolicy.Manager
+	Provider    provideriface.Provider
 
 	textureEditMu sync.Mutex
 }

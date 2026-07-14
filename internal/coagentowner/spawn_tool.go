@@ -38,24 +38,25 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 		SourceItemIDs        []string `json:"source_item_ids,omitempty"`
 	}
 	allowed := canonicalTargets(policy.AllowedDelegateTargets)
-	description := "Spawn an allowed coagent for the current " + policy.Profile + " profile."
+	roleDescription := "Canonical role/profile name. Allowed target roles for this caller: " + strings.Join(allowed, ", ") + "."
+	description := "Spawn an allowed child agent run for the current " + policy.Profile + " profile."
 	if policy.Profile == agentprofile.Conductor {
-		description = "Open a Texture document from a top-level conductor route."
+		description = "Open a Texture document from a top-level conductor route. Conductor does not spawn researcher, super, or co-super workers."
 	}
 	return toolregistry.Tool{
 		Name:        "spawn_agent",
 		Description: description,
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"objective":               map[string]any{"type": "string"},
-			"role":                    map[string]any{"type": "string", "enum": allowed},
-			"profile":                 map[string]any{"type": "string", "enum": allowed},
+			"role":                    map[string]any{"type": "string", "enum": allowed, "description": roleDescription},
+			"profile":                 map[string]any{"type": "string", "enum": allowed, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
 			"channel_id":              map[string]any{"type": "string"},
-			"slot":                    map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}},
+			"slot":                    map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer first; use verifier only after implementation commit/package/blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
 			"model":                   map[string]any{"type": "string"},
-			"model_policy_overlay_id": map[string]any{"type": "string"},
-			"title":                   map[string]any{"type": "string"},
-			"initial_content":         map[string]any{"type": "string"},
-			"source_item_ids":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml. Use this for eval/model arms instead of passing provider metadata directly."},
+			"title":                   map[string]any{"type": "string", "description": "For role=texture from processor or reconciler: optional Texture document title for a new article."},
+			"initial_content":         map[string]any{"type": "string", "description": "For role=texture from processor or reconciler: optional source/brief seed revision for the Texture before the Texture agent writes the article."},
+			"source_item_ids":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "For role=texture from processor: the exact source item ids this story handoff covers. Required when the processor request contains multiple source items."},
 		}, []string{"objective", "role"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in args
@@ -71,6 +72,9 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 				return "", fmt.Errorf("role must be one of %s", strings.Join(allowed, ", "))
 			}
 			profile := normalizeTarget(in.Profile, allowed)
+			if strings.TrimSpace(in.Profile) != "" && profile == "" {
+				return "", fmt.Errorf("profile must be one of %s", strings.Join(allowed, ", "))
+			}
 			if profile == "" {
 				profile = role
 			}

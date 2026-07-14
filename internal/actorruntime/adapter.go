@@ -32,6 +32,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 )
 
@@ -111,14 +112,16 @@ func WithOnActorFailure(fn func(agentID string, err error)) RuntimeOption {
 type Adapter struct {
 	Runtime *agentcore.Runtime
 
-	cfg      provideriface.Config
-	store    *store.Store
-	bus      *events.EventBus
-	provider provideriface.Provider
-	actorRT  *actor.Runtime
-	log      *actor.SQLiteLog
-	logDB    *sql.DB
-	logPath  string
+	cfg          provideriface.Config
+	store        *store.Store
+	bus          *events.EventBus
+	provider     provideriface.Provider
+	actorRT      *actor.Runtime
+	log          *actor.SQLiteLog
+	handler      *actorHandler
+	textureOwner *textureowner.Handler
+	logDB        *sql.DB
+	logPath      string
 
 	// Actor runtime options (applied before actorRT construction).
 	inboxCapacity  int               // 0 = use actor default
@@ -169,8 +172,10 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	a.logDB = logDB
 	a.logPath = logPath
 
-	// Create the handler and actor runtime.
-	handler := newActorHandler(a.Runtime)
+	// Create the handler and actor runtime. Texture ownership is bound by the
+	// composition root before Start.
+	handler := newActorHandler(a.Runtime, nil)
+	a.handler = handler
 	actorOpts := actor.Options{
 		MaxResident:         0, // unlimited for now
 		HandlerRetryBackoff: 100 * time.Millisecond,
@@ -219,13 +224,28 @@ func (a *Adapter) dispatch(ctx context.Context, toAgentID, kind, content, trajec
 	return a.actorRT.Send(ctx, u)
 }
 
-// Start starts the runtime. It calls the core runtime's Start (which performs
-// boot recovery: passivate interrupted runs, sweep pending actors, reconcile
-// texture documents) and then sweeps the actor log to recover any actors with
-// unprocessed backlog from a previous process.
+// BindTextureOwner installs the concrete Texture lifecycle owner before actor
+// processing begins. It is a direct owner composition, not a callback seam.
+func (a *Adapter) BindTextureOwner(owner *textureowner.Handler) error {
+	if owner == nil {
+		return fmt.Errorf("actorruntime: bind Texture owner: nil owner")
+	}
+	if a.started {
+		return fmt.Errorf("actorruntime: bind Texture owner after start")
+	}
+	a.textureOwner = owner
+	a.handler.textureOwner = owner
+	return nil
+}
+
+// Start recovers the generic lifecycle core, lets the concrete Texture owner
+// reconcile durable documents, then sweeps the actor log for unprocessed
+// mailbox entries from a previous process.
 func (a *Adapter) Start(ctx context.Context) {
 	a.Runtime.Start(ctx)
-	// Recover any actors with durable backlog from a previous process.
+	if a.textureOwner != nil {
+		a.textureOwner.Start(ctx)
+	}
 	if err := a.actorRT.Sweep(ctx); err != nil {
 		log.Printf("actorruntime: boot sweep: %v", err)
 	}

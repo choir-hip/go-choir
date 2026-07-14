@@ -32,31 +32,26 @@ func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, _ string) {
 	}
 }
 
-func (rt *Handler) reconcileAllTextureDocuments(ctx context.Context) {
+// Start reconciles durable Texture documents after the generic core has
+// recovered interrupted activations and before the actor mailbox boot sweep.
+func (rt *Handler) Start(ctx context.Context) {
 	docs, err := rt.Store.ListAllDocuments(ctx, 2000)
 	if err != nil {
 		log.Printf("runtime: reconcile all texture docs: %v", err)
 		return
 	}
 	for _, doc := range docs {
-		if _, err := rt.reconcileTextureAgentWake(ctx, doc.OwnerID, doc.DocID); err != nil {
+		if _, err := rt.ReconcileAgentWake(ctx, doc.OwnerID, doc.DocID); err != nil {
 			log.Printf("runtime: reconcile doc %s: %v", doc.DocID, err)
 		}
 	}
 }
 
-// reconcileTextureWorkerState is retained as a doc-scoped alias for the unified
-// coagent wake path used by Texture agents.
-func (rt *Handler) reconcileTextureWorkerState(ctx context.Context, ownerID, docID string) error {
-	_, err := rt.reconcileTextureAgentWake(ctx, ownerID, docID)
-	return err
-}
-
-// reconcileTextureAgentWake starts or reuses a Texture activation when pending
+// ReconcileAgentWake starts or reuses a Texture activation when pending
 // update_coagent records are addressed to texture:<docID>. Delivery uses the
 // same typed coagent update packets as other actors; integrate intent only
 // selects the Texture revision run shape.
-func (rt *Handler) reconcileTextureAgentWake(ctx context.Context, ownerID, docID string) (*types.RunRecord, error) {
+func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string) (*types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	docID = strings.TrimSpace(docID)
 	if ownerID == "" || docID == "" {

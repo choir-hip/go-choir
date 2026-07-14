@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -158,7 +159,7 @@ func TestHandlerColdStartCoagentResult(t *testing.T) {
 	}
 
 	// Send a coagent_result with nil memory — simulates cold start.
-	handler := newActorHandler(env.adapter.Runtime)
+	handler := newActorHandler(env.adapter.Runtime, nil)
 	u := actorUpdate("coagent_result", agentID, "coagent-result-content")
 	memory, err := handler.HandleUpdate(env.ctx, agentID, u, nil)
 	if err != nil {
@@ -169,6 +170,96 @@ func TestHandlerColdStartCoagentResult(t *testing.T) {
 	// the initial_dispatch message from ReconcileCoagentWake).
 	if memory != nil {
 		t.Errorf("cold start memory = %v, want nil (new run started via initial_dispatch)", memory)
+	}
+}
+
+func TestTextureColdWakeRoutesToConcreteOwner(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	env.adapter.Runtime.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+		return nil
+	})
+
+	const (
+		ownerID = "user-texture-wake"
+		docID   = "doc-texture-wake"
+		agentID = "texture:" + docID
+	)
+	now := time.Now().UTC()
+	if err := env.store.CreateDocument(env.ctx, types.Document{
+		DocID: docID, OwnerID: ownerID, Title: "Wake target", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create Texture document: %v", err)
+	}
+	if err := env.store.CreateRevision(env.ctx, types.Revision{
+		RevisionID:  "rev-texture-wake",
+		DocID:       docID,
+		OwnerID:     ownerID,
+		AuthorKind:  types.AuthorUser,
+		AuthorLabel: "user",
+		Content:     "Initial Texture content",
+		CreatedAt:   now,
+	}); err != nil {
+		t.Fatalf("create Texture revision: %v", err)
+	}
+	update := types.CoagentSourcePacket{
+		UpdateID:      "update-texture-wake",
+		OwnerID:       ownerID,
+		AgentID:       "researcher:texture-wake",
+		TargetAgentID: agentID,
+		ChannelID:     docID,
+		Role:          "researcher",
+		Packet: types.CoagentSourcePacketPayload{
+			SchemaVersion: types.CoagentSourcePacketSchemaV1,
+			Kind:          "evidence_update",
+			Summary:       "durable Texture wake",
+		},
+		Content:   "Durable Texture wake",
+		CreatedAt: now,
+	}
+	message := types.ChannelMessage{
+		ChannelID:   docID,
+		FromAgentID: update.AgentID,
+		ToAgentID:   agentID,
+		Role:        update.Role,
+		Content:     update.Content,
+		Timestamp:   now,
+	}
+	if _, _, err := env.store.DispatchWorkerUpdate(env.ctx, update, &message); err != nil {
+		t.Fatalf("dispatch Texture update: %v", err)
+	}
+
+	if err := env.store.UpsertAgent(env.ctx, types.AgentRecord{
+		AgentID: agentID, OwnerID: ownerID, SandboxID: "sandbox-test", Profile: "texture",
+	}); err != nil {
+		t.Fatalf("upsert Texture agent identity: %v", err)
+	}
+	handler := newActorHandler(env.adapter.Runtime, textureowner.NewHandler(env.adapter.Runtime))
+	memory, err := handler.HandleUpdate(env.ctx, agentID, actorUpdate("coagent_result", agentID, update.Content), nil)
+	if err != nil {
+		t.Fatalf("route Texture coagent_result: %v", err)
+	}
+	if memory != nil {
+		t.Fatalf("cold Texture wake memory = %v, want nil", memory)
+	}
+	runs, err := env.store.ListRunsByOwner(env.ctx, ownerID, 20)
+	if err != nil {
+		t.Fatalf("list Texture runs: %v", err)
+	}
+	for _, rec := range runs {
+		if rec.AgentID == agentID && rec.ChannelID == docID {
+			return
+		}
+	}
+	t.Fatalf("Texture coagent_result did not route to owner run: %+v", runs)
+}
+
+func TestTextureColdWakeFailsClosedWithoutOwner(t *testing.T) {
+	env := newAdapterTestEnv(t)
+	_, err := newActorHandler(env.adapter.Runtime, nil).reconcileCoagentWake(
+		env.ctx, "user-texture-wake", "texture:doc-texture-wake",
+	)
+	if err == nil || err.Error() != "Texture owner is not bound" {
+		t.Fatalf("Texture wake error = %v, want explicit unbound-owner failure", err)
 	}
 }
 
@@ -193,7 +284,7 @@ func TestHandlerCancelPassivatedRun(t *testing.T) {
 	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
 
 	// Send cancel.
-	handler := newActorHandler(env.adapter.Runtime)
+	handler := newActorHandler(env.adapter.Runtime, nil)
 	u := actorUpdate("cancel", "agent-cancel-test", "")
 	_, err := handler.HandleUpdate(env.ctx, "agent-cancel-test", u, mem)
 	if err != nil {
@@ -219,7 +310,7 @@ func TestHandlerCancelMissingRun(t *testing.T) {
 	env := newAdapterTestEnv(t)
 
 	mem, _ := json.Marshal(resumeState{RunID: "nonexistent-run", Phase: "parked"})
-	handler := newActorHandler(env.adapter.Runtime)
+	handler := newActorHandler(env.adapter.Runtime, nil)
 	u := actorUpdate("cancel", "agent-missing", "")
 	_, err := handler.HandleUpdate(env.ctx, "agent-missing", u, mem)
 	if err != nil {
@@ -261,7 +352,7 @@ func TestHandlerCoagentResultForCompletedRun(t *testing.T) {
 
 	// Send coagent_result with memory pointing to the completed run.
 	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
-	handler := newActorHandler(env.adapter.Runtime)
+	handler := newActorHandler(env.adapter.Runtime, nil)
 	u := actorUpdate("coagent_result", agentID, "new-result")
 	_, err = handler.HandleUpdate(env.ctx, agentID, u, mem)
 	if err != nil {
@@ -308,7 +399,7 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 
 	// Send coagent_result with memory pointing to the blocked run.
 	mem, _ := json.Marshal(resumeState{RunID: rec.RunID, Phase: "parked"})
-	handler := newActorHandler(env.adapter.Runtime)
+	handler := newActorHandler(env.adapter.Runtime, nil)
 	u := actorUpdate("coagent_result", agentID, "unblocking-result")
 	resultMem, err := handler.HandleUpdate(env.ctx, agentID, u, mem)
 	if err != nil {
@@ -340,7 +431,7 @@ func TestHandlerCoagentResultForBlockedRun(t *testing.T) {
 func TestHandlerUnknownUpdateKind(t *testing.T) {
 	env := newAdapterTestEnv(t)
 
-	handler := newActorHandler(env.adapter.Runtime)
+	handler := newActorHandler(env.adapter.Runtime, nil)
 	u := actorUpdate("unknown_kind", "agent-test", "content")
 	existingMem := []byte(`{"run_id":"run-x","phase":"parked"}`)
 	resultMem, err := handler.HandleUpdate(env.ctx, "agent-test", u, existingMem)
