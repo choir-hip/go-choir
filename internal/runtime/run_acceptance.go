@@ -897,6 +897,84 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 	var lastPromoted types.EventRecord
 	var lastRollback types.EventRecord
 	var lastBlocked types.EventRecord
+	type pendingVerification struct {
+		ref   string
+		event types.EventRecord
+	}
+	pendingVerifications := map[string]pendingVerification{}
+	pendingVerificationAliases := map[string]map[string]bool{}
+	var pendingVerificationOrder []string
+	pendingVerificationOrderSet := map[string]bool{}
+	verificationKeys := func(payload map[string]any) []string {
+		keys := make([]string, 0, 2)
+		if adoptionID := payloadString(payload, "adoption_id"); adoptionID != "" {
+			keys = append(keys, "adoption:"+adoptionID)
+		}
+		packageID := payloadString(payload, "package_id")
+		targetComputerID := payloadString(payload, "target_computer_id")
+		if packageID != "" && targetComputerID != "" {
+			keys = append(keys, "package-target:"+packageID+"\x00"+targetComputerID)
+		}
+		return keys
+	}
+	uniqueVerificationPrimary := func(key string) (string, bool) {
+		primaries := pendingVerificationAliases[key]
+		if len(primaries) != 1 {
+			return "", false
+		}
+		for primary := range primaries {
+			return primary, true
+		}
+		return "", false
+	}
+	legacyPrimaryUnclaimed := func(primary string) bool {
+		for alias, primaries := range pendingVerificationAliases {
+			if strings.HasPrefix(alias, "adoption:") && primaries[primary] {
+				return false
+			}
+		}
+		return true
+	}
+	addVerificationAlias := func(key, primary string) {
+		if pendingVerificationAliases[key] == nil {
+			pendingVerificationAliases[key] = map[string]bool{}
+		}
+		pendingVerificationAliases[key][primary] = true
+	}
+	removeVerificationPrimary := func(primary string) {
+		delete(pendingVerifications, primary)
+		for alias, primaries := range pendingVerificationAliases {
+			delete(primaries, primary)
+			if len(primaries) == 0 {
+				delete(pendingVerificationAliases, alias)
+			}
+		}
+	}
+	resolveVerification := func(payload map[string]any) {
+		keys := verificationKeys(payload)
+		if len(keys) == 0 {
+			return
+		}
+		primary, exists := uniqueVerificationPrimary(keys[0])
+		if !exists && strings.HasPrefix(keys[0], "adoption:") {
+			if len(keys) < 2 {
+				return
+			}
+			legacyPrimary, legacyExists := uniqueVerificationPrimary(keys[1])
+			if !legacyExists || !strings.HasPrefix(legacyPrimary, "package-target:") || !legacyPrimaryUnclaimed(legacyPrimary) {
+				return
+			}
+			primary, exists = legacyPrimary, true
+		}
+		if exists {
+			removeVerificationPrimary(primary)
+		}
+	}
+	recordFirst := func(first *types.EventRecord, event types.EventRecord) {
+		if first.EventID == "" {
+			*first = event
+		}
+	}
 	for _, ev := range events {
 		payload := parseTracePayload(ev.Payload)
 		switch ev.Kind {
@@ -910,7 +988,7 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 				"package_manifest_sha256": payloadString(payload, "package_manifest_sha"),
 			})
 			packageRefs = append(packageRefs, ref)
-			lastPackage = ev
+			recordFirst(&lastPackage, ev)
 		case types.EventAppAdoptionVerificationStarted:
 			ref := builder.addEventEvidence(ev, "recipient candidate app adoption verification started", map[string]any{
 				"adoption_id":              payloadString(payload, "adoption_id"),
@@ -921,8 +999,30 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 				"recipient_build_required": payloadBool(payload, "recipient_build_required"),
 				"recipient_build_status":   payloadString(payload, "recipient_build_status"),
 			})
-			verifyingRefs = append(verifyingRefs, ref)
-			lastVerifying = ev
+			keys := verificationKeys(payload)
+			if len(keys) > 0 {
+				primary, _ := uniqueVerificationPrimary(keys[0])
+				if primary == "" && strings.HasPrefix(keys[0], "adoption:") && len(keys) > 1 {
+					legacyPrimary, exists := uniqueVerificationPrimary(keys[1])
+					if exists && strings.HasPrefix(legacyPrimary, "package-target:") && legacyPrimaryUnclaimed(legacyPrimary) {
+						primary = legacyPrimary
+					}
+				}
+				if primary == "" {
+					primary = keys[0]
+					if len(pendingVerificationAliases[primary]) > 0 {
+						primary = fmt.Sprintf("event:%s:%d", ev.EventID, ev.StreamSeq)
+					}
+					if !pendingVerificationOrderSet[primary] {
+						pendingVerificationOrder = append(pendingVerificationOrder, primary)
+						pendingVerificationOrderSet[primary] = true
+					}
+				}
+				for _, key := range keys {
+					addVerificationAlias(key, primary)
+				}
+				pendingVerifications[primary] = pendingVerification{ref: ref, event: ev}
+			}
 		case types.EventAppAdoptionVerified:
 			ref := builder.addEventEvidence(ev, "recipient candidate rebuilt and verified AppChangePackage", map[string]any{
 				"adoption_id":                  payloadString(payload, "adoption_id"),
@@ -933,7 +1033,8 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 				"foreground_tail_merge_result": payloadString(payload, "foreground_tail_merge_result"),
 			})
 			verifiedRefs = append(verifiedRefs, ref)
-			lastVerified = ev
+			resolveVerification(payload)
+			recordFirst(&lastVerified, ev)
 		case types.EventAppAdoptionBlocked:
 			ref := builder.addEventEvidence(ev, "recipient candidate app adoption blocked", map[string]any{
 				"adoption_id":                  payloadString(payload, "adoption_id"),
@@ -945,7 +1046,8 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 				"error":                        payloadString(payload, "error"),
 			})
 			blockedRefs = append(blockedRefs, ref)
-			lastBlocked = ev
+			resolveVerification(payload)
+			recordFirst(&lastBlocked, ev)
 		case types.EventAppAdoptionPromoted:
 			rollbackSourceRef := payloadString(payload, "rollback_source_ref")
 			ref := builder.addEventEvidence(ev, "target computer source lineage advanced to adopted app candidate", map[string]any{
@@ -961,7 +1063,7 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 			})
 			builder.addRollbackRef("source_ref", rollbackSourceRef, "previous active source ref before app adoption promotion")
 			promotedRefs = append(promotedRefs, ref)
-			lastPromoted = ev
+			recordFirst(&lastPromoted, ev)
 			rollbackRefs = append(rollbackRefs, ref)
 		case types.EventAppAdoptionRolledBack:
 			rollbackSourceRef := payloadString(payload, "rollback_source_ref")
@@ -973,8 +1075,16 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 			})
 			builder.addRollbackRef("source_ref", rollbackSourceRef, "active source ref restored by app adoption rollback")
 			rollbackRefs = append(rollbackRefs, ref)
-			lastRollback = ev
+			recordFirst(&lastRollback, ev)
 		}
+	}
+	for _, adoptionID := range pendingVerificationOrder {
+		pending, exists := pendingVerifications[adoptionID]
+		if !exists {
+			continue
+		}
+		verifyingRefs = append(verifyingRefs, pending.ref)
+		recordFirst(&lastVerifying, pending.event)
 	}
 	if len(packageRefs) > 0 {
 		builder.addCheckpoint("app_package_published", "passed", lastPackage.Timestamp, lastPackage.StreamSeq, packageRefs, map[string]any{"package_event_count": len(packageRefs)})
@@ -994,7 +1104,7 @@ func addAcceptanceAppPromotionCheckpoints(builder *acceptanceBuilder, events []t
 	if len(rollbackRefs) > 0 {
 		at := lastPromoted.Timestamp
 		seq := lastPromoted.StreamSeq
-		if !lastRollback.Timestamp.IsZero() {
+		if at.IsZero() {
 			at = lastRollback.Timestamp
 			seq = lastRollback.StreamSeq
 		}
