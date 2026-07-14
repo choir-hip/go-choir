@@ -1,429 +1,278 @@
 ---
 name: definition
 description: >-
-  Use when work needs compact executable semantic authority: defining or
-  revising a mission, object, invariant set, authority boundary, evidence
-  class, assurance policy, completion semantics, rollback policy, or forbidden
-  collapse before or during long-running agentic execution. Produces or updates
-  a mission-definition document directly executable with `/goal path.md`,
-  with one canonical state capsule, referenced evidence, adaptive review, safe
-  concurrency, and generated non-authoritative views.
+  Use when work needs an executable /goal file: a concrete product outcome,
+  observed starting state, final artifact, proof, authority boundary, rollback,
+  compact current state, or proportionate independent review for long-running
+  agentic work. Produces or revises a goal file that can be run with
+  `/goal path.md` without turning process receipts into a second project.
 ---
 
-# Definition
+# Definition v2: Goal Files
 
-Definition is the high-level semantic authority layer for agentic work.
+Definition makes `/goal <file>.md` a run command for a real outcome.
 
-It exists because long-running agents fail when the governing words are weaker
-than the execution pressure. They turn checkpoints into completion, artifacts
-into proof, plans into authority, tests into universal truth, toy evidence into
-program validation, and motion into progress.
+A goal file says, in order: what exists now, what will exist when the work is
+done, how that result will be proved, what may be changed, and what one safe
+action comes next. It is executable authority, not a plan transcript, a model
+vote, or a status report.
 
-Definition makes the mission executable by defining what the mission's words are
-allowed to mean, how those meanings are observed, who has authority, which
-claims evidence can support, what must happen next, and when execution must stop.
+The point is reliability in service of the product. A goal should make it
+easier to build and inspect Choir, not make the process more elaborate than the
+artifact it promises.
 
-The output is a **mission-definition document**. When a compatible harness is
-called with:
+## Use It For The Right Work
 
-```text
-/goal <document>.md
-```
+Use Definition for a long-running, cross-agent, product-changing, or
+semantically uncertain effort—especially one with a meaningful authority,
+rollback, evidence, or completion question. Do not wrap an ordinary bounded
+coding task whose outcome and proof are already obvious in a new goal file.
 
-it must execute the mission defined in that document. It must not summarize the
-document, admire it, checkpoint early, or create a separate control language.
+Before authoring or running a goal, read `AGENTS.md` and
+[`docs/standing-questions.md`](../../docs/standing-questions.md). Read only the
+product doctrine relevant to the promised artifact. The repository mutation
+classes and their ceremony still apply; this skill does not replace them.
 
-## Core Thesis
-
-A definition is not a gloss. A definition is operational authority.
-
-- A plan lists intended actions.
-- A conjecture names a claim to test.
-- A gradient names an optimization landscape.
-- A definition says what the mission, objects, claims, evidence, authority,
-  states, and completion conditions are allowed to mean.
-
-The mission-definition document can contain plans, conjectures, gradients,
-variants, ledgers, and reports, but those are subordinate projections. The
-controlling object is the **definition kernel plus one canonical state
-capsule**. Evidence archives and reports are referenced projections, not second
-state authorities.
-
-## Scope
-
-Definition supersedes legacy mission-control formats. Express useful gradients,
-conjectures, observer shifts, realism parameters, evidence, rollback, and
-resumption as nodes or policies under this single authority. Do not preserve a
-parallel legacy control language. Do not use Definition for ordinary coding
-tasks whose vocabulary, authority, and completion semantics are already stable.
-
-## Non-Definitions
-
-Definition is not a document generator, normal plan, model vote, report that
-replaces execution, license to cross a broken invariant, or excuse to delay a
-valuable in-bound probe. Keep a node only when it changes action, verification,
-route, scope, authority, claim, rollback, or stopping semantics.
-
-## Mission-Definition Document
-
-A mission-definition document is the source program for a `/goal` run.
-
-If the user supplies an existing document, compile it in place. Preserve the
-author's source text where possible, but add or update the Definition sections
-needed to make execution unambiguous. Do not create a parallel control document
-unless the source document explicitly requires a split.
-
-### Authority Layout
-
-Keep one semantic authority while separating storage roles:
-
-1. **Definition kernel** — comparatively stable purpose, graph, invariants,
-   authority boundaries, evidence rules, assurance policy, rollback, and
-   completion semantics.
-2. **State capsule** — the sole canonical current-state projection: active
-   node/slice, settled predecessors, blockers, locks, artifact and deployment
-   identity, evidence pointers, remaining uncertainty, and next probe.
-3. **Evidence archive** — append-only external artifacts containing full
-   transition histories, commands, traces, reviewer outputs, and receipts.
-4. **Generated views** — HTML, reports, dashboards, and summaries derived from
-   the kernel, state capsule, and evidence index.
-
-The kernel and state capsule live in the mission-definition document. Evidence
-may live elsewhere when referenced by immutable path, URI, commit, digest, or
-artifact identity. Generated views must declare source document, source commit
-or digest, generation time, and freshness. They are never editable authority.
-
-Every current-state fact has exactly one canonical field. Do not maintain a
-detailed ledger and a separately hand-written current summary. Generate or
-delete duplicate projections. A contradiction between projections is a
-blocking conformance failure.
-
-The mission document is a control plane, not an event warehouse. Keep the
-active frontier expanded. Collapse settled slices to compact receipts containing
-status, artifact/commit identity, evidence refs, rollback refs, and invalidation
-triggers; move their full histories to the evidence archive.
-
-When authoring, migrating, or changing the kernel/schema, read
-[`references/mission-schema.md`](references/mission-schema.md). Routine
-execution and resumption need not load it. Use only load-bearing sections;
-open missing load-bearing meanings as nodes rather than silently inferring them.
-
-## `/goal <document>.md` Semantics
+## What `/goal` Means
 
 When a compatible harness receives:
 
 ```text
-/goal <document>.md
+/goal <file>.md
 ```
 
-it must interpret this as:
+it must reconcile the observed starting state, build or investigate the
+promised artifact within the stated boundaries, collect the named evidence, and
+continue until the goal is complete, honestly blocked, or superseded. It must
+not stop at a checkpoint, a passing local test, a candidate, a reviewer claim,
+or a polished document.
+
+The goal file is the one hand-maintained authority for its current state.
+Evidence archives, CI/deploy receipts, review outputs, and HTML views are
+referenced projections. They never silently overrule the goal file.
+
+Only owner-stated authority, observed facts, settled decisions without a live
+contradiction, formal checks within their stated scope, and explicit in-bound
+operating preferences may authorize execution. A model, reviewer, or repeated
+claim can supply evidence or a proposal; it is not authority by repetition.
+
+## Start With Reality
+
+Every goal opens with an **initial-state receipt**. Capture what is observed,
+not what would be convenient:
+
+- canonical branch/ref and relevant deployed identity;
+- every dirty worktree or candidate in scope, with paths, owner, disposition,
+  and recovery handle;
+- the current product/repository artifact and known failures;
+- existing settled decisions and unknowns that can change the next action.
+
+Do not touch unclassified dirty work. A dirty `main` can be an intentional
+candidate, user WIP, or a recovery surface; record which before working near
+it. If a fact is unavailable, say `unknown` and make reconciliation the next
+action. During that read-only reconciliation, mutation class may be `unknown`;
+no implementation is authorized until it is classified. Never fabricate a
+clean baseline or a candidate identity.
+
+The start receipt is immutable except for a dated correction that preserves the
+original observation and explains why it was wrong. It is not a running log.
+
+## Define The Finish Before The Method
+
+Write the goal around the thing a person, external agent, or product can use or
+inspect when it succeeds:
+
+1. **Deliver** — one plain-language user or product outcome.
+2. **Finish** — the exact artifact or durable state that must exist.
+3. **Acceptance** — the product path, command, or observation that proves a
+   scoped claim about that artifact.
+4. **Rollback** — the reversal/refusal path if the change fails after landing.
+5. **Non-goals and constraints** — only boundaries that can change the
+   delivery, safety, or authority.
+
+For source or platform-behavior change, `finish` also names the required
+landing path: pushed source identity, CI, deployment/staging identity, and
+deployed product-path acceptance. A docs-only goal may explicitly mark that
+path not applicable; it may not silently substitute a local check for it.
+
+Internal restructuring is valid only when it directly supports this finish
+line. Do not make “move packages,” “write documentation,” “get consensus,” or
+“reduce a count” the mission's final artifact unless that is itself the
+user-visible product outcome.
+
+### Weak Measures Are Steering, Not Proof
+
+Goals may use weak measures—such as LOC, a structural ratchet, docs-to-code
+rhythm, panel agreement, latency, token use, or number of active agents—to
+choose where to inspect next. Each measure must state:
+
+- its observed baseline and desired direction or threshold;
+- the decision it can inform; and
+- what it explicitly **cannot** prove.
+
+For example, a wrapper count can prompt inspection of an extraction; it cannot
+prove behavior preservation. A green test can prove its predicate; it cannot
+prove the product works. Weak measures must never advance `complete`, settle an
+authority question, or turn a candidate into an accepted artifact.
+
+## The Compact Goal File
+
+Use the authoring schema in
+[`references/mission-schema.md`](references/mission-schema.md) for a new goal
+or a v1 migration. Keep the file short enough that a fresh agent can find its
+finish line and current action without reading history.
+
+Its load-bearing parts are:
 
 ```text
-Read the mission-definition document as semantic authority. Execute it
-autonomously until its completion semantics are satisfied with named evidence,
-or until a sharply evidenced escalation/blocker/supersession condition is met.
+start       immutable observed baseline and protected WIP/candidates
+finish      promised artifact, proof, rollback, and non-completion cases
+boundaries  authority, mutation class, invariants, exclusions
+measures    weak signals with their limits
+now         the one mutable current-state card
+receipts    compact refs for closed boundaries
 ```
 
-The harness must:
+Use an optional decision map only when multiple routes genuinely change the
+artifact, authority, evidence floor, or stopping condition. Do not begin with
+a phase taxonomy, abstract graph, or retrospective. Detailed logs, reviewer
+transcripts, command output, and histories live in evidence artifacts and are
+linked from the relevant receipt.
 
-1. read the document kernel, canonical state capsule, and declared authority
-   sources using the delta-first resumption policy below;
-2. reconcile current artifact state with the state capsule;
-3. open definition nodes for missing or contested load-bearing meanings;
-4. resolve leaf definitions through the critical process;
-5. choose the next executable probe or construct inside the authority boundary;
-6. state the active definition/conjecture being tested before mutation;
-7. execute, verify, and scope the resulting claim to its evidence class;
-8. update working state when the move creates a semantic event; commit only at
-   a Git durability boundary in the Define/Implement rhythm below, coalescing
-   related capsule and evidence changes;
-9. continue until completion, blocked escalation, or supersession.
+`now` is the only mutable current-state card. It has one status, one active
+slice, a current reconciliation identity (base/deploy plus a compact WIP
+inventory ref), one candidate disposition, one accepted decision (if any),
+precise blocker/risk, evidence refs, and one executable next action. These
+fields must agree. Do not retain a second `next probe`, dashboard summary,
+checkpoint ledger, or hand-written current status elsewhere.
 
-The harness must not stop because a phase boundary, checkpoint, review packet,
-passing focused test, or worker claim exists. Those are evidence candidates, not
-completion.
+A human answer is not merely conversation context. Before it changes execution,
+record the selected option, decision kind, source/evidence, time, and consequence
+in `now.decision`. An answer absent from the canonical card has not been durably
+incorporated. The lead may choose operational routes within settled boundaries;
+purpose, architecture, or authority changes remain proposals until an owner
+ratification receipt is named.
 
-## Definition Graph
+When migrating a v1 Definition, extract the live purpose, observed start,
+finish, constraints, active candidate, and compact receipts. Keep historical
+graphs and ledgers as evidence references; do not copy their event history into
+the new card or create a parallel top-level mission.
 
-A definition graph contains stable typed nodes with source, status, meaning,
-non-definition, observables, execution effects, settlement authority, and
-invalidation triggers. Use the authoring schema when creating or changing node
-structure.
+When a route is unclear, proxy risk appears, a protected mutation needs a
+formalization seam, or repeated probes stop teaching us anything, use
+[`references/semantic-methods.md`](references/semantic-methods.md). It is an
+on-demand reasoning aid, not a second control language or routine ceremony.
 
-## Determined-State Membership
+## Candidate First, Then Durable Boundaries
 
-Determined state is not a second snapshot. It is the admissibility rule for
-claims recorded once in the definition graph or canonical state capsule. A
-claim is determined only when it is user-stated authority, an observed fact, a
-settled definition with no live contradiction, or an owner-stated operational
-preference. Plausible, stylish, repeated, or model-asserted claims are not
-determined.
-
-Current settled claims live only in `state_capsule.determined_claims`.
-Contested and open meanings live only in graph nodes referenced by
-`active_frontier` or `open_findings`; do not restate them in another current
-summary.
-
-## Canonical State Capsule
-
-Maintain exactly one compact operational snapshot using the authoring schema.
-It is the only hand-maintained current-state projection. Generate summaries,
-checkpoint prose, dashboards, and status views from it. Fail deterministically
-on contradictory statuses, stale artifact/deployment identities, dangling
-evidence, multiple active authorities, or stale generated views.
-
-## Critical Process
-
-Resolve nodes by opening ambiguity, differentiating meanings, criticizing reward
-hacks, operationalizing observables, probing/constructing, settling, and
-monitoring. When the route is unclear, proxy risk exists, evidence scope is
-contested, or formalization may be needed, read
-[`references/semantic-methods.md`](references/semantic-methods.md).
-
-## Mission Execution Loop
-
-Definition uses receding-horizon execution, but the loop operates over the
-definition graph rather than over a separate mission format.
-
-Each control interval:
-
-1. **Select** the live node or conjecture whose settlement most reduces mission
-   uncertainty or unlocks execution.
-2. **State** what the current observer can and cannot see; name any blind spot.
-3. **Choose** one move:
-   - `define`: make a missing meaning executable;
-   - `probe`: test a claim under current observer;
-   - `shift`: change observer, vocabulary, domain, instrument, or prover;
-   - `construct`: mutate the artifact under invariants;
-   - `verify`: check an artifact or claim;
-   - `settle`: promote/weaken/falsify/supersede/escalate.
-4. **Bound** the mutation radius and rollback surface.
-5. **Execute** the move.
-6. **Update** working state if the move produced a semantic event; cross a Git
-   durability boundary only when the boundary protocol requires it.
-7. **Continue** unless completion, supersession, or hard escalation is reached.
-
-If the route is clear and low-risk, batch foreseeable constructs in one interval.
-The tripwire is surprise: any unexpected evidence returns execution to a full
-select/state/choose/bound loop.
-
-### Semantic Events And Git Durability Boundaries
-
-Do not equate semantic events with Git commits:
-
-- A **semantic event** changes a node, claim, belief, next probe, assurance
-  profile, or artifact state.
-- A **working-state write** updates the capsule or evidence index on disk.
-- An **evidence receipt** is a durable external or content-addressed fact such
-  as a job, CI, deploy, trace, or reviewer result.
-- A **durability boundary** is a Git commit that makes a coherent set of events
-  and receipt references resumable.
-
-Apply semantic events and working-state writes immediately, but accumulate them
-until a required durability boundary. A changed belief, next probe, worker
-return, verifier dispatch, CI status, deploy receipt, consensus result, report
-refresh, or lock heartbeat is not by itself a reason to commit.
-
-For ordinary surprise-free work, use a natural two-beat rhythm. Consensus is an
-assurance operation on a proposed boundary, not a third beat:
-
-1. **Define.** Prepare one code-free boundary closing the prior slice and
-   defining the next problem/evidence, authority, rollback, mutation boundary,
-   and dispatch. When assurance requires consensus, freeze, review, adjudicate,
-   revise, then commit the accepted Define before Implement. This satisfies
-   problem-documentation-first.
-2. **Implement.** Prepare code, tests, generated artifacts, capsule changes,
-   local evidence, and worker identity. Run checks and independent verification;
-   when assurance requires consensus, freeze, review, adjudicate, repair, then
-   commit. A confirmed new platform-behavior problem instead requires the next
-   commit to be a code-free Define boundary authorizing repair.
-
-Bind review to a frozen candidate identity containing base revision, path scope,
-content digest, and evidence refs. Use a content-addressed patch/bundle, read-only
-snapshot, or isolated candidate commit; the latter is review substrate, not
-canonical mission state. Freeze scoped mutation. Material semantic change
-invalidates review; skip deterministic formatting/generated refresh reruns only
-with a content-neutral rationale.
-The accepted boundary must bind candidate identity, consensus/evidence refs,
-adjudication, and no-rerun rationale in included state or commit metadata. After
-commit, gather external receipts and normally fold them into the next Define.
-Post-boundary observation does not itself require consensus; use another panel
-only when unavailable evidence or surprise can change the graph, evidence class,
-authority, mutation boundary, escalation, route, or stopping condition. On
-stop/handoff without durable receipts, emit a final Define beat with terminal
-state, evidence, and rollback anchor.
-
-Do not create separate commits merely for dispatch intent, dispatch receipt,
-worker return, verifier dispatch, CI status, deploy receipt, consensus result,
-report refresh, or lock heartbeat. If an attempt produces no implementation,
-keep unresolved deliberation in working state, then combine its result, blocker,
-adjudication, and redefinition into one Define beat once the disposition or
-escalation is known.
-
-The expected long-run rhythm is approximately one state/Definition commit per
-implementation commit, with only initial and terminal bookends. Treat sustained
-departure from that rhythm as a sign that the mission is over-modeling its own
-execution; simplify the Definition before adding enforcement machinery.
-
-Archive detailed histories outside the capsule and reference them at the next
-beat. Compact settled entries without losing evidence, rollback, or invalidation
-refs.
-
-### Safe Concurrency
-
-Declare mutation lock domains, observation domains, integration authority, and
-external-effect domains. Serialize mutations sharing state, an authority edge,
-canonical journal parent, deployment routing, rollback surface, or protected
-external effect.
-
-After a frozen candidate identity exists, fan out independent source checks,
-bounded second opinions, and read-only preparation. After its canonical
-boundary, fan out CI and external verification. Separate worktrees may prepare
-genuinely disjoint patches, but one integration authority lands them. Any
-candidate drift, surprise, shared dependency, dissent, or ratchet drift
-dissolves the batch and returns to serial control.
-
-## Conjectures, Progress, Realism, And Evidence
-
-Treat conjectures as graph nodes, define a variant for long missions, preserve
-topology across simplified domains, and scope every nontrivial claim to its
-evidence class. Read the semantic-methods reference when using these mechanisms;
-routine execution on already settled definitions need not reload it.
-
-## Evidence Ledger
-
-For each promoted or settled claim, record its node, evidence class, exact
-source/observation, artifact, result, uncertainty, and promotion relevance using
-the authoring schema. The ledger records proof reach; it is not a success
-substitute or a reason for its own Git commit.
-
-## Authority And Human Escalation
-
-Escalate to the human only for group-level decisions:
-
-- purpose or identity changes;
-- authority-boundary changes;
-- unsafe/destructive or high-blast-radius mutations;
-- paid/long-running compute beyond already granted policy;
-- conflicting values or taste calls;
-- irreversible actions without accepted rollback;
-- definitions whose settlement would authorize risky mutation.
-
-Do not escalate every leaf definition. Resolve leaf definitions through the
-critical process when they stay inside established authority.
-
-Name the node, unresolved issue, options and execution consequences, and a
-recommendation using the authoring schema.
-
-## Assurance Profiles And Second Opinions
-
-Attach an assurance profile to each active mutation or settlement class. Map
-panel tiers onto project-specific mutation classes and ceremony; consensus
-supplements those rules and never replaces them or creates a competing risk
-taxonomy. Record risk, novelty, evidence floor, independent-verifier
-requirement, panel tier/diversity, hard timeout/budget, and escalation triggers
-using the authoring schema.
-
-Default toward executable ratchets plus an independent verifier for routine,
-low-risk work; use a compact diverse panel at a compatible batch checkpoint.
-Use broader panels for behavior change and full adversarial panels for novel,
-concurrent, lifecycle, migration, authority-transfer, irreversible, or protected
-work. Escalation triggers override the lower tier immediately.
-
-Use second opinions only if they can change the graph:
-
-- chosen definition;
-- split/merge/narrow/widen decision;
-- execution effect;
-- verifier or evidence class;
-- formalization requirement;
-- escalation boundary;
-- stopping condition;
-- downstream route.
-
-Second opinions are not votes. The orchestrator adjudicates and updates the
-graph. One substantiated minority blocker outweighs an unsupported majority
-PASS.
-
-Before requesting one, record the node, unresolved question, expected decision
-impact, why internal deliberation is insufficient, tool/model family, compute
-tier, hard timeout/budget, and bounded output shape using the authoring schema.
-
-Record completion status, latency, exact model/version when available,
-input/output/cache tokens, estimated cost, output size, timeout, and adjudicated
-finding disposition: unique confirmed, duplicate, false positive, or unresolved.
-Measure diversity by model family and finding yield, not CLI count.
-
-Maintain dated reviewer health receipts. Quarantine repeated stalls or empty
-outputs, probe them later under a bounded timeout, and expire unexplained
-exclusions. After several comparable panels produce unanimous no-new-finding
-results, reduce that class's panel. A confirmed unique finding, dissent, or
-evidence surprise expands the next comparable panel.
-
-## Mission Efficiency And Learning
-
-At phase gates, learn from telemetry the tools already produce: critical-path
-time, model/tool compute, CI time, rework, unique and escaped defects, rollbacks,
-Definition size, and the observed Define/Implement rhythm. Do not create
-per-slice tracking work, documents, or commits solely to measure efficiency.
-Use the retrospective to adjust assurance, batch size, context, and concurrency;
-never lower an evidence floor merely to improve a metric.
-
-## Mission Report Policy
-
-Broad mission-definition runs should maintain an owner-readable report when the
-run changes durable system state, doctrine, deployed behavior, or long-running
-training/execution state.
-
-The report should explain:
+The default rhythm discovers facts before it writes process prose:
 
 ```text
-mission goal and artifact
-invariants preserved or violated
-major decisions and route changes
-what shipped
-verification evidence
-what was proven vs merely attempted
-residual risks
-rollback refs
-next mission or next executable probe
+reconcile start → prepare a disposable candidate → rehearse actual effects
+→ freeze and challenge the candidate when warranted → Define → Implement
+→ obtain external receipts → fold them into the next Define or final closure
 ```
 
-Do not dump logs. Link evidence artifacts. Generate the report from the state
-capsule and evidence index where practical; display source identity and
-generation time. An HTML dashboard is a useful view, never a write path.
+A candidate is an isolated worktree, patch, or candidate commit with a known
+base, path scope, owner/location, and—when frozen—content digest. It is
+disposable. It may be compiled, checked, measured, and independently reviewed
+in parallel. It is not proof or a new current-state authority.
 
-PDF export is optional unless the mission document or owner requests it.
+Use rehearsal to discover real paths, caller/detector semantics, count effects,
+and product-path constraints before predicting them in a durable Definition.
+It may begin as an uncommitted isolated patch. If reliable evidence reveals a
+new platform problem requiring repair, preserve the repository's
+problem-documentation-first invariant: the first repair-code commit—including a
+candidate commit—follows a code-free Define boundary naming the problem evidence
+and authorized repair.
 
-## Checkpoint And Resumption State
+For an ordinary behavior-changing slice, the natural rhythm is:
 
-The canonical state capsule is the resumable state. Do not duplicate it in a
-second hand-maintained checkpoint block. A checkpoint report may be generated
-from the capsule and evidence index.
+1. **Define.** Record the actual problem, next mutation boundary, evidence
+   floor, rollback, and frozen candidate identity when relevant.
+2. **Implement.** One coherent boundary lands the code, tests, compact `now`
+   update, generated artifacts that changed, and local evidence.
 
-Use delta-first resumption:
+Normally those two parts land together in the implementation commit. A separate
+code-free Define commit is required only when problem-documentation-first,
+authority change, or the repository's mutation ceremony requires it.
 
-1. On first compilation, read the full kernel, state capsule, and required
-   authority sources.
-2. Record their immutable identities and a digest of compiled semantics.
-3. On resumption, verify those identities, reconcile the artifact and external
-   effects, and load the active frontier plus referenced evidence.
-4. If the kernel or authority sources changed, inspect the semantic diff and
-   reopen affected nodes; perform a full reread when the diff cannot be safely
-   localized.
-5. Do not reread archived closed-slice histories unless an invalidation trigger,
-   contradiction, audit, or rollback makes them relevant.
+External CI, deploy, reviewer, dispatch, lock, and dashboard receipts normally
+fold into the next state update or terminal closure. They do not earn standalone
+commits. A discarded candidate or unresolved review becomes one compact outcome
+once its disposition is known, not a stream of process commits.
 
-A checkpoint is not completion. If a safe executable probe with positive
-expected information or artifact value remains inside the authority and
-assurance budget, execute it instead of presenting the checkpoint as success.
+This naturally tends toward one concise Definition update per implementation
+slice, plus opening and closing bookends. It is an observed rhythm, not a quota
+or a scripted commit budget. If it drifts badly, simplify the goal or make
+slices more concrete rather than inventing more bookkeeping.
 
-## Completion Semantics
+## Assurance And Agentic Consensus
 
-Completion means the document's own completion semantics are satisfied with
-named observables and evidence.
+Use deterministic checks first. Add an independent review or agentic consensus
+only when it can change a real decision: candidate scope, product behavior,
+evidence floor, rollback, authority, or stopping condition. Do not send a
+moving target to a panel and do not use a panel merely to narrate progress.
 
-Use statuses:
+Bind review to a frozen candidate identity: base ref, scoped paths, digest, and
+available evidence. The result is an evidence receipt with an adjudicated
+outcome (`accept`, `repair`, `reject`, or `escalate`), not a vote and not its
+own commit. A reproducible minority blocker outweighs an unsupported majority
+pass.
+
+Reliability needs independence, not agent count. Vary the relevant failure
+surfaces: model family/version, context or memory lineage, tool/search source,
+and reviewer obligation (for example builder, falsifier, verifier). Prefer
+durable, differently warmed agents when Choir provides them; fresh agents are a
+fallback, not proof of diversity. Record cost, latency, failure mode, and
+unique finding yield in review evidence or generated telemetry, then use it at
+real decision gates—not as per-slice documentation work.
+
+For work that builds persistent agents, the goal references an immutable
+computer-policy resolution/run receipt (computer, authority ref, revision/digest,
+and observed resolution) and names only mission obligations. It must not copy
+model/tool/search/memory values into a second configuration database or
+hard-code a provider/role topology that the product should parameterize at
+runtime.
+
+## Concurrency, Evidence, And Views
+
+Parallelize read-only mapping, candidate preparation, and independent review
+after the base identity is fixed. Serialize mutations that share source paths,
+canonical state, deployment routing, rollback surfaces, or protected external
+effects. One integration authority lands the accepted result.
+
+Scope every claim to its evidence. Local tests, reviews, and generated artifacts
+prove only what they actually observe. Product, staging, promotion, lifecycle,
+and protected-surface claims need the evidence required by `AGENTS.md` and the
+goal's acceptance contract. Do not weaken an evidence floor to improve a time
+or token measure.
+
+For source or platform behavior changes, complete the repository landing loop:
+commit and push, CI, deploy/staging identity, then deployed acceptance. Record
+those identities and results in the terminal receipt; do not call a local test
+or a deployment SHA the final proof.
+
+For broad or long-running work, render a local owner-readable HTML view from
+the goal source. Put the promised finish at the top, then show the start
+receipt, protected dirty paths, current candidate, proof obtained and missing,
+weak measures (visibly labelled), dissent, and next action. Include source
+identity/digest, generator version, and generation time. The Markdown/YAML goal
+remains authoritative; HTML is a generated, non-editable view that may be
+served on localhost. Refresh it only as part of the relevant Define or
+Implement boundary, never as a dashboard-only commit.
+
+## Resume, Exit, And Escalate
+
+On resume, read the compact goal file first, reconcile `now.reconciliation`
+with the repository, authority/policy identities, and external artifacts, then
+follow only evidence links needed for the active slice. A mismatch in an
+immutable source, authority, or policy identity requires a semantic-diff and
+reconciliation gate before more work. A contradictory status, stale
+candidate/base, stale deployment identity, or unclassified dirty path is a
+reconciliation problem, not an invitation to guess.
+
+Use only these goal statuses:
 
 ```text
 working
@@ -433,66 +282,54 @@ blocked_incomplete
 superseded
 ```
 
-- `complete`: stopping condition satisfied with scoped evidence.
-- `checkpoint_incomplete`: useful progress landed, but stopping condition is
-  not satisfied. This is not success.
-- `blocked_incomplete`: progress is blocked after root-cause probes and
-  cognitive transforms, with exact blocker and required authority/prerequisite.
-- `superseded`: learning changed the mission identity enough that continuing
-  would optimize the wrong object.
+`complete` requires the stated finish artifact, its acceptance evidence, and a
+safe disposition for candidates and dirty work. For behavior-changing work it
+also includes the required pushed SHA, CI/deploy receipts, environment identity,
+and deployed acceptance result. `checkpoint_incomplete` is useful durable
+progress, not success. `blocked_incomplete` names the exact blocker and required
+authority or prerequisite. `superseded` means the promised artifact is no longer
+the right object; create one successor authority and redirect registries
+atomically where required. On a Definition create, settle, or supersession,
+follow the repository registry-hygiene contract and record its verification
+reference rather than copying registry state into the goal.
 
-Before any non-complete exit, verify that no safe, materially valuable probe
-remains inside the authority and assurance budget. Repeating a probe class
-without new information is motion theater. After three comparable failed or
-non-converging probes, require a changed observer, substrate-level route,
-formalization seam, supersession, or human escalation before another attempt.
+Escalate to the owner for purpose/identity changes, authority or safety
+boundaries, irreversible/high-blast-radius actions, ungranted spend, or genuine
+value conflicts after rehearsal makes the factual options clear. Normal
+sequencing, bounded investigation, and in-bound implementation remain the lead
+agent's responsibility.
 
-## Forbidden Collapses
+## Conformance Check
 
-Never collapse artifact existence into validity, plans into execution, focused
-tests into universal proof, checkpoints into completion, model agreement into
-authority, formal specs into implementation conformance, local smoke into
-deployed proof, or worker claims into completion. Read the semantic-methods
-reference when a new collapse or proxy risk appears.
+A Definition run conforms when it:
 
-## Definition Operators
-
-Use the operators in the authoring schema. Each must produce an observable
-result. Accumulate their state changes into the next natural Define or Implement
-beat. Make no silent semantic changes.
-
-## Conformance Checklist
-
-A run conforms to Definition if:
-
-- [ ] It names the active mission-definition document.
-- [ ] It treats `/goal <document>.md` as executable authority, not passive context.
-- [ ] It identifies the real artifact/object of work.
-- [ ] It separates purpose from non-purpose.
-- [ ] It names authority sources and boundaries.
-- [ ] It maintains a definition kernel and exactly one canonical state capsule.
-- [ ] It has no contradictory hand-maintained current-state projections.
-- [ ] It keeps only the active frontier expanded and archives settled histories.
-- [ ] It attaches observables and execution effects to settled nodes.
-- [ ] It scopes claims to evidence classes.
-- [ ] It preserves topology when simplifying.
-- [ ] It uses conjectures as definition nodes when truth affects execution.
-- [ ] It uses variants/progress measures for long runs.
-- [ ] It executes safe, materially valuable in-bound probes instead of stopping at checkpoints.
-- [ ] It records evidence and rollback/resumption state.
-- [ ] It distinguishes semantic events, working-state writes, evidence receipts, and Git durability boundaries.
-- [ ] It follows a natural Define/Implement rhythm and folds prior closure into the next Define beat.
-- [ ] It does not turn routine orchestration receipts into standalone commits.
-- [ ] It assigns assurance and second-opinion cost proportional to risk and novelty.
-- [ ] It records reviewer health, resource use, and adjudicated finding yield.
-- [ ] It measures mission cost and latency without weakening the evidence floor.
-- [ ] It pipelines read-only work while serializing shared-authority mutation.
-- [ ] Its generated reports and dashboards declare provenance and are non-authoritative.
-- [ ] It escalates only group-level or sharply evidenced hard blockers.
-- [ ] It does not claim completion until the document's completion semantics are satisfied.
+- starts from an observed, protected baseline rather than assumed cleanliness;
+- names one concrete finish artifact and scoped proof;
+- labels weak measures and their limits;
+- keeps one compact mutable `now` card, current reconciliation identity, and
+  durable owner decisions;
+- rehearses a real candidate before durable claims when the route is uncertain;
+- uses Define/Implement boundaries rather than commits for process events;
+- binds independent review to an immutable candidate and adjudicates it;
+- keeps evidence, dashboards, and histories as referenced projections;
+- serializes shared authority while parallelizing genuinely independent work;
+- records the required landing and deployed-acceptance receipts for behavior
+  changes;
+- does not confuse a candidate, agreement, local signal, or checkpoint with
+  completion; and
+- exits only with proven completion, honest blockage, or explicit supersession.
 
 ## Suggested Invocation
 
 ```text
-Use Definition. Treat <document>.md as executable semantic authority, not a plan, transcript, or report. Compile its stable definition kernel and exactly one canonical state capsule; keep detailed evidence in referenced archives and generate non-authoritative views from the capsule. On resumption verify source identities and load the semantic delta plus active frontier. Define missing terms, boundaries, invariants, evidence classes, assurance policy, and completion semantics, then execute materially valuable probes through the graph. Use a natural Define/Implement rhythm: fold prior closure and next authority into one state boundary, then land implementation, tests, capsule changes, and local evidence together; do not commit routine orchestration receipts separately. Compact settled histories, risk-tier second opinions, meter reviewer cost and finding yield, parallelize read-only work after immutable identities, and serialize shared-authority mutation. Escalate on group-level authority changes, unsafe actions, protected surfaces, or evidenced non-convergence. Stop only when completion is proven or the mission is honestly blocked or superseded.
+Use Definition to compile <goal>.md as executable authority. Reconcile its
+observed start receipt, protect all dirty work and candidates, deliver the
+promised finish artifact, and prove it through the named acceptance path. Keep
+one compact `now` card; treat weak measures as steering signals, not proof.
+Prepare and rehearse a disposable candidate before committing durable claims
+when the route is uncertain. Preserve problem-documentation-first before any
+repair-code commit; otherwise co-commit the concise Definition update with its
+coherent implementation. Fold routine process receipts into the next update or
+terminal receipt. Review only frozen candidates when review can change a real
+decision. Continue until complete, blocked_incomplete, or superseded.
 ```

@@ -1,202 +1,297 @@
-# Mission Definition Authoring Schema
+# Goal File Schema
 
-Read this reference when creating a new mission Definition, migrating an older
-Definition, or changing its kernel/schema. Routine execution and resumption use
-the compact rules in `SKILL.md` and need not load this file.
+Read this reference when creating or migrating a `/goal` file. Routine work
+uses the compact goal file and loads evidence only for its active slice.
 
-## Contents
+The source may be YAML frontmatter followed by short Markdown explanation, or
+equivalent clearly labelled YAML blocks. Keep the machine-readable record near
+the top. The goal file is semantic authority; generated HTML and evidence
+archives are projections.
 
-- Recommended document sections
-- Definition node schema
-- Canonical state capsule schema
-- Conjecture schema
-- Evidence record schema
-- Human escalation schema
-- Assurance and second-opinion schemas
-- Definition operators
-
-## Recommended Document Sections
-
-Use only load-bearing sections:
-
-```text
-# <Mission Name>
-
-## Harness Invocation Semantics
-## Source Authority Order
-## Real Artifact / Object Of Work
-## Mission Purpose And Non-Purpose
-## Definition Graph
-## Canonical State Capsule
-## Invariants
-## Authority Boundaries
-## Value Criterion
-## Homotopy / Realism Parameters
-## Conjecture And Belief State
-## Variant / Progress Measure
-## Execution Operators
-## Receding-Horizon Control Loop
-## Dense Feedback Channels
-## Evidence Index
-## Completion Semantics
-## Escalation Rules
-## Forbidden Collapses
-## Rollback And Resumption Policy
-## Mission Report Policy
-## Suggested Goal String
-```
-
-## Definition Node Schema
-
-Common node kinds:
-
-```text
-term object mission boundary invariant observable status operator
-evidence_class authority_rule forbidden_collapse completion_semantics
-escalation_rule formalization_seam rollback_rule conjecture variant
-homotopy_parameter
-```
-
-Common statuses:
-
-```text
-unresolved proposed contested under_deliberation testing settled promoted
-weakened falsified invalidated superseded requires_human_authority
-```
+## Minimal Template
 
 ```yaml
-id: <stable-id>
-kind: <node-kind>
-status: <node-status>
-source: user-stated | observed | inferred | reviewer | formal-check | worker-report
-term: <name>
-definition: <what it means>
-non_definition: []
-examples: []
-counterexamples: []
-observables: []
-execution_effect: []
-forbidden_collapses: []
-formalization:
-  status: not-applicable | candidate | required | done | blocked
-  note: <proof obligation or executable checker>
-settlement:
-  rule: <what settles the node>
-  settled_by: orchestrator | human | formal-check | reviewer | evidence
-  invalidation_triggers: []
-```
+---
+definition_version: 2
 
+start:
+  captured_at: <RFC-3339 timestamp>
+  source:
+    canonical_ref: <branch and commit or other immutable authority ref>
+    deploy_identity: <identity or unknown>
+  worktree_inventory:
+    status: reconciled | reconciling
+    evidence_ref: <inventory receipt or unknown>
+    preservation_rule: <required while reconciling>
+  worktrees:
+    - path: <absolute or repo-relative path>
+      status: clean | dirty | unknown
+      class: user_wip | goal_candidate | other_agent_wip | generated_temp | unknown
+      owner: <person, agent, or unknown>
+      touch: forbidden | read_only | goal_owned
+      paths_or_digest: <bounded path list or evidence ref>
+      recovery: <leave in place, branch, stash, patch, or other handle>
+  candidates:
+    - id: <stable candidate id>
+      ref: <worktree, branch, patch, or none>
+      base: <immutable ref>
+      scope: [<path>]
+      disposition: paused | active | discarded | landed | unknown
+      evidence_ref: <optional immutable evidence ref>
+  observed_artifact:
+    - claim: <what demonstrably exists now>
+      evidence_ref: <observation>
+  unknowns:
+    - <only facts whose absence can change the next action>
 
-## Canonical State Capsule Schema
+finish:
+  deliver: <plain-language outcome for a person or external agent>
+  artifact: <specific API, UI, durable record, version, or other object>
+  acceptance:
+    - action: <product path, command, or observation>
+      proves: <scoped claim>
+      evidence_class: <local test, deployed proof, human inspection, etc.>
+  rollback: <reversal, prior ref, or refusal path>
+  landing:
+    required: true | false | unknown
+    environment: <staging, production, local, or not_applicable>
+    required_receipts: [<pushed_commit, ci, deploy, environment_identity, deployed_acceptance>]
+  not_done_when:
+    - <active candidate or unresolved candidate disposition remains>
+    - <only weak signals are green>
 
-```yaml
-state_capsule:
-  schema_version: 1
-  updated_at: <timestamp>
-  kernel_digest: <digest excluding mutable capsule and generated views>
-  expected_parent_or_authority_ref: <reconciliation identity>
+boundaries:
+  mutation_class: unknown | green | yellow | orange | red | black
+  authority_sources: [<ordered sources>]
+  must_preserve: [<short invariant list>]
+  excluded: [<non-goals>]
+  protected_surfaces: [<required for red/black work>]
+  completion_evidence_floor: [<evidence classes required before complete>]
+
+measures:
+  - name: <short name>
+    kind: gate | weak_signal | telemetry
+    baseline: <observed value/ref or unknown>
+    desired: <direction, threshold, or none>
+    decision_use: <what this can change>
+    cannot_prove: <what it never certifies>
+
+now:
   status: working | complete | checkpoint_incomplete | blocked_incomplete | superseded
-  current_subgoal: <id>
-  active_frontier: [<node-or-slice-id>]
-  settled_receipts:
-    - id: <id>
-      status: <status>
-      artifact_ref: <ref>
-      evidence_refs: []
-      rollback_refs: []
-  artifact_identity: {source: <ref>, build: <ref>, deploy: <ref>}
-  determined_claims:
-    - claim: <authoritative statement>
-      source: user-stated | observed | settled-definition | operational-preference
-      execution_effect: <what this changes>
-  locks: []
-  open_findings: []
-  belief_changes: []
-  highest_impact_remaining_uncertainty: <node or claim>
-  next_executable_probe: <next safe, valuable, in-bound action>
-  evidence_index_refs: []
-  invalidation_triggers: []
+  slice: <one coherent active change>
+  question: <one unresolved question that changes execution, or none>
+  reconciliation:
+    observed_at: <RFC-3339 timestamp>
+    source_ref: <current immutable commit/digest>
+    deploy_identity: <current observed identity or unknown>
+    authority_identities: [<immutable decision/doctrine/registry refs in scope>]
+    policy_resolution_ref: <current immutable cell policy-resolution ref or not_applicable>
+    worktree_inventory_ref: <current compact inventory evidence ref>
+    status: reconciled | reconciling
+  candidate:
+    id: <candidate id or none>
+    state: none | paused | rehearsing | frozen | reviewed | ready | discarded | landed
+    ref: <current worktree, branch, patch, or none>
+    owner: <person, agent, or none>
+    base: <immutable ref or none>
+    digest: <content digest when frozen, or none>
+    scope: [<path>]
+  decision:
+    selected: <accepted route or none>
+    kind: operational | purpose | architecture | authority | safety | none
+    status: settled | proposal | none
+    source: owner | observed | orchestrator | formal_check | none
+    evidence_ref: <immutable decision/registry/evidence ref or none>
+    owner_ratification_ref: <required for orchestrator architecture/authority/purpose proposal, else not_applicable>
+    recorded_at: <RFC-3339 timestamp or none>
+    consequence: <what execution may now do>
+  evidence_refs: [<small current set>]
+  blocker_or_risk: <none or precise statement>
+  next_action: <one safe, executable move or none>
+
+receipts:
+  - id: <closed slice>
+    boundary: define | implement | terminal
+    commit_or_artifact: <immutable identity>
+    proof_refs: [<evidence>]
+    rollback_ref: <ref>
+    disposition: <closed result>
+    problem_ref: <required for a problem-documenting Define, else not_applicable>
+    authorization_ref: <repair/mutation authority, else not_applicable>
+    candidate_or_evidence_refs: [<frozen candidate or discovery evidence refs>]
+    landing:
+      source_commit: <SHA or not_applicable>
+      ci_ref: <run/status or not_applicable>
+      deploy_ref: <run/status or not_applicable>
+      environment_identity: <build/deploy identity or not_applicable>
+      deployed_acceptance: <action/result/accepted IDs or not_applicable>
+    registry_conformance_ref: <create/settle/supersede verification or not_applicable>
+
+view:
+  path: <generated local HTML path or none>
+  generator: <command/version or none>
+---
 ```
 
-## Conjecture Schema
+Add concise Markdown only where it makes the finish, a decision, or a
+constraint clearer. Do not duplicate `now` as prose.
+
+## Field Rules
+
+### Start Is A Receipt
+
+`start` records the observed entry state. It is immutable apart from a dated
+`start_correction` which preserves the original fact, names the correcting
+evidence, and explains why it matters. It is not a checkpoint ledger.
+
+Every dirty worktree must be classified. `unknown` is permitted only while
+reconciliation is the `now.next_action`; it does not authorize a nearby
+mutation. Keep large or sensitive diffs out of the goal file: record paths and
+a digest or immutable evidence ref instead.
+
+Use `worktree_inventory.status: reconciling` when known dirty work has not yet
+been safely enumerated. Its preservation rule protects that WIP while the sole
+next action is read-only inventory. `boundaries.mutation_class: unknown` is
+valid in this bootstrap state only; classify it before mutation. A candidate
+may likewise be `paused` until its base, scope, and disposition are known.
+
+### Finish Is The Contract
+
+`finish.artifact` must be something that can be fetched, observed, or used.
+`acceptance` names what the action proves and its evidence class. A test,
+review, package, candidate VM, panel agreement, or deployment identity may be
+one input to acceptance, but must not be described as completion unless it is
+the promised artifact and the stated claim is actually observed.
+
+For red or black work, include the protected surfaces, admissible evidence, and
+rollback in `boundaries` in addition to the repository-required ceremony.
+For any source or platform-behavior change, set `finish.landing.required: true`
+and name the CI/deployment/deployed-acceptance receipt floor. A docs-only goal
+may set it false with `environment: not_applicable`; it may not silently claim a
+local test is deployed proof.
+
+### Measures Do Not Govern Status
+
+Use `kind: gate` only for a real invariant or acceptance predicate. Use
+`weak_signal` for structural movement and `telemetry` for cost/latency/process
+learning. A measure that cannot justify `complete` must say so explicitly.
+
+Do not use a metric that the goal's own documentation predictably changes as a
+completion proxy. For example, documentation-citer count can be telemetry, but
+not evidence that an extraction succeeded.
+
+### Now Is The Sole Mutable Card
+
+Keep `now` small. Its `status`, `slice`, `reconciliation`, `candidate`,
+`decision`, blocker, and `next_action` must describe the same reality.
+`reconciliation` is the current observed delta from immutable `start`, not a
+second start receipt: it holds only current source/deploy identity and a compact
+inventory reference, plus immutable authority/policy identities observed at that
+time. A mismatch requires a semantic-diff/reconciliation gate before work
+continues. A human decision must enter `now.decision` before the harness acts on
+it. Store full deliberation and review material in evidence artifacts, then link
+the adjudicated result.
+
+An orchestrator may settle an `operational` route inside an existing owner
+boundary. A purpose, architecture, or authority decision synthesized by an
+orchestrator remains `proposal` until its `owner_ratification_ref` exists. The
+decision must point to the immutable authority/decision evidence rather than
+copying a registry into the goal.
+
+If no candidate is active, set `candidate.id: none` and `state: none`; do not
+leave a stale candidate hash or old next action behind. If a candidate is
+discarded, say why in a receipt and choose the next concrete action.
+
+### Receipts Are Compact
+
+One receipt closes a durable boundary. Include only identities and references
+needed to resume, audit, or roll back. Put commands, transcripts, full diffs,
+CI logs, and panel outputs in linked evidence. Do not add a receipt or commit
+for dispatch, agent output, heartbeat, dashboard refresh, or a routine CI poll.
+
+A problem-documenting Define receipt points to the discovery (`problem_ref`),
+the authorized repair/mutation boundary (`authorization_ref`), and the relevant
+candidate or evidence. That makes ordering auditable after `now` moves on,
+without copying the full problem record into current state.
+
+For a behavior-changing terminal receipt, fill in `landing` with the pushed
+commit, CI/deploy result, environment identity, and deployed acceptance action
+and result. Definition create, settle, and supersession receipts also link their
+registry-conformance verification; the registry itself remains separate.
+
+## Candidate And Review Record
+
+Before an independent review, make the candidate addressable:
 
 ```yaml
-id: <conjecture-id>
-kind: conjecture
-status: proposed | testing | settled | weakened | falsified | superseded
-claim: <what might be true>
-test: <how the current observer would know>
-edge:
-  blind_spot: <what this observer cannot see>
-  class: independence | resource | missing_oracle | frame_lock
-observer_upgrade: <smallest shift that shrinks the edge>
-scope_if_supported: <domain over which the claim may be asserted>
-falsifier: <fastest observation that would kill the claim>
-execution_effect: <what changes if supported or falsified>
+candidate:
+  id: <id>
+  ref: <isolated worktree, branch, or patch>
+  owner: <person or agent>
+  base: <commit>
+  scope: [<path>]
+  digest: <digest>
+  review_question: <one decision the review could change>
+  review_receipt: <evidence artifact>
+  adjudication: accept | repair | reject | escalate
 ```
 
-## Evidence Record Schema
+A candidate commit or isolated worktree is review substrate, not canonical
+mission state. Material candidate changes require a new digest and a new review
+only when the change can alter the reviewed decision. Use a panel only when its
+answer can change scope, evidence, rollback, authority, or stopping condition.
+If reliable evidence identifies a platform problem requiring a repair, the
+problem's code-free Define receipt precedes any repair-code candidate commit.
+
+## Persistent Deliberation Cells
+
+Include this optional section only when the goal itself builds or uses durable
+agent deliberation:
 
 ```yaml
-claim: <scoped claim>
-definition_node: <node id>
-evidence_class: <class>
-source: <file/tool/command/trace/reviewer>
-command_or_observation: <exact command or observation>
-artifact_path: <path or URI>
-result: <observed result>
-uncertainty: <remaining edge or caveat>
-promotion_relevance: <what this authorizes, if anything>
+cell:
+  computer_id: <persistent computer identity>
+  policy_resolution:
+    authority_ref: <computer-owned policy source>
+    revision_or_digest: <immutable policy identity>
+    observed_resolution_ref: <run/API/product-path receipt>
+  members:
+    - id: <durable agent identity>
+      obligation: <builder, falsifier, verifier, etc.>
+      run_or_trajectory_ref: <durable observed execution receipt>
+      independence: <different context, tool, source, or model lineage>
+  acceptance: <product-path proof of resolved policy, durable memory/restart behavior, and useful output>
 ```
 
-## Human Escalation Schema
+The goal references computer-owned policy and observed resolution; it does not
+copy member model, tool/search, memory, or budget values into a second
+configuration authority. “Reasoning budget” must be disambiguated in the
+product policy when it matters: reasoning effort, output-token limit, total
+activation budget, and spend cap are distinct controls.
 
-```yaml
-human_escalation:
-  node: <definition id>
-  issue: <why orchestration cannot settle it>
-  options:
-    - choice: <option>
-      execution_consequence: <what happens if chosen>
-  recommendation: <recommended choice>
-```
+## Generated HTML View
 
-## Assurance And Second-Opinion Schemas
+For a broad goal, generate a local HTML view from the goal file. It should show
+the finish line first, then start/protected WIP, current candidate, proof
+obtained and missing, clearly amber weak measures, dissent, and next action.
+It must identify source digest, generator version, and generation time.
 
-```yaml
-assurance_profile:
-  risk_class: low | medium | high | protected | irreversible
-  novelty: routine | adjacent | novel
-  evidence_floor: <minimum executable evidence>
-  independent_verifier: required | optional
-  second_opinion_tier: none | compact | standard | full
-  required_model_families: <count or list>
-  per_reviewer_timeout: <duration>
-  total_compute_or_token_budget: <bound>
-  escalation_triggers: [surprise, dissent, unique_blocker, weak_evidence, protected_surface, ratchet_drift]
-```
+The view is never an editable second authority. Commit a changed view with the
+Define or Implement boundary that changed its source; do not create a separate
+refresh commit. The rendering command and localhost serving arrangement belong
+to the project implementation, not this schema.
 
-```yaml
-second_opinion_request:
-  node: <definition id>
-  unresolved_question: <specific question>
-  expected_decision_impact: <what could change>
-  why_internal_deliberation_is_insufficient: <reason>
-  chosen_tool: <tool>
-  exact_model_or_family: <identity if knowable>
-  compute_tier: internal | normal_external | premium
-  timeout: <hard bound>
-  token_or_cost_budget: <hard or estimated bound>
-  max_output_shape: <verdict, counterexample, execution effect, etc.>
-```
+## Migrate A v1 Definition
 
-## Definition Operators
+1. Preserve the active mission's owner authority and registry topology.
+2. Extract its real purpose into `finish`, and capture repository/deploy/WIP
+   facts into `start` without rewriting history.
+3. Turn the live boundary into `now`; collapse earlier locks, reports, and
+   panel narratives into receipts with evidence refs.
+4. Reclassify metrics as gates, weak signals, or telemetry.
+5. Delete or generate duplicate current-state summaries. Do not create an
+   unregistered competing `/goal` file.
 
-```text
-define split merge narrow widen counterexample operationalize formalize probe
-shift construct verify request_second_opinion settle weaken falsify invalidate
-supersede promote escalate monitor
-```
-
-Every operator must produce an observable result. Commit only at a Git
-durability boundary defined by the core skill.
+Use `unknown` honestly when a historical fact cannot be reconciled. A fresh
+candidate rehearsal is usually cheaper and safer than reconstructing an old
+prediction from prose.

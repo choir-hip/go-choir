@@ -59,16 +59,19 @@ claim, test, observer blind spot, observer upgrade, supported scope, fastest
 falsifier, and execution effect. A conjecture ledger is a typed graph view, not
 separate authority.
 
-## Variant And Progress
+## Weak Measures, Variants, And Progress
 
-For long missions, define a variant that productive execution should reduce:
-unresolved nodes, blockers, failing contract classes, missing observables, open
-conjectures, or unverified interfaces. Do not use effort, elapsed time, files
-touched, or vague percentage completion.
+For a long mission, use a small variant or weak measure to decide what to
+inspect next: unresolved decision-changing questions, blockers, failing
+contract classes, missing observables, open conjectures, or unverified
+interfaces. State its baseline, decision use, and what it cannot prove in the
+goal file. Do not use effort, elapsed time, files touched, vague percentage
+completion, or a documentation-sensitive count as a completion proxy.
 
-A pass that changes no node status, buys no observer evidence, and improves no
+A pass that changes no decision, buys no observer evidence, and improves no
 artifact verifier is motion theater. Shift observer, vocabulary, domain,
-instrument, or prover.
+instrument, or prover. A favorable measure may justify that shift; it never
+settles the goal or substitutes for its stated acceptance artifact.
 
 ## Homotopy And Realism
 
