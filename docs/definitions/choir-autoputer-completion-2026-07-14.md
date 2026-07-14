@@ -141,9 +141,9 @@ now:
   slice: "extract browser and desktop ownership from internal/runtime"
   question: "Can dedicated browser-control and desktop-state handlers own their complete HTTP, persistence, event, bounded-input, CDP-process, and shared-session contracts while Runtime loses all browser/desktop state and shutdown authority?"
   reconciliation:
-    observed_at: 2026-07-14T15:43:00Z
-    source_ref: refs/remotes/origin/main@0bf6a442
-    deploy_identity: "CI 29345667840 PASS; deploy job 87129761444; activation receipt target cb0e36ba9cb9568f838e470935a90345446e69eb at 2026-07-14T15:38:14Z"
+    observed_at: 2026-07-14T16:29:40Z
+    source_ref: refs/heads/autoputer-definition-v2@48b8710c
+    deploy_identity: "CI 29345667840 PASS; deploy job 87129761444; staging remains cb0e36ba9cb9568f838e470935a90345446e69eb pending this cutover"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,7 +151,7 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: owner_boundary_frozen
+    status: accepted_local_ready_to_land
     protected_surfaces: [browser_sessions, bounded_browser_input, cdp_process_lifecycle, browser_screenshots, browser_events, desktop_state, desktop_driver_session, user_isolation]
     admissible_evidence: "Exact route/state/store/event/process map; byte-equivalent API contracts; owner/session isolation and passive-session conflict tests; focused browser/desktop tests including live CDP when available; scoped runtime ratchet; independent transition and authority review; green CI, staging identity, and authenticated deployed browser/desktop acceptance."
     rollback_ref: cb0e36ba9cb9568f838e470935a90345446e69eb
@@ -159,21 +159,27 @@ now:
     heresy_delta:
       discovered: "internal/runtime/browser.go owns 1,508 lines of browser HTTP, session persistence, event publication, capability detection, per-session locks, bounded fill/click control, snapshot extraction, CDP process/session lifecycle, and screenshots; Runtime also carries four browser lock/session fields and closes CDP sessions from Start/Stop. internal/runtime/desktop.go owns 248 lines of authenticated shared desktop-state HTTP, sanitization, driver/passive-session semantics, and store transitions. internal/desktop exists, but it is a Base API sync client rather than a replacement server-state owner; no existing browser owner exists."
       introduced: none
-      repaired: "The preceding candidate-package owner cutover is deployed and accepted; no browser/desktop repair has begun."
+      repaired: "Browser HTTP/session/event/CDP ownership now lives in internal/browsercontrol; desktop HTTP/state/clone ownership lives in internal/desktopstate. Routes inject both owners directly, sandbox fate-shares browser Close and supplies the desktop owner through an explicit runtime-core composition contract, Runtime has no browser fields/lifecycle methods or direct desktop-state store calls, and fork_desktop fails before vmctl mutation when no desktop owner is composed."
   candidate:
     id: R1-browser-desktop-owner-cutover-13
-    state: owner_boundary_frozen_ready_to_implement
-    ref: refs/heads/autoputer-definition-v2@0bf6a442
+    state: accepted_local_ready_to_land
+    ref: refs/heads/autoputer-definition-v2@48b8710c
     owner: orchestrator
-    base: refs/remotes/origin/main@0bf6a442
-    digest: "Create internal/browsercontrol.Handler as the sole browser HTTP/session/event/CDP owner and internal/desktopstate.Handler as the sole desktop HTTP/state owner. Register both directly in internal/apihandler routes; construct them in sandbox with store/config/event bus; close browsercontrol with sandbox lifetime; delete Runtime browser/desktop fields, shutdown calls, methods, helpers, and files. Move focused tests to the owning packages without changing routes, JSON, status codes, errors, state order, event payloads, bounded-input limits, desktop CAS/session rules, or owner isolation."
+    base: refs/heads/autoputer-definition-v2@b3d8205f
+    digest: "internal/browsercontrol owns browser routes, owner-scoped persisted sessions/events, bounded control, snapshots, declared-alternate fallback, CDP reuse, process cancellation, and Close. internal/desktopstate owns authenticated shared state, sanitation, passive/driver sessions, product events, and fork-state cloning. apihandler binds both directly; sandbox constructs them and passes desktopstate through explicit runtime core options. Deleted internal/runtime browser.go, browser_live_test.go, desktop.go, desktop_test.go; removed Runtime browser fields and cleanup; moved owner tests."
     scope: [browser_api, browser_session_state, browser_events, browser_capabilities, snapshots, bounded_control, cdp_lifecycle, desktop_api, desktop_state, desktop_session_convergence]
   evidence_refs:
     - "browser-map: internal/runtime/browser.go; internal/store/browser.go; internal/types/browser.go; Runtime browserOpMu/browserOps/browserCDPMu/browserCDP; Runtime Start/Stop closeAllBrowserCDPSessions; internal/apihandler/routes.go browser routes"
     - "desktop-map: internal/runtime/desktop.go; internal/runtime/desktop_test.go; internal/store/desktop_live.go; internal/types/desktop.go; internal/apihandler/routes.go desktop route"
     - "replacement-check: internal/desktop is a Base API client/sync boundary, not a server desktop-state owner; no internal browser service package exists"
-  blocker_or_risk: "No execution blocker. The cutover must preserve CDP child-process cleanup on sandbox shutdown and context cancellation, prevent bounded input from widening, retain owner-scoped session/store access, keep passive desktop sessions unable to replace shared state, and avoid leaving route wrappers or Runtime lifecycle hooks."
-  next_action: "Checkpoint this problem/owner boundary before repair. Then move browser and desktop handlers plus tests to dedicated packages, update route/sandbox composition, delete Runtime browser/desktop fields and shutdown calls, regenerate the inventory, and prove focused contracts before frozen independent review."
+    - "browser-focused: go test -tags comprehensive ./internal/browsercontrol PASS; integration-tag live CDP contracts compile/skip without GO_CHOIR_RUN_OBSCURA_CDP=1"
+    - "desktop-focused: go test -tags comprehensive ./internal/desktopstate PASS; TestCloneStatePersistsOwnerScopedDesktopCopy PASS"
+    - "composition: go test ./internal/actorruntime ./internal/sandbox ./internal/apihandler PASS; runtime shard 0/4 PASS; production runtime package compile PASS"
+    - "ratchet: runtime dissolution inventory PASS; 122 Go files, 63 production files, 59 test files, 38,228 production LOC, 48,526 test LOC, 870 exports, 252 export caller edges, 374 classified store calls, 1,349 citers"
+    - "independent-browser-review: ACCEPT 48b8710c after repairing URL-extension HTML inference for empty/octet-stream declared alternates"
+    - "independent-desktop-review: ACCEPT 48b8710c after moving fork cloning behind desktopstate, removing Runtime fallback construction and desktop-specific adapter wrapper, and requiring explicit sandbox composition"
+  blocker_or_risk: "No local execution blocker. Residual risk is deployment-only: staging must serve 48b8710c or its coherent Definition receipt, preserve authenticated browser/desktop route behavior, and keep CDP capability/cleanup dependent on the configured Obscura binary. The repository-wide comprehensive runtime tag remains independently stale (prompt/texture historical compile errors); scoped owner tests, production type-check, runtime shard 0/4, and exact ratchet pass."
+  next_action: "Commit this accepted red candidate receipt, push to origin/main, monitor CI and staging identity, then run authenticated deployed browser capabilities/session and desktop state acceptance before marking this slice complete."
 
 receipts:
   - id: predecessor-B0-authority

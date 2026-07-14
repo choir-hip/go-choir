@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 6
     store_calls: 374
     interface_candidates: 4
-    citers: 1349
+    citers: 1350
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -5800,6 +5800,8 @@ citers:
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "desktop-map: internal/runtime/desktop.go; internal/runtime/desktop_test.go; internal/store/desktop_live.go; internal/types/desktop.go; internal/apihandler/routes.go desktop route"'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "internal/runtime, a compatibility facade, or dual ownership remains"
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:digest: "internal/browsercontrol owns browser routes, owner-scoped persisted sessions/events, bounded control, snapshots, declared-alternate fallback, CDP reuse, process cancellation, and Close. inter… [sha256:4b0ad6604f2c73e1711f435e12804a2e785e7a945accabc1cdfd67310688adda]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:discovered: "internal/runtime/browser.go owns 1,508 lines of browser HTTP, session persistence, event publication, capability detection, per-session locks, bounded fill/click control, snapshot extract… [sha256:6c2176e685a841cb95a0f257e875f8604607c6ffd60d2e2538b9834d3cb5f872]'
       disposition: block
