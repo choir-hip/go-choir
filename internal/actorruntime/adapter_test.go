@@ -46,7 +46,7 @@ func newAdapterTestEnv(t *testing.T) *adapterTestEnv {
 		SupervisionInterval: time.Hour,
 	}
 
-	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0))
+	adapter := New(cfg, s, events.NewEventBus(), provider.NewStubProvider(0), nil)
 	t.Cleanup(func() {
 		adapter.Stop()
 		adapter.cleanupLog()

@@ -1,14 +1,18 @@
 //go:build comprehensive
 
-package runtime
+package desktopstate
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -17,9 +21,31 @@ func bytesReader(b []byte) *bytes.Reader {
 	return bytes.NewReader(b)
 }
 
+func testDesktopSetup(t *testing.T) (*store.Store, *Handler) {
+	t.Helper()
+	s, _, h := testDesktopSetupWithBus(t)
+	return s, h
+}
+
+func testDesktopSetupWithBus(t *testing.T) (*store.Store, *events.EventBus, *Handler) {
+	t.Helper()
+
+	s, err := store.Open(filepath.Join(t.TempDir(), "desktop.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Errorf("close store: %v", err)
+		}
+	})
+	bus := events.NewEventBus()
+	return s, bus, NewHandler(s, bus)
+}
+
 func TestDesktopStateGetUnauthenticated(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
 	// No X-Authenticated-User header — should be denied.
@@ -33,7 +59,7 @@ func TestDesktopStateGetUnauthenticated(t *testing.T) {
 
 func TestDesktopStateGetEmpty(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/desktop/state", nil)
 	req.Header.Set("X-Authenticated-User", "user-1")
@@ -59,7 +85,7 @@ func TestDesktopStateGetEmpty(t *testing.T) {
 
 func TestDesktopStateSaveAndGet(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	// Save desktop state.
 	saveReq := desktopStateSaveRequest{
@@ -121,7 +147,7 @@ func TestDesktopStateSaveAndGet(t *testing.T) {
 
 func TestDesktopStateSaveSanitizesInvalidWindowRecords(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	saveReq := desktopStateSaveRequest{
 		Windows: []types.WindowState{
@@ -202,9 +228,54 @@ func TestDesktopStateSaveSanitizesInvalidWindowRecords(t *testing.T) {
 	}
 }
 
+func TestCloneStatePersistsOwnerScopedDesktopCopy(t *testing.T) {
+	t.Parallel()
+	s, h := testDesktopSetup(t)
+	source := types.DesktopState{
+		OwnerID:   "user-1",
+		DesktopID: "primary",
+		Windows: []types.WindowState{{
+			WindowID: "window-1",
+			AppID:    "files",
+			Title:    "Files",
+			Geometry: types.WindowGeometry{Width: 800, Height: 600},
+			Mode:     types.WindowNormal,
+		}},
+		ActiveWindowID: "window-1",
+	}
+	if err := s.SaveDesktopStateForDesktop(context.Background(), source); err != nil {
+		t.Fatalf("save source state: %v", err)
+	}
+
+	cloned, err := h.CloneState(context.Background(), "user-1", "primary", "branch-a")
+	if err != nil {
+		t.Fatalf("clone state: %v", err)
+	}
+	if cloned.OwnerID != "user-1" || cloned.DesktopID != "branch-a" {
+		t.Fatalf("cloned identity = %q/%q, want user-1/branch-a", cloned.OwnerID, cloned.DesktopID)
+	}
+	if len(cloned.Windows) != 1 || cloned.Windows[0].WindowID != "window-1" {
+		t.Fatalf("cloned windows = %+v, want source window", cloned.Windows)
+	}
+	persisted, err := s.GetDesktopStateForDesktop(context.Background(), "user-1", "branch-a")
+	if err != nil {
+		t.Fatalf("get cloned state: %v", err)
+	}
+	if persisted.DesktopID != "branch-a" || len(persisted.Windows) != 1 {
+		t.Fatalf("persisted clone = %+v", persisted)
+	}
+	original, err := s.GetDesktopStateForDesktop(context.Background(), "user-1", "primary")
+	if err != nil {
+		t.Fatalf("get source state: %v", err)
+	}
+	if original.DesktopID != "primary" {
+		t.Fatalf("source desktop_id = %q, want primary", original.DesktopID)
+	}
+}
+
 func TestDesktopStateActiveWindowFollowsTopVisibleZOrder(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	saveReq := desktopStateSaveRequest{
 		Windows: []types.WindowState{
@@ -258,7 +329,7 @@ func TestDesktopStateActiveWindowFollowsTopVisibleZOrder(t *testing.T) {
 
 func TestDesktopStateSaveUnauthenticated(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	saveReq := desktopStateSaveRequest{
 		Windows:        []types.WindowState{},
@@ -278,7 +349,7 @@ func TestDesktopStateSaveUnauthenticated(t *testing.T) {
 
 func TestDesktopStateUserIsolation(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	// Save state for user-1.
 	saveReq1 := desktopStateSaveRequest{
@@ -347,7 +418,7 @@ func TestDesktopStateUserIsolation(t *testing.T) {
 
 func TestDesktopStateRouterMethodDispatch(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	// POST should be method not allowed.
 	req := httptest.NewRequest(http.MethodPost, "/api/desktop/state", nil)
@@ -382,7 +453,7 @@ func TestDesktopStateRouterMethodDispatch(t *testing.T) {
 
 func TestDesktopStateSaveAndGetByDesktopSelector(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	saveReq := desktopStateSaveRequest{
 		Windows: []types.WindowState{
@@ -447,7 +518,7 @@ func TestDesktopStateSaveAndGetByDesktopSelector(t *testing.T) {
 
 func TestDesktopStatePassiveSessionCannotReplaceSharedState(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	driverReq := desktopStateSaveRequest{
 		Windows: []types.WindowState{
@@ -520,7 +591,7 @@ func TestDesktopStatePassiveSessionCannotReplaceSharedState(t *testing.T) {
 
 func TestDesktopStateSessionsConvergeOnLatestDriverPlacement(t *testing.T) {
 	t.Parallel()
-	_, h := testAPISetup(t)
+	_, h := testDesktopSetup(t)
 
 	saveForSession := func(sessionID string, x int) {
 		t.Helper()
@@ -578,5 +649,139 @@ func TestDesktopStateSessionsConvergeOnLatestDriverPlacement(t *testing.T) {
 	}
 	if got := getX("mobile-session"); got != 360 {
 		t.Fatalf("mobile session x = %d, want latest synced placement 360", got)
+	}
+}
+
+func saveDesktopEventTestState(t *testing.T, h *Handler, driver bool) *httptest.ResponseRecorder {
+	t.Helper()
+	saveReq := desktopStateSaveRequest{
+		Windows: []types.WindowState{
+			{
+				WindowID: "win-events",
+				AppID:    "texture",
+				Title:    "Event document",
+				Geometry: types.WindowGeometry{X: 25, Y: 35, Width: 640, Height: 480},
+				Mode:     types.WindowNormal,
+				ZIndex:   3,
+			},
+		},
+		ActiveWindowID: "win-events",
+		Driver:         driver,
+	}
+	body, err := json.Marshal(saveReq)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPut, "/api/desktop/state?desktop_id=branch-events", bytesReader(body))
+	req.Header.Set("X-Authenticated-User", "user-events")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Choir-Session", "session-events")
+	req.Header.Set("X-Choir-Device", "device-events")
+	req.Header.Set("X-Choir-Viewport", "viewport-events")
+	w := httptest.NewRecorder()
+	h.HandleDesktopStateSave(w, req)
+	return w
+}
+
+func TestDesktopStateDriverSavePersistsThenPublishesProductEvents(t *testing.T) {
+	t.Parallel()
+	s, bus, h := testDesktopSetupWithBus(t)
+	sub := bus.Subscribe()
+	t.Cleanup(func() { bus.Unsubscribe(sub) })
+
+	w := saveDesktopEventTestState(t, h, true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("save status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	wantKinds := []types.EventKind{
+		types.EventDesktopDriverLeaseUpdated,
+		types.EventDesktopAppInstancesUpdated,
+		types.EventDesktopWindowPlacementUpdated,
+	}
+	published := make([]events.RuntimeEvent, 0, len(wantKinds))
+	for i, wantKind := range wantKinds {
+		select {
+		case event := <-sub:
+			published = append(published, event)
+			if event.Record.Kind != wantKind {
+				t.Fatalf("published event %d kind = %q, want %q", i, event.Record.Kind, wantKind)
+			}
+			if event.Record.EventID == "" {
+				t.Fatalf("published event %d has empty EventID", i)
+			}
+			if event.Record.OwnerID != "user-events" || event.Record.Phase != "product" {
+				t.Fatalf("published event %d record = %+v", i, event.Record)
+			}
+			if event.Actor != events.ActorRuntime || event.Cause != events.CauseHostAction {
+				t.Fatalf("published event %d actor/cause = %q/%q", i, event.Actor, event.Cause)
+			}
+			var payload map[string]any
+			if err := json.Unmarshal(event.Record.Payload, &payload); err != nil {
+				t.Fatalf("decode published event %d payload: %v", i, err)
+			}
+			if len(payload) != 9 ||
+				payload["desktop_id"] != "branch-events" ||
+				payload["session_id"] != "session-events" ||
+				payload["active_window_id"] != "win-events" ||
+				payload["window_count"] != float64(1) ||
+				payload["source_device_id"] != "device-events" ||
+				payload["source_session_id"] != "session-events" ||
+				payload["viewport_profile"] != "viewport-events" ||
+				payload["driver"] != true {
+				t.Fatalf("published event %d payload = %+v", i, payload)
+			}
+			if updatedAt, ok := payload["updated_at"].(string); !ok || updatedAt == "" {
+				t.Fatalf("published event %d updated_at = %#v", i, payload["updated_at"])
+			}
+		default:
+			t.Fatalf("published event %d missing", i)
+		}
+	}
+
+	durable, err := s.ListEventsByOwnerAfter(context.Background(), "user-events", 0, 10)
+	if err != nil {
+		t.Fatalf("list durable events: %v", err)
+	}
+	if len(durable) != len(wantKinds) {
+		t.Fatalf("durable event count = %d, want %d", len(durable), len(wantKinds))
+	}
+	for i, wantKind := range wantKinds {
+		if durable[i].Kind != wantKind {
+			t.Fatalf("durable event %d kind = %q, want %q", i, durable[i].Kind, wantKind)
+		}
+		if durable[i].EventID != published[i].Record.EventID {
+			t.Fatalf("durable event %d ID = %q, published ID = %q", i, durable[i].EventID, published[i].Record.EventID)
+		}
+	}
+	if publishedCount, dropped := bus.Stats(); publishedCount != 3 || dropped != 0 {
+		t.Fatalf("bus stats = published %d dropped %d, want 3/0", publishedCount, dropped)
+	}
+}
+
+func TestDesktopStatePassiveSaveEmitsNoProductEvents(t *testing.T) {
+	t.Parallel()
+	s, bus, h := testDesktopSetupWithBus(t)
+	sub := bus.Subscribe()
+	t.Cleanup(func() { bus.Unsubscribe(sub) })
+
+	w := saveDesktopEventTestState(t, h, false)
+	if w.Code != http.StatusOK {
+		t.Fatalf("save status = %d, want %d; body: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	select {
+	case event := <-sub:
+		t.Fatalf("passive save published event %+v", event)
+	default:
+	}
+	durable, err := s.ListEventsByOwnerAfter(context.Background(), "user-events", 0, 10)
+	if err != nil {
+		t.Fatalf("list durable events: %v", err)
+	}
+	if len(durable) != 0 {
+		t.Fatalf("passive save durable events = %+v, want none", durable)
+	}
+	if publishedCount, dropped := bus.Stats(); publishedCount != 0 || dropped != 0 {
+		t.Fatalf("bus stats = published %d dropped %d, want 0/0", publishedCount, dropped)
 	}
 }

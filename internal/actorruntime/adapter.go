@@ -137,13 +137,11 @@ type Adapter struct {
 //
 // The runtime core's ActorBridge is set to the adapter, so run activations and
 // coagent wakes go through actor.Send.
-func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, opts ...RuntimeOption) *Adapter {
-	// Create the business-logic runtime with the same options pattern.
-	rtOpts := convertOpts(opts)
-	rt := runtime.New(cfg, s, bus, provider, rtOpts...)
+func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, coreOpts []runtime.RuntimeOption, opts ...RuntimeOption) *Adapter {
+	rt := runtime.New(cfg, s, bus, provider, coreOpts...)
 
 	a := &Adapter{
-		Runtime: rt,
+		Runtime:  rt,
 		cfg:      cfg,
 		store:    s,
 		bus:      bus,
@@ -259,13 +257,6 @@ func (a *Adapter) Drain(timeout time.Duration) {
 // ActorRuntime returns the underlying actor runtime (for diagnostics/tests).
 func (a *Adapter) ActorRuntime() *actor.Runtime {
 	return a.actorRT
-}
-
-// convertOpts translates actorruntime.RuntimeOption into runtime.RuntimeOption.
-// Adapter options are applied in New after the core is constructed. Runtime
-// options continue to use runtime.New's internal defaults.
-func convertOpts(opts []RuntimeOption) []runtime.RuntimeOption {
-	return nil
 }
 
 // actorLogPath derives the actor log SQLite file path from the store path.

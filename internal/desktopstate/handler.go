@@ -1,10 +1,8 @@
-// Package runtime provides desktop state API handlers for the go-choir
-// sandbox runtime. Desktop state is persisted server-side so that desktop
-// restore works across fresh browser contexts for the same user
-// (VAL-DESKTOP-007).
-package runtime
+// Package desktopstate owns the authenticated desktop-state HTTP control plane.
+package desktopstate
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,8 +10,91 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
+	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+// Handler owns desktop-state HTTP behavior and persistence.
+type Handler struct {
+	store *store.Store
+	bus   *events.EventBus
+}
+
+// NewHandler constructs the desktop-state control plane.
+func NewHandler(s *store.Store, bus *events.EventBus) *Handler {
+	return &Handler{store: s, bus: bus}
+}
+
+// CloneState copies one owner-scoped desktop state into a new desktop identity.
+// VM lifecycle callers own the machine fork; desktopstate remains the sole
+// authority for loading and persisting the corresponding product state.
+func (h *Handler) CloneState(ctx context.Context, ownerID, sourceDesktopID, targetDesktopID string) (types.DesktopState, error) {
+	if h == nil || h.store == nil {
+		return types.DesktopState{}, fmt.Errorf("desktop state store unavailable")
+	}
+	sourceState, err := h.store.GetDesktopStateForDesktop(ctx, ownerID, sourceDesktopID)
+	if err != nil {
+		return types.DesktopState{}, fmt.Errorf("fork_desktop load source state: %w", err)
+	}
+	raw, err := json.Marshal(sourceState)
+	if err != nil {
+		return types.DesktopState{}, fmt.Errorf("fork_desktop clone source state: %w", err)
+	}
+	var clonedState types.DesktopState
+	if err := json.Unmarshal(raw, &clonedState); err != nil {
+		return types.DesktopState{}, fmt.Errorf("fork_desktop clone source state: %w", err)
+	}
+	clonedState.OwnerID = ownerID
+	clonedState.DesktopID = targetDesktopID
+	clonedState.UpdatedAt = time.Now().UTC()
+	if err := h.store.SaveDesktopStateForDesktop(ctx, clonedState); err != nil {
+		return types.DesktopState{}, fmt.Errorf("fork_desktop save cloned state: %w", err)
+	}
+	return clonedState, nil
+}
+
+func (h *Handler) emitProductEvent(ctx context.Context, ownerID, desktopID string, kind types.EventKind, payload map[string]any) (types.EventRecord, error) {
+	if h == nil || h.store == nil {
+		return types.EventRecord{}, fmt.Errorf("runtime store unavailable")
+	}
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return types.EventRecord{}, fmt.Errorf("owner_id is required")
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	desktopID = strings.TrimSpace(desktopID)
+	if desktopID != "" {
+		payload["desktop_id"] = desktopID
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return types.EventRecord{}, fmt.Errorf("marshal product event payload: %w", err)
+	}
+	rec := types.EventRecord{
+		EventID:   uuid.New().String(),
+		OwnerID:   ownerID,
+		Timestamp: time.Now().UTC(),
+		Kind:      kind,
+		Phase:     "product",
+		Payload:   raw,
+	}
+	if err := h.store.AppendEvent(ctx, &rec); err != nil {
+		return types.EventRecord{}, fmt.Errorf("append product event: %w", err)
+	}
+	if h.bus != nil {
+		h.bus.Publish(events.RuntimeEvent{
+			Record: rec,
+			Actor:  events.ActorRuntime,
+			Cause:  events.CauseHostAction,
+		})
+	}
+	return rec, nil
+}
 
 // desktopStateGetResponse is the JSON response for GET /api/desktop/state.
 type desktopStateGetResponse struct {
@@ -37,6 +118,26 @@ type desktopStateSaveResponse struct {
 	OK        bool   `json:"ok"`
 	DesktopID string `json:"desktop_id"`
 	UpdatedAt string `json:"updated_at"`
+}
+
+type apiError struct {
+	Error string `json:"error"`
+}
+
+func authenticateUser(r *http.Request) (string, error) {
+	user := r.Header.Get("X-Authenticated-User")
+	if user == "" {
+		return "", fmt.Errorf("missing authenticated user identity")
+	}
+	return user, nil
+}
+
+func writeAPIJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("runtime api: json encode error: %v", err)
+	}
 }
 
 func requestDesktopID(r *http.Request) string {
@@ -137,7 +238,7 @@ func topVisibleWindowID(windows []types.WindowState) string {
 // It returns the persisted desktop state for the authenticated user,
 // including open windows, active window, geometry, and app context
 // (VAL-DESKTOP-007). If no state exists, it returns an empty default state.
-func (h *APIHandler) HandleDesktopStateGet(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleDesktopStateGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -151,7 +252,7 @@ func (h *APIHandler) HandleDesktopStateGet(w http.ResponseWriter, r *http.Reques
 	desktopID := requestDesktopID(r)
 
 	session := requestDesktopSessionContext(r, false)
-	state, err := h.rt.Store().GetDesktopStateForSession(r.Context(), ownerID, desktopID, session.SessionID)
+	state, err := h.store.GetDesktopStateForSession(r.Context(), ownerID, desktopID, session.SessionID)
 	if err != nil {
 		log.Printf("runtime api: get desktop state: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to get desktop state"})
@@ -174,7 +275,7 @@ func (h *APIHandler) HandleDesktopStateGet(w http.ResponseWriter, r *http.Reques
 // window identities, geometry, mode, active window, and app context
 // (VAL-DESKTOP-007). The state is stored server-side and survives
 // fresh browser contexts.
-func (h *APIHandler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -205,7 +306,7 @@ func (h *APIHandler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Reque
 		UpdatedAt:      now,
 	}
 
-	if err := h.rt.Store().SaveDesktopStateForSession(r.Context(), state, session); err != nil {
+	if err := h.store.SaveDesktopStateForSession(r.Context(), state, session); err != nil {
 		log.Printf("runtime api: save desktop state: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to save desktop state"})
 		return
@@ -222,9 +323,9 @@ func (h *APIHandler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Reque
 		"driver":            session.IsDriver,
 	}
 	if session.IsDriver {
-		_, _ = h.rt.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopDriverLeaseUpdated, eventPayload)
-		_, _ = h.rt.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopAppInstancesUpdated, eventPayload)
-		_, _ = h.rt.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopWindowPlacementUpdated, eventPayload)
+		_, _ = h.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopDriverLeaseUpdated, eventPayload)
+		_, _ = h.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopAppInstancesUpdated, eventPayload)
+		_, _ = h.emitProductEvent(r.Context(), ownerID, desktopID, types.EventDesktopWindowPlacementUpdated, eventPayload)
 	}
 
 	writeAPIJSON(w, http.StatusOK, desktopStateSaveResponse{
@@ -234,9 +335,8 @@ func (h *APIHandler) HandleDesktopStateSave(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// HandleDesktopState routes GET and PUT /api/desktop/state to the
-// appropriate handler.
-func (h *APIHandler) HandleDesktopState(w http.ResponseWriter, r *http.Request) {
+// HandleDesktopState routes GET and PUT /api/desktop/state to the appropriate handler.
+func (h *Handler) HandleDesktopState(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		h.HandleDesktopStateGet(w, r)

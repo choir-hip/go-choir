@@ -68,6 +68,9 @@ func newForkDesktopTool(rt *Runtime) toolregistry.Tool {
 			if strings.TrimSpace(rt.cfg.VmctlURL) == "" {
 				return "", fmt.Errorf("fork_desktop requires runtime vmctl configuration")
 			}
+			if rt.desktopState == nil {
+				return "", fmt.Errorf("fork_desktop requires desktop state owner")
+			}
 
 			ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
 			sourceDesktopID := strings.TrimSpace(toolregistry.ExecutionContextFrom(ctx).DesktopID)
@@ -89,16 +92,9 @@ func newForkDesktopTool(rt *Runtime) toolregistry.Tool {
 				return "", err
 			}
 
-			sourceState, err := rt.store.GetDesktopStateForDesktop(ctx, ownerID, sourceDesktopID)
+			clonedState, err := rt.desktopState.CloneState(ctx, ownerID, sourceDesktopID, resolved.DesktopID)
 			if err != nil {
-				return "", fmt.Errorf("fork_desktop load source state: %w", err)
-			}
-			clonedState := cloneDesktopState(sourceState)
-			clonedState.OwnerID = ownerID
-			clonedState.DesktopID = resolved.DesktopID
-			clonedState.UpdatedAt = time.Now().UTC()
-			if err := rt.store.SaveDesktopStateForDesktop(ctx, clonedState); err != nil {
-				return "", fmt.Errorf("fork_desktop save cloned state: %w", err)
+				return "", err
 			}
 
 			return toolregistry.ResultJSON(map[string]any{
@@ -2507,16 +2503,4 @@ func normalizeForkDesktopID(raw string) string {
 		return "branch-" + uuid.New().String()[:8]
 	}
 	return id
-}
-
-func cloneDesktopState(state types.DesktopState) types.DesktopState {
-	raw, err := json.Marshal(state)
-	if err != nil {
-		return state
-	}
-	var cloned types.DesktopState
-	if err := json.Unmarshal(raw, &cloned); err != nil {
-		return state
-	}
-	return cloned
 }

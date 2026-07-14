@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/candidatepackage"
+	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -72,10 +73,6 @@ type Runtime struct {
 	wirePublishTimer      textureWakeTimer
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex
-	browserOpMu           sync.Mutex
-	browserOps            map[string]*sync.Mutex
-	browserCDPMu          sync.Mutex
-	browserCDP            map[string]*browserCDPSession
 	modelPolicyMu         sync.Mutex
 	modelPolicies         map[string]ModelPolicy
 	qdrantPipelineMu      sync.Mutex
@@ -90,6 +87,7 @@ type Runtime struct {
 
 	promotion         *promotion.Service
 	candidatePackages *candidatepackage.Service
+	desktopState      *desktopstate.Handler
 }
 
 type textureWakeTimer interface {
@@ -111,8 +109,6 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		running:          make(map[string]context.CancelFunc),
 		promptStore:      promptstore.New(cfg.PromptRoot),
 		textureWakeAfter: func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
-		browserOps:       make(map[string]*sync.Mutex),
-		browserCDP:       make(map[string]*browserCDPSession),
 		modelPolicies:    make(map[string]ModelPolicy),
 		promotion: promotion.NewService(s, promotion.Config{
 			SourceLedgerRepo:                cfg.SourceLedgerRepo,
@@ -425,6 +421,14 @@ func WithTraceStore(s trace.Store) RuntimeOption {
 	}
 }
 
+// WithDesktopStateOwner composes Runtime tools with the canonical desktop-state
+// owner without giving Runtime direct state persistence authority.
+func WithDesktopStateOwner(owner *desktopstate.Handler) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.desktopState = owner
+	}
+}
+
 func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWakeTimer) RuntimeOption {
 	return func(rt *Runtime) {
 		if after != nil {
@@ -448,10 +452,6 @@ func (rt *Runtime) Start(ctx context.Context) {
 	// a slow or unreachable Qdrant cannot block runtime startup; the dedup
 	// path also ensures the collection lazily on first use.
 	go rt.ensureProductionQdrantCollectionBestEffort(ctx)
-	go func() {
-		<-ctx.Done()
-		rt.closeAllBrowserCDPSessions()
-	}()
 	log.Printf("runtime: started (sandbox=%s)", rt.cfg.SandboxID)
 }
 
@@ -473,7 +473,6 @@ func (rt *Runtime) ensureProductionQdrantCollectionBestEffort(ctx context.Contex
 // Stop gracefully shuts down the runtime, cancelling all in-flight runs.
 // It is safe to call Stop multiple times.
 func (rt *Runtime) Stop() {
-	rt.closeAllBrowserCDPSessions()
 	rt.runningMu.Lock()
 	for runID, cancel := range rt.running {
 		cancel()

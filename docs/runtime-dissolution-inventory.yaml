@@ -3,26 +3,26 @@ canonical_parent: db1ea597cf862b77f5ccb288f8eb76a08309b64d
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 126
-    production_files: 65
-    test_files: 61
-    production_loc: 39985
-    test_loc: 49958
-    exports: 905
-    export_caller_edges: 265
+    go_files: 122
+    production_files: 63
+    test_files: 59
+    production_loc: 38228
+    test_loc: 48526
+    exports: 870
+    export_caller_edges: 252
     initial_unused_export_debt: 14
     routes: 2
     tools: 48
     production_importers: 4
     wrappers: 4
     compatibility_markers: 6
-    store_calls: 391
+    store_calls: 374
     interface_candidates: 4
-    citers: 1347
+    citers: 1349
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
-      loc: 6786
+      loc: 6788
     - id: internal/runtime/api.go [production]
       disposition: api
       loc: 1393
@@ -34,7 +34,7 @@ files:
       loc: 431
     - id: internal/runtime/api_test.go [test]
       disposition: api
-      loc: 3187
+      loc: 2486
     - id: internal/runtime/api_texture_prompt_eval.go [production]
       disposition: texture
       loc: 131
@@ -47,12 +47,6 @@ files:
     - id: internal/runtime/app_promotion_test.go [test]
       disposition: promotion
       loc: 646
-    - id: internal/runtime/browser.go [production]
-      disposition: browser
-      loc: 1508
-    - id: internal/runtime/browser_live_test.go [test]
-      disposition: browser
-      loc: 151
     - id: internal/runtime/candidate_package_intake_test.go [test]
       disposition: candidate_package
       loc: 3378
@@ -86,12 +80,6 @@ files:
     - id: internal/runtime/delegate_worker_update_fallback_test.go [test]
       disposition: core
       loc: 116
-    - id: internal/runtime/desktop.go [production]
-      disposition: desktop
-      loc: 248
-    - id: internal/runtime/desktop_test.go [test]
-      disposition: desktop
-      loc: 582
     - id: internal/runtime/email_appagent_tools_test.go [test]
       disposition: tools
       loc: 618
@@ -175,7 +163,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3669
+      loc: 3668
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -340,7 +328,7 @@ files:
       loc: 66
     - id: internal/runtime/tools_vmctl.go [production]
       disposition: tools
-      loc: 2522
+      loc: 2506
     - id: internal/runtime/tools_wire_processor.go [production]
       disposition: wire
       loc: 98
@@ -376,7 +364,7 @@ files:
       loc: 608
     - id: internal/runtime/value_helpers.go [production]
       disposition: core
-      loc: 96
+      loc: 112
     - id: internal/runtime/wire_metadata.go [production]
       disposition: wire
       loc: 41
@@ -626,9 +614,7 @@ exports:
         - internal/runtime/api_candidate_package_intake.go
         - internal/runtime/api_texture_prompt_eval.go
         - internal/runtime/api_trajectory.go
-        - internal/runtime/browser.go
         - internal/runtime/content.go
-        - internal/runtime/desktop.go
         - internal/runtime/live_ws.go
         - internal/runtime/media_state.go
         - internal/runtime/podcast.go
@@ -685,30 +671,6 @@ exports:
     - id: internal/runtime/api_test.go:func:TestAuthenticateUserMissing
       disposition: api
     - id: internal/runtime/api_test.go:func:TestAuthenticateUserPresent
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserCapabilitiesDetectConfiguredObscuraBinary
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserCapabilitiesReportOptInCDPScreenshotSubstrate
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserCapabilitiesRequireAuthAndReportUnavailable
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionCloseIsOwnerScopedIdempotentAndPreventsNavigation
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionNavigateFailsClosedWhenBackendUnavailable
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionNavigateFailsWhenTextSnapshotFails
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionNavigateKeepsTextWhenOptionalSnapshotDumpsFail
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionNavigateUsesDeclaredMarkdownAlternateFromCanonicalShell
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionNavigateUsesDeclaredMarkdownAlternateWhenHTMLFallbackLowContent
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionNavigateUsesHTMLFallbackWhenTextSnapshotEmpty
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionRejectsDirectWorldBinding
-      disposition: api
-    - id: internal/runtime/api_test.go:func:TestBrowserSessionsNavigateThroughOwnerScopedBackendSnapshot
       disposition: api
     - id: internal/runtime/api_test.go:func:TestHandleHealthDegraded
       disposition: api
@@ -806,40 +768,6 @@ exports:
       disposition: promotion
     - id: internal/runtime/app_promotion_test.go:func:TestPrivateAppChangePackageIsNotVisibleAcrossOwners
       disposition: promotion
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserCapabilities
-      disposition: browser
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionClose
-      disposition: browser
-      production_callers:
-        - internal/runtime/browser.go
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionControl
-      disposition: browser
-      production_callers:
-        - internal/runtime/browser.go
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionNavigate
-      disposition: browser
-      production_callers:
-        - internal/runtime/browser.go
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionRouter
-      disposition: browser
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/browser.go:method(*APIHandler):HandleBrowserSessionsRoot
-      disposition: browser
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/browser.go:method(*Runtime):BrowserCapabilities
-      disposition: browser
-      production_callers:
-        - internal/runtime/browser.go
-    - id: internal/runtime/browser_live_test.go:func:TestCaptureObscuraCDPScreenshotLive
-      disposition: browser
-    - id: internal/runtime/browser_live_test.go:func:TestRuntimeControlsObscuraCDPSessionLive
-      disposition: browser
-    - id: internal/runtime/browser_live_test.go:func:TestRuntimeReusesObscuraCDPSessionLive
-      disposition: browser
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionBoundaryRouteBindsApprovedIntakeWithoutPromotionSideEffects
       disposition: candidate_package
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionBoundaryRouteRejectsUnsafeTransitions
@@ -1029,40 +957,6 @@ exports:
       disposition: content
     - id: internal/runtime/delegate_worker_update_fallback_test.go:func:TestDelegateWorkerCheckpointUpdatePreservesTypedAppChangePackages
       disposition: core
-    - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopState
-      disposition: desktop
-      production_callers:
-        - internal/apihandler/routes.go
-    - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopStateGet
-      disposition: desktop
-      production_callers:
-        - internal/runtime/desktop.go
-    - id: internal/runtime/desktop.go:method(*APIHandler):HandleDesktopStateSave
-      disposition: desktop
-      production_callers:
-        - internal/runtime/desktop.go
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateActiveWindowFollowsTopVisibleZOrder
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateGetEmpty
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateGetUnauthenticated
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStatePassiveSessionCannotReplaceSharedState
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateRouterMethodDispatch
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateSaveAndGet
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateSaveAndGetByDesktopSelector
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateSaveSanitizesInvalidWindowRecords
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateSaveUnauthenticated
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateSessionsConvergeOnLatestDriverPlacement
-      disposition: desktop
-    - id: internal/runtime/desktop_test.go:func:TestDesktopStateUserIsolation
-      disposition: desktop
     - id: internal/runtime/email_appagent_tools_test.go:func:TestCleanEmailDraftBodyTextRemovesToolMarkupResidue
       disposition: tools
     - id: internal/runtime/email_appagent_tools_test.go:func:TestCleanEmailDraftBodyTextStopsAtArtifactTail
@@ -1367,6 +1261,10 @@ exports:
       disposition: lifecycle
       production_callers:
         - internal/actorruntime/adapter.go
+    - id: internal/runtime/runtime.go:func:WithDesktopStateOwner
+      disposition: lifecycle
+      production_callers:
+        - internal/sandbox/run.go
     - id: internal/runtime/runtime.go:func:WithTraceStore
       disposition: lifecycle
       production_callers:
@@ -1468,9 +1366,7 @@ exports:
       production_callers:
         - internal/actorruntime/handler.go
         - internal/runtime/api.go
-        - internal/runtime/browser.go
         - internal/runtime/content.go
-        - internal/runtime/desktop.go
         - internal/runtime/live_ws.go
         - internal/runtime/media_state.go
         - internal/runtime/podcast.go
@@ -1489,7 +1385,6 @@ exports:
         - internal/actorruntime/handler.go
         - internal/runtime/api.go
         - internal/runtime/api_app_promotion.go
-        - internal/runtime/browser.go
         - internal/runtime/channel_store.go
         - internal/runtime/content.go
         - internal/runtime/delegate_worker_update_fallback.go
@@ -1532,6 +1427,7 @@ exports:
       production_callers:
         - internal/actorruntime/adapter.go
         - internal/runtime/runtime.go
+        - internal/sandbox/run.go
     - id: internal/runtime/runtime_persistence_test.go:func:TestPersistSubmittedRunUsesRuntimeStoreInterfaceWithoutDolt
       disposition: lifecycle
     - id: internal/runtime/runtime_persistence_test.go:method(*fakeRunSubmissionStore):AppendEvent
@@ -2778,9 +2674,9 @@ wrappers:
     - id: internal/apihandler/routes.go:field:runtime.APIHandler
       disposition: delete
 compatibility_markers:
-    - id: internal/runtime/runtime.go:1977:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1976:This is the legacy execution path used when no tool registry is configured
       disposition: delete
-    - id: internal/runtime/runtime.go:99:New creates a new Runtime with the given config, store, event bus, and
+    - id: internal/runtime/runtime.go:97:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
     - id: internal/runtime/tools_capsule.go:297:This preserves backward compatibility with existing callers.
       disposition: delete
@@ -2825,32 +2721,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/api_trajectory.go:HandleTrajectoriesRoot:internal/store.method:Store.ListTrajectoriesByOwner
       disposition: read
-    - id: internal/runtime/browser.go:HandleBrowserSessionClose:internal/store.method:Store.GetBrowserSession
-      disposition: read
-    - id: internal/runtime/browser.go:HandleBrowserSessionClose:internal/store.method:Store.UpdateBrowserSession
-      disposition: lifecycle
-    - id: internal/runtime/browser.go:HandleBrowserSessionControl:internal/store.method:Store.GetBrowserSession
-      disposition: read
-    - id: internal/runtime/browser.go:HandleBrowserSessionControl:internal/store.method:Store.UpdateBrowserSession
-      disposition: lifecycle
-    - id: internal/runtime/browser.go:HandleBrowserSessionControl:internal/store.method:Store.UpdateBrowserSession#2
-      disposition: lifecycle
-    - id: internal/runtime/browser.go:HandleBrowserSessionNavigate:internal/store.method:Store.GetBrowserSession
-      disposition: read
-    - id: internal/runtime/browser.go:HandleBrowserSessionNavigate:internal/store.method:Store.UpdateBrowserSession
-      disposition: lifecycle
-    - id: internal/runtime/browser.go:HandleBrowserSessionNavigate:internal/store.method:Store.UpdateBrowserSession#2
-      disposition: lifecycle
-    - id: internal/runtime/browser.go:HandleBrowserSessionNavigate:internal/store.method:Store.UpdateBrowserSession#3
-      disposition: lifecycle
-    - id: internal/runtime/browser.go:HandleBrowserSessionRouter:internal/store.method:Store.GetBrowserSession
-      disposition: read
-    - id: internal/runtime/browser.go:HandleBrowserSessionsRoot:internal/store.method:Store.CreateBrowserSession
-      disposition: lifecycle
-    - id: internal/runtime/browser.go:HandleBrowserSessionsRoot:internal/store.method:Store.ListBrowserSessions
-      disposition: read
-    - id: internal/runtime/browser.go:emitBrowserSessionEvent:internal/store.method:Store.AppendEvent
-      disposition: lifecycle
     - id: internal/runtime/channel_store.go:ChannelCast:internal/store.method:Store.AppendChannelMessage
       disposition: lifecycle
     - id: internal/runtime/channel_store.go:ChannelCast:internal/store.method:Store.GetRun
@@ -2885,10 +2755,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/delegate_worker_update_fallback.go:synthesizeSuperFailureUpdate:internal/store.method:Store.ListEvents
       disposition: read
-    - id: internal/runtime/desktop.go:HandleDesktopStateGet:internal/store.method:Store.GetDesktopStateForSession
-      disposition: read
-    - id: internal/runtime/desktop.go:HandleDesktopStateSave:internal/store.method:Store.SaveDesktopStateForSession
-      disposition: lifecycle
     - id: internal/runtime/live_ws.go:HandleLiveWS:internal/store.method:Store.ListEventsByOwnerAfter
       disposition: read
     - id: internal/runtime/media_state.go:HandleMediaProgressGet:internal/store.method:Store.GetMediaProgress
@@ -3492,10 +3358,6 @@ store_calls:
     - id: internal/runtime/tools_vmctl.go:listWorkerToolEventsForCurrentScope:internal/store.method:Store.ListEventsByTrajectory
       disposition: read
     - id: internal/runtime/tools_vmctl.go:mirrorWorkerSubmitUpdates:internal/store.method:Store.DispatchWorkerUpdate
-      disposition: lifecycle
-    - id: internal/runtime/tools_vmctl.go:newForkDesktopTool:internal/store.method:Store.GetDesktopStateForDesktop
-      disposition: read
-    - id: internal/runtime/tools_vmctl.go:newForkDesktopTool:internal/store.method:Store.SaveDesktopStateForDesktop
       disposition: lifecycle
     - id: internal/runtime/tools_vmctl.go:preloadWorkerAppChangePackages:internal/store.method:Store.GetAppChangePackageForViewer
       disposition: read
@@ -5933,11 +5795,15 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive production-used research boundary. internal/runtime/search_gateway.go is already classified for deletion, and its only production constructor caller … [sha256:46acc30961dbacb964c02bb43a927ebdce54c6be5e07602cb6e6269b2ac45eb7]'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "candidate-package-map: internal/runtime/candidate_package_intake.go methods and helpers; internal/runtime/api_candidate_package_intake.go route callers; internal/runtime/tools_vmctl.go worker mirro… [sha256:e420f453187df4b0190b86476c023517563e67b4bdc722179e62df6116210739]'
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "browser-map: internal/runtime/browser.go; internal/store/browser.go; internal/types/browser.go; Runtime browserOpMu/browserOps/browserCDPMu/browserCDP; Runtime Start/Stop closeAllBrowserCDPSessions… [sha256:7427d24aed2ccf25f845e0c09c4f564147295ca7ad52c22ad06961df4d0a30ad]'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "desktop-map: internal/runtime/desktop.go; internal/runtime/desktop_test.go; internal/store/desktop_live.go; internal/types/desktop.go; internal/apihandler/routes.go desktop route"'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "internal/runtime, a compatibility facade, or dual ownership remains"
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:slice: "extract candidate-package intake ownership boundary from internal/runtime"'
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:discovered: "internal/runtime/browser.go owns 1,508 lines of browser HTTP, session persistence, event publication, capability detection, per-session locks, bounded fill/click control, snapshot extract… [sha256:6c2176e685a841cb95a0f257e875f8604607c6ffd60d2e2538b9834d3cb5f872]'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:slice: "extract browser and desktop ownership from internal/runtime"'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block

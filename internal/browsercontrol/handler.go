@@ -1,4 +1,4 @@
-package runtime
+package browsercontrol
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,10 +22,76 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/sourcefetch"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"golang.org/x/net/html"
 )
+
+type Handler struct {
+	cfg   provideriface.Config
+	store *store.Store
+	bus   *events.EventBus
+
+	browserOpMu  sync.Mutex
+	browserOps   map[string]*sync.Mutex
+	browserCDPMu sync.Mutex
+	browserCDP   map[string]*browserCDPSession
+}
+
+func NewHandler(cfg provideriface.Config, s *store.Store, bus *events.EventBus) *Handler {
+	return &Handler{
+		cfg:        cfg,
+		store:      s,
+		bus:        bus,
+		browserOps: make(map[string]*sync.Mutex),
+		browserCDP: make(map[string]*browserCDPSession),
+	}
+}
+
+func (h *Handler) Close() {
+	if h == nil {
+		return
+	}
+	h.closeAllBrowserCDPSessions()
+}
+
+type apiError struct {
+	Error string `json:"error"`
+}
+
+func authenticateUser(r *http.Request) (string, error) {
+	user := r.Header.Get("X-Authenticated-User")
+	if user == "" {
+		return "", fmt.Errorf("missing authenticated user identity")
+	}
+	return user, nil
+}
+
+func writeAPIJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("runtime api: json encode error: %v", err)
+	}
+}
+
+func normalizeHTTPURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("url is required")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("url must be an absolute http or https URL")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", fmt.Errorf("url scheme must be http or https")
+	}
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
 
 type browserCapabilitiesResponse struct {
 	Provider              string          `json:"provider"`
@@ -77,6 +144,9 @@ type browserSnapshotResult struct {
 	BackendSessionID string
 }
 
+const maxImportedContentBytes = 2 * 1024 * 1024
+const maxStoredExtractedText = 300 * 1024
+
 const maxBrowserSnapshotLinks = 100
 const maxBrowserScreenshotBase64 = 2 * 1024 * 1024
 const maxBrowserControlText = 500
@@ -85,7 +155,7 @@ const browserTextSnapshotTimeout = 30 * time.Second
 const browserOptionalSnapshotTimeout = 5 * time.Second
 const browserDeclaredAlternateTimeout = 15 * time.Second
 
-func (h *APIHandler) HandleBrowserCapabilities(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleBrowserCapabilities(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -94,10 +164,10 @@ func (h *APIHandler) HandleBrowserCapabilities(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	writeAPIJSON(w, http.StatusOK, h.rt.BrowserCapabilities())
+	writeAPIJSON(w, http.StatusOK, h.BrowserCapabilities())
 }
 
-func (h *APIHandler) HandleBrowserSessionsRoot(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleBrowserSessionsRoot(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -105,7 +175,7 @@ func (h *APIHandler) HandleBrowserSessionsRoot(w http.ResponseWriter, r *http.Re
 	}
 	switch r.Method {
 	case http.MethodGet:
-		sessions, err := h.rt.Store().ListBrowserSessions(r.Context(), ownerID, 50)
+		sessions, err := h.store.ListBrowserSessions(r.Context(), ownerID, 50)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list browser sessions"})
 			return
@@ -129,7 +199,7 @@ func (h *APIHandler) HandleBrowserSessionsRoot(w http.ResponseWriter, r *http.Re
 				return
 			}
 		}
-		caps := h.rt.BrowserCapabilities()
+		caps := h.BrowserCapabilities()
 		state := types.BrowserSessionIdle
 		sessionErr := ""
 		if !caps.Available {
@@ -146,12 +216,12 @@ func (h *APIHandler) HandleBrowserSessionsRoot(w http.ResponseWriter, r *http.Re
 			CurrentURL:     currentURL,
 			Error:          sessionErr,
 		}
-		rec, err := h.rt.Store().CreateBrowserSession(r.Context(), rec)
+		rec, err := h.store.CreateBrowserSession(r.Context(), rec)
 		if err != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create browser session"})
 			return
 		}
-		h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserSessionCreated, "session", map[string]any{
+		h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserSessionCreated, "session", map[string]any{
 			"configured": caps.Configured,
 			"available":  caps.Available,
 			"status":     caps.Status,
@@ -162,7 +232,7 @@ func (h *APIHandler) HandleBrowserSessionsRoot(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (h *APIHandler) HandleBrowserSessionRouter(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleBrowserSessionRouter(w http.ResponseWriter, r *http.Request) {
 	ownerID, err := authenticateUser(r)
 	if err != nil {
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
@@ -185,7 +255,7 @@ func (h *APIHandler) HandleBrowserSessionRouter(w http.ResponseWriter, r *http.R
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 			return
 		}
-		rec, err := h.rt.Store().GetBrowserSession(r.Context(), ownerID, sessionID)
+		rec, err := h.store.GetBrowserSession(r.Context(), ownerID, sessionID)
 		if err != nil {
 			if err == store.ErrNotFound {
 				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "browser session not found"})
@@ -212,7 +282,7 @@ func (h *APIHandler) HandleBrowserSessionRouter(w http.ResponseWriter, r *http.R
 	writeAPIJSON(w, http.StatusNotFound, apiError{Error: "browser session route not found"})
 }
 
-func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http.Request, ownerID, sessionID string) {
+func (h *Handler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http.Request, ownerID, sessionID string) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -229,7 +299,7 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return
 	}
-	rec, err := h.rt.Store().GetBrowserSession(r.Context(), ownerID, sessionID)
+	rec, err := h.store.GetBrowserSession(r.Context(), ownerID, sessionID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "browser session not found"})
@@ -243,10 +313,10 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusConflict, rec)
 		return
 	}
-	unlock := h.rt.lockBrowserOperation(sessionID)
+	unlock := h.lockBrowserOperation(sessionID)
 	defer unlock()
 
-	caps := h.rt.BrowserCapabilities()
+	caps := h.BrowserCapabilities()
 	rec.Provider = caps.Provider
 	rec.Mode = caps.Mode
 	rec.ExecutionScope = browserExecutionScope(caps)
@@ -255,11 +325,11 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 		rec.State = types.BrowserSessionUnavailable
 		rec.Error = caps.Status
 		rec.UpdatedAt = time.Now().UTC()
-		updated, updateErr := h.rt.Store().UpdateBrowserSession(r.Context(), rec)
+		updated, updateErr := h.store.UpdateBrowserSession(r.Context(), rec)
 		if updateErr == nil {
 			rec = updated
 		}
-		h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserNavigationFailed, "navigate", map[string]any{
+		h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserNavigationFailed, "navigate", map[string]any{
 			"url":    targetURL,
 			"error":  rec.Error,
 			"status": caps.Status,
@@ -267,7 +337,7 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusServiceUnavailable, rec)
 		return
 	}
-	snapshot, err := h.rt.fetchBrowserSnapshots(r.Context(), rec.SessionID, targetURL)
+	snapshot, err := h.fetchBrowserSnapshots(r.Context(), rec.SessionID, targetURL)
 	if err != nil {
 		rec.State = types.BrowserSessionError
 		rec.Error = err.Error()
@@ -276,11 +346,11 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 		rec.Links = nil
 		rec.ScreenshotPNG = ""
 		rec.UpdatedAt = time.Now().UTC()
-		updated, updateErr := h.rt.Store().UpdateBrowserSession(r.Context(), rec)
+		updated, updateErr := h.store.UpdateBrowserSession(r.Context(), rec)
 		if updateErr == nil {
 			rec = updated
 		}
-		h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserNavigationFailed, "navigate", map[string]any{
+		h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserNavigationFailed, "navigate", map[string]any{
 			"url":   targetURL,
 			"error": rec.Error,
 		})
@@ -298,12 +368,12 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 	rec.BackendSessionID = snapshot.BackendSessionID
 	rec.Error = ""
 	rec.UpdatedAt = time.Now().UTC()
-	rec, err = h.rt.Store().UpdateBrowserSession(r.Context(), rec)
+	rec, err = h.store.UpdateBrowserSession(r.Context(), rec)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update browser session"})
 		return
 	}
-	h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserNavigationCompleted, "snapshot", map[string]any{
+	h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserNavigationCompleted, "snapshot", map[string]any{
 		"url":                    targetURL,
 		"title":                  rec.Title,
 		"text_snapshot_bytes":    len(rec.TextSnapshot),
@@ -319,7 +389,7 @@ func (h *APIHandler) HandleBrowserSessionNavigate(w http.ResponseWriter, r *http
 	writeAPIJSON(w, http.StatusOK, rec)
 }
 
-func (h *APIHandler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.Request, ownerID, sessionID string) {
+func (h *Handler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.Request, ownerID, sessionID string) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -341,7 +411,7 @@ func (h *APIHandler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "browser control selector is required"})
 		return
 	}
-	rec, err := h.rt.Store().GetBrowserSession(r.Context(), ownerID, sessionID)
+	rec, err := h.store.GetBrowserSession(r.Context(), ownerID, sessionID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "browser session not found"})
@@ -355,9 +425,9 @@ func (h *APIHandler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.
 		writeAPIJSON(w, http.StatusConflict, rec)
 		return
 	}
-	caps := h.rt.BrowserCapabilities()
+	caps := h.BrowserCapabilities()
 	if !caps.Supports["bounded_input"] {
-		h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlFailed, "control", map[string]any{
+		h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlFailed, "control", map[string]any{
 			"action":   req.Action,
 			"selector": req.Selector,
 			"error":    "bounded input/control is unavailable",
@@ -366,7 +436,7 @@ func (h *APIHandler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.
 		return
 	}
 	if rec.BackendSessionID == "" {
-		h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlFailed, "control", map[string]any{
+		h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlFailed, "control", map[string]any{
 			"action":   req.Action,
 			"selector": req.Selector,
 			"error":    "backend CDP session is not active",
@@ -374,19 +444,19 @@ func (h *APIHandler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "backend CDP session is not active; navigate first"})
 		return
 	}
-	unlock := h.rt.lockBrowserOperation(sessionID)
+	unlock := h.lockBrowserOperation(sessionID)
 	defer unlock()
 
-	control, screenshotPNG, backendSessionID, err := h.rt.controlBrowserCDPSession(r.Context(), sessionID, req.Action, req.Selector, req.Value)
+	control, screenshotPNG, backendSessionID, err := h.controlBrowserCDPSession(r.Context(), sessionID, req.Action, req.Selector, req.Value)
 	if err != nil {
 		rec.State = types.BrowserSessionError
 		rec.Error = err.Error()
 		rec.UpdatedAt = time.Now().UTC()
-		updated, updateErr := h.rt.Store().UpdateBrowserSession(r.Context(), rec)
+		updated, updateErr := h.store.UpdateBrowserSession(r.Context(), rec)
 		if updateErr == nil {
 			rec = updated
 		}
-		h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlFailed, "control", map[string]any{
+		h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlFailed, "control", map[string]any{
 			"action":   req.Action,
 			"selector": req.Selector,
 			"error":    rec.Error,
@@ -400,7 +470,7 @@ func (h *APIHandler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.
 		return
 	}
 	if !control.OK {
-		h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlFailed, "control", map[string]any{
+		h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlFailed, "control", map[string]any{
 			"action":   req.Action,
 			"selector": req.Selector,
 			"error":    control.Error,
@@ -413,12 +483,12 @@ func (h *APIHandler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.
 	rec.BackendSessionID = backendSessionID
 	rec.Error = ""
 	rec.UpdatedAt = time.Now().UTC()
-	rec, err = h.rt.Store().UpdateBrowserSession(r.Context(), rec)
+	rec, err = h.store.UpdateBrowserSession(r.Context(), rec)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to update browser session"})
 		return
 	}
-	h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlCompleted, "control", map[string]any{
+	h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserControlCompleted, "control", map[string]any{
 		"action":               control.Action,
 		"selector":             control.Selector,
 		"value":                control.Value,
@@ -432,12 +502,12 @@ func (h *APIHandler) HandleBrowserSessionControl(w http.ResponseWriter, r *http.
 	writeAPIJSON(w, http.StatusOK, browserControlResponse{Session: rec, Control: control})
 }
 
-func (h *APIHandler) HandleBrowserSessionClose(w http.ResponseWriter, r *http.Request, ownerID, sessionID string) {
+func (h *Handler) HandleBrowserSessionClose(w http.ResponseWriter, r *http.Request, ownerID, sessionID string) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	rec, err := h.rt.Store().GetBrowserSession(r.Context(), ownerID, sessionID)
+	rec, err := h.store.GetBrowserSession(r.Context(), ownerID, sessionID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "browser session not found"})
@@ -446,21 +516,21 @@ func (h *APIHandler) HandleBrowserSessionClose(w http.ResponseWriter, r *http.Re
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load browser session"})
 		return
 	}
-	unlock := h.rt.lockBrowserOperation(sessionID)
+	unlock := h.lockBrowserOperation(sessionID)
 	defer unlock()
 
 	wasClosed := rec.State == types.BrowserSessionClosed
-	cdpClosed := h.rt.closeBrowserCDPSession(sessionID)
+	cdpClosed := h.closeBrowserCDPSession(sessionID)
 	rec.State = types.BrowserSessionClosed
 	rec.Error = ""
 	rec.UpdatedAt = time.Now().UTC()
-	rec, err = h.rt.Store().UpdateBrowserSession(r.Context(), rec)
+	rec, err = h.store.UpdateBrowserSession(r.Context(), rec)
 	if err != nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to close browser session"})
 		return
 	}
 	if !wasClosed {
-		h.rt.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserSessionClosed, "session", map[string]any{
+		h.emitBrowserSessionEvent(r.Context(), rec, types.EventBrowserSessionClosed, "session", map[string]any{
 			"closed":             true,
 			"cdp_session_closed": cdpClosed,
 		})
@@ -468,7 +538,7 @@ func (h *APIHandler) HandleBrowserSessionClose(w http.ResponseWriter, r *http.Re
 	writeAPIJSON(w, http.StatusOK, rec)
 }
 
-func (rt *Runtime) emitBrowserSessionEvent(ctx context.Context, rec types.BrowserSessionRecord, kind types.EventKind, phase string, extra map[string]any) {
+func (h *Handler) emitBrowserSessionEvent(ctx context.Context, rec types.BrowserSessionRecord, kind types.EventKind, phase string, extra map[string]any) {
 	payload := map[string]any{
 		"session_id":         rec.SessionID,
 		"provider":           rec.Provider,
@@ -500,19 +570,19 @@ func (rt *Runtime) emitBrowserSessionEvent(ctx context.Context, rec types.Browse
 		Phase:        phase,
 		Payload:      raw,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := h.store.AppendEvent(ctx, evRec); err != nil {
 		return
 	}
-	rt.bus.Publish(events.RuntimeEvent{
+	h.bus.Publish(events.RuntimeEvent{
 		Record: *evRec,
 		Actor:  events.ActorHost,
 		Cause:  events.CauseHostAction,
 	})
 }
 
-func (rt *Runtime) BrowserCapabilities() browserCapabilitiesResponse {
+func (h *Handler) BrowserCapabilities() browserCapabilitiesResponse {
 	provider := "obscura"
-	path := strings.TrimSpace(rt.cfg.ObscuraPath)
+	path := strings.TrimSpace(h.cfg.ObscuraPath)
 	resp := browserCapabilitiesResponse{
 		Provider:              provider,
 		Mode:                  "legacy_iframe",
@@ -538,7 +608,7 @@ func (rt *Runtime) BrowserCapabilities() browserCapabilitiesResponse {
 	resp.Available = true
 	resp.Status = "ready"
 	resp.Supports = browserSupports(true)
-	if rt.cfg.ObscuraCDPScreenshots {
+	if h.cfg.ObscuraCDPScreenshots {
 		resp.Substrate = "obscura_cli_fetch+obscura_cdp_screenshot"
 		resp.Supports["screenshot"] = true
 		resp.Supports["cdp_screenshot"] = true
@@ -549,21 +619,21 @@ func (rt *Runtime) BrowserCapabilities() browserCapabilitiesResponse {
 	return resp
 }
 
-func (rt *Runtime) lockBrowserOperation(browserSessionID string) func() {
+func (h *Handler) lockBrowserOperation(browserSessionID string) func() {
 	browserSessionID = strings.TrimSpace(browserSessionID)
 	if browserSessionID == "" {
 		return func() {}
 	}
-	rt.browserOpMu.Lock()
-	if rt.browserOps == nil {
-		rt.browserOps = make(map[string]*sync.Mutex)
+	h.browserOpMu.Lock()
+	if h.browserOps == nil {
+		h.browserOps = make(map[string]*sync.Mutex)
 	}
-	lock := rt.browserOps[browserSessionID]
+	lock := h.browserOps[browserSessionID]
 	if lock == nil {
 		lock = &sync.Mutex{}
-		rt.browserOps[browserSessionID] = lock
+		h.browserOps[browserSessionID] = lock
 	}
-	rt.browserOpMu.Unlock()
+	h.browserOpMu.Unlock()
 
 	lock.Lock()
 	return lock.Unlock
@@ -613,8 +683,8 @@ func resolveExecutable(path string) (string, error) {
 	return exec.LookPath(path)
 }
 
-func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, targetURL string) (browserSnapshotResult, error) {
-	resolved, err := resolveExecutable(strings.TrimSpace(rt.cfg.ObscuraPath))
+func (h *Handler) fetchBrowserSnapshots(ctx context.Context, browserSessionID, targetURL string) (browserSnapshotResult, error) {
+	resolved, err := resolveExecutable(strings.TrimSpace(h.cfg.ObscuraPath))
 	if err != nil {
 		return browserSnapshotResult{}, fmt.Errorf("backend browser unavailable: %w", err)
 	}
@@ -637,7 +707,7 @@ func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, 
 	}
 	html = strings.TrimSpace(html)
 	if text == "" {
-		title, readable := extractReadableHTML([]byte(html))
+		title, readable := sourcefetch.ExtractReadableHTML([]byte(html))
 		text = browserHTMLFallbackText(title, readable)
 		if browserReadableSnapshotLowContent(text) {
 			alternateText, alternateURL, alternateErr := fetchBrowserDeclaredMarkdownAlternate(ctx, targetURL, html)
@@ -664,8 +734,8 @@ func (rt *Runtime) fetchBrowserSnapshots(ctx context.Context, browserSessionID, 
 	}
 	screenshotPNG := ""
 	backendSessionID := ""
-	if rt.cfg.ObscuraCDPScreenshots {
-		screenshotPNG, backendSessionID, err = rt.captureBrowserCDPScreenshot(ctx, browserSessionID, resolved, targetURL)
+	if h.cfg.ObscuraCDPScreenshots {
+		screenshotPNG, backendSessionID, err = h.captureBrowserCDPScreenshot(ctx, browserSessionID, resolved, targetURL)
 		if err != nil {
 			result.Warnings = append(result.Warnings, err.Error())
 		}
@@ -698,6 +768,62 @@ func browserHTMLFallbackText(title, readable string) string {
 	return title + "\n\n" + readable
 }
 
+func fetchBrowserDeclaredAlternateText(ctx context.Context, client *http.Client, targetURL string) (struct{ Text string }, error) {
+	result := struct{ Text string }{}
+	if err := sourcefetch.ValidateURL(targetURL); err != nil {
+		return result, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return result, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; ChoirBot/0.1; +https://choir.news)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5")
+	resp, err := client.Do(req)
+	if err != nil {
+		return result, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxImportedContentBytes+1))
+	if err != nil {
+		return result, fmt.Errorf("read URL response: %w", err)
+	}
+	if len(raw) > maxImportedContentBytes {
+		raw = raw[:maxImportedContentBytes]
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return result, fmt.Errorf("browser_declared_alternate_fetch returned status %s", resp.Status)
+	}
+	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
+	isHTML := mediaType == "text/html" || mediaType == "application/xhtml+xml"
+	if mediaType == "" || mediaType == "application/octet-stream" {
+		if parsed, parseErr := url.Parse(targetURL); parseErr == nil {
+			ext := strings.ToLower(filepath.Ext(parsed.Path))
+			isHTML = ext == ".html" || ext == ".htm"
+		}
+	}
+	if isHTML {
+		_, result.Text = sourcefetch.ExtractReadableHTML(raw)
+	} else {
+		result.Text = strings.TrimSpace(string(raw))
+	}
+	if len(result.Text) > maxStoredExtractedText {
+		result.Text = result.Text[:maxStoredExtractedText]
+	}
+	return result, nil
+}
+
+func traceExcerpt(text string, max int) string {
+	normalized := strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if normalized == "" {
+		return ""
+	}
+	if len(normalized) <= max {
+		return normalized
+	}
+	return normalized[:max-1] + "…"
+}
+
 func browserReadableSnapshotLowContent(text string) bool {
 	return len(strings.TrimSpace(text)) < browserMinReadableSnapshotChars
 }
@@ -728,7 +854,7 @@ func fetchBrowserDeclaredMarkdownAlternate(ctx context.Context, targetURL, htmlS
 			return "", followURL, err
 		}
 	}
-	content, err := fetchAndExtractURL(ctx, client, alternateURL, "browser_declared_alternate_fetch", "browser_declared_alternate_html_extract", "browser_declared_alternate_text_extract")
+	content, err := fetchBrowserDeclaredAlternateText(ctx, client, alternateURL)
 	if err != nil {
 		return "", alternateURL, fmt.Errorf("backend browser declared markdown alternate fetch failed: %w", err)
 	}
@@ -1211,36 +1337,36 @@ func (session *browserCDPSession) id() string {
 	return session.sessionID
 }
 
-func (rt *Runtime) captureBrowserCDPScreenshot(ctx context.Context, browserSessionID, resolved, targetURL string) (string, string, error) {
+func (h *Handler) captureBrowserCDPScreenshot(ctx context.Context, browserSessionID, resolved, targetURL string) (string, string, error) {
 	browserSessionID = strings.TrimSpace(browserSessionID)
 	if browserSessionID == "" {
 		screenshot, err := captureObscuraCDPScreenshot(ctx, resolved, targetURL)
 		return screenshot, "", err
 	}
-	session, err := rt.ensureBrowserCDPSession(ctx, browserSessionID, resolved)
+	session, err := h.ensureBrowserCDPSession(ctx, browserSessionID, resolved)
 	if err != nil {
 		return "", "", err
 	}
 	screenshot, err := session.navigateAndScreenshot(ctx, targetURL)
 	if err != nil {
-		rt.closeBrowserCDPSession(browserSessionID)
+		h.closeBrowserCDPSession(browserSessionID)
 		return "", "", err
 	}
 	return screenshot, session.id(), nil
 }
 
-func (rt *Runtime) controlBrowserCDPSession(ctx context.Context, browserSessionID, action, selector, value string) (browserControlResult, string, string, error) {
+func (h *Handler) controlBrowserCDPSession(ctx context.Context, browserSessionID, action, selector, value string) (browserControlResult, string, string, error) {
 	browserSessionID = strings.TrimSpace(browserSessionID)
 	if browserSessionID == "" {
 		return browserControlResult{}, "", "", fmt.Errorf("browser session id is required")
 	}
-	session := rt.getBrowserCDPSession(browserSessionID)
+	session := h.getBrowserCDPSession(browserSessionID)
 	if session == nil {
 		return browserControlResult{}, "", "", fmt.Errorf("backend CDP session is not active")
 	}
 	control, screenshot, err := session.controlAndScreenshot(ctx, action, selector, value)
 	if err != nil {
-		rt.closeBrowserCDPSession(browserSessionID)
+		h.closeBrowserCDPSession(browserSessionID)
 		return browserControlResult{}, "", "", err
 	}
 	if !control.OK {
@@ -1249,45 +1375,45 @@ func (rt *Runtime) controlBrowserCDPSession(ctx context.Context, browserSessionI
 	return control, screenshot, session.id(), nil
 }
 
-func (rt *Runtime) getBrowserCDPSession(browserSessionID string) *browserCDPSession {
-	rt.browserCDPMu.Lock()
-	defer rt.browserCDPMu.Unlock()
-	return rt.browserCDP[strings.TrimSpace(browserSessionID)]
+func (h *Handler) getBrowserCDPSession(browserSessionID string) *browserCDPSession {
+	h.browserCDPMu.Lock()
+	defer h.browserCDPMu.Unlock()
+	return h.browserCDP[strings.TrimSpace(browserSessionID)]
 }
 
-func (rt *Runtime) ensureBrowserCDPSession(ctx context.Context, browserSessionID, resolved string) (*browserCDPSession, error) {
-	rt.browserCDPMu.Lock()
-	defer rt.browserCDPMu.Unlock()
-	if rt.browserCDP == nil {
-		rt.browserCDP = make(map[string]*browserCDPSession)
+func (h *Handler) ensureBrowserCDPSession(ctx context.Context, browserSessionID, resolved string) (*browserCDPSession, error) {
+	h.browserCDPMu.Lock()
+	defer h.browserCDPMu.Unlock()
+	if h.browserCDP == nil {
+		h.browserCDP = make(map[string]*browserCDPSession)
 	}
-	if session := rt.browserCDP[browserSessionID]; session != nil {
+	if session := h.browserCDP[browserSessionID]; session != nil {
 		return session, nil
 	}
 	session, err := startObscuraCDPSession(ctx, resolved)
 	if err != nil {
 		return nil, err
 	}
-	rt.browserCDP[browserSessionID] = session
+	h.browserCDP[browserSessionID] = session
 	return session, nil
 }
 
-func (rt *Runtime) closeBrowserCDPSession(browserSessionID string) bool {
-	rt.browserCDPMu.Lock()
-	session := rt.browserCDP[strings.TrimSpace(browserSessionID)]
-	delete(rt.browserCDP, strings.TrimSpace(browserSessionID))
-	rt.browserCDPMu.Unlock()
+func (h *Handler) closeBrowserCDPSession(browserSessionID string) bool {
+	h.browserCDPMu.Lock()
+	session := h.browserCDP[strings.TrimSpace(browserSessionID)]
+	delete(h.browserCDP, strings.TrimSpace(browserSessionID))
+	h.browserCDPMu.Unlock()
 	return session.close()
 }
 
-func (rt *Runtime) closeAllBrowserCDPSessions() {
-	rt.browserCDPMu.Lock()
-	sessions := make([]*browserCDPSession, 0, len(rt.browserCDP))
-	for key, session := range rt.browserCDP {
+func (h *Handler) closeAllBrowserCDPSessions() {
+	h.browserCDPMu.Lock()
+	sessions := make([]*browserCDPSession, 0, len(h.browserCDP))
+	for key, session := range h.browserCDP {
 		sessions = append(sessions, session)
-		delete(rt.browserCDP, key)
+		delete(h.browserCDP, key)
 	}
-	rt.browserCDPMu.Unlock()
+	h.browserCDPMu.Unlock()
 	for _, session := range sessions {
 		session.close()
 	}

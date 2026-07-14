@@ -4,8 +4,24 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"net/http"
 	"strings"
+
+	"github.com/yusefmosiah/go-choir/internal/types"
 )
+
+func requestDesktopID(r *http.Request) string {
+	if r == nil {
+		return types.PrimaryDesktopID
+	}
+	if desktopID := strings.TrimSpace(r.URL.Query().Get("desktop_id")); desktopID != "" {
+		return desktopID
+	}
+	if desktopID := strings.TrimSpace(r.Header.Get("X-Choir-Desktop")); desktopID != "" {
+		return desktopID
+	}
+	return types.PrimaryDesktopID
+}
 
 func rawJSONOrFallback(raw json.RawMessage, fallback string) json.RawMessage {
 	if len(raw) == 0 || !json.Valid(raw) {

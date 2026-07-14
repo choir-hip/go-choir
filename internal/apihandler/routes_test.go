@@ -5,6 +5,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
+	"github.com/yusefmosiah/go-choir/internal/desktopstate"
+	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -13,7 +17,7 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 	t.Parallel()
 
 	srv := server.NewServer("apihandler-routes-test", "0")
-	RegisterRoutes(srv, runtime.NewAPIHandler(nil), NewHandler(nil), false)
+	registerRoutesForTest(srv, false)
 
 	for _, path := range []string{
 		"/health",
@@ -91,17 +95,28 @@ func TestRegisterRoutesGatesTestAPIs(t *testing.T) {
 		"/api/test/texture/worker-update",
 	} {
 		disabled := server.NewServer("apihandler-routes-test-disabled", "0")
-		RegisterRoutes(disabled, runtime.NewAPIHandler(nil), NewHandler(nil), false)
+		registerRoutesForTest(disabled, false)
 		if registeredRouteResponds(disabled, path) {
 			t.Fatalf("test route %q registered while disabled", path)
 		}
 
 		enabled := server.NewServer("apihandler-routes-test-enabled", "0")
-		RegisterRoutes(enabled, runtime.NewAPIHandler(nil), NewHandler(nil), true)
+		registerRoutesForTest(enabled, true)
 		if !registeredRouteResponds(enabled, path) {
 			t.Fatalf("test route %q not registered while enabled", path)
 		}
 	}
+}
+
+func registerRoutesForTest(srv *server.Server, enableTestAPIs bool) {
+	RegisterRoutes(
+		srv,
+		runtime.NewAPIHandler(nil),
+		NewHandler(nil),
+		browsercontrol.NewHandler(provideriface.Config{}, nil, events.NewEventBus()),
+		desktopstate.NewHandler(nil, events.NewEventBus()),
+		enableTestAPIs,
+	)
 }
 
 func registeredRouteResponds(srv *server.Server, path string) (registered bool) {

@@ -19,6 +19,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -1172,6 +1173,7 @@ func TestDelegationAllowlistsAndEvidenceTools(t *testing.T) {
 func TestSuperForkDesktopClonesStateAndPublishRequestsVM(t *testing.T) {
 	t.Parallel()
 	rt, s, cwd := testRuntimeWithTempCWD(t)
+	rt.desktopState = desktopstate.NewHandler(s, rt.bus)
 
 	reg := vmctl.NewOwnershipRegistry("http://sandbox.test")
 	sourceOwn, err := reg.ResolveOrAssignDesktop("user-alice", types.PrimaryDesktopID)

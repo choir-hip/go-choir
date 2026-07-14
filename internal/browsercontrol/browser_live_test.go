@@ -1,6 +1,6 @@
 //go:build integration
 
-package runtime
+package browsercontrol
 
 import (
 	"context"
@@ -46,7 +46,7 @@ func TestCaptureObscuraCDPScreenshotLive(t *testing.T) {
 	}
 }
 
-func TestRuntimeControlsObscuraCDPSessionLive(t *testing.T) {
+func TestHandlerControlsObscuraCDPSessionLive(t *testing.T) {
 	if os.Getenv("GO_CHOIR_RUN_OBSCURA_CDP") != "1" {
 		t.Skip("set GO_CHOIR_RUN_OBSCURA_CDP=1 to verify live Obscura CDP bounded control")
 	}
@@ -61,20 +61,21 @@ func TestRuntimeControlsObscuraCDPSessionLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve obscura: %v", err)
 	}
-	rt := New(provideriface.Config{PromptRoot: t.TempDir()}, nil, nil, nil)
+	handler := NewHandler(provideriface.Config{}, nil, nil)
+	defer handler.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	if _, _, err := rt.captureBrowserCDPScreenshot(ctx, "browser-control-live", resolved, "https://httpbin.org/forms/post"); err != nil {
+	if _, _, err := handler.captureBrowserCDPScreenshot(ctx, "browser-control-live", resolved, "https://httpbin.org/forms/post"); err != nil {
 		t.Fatalf("initial capture: %v", err)
 	}
-	fill, fillScreenshot, fillSessionID, err := rt.controlBrowserCDPSession(ctx, "browser-control-live", "fill", "input[name=custname]", "choir-control-ok")
+	fill, fillScreenshot, fillSessionID, err := handler.controlBrowserCDPSession(ctx, "browser-control-live", "fill", "input[name=custname]", "choir-control-ok")
 	if err != nil {
 		t.Fatalf("fill control: %v", err)
 	}
 	if !fill.OK || fill.Value != "choir-control-ok" {
 		t.Fatalf("fill result = %+v, want ok value", fill)
 	}
-	click, clickScreenshot, clickSessionID, err := rt.controlBrowserCDPSession(ctx, "browser-control-live", "click", "input[name=topping]", "")
+	click, clickScreenshot, clickSessionID, err := handler.controlBrowserCDPSession(ctx, "browser-control-live", "click", "input[name=topping]", "")
 	if err != nil {
 		t.Fatalf("click control: %v", err)
 	}
@@ -93,12 +94,12 @@ func TestRuntimeControlsObscuraCDPSessionLive(t *testing.T) {
 			t.Fatalf("%s screenshot bytes = %d, want > 1000", label, len(raw))
 		}
 	}
-	if !rt.closeBrowserCDPSession("browser-control-live") {
+	if !handler.closeBrowserCDPSession("browser-control-live") {
 		t.Fatal("closeBrowserCDPSession returned false, want true")
 	}
 }
 
-func TestRuntimeReusesObscuraCDPSessionLive(t *testing.T) {
+func TestHandlerReusesObscuraCDPSessionLive(t *testing.T) {
 	if os.Getenv("GO_CHOIR_RUN_OBSCURA_CDP") != "1" {
 		t.Skip("set GO_CHOIR_RUN_OBSCURA_CDP=1 to verify live Obscura CDP session reuse")
 	}
@@ -113,14 +114,15 @@ func TestRuntimeReusesObscuraCDPSessionLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve obscura: %v", err)
 	}
-	rt := New(provideriface.Config{PromptRoot: t.TempDir()}, nil, nil, nil)
+	handler := NewHandler(provideriface.Config{}, nil, nil)
+	defer handler.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	first, firstSessionID, err := rt.captureBrowserCDPScreenshot(ctx, "browser-session-live", resolved, "https://example.com")
+	first, firstSessionID, err := handler.captureBrowserCDPScreenshot(ctx, "browser-session-live", resolved, "https://example.com")
 	if err != nil {
 		t.Fatalf("first capture: %v", err)
 	}
-	second, secondSessionID, err := rt.captureBrowserCDPScreenshot(ctx, "browser-session-live", resolved, "https://example.com/?choir=1")
+	second, secondSessionID, err := handler.captureBrowserCDPScreenshot(ctx, "browser-session-live", resolved, "https://example.com/?choir=1")
 	if err != nil {
 		t.Fatalf("second capture: %v", err)
 	}
@@ -142,10 +144,10 @@ func TestRuntimeReusesObscuraCDPSessionLive(t *testing.T) {
 			t.Fatalf("%s screenshot magic = %x, want PNG", label, raw[:8])
 		}
 	}
-	if !rt.closeBrowserCDPSession("browser-session-live") {
+	if !handler.closeBrowserCDPSession("browser-session-live") {
 		t.Fatal("closeBrowserCDPSession returned false, want true for active session")
 	}
-	if rt.closeBrowserCDPSession("browser-session-live") {
+	if handler.closeBrowserCDPSession("browser-session-live") {
 		t.Fatal("closeBrowserCDPSession returned true for already closed session")
 	}
 }

@@ -13,6 +13,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
+	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
+	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/gatewayruntime"
 	"github.com/yusefmosiah/go-choir/internal/health"
@@ -94,6 +96,9 @@ func Run() {
 	}()
 
 	bus := events.NewEventBus()
+	browserHandler := browsercontrol.NewHandler(rtRuntimeCfg, db, bus)
+	defer browserHandler.Close()
+	desktopHandler := desktopstate.NewHandler(db, bus)
 
 	// Resolve the runtime provider. VM guests route through the host-side
 	// gateway so provider credentials and upstream adapter code stay out of
@@ -121,7 +126,9 @@ func Run() {
 		log.Printf("sandbox: using stub provider (no gateway configured)")
 	}
 
-	// Build runtime options based on configuration.
+	// Compose product owners into the runtime core explicitly; adapter options
+	// remain limited to actor-lifecycle concerns.
+	coreOpts := []runtime.RuntimeOption{runtime.WithDesktopStateOwner(desktopHandler)}
 	var rtOpts []actorruntime.RuntimeOption
 
 	// Mount the Dolt-backed trace observability store when enabled. The store
@@ -139,7 +146,7 @@ func Run() {
 		}
 	}
 
-	rt := actorruntime.New(rtCfg, db, bus, rtProvider, rtOpts...)
+	rt := actorruntime.New(rtCfg, db, bus, rtProvider, coreOpts, rtOpts...)
 
 	// Initialize the file browser handler with sandbox files root. File
 	// mutations publish owner-scoped product events after the filesystem write
@@ -184,7 +191,7 @@ func Run() {
 	// Register canonical API routes (overrides default /health).
 	runtimeHandler := runtime.NewAPIHandler(rt.Runtime)
 	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
-	apihandler.RegisterRoutes(s, runtimeHandler, apiHandler, rtRuntimeCfg.EnableTestAPIs)
+	apihandler.RegisterRoutes(s, runtimeHandler, apiHandler, browserHandler, desktopHandler, rtRuntimeCfg.EnableTestAPIs)
 	if toolsEnabled {
 		superRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super)
 		if err := apihandler.RegisterProductAPIRequestTool(s, superRegistry); err != nil {

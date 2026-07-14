@@ -1,6 +1,8 @@
 package apihandler
 
 import (
+	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
+	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
@@ -8,7 +10,7 @@ import (
 // RegisterRoutes registers the canonical sandbox API route table.
 // The health handler overrides the default server health handler to report
 // runtime readiness.
-func RegisterRoutes(s *server.Server, h *runtime.APIHandler, api *Handler, enableTestAPIs bool) {
+func RegisterRoutes(s *server.Server, h *runtime.APIHandler, api *Handler, browser *browsercontrol.Handler, desktop *desktopstate.Handler, enableTestAPIs bool) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
@@ -22,10 +24,10 @@ func RegisterRoutes(s *server.Server, h *runtime.APIHandler, api *Handler, enabl
 	s.HandleFunc("/api/content/items", h.HandleContentItemsRoot)
 	s.HandleFunc("/api/content/", h.HandleContentRouter)
 	s.HandleFunc("/api/ws", h.HandleLiveWS)
-	s.HandleFunc("/api/browser/capabilities", h.HandleBrowserCapabilities)
-	s.HandleFunc("/api/browser/sessions", h.HandleBrowserSessionsRoot)
-	s.HandleFunc("/api/browser/sessions/", h.HandleBrowserSessionRouter)
-	s.HandleFunc("/api/desktop/state", h.HandleDesktopState)
+	s.HandleFunc("/api/browser/capabilities", browser.HandleBrowserCapabilities)
+	s.HandleFunc("/api/browser/sessions", browser.HandleBrowserSessionsRoot)
+	s.HandleFunc("/api/browser/sessions/", browser.HandleBrowserSessionRouter)
+	s.HandleFunc("/api/desktop/state", desktop.HandleDesktopState)
 	s.HandleFunc("/api/media/progress", h.HandleMediaProgress)
 	s.HandleFunc("/api/media/recents", h.HandleMediaRecents)
 	s.HandleFunc("/api/preferences/theme", h.HandleThemePreference)
