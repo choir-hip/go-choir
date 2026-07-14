@@ -162,7 +162,7 @@ now:
       repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; trajectory cancellation and terminal admission now share one authority lock; work-item, active-run, and boot-recovery reads exhaust canonical-ID keyset pages instead of trusting fixed prefixes."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: verified_cardinality_repair_local
+    state: passivated_reactivation_repair_required
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
@@ -195,11 +195,12 @@ now:
     - "cardinality-repair:objectgraph and full store packages PASS; >page work-item cancellation, boot-marker recovery, terminal CreateRun admission, and exhaustive active-run contracts"
     - "cardinality-runtime:280/280 shard tests PASS including 205-run activation drain and legacy settled-activation compatibility"
     - "cardinality-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
+    - "final-atomic-cardinality-review:REPAIR; passivated trajectory runs are absent from active drain and can reactivate after terminal cancellation because UpdateRun lacks terminal admission"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "The four fixed-prefix/admission blockers are repaired and locally verified. The candidate remains red and unaccepted until a frozen-commit independent review, push, CI, staging identity, and authenticated deployed cancellation proof succeed."
-  next_action: "Commit the cardinality repair, independently review the frozen candidate against both prior repair reports, then push and execute the landing loop only if reviewers return ACCEPT."
+  blocker_or_risk: "Final review found one remaining lifecycle escape: cancellation drains only active runs, while a passivated run on the trajectory can later transition back to pending through UpdateRun without checking terminal trajectory authority. Atomic batch, keyset cardinality, owner path, and process-local transaction findings otherwise remain accepted."
+  next_action: "Commit this review checkpoint before repair. Then serialize inactive-to-active UpdateRun transitions with trajectory terminal state, reject reactivation on settled or cancelled trajectories, add a passivated-run cancellation/reactivation contract, and re-run frozen review."
 
 receipts:
   - id: predecessor-B0-authority
