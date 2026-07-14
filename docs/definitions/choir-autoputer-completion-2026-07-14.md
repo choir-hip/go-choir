@@ -137,12 +137,12 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: blocked_review
-  slice: "repair the sole final-review explicit-profile alias bypass"
-  question: "Does an explicitly supplied spawn profile match one canonical allowed value byte-for-byte before any side effect?"
+  status: reviewing
+  slice: "freeze and focused-review the minimal explicit-profile repair"
+  question: "Does the two-line repair reject canonical aliases and case variants while preserving canonical explicit profiles and fuzzy role convenience?"
   reconciliation:
-    observed_at: 2026-07-14T23:34:18Z
-    source_ref: commit:1e9fd70634871b3d877242d5fa7338852a4afb42
+    observed_at: 2026-07-14T23:37:32Z
+    source_ref: staged-repair@sha256:4e8cd0a2401700ce22296a363e2d311ae1f29e3dea222ede8b9fbddbbdd65fec
     deploy_identity: blocked_before_landing
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -151,22 +151,22 @@ now:
       - docs/runtime-dissolution-inventory.yaml@production_importers:0,wrappers:0,tools:37
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: final_review_blocked
+    status: alias_repair_implemented_review_pending
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact owner/caller map; focused production-order restart tests; exact delegation validation tests; exhaustive legal-Go ratchet fixtures; all four agentcore and Texture owner shards; frozen independent review; CI, staging identity, and deployed product-path acceptance."
     rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    conjecture_delta: "Boot/wake composition, canonical completion, publication, typed events, and structural enforcement survived final review. One semantic distinction remains: agentprofile.Canonical is appropriate for the fuzzy role convenience input but is too permissive for the explicit profile override whose schema enumerates canonical values."
+    conjecture_delta: "The explicit profile override can enforce its enum contract by comparing strings.TrimSpace(raw) directly to the canonical allowlist. Fuzzy agentprofile.Canonical normalization remains confined to role and omitted-profile convenience behavior."
     heresy_delta:
-      discovered: "Final review found one additional candidate-only bypass: exactTarget canonicalizes explicit aliases, so profile=research or profile=coagent is accepted although the explicit enum requires researcher or co-super."
-      introduced: "None in canonical source; the finding remains confined to the unpushed candidate lineage."
-      repaired: "The ten earlier findings are repaired and final wake/full-cutover review found no additional blocker. The explicit-profile alias bypass is documented but not yet repaired."
+      discovered: "Final review found one additional candidate-only explicit-profile alias bypass after the ten prior findings."
+      introduced: "None in canonical source; all findings remain confined to the unpushed candidate lineage."
+      repaired: "All eleven candidate-only findings now have source-level repairs and focused regression coverage; the final repair rejects research, research-agent, Researcher, coagent, token-fuzzy, and out-of-set explicit profiles before spawn side effects."
   candidate:
     id: R1-texture-owner-cutover-16
-    state: final_review_blocked_alias_repair_required
-    ref: commit:1e9fd70634871b3d877242d5fa7338852a4afb42
+    state: alias_repair_implemented_review_pending
+    ref: staged-repair@sha256:4e8cd0a2401700ce22296a363e2d311ae1f29e3dea222ede8b9fbddbbdd65fec
     owner: orchestrator
     base: refs/remotes/origin/main@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    digest: commit:1e9fd70634871b3d877242d5fa7338852a4afb42
+    digest: sha256:4e8cd0a2401700ce22296a363e2d311ae1f29e3dea222ede8b9fbddbbdd65fec
     scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
   evidence_refs:
     - "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."
@@ -177,8 +177,9 @@ now:
     - "repair-proof: go test ./internal/actorruntime ./internal/coagentowner ./internal/agentcore ./internal/textureowner ./internal/sandbox ./cmd/runtime-ratchet -count=1 passed; focused startup serialization, first-wake identity, adversarial explicit profile, and legal-Go wrapper fixtures passed; go test -race startup serialization passed."
     - "independent-review:final wake ordering and first-identity recovery accepted with confidence 0.95; full cutover found no additional blocker beyond explicit-profile aliases."
     - "independent-review:blocking P1 at internal/coagentowner/spawn_tool.go:168-174; exactTarget canonicalizes aliases such as research into an allowed explicit researcher profile."
-  blocker_or_risk: "The sole final blocker is explicit-profile alias acceptance. The candidate remains ineligible to land until raw trimmed profile input is compared directly to canonical allowed values, adversarial alias/case tests pass, and a final focused exact-diff review accepts the repair."
-  next_action: "Commit this problem receipt, repair exactTarget without changing fuzzy role behavior, add canonical-alias and case-variant regression cases, freeze the minimal diff, and obtain final focused review before landing."
+    - "alias-repair-proof: TestSpawnAgentRejectsInvalidExplicitProfile and full internal/coagentowner passed; runtime dissolution ratchet PASS with unchanged counts; git diff --check passed."
+  blocker_or_risk: "No local blocker. The minimal alias repair requires frozen focused review before the candidate can land; canonical CI, staging identity, and deployed persistent-computer acceptance remain outstanding."
+  next_action: "Commit the minimal alias repair and compact state, obtain focused exact-diff acceptance, then land the accepted candidate."
 
 receipts:
   - id: predecessor-B0-authority

@@ -169,7 +169,7 @@ func canonicalTargets(values []string) []string {
 }
 
 func exactTarget(raw string, allowed []string) string {
-	target := agentprofile.Canonical(raw)
+	target := strings.TrimSpace(raw)
 	for _, value := range allowed {
 		if target == value {
 			return target
