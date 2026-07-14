@@ -162,11 +162,11 @@ now:
       repaired: "GET /api/costs now has one implementation owner in internal/apihandler, one direct route registration, and no runtime source or test copy."
   candidate:
     id: R1-api-owner-cutover-10
-    state: review_repair_applied
+    state: accepted_local_ready_to_land
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@5fd2fd24
-    digest: frozen_commit:04a7d4f4; final_inventory_repair:pending
+    digest: frozen_commit:04a7d4f4; inventory_repair_commit:e9d4ecff
     scope: [costs_api_handler, canonical_apihandler_owner, sandbox_store_injection, direct_route_registration]
   decision:
     selected: "Move GET /api/costs and all eight focused contracts from internal/runtime to an injected store-backed internal/apihandler.Handler; register that method directly while leaving the remaining runtime handler surface unchanged."
@@ -183,8 +183,9 @@ now:
     - "runtime-ratchet:PASS; 129 Go files, 67 production, 62 test, 42915 production LOC, 49998 test LOC, 936 exports, 294 caller edges, 441 classified store calls, 1347 citers"
     - "independent-costs-behavior-review:ACCEPT; method, authentication, owner isolation, query/filter semantics, JSON envelope, store dependency, and route wiring preserved"
     - "independent-costs-topology-review:REPAIR; clean cutover accepted, but inventory captured a pre-final-Definition citer and required regeneration"
-  blocker_or_risk: "Behavior review accepts the frozen code. The topology review's only blocker was a stale Definition citer in the generated inventory; regeneration after the final card update is the complete repair."
-  next_action: "Regenerate the inventory after this final card update, freeze the repair, and obtain topology re-review before landing."
+    - "independent-costs-topology-rereview:ACCEPT e9d4ecff; stale citer closed, 1347-citer inventory mechanically reproducible, clean cutover unchanged"
+  blocker_or_risk: "No local blocker. Independent behavior and topology reviewers accept the frozen candidate; deployed route, authentication, owner-scope, and response proof remain required."
+  next_action: "Push the accepted candidate to origin/main, monitor CI and staging deployment identity, then fetch GET /api/costs with authenticated owner scope."
 
 receipts:
   - id: predecessor-B0-authority
