@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T00:56:02Z
+  updated_at: 2026-07-14T01:13:55Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@1b28520d6a3d31ecf36b2a645623367b4630faa0
+  expected_parent_or_authority_ref: refs/heads/main@origin@caa714e1f1070a1b12d076210588d547c0bc9315
   status: working
   current_subgoal: R1-prompt-store-package-cutover-03
   active_phase: R1-runtime-dissolution
@@ -404,7 +404,7 @@ state_capsule:
     - R1-prompt-store-package-cutover-03
   locks:
     - id: R1-prompt-store-package-cutover-03
-      status: defined
+      status: verified_local
       mutation_class: orange
       classification_rationale: Prompt persistence and default-loading ownership are runtime behavior, so their package cutover is orange even when prompt bytes, filesystem state, and API behavior remain unchanged; no red protected surface is touched.
       conjecture: The prompt store, its direct tests, and all seeded default assets can move atomically to a top-level internal/promptstore owner with a clean Store/Descriptor/New API, without changing prompt bytes, override/reset semantics, persistent paths, role policy, routes, tools, state authority, provider routing, or model selection.
@@ -455,7 +455,7 @@ state_capsule:
         - E1 byte identities for all eight moved YAML assets, absent old files and directory, zero stale symbols/path imports in current source, current citer redirects, and runtime ratchet PASS with decreased runtime file and LOC counts plus only the explicitly authorized documentation-citer rebaseline
         - E2 direct promptstore persistence/default tests, doccheck classification/Markdown tests, focused runtime prompt API/override/default-loading tests, and full affected package tests
         - E6 independent immutable-candidate verification
-      rollback_ref: 1b28520d6a3d31ecf36b2a645623367b4630faa0
+      rollback_ref: caa714e1f1070a1b12d076210588d547c0bc9315
       close_condition: The old store files/default directory and stale symbols are absent, the new concrete owner contains the implementation, direct tests, and eight byte-identical YAML assets, persistent/API behavior and doccheck enforcement pass, the regenerated ratchet passes with only the authorized documentation-citer rebaseline and no source-category growth, independent review finds no forbidden seam or behavior delta, and canonical CI/deploy/authenticated prompt-artifact receipts bind the landed commit.
       assurance:
         independent_verifier: required
@@ -468,6 +468,29 @@ state_capsule:
             - google-antigravity/gemini-3.5-flash: PASS
           adjudication: Both reviewers independently confirmed the eight assets, complete concrete symbol and caller graph, path consumers, current-versus-historical citer policy, exact 268-to-270 Define-only citer drift, closure receipts, authority identity, and executable clean-cutover constraints. No blocking finding remained.
           no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, graph, evidence floor, or stopping condition.
+        implementation_review_result:
+          candidate_diff_sha256: a6fa98cd5cfc19cfbe6c9702ab46a25033fa3476f0dc988011977f5871e2e572
+          reviewers:
+            - opencode/hy3-free: PASS
+            - google-antigravity/gemini-3.5-flash: PASS
+          adjudication: Both bounded reviewers independently confirmed the clean Store/Descriptor/New cutover, eight exact asset renames, complete caller updates, persistent layout and method behavior, dual-root doccheck enforcement, current/historical citer treatment, exact ratchet reductions, and absent forbidden seams. The first panel attempt timed out only after reproducing the same evidence through unnecessary broad commands and raised no finding.
+          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed source, inventory, lock, graph, evidence floor, or stopping condition.
+      local_evidence:
+        - class: E0
+          observation: canonical implementation parent caa714e1f1070a1b12d076210588d547c0bc9315; every candidate change is within the reviewed lock
+        - class: E1
+          observation: all eight seeded default YAML assets are detected as 100% byte-identical renames; old store files/default directory and stale source symbol/path searches are empty; runtime ratchet PASS at go_files 135, production_files 71, test_files 64, production_loc 43460, test_loc 49836, exports 958, export_caller_edges 311, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, citers 269
+        - class: E2
+          observation: direct promptstore and full doccheck package tests passed
+          artifact_ref: artifact://202
+        - class: E2
+          observation: focused runtime prompt-store, prompt API, system-prompt, override, provider-prompt, and prompt-bar behavior tests passed
+          artifact_ref: artifact://198
+        - class: E2
+          observation: runtime ratchet unit tests passed
+          artifact_ref: artifact://204
+        - class: E2
+          observation: gopls reported no diagnostics in promptstore, runtime construction/API edges, or cmd/doccheck after workspace refresh
       heresy_delta:
         discovered:
           - This Define authority replaces the prior lock and mechanically raises documentation citers from 268 to 270 before implementation; source counts remain unchanged.

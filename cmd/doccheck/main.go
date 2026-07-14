@@ -397,7 +397,7 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 	} else {
 		warnings = append(warnings, textureWarnings...)
 	}
-	runtimeMarkdownWarnings, err := scanForbiddenRuntimeMarkdown()
+	runtimeMarkdownWarnings, err := scanForbiddenSourceMarkdown()
 	if err != nil {
 		warnings = append(warnings, warning{Rule: "P1", Severity: "warning", Message: fmt.Sprintf("runtime markdown scan failed: %v", err)})
 	} else {
@@ -1223,35 +1223,40 @@ func classifyHeresyContext(path, line string, docs map[string]*docInfo) string {
 	return "current-violation"
 }
 
-func scanForbiddenRuntimeMarkdown() ([]warning, error) {
+func scanForbiddenSourceMarkdown() ([]warning, error) {
 	var warnings []warning
-	err := filepath.WalkDir("internal/runtime", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
+	for _, root := range []string{"internal/runtime", "internal/promptstore/defaults"} {
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if filepath.Ext(path) != ".md" {
+				return nil
+			}
+			warnings = append(warnings, warning{
+				Rule:     "P1",
+				Severity: "warning",
+				Path:     cleanPath(path),
+				Message:  "runtime source and prompt defaults must not contain markdown; docs belong in docs/ and agent prompts belong in YAML",
+				Hint:     "use internal/promptstore/defaults/*.yaml or internal/textureprompts/*.yaml",
+			})
 			return nil
-		}
-		if filepath.Ext(path) != ".md" {
-			return nil
-		}
-		warnings = append(warnings, warning{
-			Rule:     "P1",
-			Severity: "warning",
-			Path:     cleanPath(path),
-			Message:  "internal/runtime must not contain markdown; docs belong in docs/ and agent prompts belong in YAML",
-			Hint:     "use internal/runtime/prompt_defaults/*.yaml or internal/textureprompts/*.yaml",
 		})
-		return nil
-	})
-	return warnings, err
+		if err != nil {
+			return nil, err
+		}
+	}
+	return warnings, nil
 }
 
 func classifySurface(path string) string {
 	switch {
 	case strings.HasPrefix(path, "docs/") || path == "README.md" || path == "AGENTS.md":
 		return "docs"
-	case strings.HasPrefix(path, "internal/runtime/prompt_defaults/") ||
+	case strings.HasPrefix(path, "internal/promptstore/defaults/") ||
 		strings.HasPrefix(path, "internal/textureprompts/"):
 		return "runtime-prompt"
 	case strings.HasSuffix(path, ".go"):

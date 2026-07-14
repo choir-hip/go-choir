@@ -1,4 +1,4 @@
-package runtime
+package promptstore
 
 import (
 	"embed"
@@ -14,22 +14,22 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 )
 
-//go:embed prompt_defaults/*.yaml
+//go:embed defaults/*.yaml
 var promptDefaultsFS embed.FS
 
-type PromptDescriptor struct {
+type Descriptor struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 	Source  string `json:"source"`
 	Path    string `json:"path"`
 }
 
-type PromptStore struct {
+type Store struct {
 	root string
 }
 
-func NewPromptStore(root string) *PromptStore {
-	return &PromptStore{root: root}
+func New(root string) *Store {
+	return &Store{root: root}
 }
 
 func promptRoles() []string {
@@ -49,7 +49,7 @@ func promptDefaultFiles() []string {
 	return append([]string{"core"}, promptRoles()...)
 }
 
-func (ps *PromptStore) LoadCore() (string, error) {
+func (ps *Store) LoadCore() (string, error) {
 	if err := ps.ensureDefaults(); err != nil {
 		return "", err
 	}
@@ -60,11 +60,11 @@ func (ps *PromptStore) LoadCore() (string, error) {
 	return strings.TrimSpace(string(content)), nil
 }
 
-func (ps *PromptStore) List(ownerID string) ([]PromptDescriptor, error) {
+func (ps *Store) List(ownerID string) ([]Descriptor, error) {
 	if err := ps.ensureDefaults(); err != nil {
 		return nil, err
 	}
-	prompts := make([]PromptDescriptor, 0, len(promptRoles()))
+	prompts := make([]Descriptor, 0, len(promptRoles()))
 	for _, role := range promptRoles() {
 		prompt, err := ps.Load(ownerID, role)
 		if err != nil {
@@ -78,33 +78,33 @@ func (ps *PromptStore) List(ownerID string) ([]PromptDescriptor, error) {
 	return prompts, nil
 }
 
-func (ps *PromptStore) Load(ownerID, role string) (PromptDescriptor, error) {
+func (ps *Store) Load(ownerID, role string) (Descriptor, error) {
 	if err := ps.ensureDefaults(); err != nil {
-		return PromptDescriptor{}, err
+		return Descriptor{}, err
 	}
 	role, err := normalizePromptRole(role)
 	if err != nil {
-		return PromptDescriptor{}, err
+		return Descriptor{}, err
 	}
 	userPath := ps.userPromptPath(ownerID, role)
 	if ownerID != "" {
 		if content, err := os.ReadFile(userPath); err == nil {
-			return PromptDescriptor{
+			return Descriptor{
 				Role:    role,
 				Content: strings.TrimSpace(string(content)),
 				Source:  "user",
 				Path:    userPath,
 			}, nil
 		} else if !os.IsNotExist(err) {
-			return PromptDescriptor{}, fmt.Errorf("read user prompt %s: %w", role, err)
+			return Descriptor{}, fmt.Errorf("read user prompt %s: %w", role, err)
 		}
 	}
 	defaultPath := ps.defaultPromptPath(role)
 	content, err := os.ReadFile(defaultPath)
 	if err != nil {
-		return PromptDescriptor{}, fmt.Errorf("read default prompt %s: %w", role, err)
+		return Descriptor{}, fmt.Errorf("read default prompt %s: %w", role, err)
 	}
-	return PromptDescriptor{
+	return Descriptor{
 		Role:    role,
 		Content: strings.TrimSpace(string(content)),
 		Source:  "default",
@@ -112,29 +112,29 @@ func (ps *PromptStore) Load(ownerID, role string) (PromptDescriptor, error) {
 	}, nil
 }
 
-func (ps *PromptStore) Save(ownerID, role, content string) (PromptDescriptor, error) {
+func (ps *Store) Save(ownerID, role, content string) (Descriptor, error) {
 	if strings.TrimSpace(ownerID) == "" {
-		return PromptDescriptor{}, fmt.Errorf("owner is required")
+		return Descriptor{}, fmt.Errorf("owner is required")
 	}
 	if err := ps.ensureDefaults(); err != nil {
-		return PromptDescriptor{}, err
+		return Descriptor{}, err
 	}
 	role, err := normalizePromptRole(role)
 	if err != nil {
-		return PromptDescriptor{}, err
+		return Descriptor{}, err
 	}
 	if strings.TrimSpace(content) == "" {
-		return PromptDescriptor{}, fmt.Errorf("prompt content is required")
+		return Descriptor{}, fmt.Errorf("prompt content is required")
 	}
 	path := ps.userPromptPath(ownerID, role)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return PromptDescriptor{}, fmt.Errorf("create prompt directory: %w", err)
+		return Descriptor{}, fmt.Errorf("create prompt directory: %w", err)
 	}
 	normalized := strings.TrimSpace(content) + "\n"
 	if err := os.WriteFile(path, []byte(normalized), 0o644); err != nil {
-		return PromptDescriptor{}, fmt.Errorf("write prompt override: %w", err)
+		return Descriptor{}, fmt.Errorf("write prompt override: %w", err)
 	}
-	return PromptDescriptor{
+	return Descriptor{
 		Role:    role,
 		Content: strings.TrimSpace(content),
 		Source:  "user",
@@ -142,17 +142,17 @@ func (ps *PromptStore) Save(ownerID, role, content string) (PromptDescriptor, er
 	}, nil
 }
 
-func (ps *PromptStore) Reset(ownerID, role string) (PromptDescriptor, error) {
+func (ps *Store) Reset(ownerID, role string) (Descriptor, error) {
 	if strings.TrimSpace(ownerID) == "" {
-		return PromptDescriptor{}, fmt.Errorf("owner is required")
+		return Descriptor{}, fmt.Errorf("owner is required")
 	}
 	role, err := normalizePromptRole(role)
 	if err != nil {
-		return PromptDescriptor{}, err
+		return Descriptor{}, err
 	}
 	path := ps.userPromptPath(ownerID, role)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return PromptDescriptor{}, fmt.Errorf("remove prompt override: %w", err)
+		return Descriptor{}, fmt.Errorf("remove prompt override: %w", err)
 	}
 	return ps.Load(ownerID, role)
 }
@@ -167,7 +167,7 @@ func normalizePromptRole(role string) (string, error) {
 	return "", fmt.Errorf("unsupported prompt role %q", role)
 }
 
-func (ps *PromptStore) ensureDefaults() error {
+func (ps *Store) ensureDefaults() error {
 	if strings.TrimSpace(ps.root) == "" {
 		return fmt.Errorf("prompt root is not configured")
 	}
@@ -180,7 +180,7 @@ func (ps *PromptStore) ensureDefaults() error {
 		if name == agentprofile.Texture {
 			content = []byte(textureprompts.DefaultSystemPrompt() + "\n")
 		} else {
-			raw, readErr := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("prompt_defaults", name+".yaml")))
+			raw, readErr := fs.ReadFile(promptDefaultsFS, filepath.ToSlash(filepath.Join("defaults", name+".yaml")))
 			if readErr != nil {
 				return fmt.Errorf("load embedded prompt default %s: %w", name, readErr)
 			}
@@ -202,11 +202,11 @@ func (ps *PromptStore) ensureDefaults() error {
 	return nil
 }
 
-func (ps *PromptStore) defaultPromptPath(role string) string {
+func (ps *Store) defaultPromptPath(role string) string {
 	return filepath.Join(ps.root, "defaults", role+".md")
 }
 
-func (ps *PromptStore) userPromptPath(ownerID, role string) string {
+func (ps *Store) userPromptPath(ownerID, role string) string {
 	return filepath.Join(ps.root, "users", sanitizePromptPath(ownerID), role+".md")
 }
 

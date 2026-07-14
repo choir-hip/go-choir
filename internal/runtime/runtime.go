@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
@@ -38,7 +39,7 @@ type Runtime struct {
 	store       *store.Store
 	bus         *events.EventBus
 	provider    provideriface.Provider
-	promptStore *PromptStore
+	promptStore *promptstore.Store
 
 	// traceStore is the optional Dolt-backed observability store. When set,
 	// every event emitted via emitEvent/persistEvent/persistSubmittedRun is
@@ -110,7 +111,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		provider:         provider,
 		health:           types.HealthReady,
 		running:          make(map[string]context.CancelFunc),
-		promptStore:      NewPromptStore(cfg.PromptRoot),
+		promptStore:      promptstore.New(cfg.PromptRoot),
 		textureWakeAfter: func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
 		browserOps:       make(map[string]*sync.Mutex),
 		browserCDP:       make(map[string]*browserCDPSession),
@@ -396,7 +397,7 @@ func ensureDesktopID(metadata map[string]any, parent *types.RunRecord, fallback 
 	return metadata
 }
 
-func (rt *Runtime) PromptStore() *PromptStore {
+func (rt *Runtime) PromptStore() *promptstore.Store {
 	return rt.promptStore
 }
 

@@ -86,7 +86,7 @@ func TestValidateAssertionRegisterExtractsSections(t *testing.T) {
 	}
 }
 
-func TestScanForbiddenRuntimeMarkdownAllowsYAMLPrompts(t *testing.T) {
+func TestScanForbiddenSourceMarkdownAllowsYAMLPrompts(t *testing.T) {
 	dir := t.TempDir()
 	oldwd, err := os.Getwd()
 	if err != nil {
@@ -98,21 +98,34 @@ func TestScanForbiddenRuntimeMarkdownAllowsYAMLPrompts(t *testing.T) {
 	t.Cleanup(func() {
 		_ = os.Chdir(oldwd)
 	})
-	if err := os.MkdirAll("internal/runtime/prompt_defaults", 0755); err != nil {
+	if err := os.MkdirAll("internal/runtime", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("internal/runtime/prompt_defaults/texture.yaml", []byte("version: 1\nbody: |\n  hello\n"), 0644); err != nil {
+	if err := os.MkdirAll("internal/promptstore/defaults", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("internal/runtime/prompt_defaults/legacy.md", []byte("# no\n"), 0644); err != nil {
+	if err := os.WriteFile("internal/promptstore/defaults/texture.yaml", []byte("version: 1\nbody: |\n  hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	warnings, err := scanForbiddenRuntimeMarkdown()
+	for _, path := range []string{
+		"internal/runtime/legacy.md",
+		"internal/promptstore/defaults/legacy.md",
+	} {
+		if err := os.WriteFile(path, []byte("# no\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	warnings, err := scanForbiddenSourceMarkdown()
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	if !hasWarningPath(warnings, "internal/runtime/prompt_defaults/legacy.md") {
-		t.Fatalf("expected legacy.md warning, got %#v", warnings)
+	for _, path := range []string{
+		"internal/runtime/legacy.md",
+		"internal/promptstore/defaults/legacy.md",
+	} {
+		if !hasWarningPath(warnings, path) {
+			t.Fatalf("expected %s warning, got %#v", path, warnings)
+		}
 	}
 }
 
@@ -130,7 +143,7 @@ func TestClassifySurfaceRecognizesCurrentPromptPathsOnly(t *testing.T) {
 		path string
 		want string
 	}{
-		{"internal/runtime/prompt_defaults/texture.yaml", "runtime-prompt"},
+		{"internal/promptstore/defaults/texture.yaml", "runtime-prompt"},
 		{"internal/textureprompts/texture.yaml", "runtime-prompt"},
 	}
 	for _, tt := range tests {

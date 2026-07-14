@@ -140,7 +140,7 @@ report to exactly one Texture coagent per activation.
 
 ## Enforcement
 
-- Seeded defaults live in `internal/runtime/prompt_defaults/*.yaml` and
+- Seeded defaults live in `internal/promptstore/defaults/*.yaml` and
   `internal/textureprompts/texture.yaml`.
 - Per-run runtime overlays live in `internal/runtimeprompts/overlays/*.yaml`
   (temporal grounding, conductor routing, researcher saturation, super/vsuper

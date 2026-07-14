@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -122,7 +123,7 @@ func toolResponsesForRegistry(registry *toolregistry.ToolRegistry) []toolDescrip
 	return out
 }
 
-func (h *APIHandler) promptResponse(ownerID string, prompt PromptDescriptor) (promptDescriptorResponse, error) {
+func (h *APIHandler) promptResponse(ownerID string, prompt promptstore.Descriptor) (promptDescriptorResponse, error) {
 	rec := settingsPreviewRun(ownerID, prompt.Role)
 	systemPrompt, err := h.rt.systemPromptForRun(rec)
 	if err != nil {

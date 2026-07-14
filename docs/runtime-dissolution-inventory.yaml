@@ -3,13 +3,13 @@ canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 137
-    production_files: 72
-    test_files: 65
-    production_loc: 43694
-    test_loc: 49918
-    exports: 968
-    export_caller_edges: 323
+    go_files: 135
+    production_files: 71
+    test_files: 64
+    production_loc: 43460
+    test_loc: 49836
+    exports: 958
+    export_caller_edges: 311
     initial_unused_export_debt: 16
     routes: 2
     tools: 48
@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 8
     store_calls: 443
     interface_candidates: 4
-    citers: 268
+    citers: 269
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -161,15 +161,9 @@ files:
     - id: internal/runtime/prompt_bar_unit_test.go [test]
       disposition: model
       loc: 401
-    - id: internal/runtime/prompt_store.go [production]
-      disposition: model
-      loc: 236
-    - id: internal/runtime/prompt_store_test.go [test]
-      disposition: model
-      loc: 83
     - id: internal/runtime/prompts.go [production]
       disposition: model
-      loc: 236
+      loc: 237
     - id: internal/runtime/prompts_test.go [test]
       disposition: model
       loc: 122
@@ -202,7 +196,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3648
+      loc: 3649
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -241,7 +235,7 @@ files:
       loc: 195
     - id: internal/runtime/test_helpers_test.go [test]
       disposition: core
-      loc: 329
+      loc: 330
     - id: internal/runtime/texture.go [production]
       disposition: texture
       loc: 2168
@@ -1442,46 +1436,6 @@ exports:
     - id: internal/runtime/prompt_bar_unit_test.go:func:TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag
       disposition: model
     - id: internal/runtime/prompt_bar_unit_test.go:func:TestHandlePromptBarTextureRouteCompletesConductorSynchronously
-      disposition: model
-    - id: internal/runtime/prompt_store.go:func:NewPromptStore
-      disposition: model
-      production_callers:
-        - internal/runtime/runtime.go
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):List
-      disposition: model
-      production_callers:
-        - internal/runtime/prompts.go
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):Load
-      disposition: model
-      production_callers:
-        - internal/runtime/prompt_store.go
-        - internal/runtime/prompts.go
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):LoadCore
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):Reset
-      disposition: model
-      production_callers:
-        - internal/runtime/prompts.go
-    - id: internal/runtime/prompt_store.go:method(*PromptStore):Save
-      disposition: model
-      production_callers:
-        - internal/runtime/prompts.go
-    - id: internal/runtime/prompt_store.go:type:PromptDescriptor
-      disposition: model
-      production_callers:
-        - internal/runtime/prompt_store.go
-        - internal/runtime/prompts.go
-    - id: internal/runtime/prompt_store.go:type:PromptStore
-      disposition: model
-      production_callers:
-        - internal/runtime/prompt_store.go
-        - internal/runtime/runtime.go
-    - id: internal/runtime/prompt_store_test.go:func:TestPromptStoreSeedsDefaults
-      disposition: model
-    - id: internal/runtime/prompt_store_test.go:func:TestPromptStoreSupportsUserOverridesAndReset
       disposition: model
     - id: internal/runtime/prompts.go:method(*APIHandler):HandlePromptList
       disposition: model
@@ -3034,9 +2988,9 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/app_promotion.go:944:normalizeRouteProfile converts a legacy "route:computerID" RouteProfile to
       disposition: delete
-    - id: internal/runtime/runtime.go:100:New creates a new Runtime with the given config, store, event bus, and
+    - id: internal/runtime/runtime.go:101:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
-    - id: internal/runtime/runtime.go:1956:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1957:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/tools_capsule.go:306:This preserves backward compatibility with existing callers.
       disposition: delete
@@ -4063,8 +4017,6 @@ citers:
       disposition: block
     - id: docs/choir-prompting-invariants.md:- Per-run runtime overlays live in `internal/runtimeprompts/overlays/*.yaml`
       disposition: block
-    - id: docs/choir-prompting-invariants.md:- Seeded defaults live in `internal/runtime/prompt_defaults/*.yaml` and
-      disposition: block
     - id: docs/computer-ontology.md:`internal/capsule` + `internal/runtime/tools_capsule.go`), whose transactions
       disposition: block
     - id: docs/conjecture-assertion-ledger-2026-06.md:- **Receipts:** `internal/runtime/tool_profiles.go:223-229` (AllowedDelegateTargets),
@@ -4109,31 +4061,35 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:`/internal/runtime/runs`). Every attempt executing that definition therefore
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_defaults
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_defaults#2
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store.go#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtimeprompts
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store_test.go
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtimeprompts#2
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store_test.go#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_agent_revision.go
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store_test.go#3
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_agent_revision.go#2
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompts.go
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_prompt_unit_test.go
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompts.go#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_prompt_unit_test.go#2
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime.go
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/textureprompts
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime.go#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/textureprompts#2
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime_test.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/test_helpers_test.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/test_helpers_test.go#2
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go
-      disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go#2
-      disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtimeprompts
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:1. dissolve `internal/runtime` into cohesive owners and delete it;
       disposition: block

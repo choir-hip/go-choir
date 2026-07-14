@@ -1,4 +1,4 @@
-package runtime
+package promptstore
 
 import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestPromptStoreSeedsDefaults(t *testing.T) {
-	store := NewPromptStore(t.TempDir())
+	store := New(t.TempDir())
 
 	core, err := store.LoadCore()
 	if err != nil {
@@ -46,7 +46,7 @@ func TestPromptStoreSeedsDefaults(t *testing.T) {
 }
 
 func TestPromptStoreSupportsUserOverridesAndReset(t *testing.T) {
-	store := NewPromptStore(t.TempDir())
+	store := New(t.TempDir())
 
 	saved, err := store.Save("user-alice", agentprofile.Texture, "Custom texture prompt")
 	if err != nil {
