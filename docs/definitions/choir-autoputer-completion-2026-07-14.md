@@ -141,8 +141,8 @@ now:
   slice: "extract candidate-package intake ownership boundary from internal/runtime"
   question: "Which canonical owner can contain candidate-package intake review, source-lineage validation, adoption-boundary approval, publication-draft gating, and promotion-switch evidence without duplicating promotion authority or leaving runtime writes?"
   reconciliation:
-    observed_at: 2026-07-14T15:00:29Z
-    source_ref: refs/heads/main@fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
+    observed_at: 2026-07-14T15:27:00Z
+    source_ref: refs/heads/main@2f6215ab4256eb1ad4acead67a788d1825a6c0af
     deploy_identity: "CI 29342824267 PASS; deploy job 87119847487; activation receipt target fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df at 2026-07-14T14:58:52Z"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -151,30 +151,35 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: owner_boundary_frozen
+    status: accepted_local_ready_to_land
     protected_surfaces: [candidate_package_intake, computer_source_lineage, adoption_boundary, promotion_switch_evidence, publication_draft]
     admissible_evidence: "Exact owner/caller/store/state-transition map; source-lineage CAS and owner-isolation contracts; blocked-transition preservation; scoped runtime ratchet; independent transition and authority review; green CI, staging identity, and authenticated product-path acceptance."
-    rollback_ref: fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
-    conjecture_delta: "Candidate-package intake is a distinct pre-adoption review authority, not a second promotion service. A dedicated internal/candidatepackage.Service should own its intake and adoption-review state machine, delegate only source-lineage initialization to promotion.Service, and leave deployed app promotion authority unchanged."
+    rollback_ref: 2f6215ab4256eb1ad4acead67a788d1825a6c0af
+    conjecture_delta: "Confirmed: candidate-package intake is a distinct pre-adoption review authority, not a second promotion service. internal/candidatepackage.Service now owns its intake and adoption-review state machine, delegates only source-lineage initialization to promotion.Service, and leaves deployed app promotion authority unchanged."
     heresy_delta:
-      discovered: "Runtime still owns one 1,698-line candidate-package intake state machine: create/review/adoption-boundary/publication-draft transitions, adoption-review creation and decision, source-lineage-only switch/rollback/roll-forward evidence, acceptance synthesis, and review surfaces. Its routes and vmctl worker mirror call Runtime methods directly; its writes span candidate_package_intakes, app_change_packages, app_adoptions, computer_source_lineages, and events. internal/promotion.Service is the existing owner for source-lineage initialization and deployed app promotion, but is not a replacement for this deliberately blocked pre-adoption authority."
+      discovered: "Runtime owned one 1,698-line candidate-package intake state machine: create/review/adoption-boundary/publication-draft transitions, adoption-review creation and decision, source-lineage-only switch/rollback/roll-forward evidence, acceptance synthesis, and review surfaces. Its API routes called Runtime methods directly; its writes spanned candidate_package_intakes, app_change_packages, app_adoptions, computer_source_lineages, and events. internal/promotion.Service was the existing owner for source-lineage initialization and deployed app promotion, but was not a replacement for this deliberately blocked pre-adoption authority. The vmctl worker mirror contains app-package transport but no candidate-intake method caller."
       introduced: none
-      repaired: "The preceding promotion-owner slice and its run-acceptance reducer repair are deployed and accepted at promotion level."
+      repaired: "Candidate-package intake methods, helpers, and event persistence moved to internal/candidatepackage.Service; Runtime retains only service construction and HTTP transport. promotion.Service is called only for EnsureComputerSourceLineage. The intentionally blocked publication/deployed-route/vm-lifecycle semantics, owner isolation, transition order, errors, JSON, and events are preserved."
   candidate:
     id: R1-candidate-package-owner-cutover-12
-    state: owner_boundary_frozen_ready_to_implement
-    ref: refs/heads/autoputer-definition-v2@fc0e3a0f
+    state: accepted_local_ready_to_land
+    ref: refs/heads/autoputer-definition-v2@d1bd22c0e10a89d070470b1b86c129ece8ea38fa
     owner: orchestrator
-    base: refs/heads/main@fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
-    digest: "internal/candidatepackage.Service owns the complete intake/adoption-review state machine and direct store/event writes; runtime retains transport and worker-mirror orchestration only; promotion.Service remains the sole source-lineage initializer and deployed promotion owner. Preserve transition ordering, error strings, JSON envelopes, blocked publication/deployed-route/vm-lifecycle semantics, and owner isolation exactly."
+    base: refs/heads/main@2f6215ab4256eb1ad4acead67a788d1825a6c0af
+    digest: "internal/candidatepackage.Service owns the complete intake/adoption-review state machine and direct store/event writes; runtime retains construction and HTTP transport only; promotion.Service remains the sole source-lineage initializer and deployed promotion owner. Runtime dissolution inventory: 126 Go files, 65 production files, 61 test files, 39985 production LOC, 49958 test LOC, 905 exports, 265 export caller edges, 14 initial unused exports, 2 routes, 48 tools, 4 production importers, 4 wrappers, 6 compatibility markers, 391 store calls, 4 interface candidates, 1347 citers."
     scope: [candidate_package_intake, owner_review, source_lineage, adoption_boundary, publication_draft, promotion_switch_evidence]
   evidence_refs:
     - "promotion-landing-ci:PASS https://github.com/choir-hip/go-choir/actions/runs/29342824267"
     - "promotion-deploy:job 87119847487; activation target fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df"
     - "promotion-run-acceptance:runacc-9704ea95ef27a1b1c0f4 promotion-level ACCEPTED; deployment_commit and health_commit fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df; checkpoint_causal_order passed"
-    - "candidate-package-map: internal/runtime/candidate_package_intake.go methods and helpers; internal/runtime/api_candidate_package_intake.go route callers; internal/runtime/tools_vmctl.go worker mirror; internal/store/candidate_package_intake.go and app_promotion.go persistence; internal/types/app_promotion.go records/statuses"
-  blocker_or_risk: "No execution blocker. The clean cutover must not absorb deployed app promotion or candidate-computer lifecycle authority, widen the intentionally blocked publication/deployed-route/vm-lifecycle transitions, or change the existing record-first/source-lineage-second write order without a separately documented atomicity repair."
-  next_action: "Checkpoint this owner decision before repair. Then move the complete state machine behind internal/candidatepackage.Service, inject promotion.Service only for source-lineage initialization, migrate API and worker-mirror callers, delete Runtime candidate-package methods/helpers, regenerate the inventory, and prove focused transitions plus the scoped ratchet before frozen independent review."
+    - "candidate-package-map: internal/runtime/candidate_package_intake.go methods and helpers; internal/runtime/api_candidate_package_intake.go route callers; internal/store/candidate_package_intake.go and app_promotion.go persistence; internal/types/app_promotion.go records/statuses; internal/runtime/tools_vmctl.go confirmed to have no candidate-intake method caller"
+    - "candidate-package-focused: go test ./internal/runtime -run TestCandidatePackageIntake PASS"
+    - "candidate-package-runtime-shard: scripts/go-test-runtime-shards 0/4 PASS; 70/280 tests including candidate intake owner isolation, blocked transitions, publication draft, switch acceptance, and read-only review surface"
+    - "candidate-package-ratchet: go test ./cmd/runtime-ratchet PASS; go run ./cmd/runtime-ratchet -root . PASS at candidate digest counts"
+    - "candidate-transition-review: ACCEPT d1bd22c0; transition/store/event/API parity; confidence 0.98"
+    - "candidate-authority-review: ACCEPT d1bd22c0; sole owner, one-way promotion dependency, owner scoping, deployed read-only route, and protected blocks preserved; confidence 0.98"
+  blocker_or_risk: "No local blocker. The frozen d1bd22c0 candidate passes focused transitions, runtime shard 0/4, the exact runtime ratchet, and two independent reviews. Residual risk is deployment-only: staging still serves fc0e3a0f until this candidate lands, CI passes, staging identity advances, and authenticated candidate-package product-path acceptance is repeated."
+  next_action: "Commit this acceptance receipt, push the coherent candidate to origin/main, monitor CI and staging identity, then exercise authenticated owner-scoped candidate-package review and source-lineage switch/rollback/roll-forward acceptance before marking this slice complete."
 
 receipts:
   - id: predecessor-B0-authority
