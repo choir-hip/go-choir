@@ -31,6 +31,15 @@ func (rt *Runtime) maybeAutonomousPublishWireArticle(ctx context.Context, doc ty
 		log.Printf("runtime: wire publication work item doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
 		return
 	}
+	publicationSucceeded := false
+	defer func() {
+		if publicationSucceeded {
+			return
+		}
+		if err := rt.cancelTrajectoryAuthority(context.WithoutCancel(ctx), rec.OwnerID, trajectoryIDForRun(rec)); err != nil {
+			log.Printf("runtime: wire publication failure cleanup doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
+		}
+	}()
 	platformResp, err := rt.publishWireArticleToPlatform(ctx, doc, rev, rec)
 	if err != nil {
 		log.Printf("runtime: wire platform publish doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
@@ -60,6 +69,7 @@ func (rt *Runtime) maybeAutonomousPublishWireArticle(ctx context.Context, doc ty
 		log.Printf("runtime: wire publication settle doc=%s rev=%s: %v", doc.DocID, rev.RevisionID, err)
 		return
 	}
+	publicationSucceeded = true
 	rt.noteWireEligiblePublish(ctx, doc.DocID, rev.RevisionID, rec)
 }
 

@@ -226,6 +226,118 @@ func TestTrajectoriesDecodesObjectSettlementRule(t *testing.T) {
 		t.Fatalf("settlement_rule = %s, want the rule object passed through", resp.Trajectories[0].SettlementRule)
 	}
 }
+func TestTrajectoryCancelPostsBodylessEscapedRequest(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if got := r.URL.EscapedPath(); got != "/api/trajectories/traj%2Fwith%20space/cancel" {
+			t.Errorf("escaped path = %q, want /api/trajectories/traj%%2Fwith%%20space/cancel", got)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer choir_sk_test" {
+			t.Errorf("Authorization = %q, want Bearer choir_sk_test", got)
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		if len(body) != 0 {
+			t.Errorf("body = %q, want empty", body)
+		}
+		_, _ = io.WriteString(w, `{"trajectory_id":"traj/with space","status":"cancelled","cancelled_run_ids":[]}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"trajectory", "cancel", "--api-key=choir_sk_test", "--host=" + stub.URL, "traj/with space"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+}
+
+func TestTrajectoryCancelPrintsServerJSON(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"trajectory_id":"traj-1","status":"cancelled","cancelled_run_ids":["run-1","run-2"]}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"trajectory", "cancel", "--api-key=choir_sk_test", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp struct {
+		TrajectoryID    string   `json:"trajectory_id"`
+		Status          string   `json:"status"`
+		CancelledRunIDs []string `json:"cancelled_run_ids"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode stdout: %v; stdout=%s", err, out.String())
+	}
+	if resp.TrajectoryID != "traj-1" || resp.Status != "cancelled" || !reflect.DeepEqual(resp.CancelledRunIDs, []string{"run-1", "run-2"}) {
+		t.Fatalf("response = %+v, want cancelled traj-1 with run-1 and run-2", resp)
+	}
+}
+
+func TestTrajectoryCancelRequiresID(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run([]string{"trajectory", "cancel", "--api-key=choir_sk_test"}, &out, &errOut)
+	if code != 2 {
+		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "choir trajectory cancel: trajectory id required") {
+		t.Fatalf("stderr = %q, want trajectory id usage error", errOut.String())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", out.String())
+	}
+}
+
+func TestTrajectoryCancelReportsServerError(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "cannot cancel trajectory", http.StatusConflict)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"trajectory", "cancel", "--api-key=choir_sk_test", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
+	if code != 1 {
+		t.Fatalf("code = %d, want 1; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "choir trajectory cancel traj-1: http 409: cannot cancel trajectory") {
+		t.Fatalf("stderr = %q, want server error", errOut.String())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", out.String())
+	}
+}
+
+func TestTrajectoryGetCompatibility(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %q, want GET", r.Method)
+		}
+		if r.URL.Path != "/api/trajectories/traj-1" {
+			t.Errorf("path = %q, want /api/trajectories/traj-1", r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"trajectory_id":"traj-1","status":"live"}`)
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"trajectory", "--api-key=choir_sk_test", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("decode stdout: %v; stdout=%s", err, out.String())
+	}
+	if resp["trajectory_id"] != "traj-1" || resp["status"] != "live" {
+		t.Fatalf("response = %v, want live traj-1", resp)
+	}
+}
 
 // TestTextureRevisionsHitsAPI asserts the texture revisions command GETs the
 // revisions endpoint, which returns full content bodies.

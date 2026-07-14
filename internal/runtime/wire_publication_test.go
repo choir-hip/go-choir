@@ -97,6 +97,144 @@ func TestWirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition(t *testing.
 	}
 }
 
+func TestWirePublicationFailureCancelsClaimsWithoutCancellingActivation(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	const trajectoryID = "traj-publish-failure"
+	story, rev := seedEligibleWirePublicationFixture(t, handler, "doc-publish-failure")
+	if err := handler.rt.Store().UpdateDocument(ctx, story); err != nil {
+		t.Fatalf("persist canonical story head: %v", err)
+	}
+	if _, err := handler.rt.Store().CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   trajectoryID,
+		OwnerID:        universalWirePlatformOwnerID(),
+		Kind:           types.TrajectoryKindPublication,
+		SettlementRule: defaultSettlementRuleForKind(types.TrajectoryKindPublication),
+	}); err != nil {
+		t.Fatalf("create publication trajectory: %v", err)
+	}
+	storyResolution, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              universalWirePlatformOwnerID(),
+		TrajectoryID:         trajectoryID,
+		Objective:            "resolve wire story candidate",
+		Reason:               "processor opened a wire story Texture route",
+		AuthorityProfile:     agentprofile.Texture,
+		ObjectiveFingerprint: workitem.StoryResolutionFingerprint(trajectoryID, story.DocID),
+		CreatedByRunID:       "run-publish-failure",
+		Details:              map[string]any{"kind": "wire_story_resolution", "doc_id": story.DocID},
+	})
+	if err != nil {
+		t.Fatalf("create story-resolution work item: %v", err)
+	}
+	now := time.Now().UTC()
+	rec := &types.RunRecord{
+		RunID:        "run-publish-failure",
+		AgentID:      "texture-publish-failure",
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
+		OwnerID:      universalWirePlatformOwnerID(),
+		SandboxID:    "sandbox-test",
+		State:        types.RunRunning,
+		Prompt:       "publish canonical wire revision",
+		TrajectoryID: trajectoryID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			"type":           "texture_agent_revision",
+			"request_intent": "universal_wire_processor_article_revision",
+			"trajectory_id":  trajectoryID,
+		},
+	}
+	if err := handler.rt.Store().CreateRun(ctx, *rec); err != nil {
+		t.Fatalf("create publication activation: %v", err)
+	}
+	activationCtx, cancelActivation := context.WithCancel(context.Background())
+	handler.rt.runningMu.Lock()
+	handler.rt.running[rec.RunID] = cancelActivation
+	handler.rt.runningMu.Unlock()
+	t.Cleanup(func() {
+		handler.rt.runningMu.Lock()
+		delete(handler.rt.running, rec.RunID)
+		handler.rt.runningMu.Unlock()
+		cancelActivation()
+	})
+
+	publisherCalled := false
+	handler.rt.wirePlatformPublisher = func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error) {
+		publisherCalled = true
+		return nil, errors.New("platform publication failed")
+	}
+	handler.rt.maybeAutonomousPublishWireArticle(activationCtx, story, rev, rec)
+	if !publisherCalled {
+		t.Fatal("failing platform publisher was not called")
+	}
+
+	openItems, err := handler.rt.Store().ListWorkItemsByTrajectory(ctx, rec.OwnerID, trajectoryID, true)
+	if err != nil {
+		t.Fatalf("list open work items after publication failure: %v", err)
+	}
+	if len(openItems) != 0 {
+		t.Fatalf("open work items after publication failure = %+v, want none", openItems)
+	}
+	allItems, err := handler.rt.Store().ListWorkItemsByTrajectory(ctx, rec.OwnerID, trajectoryID, false)
+	if err != nil {
+		t.Fatalf("list all work items after publication failure: %v", err)
+	}
+	publicationFingerprint := workitem.PublicationFingerprint(trajectoryID, rev.RevisionID)
+	var publicationItem types.WorkItemRecord
+	found := false
+	for _, item := range allItems {
+		if item.ObjectiveFingerprint == publicationFingerprint {
+			publicationItem = item
+			found = true
+			break
+		}
+	}
+	if !found || publicationItem.Status != types.WorkItemCancelled {
+		t.Fatalf("publication work item = %+v found=%v, want cancelled", publicationItem, found)
+	}
+	storyResolution, err = handler.rt.Store().GetWorkItem(ctx, rec.OwnerID, storyResolution.WorkItemID)
+	if err != nil {
+		t.Fatalf("load story-resolution work item: %v", err)
+	}
+	if storyResolution.Status != types.WorkItemCancelled {
+		t.Fatalf("story-resolution status = %s, want cancelled", storyResolution.Status)
+	}
+	trajectory, err := handler.rt.Store().GetTrajectory(ctx, rec.OwnerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("load failed publication trajectory: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryCancelled || trajectory.SettledAt != nil {
+		t.Fatalf("trajectory = %+v, want cancelled and not settled", trajectory)
+	}
+	canonicalDoc, err := handler.rt.Store().GetDocument(ctx, story.DocID, story.OwnerID)
+	if err != nil {
+		t.Fatalf("load canonical story after publication failure: %v", err)
+	}
+	if canonicalDoc.CurrentRevisionID != rev.RevisionID {
+		t.Fatalf("canonical story head = %q, want durable revision %q", canonicalDoc.CurrentRevisionID, rev.RevisionID)
+	}
+	canonicalRev, err := handler.rt.Store().GetRevision(ctx, rev.RevisionID, rev.OwnerID)
+	if err != nil {
+		t.Fatalf("load canonical revision after publication failure: %v", err)
+	}
+	if canonicalRev.DocID != rev.DocID || canonicalRev.Content != rev.Content {
+		t.Fatalf("canonical revision changed after publication failure: %+v", canonicalRev)
+	}
+	storedRun, err := handler.rt.Store().GetRun(ctx, rec.RunID)
+	if err != nil {
+		t.Fatalf("load publication activation: %v", err)
+	}
+	if storedRun.State != types.RunRunning || storedRun.FinishedAt != nil {
+		t.Fatalf("publication activation = %+v, want still running", storedRun)
+	}
+	select {
+	case <-activationCtx.Done():
+		t.Fatalf("publication activation was self-cancelled: %v", activationCtx.Err())
+	default:
+	}
+}
+
 func TestWirePublicationDoesNotBootstrapLocalEdition(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()

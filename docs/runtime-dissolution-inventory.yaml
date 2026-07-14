@@ -6,17 +6,17 @@ counts:
     go_files: 131
     production_files: 68
     test_files: 63
-    production_loc: 42917
-    test_loc: 49320
-    exports: 935
-    export_caller_edges: 293
+    production_loc: 43022
+    test_loc: 49699
+    exports: 940
+    export_caller_edges: 296
     initial_unused_export_debt: 15
     routes: 2
     tools: 48
     production_importers: 4
     wrappers: 4
     compatibility_markers: 8
-    store_calls: 443
+    store_calls: 444
     interface_candidates: 4
     citers: 1345
 files:
@@ -46,7 +46,7 @@ files:
       loc: 131
     - id: internal/runtime/api_trajectory.go [production]
       disposition: api
-      loc: 64
+      loc: 121
     - id: internal/runtime/app_promotion.go [production]
       disposition: promotion
       loc: 1065
@@ -193,7 +193,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3650
+      loc: 3688
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -376,7 +376,7 @@ files:
       loc: 143
     - id: internal/runtime/trajectory_test.go [test]
       disposition: core
-      loc: 334
+      loc: 575
     - id: internal/runtime/universal_wire.go [production]
       disposition: wire
       loc: 30
@@ -403,10 +403,10 @@ files:
       loc: 513
     - id: internal/runtime/wire_publication.go [production]
       disposition: wire
-      loc: 624
+      loc: 634
     - id: internal/runtime/wire_publication_test.go [test]
       disposition: wire
-      loc: 172
+      loc: 310
     - id: internal/runtime/wire_reconciler_debounce.go [production]
       disposition: wire
       loc: 341
@@ -818,6 +818,10 @@ exports:
       disposition: api
       production_callers:
         - internal/apihandler/routes.go
+    - id: internal/runtime/api_trajectory.go:method(*APIHandler):HandleTrajectoryCancel
+      disposition: api
+      production_callers:
+        - internal/runtime/api_trajectory.go
     - id: internal/runtime/api_trajectory.go:method(*APIHandler):HandleTrajectoryDetail
       disposition: api
       production_callers:
@@ -1528,6 +1532,11 @@ exports:
       production_callers:
         - internal/runtime/texture.go
         - internal/runtime/texture_agent_revision.go
+    - id: internal/runtime/runtime.go:method(*Runtime):CancelTrajectory
+      disposition: lifecycle
+      production_callers:
+        - internal/runtime/api_trajectory.go
+        - internal/runtime/runtime.go
     - id: internal/runtime/runtime.go:method(*Runtime):DispatchActorActive
       disposition: lifecycle
     - id: internal/runtime/runtime.go:method(*Runtime):EnsurePersistentSuperAgent
@@ -2624,7 +2633,11 @@ exports:
       disposition: core
     - id: internal/runtime/trajectory_test.go:func:TestCancelRunTrajectoryPersistsFallbackTrajectoryID
       disposition: core
+    - id: internal/runtime/trajectory_test.go:func:TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns
+      disposition: core
     - id: internal/runtime/trajectory_test.go:func:TestEvaluateTrajectorySettlementIsPureDataEvaluation
+      disposition: core
+    - id: internal/runtime/trajectory_test.go:func:TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation
       disposition: core
     - id: internal/runtime/trajectory_test.go:func:TestProcessorSpawnMintsPublicationTrajectory
       disposition: core
@@ -2721,6 +2734,8 @@ exports:
     - id: internal/runtime/wire_processor_decision_test.go:func:TestRecordWireProcessorDecisionToolRejectsAlreadyCoveredWithoutPublishedDoc
       disposition: wire
     - id: internal/runtime/wire_publication_test.go:func:TestWirePublicationDoesNotBootstrapLocalEdition
+      disposition: wire
+    - id: internal/runtime/wire_publication_test.go:func:TestWirePublicationFailureCancelsClaimsWithoutCancellingActivation
       disposition: wire
     - id: internal/runtime/wire_publication_test.go:func:TestWirePublicationSettlesFromCorpusdReceiptWithoutLocalEdition
       disposition: wire
@@ -2910,7 +2925,7 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/runtime.go:102:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
-    - id: internal/runtime/runtime.go:1958:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1996:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/tools_capsule.go:297:This preserves backward compatibility with existing callers.
       disposition: delete
@@ -3181,16 +3196,10 @@ store_calls:
       disposition: read
     - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.GetRun
       disposition: read
-    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.ListActiveRunsByTrajectoryExcluding
-      disposition: read
-    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.ListWorkItemsByTrajectory
-      disposition: read
     - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.UpdateRun
       disposition: lifecycle
-    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.UpdateTrajectoryStatus
-      disposition: wire
-    - id: internal/runtime/runtime.go:CancelRunTrajectory:internal/store.method:Store.UpdateWorkItemStatus
-      disposition: wire
+    - id: internal/runtime/runtime.go:CancelTrajectory:internal/store.method:Store.ListActiveRunsByTrajectoryExcluding
+      disposition: read
     - id: internal/runtime/runtime.go:EnsurePersistentSuperAgent:internal/store.method:Store.UpsertAgent
       disposition: lifecycle
     - id: internal/runtime/runtime.go:ExecuteActivationSync:internal/store.method:Store.GetRun
@@ -3223,6 +3232,14 @@ store_calls:
       disposition: wire
     - id: internal/runtime/runtime.go:buildAppagentRevisionMetadata:internal/store.method:Store.GetRevision
       disposition: read
+    - id: internal/runtime/runtime.go:cancelTrajectoryAuthority:internal/store.method:Store.GetTrajectory
+      disposition: read
+    - id: internal/runtime/runtime.go:cancelTrajectoryAuthority:internal/store.method:Store.ListWorkItemsByTrajectory
+      disposition: read
+    - id: internal/runtime/runtime.go:cancelTrajectoryAuthority:internal/store.method:Store.UpdateTrajectoryStatus
+      disposition: wire
+    - id: internal/runtime/runtime.go:cancelTrajectoryAuthority:internal/store.method:Store.UpdateWorkItemStatus
+      disposition: wire
     - id: internal/runtime/runtime.go:channelHasGroundedHistory:internal/store.method:Store.ListChannelMessages
       disposition: read
     - id: internal/runtime/runtime.go:channelHasGroundedHistory:internal/store.method:Store.ListRunsByChannel

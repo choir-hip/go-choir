@@ -89,6 +89,7 @@ Commands:
   wire diagnostics    Print wire feed diagnostics (edition substrate state)
   trajectories        List recent trajectories (ingestion/run state)
   trajectory <id>     Show one trajectory's obligations
+  trajectory cancel <id>  Cancel an owner-scoped trajectory
   texture read <doc>  Read a Texture document's metadata (title, current revision id)
   texture history <doc>  List revision history for a document (metadata only)
   texture revisions <doc>  List revisions with full content bodies
@@ -348,6 +349,9 @@ func runTrajectories(args []string, stdout, stderr io.Writer) int {
 }
 
 func runTrajectory(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "cancel" {
+		return runTrajectoryCancel(args[1:], stdout, stderr)
+	}
 	fs := flag.NewFlagSet("choir trajectory", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	c, err := newClient(fs, args, stdout, stderr)
@@ -364,6 +368,28 @@ func runTrajectory(args []string, stdout, stderr io.Writer) int {
 	var resp json.RawMessage
 	if err := c.do(http.MethodGet, "/api/trajectories/"+id, nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir trajectory %s: %v\n", id, err)
+		return 1
+	}
+	return writeJSON(stdout, resp)
+}
+func runTrajectoryCancel(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir trajectory cancel", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir trajectory cancel: %v\n", err)
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
+		fmt.Fprintln(stderr, "choir trajectory cancel: trajectory id required")
+		return 2
+	}
+	id := strings.TrimSpace(rest[0])
+	var resp json.RawMessage
+	path := "/api/trajectories/" + url.PathEscape(id) + "/cancel"
+	if err := c.do(http.MethodPost, path, nil, &resp); err != nil {
+		fmt.Fprintf(stderr, "choir trajectory cancel %s: %v\n", id, err)
 		return 1
 	}
 	return writeJSON(stdout, resp)

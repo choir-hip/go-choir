@@ -162,11 +162,11 @@ now:
       repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; the exact 1345-citer baseline passes."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: authorized_build
+    state: verified_local
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0
-    digest: pending_candidate_build
+    digest: sha256:3f19dafcac7f9be66a3a1432d7a6100d9b2aa8a290eab5e65c644058c2beea87
     scope: [trajectory_cancellation_authority, wire_publication_failure_terminalization, owner_trajectory_cancel_api]
   decision:
     selected: "Extract the trajectory/work-item state transition behind existing run-based cancellation into one shared authority. Explicit owner cancellation also stops active runs; in-process publication failure uses the same authority transition without cancelling its currently executing activation. Expose owner-scoped POST cancellation and a Choir CLI command."
@@ -181,11 +181,15 @@ now:
     - "ratchet-test:go test ./cmd/runtime-ratchet"
     - "ratchet-command:go run ./cmd/runtime-ratchet -root ."
     - "ratchet-citers:1345"
+    - "focused-runtime:trajectory authority, HTTP owner isolation, publication failure, and success-path contracts PASS"
+    - "focused-cli:trajectory cancel and detail contracts PASS"
+    - "runtime-shards:275/275 PASS"
+    - "cli-and-ratchet:PASS; inventory 1345 citers and 8 compatibility markers"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "The observed trajectory remains live with one unassigned open publication item. The only current owner cancellation surface is run-addressed or pending-document-addressed, so neither can safely disposition this completed-run/no-pending state."
-  next_action: "Commit the verified ratchet repair, then build the shared cancellation authority, owner API/CLI, and publication-failure terminalization in isolated file scopes with focused contracts."
+  blocker_or_risk: "The verified candidate has not been frozen, independently reviewed, pushed, deployed, or exercised against the observed stuck staging trajectory."
+  next_action: "Commit the verified red candidate, run independent review against that frozen identity, repair any blocker, then push and execute authenticated staging trajectory cancellation."
 
 receipts:
   - id: predecessor-B0-authority
