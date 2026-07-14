@@ -162,11 +162,11 @@ now:
       repaired: "GET /api/costs now has one implementation owner in internal/apihandler, one direct route registration, and no runtime source or test copy."
   candidate:
     id: R1-api-owner-cutover-10
-    state: verified_local_pending_review
+    state: review_repair_applied
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@5fd2fd24
-    digest: pending_frozen_commit
+    digest: frozen_commit:04a7d4f4; final_inventory_repair:pending
     scope: [costs_api_handler, canonical_apihandler_owner, sandbox_store_injection, direct_route_registration]
   decision:
     selected: "Move GET /api/costs and all eight focused contracts from internal/runtime to an injected store-backed internal/apihandler.Handler; register that method directly while leaving the remaining runtime handler surface unchanged."
@@ -181,8 +181,10 @@ now:
     - "focused-apihandler:go test -tags comprehensive ./internal/apihandler -run TestHandleCosts|TestLLMCostPackageIntegration|TestRegisterRoutes PASS"
     - "sandbox-wiring:go test ./internal/sandbox PASS"
     - "runtime-ratchet:PASS; 129 Go files, 67 production, 62 test, 42915 production LOC, 49998 test LOC, 936 exports, 294 caller edges, 441 classified store calls, 1347 citers"
-  blocker_or_risk: "Local focused behavior and structural gates pass. The candidate still needs a frozen commit and independent API-ownership review before landing."
-  next_action: "Freeze the coherent costs API cutover, obtain independent review of behavior parity and authority topology, then land only if accepted."
+    - "independent-costs-behavior-review:ACCEPT; method, authentication, owner isolation, query/filter semantics, JSON envelope, store dependency, and route wiring preserved"
+    - "independent-costs-topology-review:REPAIR; clean cutover accepted, but inventory captured a pre-final-Definition citer and required regeneration"
+  blocker_or_risk: "Behavior review accepts the frozen code. The topology review's only blocker was a stale Definition citer in the generated inventory; regeneration after the final card update is the complete repair."
+  next_action: "Regenerate the inventory after this final card update, freeze the repair, and obtain topology re-review before landing."
 
 receipts:
   - id: predecessor-B0-authority

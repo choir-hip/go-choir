@@ -6163,7 +6163,7 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "internal/runtime, a compatibility facade, or dual ownership remains"
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:conjecture_delta: "A cohesive API-owned slice can leave internal/runtime only when its handler and every production caller move together to one canonical owner without changing route registration or behavior."'
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:selected: "Move GET /api/costs and all eight focused contracts from internal/runtime to an injected store-backed internal/apihandler.Handler; register that method directly while leaving the remaining runtime handler surface unchanged."'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:slice: "extract one cohesive API ownership boundary from internal/runtime"'
       disposition: block
