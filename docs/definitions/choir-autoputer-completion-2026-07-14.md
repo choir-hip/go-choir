@@ -138,11 +138,11 @@ measures:
 
 now:
   status: working
-  slice: "map Texture ownership boundary out of internal/runtime"
-  question: "Which canonical Texture owner can absorb revision APIs, structured editing, merge/proposal logic, source attachment, lifecycle wake integration, and document identity without moving canonical write authority into Runtime callbacks?"
+  slice: "implement Texture owner and retire internal/runtime"
+  question: "Does a direct textureowner over the renamed agentcore preserve canonical writes, source/evidence invariants, model-backed merges, tool behavior, actor wake, and user isolation while eliminating the internal/runtime package without callbacks or dual authority?"
   reconciliation:
-    observed_at: 2026-07-14T18:51:56Z
-    source_ref: refs/remotes/origin/main@36caa912d9a2855cfa473d88e3393bc39c64c74e
+    observed_at: 2026-07-14T18:56:54Z
+    source_ref: refs/remotes/origin/main@3d2d2f2fb9356edbc1c56bb9adebe5f754b1b910
     deploy_identity: "CI 29358737663 PASS; deploy job 87174088250; activation receipt 36caa912d9a2855cfa473d88e3393bc39c64c74e@2026-07-14T18:46:29Z; sandbox, active computers, ordinary guest, playwright guest, and gateway report the landed commit."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -151,29 +151,30 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: mapping
-    protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation]
-    admissible_evidence: "Exact type/API/store/tool/caller map; settled authority conformance; deletion-first owner boundary; focused Texture contracts; all four runtime shards; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed Texture product-path acceptance."
-    rollback_ref: 36caa912d9a2855cfa473d88e3393bc39c64c74e
-    conjecture_delta: "Unresolved: Texture is the canonical write authority, but its API, structured editing, merge, proposal, source-graph, tool, and wake integration currently remain embedded in internal/runtime. Mapping must distinguish canonical Texture ownership from actor lifecycle and generic Runtime composition before choosing a deletion boundary."
+    status: authority_boundary_frozen
+    protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
+    admissible_evidence: "Exact type/API/store/tool/caller map; settled authority conformance; deletion-first owner boundary; no internal/runtime imports or files; focused Texture and agentcore contracts; all four former runtime shards; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed Texture product-path acceptance."
+    rollback_ref: 3d2d2f2fb9356edbc1c56bb9adebe5f754b1b910
+    conjecture_delta: "Confirmed topology: internal/texturedoc and internal/textureprompts already own and are wired for structured document and prompt substrates, but are not the canonical behavior owner. Rename the remaining generic run business-logic package from internal/runtime to internal/agentcore, then create internal/textureowner for every Texture API, canonical revision/source/proposal/merge/tool/wake behavior. textureowner may depend directly on concrete agentcore lifecycle APIs; agentcore must not import textureowner. cmd/sandbox and apihandler compose both owners directly."
     heresy_delta:
-      discovered: none
+      discovered: "The prior lifecycle/core boundary receipt left the package named internal/runtime and actorruntime still importing it; ownership was named but package extinction was not complete. Deployed acceptance also showed a researcher result completed without a subsequent Texture incorporation run during a three-minute observation window; this is inside the already-deferred Texture wake boundary."
       introduced: none
       repaired: none
   candidate:
     id: R1-texture-owner-cutover-16
-    state: mapping
+    state: authority_boundary_frozen
     ref: none
     owner: orchestrator
-    base: refs/remotes/origin/main@36caa912d9a2855cfa473d88e3393bc39c64c74e
-    digest: "Map every Texture-owned type, route, structured edit, proposal, source graph, tool, identity, and wake caller; inspect existing owner packages and settled decisions; freeze the smallest deletion-first boundary before implementation."
-    scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake]
+    base: refs/remotes/origin/main@3d2d2f2fb9356edbc1c56bb9adebe5f754b1b910
+    digest: "Rename internal/runtime to internal/agentcore as the generic run business-logic owner. Move all sixteen Texture production files and their tests into internal/textureowner; route HTTP and tool composition directly to that owner; expose only legitimate agentcore lifecycle methods needed by Texture; delete the old package/import path with no aliases, wrappers, re-exports, or callback seams."
+    scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
   evidence_refs:
-    - "deployed-model-policy: HTTP-200 researcher=chatgpt/gpt-5.4-mini/medium source=/mnt/persistent/files/System/model-policy.toml; sandbox header 36caa912"
-    - "deployed-researcher: trajectory e6283f92-7167-4426-a21a-a13d64b9b04b; researcher run 1af42058-a64d-45b3-a7a3-863265d401a0 completed with official OpenAI Responses API source URL; model-policy metadata chatgpt/gpt-5.4-mini/medium"
-    - "deferred-settlement: researcher result completed but no later Texture incorporation run appeared during the acceptance window; wake/settlement remains in the explicitly deferred Texture/core boundary"
-  blocker_or_risk: "No current execution blocker. Highest risk is creating a second Texture authority by extracting helpers without moving canonical methods and their source/evidence invariants together."
-  next_action: "Map Texture files, symbols, store calls, routes, tools, actor wake paths, existing owner packages, and settled decisions; freeze a deletion-first owner boundary before behavior-changing code."
+    - "source-map: 16 production Texture files in internal/runtime (api_texture_prompt_eval.go; texture*.go; tools_texture.go), 14,496 production LOC by retained inventory; routes in apihandler/routes.go and runtime/api.go; registration in tool_profiles.go"
+    - "coupling-map: canonical writes depend directly on Store/content/modelpolicy/provider/events; actor wake/tools additionally call run start, coagent, channel, event, trajectory, and persistent-super lifecycle methods currently owned by Runtime"
+    - "replacement-check: internal/texturedoc and internal/textureprompts are wired substrates; internal/actor and internal/actorruntime own mailbox lifecycle, but actorruntime still imports internal/runtime as its business-logic core"
+    - "deferred-problem: staging trajectory e6283f92-7167-4426-a21a-a13d64b9b04b completed researcher run 1af42058-a64d-45b3-a7a3-863265d401a0 without a later Texture incorporation run during the acceptance window"
+  blocker_or_risk: "No current execution blocker. Primary structural risk is an import cycle or callback seam between Texture and agentcore; enforce one-way textureowner -> agentcore dependency and compose registrations/routes outside both packages."
+  next_action: "Checkpoint this frozen red boundary, rename the generic core package first, then move disjoint Texture file groups into the canonical owner and reconcile compilation without behavior changes."
 
 receipts:
   - id: predecessor-B0-authority
