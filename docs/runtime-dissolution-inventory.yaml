@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 8
     store_calls: 443
     interface_candidates: 4
-    citers: 307
+    citers: 333
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -4052,6 +4052,24 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:`/internal/runtime/runs`). Every attempt executing that definition therefore
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- All production and test callers import the concrete internal/search owner directly; internal/search imports no internal/runtime package.
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime.gatewayProviderHealth
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime.gatewaySearchAttempt
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime.gatewaySearchClient
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime.gatewaySearchOutageBody
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime.newGatewaySearchClientFromEnv
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime.parseGatewaySearchOutage
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime.webSearchClient
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime.webSearchResponse
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/agent_tools_test.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/api.go
@@ -4098,6 +4116,14 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime_test.go
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/search_gateway.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/search_gateway.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/search_gateway_test.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/search_gateway_test.go#2
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/skill_context.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/super_controller.go
@@ -4111,6 +4137,12 @@ citers:
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go#3
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go:Runtime.InstallDefaultAgentTools
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go:Runtime.buildRegistryForRole
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go:func:canDelegateTo
       disposition: block
@@ -4126,7 +4158,23 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_email.go
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_research.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_research.go:RegisterResearchTools
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_research.go:compactWebSearchProjection
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_research.go:newWebSearchTool
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_research.go:newWebSearchTool#2
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_researcher.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_test.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_test.go:TestCompactWebSearchProjectionGuidesResearchUpdateCheckpoint
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_test.go:TestCompactWebSearchProjectionSurfacesGatewayOutage
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_texture.go
       disposition: block
@@ -4162,7 +4210,11 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:`internal/runtime` and make the ratchet extinction target pass.
       disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:conjecture: The gateway-backed web-search client, response contract, and structured outage semantics can move atomically from internal/runtime into the existing dependency-leaf internal/search owner w… [sha256:276354591a78d305c2a04ede664cca3ea025111b8dfdeaa29024b090d9c021e8]'
+      disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:conjecture: The two duplicate canonical profile alias tables plus the complete role capability/delegation policy can move atomically from internal/runtime/tool_profiles.go and internal/toolregistry/ba… [sha256:8167fe428b2fc373a130f46e0485a268a38d86e6862c03ac97b7625cc004479e]'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive production-used research boundary. internal/runtime/search_gateway.go is already classified for deletion, and its only production constructor caller … [sha256:46acc30961dbacb964c02bb43a927ebdce54c6be5e07602cb6e6269b2ac45eb7]'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block

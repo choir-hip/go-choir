@@ -394,14 +394,14 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T03:05:30Z
+  updated_at: 2026-07-14T04:00:58Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@2e3286e27fce363c475aa104f63afba425cd0322
+  expected_parent_or_authority_ref: refs/heads/main@origin@4a1bbdd1a43b0d0cbda6b5ef03950aa48785a97
   status: working
-  current_subgoal: R1-work-item-fingerprint-owner-cutover-05
+  current_subgoal: R1-search-gateway-owner-cutover-06
   active_phase: R1-runtime-dissolution
   active_frontier:
-    - R1-work-item-fingerprint-owner-cutover-05
+    - R1-search-gateway-owner-cutover-06
   locks:
     - id: R1-prompt-store-package-cutover-03
       status: complete
@@ -680,7 +680,7 @@ state_capsule:
           - duplicate canonical profile normalization tables in runtime and toolregistry
           - nested runtime ownership of capability and delegation policy
     - id: R1-work-item-fingerprint-owner-cutover-05
-      status: verified_local
+      status: complete
       mutation_class: red
       classification_rationale: Deterministic work-item identities control durable deduplication, obligation reuse, and run-lifecycle behavior. The cutover intends no byte or policy delta, but moving this authority touches lifecycle identity and therefore requires red ceremony.
       conjecture: All five deterministic work-item fingerprint constructors can move atomically from runtime into one dependency-leaf internal/workitem owner, with every production and test caller cut directly to its concrete API and no change to normalized objective bytes, hash bytes, prefix formats, empty-input behavior, persisted fingerprints, work-item deduplication, trajectory obligations, completion, or restart behavior.
@@ -782,12 +782,178 @@ state_capsule:
           observation: google-antigravity/gemini-3.5-flash and opencode/hy3-free independently passed immutable candidate d359a04ded5621087a57d36a0bbb7be93180204d29b6f01e2a61a7b173e59cea with no required repair; direct caller enumeration adjudicated one non-blocking reviewer miscount
       validation_notes:
         - The comprehensive-tag runtime target remains independently stale across unrelated prompt, API, and Texture tests. Those two locked comprehensive caller files were formatted and migrated directly, but are excluded from local compilation evidence; canonical CI and E5 remain mandatory.
+      landed_receipts:
+        commit_sha: 4a1bbdd1a43b0d0cbda6b5ef03950aa48785a97
+        ci:
+          run_id: 29303459550
+          status: success
+          url: https://github.com/choir-hip/go-choir/actions/runs/29303459550
+        deployment:
+          job_id: 86992455034
+          status: success
+          staging_build_sha: 4a1bbdd1a43b0d0cbda6b5ef03950aa48785a97
+          computer_status: ready
+        staging_acceptance:
+          trajectory_id: 5053c721-50ad-4238-9608-7ba694f881c5
+          conductor_loop_id: f42008db-e1d5-4118-a013-36e76a5e98d6
+          researcher_loop_id: b5c2f6c2-9aea-435b-b2fd-d6c12973c114
+          work_item_id: 09907fb1-715d-4b40-8c4a-57b4fddf1789
+          objective_fingerprint: spawned_coagent:e11286c0a0ef435fc777bd4f368896fcaf9ed3bceb04614fdd756c485fe86e93
+          texture_doc_id: 846abd91-a34d-4586-80f7-542d8916dfdd
+          initial_revision_id: e98c1652-a751-4798-bf06-fcbcb921b810
+          accepted_revision_id: d6beaad9-bdbd-4a01-8001-63858a7aaaf5
+          accepted_revision_hash: rev2:81aa3c2d359afd22fb891415e45841e05bf2e5e5f4903a213dc67c8400d92f10
+          observation: The authenticated staging conductor created exactly one researcher work item with the independently recomputed owner fingerprint, waited for the exact twenty-token result, consumed the worker update, reached zero open work items and zero pending updates, and replaced the Texture document with the exact acceptance sentence.
+      completion_adjudication: Complete at E6. Canonical CI and deploy succeeded for the landed commit; staging health and the current computer reported that exact build; the authenticated product path exercised conductor-to-researcher creation, durable work-item identity, completion, update consumption, settlement, and exact Texture revision publication; the independent immutable-candidate panel had already verified the exact caller graph, golden vectors, lifecycle tests, and ratchet delta. No protected-surface failure, authority seam, or residual work-item obligation remained.
       heresy_delta:
         discovered:
           - deterministic durable work-item identity is split between a standalone runtime objective helper file and four private wire-publication helpers
         introduced: []
         repaired:
           - deterministic durable work-item identity split between a standalone runtime objective helper file and four private wire-publication helpers
+    - id: R1-search-gateway-owner-cutover-06
+      status: defined
+      mutation_class: red
+      classification_rationale: Web-search provider routing is protected. The cutover changes only Go source ownership, but it moves the gateway transport contract and deletes an unused direct-provider implementation, so exact routing, authentication, outage semantics, tool exposure, and deployed provider behavior require red ceremony.
+      conjecture: The gateway-backed web-search client, response contract, and structured outage semantics can move atomically from internal/runtime into the existing dependency-leaf internal/search owner while its unused direct-provider implementation is deleted, with no request, response, provider-routing, tool-policy, evidence, or agent-visible behavior delta.
+      conjecture_delta: Gateway search transport becomes one explicit dependency-leaf authority instead of a private runtime client beside an unwired direct-provider package. The gateway remains the sole provider selector and health authority; no provider, model, cadence, projection, or routing policy changes.
+      object: gateway-backed research search client and response-contract ownership
+      selection_rationale: This is the smallest cohesive production-used research boundary. internal/runtime/search_gateway.go is already classified for deletion, and its only production constructor caller and response consumers are the research tool registry and projection. The existing internal/search package has no repository importer; connecting its direct Tavily/Brave/Exa/Serper implementation would bypass the canonical gateway and violate sole provider-routing authority. Deleting that superseded implementation and reusing its package path is deletion-first, avoids a third search package, and removes one runtime production file and one runtime test file.
+      exact_source_scope:
+        - internal/search/search.go
+        - internal/search/search_test.go
+        - internal/runtime/search_gateway.go
+        - internal/runtime/search_gateway_test.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/tools_research.go
+        - internal/runtime/tools_test.go
+        - docs/runtime-dissolution-inventory.yaml
+        - docs/definitions/choir-autoputer-completion-2026-07-13.md
+      owner_contract:
+        package: internal/search
+        exports:
+          - Client
+          - Response
+          - NewGatewayClientFromEnv
+        private_implementation:
+          - gatewaySearchClient
+          - gatewaySearchAttempt
+          - gatewaySearchOutageBody
+          - gatewayProviderHealth
+          - parseGatewaySearchOutage
+          - firstNonEmptyString
+        behavior: Client.Search POSTs the same query and optional positive max_results JSON to /provider/v1/search, sends the same bearer token and content type, preserves the same 30-second default timeout, returns the same successful response fields, projects search_outage into the same structured non-error response, and preserves the same malformed, transport, status, and gateway-error failures.
+        dependency_note: firstNonEmptyString is redefined privately in internal/search/search.go with the same trim-first behavior because the runtime helper lives in tools_vmctl.go outside this boundary; internal/search must not import runtime.
+      runtime_deletions:
+        - internal/runtime/search_gateway.go
+        - internal/runtime/search_gateway_test.go
+        - internal/runtime.webSearchClient
+        - internal/runtime.webSearchResponse
+        - internal/runtime.gatewaySearchClient
+        - internal/runtime.gatewaySearchAttempt
+        - internal/runtime.gatewaySearchOutageBody
+        - internal/runtime.gatewayProviderHealth
+        - internal/runtime.newGatewaySearchClientFromEnv
+        - internal/runtime.parseGatewaySearchOutage
+      superseded_search_deletions:
+        - SearchResult
+        - SearchResponse
+        - SearchRequest
+        - SearchProvider
+        - SearchClient
+        - NewSearchClient
+        - SearchClient.Search
+        - SearchClient.AvailableProviders
+        - TavilyProvider and parseTavilyResults
+        - BraveProvider and parseBraveResults
+        - ExaProvider and parseExaResults
+        - SerperProvider and parseSerperResults
+        - truncateError
+      exact_caller_graph:
+        constructor:
+          production:
+            - internal/runtime/tool_profiles.go:Runtime.InstallDefaultAgentTools
+          tests:
+            - internal/search/search_test.go
+        client_contract:
+          production:
+            - internal/runtime/tool_profiles.go:Runtime.buildRegistryForRole
+            - internal/runtime/tools_research.go:RegisterResearchTools
+            - internal/runtime/tools_research.go:newWebSearchTool
+        response_contract:
+          production:
+            - internal/runtime/tools_research.go:newWebSearchTool
+            - internal/runtime/tools_research.go:compactWebSearchProjection
+          tests:
+            - internal/runtime/tools_test.go:TestCompactWebSearchProjectionGuidesResearchUpdateCheckpoint
+            - internal/runtime/tools_test.go:TestCompactWebSearchProjectionSurfacesGatewayOutage
+        legacy_direct_provider_importers: []
+      invariants:
+        - RUNTIME_GATEWAY_URL remains first-choice base URL and PROXY_VMCTL_URL remains the fallback; missing base URL or RUNTIME_GATEWAY_TOKEN yields a nil client and unavailable web_search rather than a typed-nil interface.
+        - The request method, /provider/v1/search suffix, query bytes, positive max_results omission rule, Authorization bearer value, Content-Type, timeout, unbounded response-body read behavior, and error prefixes remain byte-for-byte unchanged.
+        - HTTP 200 success preserves query, provider, providers, attempts, results, merged_count, waves, degraded, provider_health, outage, code, and error JSON semantics.
+        - A body whose code or error is search_outage remains a successful structured Response with empty non-nil results, fallback query behavior, attempts, provider health, outage, degraded, code, and error fields preserved exactly.
+        - Non-outage non-200 responses, malformed JSON, request creation, transport, and body-read failures retain their existing observable error classes and text.
+        - The gateway remains the sole provider selection, cooldown, health, merge, and credential authority. No runtime or internal/search code may call Tavily, Brave, Exa, or Serper directly after the cutover.
+        - web_search registration, researcher authorization, minimum forty-result request floor, fifty-result schema ceiling, compact projection, Trace full-output evidence, checkpoint cadence, source_search, and all other research tools remain unchanged.
+        - No runtime compatibility alias, facade, wrapper, duplicate response type, legacy constructor, direct-provider fallback, or import cycle is retained.
+        - All production and test callers import the concrete internal/search owner directly; internal/search imports no internal/runtime package.
+        - Persisted state, routes, stores, lifecycle, work items, Texture, Trace, promotion, vmctl, provider/model policy, and agent-profile policy are unchanged.
+      exact_tests:
+        - internal/search constructor environment precedence, missing configuration, successful request method/path/headers/body and complete response decode
+        - internal/search structured outage projection with fallback query, attempts, provider health, empty results, degraded flag, code, and error
+        - internal/search non-outage gateway error, generic status, malformed success response, and transport failure behavior
+        - existing runtime compact web-search success/checkpoint and structured-outage projections
+        - focused runtime tool-profile registry and web_search execution behavior
+      forbidden_targets:
+        - gateway route, authentication, provider selection, cooldown, health, merge, credential, or response schema changes
+        - direct provider calls or provider API-key reads outside the gateway
+        - web_search name, description, parameters, result floor, result ceiling, projection, Trace evidence, checkpoint cadence, or role exposure changes
+        - source_search, source-service, content import/fetch, route, store, lifecycle, work-item, Texture, promotion, vmctl, or model-policy behavior
+        - edits outside exact_source_scope
+        - compatibility aliases, re-exports, facades, duplicate clients, or dual routing
+      protected_surfaces:
+        - gateway provider routing and authentication
+        - web_search agent tool behavior and Trace evidence
+        - role-based tool exposure
+      admissible_evidence:
+        - E0 frozen base, exact diff, complete LSP caller graph, and proof that internal/search has no importer before cutover
+        - E1 runtime extinction of the private gateway client/response types and all direct provider symbols, one dependency-leaf owner, no internal/search-to-runtime import, and ratchet reduction
+        - E2 direct owner tests plus focused runtime projection, registry, and web_search behavior tests
+        - E5 canonical CI/deploy identity plus an authenticated staging coagent web_search transition whose Trace evidence proves gateway-backed results or an honest structured outage
+        - E6 independent immutable-candidate verification bound to exact diff, caller graph, request/response golden behavior, ratchet delta, and focused tests
+      rollback_ref: 4a1bbdd1a43b0d0cbda6b5ef03950aa48785a97
+      close_condition: Runtime contains none of its private gateway-search client, response, or outage types and no search_gateway files; internal/search contains only the gateway-backed client contract and direct tests, with every legacy direct-provider symbol absent; all callers use the owner directly; request, response, outage, error, tool-policy, provider-routing, role exposure, and evidence behavior are unchanged; the ratchet passes with runtime file/LOC/interface reductions and only authorized documentation changes; independent review finds no authority delta or seam; and canonical CI/deploy plus an authenticated staging coagent web_search transition bind the landed commit.
+      assurance:
+        independent_verifier: required
+        panel: compact
+        review_binding: frozen base, exact diff digest, complete LSP caller graph, pre/post request-response vectors, ratchet delta, focused tests, and staging coagent web_search transition
+        define_review_result:
+          initial_candidate_diff_sha256: 84335ccf2520bea251cc44d911d8877a1cce5c58549b4f0437dfb444312833f6
+          repaired_candidate_diff_sha256: a87f3c896da1a08f2ab45a35dd329c3f57fd7ead8f639dd9d3dd6d32c67b96ba
+          reviewers:
+            - google-antigravity/gemini-3.5-flash: PASS
+            - opencode/hy3-free: PASS after bounded repair
+          adjudication: Both reviewers verified the zero-importer legacy search package, complete gateway constructor/client/response caller graph, request/response/outage semantics, red evidence floor, and Define-only citer rise. One reviewer required the lock to preserve the actual gatewaySearchClient and firstNonEmptyString names, state that the dependency-local helper replaces an out-of-scope runtime helper without importing runtime, and distinguish the method's delete disposition from the containing file's research domain. The repaired candidate passed bounded rereview with no remaining semantic blocker; the repaired wording mechanically changed the exact authorized documentation-only endpoint from 334 to 333, which was recomputed after appending this receipt.
+          count_review:
+            candidate_diff_sha256: 3c0c6fa7a88fbc96eec597f286b095cd1370da2b7919896a1514c40a7315777c
+            reviewer: opencode/hy3-free
+            result: PASS
+            observation: Independent rerun of the ratchet confirmed citers 307 to 333 with every source-category count unchanged and the semantic repairs intact.
+          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, caller graph, behavior invariants, evidence floor, or stopping condition.
+      local_evidence:
+        - class: E0
+          observation: repository import search finds no caller of internal/search, while LSP resolves the deployed gateway constructor only from runtime tool-profile installation and the runtime response contract only through research registration, execution, projection, and two projection tests
+        - class: E0
+          observation: the inventory classifies gatewaySearchClient.Search as delete and the containing search_gateway.go file under the research domain; R1 requires the file itself to leave runtime. The existing internal/search direct-provider implementation is unwired and would violate the canonical gateway provider-routing boundary if connected.
+      validation_notes:
+        - Runtime baseline before this Define is go_files 134, production_files 70, test_files 64, production_loc 43230, test_loc 49847, exports 957, export_caller_edges 308, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 307.
+        - This Define mechanically raises documentation citers from 307 to exactly 333 before implementation; all source-category counts remain unchanged. The implementation must rebaseline that authorized documentation-only rise, then reduce runtime production files, test files, production LOC, test LOC, and interface candidates without increasing any other source category.
+      heresy_delta:
+        discovered:
+          - gateway-backed search transport and response authority are nested in runtime beside an unwired internal/search package that directly selects providers and reads provider credentials
+        introduced: []
+        repaired: []
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin
