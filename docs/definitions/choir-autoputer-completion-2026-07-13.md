@@ -394,7 +394,7 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T04:38:32Z
+  updated_at: 2026-07-14T04:51:11Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
   expected_parent_or_authority_ref: refs/heads/main@origin@e9a1d11d441567ff43ff794d90b2e9f1ba630641
   status: working
@@ -979,12 +979,13 @@ state_capsule:
         - class: E2
           observation: gopls reported no diagnostics in the owner, research tool, or profile registry wiring; LSP resolved the constructor to one production caller plus direct owner tests, Client to three runtime boundaries, and Response to runtime projection plus two projection tests
         - class: E5
-          observation: pending canonical CI/deploy identity and an authenticated staging coagent web_search transition
+          observation: Canonical CI run 29306556937 and deploy job 87001461766 succeeded for landed commit 59f514efae75bd00a07743c4944a7018d23a49d8; the activation receipt bound both sandbox and gateway to that commit. Authenticated staging trajectory e3cd4fcf-5b3e-4ded-bfc2-6414871b0688 created researcher run 195f57c8-56fb-4689-814d-3a59f4f0d011, whose durable result reports that its single web_search returned structured search_outage with no results. The public edge correctly rejects direct access to the internal run-events Trace endpoint with HTTP 403, so the raw tool Trace has not yet been independently observed and this lock remains open.
       validation_notes:
         - Runtime baseline before this Define is go_files 134, production_files 70, test_files 64, production_loc 43230, test_loc 49847, exports 957, export_caller_edges 308, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 307.
         - This Define mechanically raises documentation citers from 307 to exactly 333 before implementation; all source-category counts remain unchanged. The implementation must rebaseline that authorized documentation-only rise, then reduce runtime production files, test files, production LOC, and test LOC without increasing any other source category; interface candidates must remain flat at four.
         - 'Problem documented before ratchet correction: the first implementation measurement showed interface_candidates remained four, not lower. That category enumerates four pre-existing runtime-to-store interface call boundaries and does not count the private webSearchClient declaration being moved. Requiring a decrease would force unrelated scope or a false reclassification. Correcting the lock to require the category remain flat preserves debt authority and changes no source behavior.'
         - Local and ratchet proof covers exact transport, response, outage, projection, role wiring, and source authority. Provider routing and agent-visible search remain protected and require canonical CI/deploy plus staging product-path proof before completion.
+        - 'Problem documented before any further probe or fix: the first authenticated deployed coagent web_search after commit 59f514efae75bd00a07743c4944a7018d23a49d8 returned structured search_outage and no results. This is a search-provider/gateway substrate failure observation, not evidence that the ownership cutover caused it. An honest structured outage is admissible E5 only when Trace proves it; the durable researcher result alone is indirect, and the public edge correctly forbids the internal events route. Do not label the lock complete until an admissible product-path artifact independently proves the structured gateway response or a later deployed coagent search returns gateway-backed results.'
       heresy_delta:
         discovered:
           - gateway-backed search transport and response authority are nested in runtime beside an unwired internal/search package that directly selects providers and reads provider credentials
