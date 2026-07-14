@@ -20,10 +20,10 @@ if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-# List all packages except internal/runtime (which has its own sharded runner).
-mapfile -t all_packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
+# List all packages except agentcore and textureowner (which have their own sharded runner).
+mapfile -t all_packages < <(go list ./... | grep -Ev '^github.com/yusefmosiah/go-choir/internal/(agentcore|textureowner)$')
 if (( ${#all_packages[@]} == 0 )); then
-  echo "No non-runtime packages found"
+  echo "No non-agentcore packages found"
   exit 0
 fi
 

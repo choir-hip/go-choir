@@ -163,8 +163,10 @@ func TestScanForbiddenSourceMarkdownAllowsYAMLPrompts(t *testing.T) {
 	t.Cleanup(func() {
 		_ = os.Chdir(oldwd)
 	})
-	if err := os.MkdirAll("internal/runtime", 0o755); err != nil {
-		t.Fatal(err)
+	for _, root := range []string{"internal/agentcore", "internal/textureowner"} {
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := os.MkdirAll("internal/promptstore/defaults", 0o755); err != nil {
 		t.Fatal(err)
@@ -173,7 +175,8 @@ func TestScanForbiddenSourceMarkdownAllowsYAMLPrompts(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{
-		"internal/runtime/legacy.md",
+		"internal/agentcore/legacy.md",
+		"internal/textureowner/legacy.md",
 		"internal/promptstore/defaults/legacy.md",
 	} {
 		if err := os.WriteFile(path, []byte("# no\n"), 0o644); err != nil {
@@ -185,7 +188,8 @@ func TestScanForbiddenSourceMarkdownAllowsYAMLPrompts(t *testing.T) {
 		t.Fatalf("scan: %v", err)
 	}
 	for _, path := range []string{
-		"internal/runtime/legacy.md",
+		"internal/agentcore/legacy.md",
+		"internal/textureowner/legacy.md",
 		"internal/promptstore/defaults/legacy.md",
 	} {
 		if !hasWarningPath(warnings, path) {
@@ -274,9 +278,9 @@ func TestTextureRetiredNameAllowlist(t *testing.T) {
 		{"docs/mission-texture-hard-cutover-v0.md", "Selected affordance line counts: /api/" + retiredName + " 505.", true},
 		{"docs/mission-texture-hard-cutover-v0.md", "  `edit_" + retiredName + "` 390, `request_super_execution` 122.", true},
 		{"cmd/doccheck/main.go", `for _, term := range []string{"` + retiredName + `"}`, true},
-		{"internal/runtime/texture.go", "// texture-cutover-allow: " + retiredName + " route shim; delete-by texture-hard-cutover-v0", true},
+		{"internal/textureowner/texture.go", "// texture-cutover-allow: " + retiredName + " route shim; delete-by texture-hard-cutover-v0", true},
 		{"docs/current.md", retiredDisplay + " owns canonical versions.", false},
-		{"internal/runtime/texture.go", "const path = \"/api/" + retiredName + "/documents\"", false},
+		{"internal/textureowner/texture.go", "const path = \"/api/" + retiredName + "/documents\"", false},
 	}
 	for _, tt := range tests {
 		if got := isAllowedTextureRetiredNameLine(tt.path, tt.line, docs); got != tt.want {

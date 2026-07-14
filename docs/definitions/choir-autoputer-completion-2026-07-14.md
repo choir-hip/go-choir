@@ -137,44 +137,44 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: working
-  slice: "implement Texture owner and retire internal/runtime"
-  question: "Does a direct textureowner over the renamed agentcore preserve canonical writes, source/evidence invariants, model-backed merges, tool behavior, actor wake, and user isolation while eliminating the internal/runtime package without callbacks or dual authority?"
+  status: reviewing
+  slice: "review and land Texture owner cutover with internal/runtime extinct"
+  question: "Does the frozen candidate preserve every Texture and generic agentcore contract while leaving one-way textureowner -> agentcore ownership, no retired package, and no dual tool or route authority?"
   reconciliation:
-    observed_at: 2026-07-14T18:56:54Z
-    source_ref: refs/remotes/origin/main@3d2d2f2fb9356edbc1c56bb9adebe5f754b1b910
-    deploy_identity: "CI 29358737663 PASS; deploy job 87174088250; activation receipt 36caa912d9a2855cfa473d88e3393bc39c64c74e@2026-07-14T18:46:29Z; sandbox, active computers, ordinary guest, playwright guest, and gateway report the landed commit."
+    observed_at: 2026-07-14T21:45:54Z
+    source_ref: staged-implementation-excluding-now-card@sha256:9252e57d61ac7bfa966ec5ee56c80714abfb74c97e980dbdf772a6f89d6f99db
+    deploy_identity: pending_candidate_review_and_landing
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-      - docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498
+      - docs/runtime-dissolution-inventory.yaml@production_importers:0,wrappers:0,tools:37
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: authority_boundary_frozen
+    status: candidate_implemented_local
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact type/API/store/tool/caller map; settled authority conformance; deletion-first owner boundary; no internal/runtime imports or files; focused Texture and agentcore contracts; all four former runtime shards; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed Texture product-path acceptance."
     rollback_ref: 3d2d2f2fb9356edbc1c56bb9adebe5f754b1b910
-    conjecture_delta: "Confirmed topology: internal/texturedoc and internal/textureprompts already own and are wired for structured document and prompt substrates, but are not the canonical behavior owner. Rename the remaining generic run business-logic package from internal/runtime to internal/agentcore, then create internal/textureowner for every Texture API, canonical revision/source/proposal/merge/tool/wake behavior. textureowner may depend directly on concrete agentcore lifecycle APIs; agentcore must not import textureowner. cmd/sandbox and apihandler compose both owners directly."
+    conjecture_delta: "Confirmed by implementation and tests: a one-way textureowner -> agentcore dependency preserves the canonical Texture API, revisions, sources, prompts, tools, actor wake, and user isolation while apihandler and sandbox compose the owners directly. internal/runtime is absent, no Go import names it, and the structural ratchet reports production_importers=0 and wrappers=0."
     heresy_delta:
       discovered: "The prior lifecycle/core boundary receipt left the package named internal/runtime and actorruntime still importing it; ownership was named but package extinction was not complete. Deployed acceptance also showed a researcher result completed without a subsequent Texture incorporation run during a three-minute observation window; this is inside the already-deferred Texture wake boundary."
       introduced: none
-      repaired: none
+      repaired: "Retired the internal/runtime package/import path; moved canonical Texture behavior and tests to internal/textureowner; renamed the generic lifecycle core to internal/agentcore; removed the duplicate core request_email_draft tool constructor; rewired routes, actor adapter, sandbox composition, test shards, and active source guidance."
   candidate:
     id: R1-texture-owner-cutover-16
-    state: authority_boundary_frozen
-    ref: none
+    state: implemented_local_review_pending
+    ref: staged-implementation-excluding-now-card@sha256:9252e57d61ac7bfa966ec5ee56c80714abfb74c97e980dbdf772a6f89d6f99db
     owner: orchestrator
     base: refs/remotes/origin/main@3d2d2f2fb9356edbc1c56bb9adebe5f754b1b910
-    digest: "Rename internal/runtime to internal/agentcore as the generic run business-logic owner. Move all sixteen Texture production files and their tests into internal/textureowner; route HTTP and tool composition directly to that owner; expose only legitimate agentcore lifecycle methods needed by Texture; delete the old package/import path with no aliases, wrappers, re-exports, or callback seams."
+    digest: sha256:9252e57d61ac7bfa966ec5ee56c80714abfb74c97e980dbdf772a6f89d6f99db
     scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
   evidence_refs:
-    - "source-map: 16 production Texture files in internal/runtime (api_texture_prompt_eval.go; texture*.go; tools_texture.go), 14,496 production LOC by retained inventory; routes in apihandler/routes.go and runtime/api.go; registration in tool_profiles.go"
-    - "coupling-map: canonical writes depend directly on Store/content/modelpolicy/provider/events; actor wake/tools additionally call run start, coagent, channel, event, trajectory, and persistent-super lifecycle methods currently owned by Runtime"
-    - "replacement-check: internal/texturedoc and internal/textureprompts are wired substrates; internal/actor and internal/actorruntime own mailbox lifecycle, but actorruntime still imports internal/runtime as its business-logic core"
-    - "deferred-problem: staging trajectory e6283f92-7167-4426-a21a-a13d64b9b04b completed researcher run 1af42058-a64d-45b3-a7a3-863265d401a0 without a later Texture incorporation run during the acceptance window"
-  blocker_or_risk: "No current execution blocker. Primary structural risk is an import cycle or callback seam between Texture and agentcore; enforce one-way textureowner -> agentcore dependency and compose registrations/routes outside both packages."
-  next_action: "Checkpoint this frozen red boundary, rename the generic core package first, then move disjoint Texture file groups into the canonical owner and reconcile compilation without behavior changes."
+    - "source-proof: internal/runtime is absent; repository Go imports contain no github.com/yusefmosiah/go-choir/internal/runtime; direct composition is agentcore + textureowner + coagentowner."
+    - "test-proof: go test ./... with live search-provider keys disabled passed 75 packages (19 without tests); scripts/go-test-runtime-shards passed all four agentcore shards plus textureowner; go build ./... and git diff --check passed."
+    - "ratchet-proof: runtime dissolution inventory PASS with production_importers=0, wrappers=0, 37 tools, 10 canonical initial unused-export debt entries, 34,394 production LOC, and 46,079 test LOC in declared scope."
+    - "deferred-problem: staging trajectory e6283f92-7167-4426-a21a-a13d64b9b04b completed researcher run 1af42058-a64d-45b3-a7a3-863265d401a0 without a later Texture incorporation run during the prior acceptance window; this candidate does not claim that separate wake behavior repaired."
+  blocker_or_risk: "No local execution blocker. Remaining gates are frozen independent review, canonical commit/push, CI/deploy identity, and deployed Texture product-path acceptance. The previously observed researcher-to-Texture wake gap remains a separate disclosed risk."
+  next_action: "Commit the frozen candidate, bind independent review to that commit, adjudicate any blocking finding, then land and run CI, staging identity, and deployed Texture acceptance."
 
 receipts:
   - id: predecessor-B0-authority

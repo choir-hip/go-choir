@@ -3,4 +3,4 @@ set -euo pipefail
 
 echo "Running integration-tagged Go tests"
 run_regex="${GO_CHOIR_INTEGRATION_RUN:-^(TestIntegration|Test.*Live$|TestLiveLLM|Test.*RealLLM|TestRealLLMProviderInfo)}"
-"$(dirname "$0")/go-test-with-timing" -tags=integration -count=1 -run "$run_regex" ./internal/provider ./internal/runtime "$@"
+"$(dirname "$0")/go-test-with-timing" -tags=integration -count=1 -run "$run_regex" ./internal/provider ./internal/agentcore ./internal/textureowner "$@"

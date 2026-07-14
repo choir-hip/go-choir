@@ -260,17 +260,7 @@ for path in "${changed[@]}"; do
       mark_vmctl_restart
       add_explanation "$path -> sandbox runtime package + vmctl runtime-package endpoint restart"
       ;;
-    internal/runtime/model_policy.go)
-      add_host_service "sandbox"
-      mark_vmctl_restart
-      add_explanation "$path -> sandbox runtime package + vmctl runtime-package endpoint restart"
-      ;;
-    internal/runtime/api_trace.go)
-      add_host_service "sandbox"
-      mark_vmctl_restart
-      add_explanation "$path -> sandbox runtime package + vmctl runtime-package endpoint restart"
-      ;;
-    internal/runtime/*)
+    internal/agentcore/*|internal/textureowner/*)
       add_host_service "gateway"
       add_host_service "sandbox"
       mark_vmctl_restart

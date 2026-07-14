@@ -27,14 +27,14 @@ func TestInventoryBaselineAndRegressions(t *testing.T) {
 		{
 			name: "added production file",
 			mutate: func(t *testing.T, root string) {
-				writeFixture(t, root, "internal/runtime/added.go", "package runtime\n\nfunc added() {}\n")
+				writeFixture(t, root, "internal/agentcore/added.go", "package runtime\n\nfunc added() {}\n")
 			},
-			diagnostic: `files: added item "internal/runtime/added.go [production]"`,
+			diagnostic: `files: added item "internal/agentcore/added.go [production]"`,
 		},
 		{
 			name: "added export",
 			mutate: func(t *testing.T, root string) {
-				writeFixture(t, root, "internal/runtime/runtime.go", "package runtime\n\ntype Runtime struct{}\n\nfunc NewRuntime() *Runtime { return &Runtime{} }\n")
+				writeFixture(t, root, "internal/agentcore/runtime.go", "package runtime\n\ntype Runtime struct{}\n\nfunc NewRuntime() *Runtime { return &Runtime{} }\n")
 			},
 			diagnostic: "new production exports also require a production caller",
 		},
@@ -96,7 +96,7 @@ func TestSyntaxAwareInventory(t *testing.T) {
 
 type Tool struct { Name string }
 `)
-	writeFixture(t, root, "internal/runtime/registration.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/registration.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/toolregistry"
 
@@ -143,7 +143,7 @@ func (*Store) UpsertComputerSourceLineage() {}
 func (*Store) UpsertAppChangePackage() {}
 func (*Store) UpdateAppAdoptionIfCurrent() {}
 `)
-	writeFixture(t, root, "internal/runtime/writers.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/writers.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 
@@ -207,13 +207,13 @@ func TestNewStoreWriterRequiresBaselineDisposition(t *testing.T) {
 type Store struct{}
 func (*Store) UpsertAppAdoption() {}
 `)
-	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/writer.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
 `)
 	baseline := mustScan(t, root)
-	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/writer.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
@@ -230,13 +230,13 @@ func TestNewPatchWriterRequiresBaselineDisposition(t *testing.T) {
 type Store struct{}
 func (*Store) PatchRevisionMetadata() {}
 `)
-	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/writer.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
 `)
 	baseline := mustScan(t, root)
-	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/writer.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
@@ -253,13 +253,13 @@ func TestUnknownStoreMethodFailsClosed(t *testing.T) {
 type Store struct{}
 func (*Store) TransmogrifyState() {}
 `)
-	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/writer.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
 `)
 	baseline := mustScan(t, root)
-	writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/writer.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
@@ -274,13 +274,13 @@ func TestDeceptiveStoreMethodNamesRequireDisposition(t *testing.T) {
 		t.Run(method, func(t *testing.T) {
 			root := fixtureRepository(t)
 			writeFixture(t, root, "internal/store/store.go", "package store\n\ntype Store struct{}\nfunc (*Store) "+method+"() {}\n")
-			writeFixture(t, root, "internal/runtime/writer.go", `package runtime
+			writeFixture(t, root, "internal/agentcore/writer.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
 `)
 			baseline := mustScan(t, root)
-			writeFixture(t, root, "internal/runtime/writer.go", "package runtime\n\nimport \"github.com/yusefmosiah/go-choir/internal/store\"\nvar stateStore *store.Store\nfunc callStore() { stateStore."+method+"() }\n")
+			writeFixture(t, root, "internal/agentcore/writer.go", "package runtime\n\nimport \"github.com/yusefmosiah/go-choir/internal/store\"\nvar stateStore *store.Store\nfunc callStore() { stateStore."+method+"() }\n")
 			err := compareInventory(baseline, mustScan(t, root))
 			assertDiagnostic(t, err, "store_calls: added item")
 			assertDiagnostic(t, err, method)
@@ -302,7 +302,7 @@ func TestStoreWriterDispositionsCannotBeLaundered(t *testing.T) {
 	for method, expected := range required {
 		t.Run(method, func(t *testing.T) {
 			inventory := Inventory{StoreCalls: []Entry{{
-				ID:          "internal/runtime/fixture.go:use:internal/store.method:Store." + method,
+				ID:          "internal/agentcore/fixture.go:use:internal/store.method:Store." + method,
 				Disposition: "read",
 			}}}
 			assertDiagnostic(t, errors.New(strings.Join(validateStoreCalls(inventory.StoreCalls), "\n")), "must use "+expected+" disposition")
@@ -324,7 +324,7 @@ func TestExactReadRequiresBaselineDisposition(t *testing.T) {
 type Store struct{}
 func (*Store) GetDocument() {}
 `)
-	writeFixture(t, root, "internal/runtime/reader.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/reader.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 func readStore(value *store.Store) { value.GetDocument() }
@@ -346,13 +346,13 @@ func TestStoreMethodValuesAreInventoried(t *testing.T) {
 type Store struct{}
 func (*Store) SaveDesktopState() {}
 `)
-		writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+		writeFixture(t, root, "internal/agentcore/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
 `)
 		baseline := mustScan(t, root)
-		writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+		writeFixture(t, root, "internal/agentcore/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
@@ -370,7 +370,7 @@ var saveState = stateStore.SaveDesktopState
 type Store struct{}
 func (*Store) GetDocument() {}
 `)
-		writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+		writeFixture(t, root, "internal/agentcore/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
@@ -393,7 +393,7 @@ func TestStoreBackedInterfaceCallIsInventoried(t *testing.T) {
 type Store struct{}
 func (*Store) SaveUserPreference() {}
 `)
-	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 type persistence interface { SaveUserPreference() }
@@ -402,7 +402,7 @@ func persist(target persistence) {}
 func begin(state *store.Store) { adapt(state) }
 `)
 	baseline := mustScan(t, root)
-	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 type persistence interface { SaveUserPreference() }
@@ -445,7 +445,7 @@ func use() { holder{state: &store.Store{}}.state.SaveUserPreference() }`,
 type Store struct{}
 func (*Store) SaveUserPreference() {}
 `)
-			writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+			writeFixture(t, root, "internal/agentcore/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 type persistence interface { SaveUserPreference() }
@@ -480,7 +480,7 @@ func TestPromotedEmbeddedInterfaceSelectionIsCandidate(t *testing.T) {
 type Store struct{}
 func (*Store) SaveUserPreference() {}
 `)
-	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 type persistence interface { SaveUserPreference() }
@@ -492,7 +492,7 @@ func persist(value embedded) { value.SaveUserPreference() }
 	if len(inventory.InterfaceCandidates) != 1 {
 		t.Fatalf("promoted interface candidates = %+v, want one", inventory.InterfaceCandidates)
 	}
-	if !strings.Contains(inventory.InterfaceCandidates[0].ID, "internal/runtime.persistence.SaveUserPreference") {
+	if !strings.Contains(inventory.InterfaceCandidates[0].ID, "internal/agentcore.persistence.SaveUserPreference") {
 		t.Fatalf("candidate identity does not name declaring interface: %q", inventory.InterfaceCandidates[0].ID)
 	}
 	inventory.InterfaceCandidates[0].Disposition = "lifecycle"
@@ -509,7 +509,7 @@ func TestSameNameFakeInterfaceIsConservativePotentialStoreCall(t *testing.T) {
 type Store struct{}
 func (*Store) GetRun() {}
 `)
-	writeFixture(t, root, "internal/runtime/reporter.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/reporter.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 type reporter interface { GetRun() }
@@ -542,7 +542,7 @@ func TestPackageStoreHelperIsNotStoreMethod(t *testing.T) {
 type Store struct{}
 func SaveDesktopState() {}
 `)
-	writeFixture(t, root, "internal/runtime/persistence.go", `package runtime
+	writeFixture(t, root, "internal/agentcore/persistence.go", `package runtime
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 func persist() { store.SaveDesktopState() }
@@ -560,7 +560,7 @@ func TestInventoryUsesAuthoritativeFilesAndStableCiterIdentities(t *testing.T) {
 		initGitFixture(t, root)
 		baseline := mustScan(t, root)
 		writeFixture(t, root, "frontend/dist/assets/ghostty-web.js",
-			strings.Repeat("x", 700_000)+" // internal/runtime\n")
+			strings.Repeat("x", 700_000)+" // internal/agentcore\n")
 		current := mustScan(t, root)
 		if err := compareInventory(baseline, current); err != nil {
 			t.Fatalf("ignored generated tree changed inventory: %v", err)
@@ -598,7 +598,7 @@ func TestRebasedExportRequiresProductionCaller(t *testing.T) {
 	t.Run("unused export fails after baseline rebase", func(t *testing.T) {
 		root := fixtureRepository(t)
 		original := mustScan(t, root)
-		writeFixture(t, root, "internal/runtime/runtime.go",
+		writeFixture(t, root, "internal/agentcore/runtime.go",
 			"package runtime\n\ntype Runtime struct{}\n\nfunc UnusedExport() {}\n")
 		rebased := mustScan(t, root)
 		rebaseInitialDebt(&rebased, original.UnusedExportDebt)
@@ -609,11 +609,11 @@ func TestRebasedExportRequiresProductionCaller(t *testing.T) {
 	t.Run("used export passes after baseline rebase", func(t *testing.T) {
 		root := fixtureRepository(t)
 		original := mustScan(t, root)
-		writeFixture(t, root, "internal/runtime/runtime.go",
+		writeFixture(t, root, "internal/agentcore/runtime.go",
 			"package runtime\n\ntype Runtime struct{}\n\nfunc UsedExport() {}\n")
 		writeFixture(t, root, "cmd/caller/main.go", `package main
 
-import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+import runtime "github.com/yusefmosiah/go-choir/internal/agentcore"
 
 func useRuntime() { runtime.UsedExport() }
 `)
@@ -627,14 +627,14 @@ func useRuntime() { runtime.UsedExport() }
 	t.Run("typed receiver method call passes", func(t *testing.T) {
 		root := fixtureRepository(t)
 		original := mustScan(t, root)
-		writeFixture(t, root, "internal/runtime/runtime.go", `package runtime
+		writeFixture(t, root, "internal/agentcore/runtime.go", `package runtime
 
 type Runtime struct{}
 func (*Runtime) Start() {}
 `)
 		writeFixture(t, root, "cmd/caller/main.go", `package main
 
-import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+import runtime "github.com/yusefmosiah/go-choir/internal/agentcore"
 
 func useRuntime(rt *runtime.Runtime) { rt.Start() }
 `)
@@ -648,14 +648,14 @@ func useRuntime(rt *runtime.Runtime) { rt.Start() }
 	t.Run("unrelated same-name method does not satisfy", func(t *testing.T) {
 		root := fixtureRepository(t)
 		original := mustScan(t, root)
-		writeFixture(t, root, "internal/runtime/runtime.go", `package runtime
+		writeFixture(t, root, "internal/agentcore/runtime.go", `package runtime
 
 type Runtime struct{}
 func (*Runtime) Start() {}
 `)
 		writeFixture(t, root, "cmd/caller/main.go", `package main
 
-import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+import runtime "github.com/yusefmosiah/go-choir/internal/agentcore"
 
 type other struct{}
 func (*other) Start() {}
@@ -671,7 +671,7 @@ var _ *runtime.Runtime
 	t.Run("constructor field flow passes", func(t *testing.T) {
 		root := fixtureRepository(t)
 		original := mustScan(t, root)
-		writeFixture(t, root, "internal/runtime/runtime.go", `package runtime
+		writeFixture(t, root, "internal/agentcore/runtime.go", `package runtime
 
 type Runtime struct{}
 func NewRuntime() *Runtime { return &Runtime{} }
@@ -679,7 +679,7 @@ func (*Runtime) Start() {}
 `)
 		writeFixture(t, root, "cmd/caller/main.go", `package main
 
-import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+import runtime "github.com/yusefmosiah/go-choir/internal/agentcore"
 
 type holder struct { runtime *runtime.Runtime }
 func useRuntime() {
@@ -697,14 +697,14 @@ func useRuntime() {
 	t.Run("promoted alias receiver flow passes", func(t *testing.T) {
 		root := fixtureRepository(t)
 		original := mustScan(t, root)
-		writeFixture(t, root, "internal/runtime/runtime.go", `package runtime
+		writeFixture(t, root, "internal/agentcore/runtime.go", `package runtime
 
 type Runtime struct{}
 func (*Runtime) Start() {}
 `)
 		writeFixture(t, root, "cmd/caller/main.go", `package main
 
-import runtime "github.com/yusefmosiah/go-choir/internal/runtime"
+import runtime "github.com/yusefmosiah/go-choir/internal/agentcore"
 
 type runtimeAlias = runtime.Runtime
 type holder struct { *runtimeAlias }
@@ -722,7 +722,7 @@ func TestInitialUnusedExportDebtCannotGrow(t *testing.T) {
 	t.Run("manual debt and count rebase fails", func(t *testing.T) {
 		root := fixtureRepository(t)
 		prior := mustScan(t, root)
-		writeFixture(t, root, "internal/runtime/runtime.go",
+		writeFixture(t, root, "internal/agentcore/runtime.go",
 			"package runtime\n\ntype Runtime struct{}\n\nfunc NewlyUnused() {}\n")
 		rebased := mustScan(t, root)
 		err := validateDebtNoGrowth(prior, rebased)
@@ -737,6 +737,25 @@ func TestInitialUnusedExportDebtCannotGrow(t *testing.T) {
 			t.Fatalf("debt removal: %v", err)
 		}
 	})
+}
+
+func TestRebasePackageCutoverDebtPreservesOnlyMovedExports(t *testing.T) {
+	exports := []Entry{
+		{ID: "internal/agentcore/runtime.go:method(*Runtime):StartRun"},
+		{ID: "internal/textureowner/texture_workflow_verifier.go:method(*Handler):VerifyTextureWorkflow"},
+		{ID: "internal/agentcore/runtime.go:func:NewlyUnused"},
+	}
+	previous := []Entry{
+		{ID: "internal/runtime/runtime.go:method(*Runtime):StartRun"},
+		{ID: "internal/runtime/texture_workflow_verifier.go:method(*Runtime):VerifyTextureWorkflow"},
+		{ID: "internal/runtime/runtime.go:method(*Runtime):Removed"},
+	}
+	got := rebasePackageCutoverDebt(exports, previous)
+	if len(got) != 2 ||
+		got[0].ID != "internal/agentcore/runtime.go:method(*Runtime):StartRun" ||
+		got[1].ID != "internal/textureowner/texture_workflow_verifier.go:method(*Handler):VerifyTextureWorkflow" {
+		t.Fatalf("rebased debt = %#v", got)
+	}
 }
 
 func TestCiterSuffixDriftChangesDigestIdentity(t *testing.T) {
@@ -770,8 +789,8 @@ func fixtureRepository(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	writeFixture(t, root, "go.mod", "module github.com/yusefmosiah/go-choir\n\ngo 1.25.6\n")
-	writeFixture(t, root, "internal/runtime/runtime.go", "package runtime\n\ntype Runtime struct{}\n")
-	writeFixture(t, root, "internal/runtime/runtime_test.go", "package runtime\n\nfunc ExampleRuntime() {}\n")
+	writeFixture(t, root, "internal/agentcore/runtime.go", "package runtime\n\ntype Runtime struct{}\n")
+	writeFixture(t, root, "internal/agentcore/runtime_test.go", "package runtime\n\nfunc ExampleRuntime() {}\n")
 	writeFixture(t, root, "docs/evidence/history.md", "Removed dependency: internal/runtime.\n")
 	return root
 }

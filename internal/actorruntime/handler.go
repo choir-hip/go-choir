@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
-	"github.com/yusefmosiah/go-choir/internal/runtime"
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -35,12 +35,12 @@ type resumeState struct {
 // The tool loop loads the persisted conversation, injects the new update via
 // injectUserTurns, and resumes from the park point.
 type actorHandler struct {
-	rt *runtime.Runtime
+	rt *agentcore.Runtime
 }
 
 // newActorHandler creates the handler. The rt must have its store, provider,
 // and tool registry configured before runs are dispatched.
-func newActorHandler(rt *runtime.Runtime) *actorHandler {
+func newActorHandler(rt *agentcore.Runtime) *actorHandler {
 	return &actorHandler{rt: rt}
 }
 

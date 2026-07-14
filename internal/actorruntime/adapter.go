@@ -28,9 +28,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 )
@@ -44,7 +44,7 @@ type RuntimeOption func(*Adapter)
 // not own the store connection (the caller manages the *sql.DB lifecycle).
 func WithTraceStore(s trace.Store) RuntimeOption {
 	return func(a *Adapter) {
-		runtime.WithTraceStore(s)(a.Runtime)
+		agentcore.WithTraceStore(s)(a.Runtime)
 	}
 }
 
@@ -109,7 +109,7 @@ func WithOnActorFailure(fn func(agentID string, err error)) RuntimeOption {
 // logic activates a run or wakes a coagent, the dispatch function sends actor
 // messages through actor.Send.
 type Adapter struct {
-	Runtime *runtime.Runtime
+	Runtime *agentcore.Runtime
 
 	cfg      provideriface.Config
 	store    *store.Store
@@ -137,8 +137,8 @@ type Adapter struct {
 //
 // The runtime core's ActorBridge is set to the adapter, so run activations and
 // coagent wakes go through actor.Send.
-func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, coreOpts []runtime.RuntimeOption, opts ...RuntimeOption) *Adapter {
-	rt := runtime.New(cfg, s, bus, provider, coreOpts...)
+func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provider provideriface.Provider, coreOpts []agentcore.RuntimeOption, opts ...RuntimeOption) *Adapter {
+	rt := agentcore.New(cfg, s, bus, provider, coreOpts...)
 
 	a := &Adapter{
 		Runtime:  rt,

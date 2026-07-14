@@ -105,8 +105,8 @@ go test ./cmd/choir/ -count=1
 
 ## Architecture Notes
 
-- The CLI avoids importing `internal/runtime` (which needs cgo/ICU) by
-  defining local response types that mirror the runtime's JSON shapes.
+- The CLI avoids importing the Dolt-backed `internal/agentcore` and
+  `internal/textureowner` packages by defining local response types for their JSON contracts.
 - The `do` method supports GET, POST, and DELETE with optional JSON body.
 - `/api/prompt-bar` is the public run-start endpoint; `/api/agent/*` routes are
   intentionally blocked from public access.

@@ -31,7 +31,7 @@ assert_output auth-change $'internal/auth/service.go\ninternal/auth/service_test
 assert_output tests-only $'internal/auth/service_test.go\ninternal/auth/testdata/fixture.json\n' \
   'go=true' 'sbom=false' 'high_risk_race=false'
 
-assert_output runtime-change $'internal/runtime/engine.go\n' \
+assert_output runtime-change $'internal/agentcore/engine.go\ninternal/textureowner/handler.go\n' \
   'go=true' 'sbom=true' 'high_risk_race=true'
 
 assert_output frontend-change $'frontend/src/routes/+page.svelte\n' \

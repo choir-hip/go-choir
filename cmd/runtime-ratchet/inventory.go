@@ -26,9 +26,16 @@ import (
 )
 
 const (
-	inventorySchema = "runtime-dissolution-inventory/v6"
-	runtimeImport   = "github.com/yusefmosiah/go-choir/internal/runtime"
+	inventorySchema      = "runtime-dissolution-inventory/v6"
+	retiredRuntimeImport = "github.com/yusefmosiah/go-choir/internal/runtime"
+	agentCoreImport      = "github.com/yusefmosiah/go-choir/internal/agentcore"
+	textureOwnerImport   = "github.com/yusefmosiah/go-choir/internal/textureowner"
 )
+
+func isDissolutionImport(path string) bool {
+	return path == agentCoreImport || strings.HasPrefix(path, agentCoreImport+"/") ||
+		path == textureOwnerImport || strings.HasPrefix(path, textureOwnerImport+"/")
+}
 
 type Inventory struct {
 	Schema               string  `yaml:"schema"`
@@ -174,8 +181,9 @@ func scanGo(root string, files []string, citerOrdinals map[string]int, typePacka
 			return fmt.Errorf("parse %s: %w", rel, err)
 		}
 		isTest := strings.HasSuffix(rel, "_test.go")
-		inRuntime := rel == "internal/runtime" || strings.HasPrefix(rel, "internal/runtime/")
-		if inRuntime {
+		inOwnershipPackage := rel == "internal/agentcore" || strings.HasPrefix(rel, "internal/agentcore/") ||
+			rel == "internal/textureowner" || strings.HasPrefix(rel, "internal/textureowner/")
+		if inOwnershipPackage {
 			loc := countLines(src)
 			kind := "production"
 			if isTest {
@@ -188,7 +196,7 @@ func scanGo(root string, files []string, citerOrdinals map[string]int, typePacka
 			typePackages[filepath.Dir(rel)] = true
 		}
 		imports := runtimeImports(file)
-		if !inRuntime && !isTest && len(imports) > 0 {
+		if !inOwnershipPackage && !isTest && len(imports) > 0 {
 			inv.ProductionImporters = append(inv.ProductionImporters, Entry{ID: rel, Disposition: "delete"})
 			scanWrappers(rel, file, imports, inv)
 		}
@@ -305,7 +313,7 @@ func runtimeImports(file *ast.File) map[string]string {
 	imports := map[string]string{}
 	for _, imp := range file.Imports {
 		path, err := strconv.Unquote(imp.Path.Value)
-		if err != nil || (path != runtimeImport && !strings.HasPrefix(path, runtimeImport+"/")) {
+		if err != nil || (path != retiredRuntimeImport && !strings.HasPrefix(path, retiredRuntimeImport+"/")) {
 			continue
 		}
 		name := filepath.Base(path)
@@ -445,11 +453,11 @@ func isLocalProductionPackage(root string, listed goListPackage) bool {
 }
 
 func dependsOnRuntime(listed goListPackage) bool {
-	if listed.ImportPath == runtimeImport || strings.HasPrefix(listed.ImportPath, runtimeImport+"/") {
+	if isDissolutionImport(listed.ImportPath) {
 		return true
 	}
 	for _, dependency := range listed.Deps {
-		if dependency == runtimeImport || strings.HasPrefix(dependency, runtimeImport+"/") {
+		if isDissolutionImport(dependency) {
 			return true
 		}
 	}
@@ -516,7 +524,7 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 			continue
 		}
 		importPath := object.Pkg().Path()
-		if importPath != runtimeImport && !strings.HasPrefix(importPath, runtimeImport+"/") {
+		if !isDissolutionImport(importPath) {
 			continue
 		}
 		position := fset.Position(identifier.Pos())
@@ -526,7 +534,7 @@ func collectTypedUses(root string, environment []string, listed goListPackage, e
 		}
 		uses[key][slashRel(root, position.Filename)] = true
 	}
-	if listed.ImportPath == runtimeImport || strings.HasPrefix(listed.ImportPath, runtimeImport+"/") {
+	if isDissolutionImport(listed.ImportPath) {
 		for _, file := range files {
 			ordinals := map[string]int{}
 			ast.Inspect(file, func(node ast.Node) bool {
@@ -618,8 +626,7 @@ func storeSelectionKey(_ *types.Selection, function *types.Func, storeMethods ma
 	}
 	namedReceiver, ok := receiver.(*types.Named)
 	if !ok || namedReceiver.Obj().Pkg() == nil ||
-		(namedReceiver.Obj().Pkg().Path() != runtimeImport &&
-			!strings.HasPrefix(namedReceiver.Obj().Pkg().Path(), runtimeImport+"/")) {
+		!isDissolutionImport(namedReceiver.Obj().Pkg().Path()) {
 		return "", false
 	}
 	if _, ok := namedReceiver.Underlying().(*types.Interface); !ok {

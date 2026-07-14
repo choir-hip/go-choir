@@ -1259,7 +1259,7 @@ func classifyHeresyContext(path, line string, docs map[string]*docInfo) string {
 
 func scanForbiddenSourceMarkdown() ([]warning, error) {
 	var warnings []warning
-	for _, root := range []string{"internal/runtime", "internal/promptstore/defaults"} {
+	for _, root := range []string{"internal/agentcore", "internal/textureowner", "internal/promptstore/defaults"} {
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err

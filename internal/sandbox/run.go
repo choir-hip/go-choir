@@ -11,9 +11,11 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
+	"github.com/yusefmosiah/go-choir/internal/coagentowner"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -22,9 +24,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -132,9 +134,9 @@ func Run() {
 
 	// Compose product owners into the runtime core explicitly; adapter options
 	// remain limited to actor-lifecycle concerns.
-	coreOpts := []runtime.RuntimeOption{
-		runtime.WithDesktopStateOwner(desktopHandler),
-		runtime.WithContentService(contentService),
+	coreOpts := []agentcore.RuntimeOption{
+		agentcore.WithDesktopStateOwner(desktopHandler),
+		agentcore.WithContentService(contentService),
 	}
 	var rtOpts []actorruntime.RuntimeOption
 
@@ -195,10 +197,31 @@ func Run() {
 		log.Printf("sandbox: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
 	}
 
+	textureHandler := textureowner.NewHandler(rt.Runtime)
+	if toolsEnabled {
+		if err := textureowner.RegisterTools(rt.Runtime.ToolRegistryForProfile(agentprofile.Texture), textureHandler); err != nil {
+			log.Fatalf("sandbox: register Texture tools: %v", err)
+		}
+		for _, profile := range []string{
+			agentprofile.Conductor,
+			agentprofile.Super,
+			agentprofile.CoSuper,
+			agentprofile.VSuper,
+			agentprofile.Researcher,
+			agentprofile.Texture,
+			agentprofile.Processor,
+			agentprofile.Reconciler,
+		} {
+			if err := coagentowner.RegisterSpawnTool(rt.Runtime.ToolRegistryForProfile(profile), rt.Runtime, textureHandler, agentprofile.PolicyFor(profile)); err != nil {
+				log.Fatalf("sandbox: register coagent spawn tool for %s: %v", profile, err)
+			}
+		}
+	}
+
 	// Register canonical API routes (overrides default /health).
-	runtimeHandler := runtime.NewAPIHandler(rt.Runtime)
+	runtimeHandler := agentcore.NewAPIHandler(rt.Runtime)
 	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
-	apihandler.RegisterRoutes(s, runtimeHandler, apiHandler, browserHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
+	apihandler.RegisterRoutes(s, runtimeHandler, textureHandler, apiHandler, browserHandler, desktopHandler, contentService, mediaHandler, rtRuntimeCfg.EnableTestAPIs)
 	if toolsEnabled {
 		superRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super)
 		if err := apihandler.RegisterProductAPIRequestTool(s, superRegistry); err != nil {

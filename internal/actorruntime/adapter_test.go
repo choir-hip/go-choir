@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/actor"
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -118,7 +118,7 @@ func TestAdapterDispatchActorActive(t *testing.T) {
 
 func TestAdapterRuntimeCoreIsNamedAndNotEmbedded(t *testing.T) {
 	adapterType := reflect.TypeOf(Adapter{})
-	runtimeType := reflect.TypeOf((*runtime.Runtime)(nil))
+	runtimeType := reflect.TypeOf((*agentcore.Runtime)(nil))
 	runtimeFields := 0
 	for i := range adapterType.NumField() {
 		field := adapterType.Field(i)

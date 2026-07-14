@@ -32,7 +32,7 @@ func main() {
 	if *writeBaseline {
 		previous, readErr := readInventory(baselinePath)
 		if readErr == nil {
-			inventory.UnusedExportDebt = previous.UnusedExportDebt
+			inventory.UnusedExportDebt = rebasePackageCutoverDebt(inventory.Exports, previous.UnusedExportDebt)
 		}
 		applyAuthoritativeInterfaceCandidateDispositions(&inventory)
 		applyInterfaceCandidateAuthority(&inventory, inventory)
@@ -69,6 +69,34 @@ func main() {
 	fmt.Println("runtime dissolution inventory: PASS")
 	printCounts(inventory.Counts)
 }
+func rebasePackageCutoverDebt(exports, previous []Entry) []Entry {
+	current := make(map[string]Entry, len(exports))
+	for _, entry := range exports {
+		current[entry.ID] = entry
+	}
+	rebased := make([]Entry, 0, len(previous))
+	for _, entry := range previous {
+		candidates := []string{entry.ID}
+		if strings.HasPrefix(entry.ID, "internal/runtime/") {
+			suffix := strings.TrimPrefix(entry.ID, "internal/runtime/")
+			candidates = append(candidates,
+				"internal/agentcore/"+suffix,
+				strings.Replace("internal/textureowner/"+suffix, "method(*Runtime):", "method(*Handler):", 1),
+			)
+		}
+		for _, candidate := range candidates {
+			export, exists := current[candidate]
+			if exists && len(export.ProductionCallers) == 0 {
+				entry.ID = candidate
+				rebased = append(rebased, entry)
+				break
+			}
+		}
+	}
+	sort.Slice(rebased, func(i, j int) bool { return rebased[i].ID < rebased[j].ID })
+	return rebased
+}
+
 func applyAuthoritativeInterfaceCandidateDispositions(current *Inventory) {
 	for index := range current.InterfaceCandidates {
 		entry := &current.InterfaceCandidates[index]
@@ -129,9 +157,10 @@ func enforceDebtAuthority(root, baselinePath string, current Inventory, writing,
 	if bootstrap {
 		return errors.New("-bootstrap-initial-debt is forbidden when prior canonical Git authority exists")
 	}
+	prior.UnusedExportDebt = rebasePackageCutoverDebt(current.Exports, prior.UnusedExportDebt)
+	setCounts(&prior)
 	return validateDebtNoGrowth(prior, current)
 }
-
 
 func repositoryRoot(explicit string) (string, error) {
 	if explicit != "" {

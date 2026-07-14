@@ -288,8 +288,8 @@ func runWire(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// wireStoriesResponse mirrors internal/runtime.universalWireStoriesResponse.
-// Defined here to avoid importing the runtime package (which needs cgo/ICU).
+// wireStoriesResponse mirrors the wire API response without importing its
+// Dolt-backed owner package.
 type wireStoriesResponse struct {
 	Stories      []wireStory          `json:"stories"`
 	StyleSources []json.RawMessage    `json:"style_sources"`
@@ -663,7 +663,7 @@ func runRunCancel(args []string, stdout, stderr io.Writer) int {
 	return writeJSON(stdout, resp)
 }
 
-// promptBarSubmitResponse mirrors internal/runtime.promptBarSubmitResponse.
+// promptBarSubmitResponse mirrors textureowner.promptBarSubmitResponse.
 type promptBarSubmitResponse struct {
 	SubmissionID string `json:"submission_id"`
 	State        string `json:"state"`

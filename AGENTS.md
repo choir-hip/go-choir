@@ -39,10 +39,11 @@ direnv + nix-direnv. `CGO_CFLAGS`, `PKG_CONFIG_PATH`, `LD_LIBRARY_PATH`, and
 the Nix `PATH` entries are exported by `~/.zshenv` (for zsh-based agents:
 codex, cursor, opencode, pi) and `~/.bashenv` via `BASH_ENV` (for bash-based
 agents: devin, claude code). No `nix develop -c` wrapper is needed — run
-`go test ...` directly. The runtime package is broad and CI shards it; for
-local coverage prefer `scripts/go-test-runtime-shards` or focused
-`go test ./internal/runtime -run TestName` while shaping one transition. Do not
-hand-enter `CGO_*FLAGS` for the Dolt ICU dependency except as a short diagnostic
+`go test ...` directly.
+`internal/agentcore` and `internal/textureowner` are broad and CI shards them; for
+local coverage prefer `scripts/go-test-runtime-shards` or a focused
+`go test ./internal/agentcore -run TestName` / `go test ./internal/textureowner -run TestName`.
+Do not hand-enter `CGO_*FLAGS` for the Dolt ICU dependency except as a short diagnostic
 — the durable fix is ensuring direnv is loaded (check with `echo $CGO_CFLAGS`).
 
 If those variables are empty, run `direnv status` first. In a fresh or changed

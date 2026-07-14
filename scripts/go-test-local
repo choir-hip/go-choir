@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Running non-runtime Go tests"
-mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
+echo "Running non-agentcore Go tests"
+mapfile -t packages < <(go list ./... | grep -Ev '^github.com/yusefmosiah/go-choir/internal/(agentcore|textureowner)$')
 if (( ${#packages[@]} > 0 )); then
   "$(dirname "$0")/go-test-with-timing" -count=1 "${packages[@]}"
 fi
 
-echo "Running sharded internal/runtime Go tests"
+echo "Running sharded agentcore and textureowner Go tests"
 "$(dirname "$0")/go-test-runtime-shards" "$@"

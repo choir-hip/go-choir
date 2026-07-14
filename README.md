@@ -379,7 +379,7 @@ dev shell so compiler and linker paths come from Nix instead of hand-entered
 
 ```sh
 nix develop
-go test -count=1 ./internal/store ./internal/runtime
+go test -count=1 ./internal/store ./internal/agentcore ./internal/textureowner
 ```
 
 If you use `direnv`, run `direnv allow` once and the same environment will load
@@ -490,7 +490,9 @@ internal/auth/       passkey/JWT auth
 internal/proxy/      auth-gated proxy and VM routing
 internal/vmctl/      VM ownership/lifecycle API
 internal/gateway/    LLM/search gateway
-internal/runtime/    agent runtime, product APIs, Texture/source/Web Lens/trace-evidence/control surfaces
+internal/agentcore/  generic agent lifecycle, product APIs, evidence, and control surfaces
+internal/textureowner/ Texture documents, revisions, prompts, tools, sources, and wake behavior
+internal/coagentowner/ co-agent spawn and handoff ownership
 internal/store/      runtime persistence plus embedded Texture/Dolt workspace
 frontend/            Svelte desktop and Playwright tests
 nix/                 deployment and NixOS configuration

@@ -15,7 +15,7 @@ env:
 
 jobs:
   go-test-runtime-race:
-    name: Go Test (internal/runtime race shard ${{ matrix.shard }})
+    name: Go Test (agentcore/textureowner race shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -41,7 +41,7 @@ jobs:
           restore-keys: |
             go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Go test internal/runtime shard with -race
+      - name: Go test agentcore/textureowner shard with -race
         shell: bash
         env:
           TOTAL_SHARDS: 4
@@ -75,7 +75,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t packages < <(go list ./... | grep -v '^github.com/yusefmosiah/go-choir/internal/runtime$')
+          mapfile -t packages < <(go list ./... | grep -Ev '^github.com/yusefmosiah/go-choir/internal/(agentcore|textureowner)$')
           if (( ${#packages[@]} > 0 )); then
             scripts/go-test-with-timing -race -count=1 "${packages[@]}"
           fi

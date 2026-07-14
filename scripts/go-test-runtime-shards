@@ -7,31 +7,42 @@ if ! [[ "$total_shards" =~ ^[1-9][0-9]*$ ]]; then
   exit 2
 fi
 
-mapfile -t tests < <(go test ./internal/runtime -list '^(Test|Example)' | grep -E '^(Test|Example)' || true)
-if (( ${#tests[@]} == 0 )); then
-  echo "No internal/runtime tests found"
-  exit 0
-fi
+packages=(./internal/agentcore ./internal/textureowner)
 
 run_shard() {
   local shard_index="$1"
   shift
-  local -a selected=()
-  for i in "${!tests[@]}"; do
-    if (( i % total_shards == shard_index )); then
-      selected+=("${tests[$i]}")
+  local status=0
+
+  for package in "${packages[@]}"; do
+    local -a tests=()
+    mapfile -t tests < <(go test "$package" -list '^(Test|Example)' | grep -E '^(Test|Example)' || true)
+    if (( ${#tests[@]} == 0 )); then
+      echo "No ${package} tests found"
+      continue
+    fi
+
+    local -a selected=()
+    for i in "${!tests[@]}"; do
+      if (( i % total_shards == shard_index )); then
+        selected+=("${tests[$i]}")
+      fi
+    done
+
+    if (( ${#selected[@]} == 0 )); then
+      echo "No ${package} tests selected for shard ${shard_index}/${total_shards}"
+      continue
+    fi
+
+    local regex
+    regex="$(IFS='|'; echo "^(${selected[*]})$")"
+    echo "Running ${#selected[@]} of ${#tests[@]} ${package} tests in shard ${shard_index}/${total_shards}"
+    if ! "$(dirname "$0")/go-test-with-timing" "$package" -count=1 -run "$regex" "$@"; then
+      status=1
     fi
   done
 
-  if (( ${#selected[@]} == 0 )); then
-    echo "No internal/runtime tests selected for shard ${shard_index}/${total_shards}"
-    return 0
-  fi
-
-  local regex
-  regex="$(IFS='|'; echo "^(${selected[*]})$")"
-  echo "Running ${#selected[@]} of ${#tests[@]} internal/runtime tests in shard ${shard_index}/${total_shards}"
-  "$(dirname "$0")/go-test-with-timing" ./internal/runtime -count=1 -run "$regex" "$@"
+  return "$status"
 }
 
 if [[ -n "${SHARD_INDEX:-}" ]]; then

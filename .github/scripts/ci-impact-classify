@@ -136,7 +136,7 @@ else
     esac
 
     case "$path" in
-      go.mod|go.sum|scripts/go-test-*|internal/runtime/*|internal/actor/*|internal/actorruntime/*|internal/events/*|internal/store/*|internal/vmmanager/*|internal/vmctl/*)
+      go.mod|go.sum|scripts/go-test-*|internal/agentcore/*|internal/textureowner/*|internal/actor/*|internal/actorruntime/*|internal/events/*|internal/store/*|internal/vmmanager/*|internal/vmctl/*)
         mark high_risk_race "$path -> always-on race-sensitive substrate"
         ;;
     esac

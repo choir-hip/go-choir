@@ -3,23 +3,27 @@ package apihandler
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
+	"github.com/yusefmosiah/go-choir/internal/agentcore"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
+	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/runtime"
 	"github.com/yusefmosiah/go-choir/internal/server"
+	"github.com/yusefmosiah/go-choir/internal/store"
+	"github.com/yusefmosiah/go-choir/internal/textureowner"
 )
 
 func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 	t.Parallel()
 
 	srv := server.NewServer("apihandler-routes-test", "0")
-	registerRoutesForTest(srv, false)
+	registerRoutesForTest(t, srv, false)
 
 	for _, path := range []string{
 		"/health",
@@ -97,23 +101,31 @@ func TestRegisterRoutesGatesTestAPIs(t *testing.T) {
 		"/api/test/texture/worker-update",
 	} {
 		disabled := server.NewServer("apihandler-routes-test-disabled", "0")
-		registerRoutesForTest(disabled, false)
+		registerRoutesForTest(t, disabled, false)
 		if registeredRouteResponds(disabled, path) {
 			t.Fatalf("test route %q registered while disabled", path)
 		}
 
 		enabled := server.NewServer("apihandler-routes-test-enabled", "0")
-		registerRoutesForTest(enabled, true)
+		registerRoutesForTest(t, enabled, true)
 		if !registeredRouteResponds(enabled, path) {
 			t.Fatalf("test route %q not registered while enabled", path)
 		}
 	}
 }
 
-func registerRoutesForTest(srv *server.Server, enableTestAPIs bool) {
+func registerRoutesForTest(t *testing.T, srv *server.Server, enableTestAPIs bool) {
+	t.Helper()
+	s, err := store.Open(filepath.Join(t.TempDir(), "routes.db"))
+	if err != nil {
+		t.Fatalf("open route test store: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	core := agentcore.New(provideriface.Config{SandboxID: "routes-test", EnableTestAPIs: enableTestAPIs}, s, events.NewEventBus(), provider.NewStubProvider(0))
 	RegisterRoutes(
 		srv,
-		runtime.NewAPIHandler(nil),
+		agentcore.NewAPIHandler(core),
+		textureowner.NewHandler(core),
 		NewHandler(nil),
 		browsercontrol.NewHandler(provideriface.Config{}, nil, events.NewEventBus()),
 		desktopstate.NewHandler(nil, events.NewEventBus()),

@@ -65,8 +65,8 @@ The next and only product invocation is:
 The same command resumes after interruption. The mission reconciles one
 canonical state capsule, preserves settled predecessor receipts, and executes:
 
-1. dissolve `internal/runtime` by extracting finite cohesive domain operations
-   before each thin HTTP ownership cutover, then prove package extinction;
+1. keep `internal/runtime` extinct after its direct `agentcore` and
+   `textureowner` ownership cutover, then continue the remaining product proofs;
 2. prove audited-computer construction and CLI-visible operator truth;
 3. establish durable run truth and artifact-verified completion;
 4. prove candidate self-development, receipted promotion, and rollback;
