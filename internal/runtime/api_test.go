@@ -18,6 +18,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -211,6 +212,11 @@ reasoning = "medium"
 		t.Fatal(err)
 	}
 	rt.cfg.ModelPolicyPath = policyPath
+	rt.modelPolicy = modelpolicy.NewManager(modelpolicy.ManagerConfig{
+		PolicyPath:     policyPath,
+		ProviderConfig: rt.cfg,
+		Provider:       rt.provider,
+	})
 
 	req := authenticatedRequest(http.MethodGet, "/api/model-policy/resolve?role=researcher&overlay_id=mimo-eval", "", "user-alice")
 	w := httptest.NewRecorder()
@@ -280,6 +286,11 @@ reasoning = "medium"
 		t.Fatal(err)
 	}
 	rt.cfg.ModelPolicyPath = policyPath
+	rt.modelPolicy = modelpolicy.NewManager(modelpolicy.ManagerConfig{
+		PolicyPath:     policyPath,
+		ProviderConfig: rt.cfg,
+		Provider:       rt.provider,
+	})
 
 	body := `{"text":"Write a briefing about new AI infra in 2026 with live evidence.","model_policy_overlay_id":"glm-medium"}`
 	w := runtimeHandlerRequest(t, handler.HandleTexturePromptEval, http.MethodPost, "/api/evals/texture-prompt", body, "user-alice")

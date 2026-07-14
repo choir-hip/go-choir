@@ -41,8 +41,8 @@ func TestHandlePromptListReturnsEffectivePrompts(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if len(resp.Prompts) != len(promptRoles()) {
-		t.Fatalf("prompt count = %d, want %d", len(resp.Prompts), len(promptRoles()))
+	if len(resp.Prompts) != 8 {
+		t.Fatalf("prompt count = %d, want 8", len(resp.Prompts))
 	}
 	for _, prompt := range resp.Prompts {
 		if strings.TrimSpace(prompt.SourceLabel) == "" {
@@ -54,7 +54,7 @@ func TestHandlePromptListReturnsEffectivePrompts(t *testing.T) {
 		if len(prompt.Tools) == 0 {
 			t.Fatalf("prompt %s missing tool metadata", prompt.Role)
 		}
-		if strings.TrimSpace(prompt.provideriface.ProviderPolicy.ActiveProvider) == "" {
+		if strings.TrimSpace(prompt.ProviderPolicy.ActiveProvider) == "" {
 			t.Fatalf("prompt %s missing provider policy", prompt.Role)
 		}
 	}

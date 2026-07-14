@@ -7,7 +7,7 @@ counts:
     production_files: 57
     test_files: 55
     production_loc: 33299
-    test_loc: 46615
+    test_loc: 46495
     exports: 796
     export_caller_edges: 213
     initial_unused_export_debt: 11
@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 6
     store_calls: 352
     interface_candidates: 4
-    citers: 1349
+    citers: 1347
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -34,7 +34,7 @@ files:
       loc: 431
     - id: internal/runtime/api_test.go [test]
       disposition: api
-      loc: 2485
+      loc: 2496
     - id: internal/runtime/api_texture_prompt_eval.go [production]
       disposition: texture
       loc: 132
@@ -244,7 +244,7 @@ files:
       loc: 16
     - id: internal/runtime/texture_test.go [test]
       disposition: texture
-      loc: 9823
+      loc: 9692
     - id: internal/runtime/texture_tool_unit_test.go [test]
       disposition: texture
       loc: 1063
@@ -5492,10 +5492,6 @@ citers:
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "model-map: internal/runtime/model_policy.go; tools_model_verify.go; callers in runtime.go, api.go, api_texture_prompt_eval.go, texture_merge.go, run start paths, tool_profiles.go"'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "research-map: internal/runtime/tools_research.go nine tools; direct dependencies content Service, Store, search.Client, source client, HTTP; registration in tool_profiles.go"'
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:discovered: "internal/runtime/model_policy.go owns 667 lines of policy defaults, file creation/parsing, overlays, last-valid cache, and metadata enrichment; tools_model_verify.go owns provider capabil… [sha256:6d60ad8fa51d7abbac5fb012dc5d75ca131ab4847582b93a88725c5d4aa487cb]'
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:slice: "map model and research ownership from internal/runtime"'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block
