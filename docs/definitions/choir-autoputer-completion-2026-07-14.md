@@ -138,10 +138,10 @@ measures:
 
 now:
   status: blocked_review
-  slice: "repair invalid coagent profile fallback before landing Texture owner cutover"
-  question: "Does explicit invalid spawn_agent profile input fail closed instead of silently falling back to role after the owner extraction?"
+  slice: "repair six frozen-review regressions before landing Texture owner cutover"
+  question: "Does the repaired candidate fail closed on delegation, route cold Texture wakes, preserve canonical-write completion and autonomous publication, project typed document events, and ratchet the new owner packages?"
   reconciliation:
-    observed_at: 2026-07-14T21:59:05Z
+    observed_at: 2026-07-14T22:03:02Z
     source_ref: commit:c791a0aeffc8afeab6aebe30536cf754753c4a60
     deploy_identity: blocked_before_landing
     authority_identities:
@@ -157,9 +157,9 @@ now:
     rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
     conjecture_delta: "Confirmed by implementation and tests: a one-way textureowner -> agentcore dependency preserves the canonical Texture API, revisions, sources, prompts, tools, actor wake, and user isolation while apihandler and sandbox compose the owners directly. internal/runtime is absent, no Go import names it, and the structural ratchet reports production_importers=0 and wrappers=0."
     heresy_delta:
-      discovered: "The prior lifecycle/core boundary receipt left the package named internal/runtime and actorruntime still importing it; ownership was named but package extinction was not complete. Deployed acceptance also showed a researcher result completed without a subsequent Texture incorporation run during a three-minute observation window; this is inside the already-deferred Texture wake boundary."
-      introduced: none
-      repaired: "Retired the internal/runtime package/import path; moved canonical Texture behavior and tests to internal/textureowner; renamed the generic lifecycle core to internal/agentcore; removed the duplicate core request_email_draft tool constructor; rewired routes, actor adapter, sandbox composition, test shards, and active source guidance."
+      discovered: "Frozen independent review found six candidate regressions: explicit invalid spawn profiles fail open; cold Texture actor wakes are consumed without owner reconciliation or boot sweep; reconciler completion no longer proves a canonical revision; the wrapper ratchet does not scan the new owner imports; autonomous Wire publication is behind an unassigned optional callback; and typed Texture progress/failure events no longer reach the document stream."
+      introduced: "None in canonical source; all six findings are confined to the unpushed candidate lineage rooted at c791a0ae."
+      repaired: "Pending. The candidate already retires internal/runtime and moves canonical Texture behavior/tests to internal/textureowner, but it is not accepted until every blocking behavior and detector regression is repaired and re-reviewed."
   candidate:
     id: R1-texture-owner-cutover-16
     state: review_blocked_repair_required
@@ -174,8 +174,13 @@ now:
     - "ratchet-proof: runtime dissolution inventory PASS with production_importers=0, wrappers=0, 37 tools, 10 canonical initial unused-export debt entries, 34,394 production LOC, and 46,079 test LOC in declared scope."
     - "deferred-problem: staging trajectory e6283f92-7167-4426-a21a-a13d64b9b04b completed researcher run 1af42058-a64d-45b3-a7a3-863265d401a0 without a later Texture incorporation run during the prior acceptance window; this candidate does not claim that separate wake behavior repaired."
     - "independent-review:blocking P2 at internal/coagentowner/spawn_tool.go:73-76; an explicit nonempty invalid or out-of-policy profile normalizes to empty and silently defaults to role, while ToolRegistry execution does not enforce the JSON Schema enum."
-  blocker_or_risk: "Frozen review found one behavior regression: explicit invalid spawn_agent profile input fails open to the valid role instead of preserving the prior CanDelegate rejection. This can spawn a different allowed child than requested. The implementation commit is not eligible to land until the finding is repaired and focused regression proof plus frozen re-review pass."
-  next_action: "Commit this problem receipt before repair, then reject nonempty invalid profiles before defaulting omitted profile to role; add focused contract coverage, re-run scoped verification, and bind independent re-review to the repair commit."
+    - "independent-review:blocking P1 at internal/agentcore/super_controller.go:346-348; ReconcileCoagentWake consumes texture:<doc> cold or terminal wakes with no owner call, while the prior boot Texture sweep was removed."
+    - "independent-review:blocking P1 at internal/agentcore/tools_coagent.go:20-29; required-child completion counts a completed Texture child without proving a matching canonical reconciler_handoff revision."
+    - "independent-review:blocking P2 at cmd/runtime-ratchet/inventory.go:35-38 and wrapper alias discovery; the new dissolution-import predicate is not used, so agentcore/textureowner wrappers evade the ratchet."
+    - "independent-review:blocking P1 at internal/textureowner/tools_texture.go:776-778 and handler.go:43,51-62; canonical Wire publication is nil-gated by CanonicalRevisionCommitted, which has no production assignment."
+    - "independent-review:blocking P1 at internal/agentcore/runtime.go:1668-1675,2828-2864 and internal/textureowner/texture.go:1792-1818; generic-only progress/failure events leave the Texture document stream without synth_progress or synth_failed."
+  blocker_or_risk: "The frozen implementation has six independent blocking findings across delegation validation, actor wake, completion evidence, structural enforcement, publication, and document event projection. The implementation commit is not eligible to land. Repairs must preserve one-way ownership through concrete composition rather than optional callbacks or new facades."
+  next_action: "Repair all six findings from this committed problem receipt, restore the deleted observable contracts with focused tests, regenerate the ratchet baseline, run scoped owner/shard/build verification, freeze a new commit, and obtain independent re-review before landing."
 
 receipts:
   - id: predecessor-B0-authority
