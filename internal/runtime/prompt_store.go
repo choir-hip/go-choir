@@ -11,7 +11,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/promptspec"
-	"github.com/yusefmosiah/go-choir/internal/runtime/textureprompts"
+	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 )
 
 //go:embed prompt_defaults/*.yaml

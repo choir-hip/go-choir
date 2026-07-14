@@ -3,13 +3,13 @@ canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 141
-    production_files: 74
-    test_files: 67
-    production_loc: 43883
-    test_loc: 50018
-    exports: 998
-    export_caller_edges: 354
+    go_files: 137
+    production_files: 72
+    test_files: 65
+    production_loc: 43694
+    test_loc: 49918
+    exports: 968
+    export_caller_edges: 323
     initial_unused_export_debt: 16
     routes: 2
     tools: 48
@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 8
     store_calls: 443
     interface_candidates: 4
-    citers: 270
+    citers: 268
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -218,12 +218,6 @@ files:
     - id: internal/runtime/runtime_test.go [test]
       disposition: lifecycle
       loc: 1736
-    - id: internal/runtime/runtimeprompts/prompts.go [production]
-      disposition: model
-      loc: 110
-    - id: internal/runtime/runtimeprompts/prompts_test.go [test]
-      disposition: model
-      loc: 43
     - id: internal/runtime/search_gateway.go [production]
       disposition: research
       loc: 166
@@ -326,12 +320,6 @@ files:
     - id: internal/runtime/texture_workflow_verifier_test.go [test]
       disposition: texture
       loc: 743
-    - id: internal/runtime/textureprompts/prompts.go [production]
-      disposition: texture
-      loc: 79
-    - id: internal/runtime/textureprompts/prompts_test.go [test]
-      disposition: texture
-      loc: 57
     - id: internal/runtime/tool_profiles.go [production]
       disposition: tools
       loc: 661
@@ -1838,82 +1826,6 @@ exports:
       disposition: lifecycle
     - id: internal/runtime/runtime_test.go:method(*mockBridgeProvider):ProviderName
       disposition: lifecycle
-    - id: internal/runtime/runtimeprompts/prompts.go:func:CoSuperRuntimeOverlay
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:ConductorRunOverlay
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:ProcessorRuntimeOverlay
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:ReconcilerRuntimeOverlay
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:ResearcherRuntimeOverlay
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:RunContextOverlay
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:SuperRuntimeOverlay
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:TemporalContext
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:VSuperRuntimeOverlay
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:func:WorkerRepoBootstrap
-      disposition: model
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:type:CoSuperRuntimeOptions
-      disposition: model
-      production_callers:
-        - internal/runtime/runtimeprompts/prompts.go
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:type:ConductorRunOptions
-      disposition: model
-      production_callers:
-        - internal/runtime/runtimeprompts/prompts.go
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:type:RunContextOptions
-      disposition: model
-      production_callers:
-        - internal/runtime/runtimeprompts/prompts.go
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:type:TemporalContextOptions
-      disposition: model
-      production_callers:
-        - internal/runtime/runtimeprompts/prompts.go
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:type:VSuperRuntimeOptions
-      disposition: model
-      production_callers:
-        - internal/runtime/runtimeprompts/prompts.go
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts.go:type:WorkerRepoBootstrapOptions
-      disposition: model
-      production_callers:
-        - internal/runtime/runtimeprompts/prompts.go
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/runtimeprompts/prompts_test.go:func:TestResearcherRuntimeOverlayIncludesParallelSaturation
-      disposition: model
-    - id: internal/runtime/runtimeprompts/prompts_test.go:func:TestSuperRuntimeOverlayIncludesAuthorityBoundary
-      disposition: model
-    - id: internal/runtime/runtimeprompts/prompts_test.go:func:TestWorkerRepoBootstrapOverlayRendersCommands
-      disposition: model
     - id: internal/runtime/search_gateway.go:method(*gatewaySearchClient):Search
       disposition: research
     - id: internal/runtime/search_gateway_test.go:func:TestGatewaySearchClientParsesSearchOutage
@@ -2521,44 +2433,6 @@ exports:
     - id: internal/runtime/texture_workflow_verifier_test.go:func:TestVerifyTextureWorkflowDeterministicEventLog
       disposition: texture
     - id: internal/runtime/texture_workflow_verifier_test.go:func:TestVerifyTextureWorkflowSeededStochasticOrdering
-      disposition: texture
-    - id: internal/runtime/textureprompts/prompts.go:func:DefaultSystemPrompt
-      disposition: texture
-      production_callers:
-        - internal/runtime/prompt_store.go
-    - id: internal/runtime/textureprompts/prompts.go:func:RevisionPolicyOverlay
-      disposition: texture
-      production_callers:
-        - internal/runtime/texture_agent_revision.go
-    - id: internal/runtime/textureprompts/prompts.go:func:RevisionSourceEntitiesIntro
-      disposition: texture
-      production_callers:
-        - internal/runtime/texture_agent_revision.go
-    - id: internal/runtime/textureprompts/prompts.go:func:RevisionWorkerFindingsOverlay
-      disposition: texture
-      production_callers:
-        - internal/runtime/texture_agent_revision.go
-    - id: internal/runtime/textureprompts/prompts.go:func:RunOverlay
-      disposition: texture
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/textureprompts/prompts.go:type:RevisionPolicyOptions
-      disposition: texture
-      production_callers:
-        - internal/runtime/texture_agent_revision.go
-        - internal/runtime/textureprompts/prompts.go
-    - id: internal/runtime/textureprompts/prompts.go:type:RevisionWorkerFindingsOptions
-      disposition: texture
-      production_callers:
-        - internal/runtime/texture_agent_revision.go
-        - internal/runtime/textureprompts/prompts.go
-    - id: internal/runtime/textureprompts/prompts_test.go:func:TestDefaultSystemPromptIsNonEmpty
-      disposition: texture
-    - id: internal/runtime/textureprompts/prompts_test.go:func:TestRevisionPolicyOverlayIncludesPatchExample
-      disposition: texture
-    - id: internal/runtime/textureprompts/prompts_test.go:func:TestRunOverlayHasNoWireBranch
-      disposition: texture
-    - id: internal/runtime/textureprompts/prompts_test.go:func:TestRunOverlayIncludesArticleAndProbeGuidance
       disposition: texture
     - id: internal/runtime/tool_profiles.go:method(*Runtime):InstallDefaultAgentTools
       disposition: tools
@@ -4187,11 +4061,9 @@ citers:
       disposition: block
     - id: docs/choir-doctrine.md:`successor pattern:` Candidate = `(CodeRef, forked ArtifactProgramRef)`; speculative effects execute in capsules (`internal/capsule` + `internal/runtime/tools_capsule.go`); promotion = atomic route flip between `ComputerVersion` records.
       disposition: block
-    - id: docs/choir-prompting-invariants.md:- Per-run runtime overlays live in `internal/runtime/runtimeprompts/overlays/*.yaml`
+    - id: docs/choir-prompting-invariants.md:- Per-run runtime overlays live in `internal/runtimeprompts/overlays/*.yaml`
       disposition: block
     - id: docs/choir-prompting-invariants.md:- Seeded defaults live in `internal/runtime/prompt_defaults/*.yaml` and
-      disposition: block
-    - id: docs/choir-prompting-invariants.md:`internal/runtime/textureprompts/texture.yaml`.
       disposition: block
     - id: docs/computer-ontology.md:`internal/capsule` + `internal/runtime/tools_capsule.go`), whose transactions
       disposition: block
@@ -4237,35 +4109,35 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:`/internal/runtime/runs`). Every attempt executing that definition therefore
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- E1 zero Go imports of internal/runtime/promptspec, absent old filesystem package, and runtime ratchet PASS with decreased runtime file and LOC counts; old path strings may remain only where the gene… [sha256:be6b073bd190ace25366b1671b307ca63db62fb6e8d5b8cf00a237267c7a1866]
-      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_store.go#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtimeprompts
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec/promptspec.go
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtimeprompts#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec/promptspec.go#2
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_agent_revision.go
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec/promptspec_test.go
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_agent_revision.go#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/promptspec/promptspec_test.go#2
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_prompt_unit_test.go
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtimeprompts/prompts.go
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_prompt_unit_test.go#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtimeprompts/prompts.go#2
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/textureprompts
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/textureprompts/prompts.go
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/textureprompts#2
       disposition: block
-    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/textureprompts/prompts.go#2
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtimeprompts
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:1. dissolve `internal/runtime` into cohesive owners and delete it;
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:`internal/runtime` and make the ratchet extinction target pass.
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:object: internal/runtime/promptspec package ownership'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block
@@ -4378,8 +4250,6 @@ citers:
     - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:- internal/runtime/app_promotion.go: RollForwardAppAdoption; a rolled-back version may be promoted again only by a fresh validated CAS command'
       disposition: block
     - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:- internal/runtime/candidate_package_intake.go: SwitchCandidatePackageIntakeAdoptionReview, RollbackCandidatePackageIntakeAdoptionReview, and RollForwardCandidatePackageIntakeAdoptionReview, plus thei… [sha256:704583ffa4ed97374e04e7aa9fe636f044c53dc46ff276d5cac24da5a3c76a95]'
-      disposition: block
-    - id: docs/definitions/og-dolt-heresy-completion-2026-07-08.md:-count=1; go test ./internal/runtime/textureprompts -count=1;
       disposition: block
     - id: 'docs/definitions/og-dolt-heresy-completion-2026-07-08.md:Source audit 2026-07-10: internal/runtime/app_promotion.go persists adopted'
       disposition: block

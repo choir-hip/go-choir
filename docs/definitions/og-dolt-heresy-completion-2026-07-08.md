@@ -1223,7 +1223,7 @@ Per the definition skill. Specific bindings:
   command_or_observation: >-
     go test ./internal/runtime -run
     'TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches|TestExplicitNoWorkerDecisionParsesWithoutNarrativeRouteOracle|TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims'
-    -count=1; go test ./internal/runtime/textureprompts -count=1;
+    -count=1; go test ./internal/textureprompts -count=1;
     scripts/check-heresies.sh --fail-on-regression; temporary production marker
     negative proof; CI run 29074494439; Node B /health; real-passkey staging
     create/revision/revise/poll/delete probe.

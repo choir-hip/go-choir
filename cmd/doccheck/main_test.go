@@ -125,6 +125,23 @@ func hasWarningPath(warnings []warning, path string) bool {
 	return false
 }
 
+func TestClassifySurfaceRecognizesCurrentPromptPathsOnly(t *testing.T) {
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"internal/runtime/prompt_defaults/texture.yaml", "runtime-prompt"},
+		{"internal/textureprompts/texture.yaml", "runtime-prompt"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			if got := classifySurface(tt.path); got != tt.want {
+				t.Fatalf("classifySurface(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestClassifyHeresyContext(t *testing.T) {
 	docs := map[string]*docInfo{
 		"docs/evidence.md": {Path: "docs/evidence.md", Scope: "historical", IsEvidence: true},

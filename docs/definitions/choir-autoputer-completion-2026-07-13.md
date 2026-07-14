@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T00:05:24Z
+  updated_at: 2026-07-14T00:20:06Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@642b391a1589196cccf8c35169b1d32b5e791131
+  expected_parent_or_authority_ref: refs/heads/main@origin@6627cc3294c8e950f5b7c5339b8e0bb056ace3d8
   status: working
   current_subgoal: R1-prompt-packages-cutover-02
   active_phase: R1-runtime-dissolution
@@ -404,7 +404,7 @@ state_capsule:
     - R1-prompt-packages-cutover-02
   locks:
     - id: R1-prompt-packages-cutover-02
-      status: defined
+      status: verified_local
       mutation_class: orange
       classification_rationale: Runtime package ownership changes are orange even when byte-identical prompt assets and loaders preserve behavior; no red protected surface is touched.
       conjecture: The self-contained runtime and Texture prompt asset packages can move atomically to top-level cohesive owners without changing any embedded prompt byte, parser/rendering behavior, role policy, route, tool, state authority, provider routing, or model selection.
@@ -451,19 +451,42 @@ state_capsule:
         - E1 byte identities for every moved file, zero Go imports of either old path, absent old filesystem packages, current citer redirects, and runtime ratchet PASS with decreased runtime file and LOC counts
         - E2 direct runtimeprompts and textureprompts tests plus focused prompt-store, texture-revision, tool-profile, prompt-rendering, and doccheck path-classification behavior
         - E6 independent immutable-candidate verification
-      rollback_ref: 642b391a1589196cccf8c35169b1d32b5e791131
+      rollback_ref: 6627cc3294c8e950f5b7c5339b8e0bb056ace3d8
       close_condition: Both old directories and all Go imports are absent, both new owners contain byte-identical implementations, assets, and direct tests, focused behavior and ratchet checks pass without category growth, independent review finds no forbidden seam or policy delta, and canonical CI/deploy/authenticated prompt-artifact receipts bind the landed commit.
       assurance:
         independent_verifier: required
         panel: compact
         review_binding: frozen base, exact diff digest, byte-identity manifest, commands, and ratchet delta
-        review_result:
+        define_review_result:
           candidate_diff_sha256: 4af62491bf7687865cf3c68f46b8e2b1484eeec04dc14c3c20d46278fc8a0661
           reviewers:
             - google-antigravity/gemini-3.5-flash: PASS
             - opencode/hy3-free: timed out after repository scan without a final verdict
           adjudication: The first panel run found a missing doccheck path consumer; the lock now includes the classifier, hint, focused test, and all current doctrine/subordinate citers. Gemini independently verified the repaired complete scope, closure receipts, authority identity, dependencies, and diff digest. The second opencode run confirmed the target trees and enumerated the repaired callers and citers before timing out without a new finding.
           no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, graph, evidence floor, or stopping condition.
+        implementation_review_result:
+          candidate_diff_sha256: 4953f9203e258c92bd13f253bfca666557440f106c0a5e59c1722a7330d781e9
+          reviewers:
+            - opencode/hy3-free: PASS
+            - google-antigravity/gemini-3.5-flash: PASS
+          adjudication: Both reviewers independently recomputed all 20 byte-identical renames, every Go caller and current citer cutover, doccheck path behavior, exact ratchet reductions, absent forbidden seams, coherent state, and focused build/test results. No blocking finding remained.
+          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed source, inventory, lock, graph, evidence floor, or stopping condition.
+      local_evidence:
+        - class: E0
+          observation: canonical implementation parent 6627cc3294c8e950f5b7c5339b8e0bb056ace3d8; all candidate changes are within the reviewed lock
+        - class: E1
+          observation: all 20 package Go, test, and embedded YAML files are detected as 100% byte-identical renames; old package directories and old Go import searches are empty; regenerated runtime ratchet PASS at go_files 137, production_files 72, test_files 65, production_loc 43694, test_loc 49918, exports 968, export_caller_edges 323, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, citers 268
+        - class: E2
+          observation: direct runtimeprompts, textureprompts, and full doccheck package tests passed
+          artifact_ref: artifact://111
+        - class: E2
+          observation: focused runtime prompt-store, system-prompt, Texture-prompt, revision-prompt, and provider-prompt consumer tests passed
+          artifact_ref: artifact://113
+        - class: E2
+          observation: runtime ratchet unit tests passed
+          artifact_ref: artifact://116
+        - class: E2
+          observation: gopls reported no diagnostics in either moved package or cmd/doccheck after workspace refresh
       heresy_delta:
         discovered: []
         introduced: []

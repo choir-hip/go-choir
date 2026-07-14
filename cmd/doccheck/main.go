@@ -25,24 +25,24 @@ const (
 )
 
 var highRead = map[string]bool{
-	"README.md":                                     true,
-	"AGENTS.md":                                     true,
-	"docs/README.md":                                true,
-	"docs/choir-doctrine.md":                        true,
-	"docs/semantic-registry.md":                     true,
-	"docs/NOW.md":                                   true,
-	"docs/ACTIVE.md":                                true,
-	"docs/current-architecture.md":                  true,
-	"docs/platform-os-app-state.md":                 true,
-	"docs/conjecture-assertion-ledger-2026-06.md":   true,
-	"docs/heresy-detectors.md":                      true,
-	"docs/agent-product-doctrine.md":                true,
-	"docs/choir-prompting-invariants.md":            true,
-	"docs/memo-problem-documentation-first.md":      true,
-	"docs/computer-ontology.md":                     true,
-	"docs/runtime-invariants.md":                    true,
-	"docs/texture-agentic-invariants-2026-06-13.md": true,
-	"docs/source-external-data-publication.md":      true,
+	"README.md":                                                 true,
+	"AGENTS.md":                                                 true,
+	"docs/README.md":                                            true,
+	"docs/choir-doctrine.md":                                    true,
+	"docs/semantic-registry.md":                                 true,
+	"docs/NOW.md":                                               true,
+	"docs/ACTIVE.md":                                            true,
+	"docs/current-architecture.md":                              true,
+	"docs/platform-os-app-state.md":                             true,
+	"docs/conjecture-assertion-ledger-2026-06.md":               true,
+	"docs/heresy-detectors.md":                                  true,
+	"docs/agent-product-doctrine.md":                            true,
+	"docs/choir-prompting-invariants.md":                        true,
+	"docs/memo-problem-documentation-first.md":                  true,
+	"docs/computer-ontology.md":                                 true,
+	"docs/runtime-invariants.md":                                true,
+	"docs/texture-agentic-invariants-2026-06-13.md":             true,
+	"docs/source-external-data-publication.md":                  true,
 	"docs/definitions/choir-autoputer-completion-2026-07-13.md": true,
 }
 
@@ -1240,7 +1240,7 @@ func scanForbiddenRuntimeMarkdown() ([]warning, error) {
 			Severity: "warning",
 			Path:     cleanPath(path),
 			Message:  "internal/runtime must not contain markdown; docs belong in docs/ and agent prompts belong in YAML",
-			Hint:     "use internal/runtime/prompt_defaults/*.yaml or internal/runtime/textureprompts/*.yaml",
+			Hint:     "use internal/runtime/prompt_defaults/*.yaml or internal/textureprompts/*.yaml",
 		})
 		return nil
 	})
@@ -1252,7 +1252,7 @@ func classifySurface(path string) string {
 	case strings.HasPrefix(path, "docs/") || path == "README.md" || path == "AGENTS.md":
 		return "docs"
 	case strings.HasPrefix(path, "internal/runtime/prompt_defaults/") ||
-		strings.HasPrefix(path, "internal/runtime/textureprompts/"):
+		strings.HasPrefix(path, "internal/textureprompts/"):
 		return "runtime-prompt"
 	case strings.HasSuffix(path, ".go"):
 		return "go"
