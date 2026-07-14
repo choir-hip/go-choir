@@ -20,6 +20,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
@@ -575,7 +576,7 @@ func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
 		return
 	}
-	role := normalizeModelPolicyRole(r.URL.Query().Get("role"))
+	role := modelpolicy.NormalizeRole(r.URL.Query().Get("role"))
 	if role == "" {
 		role = agentprofile.Conductor
 	}
@@ -585,18 +586,18 @@ func (h *APIHandler) HandleModelPolicyResolve(w http.ResponseWriter, r *http.Req
 	}
 	overlayID := strings.TrimSpace(r.URL.Query().Get("overlay_id"))
 	if overlayID != "" {
-		metadata[runMetadataLLMPolicyOverlayID] = overlayID
+		metadata[modelpolicy.MetadataPolicyOverlayID] = overlayID
 	}
-	metadata = h.rt.ensureResolvedLLMMetadata(r.Context(), ownerID, metadata)
+	metadata = h.rt.modelPolicy.EnrichMetadata(r.Context(), ownerID, role, metadata)
 	writeAPIJSON(w, http.StatusOK, modelPolicyResolveResponse{
 		Role:            role,
 		OverlayID:       overlayID,
-		Provider:        metadataStringValue(metadata, runMetadataLLMProvider),
-		Model:           metadataStringValue(metadata, runMetadataLLMModel),
-		ReasoningEffort: metadataStringValue(metadata, runMetadataLLMReasoningEffort),
-		MaxTokens:       metadataIntValue(metadata, runMetadataLLMMaxTokens),
-		Source:          metadataStringValue(metadata, runMetadataLLMPolicySource),
-		PolicyError:     metadataStringValue(metadata, runMetadataLLMPolicyError),
+		Provider:        metadataStringValue(metadata, modelpolicy.MetadataProvider),
+		Model:           metadataStringValue(metadata, modelpolicy.MetadataModel),
+		ReasoningEffort: metadataStringValue(metadata, modelpolicy.MetadataReasoningEffort),
+		MaxTokens:       metadataIntValue(metadata, modelpolicy.MetadataMaxTokens),
+		Source:          metadataStringValue(metadata, modelpolicy.MetadataPolicySource),
+		PolicyError:     metadataStringValue(metadata, modelpolicy.MetadataPolicyError),
 	})
 }
 

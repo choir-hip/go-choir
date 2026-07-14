@@ -63,6 +63,31 @@ func (rt *Runtime) synthesizeResearcherUpdateIfMissing(ctx context.Context, rec 
 	return nil
 }
 
+func latestSuccessfulResearchToolSeq(events []types.EventRecord, toolNames ...string) int64 {
+	wanted := make(map[string]bool, len(toolNames))
+	for _, toolName := range toolNames {
+		if strings.TrimSpace(toolName) != "" {
+			wanted[toolName] = true
+		}
+	}
+	var latest int64
+	for _, ev := range events {
+		if ev.Kind != types.EventToolResult {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+			continue
+		}
+		tool, _ := payload["tool"].(string)
+		isError, _ := payload["is_error"].(bool)
+		if wanted[tool] && !isError && ev.Seq > latest {
+			latest = ev.Seq
+		}
+	}
+	return latest
+}
+
 func latestSuccessfulResearchToolResultOutput(eventsForRun []types.EventRecord) (types.EventRecord, string, map[string]any, bool) {
 	wanted := map[string]bool{
 		"web_search":                 true,

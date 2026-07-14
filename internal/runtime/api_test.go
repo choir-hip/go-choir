@@ -305,7 +305,7 @@ reasoning = "medium"
 	if err != nil {
 		t.Fatalf("GetRun conductor: %v", err)
 	}
-	if got := metadataStringValue(conductor.Metadata, runMetadataLLMPolicyOverlayID); got != "glm-medium" {
+	if got := metadataStringValue(conductor.Metadata, modelpolicy.MetadataPolicyOverlayID); got != "glm-medium" {
 		t.Fatalf("conductor overlay = %q; metadata=%+v", got, conductor.Metadata)
 	}
 
@@ -324,10 +324,10 @@ reasoning = "medium"
 	if textureRun == nil {
 		t.Fatalf("expected a texture run on doc channel %s; runs=%d", resp.DocID, len(runs))
 	}
-	if got := metadataStringValue(textureRun.Metadata, runMetadataLLMPolicyOverlayID); got != "glm-medium" {
+	if got := metadataStringValue(textureRun.Metadata, modelpolicy.MetadataPolicyOverlayID); got != "glm-medium" {
 		t.Fatalf("texture run overlay = %q; metadata=%+v", got, textureRun.Metadata)
 	}
-	if got := metadataStringValue(textureRun.Metadata, runMetadataLLMModel); got != "glm-5.2" {
+	if got := metadataStringValue(textureRun.Metadata, modelpolicy.MetadataModel); got != "glm-5.2" {
 		t.Fatalf("texture run model = %q, want glm-5.2; metadata=%+v", got, textureRun.Metadata)
 	}
 }

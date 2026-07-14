@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -114,7 +115,7 @@ func newSpawnAgentTool(rt *Runtime, spec agentprofile.Policy) toolregistry.Tool 
 				constraints[runMetadataModel] = model
 			}
 			if overlayID := strings.TrimSpace(in.ModelPolicyOverlayID); overlayID != "" {
-				constraints[runMetadataLLMPolicyOverlayID] = overlayID
+				constraints[modelpolicy.MetadataPolicyOverlayID] = overlayID
 			}
 			if (callerProfile == agentprofile.Conductor ||
 				callerProfile == agentprofile.Processor ||

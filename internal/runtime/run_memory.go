@@ -34,7 +34,7 @@ type runMemoryManager struct {
 	cfg                       provideriface.Config
 	emit                      provideriface.EventEmitFunc
 	provider                  provideriface.ToolLoopProvider
-	llmConfig                 LLMSelection
+	llmConfig                 provideriface.LLMSelection
 	promptOverheadTokens      int
 	overflowRecoveryAttempted bool
 	compactionInProgress      bool
@@ -49,7 +49,7 @@ func newRunMemoryManager(store *runtimestore.Store, rec *types.RunRecord, cfg pr
 	}
 }
 
-func (m *runMemoryManager) withLLMCompactor(provider provideriface.ToolLoopProvider, llmConfig LLMSelection, promptOverheadTokens int) *runMemoryManager {
+func (m *runMemoryManager) withLLMCompactor(provider provideriface.ToolLoopProvider, llmConfig provideriface.LLMSelection, promptOverheadTokens int) *runMemoryManager {
 	m.provider = provider
 	m.llmConfig = llmConfig
 	m.promptOverheadTokens = promptOverheadTokens

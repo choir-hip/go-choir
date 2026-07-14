@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
@@ -329,7 +330,7 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	return b.String(), nil
 }
 
-func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, searchClient search.Client, sourceClient sourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
+func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, searchClient search.Client, sourceClient researchtools.SourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if spec.AllowWritableFiles {
 		if err := RegisterFileTools(registry, cwd); err != nil {
@@ -346,7 +347,9 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 		}
 	}
 	if spec.AllowResearchTools {
-		if err := RegisterResearchTools(registry, searchClient, sourceClient, httpClient, rt); err != nil {
+		if err := researchtools.Register(registry, researchtools.Dependencies{
+			Store: rt.store, Content: rt.content, Search: searchClient, Source: sourceClient, HTTP: httpClient,
+		}); err != nil {
 			return nil, err
 		}
 	}
@@ -388,7 +391,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	}
 
 	searchClient := search.NewGatewayClientFromEnv()
-	sourceClient := newSourceSearchClientFromEnv()
+	sourceClient := researchtools.NewSourceClientFromEnv()
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 
 	superRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Super), cwd, searchClient, sourceClient, httpClient)

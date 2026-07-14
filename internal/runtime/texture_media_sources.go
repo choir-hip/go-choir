@@ -12,6 +12,7 @@ import (
 	"time"
 
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
+	"github.com/yusefmosiah/go-choir/internal/researchtools"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
@@ -233,8 +234,8 @@ func enrichSourceServiceEntities(ctx context.Context, entities []textureSourceEn
 	if len(entities) == 0 {
 		return
 	}
-	sourceClient, ok := newSourceSearchClientFromEnv().(sourceItemResolveClient)
-	if !ok || sourceClient == nil {
+	sourceClient := researchtools.NewSourceClientFromEnv()
+	if sourceClient == nil {
 		return
 	}
 	resolveCtx, cancel := context.WithTimeout(ctx, 750*time.Millisecond)

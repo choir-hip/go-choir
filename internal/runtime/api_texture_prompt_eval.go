@@ -3,6 +3,7 @@ package runtime
 import (
 	"encoding/json"
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"log"
 	"net/http"
@@ -67,16 +68,16 @@ func (h *APIHandler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Requ
 	}
 
 	metadata := map[string]any{
-		runMetadataAgentProfile:       agentprofile.Conductor,
-		runMetadataAgentRole:          agentprofile.Conductor,
-		runMetadataLLMPolicyOverlayID: overlayID,
-		"input_source":                "prompt_bar",
-		"requested_app":               agentprofile.Texture,
-		"seed_prompt":                 text,
-		"initial_document_title":      provider.InitialTextureTitle(text, strings.TrimSpace(req.Title)),
-		"submission_surface":          "prompt_bar",
-		"request_source":              "texture_prompt_eval",
-		"eval_kind":                   texturePromptEvalKind,
+		runMetadataAgentProfile:             agentprofile.Conductor,
+		runMetadataAgentRole:                agentprofile.Conductor,
+		modelpolicy.MetadataPolicyOverlayID: overlayID,
+		"input_source":                      "prompt_bar",
+		"requested_app":                     agentprofile.Texture,
+		"seed_prompt":                       text,
+		"initial_document_title":            provider.InitialTextureTitle(text, strings.TrimSpace(req.Title)),
+		"submission_surface":                "prompt_bar",
+		"request_source":                    "texture_prompt_eval",
+		"eval_kind":                         texturePromptEvalKind,
 	}
 	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
 		metadata[runMetadataOwnerEmail] = ownerEmail
@@ -90,12 +91,12 @@ func (h *APIHandler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Requ
 	resolveMeta := cloneMetadata(metadata)
 	resolveMeta[runMetadataAgentProfile] = agentprofile.Texture
 	resolveMeta[runMetadataAgentRole] = agentprofile.Texture
-	resolved := h.rt.ensureResolvedLLMMetadata(r.Context(), ownerID, resolveMeta)
-	if errText := metadataStringValue(resolved, runMetadataLLMPolicyError); errText != "" {
+	resolved := h.rt.modelPolicy.EnrichMetadata(r.Context(), ownerID, agentprofile.Texture, resolveMeta)
+	if errText := metadataStringValue(resolved, modelpolicy.MetadataPolicyError); errText != "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "model policy overlay did not resolve: " + errText})
 		return
 	}
-	if metadataStringValue(resolved, runMetadataLLMProvider) == "" || metadataStringValue(resolved, runMetadataLLMModel) == "" {
+	if metadataStringValue(resolved, modelpolicy.MetadataProvider) == "" || metadataStringValue(resolved, modelpolicy.MetadataModel) == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "model policy overlay did not resolve provider and model"})
 		return
 	}
@@ -122,9 +123,9 @@ func (h *APIHandler) HandleTexturePromptEval(w http.ResponseWriter, r *http.Requ
 		SubmissionID:         rec.RunID,
 		DocID:                routeDecision.DocID,
 		ModelPolicyOverlayID: overlayID,
-		Provider:             metadataStringValue(resolved, runMetadataLLMProvider),
-		Model:                metadataStringValue(resolved, runMetadataLLMModel),
-		ReasoningEffort:      metadataStringValue(resolved, runMetadataLLMReasoningEffort),
+		Provider:             metadataStringValue(resolved, modelpolicy.MetadataProvider),
+		Model:                metadataStringValue(resolved, modelpolicy.MetadataModel),
+		ReasoningEffort:      metadataStringValue(resolved, modelpolicy.MetadataReasoningEffort),
 		StatusURL:            "/api/prompt-bar/submissions/" + rec.RunID,
 		CreatedAt:            rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 	})

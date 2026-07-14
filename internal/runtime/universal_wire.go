@@ -1,9 +1,7 @@
 package runtime
 
-import "strings"
-
 func universalWirePlatformOwnerID() string {
-	ownerID := strings.TrimSpace(getenvFirst("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
+	ownerID := firstNonEmptyEnv("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID")
 	if ownerID == "" {
 		ownerID = "universal-wire-platform"
 	}

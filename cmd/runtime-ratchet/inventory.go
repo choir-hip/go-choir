@@ -84,7 +84,7 @@ var compatibilityRE = regexp.MustCompile(`(?i)\b(deprecated|compatib(?:ility|le)
 func scanRepository(root string) (Inventory, error) {
 	inv := Inventory{
 		Schema:          inventorySchema,
-		CanonicalParent: "db1ea597cf862b77f5ccb288f8eb76a08309b64d",
+		CanonicalParent: "0f905ffcfeba3db85f0958382d9beb68f013a498",
 		DispatchNonce:   "s0-runtime-inventory-ratchet-01-nonce-01",
 		Transition:      "s0-runtime-inventory-ratchet-dispatch-intent-01",
 	}

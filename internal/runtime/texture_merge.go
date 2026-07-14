@@ -152,12 +152,11 @@ func (rt *Runtime) callTextureSemanticMergeModel(ctx context.Context, ownerID st
 	if rt == nil || rt.provider == nil {
 		return textureModelSemanticMergeResult{}, nil, fmt.Errorf("runtime provider unavailable")
 	}
-	policy, err := rt.loadModelPolicy(ctx, ownerID)
+	selection, err := rt.modelPolicy.Resolve(ctx, ownerID, agentprofile.Texture, "")
 	policySource := "policy"
 	if err != nil {
 		policySource = "policy_error:" + err.Error()
 	}
-	selection := policy.Resolve(agentprofile.Texture)
 	if strings.TrimSpace(selection.Provider) == "" || strings.TrimSpace(selection.Model) == "" {
 		return textureModelSemanticMergeResult{}, nil, fmt.Errorf("texture model policy did not resolve provider/model")
 	}

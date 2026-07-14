@@ -341,7 +341,7 @@ func TestTextureAgentRevisionRealLLM(t *testing.T) {
 	// Step 2: Add initial user content.
 	initialContent := "Hey there! This is a simple test document. It has some informal language and could use improvement."
 	revReq := textureCreateRevisionRequest{
-		Content:     initialContent,
+		Content: initialContent,
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -489,7 +489,7 @@ func TestTextureAgentRevisionRealLLMCodeGeneration(t *testing.T) {
 
 	// Create initial revision.
 	revReq := textureCreateRevisionRequest{
-		Content:     "I need a Python function to calculate fibonacci numbers.",
+		Content: "I need a Python function to calculate fibonacci numbers.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -566,7 +566,7 @@ func TestTextureAgentRevisionRealLLMEventsEmitted(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Some content to revise.",
+		Content: "Some content to revise.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -658,7 +658,7 @@ func TestTextureAgentRevisionRealLLMMutationIdempotency(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Content for idempotency test.",
+		Content: "Content for idempotency test.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -735,7 +735,7 @@ func TestTextureAgentRevisionRealLLMStreamingDeltas(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Short text.",
+		Content: "Short text.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -799,7 +799,7 @@ func TestTextureAgentRevisionRealLLMProviderMetadata(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&docResp)
 
 	revReq := textureCreateRevisionRequest{
-		Content:     "Some text for metadata test.",
+		Content: "Some text for metadata test.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -861,7 +861,7 @@ func TestTextureAgentRevisionRealLLMFullHistory(t *testing.T) {
 
 	// User edit 1.
 	revReq := textureCreateRevisionRequest{
-		Content:     "First draft by user.",
+		Content: "First draft by user.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
@@ -884,7 +884,7 @@ func TestTextureAgentRevisionRealLLMFullHistory(t *testing.T) {
 
 	// User edit 2.
 	revReq = textureCreateRevisionRequest{
-		Content:     "User adds more content after agent revision.",
+		Content: "User adds more content after agent revision.",
 	}
 	req = textureRealLLMRequest(t, http.MethodPost,
 		"/api/texture/documents/"+docResp.DocID+"/revisions", revReq)

@@ -16,6 +16,7 @@ import (
 
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/events"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -270,8 +271,8 @@ func testPromptRuntime(t *testing.T) *Runtime {
 			PromptRoot:          promptRoot,
 			SupervisionInterval: time.Hour,
 		},
-		promptStore:   promptstore.New(promptRoot),
-		modelPolicies: make(map[string]ModelPolicy),
+		promptStore: promptstore.New(promptRoot),
+		modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{}),
 	}
 }
 

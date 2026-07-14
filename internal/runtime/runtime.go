@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/candidatepackage"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -74,8 +75,7 @@ type Runtime struct {
 	wirePublishTimer      textureWakeTimer
 	wirePlatformPublisher func(context.Context, types.Document, types.Revision, *types.RunRecord) (*wirepublish.PublishTextureResponse, error)
 	textureEditMu         sync.Mutex
-	modelPolicyMu         sync.Mutex
-	modelPolicies         map[string]ModelPolicy
+	modelPolicy           *modelpolicy.Manager
 	qdrantPipelineMu      sync.Mutex
 	qdrantPipeline        *qdrant.Pipeline
 	qdrantPipelineInitErr error
@@ -111,7 +111,11 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		running:          make(map[string]context.CancelFunc),
 		promptStore:      promptstore.New(cfg.PromptRoot),
 		textureWakeAfter: func(d time.Duration, fn func()) textureWakeTimer { return time.AfterFunc(d, fn) },
-		modelPolicies:    make(map[string]ModelPolicy),
+		modelPolicy: modelpolicy.NewManager(modelpolicy.ManagerConfig{
+			PolicyPath:     cfg.ModelPolicyPath,
+			ProviderConfig: cfg,
+			Provider:       provider,
+		}),
 		promotion: promotion.NewService(s, promotion.Config{
 			SourceLedgerRepo:                cfg.SourceLedgerRepo,
 			PromotionSourceRepo:             cfg.PromotionSourceRepo,
@@ -556,7 +560,11 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 		agentRec.ChannelID = runID
 	}
 	metadata = ensureTrajectoryID(metadata, nil, runID)
-	metadata = rt.ensureResolvedLLMMetadata(ctx, ownerID, metadata)
+	role := firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentRole), metadataStringValue(metadata, runMetadataAgentProfile))
+	metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, role, metadata)
+	if model := metadataStringValue(metadata, modelpolicy.MetadataModel); model != "" {
+		metadata[runMetadataModel] = model
+	}
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	rec := &types.RunRecord{
@@ -694,9 +702,9 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	// A pinned model-policy overlay (e.g. an eval arm) covers the whole
 	// trajectory: a child coagent inherits the requester's overlay when it does
 	// not specify its own, so a Texture arm also pins the researchers it spawns.
-	if strings.TrimSpace(metadataStringValue(metadata, runMetadataLLMPolicyOverlayID)) == "" {
-		if overlayID := strings.TrimSpace(metadataStringValue(requesterRec.Metadata, runMetadataLLMPolicyOverlayID)); overlayID != "" {
-			metadata[runMetadataLLMPolicyOverlayID] = overlayID
+	if strings.TrimSpace(metadataStringValue(metadata, modelpolicy.MetadataPolicyOverlayID)) == "" {
+		if overlayID := strings.TrimSpace(metadataStringValue(requesterRec.Metadata, modelpolicy.MetadataPolicyOverlayID)); overlayID != "" {
+			metadata[modelpolicy.MetadataPolicyOverlayID] = overlayID
 		}
 	}
 	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
@@ -774,7 +782,11 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		}
 		return cause
 	}
-	metadata = rt.ensureResolvedLLMMetadata(ctx, ownerID, metadata)
+	role := firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentRole), metadataStringValue(metadata, runMetadataAgentProfile))
+	metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, role, metadata)
+	if model := metadataStringValue(metadata, modelpolicy.MetadataModel); model != "" {
+		metadata[runMetadataModel] = model
+	}
 	agentRec.CreatedAt = now
 	agentRec.UpdatedAt = now
 	if err := rt.store.UpsertAgent(ctx, agentRec); err != nil {
@@ -1765,8 +1777,8 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		}
 	}
 	maxOutputTokens := provideriface.MaxInteractiveOutputTokensForSelection(llmConfig, agentProfileForRun(rec))
-	terminalFallback := terminalProviderFallbackSelection()
-	preconditionFallbacks := providerPreconditionFallbackSelections(llmConfig)
+	terminalFallback := modelpolicy.TerminalProviderFallbackSelection()
+	preconditionFallbacks := modelpolicy.ProviderPreconditionFallbackSelections(llmConfig)
 	if emit != nil {
 		payload, _ := json.Marshal(map[string]any{
 			"phase":                      "tool_loop_fallbacks_configured",
@@ -2332,17 +2344,17 @@ func (rt *Runtime) ensureConductorTextureRoute(ctx context.Context, rec *types.R
 		metadataStringValue(rec.Metadata, "seed_prompt"),
 	)
 	userRevisionMetadata := map[string]any{
-		"seed_prompt":                 routeSeedPrompt,
-		"conductor_loop_id":           rec.RunID,
-		runMetadataTrajectoryID:       trajectoryIDForRun(rec),
-		runMetadataLLMPolicyOverlayID: metadataString(rec.Metadata, runMetadataLLMPolicyOverlayID),
-		runMetadataOwnerEmail:         metadataString(rec.Metadata, runMetadataOwnerEmail),
-		"created_from":                "conductor",
-		"source":                      "user_prompt",
-		"revision_role":               textureRevisionRoleInput,
-		"input_origin":                textureInputOriginUserPrompt,
-		"texture_version":             "v0",
-		textureMetadataPromptUnixTS:   now.Unix(),
+		"seed_prompt":                       routeSeedPrompt,
+		"conductor_loop_id":                 rec.RunID,
+		runMetadataTrajectoryID:             trajectoryIDForRun(rec),
+		modelpolicy.MetadataPolicyOverlayID: metadataString(rec.Metadata, modelpolicy.MetadataPolicyOverlayID),
+		runMetadataOwnerEmail:               metadataString(rec.Metadata, runMetadataOwnerEmail),
+		"created_from":                      "conductor",
+		"source":                            "user_prompt",
+		"revision_role":                     textureRevisionRoleInput,
+		"input_origin":                      textureInputOriginUserPrompt,
+		"texture_version":                   "v0",
+		textureMetadataPromptUnixTS:         now.Unix(),
 	}
 	// The owner prompt is the canonical Texture V0. For prompt-bar-created
 	// Texture, V0 content is exactly the owner's prompt text, not blank metadata
@@ -3016,7 +3028,7 @@ var durableMetadataKeys = []string{
 	"selected_style_sources",
 	"selected_style_rationale",
 	runMetadataOwnerEmail,
-	runMetadataLLMPolicyOverlayID,
+	modelpolicy.MetadataPolicyOverlayID,
 	textureAvailableSourceEntitiesKey,
 }
 

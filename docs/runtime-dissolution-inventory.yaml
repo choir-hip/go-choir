@@ -1,31 +1,31 @@
 schema: runtime-dissolution-inventory/v6
-canonical_parent: db1ea597cf862b77f5ccb288f8eb76a08309b64d
+canonical_parent: 0f905ffcfeba3db85f0958382d9beb68f013a498
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 117
-    production_files: 60
-    test_files: 57
-    production_loc: 35248
-    test_loc: 47507
-    exports: 830
-    export_caller_edges: 226
-    initial_unused_export_debt: 14
+    go_files: 112
+    production_files: 57
+    test_files: 55
+    production_loc: 33299
+    test_loc: 46615
+    exports: 796
+    export_caller_edges: 213
+    initial_unused_export_debt: 11
     routes: 2
-    tools: 48
+    tools: 38
     production_importers: 4
     wrappers: 4
     compatibility_markers: 6
-    store_calls: 357
+    store_calls: 352
     interface_candidates: 4
     citers: 1349
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
-      loc: 6790
+      loc: 6826
     - id: internal/runtime/api.go [production]
       disposition: api
-      loc: 1394
+      loc: 1395
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
       loc: 859
@@ -34,10 +34,10 @@ files:
       loc: 431
     - id: internal/runtime/api_test.go [test]
       disposition: api
-      loc: 2486
+      loc: 2485
     - id: internal/runtime/api_texture_prompt_eval.go [production]
       disposition: texture
-      loc: 131
+      loc: 132
     - id: internal/runtime/api_trajectory.go [production]
       disposition: api
       loc: 126
@@ -92,18 +92,12 @@ files:
     - id: internal/runtime/live_ws_test.go [test]
       disposition: core
       loc: 122
-    - id: internal/runtime/model_policy.go [production]
-      disposition: model
-      loc: 667
-    - id: internal/runtime/model_policy_test.go [test]
-      disposition: model
-      loc: 548
     - id: internal/runtime/podcast.go [production]
       disposition: podcast
       loc: 448
     - id: internal/runtime/podcast_test.go [test]
       disposition: podcast
-      loc: 156
+      loc: 159
     - id: internal/runtime/podcast_unit_test.go [test]
       disposition: podcast
       loc: 66
@@ -130,7 +124,7 @@ files:
       loc: 70
     - id: internal/runtime/researcher_checkpoint_fallback.go [production]
       disposition: research
-      loc: 264
+      loc: 289
     - id: internal/runtime/run_acceptance.go [production]
       disposition: lifecycle
       loc: 1411
@@ -148,7 +142,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3678
+      loc: 3690
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -181,7 +175,7 @@ files:
       loc: 195
     - id: internal/runtime/test_helpers_test.go [test]
       disposition: core
-      loc: 333
+      loc: 334
     - id: internal/runtime/texture.go [production]
       disposition: texture
       loc: 2177
@@ -211,7 +205,7 @@ files:
       loc: 30
     - id: internal/runtime/texture_identity_test.go [test]
       disposition: texture
-      loc: 101
+      loc: 77
     - id: internal/runtime/texture_import.go [production]
       disposition: texture
       loc: 665
@@ -226,10 +220,10 @@ files:
       loc: 501
     - id: internal/runtime/texture_media_sources.go [production]
       disposition: texture
-      loc: 898
+      loc: 899
     - id: internal/runtime/texture_merge.go [production]
       disposition: texture
-      loc: 536
+      loc: 535
     - id: internal/runtime/texture_prompt_unit_test.go [test]
       disposition: texture
       loc: 791
@@ -262,7 +256,7 @@ files:
       loc: 743
     - id: internal/runtime/tool_profiles.go [production]
       disposition: tools
-      loc: 501
+      loc: 504
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
       loc: 405
@@ -274,7 +268,7 @@ files:
       loc: 527
     - id: internal/runtime/tools_coagent.go [production]
       disposition: tools
-      loc: 1054
+      loc: 1055
     - id: internal/runtime/tools_coagent_idempotency_test.go [test]
       disposition: tools
       loc: 130
@@ -286,16 +280,7 @@ files:
       loc: 612
     - id: internal/runtime/tools_evidence.go [production]
       disposition: evidence
-      loc: 231
-    - id: internal/runtime/tools_model_verify.go [production]
-      disposition: model
-      loc: 244
-    - id: internal/runtime/tools_model_verify_test.go [test]
-      disposition: model
-      loc: 231
-    - id: internal/runtime/tools_research.go [production]
-      disposition: research
-      loc: 1091
+      loc: 232
     - id: internal/runtime/tools_researcher.go [production]
       disposition: research
       loc: 268
@@ -304,7 +289,7 @@ files:
       loc: 362
     - id: internal/runtime/tools_test.go [test]
       disposition: tools
-      loc: 1451
+      loc: 1323
     - id: internal/runtime/tools_texture.go [production]
       disposition: texture
       loc: 1875
@@ -334,7 +319,7 @@ files:
       loc: 923
     - id: internal/runtime/universal_wire.go [production]
       disposition: wire
-      loc: 30
+      loc: 28
     - id: internal/runtime/universal_wire_test.go [test]
       disposition: wire
       loc: 63
@@ -349,7 +334,7 @@ files:
       loc: 608
     - id: internal/runtime/value_helpers.go [production]
       disposition: core
-      loc: 112
+      loc: 123
     - id: internal/runtime/wire_metadata.go [production]
       disposition: wire
       loc: 41
@@ -950,51 +935,6 @@ exports:
       disposition: core
     - id: internal/runtime/live_ws_test.go:func:TestLiveWSPublishesOwnerScopedProductEvents
       disposition: core
-    - id: internal/runtime/model_policy.go:method(ModelPolicy):Resolve
-      disposition: model
-      production_callers:
-        - internal/runtime/model_policy.go
-        - internal/runtime/texture_merge.go
-        - internal/runtime/tools_model_verify.go
-    - id: internal/runtime/model_policy.go:type:LLMSelection
-      disposition: model
-      production_callers:
-        - internal/runtime/model_policy.go
-        - internal/runtime/run_memory.go
-        - internal/runtime/tools_model_verify.go
-    - id: internal/runtime/model_policy.go:type:ModelPolicy
-      disposition: model
-      production_callers:
-        - internal/runtime/model_policy.go
-        - internal/runtime/runtime.go
-    - id: internal/runtime/model_policy_test.go:func:TestDefaultModelPolicyUsesChatGPTCutover
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestEnsureDefaultModelPolicyCreatesCutoverPolicy
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestEnsureDefaultModelPolicyDoesNotRewriteExistingPolicy
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestFallbackModelPolicyUsesChatGPTCutoverDefaults
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestGeneratedModelPolicyUsesTextureRoleKey
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestNormalizeModelPolicyRoleSeparatesVerifierModalities
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestParseModelPolicyResolvesRoles
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestProviderPreconditionFallbackSelectionsUseCrossProviderFlash
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestRuntimeFallsBackToPreviousValidModelPolicy
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestRuntimeRejectsExpiredModelPolicyOverlay
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestRuntimeResolvesModelPolicyIntoRunMetadata
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestRuntimeResolvesModelPolicyOverlayIntoRunMetadata
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestStartCoagentRunResolvesModelPolicyIntoRunMetadata
-      disposition: model
-    - id: internal/runtime/model_policy_test.go:func:TestStartCoagentRunResolvesModelPolicyOverlayIntoRunMetadata
-      disposition: model
     - id: internal/runtime/podcast.go:method(*APIHandler):HandlePodcastSearch
       disposition: podcast
       production_callers:
@@ -1239,7 +1179,6 @@ exports:
         - internal/runtime/texture_lineage.go
         - internal/runtime/texture_merge.go
         - internal/runtime/tools_coagent.go
-        - internal/runtime/tools_research.go
         - internal/sandbox/run.go
     - id: internal/runtime/runtime.go:type:Runtime
       disposition: lifecycle
@@ -1250,7 +1189,6 @@ exports:
         - internal/runtime/api_app_promotion.go
         - internal/runtime/channel_store.go
         - internal/runtime/delegate_worker_update_fallback.go
-        - internal/runtime/model_policy.go
         - internal/runtime/product_events.go
         - internal/runtime/qdrant_dedup.go
         - internal/runtime/qdrant_runtime.go
@@ -1272,8 +1210,6 @@ exports:
         - internal/runtime/tools_coagent.go
         - internal/runtime/tools_email.go
         - internal/runtime/tools_evidence.go
-        - internal/runtime/tools_model_verify.go
-        - internal/runtime/tools_research.go
         - internal/runtime/tools_researcher.go
         - internal/runtime/tools_shipper.go
         - internal/runtime/tools_texture.go
@@ -1531,8 +1467,6 @@ exports:
     - id: internal/runtime/texture_identity_test.go:func:TestTextureActorIdentityCompatibility
       disposition: texture
     - id: internal/runtime/texture_identity_test.go:func:TestTextureAgentRevisionTaskTypeCompatibility
-      disposition: texture
-    - id: internal/runtime/texture_identity_test.go:func:TestTextureModelPolicyRoleUsesLegacySelectionKey
       disposition: texture
     - id: internal/runtime/texture_lineage_structured_test.go:func:TestMarkdownLineageStructuredRevisionParsesHeadingsListsAndRefs
       disposition: texture
@@ -2074,42 +2008,10 @@ exports:
       disposition: evidence
       production_callers:
         - internal/runtime/tool_profiles.go
-    - id: internal/runtime/tools_model_verify_test.go:func:TestVerifyModelCapabilityExplicitTextOnlyOmitFireworksMaxTokens
-      disposition: model
-    - id: internal/runtime/tools_model_verify_test.go:func:TestVerifyModelCapabilityRejectsImageForTextOnlyModel
-      disposition: model
-    - id: internal/runtime/tools_model_verify_test.go:func:TestVerifyModelCapabilityRejectsMalformedImageInput
-      disposition: model
-    - id: internal/runtime/tools_model_verify_test.go:func:TestVerifyModelCapabilityUsesDeterministicImageFixture
-      disposition: model
-    - id: internal/runtime/tools_model_verify_test.go:func:TestVerifyModelCapabilityUsesPolicyForMiMoImage
-      disposition: model
-    - id: internal/runtime/tools_model_verify_test.go:func:TestVerifyModelCapabilityUsesPolicyForTextOnlyVerifier
-      disposition: model
-    - id: internal/runtime/tools_model_verify_test.go:method(*capturingModelVerifyProvider):CallWithTools
-      disposition: model
-    - id: internal/runtime/tools_model_verify_test.go:method(*capturingModelVerifyProvider):Execute
-      disposition: model
-    - id: internal/runtime/tools_model_verify_test.go:method(*capturingModelVerifyProvider):ProviderName
-      disposition: model
-    - id: internal/runtime/tools_research.go:func:RegisterResearchTools
-      disposition: research
-      production_callers:
-        - internal/runtime/tool_profiles.go
-    - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):IngestionHandoffLatest
-      disposition: research
-    - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):ResolveSourceItem
-      disposition: research
-    - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):SearchSources
-      disposition: research
     - id: internal/runtime/tools_shipper.go:func:RegisterShipperTools
       disposition: tools
       production_callers:
         - internal/runtime/tool_profiles.go
-    - id: internal/runtime/tools_test.go:func:TestCompactWebSearchProjectionGuidesResearchUpdateCheckpoint
-      disposition: tools
-    - id: internal/runtime/tools_test.go:func:TestCompactWebSearchProjectionSurfacesGatewayOutage
-      disposition: tools
     - id: internal/runtime/tools_test.go:func:TestDelegateRequiresAppChangePackageHonorsExplicitNegativeInstruction
       disposition: tools
     - id: internal/runtime/tools_test.go:func:TestExecuteTools
@@ -2159,8 +2061,6 @@ exports:
     - id: internal/runtime/tools_test.go:func:TestResearcherSourceSearchCallsSourceServiceAPI
       disposition: tools
     - id: internal/runtime/tools_test.go:func:TestResearcherSourceSearchWithoutConfiguredAPIIsUnavailable
-      disposition: tools
-    - id: internal/runtime/tools_test.go:func:TestShouldRequireResearchUpdateAfterResearchToolBatches
       disposition: tools
     - id: internal/runtime/tools_test.go:func:TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath
       disposition: tools
@@ -2407,12 +2307,6 @@ initial_unused_export_debt:
       disposition: delete
     - id: internal/runtime/tools_capsule.go:func:WithCapsuleCtx
       disposition: delete
-    - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):IngestionHandoffLatest
-      disposition: delete
-    - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):ResolveSourceItem
-      disposition: delete
-    - id: internal/runtime/tools_research.go:method(*httpSourceSearchClient):SearchSources
-      disposition: delete
     - id: internal/runtime/tools_vmctl.go:method(*workerRunPollError):Error
       disposition: delete
 routes:
@@ -2471,26 +2365,6 @@ tools:
       disposition: evidence
     - id: internal/runtime/tools_evidence.go:Tool:save_evidence
       disposition: evidence
-    - id: internal/runtime/tools_model_verify.go:Tool:verify_model_capability
-      disposition: model
-    - id: internal/runtime/tools_research.go:Tool:fetch_url
-      disposition: research
-    - id: internal/runtime/tools_research.go:Tool:import_document_content
-      disposition: research
-    - id: internal/runtime/tools_research.go:Tool:import_url_content
-      disposition: research
-    - id: internal/runtime/tools_research.go:Tool:list_content_item_selectors
-      disposition: research
-    - id: internal/runtime/tools_research.go:Tool:read_content_item
-      disposition: research
-    - id: internal/runtime/tools_research.go:Tool:read_content_item_selector
-      disposition: research
-    - id: internal/runtime/tools_research.go:Tool:search_wire_corpus
-      disposition: research
-    - id: internal/runtime/tools_research.go:Tool:source_search
-      disposition: research
-    - id: internal/runtime/tools_research.go:Tool:web_search
-      disposition: research
     - id: internal/runtime/tools_shipper.go:Tool:publish_app_change_package
       disposition: tools
     - id: internal/runtime/tools_texture.go:Tool:patch_texture
@@ -2536,7 +2410,7 @@ wrappers:
     - id: internal/apihandler/routes.go:field:runtime.APIHandler
       disposition: delete
 compatibility_markers:
-    - id: internal/runtime/runtime.go:1986:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1998:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/runtime.go:99:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
@@ -2544,9 +2418,9 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/tools_texture.go:1582:source_ref display_mode enum after the hard cutover. Legacy expanded
       disposition: delete
-    - id: internal/runtime/universal_wire.go:14:Accept both the new "corpusd_route_path" key and the legacy
+    - id: internal/runtime/universal_wire.go:12:Accept both the new "corpusd_route_path" key and the legacy
       disposition: delete
-    - id: internal/runtime/universal_wire.go:15:"platformd_route_path" key for backward compatibility with existing
+    - id: internal/runtime/universal_wire.go:13:"platformd_route_path" key for backward compatibility with existing
       disposition: delete
 store_calls:
     - id: internal/runtime/api.go:HandleInternalRunEvents:internal/store.method:Store.ListEvents
@@ -3131,16 +3005,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/tools_evidence.go:newSaveEvidenceTool:internal/store.method:Store.CreateEvidence
       disposition: lifecycle
-    - id: internal/runtime/tools_research.go:newListContentItemSelectorsTool:internal/store.method:Store.GetContentItem
-      disposition: read
-    - id: internal/runtime/tools_research.go:newReadContentItemSelectorTool:internal/store.method:Store.GetContentItem
-      disposition: read
-    - id: internal/runtime/tools_research.go:newReadContentItemTool:internal/store.method:Store.GetContentItem
-      disposition: read
-    - id: internal/runtime/tools_research.go:newSearchWireCorpusTool:internal/store.method:Store.SearchPublishedDocuments
-      disposition: read
-    - id: internal/runtime/tools_research.go:shouldRequireResearchUpdateAfterTool:internal/store.method:Store.ListEvents
-      disposition: read
     - id: internal/runtime/tools_researcher.go:emitChannelMessageEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
     - id: internal/runtime/tools_researcher.go:ensureFindingEvidence:internal/store.method:Store.CreateEvidence
@@ -5623,15 +5487,15 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive production-used research boundary. internal/runtime/search_gateway.go is already classified for deletion, and its only production constructor caller … [sha256:46acc30961dbacb964c02bb43a927ebdce54c6be5e07602cb6e6269b2ac45eb7]'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "content-map: internal/runtime/content.go; content_extract.go; content_test.go; content_extract_test.go; internal/apihandler/routes.go content routes; Runtime callers in podcast.go, texture_media_sources.go, tools_research.go, api.go"'
-      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "internal/runtime, a compatibility facade, or dual ownership remains"
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "media-map: internal/runtime/media_state.go; media_state_test.go; internal/apihandler/routes.go media progress/recents/theme routes; store media/preference methods; product events"'
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "model-map: internal/runtime/model_policy.go; tools_model_verify.go; callers in runtime.go, api.go, api_texture_prompt_eval.go, texture_merge.go, run start paths, tool_profiles.go"'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:discovered: "internal/runtime/content.go owns 1,984 lines of content HTTP, URL/file import, sourcefetch validation, readability/document extraction, YouTube transcript provider and InnerTube fallback,… [sha256:699b4e4bd8f29d6e02980681500bc32fdb8dd0e4a1343e43311a19f43c69977d]'
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "research-map: internal/runtime/tools_research.go nine tools; direct dependencies content Service, Store, search.Client, source client, HTTP; registration in tool_profiles.go"'
       disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:slice: "extract content and media ownership from internal/runtime"'
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:discovered: "internal/runtime/model_policy.go owns 667 lines of policy defaults, file creation/parsing, overlays, last-valid cache, and metadata enrichment; tools_model_verify.go owns provider capabil… [sha256:6d60ad8fa51d7abbac5fb012dc5d75ca131ab4847582b93a88725c5d4aa487cb]'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:slice: "map model and research ownership from internal/runtime"'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block

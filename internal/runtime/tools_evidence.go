@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -41,7 +42,7 @@ func RegisterRunMemoryTools(registry *toolregistry.ToolRegistry, rt *Runtime) er
 // verify_model_capability is a model diagnostic and does not belong in Texture's
 // default authoring affordance.
 func RegisterModelDiagnosticTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
-	return registry.Register(newVerifyModelCapabilityTool(rt))
+	return registry.Register(modelpolicy.NewVerifyModelCapabilityTool(rt.modelPolicy))
 }
 
 func newGetRunMemoryEntryTool(rt *Runtime) toolregistry.Tool {

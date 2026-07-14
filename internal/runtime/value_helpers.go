@@ -110,3 +110,14 @@ func stringFromMap(m map[string]any, key string) string {
 	value, _ := m[key].(string)
 	return strings.TrimSpace(value)
 }
+
+func truncateRunes(value string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes])
+}

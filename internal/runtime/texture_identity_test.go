@@ -75,27 +75,3 @@ func TestTextureAgentRevisionTaskTypeCompatibility(t *testing.T) {
 		t.Fatal("unrelated task type should not be recognized as Texture revision task type")
 	}
 }
-
-func TestTextureModelPolicyRoleUsesLegacySelectionKey(t *testing.T) {
-	raw := `
-[defaults]
-fallback_provider = "chatgpt"
-fallback_model = "gpt-5.5"
-reasoning = "low"
-
-[roles.texture]
-provider = "fireworks"
-model = "accounts/fireworks/models/deepseek-v4-flash"
-`
-	policy, err := parseModelPolicy(raw, "/System/model-policy.toml")
-	if err != nil {
-		t.Fatalf("parseModelPolicy: %v", err)
-	}
-	texture := policy.Resolve(agentprofile.Texture)
-	if texture.Provider != "fireworks" || texture.Model != "accounts/fireworks/models/deepseek-v4-flash" {
-		t.Fatalf("texture selection = %+v, want legacy texture role selection", texture)
-	}
-	if got := normalizeModelPolicyRole("texture"); got != agentprofile.Texture {
-		t.Fatalf("texture normalized to %q, want %q", got, agentprofile.Texture)
-	}
-}

@@ -420,7 +420,7 @@ func TestRunMemoryCompactionPromptIncludesObjectiveAndRetrievalInstructions(t *t
 
 func TestRunMemoryEffectiveThresholdUsesModelContextWindow(t *testing.T) {
 	manager := newRunMemoryManager(nil, &types.RunRecord{}, provideriface.Config{}, nil).
-		withLLMCompactor(nil, LLMSelection{Model: "deepseek-v4-flash"}, 0)
+		withLLMCompactor(nil, provideriface.LLMSelection{Model: "deepseek-v4-flash"}, 0)
 	if got := manager.effectiveContextThresholdTokens(); got != 700000 {
 		t.Fatalf("threshold = %d, want 700000", got)
 	}

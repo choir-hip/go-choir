@@ -1,4 +1,4 @@
-package runtime
+package researchtools
 
 import (
 	"context"
@@ -15,23 +15,24 @@ import (
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-type sourceSearchClient interface {
-	SearchSources(ctx context.Context, query string, maxResults int) (*sourceSearchResponse, error)
+type SourceSearchClient interface {
+	SearchSources(ctx context.Context, query string, maxResults int) (*SourceSearchResponse, error)
 }
 
-type sourceItemResolveClient interface {
+type SourceItemResolveClient interface {
 	ResolveSourceItem(ctx context.Context, itemID string) (*sourceapi.ItemResult, error)
 }
 
-type ingestionHandoffStatusClient interface {
+type IngestionHandoffStatusClient interface {
 	IngestionHandoffLatest(ctx context.Context) (*sourceapi.IngestionHandoffResponse, error)
 }
 
-type sourceSearchResponse struct {
+type SourceSearchResponse struct {
 	Query    string           `json:"query"`
 	Provider string           `json:"provider"`
 	Results  []map[string]any `json:"results"`
@@ -39,24 +40,35 @@ type sourceSearchResponse struct {
 	Metadata map[string]any   `json:"metadata,omitempty"`
 }
 
-type httpSourceSearchClient struct {
+type SourceClientConfig struct {
+	BaseURL    string
+	HTTPClient *http.Client
+}
+
+type HTTPSourceClient struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-func newSourceSearchClientFromEnv() sourceSearchClient {
-	baseURL := strings.TrimSpace(getenvFirst("SOURCE_SERVICE_BASE_URL", "SOURCE_SERVICE_URL", "SOURCECYCLED_API_URL"))
+func NewSourceClient(config SourceClientConfig) *HTTPSourceClient {
+	baseURL := strings.TrimRight(strings.TrimSpace(config.BaseURL), "/")
 	if baseURL == "" {
 		return nil
 	}
-	baseURL = strings.TrimRight(baseURL, "/")
 	if _, err := url.ParseRequestURI(baseURL); err != nil {
 		return nil
 	}
-	return &httpSourceSearchClient{
-		baseURL:    baseURL,
-		httpClient: &http.Client{Timeout: 15 * time.Second},
+	client := config.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 15 * time.Second}
 	}
+	return &HTTPSourceClient{baseURL: baseURL, httpClient: client}
+}
+
+func NewSourceClientFromEnv() *HTTPSourceClient {
+	return NewSourceClient(SourceClientConfig{
+		BaseURL: strings.TrimSpace(getenvFirst("SOURCE_SERVICE_BASE_URL", "SOURCE_SERVICE_URL", "SOURCECYCLED_API_URL")),
+	})
 }
 
 func getenvFirst(names ...string) string {
@@ -68,7 +80,7 @@ func getenvFirst(names ...string) string {
 	return ""
 }
 
-func (c *httpSourceSearchClient) SearchSources(ctx context.Context, query string, maxResults int) (*sourceSearchResponse, error) {
+func (c *HTTPSourceClient) SearchSources(ctx context.Context, query string, maxResults int) (*SourceSearchResponse, error) {
 	if c == nil || strings.TrimSpace(c.baseURL) == "" {
 		return nil, fmt.Errorf("source search client not configured")
 	}
@@ -108,7 +120,7 @@ func (c *httpSourceSearchClient) SearchSources(ctx context.Context, query string
 	if apiResp.Metadata.TargetKind != "" {
 		metadata["target_kind"] = apiResp.Metadata.TargetKind
 	}
-	return &sourceSearchResponse{
+	return &SourceSearchResponse{
 		Query:    apiResp.Query,
 		Provider: firstNonEmptyString(apiResp.Provider, sourceapi.ProviderName),
 		Results:  results,
@@ -117,7 +129,7 @@ func (c *httpSourceSearchClient) SearchSources(ctx context.Context, query string
 	}, nil
 }
 
-func (c *httpSourceSearchClient) IngestionHandoffLatest(ctx context.Context) (*sourceapi.IngestionHandoffResponse, error) {
+func (c *HTTPSourceClient) IngestionHandoffLatest(ctx context.Context) (*sourceapi.IngestionHandoffResponse, error) {
 	if c == nil || strings.TrimSpace(c.baseURL) == "" {
 		return nil, fmt.Errorf("source search client not configured")
 	}
@@ -146,7 +158,7 @@ func (c *httpSourceSearchClient) IngestionHandoffLatest(ctx context.Context) (*s
 	return &apiResp, nil
 }
 
-func (c *httpSourceSearchClient) ResolveSourceItem(ctx context.Context, itemID string) (*sourceapi.ItemResult, error) {
+func (c *HTTPSourceClient) ResolveSourceItem(ctx context.Context, itemID string) (*sourceapi.ItemResult, error) {
 	itemID = strings.TrimSpace(itemID)
 	if c == nil || strings.TrimSpace(c.baseURL) == "" {
 		return nil, fmt.Errorf("source search client not configured")
@@ -212,17 +224,25 @@ func sourceAPIItemMap(item sourceapi.ItemResult) map[string]any {
 	}
 }
 
-func RegisterResearchTools(registry *toolregistry.ToolRegistry, searchClient search.Client, sourceClient sourceSearchClient, httpClient *http.Client, rt *Runtime) error {
+type Dependencies struct {
+	Store   *store.Store
+	Content *contentowner.Service
+	Search  search.Client
+	Source  SourceSearchClient
+	HTTP    *http.Client
+}
+
+func Register(registry *toolregistry.ToolRegistry, deps Dependencies) error {
 	for _, tool := range []toolregistry.Tool{
-		newWebSearchTool(searchClient, rt),
-		newSourceSearchTool(sourceClient, rt),
-		newFetchURLTool(httpClient, rt),
-		newImportDocumentContentTool(rt),
-		newImportURLContentTool(rt),
-		newReadContentItemTool(rt),
-		newListContentItemSelectorsTool(rt),
-		newReadContentItemSelectorTool(rt),
-		newSearchWireCorpusTool(rt),
+		newWebSearchTool(deps.Search, deps),
+		newSourceSearchTool(deps.Source, deps),
+		newFetchURLTool(deps.HTTP, deps),
+		newImportDocumentContentTool(deps),
+		newImportURLContentTool(deps),
+		newReadContentItemTool(deps),
+		newListContentItemSelectorsTool(deps),
+		newReadContentItemSelectorTool(deps),
+		newSearchWireCorpusTool(deps),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -231,7 +251,7 @@ func RegisterResearchTools(registry *toolregistry.ToolRegistry, searchClient sea
 	return nil
 }
 
-func newImportDocumentContentTool(rt *Runtime) toolregistry.Tool {
+func newImportDocumentContentTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		URL      string `json:"url,omitempty"`
 		FilePath string `json:"file_path,omitempty"`
@@ -245,10 +265,7 @@ func newImportDocumentContentTool(rt *Runtime) toolregistry.Tool {
 			"query":     map[string]any{"type": "string"},
 		}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if rt == nil {
-				return "", fmt.Errorf("runtime not configured")
-			}
-			if rt.content == nil {
+			if deps.Content == nil {
 				return "", fmt.Errorf("content service not configured")
 			}
 			var in args
@@ -267,9 +284,9 @@ func newImportDocumentContentTool(rt *Runtime) toolregistry.Tool {
 			var item types.ContentItem
 			var err error
 			if urlValue != "" {
-				item, err = rt.content.ImportURL(ctx, ownerID, urlValue, strings.TrimSpace(in.Query))
+				item, err = deps.Content.ImportURL(ctx, ownerID, urlValue, strings.TrimSpace(in.Query))
 			} else {
-				item, err = rt.content.ImportFile(ctx, ownerID, filePath)
+				item, err = deps.Content.ImportFile(ctx, ownerID, filePath)
 			}
 			if err != nil {
 				return "", err
@@ -289,12 +306,12 @@ func newImportDocumentContentTool(rt *Runtime) toolregistry.Tool {
 				"selector_count": len(selectors),
 				"provenance":     item.Provenance,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
 
-func newSourceSearchTool(sourceClient sourceSearchClient, rt *Runtime) toolregistry.Tool {
+func newSourceSearchTool(sourceClient SourceSearchClient, deps Dependencies) toolregistry.Tool {
 	type args struct {
 		Query      string `json:"query"`
 		MaxResults int    `json:"max_results,omitempty"`
@@ -327,12 +344,12 @@ func newSourceSearchTool(sourceClient sourceSearchClient, rt *Runtime) toolregis
 				"metadata":           resp.Metadata,
 				"results":            resp.Results,
 			}
-			model, metadata := compactSourceSearchProjection(full, resp, shouldRequireResearchUpdateAfterTool(ctx, rt))
+			model, metadata := compactSourceSearchProjection(full, resp, shouldRequireResearchUpdateAfterTool(ctx, deps))
 			return toolregistry.ProjectionResultJSON(model, full, metadata)
 		}}
 }
 
-func newImportURLContentTool(rt *Runtime) toolregistry.Tool {
+func newImportURLContentTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		URL   string `json:"url"`
 		Query string `json:"query,omitempty"`
@@ -344,10 +361,7 @@ func newImportURLContentTool(rt *Runtime) toolregistry.Tool {
 			"query": map[string]any{"type": "string"},
 		}, []string{"url"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if rt == nil {
-				return "", fmt.Errorf("runtime not configured")
-			}
-			if rt.content == nil {
+			if deps.Content == nil {
 				return "", fmt.Errorf("content service not configured")
 			}
 			var in args
@@ -358,7 +372,7 @@ func newImportURLContentTool(rt *Runtime) toolregistry.Tool {
 			if ownerID == "" {
 				return "", fmt.Errorf("import_url_content missing owner context")
 			}
-			item, err := rt.content.ImportURL(ctx, ownerID, strings.TrimSpace(in.URL), strings.TrimSpace(in.Query))
+			item, err := deps.Content.ImportURL(ctx, ownerID, strings.TrimSpace(in.URL), strings.TrimSpace(in.Query))
 			if err != nil {
 				return "", err
 			}
@@ -374,12 +388,12 @@ func newImportURLContentTool(rt *Runtime) toolregistry.Tool {
 				"text_chars":    len(item.TextContent),
 				"provenance":    item.Provenance,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
 
-func newReadContentItemTool(rt *Runtime) toolregistry.Tool {
+func newReadContentItemTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		ContentID    string `json:"content_id"`
 		MaxTextChars int    `json:"max_text_chars,omitempty"`
@@ -393,8 +407,8 @@ func newReadContentItemTool(rt *Runtime) toolregistry.Tool {
 			"max_segments":   map[string]any{"type": "integer", "minimum": 0, "maximum": 1000},
 		}, []string{"content_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if rt == nil {
-				return "", fmt.Errorf("runtime not configured")
+			if deps.Store == nil {
+				return "", fmt.Errorf("store not configured")
 			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
@@ -408,7 +422,7 @@ func newReadContentItemTool(rt *Runtime) toolregistry.Tool {
 			if contentID == "" {
 				return "", fmt.Errorf("content_id must not be empty")
 			}
-			item, err := rt.Store().GetContentItem(ctx, ownerID, contentID)
+			item, err := deps.Store.GetContentItem(ctx, ownerID, contentID)
 			if err != nil {
 				return "", err
 			}
@@ -462,12 +476,12 @@ func newReadContentItemTool(rt *Runtime) toolregistry.Tool {
 				"segment_count":      segmentCount,
 				"segments_truncated": segmentsTruncated,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
 
-func newListContentItemSelectorsTool(rt *Runtime) toolregistry.Tool {
+func newListContentItemSelectorsTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		ContentID string `json:"content_id"`
 	}
@@ -477,8 +491,8 @@ func newListContentItemSelectorsTool(rt *Runtime) toolregistry.Tool {
 			"content_id": map[string]any{"type": "string"},
 		}, []string{"content_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if rt == nil {
-				return "", fmt.Errorf("runtime not configured")
+			if deps.Store == nil {
+				return "", fmt.Errorf("store not configured")
 			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
@@ -488,7 +502,7 @@ func newListContentItemSelectorsTool(rt *Runtime) toolregistry.Tool {
 			if ownerID == "" {
 				return "", fmt.Errorf("list_content_item_selectors missing owner context")
 			}
-			item, err := rt.Store().GetContentItem(ctx, ownerID, strings.TrimSpace(in.ContentID))
+			item, err := deps.Store.GetContentItem(ctx, ownerID, strings.TrimSpace(in.ContentID))
 			if err != nil {
 				return "", err
 			}
@@ -510,12 +524,12 @@ func newListContentItemSelectorsTool(rt *Runtime) toolregistry.Tool {
 				"selector_count": len(previews),
 				"selectors":      previews,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
 
-func newReadContentItemSelectorTool(rt *Runtime) toolregistry.Tool {
+func newReadContentItemSelectorTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		ContentID    string `json:"content_id"`
 		SelectorID   string `json:"selector_id"`
@@ -529,8 +543,8 @@ func newReadContentItemSelectorTool(rt *Runtime) toolregistry.Tool {
 			"max_text_chars": map[string]any{"type": "integer", "minimum": 0, "maximum": 100000},
 		}, []string{"content_id", "selector_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if rt == nil {
-				return "", fmt.Errorf("runtime not configured")
+			if deps.Store == nil {
+				return "", fmt.Errorf("store not configured")
 			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
@@ -540,7 +554,7 @@ func newReadContentItemSelectorTool(rt *Runtime) toolregistry.Tool {
 			if ownerID == "" {
 				return "", fmt.Errorf("read_content_item_selector missing owner context")
 			}
-			item, err := rt.Store().GetContentItem(ctx, ownerID, strings.TrimSpace(in.ContentID))
+			item, err := deps.Store.GetContentItem(ctx, ownerID, strings.TrimSpace(in.ContentID))
 			if err != nil {
 				return "", err
 			}
@@ -583,7 +597,7 @@ func newReadContentItemSelectorTool(rt *Runtime) toolregistry.Tool {
 				"text_chars":     len(selected.Text),
 				"text_truncated": truncated,
 			}
-			addResearchUpdateCheckpointRequirement(ctx, rt, result)
+			addResearchUpdateCheckpointRequirement(ctx, deps, result)
 			return toolregistry.ResultJSON(result)
 		}}
 }
@@ -620,7 +634,7 @@ func boundedContentSegments(value any, maxSegments int) ([]any, int, bool) {
 // target and gateway default; the gateway clamps the ceiling at 50.
 const webSearchAgentResultFloor = 40
 
-func newWebSearchTool(searchClient search.Client, rt *Runtime) toolregistry.Tool {
+func newWebSearchTool(searchClient search.Client, deps Dependencies) toolregistry.Tool {
 	type args struct {
 		Query      string `json:"query"`
 		MaxResults int    `json:"max_results,omitempty"`
@@ -671,23 +685,23 @@ func newWebSearchTool(searchClient search.Client, rt *Runtime) toolregistry.Tool
 				full["code"] = resp.Code
 				full["error"] = resp.Error
 			}
-			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchUpdateAfterTool(ctx, rt))
+			model, metadata := compactWebSearchProjection(full, resp, shouldRequireResearchUpdateAfterTool(ctx, deps))
 			return toolregistry.ProjectionResultJSON(model, full, metadata)
 		}}
 }
 
-func shouldRequireResearchUpdateAfterTool(ctx context.Context, rt *Runtime) bool {
+func shouldRequireResearchUpdateAfterTool(ctx context.Context, deps Dependencies) bool {
 	if toolregistry.ExecutionContextFrom(ctx).Profile != agentprofile.Researcher {
 		return false
 	}
-	if rt == nil || rt.store == nil {
+	if deps.Store == nil {
 		return false
 	}
 	runID := toolregistry.ExecutionContextFrom(ctx).RunID
 	if runID == "" {
 		return false
 	}
-	events, err := rt.store.ListEvents(ctx, runID, 200)
+	events, err := deps.Store.ListEvents(ctx, runID, 200)
 	if err != nil {
 		return false
 	}
@@ -742,14 +756,14 @@ func latestSuccessfulResearchToolSeq(events []types.EventRecord, toolNames ...st
 	return latest
 }
 
-func addResearchUpdateCheckpointRequirement(ctx context.Context, rt *Runtime, result map[string]any) {
-	if !shouldRequireResearchUpdateAfterTool(ctx, rt) {
+func addResearchUpdateCheckpointRequirement(ctx context.Context, deps Dependencies, result map[string]any) {
+	if !shouldRequireResearchUpdateAfterTool(ctx, deps) {
 		return
 	}
 	result["next_instruction"] = "Submit a concise update_coagent source packet from this latest research batch before any additional search/fetch turn. Use schema_version=\"coagent_source_packet.v1\" with kind=\"evidence_update\" or kind=\"blocker\", claims[], packet.sources for citeable handles, questions[], and notes[]."
 }
 
-func newFetchURLTool(httpClient *http.Client, rt *Runtime) toolregistry.Tool {
+func newFetchURLTool(httpClient *http.Client, deps Dependencies) toolregistry.Tool {
 	type args struct {
 		URL      string `json:"url"`
 		MaxChars int    `json:"max_chars,omitempty"`
@@ -802,7 +816,7 @@ func newFetchURLTool(httpClient *http.Client, rt *Runtime) toolregistry.Tool {
 				"content_length": len(data),
 				"content":        content,
 			}
-			model, metadata := compactFetchURLProjection(full, content, shouldRequireResearchUpdateAfterTool(ctx, rt))
+			model, metadata := compactFetchURLProjection(full, content, shouldRequireResearchUpdateAfterTool(ctx, deps))
 			return toolregistry.ProjectionResultJSON(model, full, metadata)
 		}}
 }
@@ -895,7 +909,7 @@ func compactWebSearchProjection(full map[string]any, resp *search.Response, requ
 	return model, metadata
 }
 
-func compactSourceSearchProjection(full map[string]any, resp *sourceSearchResponse, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
+func compactSourceSearchProjection(full map[string]any, resp *SourceSearchResponse, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
 	const maxVisibleResults = 8
 	const maxBodyChars = 1000
 	visibleResults := make([]map[string]any, 0, researchMinInt(len(resp.Results), maxVisibleResults))
@@ -1032,7 +1046,7 @@ func researchMaxInt(a, b int) int {
 	return b
 }
 
-func newSearchWireCorpusTool(rt *Runtime) toolregistry.Tool {
+func newSearchWireCorpusTool(deps Dependencies) toolregistry.Tool {
 	type args struct {
 		Query   string `json:"query"`
 		Limit   int    `json:"limit,omitempty"`
@@ -1046,8 +1060,8 @@ func newSearchWireCorpusTool(rt *Runtime) toolregistry.Tool {
 			"owner_id": map[string]any{"type": "string", "description": "Scope to owner (default: platform wire owner)"},
 		}, []string{"query"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if rt == nil || rt.store == nil {
-				return "", fmt.Errorf("runtime not configured")
+			if deps.Store == nil {
+				return "", fmt.Errorf("store not configured")
 			}
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
@@ -1065,7 +1079,7 @@ func newSearchWireCorpusTool(rt *Runtime) toolregistry.Tool {
 			if ownerID == "" {
 				ownerID = universalWirePlatformOwnerID()
 			}
-			results, err := rt.store.SearchPublishedDocuments(ctx, query, ownerID, limit)
+			results, err := deps.Store.SearchPublishedDocuments(ctx, query, ownerID, limit)
 			if err != nil {
 				return "", fmt.Errorf("search wire corpus: %w", err)
 			}
@@ -1088,4 +1102,21 @@ func newSearchWireCorpusTool(rt *Runtime) toolregistry.Tool {
 			}
 			return toolregistry.ResultJSON(map[string]any{"results": out, "count": len(out), "query": query})
 		}}
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func universalWirePlatformOwnerID() string {
+	ownerID := strings.TrimSpace(getenvFirst("SOURCE_SERVICE_RUNTIME_OWNER_ID", "SOURCECYCLED_RUNTIME_OWNER_ID"))
+	if ownerID == "" {
+		ownerID = "universal-wire-platform"
+	}
+	return ownerID
 }

@@ -138,32 +138,32 @@ measures:
 
 now:
   status: working
-  slice: "map model and research ownership from internal/runtime"
-  question: "Can model-policy loading/resolution/verification and generic research/search/content-source tools move to dedicated owners while prompt enrichment and researcher settlement remain with the later core/Texture boundary rather than being connected through callbacks?"
+  slice: "land and accept model and research owner cutover"
+  question: "Does the direct modelpolicy/researchtools owner cutover preserve all model-selection, verification, source/search/content tool, and researcher checkpoint contracts without Runtime wrappers?"
   reconciliation:
-    observed_at: 2026-07-14T17:43:07Z
-    source_ref: refs/heads/autoputer-definition-v2@0f905ffcfeba3db85f0958382d9beb68f013a498
-    deploy_identity: "CI 29353600501 PASS; deploy job 87156686176; activation receipt 474b9b70214ba6c063e6e3231430ce75474e014c at 2026-07-14T17:31:15Z."
+    observed_at: 2026-07-14T18:17:08Z
+    source_ref: refs/heads/autoputer-definition-v2@60bb2f9
+    deploy_identity: "Predecessor 0f905ffcfeba3db85f0958382d9beb68f013a498 is deployed; current model/research candidate is locally accepted and not yet pushed."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-      - docs/runtime-dissolution-inventory.yaml@canonical_parent:b3d8205fe3047ccbde392abbaed681a2e60dbee1
+      - docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: owner_boundary_frozen
+    status: accepted_local_ready_for_independent_review
     protected_surfaces: [model_policy, provider_routing, verifier_calls, researcher_tools, search_gateway, source_artifacts, content_service, evidence_state, user_isolation, texture_authority]
-    admissible_evidence: "Exact caller/provider/store/tool map; policy parsing/cache/overlay and model verification contracts; research tool schemas/results/content/source behavior; direct registry composition; no runtime wrappers; focused tests, scoped runtime shard and ratchet; frozen independent reviews; CI, staging identity, and deployed model-policy/research acceptance."
+    admissible_evidence: "Exact caller/provider/store/tool map; policy parsing/cache/overlay and model verification contracts; research tool schemas/results/content/source behavior; direct registry composition; no runtime wrappers; modelpolicy/researchtools tests; all four runtime shards; owner composition packages; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed model-policy/research acceptance."
     rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
-    conjecture_delta: "Model selection is a computer-owned policy service, not run orchestration; internal/modelcatalog is complementary metadata, not a replacement. Generic research tools can depend directly on Store, content Service, search.Client, source clients, and HTTP, while tools_researcher.go and researcher_checkpoint_fallback.go are settlement/Texture lifecycle and must remain for later ownership. Prompt persistence already belongs to promptstore, but prompts.go enriches responses from live tool profiles and system prompts; moving it now would require a forbidden callback seam, so it stays with the final core/profile cutover."
+    conjecture_delta: "Confirmed: model selection is a computer-owned modelpolicy service and generic research tooling is a direct-dependency researchtools service. Runtime now composes both owners without callbacks or compatibility wrappers; prompt enrichment and researcher settlement remain deliberately local to later core/Texture slices."
     heresy_delta:
-      discovered: "internal/runtime/model_policy.go owns 667 lines of policy defaults, file creation/parsing, overlays, last-valid cache, and metadata enrichment; tools_model_verify.go owns provider capability probes. internal/runtime/tools_research.go owns 1,091 lines and nine generic tools but depends on Runtime only for content Service, Store reads, and checkpoint-event inspection. internal/modelcatalog does not load policy; search/source/content packages own substrates but no generic research tool owner exists. tools_researcher.go and researcher_checkpoint_fallback.go own settlement/evidence/channel/Texture wake behavior, not generic research."
+      discovered: "The frozen map was accurate. Three source-client methods listed as initial unused-export debt disappeared with the generic research owner extraction; the ratchet generator still named the preceding browser/content implementation parent and required a mechanically exact parent advance."
       introduced: none
-      repaired: "The preceding content/media cutover is deployed and accepted with CI, activation identity, authenticated content import/list/get, and media progress/recents round trips."
+      repaired: "internal/modelpolicy now solely owns policy defaults, file loading/parsing, overlays, last-valid cache, metadata enrichment, and model verification tool construction. internal/researchtools now solely owns nine generic research tools with explicit Store/content/search/source/HTTP dependencies. Runtime directly composes both owners; old model_policy.go, tools_model_verify.go, and tools_research.go are deleted; all runtime callers use exported owner contracts; initial unused-export debt fell 14 to 11."
   candidate:
     id: R1-model-research-owner-cutover-15
-    state: owner_boundary_frozen_ready_to_implement
-    ref: refs/heads/autoputer-definition-v2@0f905ffcfeba3db85f0958382d9beb68f013a498
+    state: accepted_local_ready_for_independent_review
+    ref: refs/heads/autoputer-definition-v2@60bb2f9
     owner: orchestrator
     base: refs/remotes/origin/main@0f905ffcfeba3db85f0958382d9beb68f013a498
     digest: "Create internal/modelpolicy Manager as sole policy file/default/parser/overlay/cache/metadata owner and move model verification tool construction beside it. Create internal/researchtools as sole generic research tool registration/implementation owner with explicit Store/content/search/source/HTTP dependencies. Runtime composes and calls these owners directly; delete model_policy.go, tools_model_verify.go, and tools_research.go after every caller migrates. Retain prompts.go, tools_researcher.go, and researcher_checkpoint_fallback.go for later core/Texture settlement cutovers; do not add callbacks or wrappers."
@@ -173,8 +173,8 @@ now:
     - "research-map: internal/runtime/tools_research.go nine tools; direct dependencies content Service, Store, search.Client, source client, HTTP; registration in tool_profiles.go"
     - "replacement-check: internal/modelcatalog is static capability metadata only; promptstore already owns prompt persistence; search/source/content own substrates; no model-policy or research-tool owner package exists"
     - "deferred-settlement: tools_researcher.go and researcher_checkpoint_fallback.go retain lifecycle/evidence/channel/Texture wake authority for later cutover"
-  blocker_or_risk: "No execution blocker. Highest risk is broad unexported runtime metadata/helper coupling and tool result/schema drift. The cutover must export a narrow modelpolicy metadata contract, give researchtools explicit dependencies, preserve all tool names/schemas/results and provider/source failure semantics, and avoid moving prompt enrichment or researcher settlement through callbacks."
-  next_action: "Commit this frozen problem-owner boundary, implement the two owner packages in parallel without shared integration edits, then migrate Runtime/API/Texture/tool-profile callers serially, delete the old files, regenerate the inventory, and prove focused contracts before independent review."
+  blocker_or_risk: "No local execution blocker. The candidate passes modelpolicy/researchtools tests, direct owner composition packages, all four runtime shards, focused integration contracts, and the regenerated ratchet. Remaining gates are frozen independent review, canonical CI/deploy identity, and authenticated staging model-policy/research acceptance."
+  next_action: "Commit the frozen candidate, obtain independent review of model/research authority and behavior preservation, repair any findings, then push origin/main and execute CI/deploy/staging acceptance."
 
 receipts:
   - id: predecessor-B0-authority
