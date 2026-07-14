@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T05:40:13Z
+  updated_at: 2026-07-14T05:41:19Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@2948410f
+  expected_parent_or_authority_ref: refs/heads/main@origin@186a7986
   status: working
   current_subgoal: R1-toolregistry-facade-extinction-07
   active_phase: R1-runtime-dissolution
@@ -1031,6 +1031,8 @@ state_capsule:
         - internal/runtime/tools_worker_update.go
         - internal/runtime/tools_test.go
         - internal/runtime/run_memory_integration_test.go
+        - cmd/runtime-ratchet/inventory.go
+        - cmd/runtime-ratchet/inventory_test.go
         - docs/runtime-dissolution-inventory.yaml
         - docs/definitions/choir-autoputer-completion-2026-07-13.md
       owner_contract:
@@ -1118,6 +1120,7 @@ state_capsule:
         - owner golden tests for nil/empty/populated BuildSystemPrompt bytes
         - owner golden tests for ResultJSON compact bytes, HTML escaping, nil values, and unsupported-value errors
         - owner golden tests for ProjectionResultJSON normal and nil-metadata envelope bytes plus unsupported-value errors
+        - ratchet detector test proving unqualified Tool and qualified toolregistry.Tool registrations produce identical tool identities and counts
         - focused runtime tool profile, prompt catalog, representative schema, result, projection, research outage, work-item update, and run-memory tool-loop behavior
       forbidden_targets:
         - any tool name, description, parameter schema, handler, registration order, result field, projection field, prompt text, catalog format, role exposure, or execution semantics
@@ -1133,7 +1136,7 @@ state_capsule:
         - E5 canonical CI/deploy identity plus an authenticated staging coagent transition whose durable tool result and downstream update/Texture artifact prove unchanged schema, execution, JSON result, projection, and prompt-catalog behavior
         - E6 independent immutable-candidate verification bound to exact diff, caller graph, golden bytes, ratchet delta, focused tests, and staging transition
       rollback_ref: d6014fa7
-      close_condition: Runtime tools.go is absent; runtime declares none of Tool, jsonSchemaObject, cloneSchemaMap, buildSystemPromptWithTools, toolProjectionResultJSON, or toolResultJSON; internal/toolregistry is the sole owner; all callers use it directly; exact schemas, prompt catalogs, result and projection bytes, execution, role exposure, and Trace behavior are unchanged; duplicate runtime owner tests are removed; the ratchet passes with production file/LOC, test LOC, and wrapper reductions and no unrelated category increase; independent review finds no alias, facade, behavior delta, or evidence gap; and canonical CI/deploy plus authenticated staging product-path proof bind the landed commit.
+      close_condition: Runtime tools.go is absent; runtime declares none of Tool, jsonSchemaObject, cloneSchemaMap, buildSystemPromptWithTools, toolProjectionResultJSON, or toolResultJSON; internal/toolregistry is the sole owner; all callers use it directly; exact schemas, prompt catalogs, result and projection bytes, execution, role exposure, and Trace behavior are unchanged; duplicate runtime owner tests are removed; the ratchet preserves all 48 tool identities while passing with production file/LOC, test LOC, and wrapper reductions and no unrelated category increase; independent review finds no alias, facade, behavior delta, detector gap, or evidence gap; and canonical CI/deploy plus authenticated staging product-path proof bind the landed commit.
       assurance:
         independent_verifier: required
         panel: compact
@@ -1152,6 +1155,12 @@ state_capsule:
           result: PASS
           adjudication: Independent review verified that internal/toolregistry/toolregistry_test.go is nonexistent, internal/toolregistry/toolloop_test.go is the actual package behavior-test owner and can host the frozen golden vectors, and the correction changes only that exact path plus capsule time and parent.
           no_rerun_rationale: Appending this receipt changes assurance provenance only and does not alter the reviewed scope correction.
+        detector_correction_review:
+          candidate_diff_sha256: cfc37f13eee20d6fb6112ef1f2f5bbcd7df9fa8bb7f158bdb3796493745a64d6
+          reviewer: google-antigravity/gemini-3.5-flash
+          result: PASS
+          adjudication: Independent review verified the two-file detector scope, equal recognition of Tool and toolregistry.Tool literals, preservation of the baseline :Tool: identities and count 48, and no product-contract change.
+          no_rerun_rationale: Appending this receipt changes assurance provenance only and does not alter the reviewed detector correction.
       validation_notes:
         - Runtime baseline before this Define is go_files 132, production_files 69, test_files 63, production_loc 43047, test_loc 49769, exports 955, export_caller_edges 308, initial_unused_export_debt 15, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 333.
         - This Define mechanically raises documentation citers from 333 to exactly 391 while every source-category count remains unchanged. Implementation must rebaseline that reviewed documentation-only rise, then reduce runtime production files, production LOC, test LOC, and wrappers without increasing any other source category.
