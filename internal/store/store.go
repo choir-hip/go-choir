@@ -69,6 +69,7 @@ type Store struct {
 	texturePath              string
 	doltConnector            doltConnector
 	jsonPatchMu              sync.Mutex
+	trajectoryMu             sync.Mutex
 	textureRevMu             sync.Mutex
 	doltCommitMu             sync.Mutex
 	doltHistoryDirty         bool

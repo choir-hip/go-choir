@@ -235,6 +235,214 @@ func TestWirePublicationFailureCancelsClaimsWithoutCancellingActivation(t *testi
 	}
 }
 
+func TestRecoverOpenWirePublicationClaimsCancelsOrphanedTrajectoryClaims(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	const (
+		ownerID            = "owner-wire-recovery"
+		trajectoryID       = "traj-wire-recovery"
+		secondTrajectoryID = "traj-wire-recovery-second"
+		unrelatedID        = "traj-wire-unrelated"
+		activeRunID        = "run-wire-recovery"
+	)
+	if _, err := handler.rt.Store().CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   trajectoryID,
+		OwnerID:        ownerID,
+		Kind:           types.TrajectoryKindPublication,
+		SettlementRule: defaultSettlementRuleForKind(types.TrajectoryKindPublication),
+	}); err != nil {
+		t.Fatalf("create recovery trajectory: %v", err)
+	}
+	publicationItem, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              ownerID,
+		TrajectoryID:         trajectoryID,
+		Objective:            "publish an orphaned wire revision",
+		ObjectiveFingerprint: "wire-recovery-publication",
+		Details:              map[string]any{"kind": "wire_publication"},
+	})
+	if err != nil {
+		t.Fatalf("create orphaned publication marker: %v", err)
+	}
+	if publicationItem.AssignedAgentID != "" {
+		t.Fatalf("publication marker assigned_agent_id = %q, want unassigned", publicationItem.AssignedAgentID)
+	}
+	duplicatePublicationItem, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              ownerID,
+		TrajectoryID:         trajectoryID,
+		Objective:            "publish another orphaned wire revision",
+		ObjectiveFingerprint: "wire-recovery-publication-duplicate",
+		Details:              map[string]any{"kind": "wire_publication"},
+	})
+	if err != nil {
+		t.Fatalf("create duplicate publication marker: %v", err)
+	}
+	storyItem, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              ownerID,
+		TrajectoryID:         trajectoryID,
+		Objective:            "resolve the publication story",
+		ObjectiveFingerprint: "wire-recovery-story",
+		Details:              map[string]any{"kind": "wire_story_resolution"},
+	})
+	if err != nil {
+		t.Fatalf("create sibling story claim: %v", err)
+	}
+	if _, err := handler.rt.Store().CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   secondTrajectoryID,
+		OwnerID:        ownerID,
+		Kind:           types.TrajectoryKindPublication,
+		SettlementRule: defaultSettlementRuleForKind(types.TrajectoryKindPublication),
+	}); err != nil {
+		t.Fatalf("create second recovery trajectory: %v", err)
+	}
+	secondPublicationItem, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              ownerID,
+		TrajectoryID:         secondTrajectoryID,
+		Objective:            "publish a second orphaned wire revision",
+		ObjectiveFingerprint: "wire-recovery-publication-second",
+		Details:              map[string]any{"kind": "wire_publication"},
+	})
+	if err != nil {
+		t.Fatalf("create second orphaned publication marker: %v", err)
+	}
+
+	if _, err := handler.rt.Store().CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: unrelatedID,
+		OwnerID:      ownerID,
+		Kind:         types.TrajectoryKindTask,
+	}); err != nil {
+		t.Fatalf("create unrelated trajectory: %v", err)
+	}
+	unrelatedItem, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              ownerID,
+		TrajectoryID:         unrelatedID,
+		Objective:            "leave unrelated work open",
+		ObjectiveFingerprint: "wire-recovery-unrelated",
+		Details:              map[string]any{"kind": "unrelated_work"},
+	})
+	if err != nil {
+		t.Fatalf("create unrelated work item: %v", err)
+	}
+	now := time.Now().UTC()
+	run := types.RunRecord{
+		RunID:        activeRunID,
+		AgentID:      "texture-wire-recovery",
+		AgentProfile: agentprofile.Texture,
+		AgentRole:    agentprofile.Texture,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-wire-recovery",
+		State:        types.RunRunning,
+		Prompt:       "publish the wire revision",
+		TrajectoryID: trajectoryID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := handler.rt.Store().CreateRun(ctx, run); err != nil {
+		t.Fatalf("create current publication activation: %v", err)
+	}
+	activationCtx, cancelActivation := context.WithCancel(context.Background())
+	handler.rt.runningMu.Lock()
+	handler.rt.running[activeRunID] = cancelActivation
+	handler.rt.runningMu.Unlock()
+	t.Cleanup(func() {
+		handler.rt.runningMu.Lock()
+		delete(handler.rt.running, activeRunID)
+		handler.rt.runningMu.Unlock()
+		cancelActivation()
+	})
+
+	handler.rt.recoverOpenWirePublicationClaims(ctx)
+
+	for _, itemID := range []string{publicationItem.WorkItemID, duplicatePublicationItem.WorkItemID, storyItem.WorkItemID, secondPublicationItem.WorkItemID} {
+		item, err := handler.rt.Store().GetWorkItem(ctx, ownerID, itemID)
+		if err != nil {
+			t.Fatalf("load recovered work item %s: %v", itemID, err)
+		}
+		if item.Status != types.WorkItemCancelled {
+			t.Fatalf("recovered work item %s status = %s, want cancelled", itemID, item.Status)
+		}
+	}
+	trajectory, err := handler.rt.Store().GetTrajectory(ctx, ownerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("load recovered trajectory: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryCancelled || trajectory.SettledAt != nil {
+		t.Fatalf("recovered trajectory = %+v, want cancelled and not settled", trajectory)
+	}
+	secondTrajectory, err := handler.rt.Store().GetTrajectory(ctx, ownerID, secondTrajectoryID)
+	if err != nil {
+		t.Fatalf("load second recovered trajectory: %v", err)
+	}
+	if secondTrajectory.Status != types.TrajectoryCancelled || secondTrajectory.SettledAt != nil {
+		t.Fatalf("second recovered trajectory = %+v, want cancelled and not settled", secondTrajectory)
+	}
+	unrelatedItem, err = handler.rt.Store().GetWorkItem(ctx, ownerID, unrelatedItem.WorkItemID)
+	if err != nil {
+		t.Fatalf("load unrelated work item: %v", err)
+	}
+	if unrelatedItem.Status != types.WorkItemOpen {
+		t.Fatalf("unrelated work item status = %s, want open", unrelatedItem.Status)
+	}
+	unrelatedTrajectory, err := handler.rt.Store().GetTrajectory(ctx, ownerID, unrelatedID)
+	if err != nil {
+		t.Fatalf("load unrelated trajectory: %v", err)
+	}
+	if unrelatedTrajectory.Status != types.TrajectoryLive {
+		t.Fatalf("unrelated trajectory status = %s, want live", unrelatedTrajectory.Status)
+	}
+	storedRun, err := handler.rt.Store().GetRun(ctx, activeRunID)
+	if err != nil {
+		t.Fatalf("load current publication activation: %v", err)
+	}
+	if storedRun.State != types.RunRunning || storedRun.FinishedAt != nil {
+		t.Fatalf("current publication activation = %+v, want still running", storedRun)
+	}
+	select {
+	case <-activationCtx.Done():
+		t.Fatalf("current publication activation was cancelled: %v", activationCtx.Err())
+	default:
+	}
+
+	recoveredAt := trajectory.UpdatedAt
+	handler.rt.recoverOpenWirePublicationClaims(ctx)
+	trajectory, err = handler.rt.Store().GetTrajectory(ctx, ownerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("load trajectory after repeated recovery: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryCancelled || !trajectory.UpdatedAt.Equal(recoveredAt) {
+		t.Fatalf("trajectory after repeated recovery = %+v, want unchanged cancelled trajectory", trajectory)
+	}
+}
+
+func TestRecoverOpenWirePublicationClaimsLeavesFailedMarkerOpenForRetry(t *testing.T) {
+	_, handler := testAPISetup(t)
+	ctx := context.Background()
+	const (
+		ownerID      = "owner-wire-recovery-error"
+		trajectoryID = "missing-wire-recovery-trajectory"
+	)
+	marker, err := handler.rt.Store().CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:              ownerID,
+		TrajectoryID:         trajectoryID,
+		Objective:            "retry an orphaned wire publication",
+		ObjectiveFingerprint: "wire-recovery-error",
+		Details:              map[string]any{"kind": "wire_publication"},
+	})
+	if err != nil {
+		t.Fatalf("create failed-recovery marker: %v", err)
+	}
+
+	handler.rt.recoverOpenWirePublicationClaims(ctx)
+	handler.rt.recoverOpenWirePublicationClaims(ctx)
+
+	marker, err = handler.rt.Store().GetWorkItem(ctx, ownerID, marker.WorkItemID)
+	if err != nil {
+		t.Fatalf("load failed-recovery marker: %v", err)
+	}
+	if marker.Status != types.WorkItemOpen {
+		t.Fatalf("failed-recovery marker status = %s, want open for next boot", marker.Status)
+	}
+}
+
 func TestWirePublicationDoesNotBootstrapLocalEdition(t *testing.T) {
 	_, handler := testAPISetup(t)
 	ctx := context.Background()

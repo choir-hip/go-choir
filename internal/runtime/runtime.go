@@ -440,6 +440,7 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 // assigned open trajectory work are swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
+	rt.recoverOpenWirePublicationClaims(ctx)
 	rt.sweepPassivatedSpawnedCoagentWork(ctx)
 	rt.sweepPendingUpdateActors(ctx)
 	rt.sweepOpenWorkItemActors(ctx)
@@ -1175,60 +1176,48 @@ func (rt *Runtime) CancelAgent(ctx context.Context, agentID, ownerID string) err
 	return rt.CancelRun(ctx, rec.RunID, ownerID)
 }
 
-// cancelTrajectoryAuthority is the single durable state transition for
-// trajectory cancellation. It closes every open obligation before marking a
-// live trajectory cancelled. Terminal trajectories are left unchanged.
-func (rt *Runtime) cancelTrajectoryAuthority(ctx context.Context, ownerID, trajectoryID string) error {
+const trajectoryActivationDrainTimeout = 30 * time.Second
+
+// cancelTrajectoryAuthority delegates the durable cancellation transition to
+// the store, which atomically closes open obligations and terminalizes live
+// trajectories. The returned record is the authoritative durable state.
+func (rt *Runtime) cancelTrajectoryAuthority(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
 	if rt == nil || rt.store == nil {
-		return fmt.Errorf("cancel trajectory: runtime store is unavailable")
+		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	if ownerID == "" || trajectoryID == "" {
-		return fmt.Errorf("cancel trajectory: owner_id and trajectory_id are required")
+		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory: owner_id and trajectory_id are required")
 	}
-
-	trajectory, err := rt.store.GetTrajectory(ctx, ownerID, trajectoryID)
-	if err != nil {
-		return err
-	}
-	switch trajectory.Status {
-	case types.TrajectoryCancelled, types.TrajectorySettled:
-		return nil
-	case types.TrajectoryLive:
-	default:
-		return fmt.Errorf("cancel trajectory: unsupported trajectory status %q", trajectory.Status)
-	}
-
-	openItems, err := rt.store.ListWorkItemsByTrajectory(ctx, ownerID, trajectoryID, true)
-	if err != nil {
-		return fmt.Errorf("list open trajectory work items: %w", err)
-	}
-	for _, item := range openItems {
-		if _, err := rt.store.UpdateWorkItemStatus(ctx, ownerID, item.WorkItemID, types.WorkItemCancelled); err != nil {
-			return fmt.Errorf("cancel trajectory work item %s: %w", item.WorkItemID, err)
-		}
-	}
-	if _, err := rt.store.UpdateTrajectoryStatus(ctx, ownerID, trajectoryID, types.TrajectoryCancelled); err != nil {
-		return fmt.Errorf("cancel trajectory status: %w", err)
-	}
-	return nil
+	return rt.store.CancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
 }
 
 // CancelTrajectory cancels an owner-scoped trajectory and then terminates all
 // of its active run activations. Durable trajectory state becomes terminal
-// before any activation is signalled.
-func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID string) ([]string, error) {
-	if err := rt.cancelTrajectoryAuthority(ctx, ownerID, trajectoryID); err != nil {
-		return nil, err
+// before any activation is signalled. A settled trajectory is reported
+// unchanged and its activations are not cancelled.
+func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID string) (types.TrajectoryRecord, []string, error) {
+	trajectory, err := rt.cancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
+	if err != nil {
+		return types.TrajectoryRecord{}, nil, err
+	}
+	if trajectory.Status != types.TrajectoryCancelled {
+		return trajectory, nil, nil
 	}
 
-	trajectoryID = strings.TrimSpace(trajectoryID)
-	ownerID = strings.TrimSpace(ownerID)
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID))
+	return trajectory, cancelled, err
+}
+
+func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, ownerID, trajectoryID string) ([]string, error) {
+	drainCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), trajectoryActivationDrainTimeout)
+	defer cancel()
+
 	cancelled := []string{}
 	excluded := []string{}
 	for {
-		active, err := rt.store.ListActiveRunsByTrajectoryExcluding(ctx, ownerID, trajectoryID, excluded, 200)
+		active, err := rt.store.ListActiveRunsByTrajectoryExcluding(drainCtx, ownerID, trajectoryID, excluded, 200)
 		if err != nil {
 			return cancelled, fmt.Errorf("list active trajectory activations: %w", err)
 		}
@@ -1237,7 +1226,7 @@ func (rt *Runtime) CancelTrajectory(ctx context.Context, trajectoryID, ownerID s
 		}
 		for _, run := range active {
 			excluded = append(excluded, run.RunID)
-			if err := rt.CancelRun(ctx, run.RunID, ownerID); err != nil {
+			if err := rt.CancelRun(drainCtx, run.RunID, ownerID); err != nil {
 				if strings.Contains(err.Error(), "cannot cancel run in") {
 					continue
 				}
@@ -1277,7 +1266,8 @@ func (rt *Runtime) CancelRunTrajectory(ctx context.Context, runID, ownerID strin
 	if err := rt.store.UpdateRun(ctx, rec); err != nil {
 		return nil, fmt.Errorf("persist trajectory identity on run %s: %w", rec.RunID, err)
 	}
-	return rt.CancelTrajectory(ctx, trajectoryID, ownerID)
+	_, cancelled, err := rt.CancelTrajectory(ctx, trajectoryID, ownerID)
+	return cancelled, err
 }
 
 // ListRunsByOwner returns recent runs for the given owner, ordered by

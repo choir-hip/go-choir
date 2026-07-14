@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -313,8 +314,8 @@ func TestListOpenAssignedWorkItemsOnlyReturnsLiveAssignedOpenItems(t *testing.T)
 		TrajectoryID:    "traj-settled",
 		Objective:       "settled trajectory work",
 		AssignedAgentID: "cosuper:settled",
-	}); err != nil {
-		t.Fatalf("create settled work item: %v", err)
+	}); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("create settled work item error = %v, want ErrConcurrentStateChange", err)
 	}
 
 	got, err := s.ListOpenAssignedWorkItems(ctx, 20)
@@ -410,5 +411,217 @@ func TestWorkItemDetailsConcurrentMergePatchesPreserveKeys(t *testing.T) {
 		if got.Details[key] != fmt.Sprintf("value-%02d", i) {
 			t.Fatalf("detail %s = %q, want value-%02d; details=%+v", key, got.Details[key], i, got.Details)
 		}
+	}
+}
+
+func TestCancelTrajectoryAuthorityAtomicallyClosesOpenAuthority(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: "traj-cancel",
+		OwnerID:      "user-alice",
+		Kind:         types.TrajectoryKindTask,
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	openItem, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-cancel",
+		Objective:    "cancel me",
+	})
+	if err != nil {
+		t.Fatalf("create open work item: %v", err)
+	}
+	completedItem, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-cancel",
+		Objective:    "leave me completed",
+	})
+	if err != nil {
+		t.Fatalf("create completed work item: %v", err)
+	}
+	completedItem, err = s.UpdateWorkItemStatus(ctx, "user-alice", completedItem.WorkItemID, types.WorkItemCompleted)
+	if err != nil {
+		t.Fatalf("complete work item: %v", err)
+	}
+	preCancelledItem, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-cancel",
+		Objective:    "leave me cancelled",
+	})
+	if err != nil {
+		t.Fatalf("create pre-cancelled work item: %v", err)
+	}
+	preCancelledItem, err = s.UpdateWorkItemStatus(ctx, "user-alice", preCancelledItem.WorkItemID, types.WorkItemCancelled)
+	if err != nil {
+		t.Fatalf("pre-cancel work item: %v", err)
+	}
+
+	cancelled, err := s.CancelTrajectoryAuthority(ctx, "user-alice", "traj-cancel")
+	if err != nil {
+		t.Fatalf("cancel trajectory authority: %v", err)
+	}
+	if cancelled.Status != types.TrajectoryCancelled {
+		t.Fatalf("trajectory status = %q, want cancelled", cancelled.Status)
+	}
+	open, err := s.ListWorkItemsByTrajectory(ctx, "user-alice", "traj-cancel", true)
+	if err != nil {
+		t.Fatalf("list open work items: %v", err)
+	}
+	if len(open) != 0 {
+		t.Fatalf("open work items after cancellation = %+v, want none", open)
+	}
+	cancelledItem, err := s.GetWorkItem(ctx, "user-alice", openItem.WorkItemID)
+	if err != nil {
+		t.Fatalf("get cancelled work item: %v", err)
+	}
+	if cancelledItem.Status != types.WorkItemCancelled {
+		t.Fatalf("work item status = %q, want cancelled", cancelledItem.Status)
+	}
+	if !cancelledItem.UpdatedAt.Equal(cancelled.UpdatedAt) {
+		t.Fatalf("atomic transition timestamps differ: trajectory=%s item=%s", cancelled.UpdatedAt, cancelledItem.UpdatedAt)
+	}
+	stillCompleted, err := s.GetWorkItem(ctx, "user-alice", completedItem.WorkItemID)
+	if err != nil {
+		t.Fatalf("get completed work item: %v", err)
+	}
+	if stillCompleted.Status != types.WorkItemCompleted || !stillCompleted.UpdatedAt.Equal(completedItem.UpdatedAt) {
+		t.Fatalf("completed work item was mutated: before=%+v after=%+v", completedItem, stillCompleted)
+	}
+	stillPreCancelled, err := s.GetWorkItem(ctx, "user-alice", preCancelledItem.WorkItemID)
+	if err != nil {
+		t.Fatalf("get pre-cancelled work item: %v", err)
+	}
+	if stillPreCancelled.Status != types.WorkItemCancelled || !stillPreCancelled.UpdatedAt.Equal(preCancelledItem.UpdatedAt) {
+		t.Fatalf("cancelled work item was mutated: before=%+v after=%+v", preCancelledItem, stillPreCancelled)
+	}
+
+	again, err := s.CancelTrajectoryAuthority(ctx, "user-alice", "traj-cancel")
+	if err != nil {
+		t.Fatalf("repeat cancellation: %v", err)
+	}
+	if again.Status != types.TrajectoryCancelled || !again.UpdatedAt.Equal(cancelled.UpdatedAt) {
+		t.Fatalf("repeat cancellation was not idempotent: first=%+v second=%+v", cancelled, again)
+	}
+	sameCancelledItem, err := s.UpdateWorkItemStatus(ctx, "user-alice", openItem.WorkItemID, types.WorkItemCancelled)
+	if err != nil {
+		t.Fatalf("repeat work item cancellation: %v", err)
+	}
+	if !sameCancelledItem.UpdatedAt.Equal(cancelledItem.UpdatedAt) {
+		t.Fatalf("repeat work item cancellation changed timestamp: first=%s second=%s", cancelledItem.UpdatedAt, sameCancelledItem.UpdatedAt)
+	}
+	sameCancelledTrajectory, err := s.UpdateTrajectoryStatus(ctx, "user-alice", "traj-cancel", types.TrajectoryCancelled)
+	if err != nil {
+		t.Fatalf("repeat trajectory cancellation status: %v", err)
+	}
+	if !sameCancelledTrajectory.UpdatedAt.Equal(cancelled.UpdatedAt) {
+		t.Fatalf("repeat trajectory cancellation status changed timestamp: first=%s second=%s", cancelled.UpdatedAt, sameCancelledTrajectory.UpdatedAt)
+	}
+	if _, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-cancel",
+		Objective:    "late authority",
+	}); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("create work item after cancellation error = %v, want ErrConcurrentStateChange", err)
+	}
+	if _, err := s.UpdateWorkItemStatus(ctx, "user-alice", openItem.WorkItemID, types.WorkItemCompleted); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("late completion error = %v, want ErrConcurrentStateChange", err)
+	}
+	if _, err := s.UpdateTrajectoryStatus(ctx, "user-alice", "traj-cancel", types.TrajectorySettled); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("settle cancelled trajectory error = %v, want ErrConcurrentStateChange", err)
+	}
+	if _, err := s.CancelTrajectoryAuthority(ctx, "user-bob", "traj-cancel"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-owner cancellation error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestCancelTrajectoryAuthorityKeepsSettledTrajectorySettled(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: "traj-already-settled",
+		OwnerID:      "user-alice",
+		Kind:         types.TrajectoryKindTask,
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	item, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-already-settled",
+		Objective:    "existing obligation",
+	})
+	if err != nil {
+		t.Fatalf("create work item: %v", err)
+	}
+	settled, err := s.UpdateTrajectoryStatus(ctx, "user-alice", "traj-already-settled", types.TrajectorySettled)
+	if err != nil {
+		t.Fatalf("settle trajectory: %v", err)
+	}
+	settledAgain, err := s.UpdateTrajectoryStatus(ctx, "user-alice", "traj-already-settled", types.TrajectorySettled)
+	if err != nil {
+		t.Fatalf("repeat settlement: %v", err)
+	}
+	if !settledAgain.UpdatedAt.Equal(settled.UpdatedAt) {
+		t.Fatalf("repeat settlement changed timestamp: first=%s second=%s", settled.UpdatedAt, settledAgain.UpdatedAt)
+	}
+
+	got, err := s.CancelTrajectoryAuthority(ctx, "user-alice", "traj-already-settled")
+	if err != nil {
+		t.Fatalf("cancel settled trajectory: %v", err)
+	}
+	if got.Status != types.TrajectorySettled || got.SettledAt == nil || !got.UpdatedAt.Equal(settled.UpdatedAt) {
+		t.Fatalf("settled trajectory changed during cancellation: before=%+v after=%+v", settled, got)
+	}
+	stillOpen, err := s.GetWorkItem(ctx, "user-alice", item.WorkItemID)
+	if err != nil {
+		t.Fatalf("get settled trajectory work item: %v", err)
+	}
+	if stillOpen.Status != types.WorkItemOpen {
+		t.Fatalf("settled terminal fast path mutated work item: %+v", stillOpen)
+	}
+}
+
+func TestListOpenWorkItemsByKindReturnsRecoveryMarkers(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	orphan, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "missing-trajectory",
+		Objective:    "retry publication",
+		Details:      map[string]any{"kind": "wire_publication"},
+	})
+	if err != nil {
+		t.Fatalf("create orphan marker: %v", err)
+	}
+	completed, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "missing-trajectory",
+		Objective:    "already published",
+		Details:      map[string]any{"kind": "wire_publication"},
+	})
+	if err != nil {
+		t.Fatalf("create completed marker: %v", err)
+	}
+	if _, err := s.UpdateWorkItemStatus(ctx, "user-alice", completed.WorkItemID, types.WorkItemCompleted); err != nil {
+		t.Fatalf("complete marker: %v", err)
+	}
+	if _, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+		OwnerID:      "user-alice",
+		TrajectoryID: "missing-trajectory",
+		Objective:    "different recovery kind",
+		Details:      map[string]any{"kind": "other"},
+	}); err != nil {
+		t.Fatalf("create other marker: %v", err)
+	}
+
+	got, err := s.ListOpenWorkItemsByKind(ctx, "wire_publication", 0)
+	if err != nil {
+		t.Fatalf("list open work items by kind: %v", err)
+	}
+	if len(got) != 1 || got[0].WorkItemID != orphan.WorkItemID {
+		t.Fatalf("recovery markers = %+v, want only orphan %s", got, orphan.WorkItemID)
 	}
 }

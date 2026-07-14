@@ -3,6 +3,7 @@ package runtime
 import (
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -43,7 +44,7 @@ func (h *APIHandler) HandleTrajectoriesRoot(w http.ResponseWriter, r *http.Reque
 // subtree. The cancel child is dispatched separately; GET detail continues to
 // answer open obligations from durable state alone.
 func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Request) {
-	if _, ok := trajectoryCancelIDFromPath(r.URL.Path); ok {
+	if _, ok := trajectoryCancelIDFromPath(r.URL.EscapedPath()); ok || r.Method == http.MethodPost {
 		h.HandleTrajectoryCancel(w, r)
 		return
 	}
@@ -87,12 +88,12 @@ func (h *APIHandler) HandleTrajectoryCancel(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
 	}
-	trajectoryID, ok := trajectoryCancelIDFromPath(r.URL.Path)
+	trajectoryID, ok := trajectoryCancelIDFromPath(r.URL.EscapedPath())
 	if !ok {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
 		return
 	}
-	cancelledRunIDs, err := h.rt.CancelTrajectory(r.Context(), trajectoryID, ownerID)
+	trajectory, cancelledRunIDs, err := h.rt.CancelTrajectory(r.Context(), trajectoryID, ownerID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
@@ -102,20 +103,24 @@ func (h *APIHandler) HandleTrajectoryCancel(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, trajectoryCancelResponse{
-		TrajectoryID:    trajectoryID,
-		Status:          types.TrajectoryCancelled,
+		TrajectoryID:    trajectory.TrajectoryID,
+		Status:          trajectory.Status,
 		CancelledRunIDs: cancelledRunIDs,
 	})
 }
 
-func trajectoryCancelIDFromPath(path string) (string, bool) {
+func trajectoryCancelIDFromPath(escapedPath string) (string, bool) {
 	const prefix = "/api/trajectories/"
-	if !strings.HasPrefix(path, prefix) {
+	if !strings.HasPrefix(escapedPath, prefix) {
 		return "", false
 	}
-	parts := strings.Split(strings.Trim(strings.TrimPrefix(path, prefix), "/"), "/")
-	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || parts[1] != "cancel" {
+	parts := strings.Split(strings.TrimPrefix(escapedPath, prefix), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] != "cancel" {
 		return "", false
 	}
-	return strings.TrimSpace(parts[0]), true
+	trajectoryID, err := url.PathUnescape(parts[0])
+	if err != nil || strings.TrimSpace(trajectoryID) == "" {
+		return "", false
+	}
+	return trajectoryID, true
 }

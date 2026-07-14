@@ -42,6 +42,9 @@ func (s *Store) CreateTrajectoryIfAbsent(ctx context.Context, rec types.Trajecto
 		rec.UpdatedAt = now
 	}
 
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+
 	return s.CreateTrajectoryIfAbsentOG(ctx, rec)
 }
 
@@ -64,10 +67,21 @@ func (s *Store) ListTrajectoriesByOwner(ctx context.Context, ownerID string, lim
 	return s.ListTrajectoriesByOwnerOG(ctx, ownerID, limit)
 }
 
-// UpdateTrajectoryStatus transitions a trajectory's lifecycle status.
-// Settling stamps settled_at.
+// UpdateTrajectoryStatus transitions a live trajectory to a terminal status.
+// Repeating the stored status is idempotent; a terminal trajectory cannot be
+// rewritten to a different terminal status.
 func (s *Store) UpdateTrajectoryStatus(ctx context.Context, ownerID, trajectoryID string, status types.TrajectoryStatus) (types.TrajectoryRecord, error) {
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
 	return s.UpdateTrajectoryStatusOG(ctx, ownerID, trajectoryID, status)
+}
+
+// CancelTrajectoryAuthority atomically cancels a live trajectory and every
+// open work item on it. Terminal trajectories are returned unchanged.
+func (s *Store) CancelTrajectoryAuthority(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+	return s.cancelTrajectoryAuthorityOG(ctx, ownerID, trajectoryID)
 }
 
 // UpdateTrajectorySubjectRefs merges the provided subject refs into the
@@ -78,11 +92,13 @@ func (s *Store) UpdateTrajectorySubjectRefs(ctx context.Context, ownerID, trajec
 	if len(patch) == 0 {
 		return s.GetTrajectory(ctx, ownerID, trajectoryID)
 	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
 	s.jsonPatchMu.Lock()
 	defer s.jsonPatchMu.Unlock()
 
 	// Fetch the existing OG object to preserve object ID and created_at.
-	obj, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", trajectoryID)
+	obj, err := s.getTrajectoryObjectOG(ctx, ownerID, trajectoryID)
 	if err != nil {
 		return types.TrajectoryRecord{}, err
 	}
@@ -131,6 +147,18 @@ func (s *Store) CreateWorkItem(ctx context.Context, rec types.WorkItemRecord) (t
 	if strings.TrimSpace(rec.Objective) == "" {
 		return types.WorkItemRecord{}, fmt.Errorf("create work item: objective is required")
 	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+
+	trajectory, err := s.GetTrajectoryOG(ctx, rec.OwnerID, rec.TrajectoryID)
+	if err == nil {
+		if trajectory.Status == types.TrajectorySettled || trajectory.Status == types.TrajectoryCancelled {
+			return types.WorkItemRecord{}, ErrConcurrentStateChange
+		}
+	} else if !errors.Is(err, ErrNotFound) {
+		return types.WorkItemRecord{}, err
+	}
+
 	if fingerprint := strings.TrimSpace(rec.ObjectiveFingerprint); fingerprint != "" {
 		existing, ok, err := s.findWorkItemByFingerprint(ctx, rec.OwnerID, rec.TrajectoryID, fingerprint)
 		if err != nil {
@@ -212,6 +240,17 @@ func (s *Store) ListWorkItemsByTrajectory(ctx context.Context, ownerID, trajecto
 	return s.ListWorkItemsByTrajectoryOG(ctx, ownerID, trajectoryID, openOnly)
 }
 
+// ListOpenWorkItemsByKind returns open work items whose details.kind matches
+// kind, oldest first. A non-positive limit returns every matching marker.
+// Missing trajectory rows do not hide orphaned durable recovery markers.
+func (s *Store) ListOpenWorkItemsByKind(ctx context.Context, kind string, limit int) ([]types.WorkItemRecord, error) {
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		return nil, nil
+	}
+	return s.ListOpenWorkItemsByKindOG(ctx, kind, limit)
+}
+
 // ListOpenAssignedWorkItems returns open work items on live trajectories that
 // already name the durable agent responsible for processing them. This is the
 // boot-recovery query for cold actors whose update_coagent backlog is empty but
@@ -268,8 +307,12 @@ func (s *Store) ListOpenAssignedWorkItems(ctx context.Context, limit int) ([]typ
 	return candidates, nil
 }
 
-// UpdateWorkItemStatus transitions a work item's lifecycle status.
+// UpdateWorkItemStatus transitions an open work item to a terminal status.
+// Repeating the stored status is idempotent; a terminal work item cannot be
+// rewritten to the other terminal status.
 func (s *Store) UpdateWorkItemStatus(ctx context.Context, ownerID, workItemID string, status types.WorkItemStatus) (types.WorkItemRecord, error) {
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
 	return s.UpdateWorkItemStatusOG(ctx, ownerID, workItemID, status)
 }
 
@@ -281,6 +324,8 @@ func (s *Store) UpdateWorkItemDetails(ctx context.Context, ownerID, workItemID s
 	if len(patch) == 0 {
 		return s.GetWorkItem(ctx, ownerID, workItemID)
 	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
 	s.jsonPatchMu.Lock()
 	defer s.jsonPatchMu.Unlock()
 

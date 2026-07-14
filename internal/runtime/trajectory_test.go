@@ -1,12 +1,16 @@
 package runtime
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -374,7 +378,7 @@ func TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns(t *test
 		t.Fatalf("create active run: %v", err)
 	}
 
-	if _, err := rt.CancelTrajectory(ctx, trajectoryID, "user-bob"); !errors.Is(err, store.ErrNotFound) {
+	if _, _, err := rt.CancelTrajectory(ctx, trajectoryID, "user-bob"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("cross-owner cancel error = %v, want not found", err)
 	}
 	trajectory, err := s.GetTrajectory(ctx, ownerID, trajectoryID)
@@ -392,12 +396,15 @@ func TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns(t *test
 		t.Fatalf("cross-owner cancel changed open item status to %s", storedOpen.Status)
 	}
 
-	cancelled, err := rt.CancelTrajectory(ctx, trajectoryID, ownerID)
+	returnedTrajectory, cancelled, err := rt.CancelTrajectory(ctx, trajectoryID, ownerID)
 	if err != nil {
 		t.Fatalf("cancel trajectory: %v", err)
 	}
 	if len(cancelled) != 1 || cancelled[0] != activeRunID {
 		t.Fatalf("cancelled run ids = %+v, want [%s]", cancelled, activeRunID)
+	}
+	if returnedTrajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("returned trajectory status = %s, want cancelled", returnedTrajectory.Status)
 	}
 	trajectory, err = s.GetTrajectory(ctx, ownerID, trajectoryID)
 	if err != nil {
@@ -428,12 +435,202 @@ func TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns(t *test
 		t.Fatalf("active run state = %s, want cancelled", storedRun.State)
 	}
 
-	cancelled, err = rt.CancelTrajectory(ctx, trajectoryID, ownerID)
+	returnedTrajectory, cancelled, err = rt.CancelTrajectory(ctx, trajectoryID, ownerID)
 	if err != nil {
 		t.Fatalf("repeat trajectory cancellation: %v", err)
 	}
 	if len(cancelled) != 0 {
 		t.Fatalf("repeat trajectory cancellation cancelled runs = %+v, want none", cancelled)
+	}
+	if returnedTrajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("repeat returned trajectory status = %s, want cancelled", returnedTrajectory.Status)
+	}
+}
+
+func TestCancelTrajectoryRetriesActivationDrainForAlreadyCancelledAuthority(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	const (
+		ownerID      = "user-alice"
+		trajectoryID = "traj-cancel-drain-retry"
+		runID        = "run-cancel-drain-retry"
+	)
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   trajectoryID,
+		OwnerID:        ownerID,
+		Kind:           types.TrajectoryKindTask,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID:        runID,
+		AgentID:      "agent-cancel-drain-retry",
+		AgentProfile: agentprofile.CoSuper,
+		AgentRole:    agentprofile.CoSuper,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunPending,
+		Prompt:       "activation left behind after durable cancellation",
+		TrajectoryID: trajectoryID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataTrajectoryID: trajectoryID,
+		},
+	}); err != nil {
+		t.Fatalf("create active run: %v", err)
+	}
+	if trajectory, err := s.CancelTrajectoryAuthority(ctx, ownerID, trajectoryID); err != nil {
+		t.Fatalf("commit cancellation authority: %v", err)
+	} else if trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("authority status = %s, want cancelled", trajectory.Status)
+	}
+
+	trajectory, cancelled, err := rt.CancelTrajectory(ctx, trajectoryID, ownerID)
+	if err != nil {
+		t.Fatalf("retry trajectory cancellation: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("returned trajectory status = %s, want cancelled", trajectory.Status)
+	}
+	if len(cancelled) != 1 || cancelled[0] != runID {
+		t.Fatalf("cancelled run ids = %+v, want [%s]", cancelled, runID)
+	}
+	stored, err := s.GetRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("get drained run: %v", err)
+	}
+	if stored.State != types.RunCancelled {
+		t.Fatalf("drained run state = %s, want cancelled", stored.State)
+	}
+}
+
+func TestCancelTrajectoryReturnsSettledTruthWithoutCancellingActivations(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	const (
+		ownerID      = "user-alice"
+		trajectoryID = "traj-settled-cancel-truth"
+		runID        = "run-settled-cancel-truth"
+	)
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   trajectoryID,
+		OwnerID:        ownerID,
+		Kind:           types.TrajectoryKindTask,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	if _, err := s.UpdateTrajectoryStatus(ctx, ownerID, trajectoryID, types.TrajectorySettled); err != nil {
+		t.Fatalf("settle trajectory: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID:        runID,
+		AgentID:      "agent-settled-cancel-truth",
+		AgentProfile: agentprofile.CoSuper,
+		AgentRole:    agentprofile.CoSuper,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunPending,
+		Prompt:       "activation associated with settled authority",
+		TrajectoryID: trajectoryID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataTrajectoryID: trajectoryID,
+		},
+	}); err != nil {
+		t.Fatalf("create active run: %v", err)
+	}
+
+	trajectory, cancelled, err := rt.CancelTrajectory(ctx, trajectoryID, ownerID)
+	if err != nil {
+		t.Fatalf("cancel settled trajectory: %v", err)
+	}
+	if trajectory.Status != types.TrajectorySettled {
+		t.Fatalf("returned trajectory status = %s, want settled", trajectory.Status)
+	}
+	if len(cancelled) != 0 {
+		t.Fatalf("cancelled settled trajectory activations = %+v, want none", cancelled)
+	}
+	stored, err := s.GetRun(ctx, runID)
+	if err != nil {
+		t.Fatalf("get settled trajectory run: %v", err)
+	}
+	if stored.State != types.RunPending {
+		t.Fatalf("settled trajectory run state = %s, want pending", stored.State)
+	}
+}
+
+func TestCancelledRequestDoesNotInterruptPostAuthorityActivationDrain(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	rt, s := testRuntime(t)
+	const (
+		ownerID      = "user-alice"
+		trajectoryID = "traj-detached-cancel-drain"
+		runID        = "run-detached-cancel-drain"
+	)
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID:   trajectoryID,
+		OwnerID:        ownerID,
+		Kind:           types.TrajectoryKindTask,
+		Status:         types.TrajectoryLive,
+		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID:        runID,
+		AgentID:      "agent-detached-cancel-drain",
+		AgentProfile: agentprofile.CoSuper,
+		AgentRole:    agentprofile.CoSuper,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunPending,
+		Prompt:       "activation drained after request cancellation",
+		TrajectoryID: trajectoryID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataTrajectoryID: trajectoryID,
+		},
+	}); err != nil {
+		t.Fatalf("create active run: %v", err)
+	}
+	trajectory, err := rt.cancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("commit cancellation authority: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryCancelled {
+		t.Fatalf("authority status = %s, want cancelled", trajectory.Status)
+	}
+	cancel()
+
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, ownerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("drain after request cancellation: %v", err)
+	}
+	if len(cancelled) != 1 || cancelled[0] != runID {
+		t.Fatalf("cancelled run ids = %+v, want [%s]", cancelled, runID)
+	}
+	stored, err := s.GetRun(context.Background(), runID)
+	if err != nil {
+		t.Fatalf("get drained run: %v", err)
+	}
+	if stored.State != types.RunCancelled {
+		t.Fatalf("drained run state = %s, want cancelled", stored.State)
 	}
 }
 
@@ -441,9 +638,54 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	h := NewAPIHandler(rt)
+	server := httptest.NewServer(http.HandlerFunc(h.HandleTrajectoryDetail))
+	defer server.Close()
+
+	doRequest := func(method, escapedPath, ownerID string) (int, []byte) {
+		t.Helper()
+		req, err := http.NewRequest(method, server.URL+escapedPath, nil)
+		if err != nil {
+			t.Fatalf("create %s %s request: %v", method, escapedPath, err)
+		}
+		req.Header.Set("X-Authenticated-User", ownerID)
+		resp, err := server.Client().Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", method, escapedPath, err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read %s %s response: %v", method, escapedPath, err)
+		}
+		return resp.StatusCode, body
+	}
+
+	doRawRequest := func(requestTarget string) (int, []byte) {
+		t.Helper()
+		conn, err := net.Dial("tcp", server.Listener.Addr().String())
+		if err != nil {
+			t.Fatalf("dial test server: %v", err)
+		}
+		defer conn.Close()
+		rawRequest := "POST " + requestTarget + " HTTP/1.1\r\nHost: example.test\r\nX-Authenticated-User: user-alice\r\nConnection: close\r\n\r\n"
+		if _, err := io.WriteString(conn, rawRequest); err != nil {
+			t.Fatalf("write raw request %q: %v", requestTarget, err)
+		}
+		resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: http.MethodPost})
+		if err != nil {
+			t.Fatalf("read raw response for %q: %v", requestTarget, err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read raw response body for %q: %v", requestTarget, err)
+		}
+		return resp.StatusCode, body
+	}
+
 	const (
 		ownerID      = "user-alice"
-		trajectoryID = "traj-api-cancel"
+		trajectoryID = "traj/with space"
 		activeRunID  = "run-api-cancel-active"
 	)
 	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
@@ -485,30 +727,26 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 		t.Fatalf("create active run: %v", err)
 	}
 
-	getReq := httptest.NewRequest(http.MethodGet, "/api/trajectories/"+trajectoryID, nil)
-	getReq.Header.Set("X-Authenticated-User", ownerID)
-	getRec := httptest.NewRecorder()
-	h.HandleTrajectoryDetail(getRec, getReq)
-	if getRec.Code != http.StatusOK {
-		t.Fatalf("GET detail status = %d, body=%s", getRec.Code, getRec.Body.String())
+	escapedTrajectoryPath := "/api/trajectories/" + url.PathEscape(trajectoryID)
+	status, body := doRequest(http.MethodGet, escapedTrajectoryPath, ownerID)
+	if status != http.StatusOK {
+		t.Fatalf("GET detail status = %d, body=%s", status, body)
 	}
 	var before TrajectoryObligations
-	if err := json.Unmarshal(getRec.Body.Bytes(), &before); err != nil {
+	if err := json.Unmarshal(body, &before); err != nil {
 		t.Fatalf("decode GET detail: %v", err)
 	}
 	if before.Trajectory.TrajectoryID != trajectoryID || before.Trajectory.Status != types.TrajectoryLive {
-		t.Fatalf("GET trajectory = %+v, want live %s", before.Trajectory, trajectoryID)
+		t.Fatalf("GET trajectory = %+v, want live %q", before.Trajectory, trajectoryID)
 	}
 	if len(before.OpenWorkItems) != 1 || before.OpenWorkItems[0].WorkItemID != item.WorkItemID {
 		t.Fatalf("GET open work items = %+v, want %s", before.OpenWorkItems, item.WorkItemID)
 	}
 
-	otherReq := httptest.NewRequest(http.MethodPost, "/api/trajectories/"+trajectoryID+"/cancel", nil)
-	otherReq.Header.Set("X-Authenticated-User", "user-bob")
-	otherRec := httptest.NewRecorder()
-	h.HandleTrajectoryDetail(otherRec, otherReq)
-	if otherRec.Code != http.StatusNotFound {
-		t.Fatalf("cross-owner cancel status = %d, body=%s", otherRec.Code, otherRec.Body.String())
+	cancelPath := escapedTrajectoryPath + "/cancel"
+	status, body = doRequest(http.MethodPost, cancelPath, "user-bob")
+	if status != http.StatusNotFound {
+		t.Fatalf("cross-owner cancel status = %d, body=%s", status, body)
 	}
 	trajectory, err := s.GetTrajectory(ctx, ownerID, trajectoryID)
 	if err != nil {
@@ -518,15 +756,30 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 		t.Fatalf("cross-owner HTTP cancel changed trajectory status to %s", trajectory.Status)
 	}
 
-	cancelReq := httptest.NewRequest(http.MethodPost, "/api/trajectories/"+trajectoryID+"/cancel", nil)
-	cancelReq.Header.Set("X-Authenticated-User", ownerID)
-	cancelRec := httptest.NewRecorder()
-	h.HandleTrajectoryDetail(cancelRec, cancelReq)
-	if cancelRec.Code != http.StatusOK {
-		t.Fatalf("cancel status = %d, body=%s", cancelRec.Code, cancelRec.Body.String())
+	for _, extraPath := range []string{
+		cancelPath + "/extra",
+		escapedTrajectoryPath + "/extra/cancel",
+		escapedTrajectoryPath + "//cancel",
+	} {
+		status, body = doRequest(http.MethodPost, extraPath, ownerID)
+		if status != http.StatusNotFound {
+			t.Errorf("POST extra path %q status = %d, body=%s; want 404", extraPath, status, body)
+		}
+	}
+	trajectory, err = s.GetTrajectory(ctx, ownerID, trajectoryID)
+	if err != nil {
+		t.Fatalf("get trajectory after invalid HTTP paths: %v", err)
+	}
+	if trajectory.Status != types.TrajectoryLive {
+		t.Fatalf("invalid HTTP path changed trajectory status to %s", trajectory.Status)
+	}
+
+	status, body = doRequest(http.MethodPost, cancelPath, ownerID)
+	if status != http.StatusOK {
+		t.Fatalf("cancel status = %d, body=%s", status, body)
 	}
 	var cancelResp trajectoryCancelResponse
-	if err := json.Unmarshal(cancelRec.Body.Bytes(), &cancelResp); err != nil {
+	if err := json.Unmarshal(body, &cancelResp); err != nil {
 		t.Fatalf("decode cancel response: %v", err)
 	}
 	if cancelResp.TrajectoryID != trajectoryID || cancelResp.Status != types.TrajectoryCancelled {
@@ -536,19 +789,91 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 		t.Fatalf("cancelled_run_ids = %+v, want [%s]", cancelResp.CancelledRunIDs, activeRunID)
 	}
 
-	getReq = httptest.NewRequest(http.MethodGet, "/api/trajectories/"+trajectoryID, nil)
-	getReq.Header.Set("X-Authenticated-User", ownerID)
-	getRec = httptest.NewRecorder()
-	h.HandleTrajectoryDetail(getRec, getReq)
-	if getRec.Code != http.StatusOK {
-		t.Fatalf("GET cancelled detail status = %d, body=%s", getRec.Code, getRec.Body.String())
+	status, body = doRequest(http.MethodGet, escapedTrajectoryPath, ownerID)
+	if status != http.StatusOK {
+		t.Fatalf("GET cancelled detail status = %d, body=%s", status, body)
 	}
 	var after TrajectoryObligations
-	if err := json.Unmarshal(getRec.Body.Bytes(), &after); err != nil {
+	if err := json.Unmarshal(body, &after); err != nil {
 		t.Fatalf("decode cancelled GET detail: %v", err)
 	}
 	if after.Trajectory.Status != types.TrajectoryCancelled || len(after.OpenWorkItems) != 0 {
 		t.Fatalf("cancelled GET detail = %+v", after)
+	}
+
+	const settledTrajectoryID = "traj-api-already-settled"
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: settledTrajectoryID,
+		OwnerID:      ownerID,
+		Kind:         types.TrajectoryKindTask,
+		Status:       types.TrajectoryLive,
+	}); err != nil {
+		t.Fatalf("create settled trajectory: %v", err)
+	}
+	const settledRunID = "run-api-settled-active"
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID:        settledRunID,
+		AgentID:      "agent-api-settled-active",
+		AgentProfile: agentprofile.CoSuper,
+		AgentRole:    agentprofile.CoSuper,
+		OwnerID:      ownerID,
+		SandboxID:    "sandbox-test",
+		State:        types.RunPending,
+		Prompt:       "activation that must survive settled cancellation",
+		TrajectoryID: settledTrajectoryID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Metadata: map[string]any{
+			runMetadataAgentProfile: agentprofile.CoSuper,
+			runMetadataAgentRole:    agentprofile.CoSuper,
+			runMetadataTrajectoryID: settledTrajectoryID,
+		},
+	}); err != nil {
+		t.Fatalf("create settled trajectory activation: %v", err)
+	}
+	if _, err := s.UpdateTrajectoryStatus(ctx, ownerID, settledTrajectoryID, types.TrajectorySettled); err != nil {
+		t.Fatalf("settle trajectory: %v", err)
+	}
+	settledCancelPath := "/api/trajectories/" + url.PathEscape(settledTrajectoryID) + "/cancel"
+	status, body = doRequest(http.MethodPost, settledCancelPath, ownerID)
+	if status != http.StatusOK {
+		t.Fatalf("settled cancellation status = %d, body=%s", status, body)
+	}
+	var settledResp trajectoryCancelResponse
+	if err := json.Unmarshal(body, &settledResp); err != nil {
+		t.Fatalf("decode settled cancellation response: %v", err)
+	}
+	if settledResp.TrajectoryID != settledTrajectoryID || settledResp.Status != types.TrajectorySettled {
+		t.Fatalf("settled cancellation response = %+v, want truthful settled status", settledResp)
+	}
+	if len(settledResp.CancelledRunIDs) != 0 {
+		t.Fatalf("settled cancellation claimed cancelled runs: %+v", settledResp.CancelledRunIDs)
+	}
+	settledRun, err := s.GetRun(ctx, settledRunID)
+	if err != nil {
+		t.Fatalf("get settled trajectory activation: %v", err)
+	}
+	if settledRun.State != types.RunPending {
+		t.Fatalf("settled trajectory activation state = %s, want pending", settledRun.State)
+	}
+
+	for _, malformedPath := range []string{
+		"/api/trajectories/%/cancel",
+		"/api/trajectories/%2/cancel",
+		"/api/trajectories/%GG/cancel",
+	} {
+		if id, ok := trajectoryCancelIDFromPath(malformedPath); ok {
+			t.Errorf("malformed escaped path %q parsed as trajectory %q", malformedPath, id)
+		}
+		status, body := doRawRequest(malformedPath)
+		if status != http.StatusBadRequest {
+			t.Errorf("raw malformed path %q status = %d, body=%s; want 400", malformedPath, status, body)
+		}
+	}
+	const percentBearingID = "traj%2Fliteral"
+	percentBearingPath := "/api/trajectories/" + url.PathEscape(percentBearingID) + "/cancel"
+	if id, ok := trajectoryCancelIDFromPath(percentBearingPath); !ok || id != percentBearingID {
+		t.Fatalf("single unescape parsed %q as (%q, %t), want (%q, true)", percentBearingPath, id, ok, percentBearingID)
 	}
 }
 

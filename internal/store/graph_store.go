@@ -494,11 +494,33 @@ func (s *Store) ListEventsByOwnerOG(ctx context.Context, ownerID string, limit i
 // Trajectories — object graph implementation
 // =========================================================================
 
+func (s *Store) getTrajectoryObjectOG(ctx context.Context, ownerID, trajectoryID string) (objectgraph.Object, error) {
+	suffix := objectgraph.StableSuffixFromKey(trajectoryID)
+	canonicalID, err := objectgraph.BuildCanonicalID(ogKindTrajectory, ownerID, suffix)
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return objectgraph.Object{}, fmt.Errorf("store: object graph not initialized")
+	}
+	obj, err := store.GetObject(ctx, canonicalID)
+	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return objectgraph.Object{}, ErrNotFound
+		}
+		return objectgraph.Object{}, err
+	}
+	return obj, nil
+}
+
 // CreateTrajectoryIfAbsentOG creates a trajectory if it doesn't exist.
 // Returns the stored record (existing or newly created).
 func (s *Store) CreateTrajectoryIfAbsentOG(ctx context.Context, rec types.TrajectoryRecord) (types.TrajectoryRecord, error) {
-	// Check if it already exists.
-	existing, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", rec.TrajectoryID)
+	existing, err := s.getTrajectoryObjectOG(ctx, rec.OwnerID, rec.TrajectoryID)
 	if err == nil {
 		var existingRec types.TrajectoryRecord
 		if err := ogDecode(existing, &existingRec); err != nil {
@@ -506,11 +528,10 @@ func (s *Store) CreateTrajectoryIfAbsentOG(ctx context.Context, rec types.Trajec
 		}
 		return existingRec, nil
 	}
-	if err != objectgraph.ErrNotFound {
+	if err != ErrNotFound {
 		return types.TrajectoryRecord{}, err
 	}
 
-	// Create new.
 	if rec.Kind == "" {
 		rec.Kind = types.TrajectoryKindTask
 	}
@@ -524,16 +545,7 @@ func (s *Store) CreateTrajectoryIfAbsentOG(ctx context.Context, rec types.Trajec
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = now
 	}
-	metadata := map[string]any{
-		"trajectory_id": rec.TrajectoryID,
-		"kind":          string(rec.Kind),
-		"status":        string(rec.Status),
-		"created_at":    rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":    rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	}
-	if rec.SettledAt != nil {
-		metadata["settled_at"] = rec.SettledAt.UTC().Format(time.RFC3339Nano)
-	}
+	metadata := trajectoryMetadata(rec)
 
 	_, err = s.ogPut(ctx, ogKindTrajectory, rec.OwnerID, rec.TrajectoryID, rec, metadata, now)
 	if err != nil {
@@ -544,20 +556,13 @@ func (s *Store) CreateTrajectoryIfAbsentOG(ctx context.Context, rec types.Trajec
 
 // GetTrajectoryOG retrieves a trajectory by ID from the object graph.
 func (s *Store) GetTrajectoryOG(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", trajectoryID)
+	obj, err := s.getTrajectoryObjectOG(ctx, ownerID, trajectoryID)
 	if err != nil {
-		if err == objectgraph.ErrNotFound {
-			return types.TrajectoryRecord{}, ErrNotFound
-		}
 		return types.TrajectoryRecord{}, err
 	}
 	var rec types.TrajectoryRecord
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.TrajectoryRecord{}, err
-	}
-	// Verify owner matches.
-	if rec.OwnerID != ownerID {
-		return types.TrajectoryRecord{}, ErrNotFound
 	}
 	return rec, nil
 }
@@ -588,7 +593,7 @@ func (s *Store) ListTrajectoriesByOwnerOG(ctx context.Context, ownerID string, l
 
 // UpdateTrajectoryStatusOG updates the status of a trajectory.
 func (s *Store) UpdateTrajectoryStatusOG(ctx context.Context, ownerID, trajectoryID string, status types.TrajectoryStatus) (types.TrajectoryRecord, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindTrajectory, "trajectory_id", trajectoryID)
+	obj, err := s.getTrajectoryObjectOG(ctx, ownerID, trajectoryID)
 	if err != nil {
 		return types.TrajectoryRecord{}, err
 	}
@@ -596,8 +601,12 @@ func (s *Store) UpdateTrajectoryStatusOG(ctx context.Context, ownerID, trajector
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.TrajectoryRecord{}, err
 	}
-	if rec.OwnerID != ownerID {
-		return types.TrajectoryRecord{}, ErrNotFound
+	if rec.Status == status {
+		return rec, nil
+	}
+	if rec.Status != types.TrajectoryLive ||
+		(status != types.TrajectorySettled && status != types.TrajectoryCancelled) {
+		return rec, fmt.Errorf("update trajectory status: %w", ErrConcurrentStateChange)
 	}
 
 	rec.Status = status
@@ -613,6 +622,17 @@ func (s *Store) UpdateTrajectoryStatusOG(ctx context.Context, ownerID, trajector
 // upsertTrajectoryOG writes the trajectory record back to the object graph,
 // preserving the existing object ID and created_at.
 func (s *Store) upsertTrajectoryOG(ctx context.Context, rec types.TrajectoryRecord, existing objectgraph.Object) (types.TrajectoryRecord, error) {
+	updated, err := trajectoryObject(rec, existing)
+	if err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	if err := s.ogStore.PutObject(ctx, updated); err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	return rec, nil
+}
+
+func trajectoryMetadata(rec types.TrajectoryRecord) map[string]any {
 	metadata := map[string]any{
 		"trajectory_id": rec.TrajectoryID,
 		"kind":          string(rec.Kind),
@@ -623,15 +643,22 @@ func (s *Store) upsertTrajectoryOG(ctx context.Context, rec types.TrajectoryReco
 	if rec.SettledAt != nil {
 		metadata["settled_at"] = rec.SettledAt.UTC().Format(time.RFC3339Nano)
 	}
+	return metadata
+}
 
-	bodyJSON, _ := json.Marshal(rec)
-	existing.Body = bodyJSON
-	existing.Metadata = mustMarshalMetadata(metadata)
-	existing.UpdatedAt = rec.UpdatedAt
-	if err := s.ogStore.PutObject(ctx, existing); err != nil {
-		return types.TrajectoryRecord{}, err
+func trajectoryObject(rec types.TrajectoryRecord, existing objectgraph.Object) (objectgraph.Object, error) {
+	bodyJSON, err := json.Marshal(rec)
+	if err != nil {
+		return objectgraph.Object{}, fmt.Errorf("marshal trajectory: %w", err)
 	}
-	return rec, nil
+	metadataJSON, err := json.Marshal(trajectoryMetadata(rec))
+	if err != nil {
+		return objectgraph.Object{}, fmt.Errorf("marshal trajectory metadata: %w", err)
+	}
+	existing.Body = bodyJSON
+	existing.Metadata = metadataJSON
+	existing.UpdatedAt = rec.UpdatedAt
+	return existing, nil
 }
 
 // =========================================================================
@@ -653,16 +680,7 @@ func (s *Store) CreateWorkItemOG(ctx context.Context, rec types.WorkItemRecord) 
 	if rec.UpdatedAt.IsZero() {
 		rec.UpdatedAt = now
 	}
-	metadata := map[string]any{
-		"work_item_id":          rec.WorkItemID,
-		"trajectory_id":         rec.TrajectoryID,
-		"status":                string(rec.Status),
-		"assigned_agent_id":     rec.AssignedAgentID,
-		"objective_fingerprint": rec.ObjectiveFingerprint,
-		"created_by_run_id":     rec.CreatedByRunID,
-		"created_at":            rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":            rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	}
+	metadata := workItemMetadata(rec)
 
 	obj, err := s.ogPut(ctx, ogKindWorkItem, rec.OwnerID, rec.WorkItemID, rec, metadata, now)
 	if err != nil {
@@ -684,21 +702,38 @@ func (s *Store) CreateWorkItemOG(ctx context.Context, rec types.WorkItemRecord) 
 	return rec, nil
 }
 
-// GetWorkItemOG retrieves a work item by ID.
-func (s *Store) GetWorkItemOG(ctx context.Context, ownerID, workItemID string) (types.WorkItemRecord, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindWorkItem, "work_item_id", workItemID)
+func (s *Store) getWorkItemObjectOG(ctx context.Context, ownerID, workItemID string) (objectgraph.Object, error) {
+	suffix := objectgraph.StableSuffixFromKey(workItemID)
+	canonicalID, err := objectgraph.BuildCanonicalID(ogKindWorkItem, ownerID, suffix)
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return objectgraph.Object{}, fmt.Errorf("store: object graph not initialized")
+	}
+	obj, err := store.GetObject(ctx, canonicalID)
 	if err != nil {
 		if err == objectgraph.ErrNotFound {
-			return types.WorkItemRecord{}, ErrNotFound
+			return objectgraph.Object{}, ErrNotFound
 		}
+		return objectgraph.Object{}, err
+	}
+	return obj, nil
+}
+
+// GetWorkItemOG retrieves a work item by ID.
+func (s *Store) GetWorkItemOG(ctx context.Context, ownerID, workItemID string) (types.WorkItemRecord, error) {
+	obj, err := s.getWorkItemObjectOG(ctx, ownerID, workItemID)
+	if err != nil {
 		return types.WorkItemRecord{}, err
 	}
 	var rec types.WorkItemRecord
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.WorkItemRecord{}, err
-	}
-	if rec.OwnerID != ownerID {
-		return types.WorkItemRecord{}, ErrNotFound
 	}
 	return rec, nil
 }
@@ -732,7 +767,7 @@ func (s *Store) ListWorkItemsByTrajectoryOG(ctx context.Context, ownerID, trajec
 
 // UpdateWorkItemStatusOG updates the status of a work item.
 func (s *Store) UpdateWorkItemStatusOG(ctx context.Context, ownerID, workItemID string, status types.WorkItemStatus) (types.WorkItemRecord, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindWorkItem, "work_item_id", workItemID)
+	obj, err := s.getWorkItemObjectOG(ctx, ownerID, workItemID)
 	if err != nil {
 		return types.WorkItemRecord{}, err
 	}
@@ -740,14 +775,28 @@ func (s *Store) UpdateWorkItemStatusOG(ctx context.Context, ownerID, workItemID 
 	if err := ogDecode(obj, &rec); err != nil {
 		return types.WorkItemRecord{}, err
 	}
-	if rec.OwnerID != ownerID {
-		return types.WorkItemRecord{}, ErrNotFound
+	if rec.Status == status {
+		return rec, nil
+	}
+	if rec.Status != types.WorkItemOpen ||
+		(status != types.WorkItemCompleted && status != types.WorkItemCancelled) {
+		return rec, fmt.Errorf("update work item status: %w", ErrConcurrentStateChange)
 	}
 
 	rec.Status = status
 	rec.UpdatedAt = time.Now().UTC()
+	updated, err := workItemObject(rec, obj)
+	if err != nil {
+		return types.WorkItemRecord{}, err
+	}
+	if err := s.ogStore.PutObject(ctx, updated); err != nil {
+		return types.WorkItemRecord{}, err
+	}
+	return rec, nil
+}
 
-	metadata := map[string]any{
+func workItemMetadata(rec types.WorkItemRecord) map[string]any {
+	return map[string]any{
 		"work_item_id":          rec.WorkItemID,
 		"trajectory_id":         rec.TrajectoryID,
 		"status":                string(rec.Status),
@@ -757,15 +806,111 @@ func (s *Store) UpdateWorkItemStatusOG(ctx context.Context, ownerID, workItemID 
 		"created_at":            rec.CreatedAt.UTC().Format(time.RFC3339Nano),
 		"updated_at":            rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
+}
 
-	bodyJSON, _ := json.Marshal(rec)
-	obj.Body = bodyJSON
-	obj.Metadata = mustMarshalMetadata(metadata)
-	obj.UpdatedAt = rec.UpdatedAt
-	if err := s.ogStore.PutObject(ctx, obj); err != nil {
-		return types.WorkItemRecord{}, err
+func workItemObject(rec types.WorkItemRecord, existing objectgraph.Object) (objectgraph.Object, error) {
+	bodyJSON, err := json.Marshal(rec)
+	if err != nil {
+		return objectgraph.Object{}, fmt.Errorf("marshal work item: %w", err)
 	}
-	return rec, nil
+	metadataJSON, err := json.Marshal(workItemMetadata(rec))
+	if err != nil {
+		return objectgraph.Object{}, fmt.Errorf("marshal work item metadata: %w", err)
+	}
+	existing.Body = bodyJSON
+	existing.Metadata = metadataJSON
+	existing.UpdatedAt = rec.UpdatedAt
+	return existing, nil
+}
+
+func (s *Store) cancelTrajectoryAuthorityOG(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
+	trajectoryObj, err := s.getTrajectoryObjectOG(ctx, ownerID, trajectoryID)
+	if err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	var trajectory types.TrajectoryRecord
+	if err := ogDecode(trajectoryObj, &trajectory); err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	if trajectory.Status == types.TrajectorySettled || trajectory.Status == types.TrajectoryCancelled {
+		return trajectory, nil
+	}
+	if trajectory.Status != types.TrajectoryLive {
+		return trajectory, fmt.Errorf("cancel trajectory authority: %w", ErrConcurrentStateChange)
+	}
+
+	objs, err := s.ogListByMetadata(ctx, ogKindWorkItem, "trajectory_id", trajectoryID, 100000)
+	if err != nil {
+		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory authority: list work items: %w", err)
+	}
+	now := time.Now().UTC()
+	batch := objectgraph.Batch{Objects: make([]objectgraph.Object, 0, len(objs)+1)}
+	for _, obj := range objs {
+		var item types.WorkItemRecord
+		if err := ogDecode(obj, &item); err != nil {
+			return types.TrajectoryRecord{}, err
+		}
+		if item.OwnerID != ownerID || item.TrajectoryID != trajectoryID || item.Status != types.WorkItemOpen {
+			continue
+		}
+		item.Status = types.WorkItemCancelled
+		item.UpdatedAt = now
+		updated, err := workItemObject(item, obj)
+		if err != nil {
+			return types.TrajectoryRecord{}, err
+		}
+		batch.Objects = append(batch.Objects, updated)
+	}
+
+	trajectory.Status = types.TrajectoryCancelled
+	trajectory.UpdatedAt = now
+	updatedTrajectory, err := trajectoryObject(trajectory, trajectoryObj)
+	if err != nil {
+		return types.TrajectoryRecord{}, err
+	}
+	batch.Objects = append(batch.Objects, updatedTrajectory)
+	if s.ogStore == nil {
+		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory authority: object graph not initialized")
+	}
+	if err := s.ogStore.PutBatch(ctx, batch); err != nil {
+		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory authority: %w", err)
+	}
+	return trajectory, nil
+}
+
+func (s *Store) ListOpenWorkItemsByKindOG(ctx context.Context, kind string, limit int) ([]types.WorkItemRecord, error) {
+	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
+		Kind:  ogKindWorkItem,
+		Limit: 100000,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list open work items by kind: %w", err)
+	}
+	items := make([]types.WorkItemRecord, 0)
+	for _, obj := range objs {
+		var item types.WorkItemRecord
+		if err := ogDecode(obj, &item); err != nil {
+			return nil, err
+		}
+		itemKind, _ := item.Details["kind"].(string)
+		if item.Status != types.WorkItemOpen || itemKind != kind {
+			continue
+		}
+		items = append(items, item)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if !items[i].UpdatedAt.Equal(items[j].UpdatedAt) {
+			return items[i].UpdatedAt.Before(items[j].UpdatedAt)
+		}
+		if !items[i].CreatedAt.Equal(items[j].CreatedAt) {
+			return items[i].CreatedAt.Before(items[j].CreatedAt)
+		}
+		return items[i].WorkItemID < items[j].WorkItemID
+	})
+	if limit > 0 && len(items) > limit {
+		items = items[:limit]
+	}
+	return items, nil
 }
 
 // =========================================================================
