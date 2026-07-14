@@ -10,6 +10,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/runtimeprompts"
+	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/textureprompts"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -329,7 +330,7 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	return b.String(), nil
 }
 
-func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
+func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, searchClient search.Client, sourceClient sourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
 	if spec.AllowWritableFiles {
 		if err := RegisterFileTools(registry, cwd); err != nil {
@@ -387,7 +388,7 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 		cwd = wd
 	}
 
-	searchClient := newGatewaySearchClientFromEnv()
+	searchClient := search.NewGatewayClientFromEnv()
 	sourceClient := newSourceSearchClientFromEnv()
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 

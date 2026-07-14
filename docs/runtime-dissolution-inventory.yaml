@@ -3,14 +3,14 @@ canonical_parent: f72a141ef0f97fbec6521831dc3f5836b9526631
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 134
-    production_files: 70
-    test_files: 64
-    production_loc: 43230
-    test_loc: 49847
-    exports: 957
+    go_files: 132
+    production_files: 69
+    test_files: 63
+    production_loc: 43047
+    test_loc: 49769
+    exports: 955
     export_caller_edges: 308
-    initial_unused_export_debt: 16
+    initial_unused_export_debt: 15
     routes: 2
     tools: 48
     production_importers: 4
@@ -209,12 +209,6 @@ files:
     - id: internal/runtime/runtime_test.go [test]
       disposition: lifecycle
       loc: 1736
-    - id: internal/runtime/search_gateway.go [production]
-      disposition: research
-      loc: 166
-    - id: internal/runtime/search_gateway_test.go [test]
-      disposition: research
-      loc: 79
     - id: internal/runtime/skill_context.go [production]
       disposition: core
       loc: 128
@@ -313,7 +307,7 @@ files:
       loc: 743
     - id: internal/runtime/tool_profiles.go [production]
       disposition: tools
-      loc: 509
+      loc: 510
     - id: internal/runtime/toolloop_test.go [test]
       disposition: tools
       loc: 405
@@ -349,7 +343,7 @@ files:
       loc: 231
     - id: internal/runtime/tools_research.go [production]
       disposition: research
-      loc: 1128
+      loc: 1110
     - id: internal/runtime/tools_researcher.go [production]
       disposition: research
       loc: 268
@@ -358,7 +352,7 @@ files:
       loc: 363
     - id: internal/runtime/tools_test.go [test]
       disposition: tools
-      loc: 1899
+      loc: 1900
     - id: internal/runtime/tools_texture.go [production]
       disposition: texture
       loc: 1883
@@ -1777,10 +1771,6 @@ exports:
       disposition: lifecycle
     - id: internal/runtime/runtime_test.go:method(*mockBridgeProvider):ProviderName
       disposition: lifecycle
-    - id: internal/runtime/search_gateway.go:method(*gatewaySearchClient):Search
-      disposition: research
-    - id: internal/runtime/search_gateway_test.go:func:TestGatewaySearchClientParsesSearchOutage
-      disposition: research
     - id: internal/runtime/streaming_test.go:func:TestStreamingCancellationStopsEmission
       disposition: core
     - id: internal/runtime/streaming_test.go:func:TestStreamingCompletesWithProperTermination
@@ -2835,8 +2825,6 @@ initial_unused_export_debt:
     - id: internal/runtime/runtime.go:method(*Runtime):SetHealth
       disposition: delete
     - id: internal/runtime/runtime.go:method(*Runtime):StartRun
-      disposition: delete
-    - id: internal/runtime/search_gateway.go:method(*gatewaySearchClient):Search
       disposition: delete
     - id: internal/runtime/texture_workflow_verifier.go:method(*Runtime):VerifyTextureWorkflow
       disposition: delete

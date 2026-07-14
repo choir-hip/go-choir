@@ -12,29 +12,11 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/search"
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
-
-type webSearchClient interface {
-	Search(ctx context.Context, query string, maxResults int) (*webSearchResponse, error)
-}
-
-type webSearchResponse struct {
-	Query          string           `json:"query"`
-	Provider       string           `json:"provider"`
-	Providers      []string         `json:"providers,omitempty"`
-	Attempts       []map[string]any `json:"attempts,omitempty"`
-	Results        []map[string]any `json:"results"`
-	MergedCount    int              `json:"merged_count,omitempty"`
-	Waves          int              `json:"waves,omitempty"`
-	Degraded       bool             `json:"degraded,omitempty"`
-	ProviderHealth map[string]any   `json:"provider_health,omitempty"`
-	Outage         bool             `json:"outage,omitempty"`
-	Code           string           `json:"code,omitempty"`
-	Error          string           `json:"error,omitempty"`
-}
 
 type sourceSearchClient interface {
 	SearchSources(ctx context.Context, query string, maxResults int) (*sourceSearchResponse, error)
@@ -229,7 +211,7 @@ func sourceAPIItemMap(item sourceapi.ItemResult) map[string]any {
 	}
 }
 
-func RegisterResearchTools(registry *toolregistry.ToolRegistry, searchClient webSearchClient, sourceClient sourceSearchClient, httpClient *http.Client, rt *Runtime) error {
+func RegisterResearchTools(registry *toolregistry.ToolRegistry, searchClient search.Client, sourceClient sourceSearchClient, httpClient *http.Client, rt *Runtime) error {
 	for _, tool := range []Tool{
 		newWebSearchTool(searchClient, rt),
 		newSourceSearchTool(sourceClient, rt),
@@ -643,7 +625,7 @@ func boundedContentSegments(value any, maxSegments int) ([]any, int, bool) {
 // target and gateway default; the gateway clamps the ceiling at 50.
 const webSearchAgentResultFloor = 40
 
-func newWebSearchTool(searchClient webSearchClient, rt *Runtime) Tool {
+func newWebSearchTool(searchClient search.Client, rt *Runtime) Tool {
 	type args struct {
 		Query      string `json:"query"`
 		MaxResults int    `json:"max_results,omitempty"`
@@ -834,7 +816,7 @@ func newFetchURLTool(httpClient *http.Client, rt *Runtime) Tool {
 	}
 }
 
-func compactWebSearchProjection(full map[string]any, resp *webSearchResponse, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
+func compactWebSearchProjection(full map[string]any, resp *search.Response, requireFindingsCheckpoint bool) (map[string]any, map[string]any) {
 	// Agent retrieval, not a human result page: show the model a broad candidate
 	// set so a single broad first-pass search yields enough to ground and rerank.
 	// The router already accumulates up to ~40 merged hits (search plane defaults);

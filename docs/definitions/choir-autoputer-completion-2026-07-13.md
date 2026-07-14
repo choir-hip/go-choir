@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T04:18:04Z
+  updated_at: 2026-07-14T04:38:32Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@029e3dd859ac9fd7122ca0f0f2c52df03fdda5d0
+  expected_parent_or_authority_ref: refs/heads/main@origin@e9a1d11d441567ff43ff794d90b2e9f1ba630641
   status: working
   current_subgoal: R1-search-gateway-owner-cutover-06
   active_phase: R1-runtime-dissolution
@@ -812,7 +812,7 @@ state_capsule:
         repaired:
           - deterministic durable work-item identity split between a standalone runtime objective helper file and four private wire-publication helpers
     - id: R1-search-gateway-owner-cutover-06
-      status: defined
+      status: verified_local
       mutation_class: red
       classification_rationale: Web-search provider routing is protected. The cutover changes only Go source ownership, but it moves the gateway transport contract and deletes an unused direct-provider implementation, so exact routing, authentication, outage semantics, tool exposure, and deployed provider behavior require red ceremony.
       conjecture: The gateway-backed web-search client, response contract, and structured outage semantics can move atomically from internal/runtime into the existing dependency-leaf internal/search owner while its unused direct-provider implementation is deleted, with no request, response, provider-routing, tool-policy, evidence, or agent-visible behavior delta.
@@ -951,20 +951,46 @@ state_capsule:
               result: PASS
               observation: Independent parsing confirmed the quoted problem note is a scalar, the exact parent and correction semantics are unchanged, and the prior correction receipt remains present.
           no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, caller graph, behavior invariants, evidence floor, or stopping condition.
+        implementation_review_result:
+          candidate_diff_sha256: ca179bcdae8ff4498dc2732a260e0dce45fe1ef9e3d5c54884a932a9adc77b74
+          reviewers:
+            - google-antigravity/gemini-3.5-flash: PASS
+            - opencode/hy3-free: PASS
+          adjudication: Both independent reviewers matched the frozen nine-path candidate digest and exact authority parent; verified deletion of the unused direct-provider implementation, both runtime gateway files, private runtime client/response contracts, and direct provider credentials; recomputed the complete constructor, Client, and Response caller graph; matched request, response, outage, trimming, error, tool-policy, Trace, and role behavior; validated focused tests and the exact ratchet reductions with four unrelated interface candidates flat; parsed the unique-key capsule; and found no wrapper, alias, fallback, dual route, authority seam, or unclaimed E5 evidence.
+          no_rerun_rationale: Appending this immutable-candidate review receipt changes only non-authoritative assurance provenance; it does not change implementation, tests, inventory, reviewed authority, evidence floor, or stopping condition.
       local_evidence:
         - class: E0
           observation: repository import search finds no caller of internal/search, while LSP resolves the deployed gateway constructor only from runtime tool-profile installation and the runtime response contract only through research registration, execution, projection, and two projection tests
         - class: E0
           observation: the inventory classifies gatewaySearchClient.Search as delete and the containing search_gateway.go file under the research domain; R1 requires the file itself to leave runtime. The existing internal/search direct-provider implementation is unwired and would violate the canonical gateway provider-routing boundary if connected.
+        - class: E1
+          observation: both runtime search_gateway files, the private runtime client and response contracts, and every legacy direct-provider symbol are absent; the existing search package is now the sole gateway-backed owner with three exports, no runtime import, and direct production wiring
+        - class: E1
+          observation: runtime ratchet PASS at go_files 132, production_files 69, test_files 63, production_loc 43047, test_loc 49769, exports 955, export_caller_edges 308, initial_unused_export_debt 15, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 333; relative to the reviewed implementation authority, runtime lost two files, one production file, one test file, 183 production LOC, 78 test LOC, two exports, and one unit of unused-export debt while all other source categories remained flat
+        - class: E2
+          observation: direct gateway owner tests cover missing configuration, URL precedence, nil-interface behavior, timeout, request method/path/headers/body, positive result limits and non-positive omission, every response field, structured outage fallback and optional fields, gateway/status/decode/request/transport/read errors, and pass under the race detector
+          artifact_refs: [artifact://483, artifact://485]
+        - class: E2
+          observation: focused runtime profile installation, gateway route, proxy fallback, unavailable-client, compact success/checkpoint, and structured-outage projection tests passed
+          artifact_ref: artifact://483
+        - class: E2
+          observation: search owner and runtime compiled with no tests selected; go vet passed both packages; runtime-ratchet unit tests and the authoritative ratchet passed
+          artifact_refs: [artifact://487, artifact://490]
+        - class: E2
+          observation: gopls reported no diagnostics in the owner, research tool, or profile registry wiring; LSP resolved the constructor to one production caller plus direct owner tests, Client to three runtime boundaries, and Response to runtime projection plus two projection tests
+        - class: E5
+          observation: pending canonical CI/deploy identity and an authenticated staging coagent web_search transition
       validation_notes:
         - Runtime baseline before this Define is go_files 134, production_files 70, test_files 64, production_loc 43230, test_loc 49847, exports 957, export_caller_edges 308, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 307.
         - This Define mechanically raises documentation citers from 307 to exactly 333 before implementation; all source-category counts remain unchanged. The implementation must rebaseline that authorized documentation-only rise, then reduce runtime production files, test files, production LOC, and test LOC without increasing any other source category; interface candidates must remain flat at four.
         - 'Problem documented before ratchet correction: the first implementation measurement showed interface_candidates remained four, not lower. That category enumerates four pre-existing runtime-to-store interface call boundaries and does not count the private webSearchClient declaration being moved. Requiring a decrease would force unrelated scope or a false reclassification. Correcting the lock to require the category remain flat preserves debt authority and changes no source behavior.'
+        - Local and ratchet proof covers exact transport, response, outage, projection, role wiring, and source authority. Provider routing and agent-visible search remain protected and require canonical CI/deploy plus staging product-path proof before completion.
       heresy_delta:
         discovered:
           - gateway-backed search transport and response authority are nested in runtime beside an unwired internal/search package that directly selects providers and reads provider credentials
         introduced: []
-        repaired: []
+        repaired:
+          - gateway-backed search transport and response authority nested in runtime beside an unwired direct-provider search package
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin
