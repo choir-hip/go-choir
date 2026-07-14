@@ -11,6 +11,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/sourceapi"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
 func wireCanonicalRevisionEligibleForPublication(doc types.Document, rev types.Revision, rec *types.RunRecord) bool {
@@ -132,7 +133,7 @@ func (rt *Runtime) beginWireProcessorDecisionWorkItem(ctx context.Context, rec *
 		Objective:            "resolve processor request into explicit publication decisions",
 		Reason:               "processor request started without durable per-item decision ledger yet",
 		AuthorityProfile:     agentprofile.Processor,
-		ObjectiveFingerprint: wireProcessorDecisionWorkItemFingerprint(trajectoryID),
+		ObjectiveFingerprint: workitem.ProcessorDecisionFingerprint(trajectoryID),
 		CreatedByRunID:       rec.RunID,
 		Details: map[string]any{
 			"kind":                       "wire_processor_request_resolution",
@@ -174,7 +175,7 @@ func (rt *Runtime) beginWireProcessorSourceDecisionWorkItems(ctx context.Context
 			Objective:            "resolve source item into explicit publication decision",
 			Reason:               "processor request started with source item awaiting typed publication verdict",
 			AuthorityProfile:     agentprofile.Processor,
-			ObjectiveFingerprint: wireProcessorSourceItemDecisionWorkItemFingerprint(trajectoryID, sourceItemID),
+			ObjectiveFingerprint: workitem.SourceItemDecisionFingerprint(trajectoryID, sourceItemID),
 			CreatedByRunID:       rec.RunID,
 			Details: map[string]any{
 				"kind":              "wire_source_item_resolution",
@@ -283,7 +284,7 @@ func (rt *Runtime) recordWireProcessorDecision(ctx context.Context, rec *types.R
 	} else if strings.TrimSpace(update.CoveredByDocID) != "" {
 		return types.WorkItemRecord{}, fmt.Errorf("wire processor decision record: covered_by_doc_id is only valid for already_covered")
 	}
-	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
+	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 	if err != nil {
 		return types.WorkItemRecord{}, err
 	}
@@ -291,7 +292,7 @@ func (rt *Runtime) recordWireProcessorDecision(ctx context.Context, rec *types.R
 		if _, err := rt.beginWireProcessorDecisionWorkItem(ctx, rec); err != nil {
 			return types.WorkItemRecord{}, err
 		}
-		item, found, err = rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
+		item, found, err = rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 		if err != nil {
 			return types.WorkItemRecord{}, err
 		}
@@ -339,7 +340,7 @@ func (rt *Runtime) recordWireProcessorSourceItemDecisions(ctx context.Context, r
 		return fmt.Errorf("wire processor source item decisions: identity unavailable")
 	}
 	for _, sourceItemID := range sourceItemIDs {
-		item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorSourceItemDecisionWorkItemFingerprint(trajectoryID, sourceItemID))
+		item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.SourceItemDecisionFingerprint(trajectoryID, sourceItemID))
 		if err != nil {
 			return err
 		}
@@ -391,7 +392,7 @@ func (rt *Runtime) reconcileWireProcessorRequestResolution(ctx context.Context, 
 	if ownerID == "" || trajectoryID == "" {
 		return types.WorkItemRecord{}, fmt.Errorf("wire processor request resolution: identity unavailable")
 	}
-	requestItem, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
+	requestItem, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 	if err != nil {
 		return types.WorkItemRecord{}, err
 	}
@@ -408,7 +409,7 @@ func (rt *Runtime) reconcileWireProcessorRequestResolution(ctx context.Context, 
 	allTerminalWithoutStory := true
 	hasDeferred := false
 	for _, sourceItemID := range sourceItemIDs {
-		item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorSourceItemDecisionWorkItemFingerprint(trajectoryID, sourceItemID))
+		item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.SourceItemDecisionFingerprint(trajectoryID, sourceItemID))
 		if err != nil {
 			return types.WorkItemRecord{}, err
 		}
@@ -524,7 +525,7 @@ func (rt *Runtime) beginWireStoryResolutionWorkItem(ctx context.Context, rec *ty
 		Objective:            "resolve wire story candidate to publication or explicit non-publication decision",
 		Reason:               "processor opened a wire story Texture route",
 		AuthorityProfile:     agentprofile.Texture,
-		ObjectiveFingerprint: wireStoryResolutionWorkItemFingerprint(trajectoryID, docID),
+		ObjectiveFingerprint: workitem.StoryResolutionFingerprint(trajectoryID, docID),
 		CreatedByRunID:       rec.RunID,
 		Details: map[string]any{
 			"kind":   "wire_story_resolution",
@@ -547,7 +548,7 @@ func (rt *Runtime) completeWireStoryResolutionWorkItem(ctx context.Context, rec 
 	if ownerID == "" || trajectoryID == "" || docID == "" {
 		return fmt.Errorf("wire story resolution work item complete: identity unavailable")
 	}
-	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireStoryResolutionWorkItemFingerprint(trajectoryID, docID))
+	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.StoryResolutionFingerprint(trajectoryID, docID))
 	if err != nil {
 		return err
 	}
@@ -575,7 +576,7 @@ func (rt *Runtime) beginWirePublicationWorkItem(ctx context.Context, doc types.D
 		TrajectoryID:         trajectoryID,
 		Objective:            "publish wire article revision and link it into the edition",
 		Reason:               "autonomous wire publication",
-		ObjectiveFingerprint: wirePublicationWorkItemFingerprint(trajectoryID, rev.RevisionID),
+		ObjectiveFingerprint: workitem.PublicationFingerprint(trajectoryID, rev.RevisionID),
 		CreatedByRunID:       rec.RunID,
 		Details: map[string]any{
 			"kind":        "wire_publication",
@@ -620,39 +621,4 @@ func (rt *Runtime) settleWirePublicationTrajectoryIfReady(ctx context.Context, r
 	}
 	_, err = rt.store.UpdateTrajectoryStatus(ctx, ownerID, trajectoryID, types.TrajectorySettled)
 	return err
-}
-
-func wirePublicationWorkItemFingerprint(trajectoryID, revisionID string) string {
-	trajectoryID = strings.TrimSpace(trajectoryID)
-	revisionID = strings.TrimSpace(revisionID)
-	if trajectoryID == "" || revisionID == "" {
-		return ""
-	}
-	return "wire_publication:" + trajectoryID + ":" + revisionID
-}
-
-func wireStoryResolutionWorkItemFingerprint(trajectoryID, docID string) string {
-	trajectoryID = strings.TrimSpace(trajectoryID)
-	docID = strings.TrimSpace(docID)
-	if trajectoryID == "" || docID == "" {
-		return ""
-	}
-	return "wire_story_resolution:" + trajectoryID + ":" + docID
-}
-
-func wireProcessorDecisionWorkItemFingerprint(trajectoryID string) string {
-	trajectoryID = strings.TrimSpace(trajectoryID)
-	if trajectoryID == "" {
-		return ""
-	}
-	return "wire_processor_request_resolution:" + trajectoryID
-}
-
-func wireProcessorSourceItemDecisionWorkItemFingerprint(trajectoryID, sourceItemID string) string {
-	trajectoryID = strings.TrimSpace(trajectoryID)
-	sourceItemID = strings.TrimSpace(sourceItemID)
-	if trajectoryID == "" || sourceItemID == "" {
-		return ""
-	}
-	return "wire_source_item_resolution:" + trajectoryID + ":" + sourceItemID
 }

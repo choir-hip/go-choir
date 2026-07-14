@@ -25,6 +25,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
 func toolSchemaStringEnum(schema map[string]any, property string) []string {
@@ -2215,7 +2216,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	var sawStoryResolution bool
 	for _, item := range workItems {
 		switch item.ObjectiveFingerprint {
-		case wireStoryResolutionWorkItemFingerprint(processorRun.TrajectoryID, textureSpawn.DocID):
+		case workitem.StoryResolutionFingerprint(processorRun.TrajectoryID, textureSpawn.DocID):
 			sawStoryResolution = true
 			if item.Details["kind"] != "wire_story_resolution" || item.Details["doc_id"] != textureSpawn.DocID {
 				t.Fatalf("processor story-resolution work item details = %+v", item.Details)
@@ -2227,7 +2228,7 @@ func TestProcessorAndReconcilerProfilesDelegateToTextureOnly(t *testing.T) {
 	if !sawStoryResolution {
 		t.Fatalf("processor work items missing expected story-resolution fingerprint: %+v", workItems)
 	}
-	processorDecision, found, err := rt.Store().FindWorkItemByFingerprint(context.Background(), "user-alice", processorRun.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(processorRun.TrajectoryID))
+	processorDecision, found, err := rt.Store().FindWorkItemByFingerprint(context.Background(), "user-alice", processorRun.TrajectoryID, workitem.ProcessorDecisionFingerprint(processorRun.TrajectoryID))
 	if err != nil {
 		t.Fatalf("find completed processor decision work item: %v", err)
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 
 	"github.com/google/uuid"
 
@@ -877,7 +878,7 @@ func (rt *Runtime) createSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 		AuthorityProfile:     profile,
 		AssignedAgentID:      agentID,
 		CreatedByRunID:       requesterRunID,
-		ObjectiveFingerprint: "spawned_coagent:" + objectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
+		ObjectiveFingerprint: "spawned_coagent:" + workitem.ObjectiveFingerprint(ownerID, trajectoryID, rec.RunID, objective),
 		Details:              details,
 	})
 }
@@ -1349,7 +1350,7 @@ func (rt *Runtime) processorRunOccupiesAdmission(ctx context.Context, rec types.
 	if ownerID == "" || trajectoryID == "" {
 		return true
 	}
-	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, wireProcessorDecisionWorkItemFingerprint(trajectoryID))
+	item, found, err := rt.store.FindWorkItemByFingerprint(ctx, ownerID, trajectoryID, workitem.ProcessorDecisionFingerprint(trajectoryID))
 	if err != nil || !found {
 		return true
 	}

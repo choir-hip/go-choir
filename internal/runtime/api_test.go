@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
 // --- Task Submission Tests ---
@@ -2553,7 +2554,7 @@ func TestHandleInternalRunSubmissionAdmitsProcessorAfterStoryRouteRequestResolut
 		t.Fatalf("ensure processor texture route: %v", err)
 	}
 
-	requestItem, found, err := rt.Store().FindWorkItemByFingerprint(context.Background(), "user-alice", rec.TrajectoryID, wireProcessorDecisionWorkItemFingerprint(rec.TrajectoryID))
+	requestItem, found, err := rt.Store().FindWorkItemByFingerprint(context.Background(), "user-alice", rec.TrajectoryID, workitem.ProcessorDecisionFingerprint(rec.TrajectoryID))
 	if err != nil {
 		t.Fatalf("find processor request work item: %v", err)
 	}

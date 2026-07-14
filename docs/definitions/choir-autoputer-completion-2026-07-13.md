@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T02:31:45Z
+  updated_at: 2026-07-14T03:05:30Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@0490b4de1f784d5753baa215979ec7a1a076becd
+  expected_parent_or_authority_ref: refs/heads/main@origin@2e3286e27fce363c475aa104f63afba425cd0322
   status: working
   current_subgoal: R1-work-item-fingerprint-owner-cutover-05
   active_phase: R1-runtime-dissolution
@@ -680,7 +680,7 @@ state_capsule:
           - duplicate canonical profile normalization tables in runtime and toolregistry
           - nested runtime ownership of capability and delegation policy
     - id: R1-work-item-fingerprint-owner-cutover-05
-      status: defined
+      status: verified_local
       mutation_class: red
       classification_rationale: Deterministic work-item identities control durable deduplication, obligation reuse, and run-lifecycle behavior. The cutover intends no byte or policy delta, but moving this authority touches lifecycle identity and therefore requires red ceremony.
       conjecture: All five deterministic work-item fingerprint constructors can move atomically from runtime into one dependency-leaf internal/workitem owner, with every production and test caller cut directly to its concrete API and no change to normalized objective bytes, hash bytes, prefix formats, empty-input behavior, persisted fingerprints, work-item deduplication, trajectory obligations, completion, or restart behavior.
@@ -728,7 +728,7 @@ state_capsule:
         - Preserve every already-persisted and newly-created fingerprint byte, store lookup, deduplication decision, work-item detail, assignment, status transition, trajectory obligation, run metadata field, route, provider/model choice, and restart behavior.
         - Add direct table-driven owner tests with hard-coded golden objective hashes, Unicode/punctuation normalization, whitespace and empty cases, every wire prefix, and every missing-component case. Strengthen the spawned-coagent runtime test to assert the exact owner-produced fingerprint.
         - Retain focused spawned-coagent completion/restart, trajectory, processor decision, wire publication, and store fingerprint-deduplication tests.
-        - Regenerate the runtime inventory without weakening debt authority. This Define mechanically raises documentation citers from the landed 291 to exactly 307 before implementation while all source-category counts remain unchanged. Runtime production files and LOC must decrease; runtime exports, export caller edges, initial unused-export debt, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, legacy state writers, and legacy store reads may not increase. Test LOC may rise only for the exact wiring assertion.
+        - Regenerate the runtime inventory without weakening debt authority. This Define mechanically raises documentation citers from the landed 291 to exactly 307 before implementation while all source-category counts remain unchanged. Runtime production files and LOC must decrease; runtime exports, export caller edges, initial unused-export debt, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, legacy state writers, and legacy store reads may not increase. Test LOC may rise only for the direct-owner imports and exact wiring assertion required by the locked caller migration; this clarifies the original internally contradictory wording, which required direct migration of six runtime test files while naming only the assertion as authorized test growth, without changing the graph, behavior, or evidence floor.
       protected_surfaces:
         - durable work-item identity and fingerprint deduplication
         - trajectory obligation reuse and settlement inputs
@@ -753,11 +753,41 @@ state_capsule:
             - google-antigravity/gemini-3.5-flash: PASS after repair
           adjudication: The first panel found two omitted comprehensive test files, three omitted callers, an implicit five-constructor versus six-symbol distinction, and an unaddressed separate worker-VM normalizer. The repaired lock includes both files, binds three story-resolution and eight processor-decision test callers, names five constructors plus one normalizer, keeps the distinct five-field worker-VM identity outside this WorkItemRecord boundary, and records the measured 291-to-307 documentation-only citer rise. Both reviewers independently recomputed the repair and found no remaining blocker.
           no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, caller graph, evidence floor, or stopping condition.
+        implementation_review_result:
+          candidate_diff_sha256: d359a04ded5621087a57d36a0bbb7be93180204d29b6f01e2a61a7b173e59cea
+          reviewers:
+            - google-antigravity/gemini-3.5-flash: PASS
+            - opencode/hy3-free: PASS after bounded rereview
+          adjudication: Both independent reviewers matched the frozen 14-path candidate digest, recomputed deletion of all six old symbols, sole dependency-leaf ownership, objective and wire byte equivalence, direct migration of production and comprehensive-tag callers, unchanged separate worker-VM identity, complete golden and spawned wiring tests, authorized ratchet reductions, honest test growth, and no wrapper, duplicate authority, persisted-lifecycle delta, or evidence inflation. The bounded rereview reported a cosmetic eight-versus-nine processor-test-caller concern; direct enumeration proves the reviewed count of eight across one trajectory caller, five processor-decision callers, one agent-tools caller, and one API caller. The initial opencode attempt timed out and produced no verdict, so it is excluded rather than counted.
+          no_rerun_rationale: Appending this immutable-candidate review receipt changes only non-authoritative assurance provenance; it does not change implementation, tests, inventory, reviewed authority, evidence floor, or stopping condition.
+      local_evidence:
+        - class: E0
+          observation: canonical implementation parent 2e3286e2; every candidate source and test change is within the reviewed 14-path lock
+        - class: E1
+          observation: all six superseded runtime fingerprint symbols are absent; five exported constructors plus one private normalizer live in the dependency-leaf workitem owner, and every normal-build production and test caller resolves directly to it
+        - class: E1
+          observation: runtime ratchet passed after authoritative rebaseline at go_files 134, production_files 70, test_files 64, production_loc 43230, test_loc 49847, exports 957, export_caller_edges 308, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 307; runtime production lost one file and 78 LOC, test LOC rose only for six required owner imports, import formatting, and the four-line exact spawned fingerprint assertion, and all other ratchet categories remained flat
+        - class: E2
+          observation: direct workitem golden-vector, Unicode/punctuation normalization, whitespace, empty-input, every-prefix, and every-missing-component tests passed
+          artifact_ref: artifact://351
+        - class: E2
+          observation: focused spawned-coagent completion and process-restart recovery, trajectory, processor-decision, wire-publication, and store fingerprint-deduplication tests passed
+          artifact_refs: [artifact://354, artifact://356]
+        - class: E2
+          observation: runtime compiled with no tests selected, and go vet passed for workitem and runtime
+          artifact_refs: [artifact://358]
+        - class: E2
+          observation: gopls reported no diagnostics in the new workitem owner or normal-build runtime caller files after workspace refresh; LSP resolved the normal-build caller graph directly to the owner, while the two comprehensive-tag files remain outside gopls package metadata and were migrated explicitly within the reviewed scope
+        - class: E6
+          observation: google-antigravity/gemini-3.5-flash and opencode/hy3-free independently passed immutable candidate d359a04ded5621087a57d36a0bbb7be93180204d29b6f01e2a61a7b173e59cea with no required repair; direct caller enumeration adjudicated one non-blocking reviewer miscount
+      validation_notes:
+        - The comprehensive-tag runtime target remains independently stale across unrelated prompt, API, and Texture tests. Those two locked comprehensive caller files were formatted and migrated directly, but are excluded from local compilation evidence; canonical CI and E5 remain mandatory.
       heresy_delta:
         discovered:
           - deterministic durable work-item identity is split between a standalone runtime objective helper file and four private wire-publication helpers
         introduced: []
-        repaired: []
+        repaired:
+          - deterministic durable work-item identity split between a standalone runtime objective helper file and four private wire-publication helpers
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin
