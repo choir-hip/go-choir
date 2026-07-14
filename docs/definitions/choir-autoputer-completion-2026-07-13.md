@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T05:24:41Z
+  updated_at: 2026-07-14T05:25:59Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@c70f083e
+  expected_parent_or_authority_ref: refs/heads/main@origin@d3a352e1
   status: working
   current_subgoal: R1-toolregistry-facade-extinction-07
   active_phase: R1-runtime-dissolution
@@ -1011,7 +1011,7 @@ state_capsule:
       selection_rationale: This is the smallest cohesive cross-cutting boundary already owned elsewhere. internal/runtime/tools.go contains one type alias and four forwarding helpers, while toolResultJSON is a fifth pure encoder in tool_profiles.go; all delegate to or semantically belong to internal/toolregistry. Direct caller migration deletes the wrapper file, removes an unrelated encoder from profile installation, shrinks duplicate registry tests, and reduces wrapper debt without introducing an interface, accessor, callback, compatibility name, or new package.
       exact_source_scope:
         - internal/toolregistry/toolregistry.go
-        - internal/toolregistry/toolregistry_test.go
+        - internal/toolregistry/toolloop_test.go
         - internal/toolregistry/toolloop.go
         - internal/runtime/tools.go
         - internal/runtime/tool_profiles.go
@@ -1146,6 +1146,12 @@ state_capsule:
             - opencode/hy3-free: PASS after bounded repair
           adjudication: Both reviewers recomputed the six-symbol runtime caller graph, exact owner contract, 333-to-391 documentation-only citer rise, ratchet and evidence floor, and prior search-lock closure. Gemini's first pass exposed the pre-existing private prompt composer in internal/toolregistry/toolloop.go; the lock was repaired to include that file in scope and caller graph. Opencode then required the duplicate's explicit deletion target; the final candidate names internal/toolregistry/toolloop.go:buildSystemPromptWithTools in owner_duplicate_deletions. A final immutable Gemini check independently verified the exact repaired hash, valid YAML, all three scope/caller/deletion repairs, one exported BuildSystemPrompt owner, unchanged citer endpoint, and no prior-lock regression with no remaining blocker.
           no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, caller graph, behavior invariants, evidence floor, or stopping condition.
+        scope_correction_review:
+          candidate_diff_sha256: dee424a9a545a007e1e8dba41f58de7008a61f3449b25000df20579f90f816dd
+          reviewer: google-antigravity/gemini-3.5-flash
+          result: PASS
+          adjudication: Independent review verified that internal/toolregistry/toolregistry_test.go is nonexistent, internal/toolregistry/toolloop_test.go is the actual package behavior-test owner and can host the frozen golden vectors, and the correction changes only that exact path plus capsule time and parent.
+          no_rerun_rationale: Appending this receipt changes assurance provenance only and does not alter the reviewed scope correction.
       validation_notes:
         - Runtime baseline before this Define is go_files 132, production_files 69, test_files 63, production_loc 43047, test_loc 49769, exports 955, export_caller_edges 308, initial_unused_export_debt 15, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 333.
         - This Define mechanically raises documentation citers from 333 to exactly 391 while every source-category count remains unchanged. Implementation must rebaseline that reviewed documentation-only rise, then reduce runtime production files, production LOC, test LOC, and wrappers without increasing any other source category.
