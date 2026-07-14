@@ -137,12 +137,12 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: reviewing
-  slice: "freeze and independently re-review the complete Texture owner cutover"
-  question: "Does the frozen candidate now preserve exactly one boot/wake authority, durable first-wake identity, exact delegation validation, and exhaustive owner-wrapper detection?"
+  status: blocked_review
+  slice: "repair the sole final-review explicit-profile alias bypass"
+  question: "Does an explicitly supplied spawn profile match one canonical allowed value byte-for-byte before any side effect?"
   reconciliation:
-    observed_at: 2026-07-14T23:27:23Z
-    source_ref: staged-repair@sha256:00691ed69781f2ae9ff9879e845f897f3edcaaad96b2c03317cb288ff799ec46
+    observed_at: 2026-07-14T23:34:18Z
+    source_ref: commit:1e9fd70634871b3d877242d5fa7338852a4afb42
     deploy_identity: blocked_before_landing
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -151,22 +151,22 @@ now:
       - docs/runtime-dissolution-inventory.yaml@production_importers:0,wrappers:0,tools:37
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: candidate_implemented_local_review_pending
+    status: final_review_blocked
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact owner/caller map; focused production-order restart tests; exact delegation validation tests; exhaustive legal-Go ratchet fixtures; all four agentcore and Texture owner shards; frozen independent review; CI, staging identity, and deployed product-path acceptance."
     rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    conjecture_delta: "Concrete composition is safe when actor delivery remains paused across both generic and Texture recovery, then flushes durable boot dispatches with retry before the actor-log sweep. Texture actor identity can be resolved by the canonical owner from document identity rather than assuming a pre-existing generic agents row. Explicit profile inputs and structural detectors must use exact legal syntax, while fuzzy normalization remains limited to the role convenience field."
+    conjecture_delta: "Boot/wake composition, canonical completion, publication, typed events, and structural enforcement survived final review. One semantic distinction remains: agentprofile.Canonical is appropriate for the fuzzy role convenience input but is too permissive for the explicit profile override whose schema enumerates canonical values."
     heresy_delta:
-      discovered: "Frozen review found ten candidate-only regressions across two rounds: six deleted behavior contracts and four composition/adversarial-syntax gaps."
-      introduced: "None in canonical source; all findings remain confined to the unpushed candidate lineage."
-      repaired: "All ten findings now have source-level repairs and focused regression coverage: exact spawn profile validation; paused/retried boot dispatch; owner-resolved first Texture identity; canonical Revision completion evidence; direct publication; typed lifecycle events; and wrapper detection for qualified, dot-imported, pointer, embedded, and parenthesized owner types."
+      discovered: "Final review found one additional candidate-only bypass: exactTarget canonicalizes explicit aliases, so profile=research or profile=coagent is accepted although the explicit enum requires researcher or co-super."
+      introduced: "None in canonical source; the finding remains confined to the unpushed candidate lineage."
+      repaired: "The ten earlier findings are repaired and final wake/full-cutover review found no additional blocker. The explicit-profile alias bypass is documented but not yet repaired."
   candidate:
     id: R1-texture-owner-cutover-16
-    state: implemented_local_review_pending
-    ref: staged-repair@sha256:00691ed69781f2ae9ff9879e845f897f3edcaaad96b2c03317cb288ff799ec46
+    state: final_review_blocked_alias_repair_required
+    ref: commit:1e9fd70634871b3d877242d5fa7338852a4afb42
     owner: orchestrator
     base: refs/remotes/origin/main@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    digest: sha256:00691ed69781f2ae9ff9879e845f897f3edcaaad96b2c03317cb288ff799ec46
+    digest: commit:1e9fd70634871b3d877242d5fa7338852a4afb42
     scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
   evidence_refs:
     - "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."
@@ -175,8 +175,10 @@ now:
     - "suite-load-risk: two concurrent full go test ./... runs reached a context deadline in TestCancelRunTrajectoryDrainsMoreThanOneActivePage; the exact test passed standalone and every agentcore/Texture shard passed. Live search-provider tests were disabled for the isolated run."
     - "independent-review:first-round event/publication projection and canonical Revision completion evidence accepted with confidence 0.93; four second-round blockers were documented in commit ffcf3592 before repair."
     - "repair-proof: go test ./internal/actorruntime ./internal/coagentowner ./internal/agentcore ./internal/textureowner ./internal/sandbox ./cmd/runtime-ratchet -count=1 passed; focused startup serialization, first-wake identity, adversarial explicit profile, and legal-Go wrapper fixtures passed; go test -race startup serialization passed."
-  blocker_or_risk: "No local execution blocker. The frozen candidate still requires exact-commit independent re-review, canonical landing, CI/deploy identity, and deployed persistent-computer acceptance. The concurrent whole-suite Dolt timeout remains a disclosed load risk; standalone and sharded coverage pass."
-  next_action: "Commit the repaired candidate and this compact state, obtain final independent exact-commit re-review, then land and execute the deployed acceptance path."
+    - "independent-review:final wake ordering and first-identity recovery accepted with confidence 0.95; full cutover found no additional blocker beyond explicit-profile aliases."
+    - "independent-review:blocking P1 at internal/coagentowner/spawn_tool.go:168-174; exactTarget canonicalizes aliases such as research into an allowed explicit researcher profile."
+  blocker_or_risk: "The sole final blocker is explicit-profile alias acceptance. The candidate remains ineligible to land until raw trimmed profile input is compared directly to canonical allowed values, adversarial alias/case tests pass, and a final focused exact-diff review accepts the repair."
+  next_action: "Commit this problem receipt, repair exactTarget without changing fuzzy role behavior, add canonical-alias and case-variant regression cases, freeze the minimal diff, and obtain final focused review before landing."
 
 receipts:
   - id: predecessor-B0-authority
