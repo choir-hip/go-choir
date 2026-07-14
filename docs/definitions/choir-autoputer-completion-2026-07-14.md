@@ -151,19 +151,19 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: review_repairs_local_pass_ready_for_rereview
+    status: second_independent_review_repair_required
     protected_surfaces: [model_policy, provider_routing, verifier_calls, researcher_tools, search_gateway, source_artifacts, content_service, evidence_state, user_isolation, texture_authority]
     admissible_evidence: "Exact caller/provider/store/tool map; policy parsing/cache/overlay and model verification contracts; research tool schemas/results/content/source behavior; direct registry composition; no runtime wrappers; modelpolicy/researchtools tests; all four runtime shards; owner composition packages; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed model-policy/research acceptance."
     rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
     conjecture_delta: "Confirmed: model selection is a computer-owned modelpolicy service and generic research tooling is a direct-dependency researchtools service. Runtime now composes both owners without callbacks or compatibility wrappers; prompt enrichment and researcher settlement remain deliberately local to later core/Texture slices."
     heresy_delta:
-      discovered: "Both frozen independent reviews found the same P1 integration-fixture defect: modelpolicy.Manager correctly snapshots the computer policy path at construction, but two retained comprehensive API fixtures mutate rt.cfg.ModelPolicyPath afterward, leaving the sole owner unsynchronized and causing overlay/API resolution failure. The comprehensive build also exposed stale pre-cutover prompt/Texture test references that no default shard compiled. Three source-client methods listed as initial unused-export debt disappeared with the generic research owner extraction."
-      introduced: "d90aca75 migrated policy ownership without migrating the two test-only post-construction config mutations; no production configuration mutation path was found."
-      repaired: "The two comprehensive API fixtures now reconstruct the sole modelpolicy.Manager from the final policy path/provider config instead of mutating Runtime config alone. Stale comprehensive prompt references now use the current response contract, and stale textureCreateRevisionRequest authority fields were deleted from tests rather than restored to production. Focused comprehensive overlay/Texture-eval/tool-profile/document-selector/prompt contracts pass; comprehensive and default runtime compile, owner composition packages pass, and the regenerated ratchet passes at test_loc 46495 and citer count 1347."
+      discovered: "Both initial frozen reviews found and the first repair closed the same modelpolicy fixture defect. The second contract re-review found one remaining P1 test-quality defect: deleting obsolete AuthorKind/AuthorLabel fields from textureCreateRevisionRequest literals also stopped three hostile-authorship tests from actually sending hostile JSON fields, weakening the negative authority ratchet even though production requests still correctly omit and ignore those fields."
+      introduced: "7c838d90 removed stale compile-time request fields too broadly inside tests, preserving their assertions but deleting the hostile inputs that made them meaningful. Production authority remained correct."
+      repaired: "Modelpolicy fixture synchronization is accepted by independent re-review. Hostile-authorship test input repair is pending; it must send raw JSON/map fields without restoring production request fields."
   candidate:
     id: R1-model-research-owner-cutover-15
-    state: review_repairs_local_pass_ready_for_rereview
-    ref: refs/heads/autoputer-definition-v2@994aab83
+    state: second_independent_review_repair_required
+    ref: refs/heads/autoputer-definition-v2@7c838d90
     owner: orchestrator
     base: refs/remotes/origin/main@0f905ffcfeba3db85f0958382d9beb68f013a498
     digest: "Create internal/modelpolicy Manager as sole policy file/default/parser/overlay/cache/metadata owner and move model verification tool construction beside it. Create internal/researchtools as sole generic research tool registration/implementation owner with explicit Store/content/search/source/HTTP dependencies. Runtime composes and calls these owners directly; delete model_policy.go, tools_model_verify.go, and tools_research.go after every caller migrates. Retain prompts.go, tools_researcher.go, and researcher_checkpoint_fallback.go for later core/Texture settlement cutovers; do not add callbacks or wrappers."
@@ -173,8 +173,8 @@ now:
     - "research-map: internal/runtime/tools_research.go nine tools; direct dependencies content Service, Store, search.Client, source client, HTTP; registration in tool_profiles.go"
     - "replacement-check: internal/modelcatalog is static capability metadata only; promptstore already owns prompt persistence; search/source/content own substrates; no model-policy or research-tool owner package exists"
     - "deferred-settlement: tools_researcher.go and researcher_checkpoint_fallback.go retain lifecycle/evidence/channel/Texture wake authority for later cutover"
-  blocker_or_risk: "No local blocker. Both reviewer findings are repaired without changing production policy-owner semantics or restoring client-controlled Texture authority. Remaining gates are frozen re-review, canonical CI/deploy identity, and authenticated staging model-policy/research acceptance."
-  next_action: "Commit the review repairs, obtain frozen independent re-review, then push origin/main and execute CI/deploy/staging model-policy and researcher product-path acceptance."
+  blocker_or_risk: "P1 test-quality blocker before landing: three comprehensive Texture tests assert server-owned authorship but no longer submit client-controlled author_kind/author_label inputs. Production remains protected, but the negative authority contract is not currently exercised."
+  next_action: "Restore hostile author_kind/author_label inputs through raw JSON/map request bodies only, keep production textureCreateRevisionRequest authority-free, rerun focused comprehensive contracts and ratchet, then obtain final frozen re-review."
 
 receipts:
   - id: predecessor-B0-authority
