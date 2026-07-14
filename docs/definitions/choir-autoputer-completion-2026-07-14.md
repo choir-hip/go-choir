@@ -138,12 +138,12 @@ measures:
 
 now:
   status: working
-  slice: "extract browser and desktop ownership from internal/runtime"
-  question: "Can dedicated browser-control and desktop-state handlers own their complete HTTP, persistence, event, bounded-input, CDP-process, and shared-session contracts while Runtime loses all browser/desktop state and shutdown authority?"
+  slice: "extract content and media ownership from internal/runtime"
+  question: "Can a canonical content service and media-state handler own all content import, extraction, source validation, transcript/search fallback, content/media persistence, event, and HTTP contracts while Runtime retains only explicit caller composition and no wrappers or direct store authority?"
   reconciliation:
-    observed_at: 2026-07-14T16:29:40Z
-    source_ref: refs/heads/autoputer-definition-v2@48b8710c
-    deploy_identity: "CI 29345667840 PASS; deploy job 87129761444; staging remains cb0e36ba9cb9568f838e470935a90345446e69eb pending this cutover"
+    observed_at: 2026-07-14T16:40:18Z
+    source_ref: refs/remotes/origin/main@a0b7c9d904be618c8ace59d0b19b6d10bb7d4226
+    deploy_identity: "CI 29349986819 PASS; deploy job 87144519480; activation receipt a0b7c9d904be618c8ace59d0b19b6d10bb7d4226 at 2026-07-14T16:38:25Z; authenticated staging sandbox routes report a0b7c9d9"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,35 +151,31 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: accepted_local_ready_to_land
-    protected_surfaces: [browser_sessions, bounded_browser_input, cdp_process_lifecycle, browser_screenshots, browser_events, desktop_state, desktop_driver_session, user_isolation]
-    admissible_evidence: "Exact route/state/store/event/process map; byte-equivalent API contracts; owner/session isolation and passive-session conflict tests; focused browser/desktop tests including live CDP when available; scoped runtime ratchet; independent transition and authority review; green CI, staging identity, and authenticated deployed browser/desktop acceptance."
-    rollback_ref: cb0e36ba9cb9568f838e470935a90345446e69eb
-    conjecture_delta: "Browser and desktop are product-facing stateful control planes, not runtime orchestration. Their complete handlers can leave Runtime as dedicated owners if route composition injects them directly, browser shutdown fate-shares with sandbox service lifetime, and no wrapper/facade remains."
+    status: owner_boundary_frozen
+    protected_surfaces: [content_items, url_source_validation, file_source_boundary, document_extraction, youtube_transcripts, searxng_discovery, content_events, media_progress, media_recents, theme_preferences, user_isolation]
+    admissible_evidence: "Exact route/caller/store/event/provider/helper map; owner-scoped content/media transitions; URL/file boundary and transcript/provider failure tests; byte-equivalent HTTP contracts; direct runtime caller migration with no import wrappers; focused content/media tests; scoped runtime callers and ratchet; independent transition and authority review; green CI, staging identity, and authenticated deployed acceptance."
+    rollback_ref: b3d8205fe3047ccbde392abbaed681a2e60dbee1
+    conjecture_delta: "Content import/extraction and media state are product services, not runtime orchestration. A content owner may expose direct ImportURL/ImportFile methods to remaining runtime callers through explicit composition, while a media handler can remain route-only; shared pure media/source classification must have one canonical home rather than be copied back into Runtime."
     heresy_delta:
-      discovered: "internal/runtime/browser.go owns 1,508 lines of browser HTTP, session persistence, event publication, capability detection, per-session locks, bounded fill/click control, snapshot extraction, CDP process/session lifecycle, and screenshots; Runtime also carries four browser lock/session fields and closes CDP sessions from Start/Stop. internal/runtime/desktop.go owns 248 lines of authenticated shared desktop-state HTTP, sanitization, driver/passive-session semantics, and store transitions. internal/desktop exists, but it is a Base API sync client rather than a replacement server-state owner; no existing browser owner exists."
+      discovered: "internal/runtime/content.go owns 1,984 lines of content HTTP, URL/file import, sourcefetch validation, readability/document extraction, YouTube transcript provider and InnerTube fallback, SearXNG discovery, dedupe, store writes, and content events; content_extract.go owns 552 lines of document adapters. Runtime podcast, Texture media-source, and researcher tools call Runtime.ImportURLContent/ImportFileContent wrappers; api.go calls content intent classification; Texture files share content media/hash/source-path helpers. internal/runtime/media_state.go owns 287 lines of authenticated media progress, recents, theme preference store transitions and product events. No existing content or media server owner package exists."
       introduced: none
-      repaired: "Browser HTTP/session/event/CDP ownership now lives in internal/browsercontrol; desktop HTTP/state/clone ownership lives in internal/desktopstate. Routes inject both owners directly, sandbox fate-shares browser Close and supplies the desktop owner through an explicit runtime-core composition contract, Runtime has no browser fields/lifecycle methods or direct desktop-state store calls, and fork_desktop fails before vmctl mutation when no desktop owner is composed."
+      repaired: "The preceding browser/desktop cutover is deployed and accepted: staging a0b7c9d9 returned authenticated HTTP 200 for capabilities, sessions, and desktop state, then created/listed/closed browser session 7e28e2bb-a20e-40b6-b30c-53951b0dcbb8 with idle-to-closed lifecycle."
   candidate:
-    id: R1-browser-desktop-owner-cutover-13
-    state: accepted_local_ready_to_land
-    ref: refs/heads/autoputer-definition-v2@48b8710c
+    id: R1-content-media-owner-cutover-14
+    state: owner_boundary_frozen_ready_to_implement
+    ref: refs/heads/autoputer-definition-v2@a0b7c9d904be618c8ace59d0b19b6d10bb7d4226
     owner: orchestrator
-    base: refs/heads/autoputer-definition-v2@b3d8205f
-    digest: "internal/browsercontrol owns browser routes, owner-scoped persisted sessions/events, bounded control, snapshots, declared-alternate fallback, CDP reuse, process cancellation, and Close. internal/desktopstate owns authenticated shared state, sanitation, passive/driver sessions, product events, and fork-state cloning. apihandler binds both directly; sandbox constructs them and passes desktopstate through explicit runtime core options. Deleted internal/runtime browser.go, browser_live_test.go, desktop.go, desktop_test.go; removed Runtime browser fields and cleanup; moved owner tests."
-    scope: [browser_api, browser_session_state, browser_events, browser_capabilities, snapshots, bounded_control, cdp_lifecycle, desktop_api, desktop_state, desktop_session_convergence]
+    base: refs/remotes/origin/main@a0b7c9d904be618c8ace59d0b19b6d10bb7d4226
+    digest: "Create internal/content as the sole content HTTP/import/extraction/store/event/provider owner and internal/mediastate as the sole media-state HTTP/store/event owner. Register handlers directly in apihandler; construct owners in sandbox; inject the content service explicitly into runtime core callers; replace every Runtime.ImportURLContent/ImportFileContent call with direct owner calls and delete those wrappers. Move shared pure content/media/source classification to one canonical content package and migrate remaining Runtime/Texture callers rather than duplicating helpers. Delete runtime content/media production files and move/split focused tests."
+    scope: [content_http, content_items, url_import, file_import, document_extraction, source_validation, transcript_fetch, search_discovery, content_events, media_progress, media_recents, theme_preferences, shared_content_classification]
   evidence_refs:
-    - "browser-map: internal/runtime/browser.go; internal/store/browser.go; internal/types/browser.go; Runtime browserOpMu/browserOps/browserCDPMu/browserCDP; Runtime Start/Stop closeAllBrowserCDPSessions; internal/apihandler/routes.go browser routes"
-    - "desktop-map: internal/runtime/desktop.go; internal/runtime/desktop_test.go; internal/store/desktop_live.go; internal/types/desktop.go; internal/apihandler/routes.go desktop route"
-    - "replacement-check: internal/desktop is a Base API client/sync boundary, not a server desktop-state owner; no internal browser service package exists"
-    - "browser-focused: go test -tags comprehensive ./internal/browsercontrol PASS; integration-tag live CDP contracts compile/skip without GO_CHOIR_RUN_OBSCURA_CDP=1"
-    - "desktop-focused: go test -tags comprehensive ./internal/desktopstate PASS; TestCloneStatePersistsOwnerScopedDesktopCopy PASS"
-    - "composition: go test ./internal/actorruntime ./internal/sandbox ./internal/apihandler PASS; runtime shard 0/4 PASS; production runtime package compile PASS"
-    - "ratchet: runtime dissolution inventory PASS; 122 Go files, 63 production files, 59 test files, 38,228 production LOC, 48,526 test LOC, 870 exports, 252 export caller edges, 374 classified store calls, 1,349 citers"
-    - "independent-browser-review: ACCEPT 48b8710c after repairing URL-extension HTML inference for empty/octet-stream declared alternates"
-    - "independent-desktop-review: ACCEPT 48b8710c after moving fork cloning behind desktopstate, removing Runtime fallback construction and desktop-specific adapter wrapper, and requiring explicit sandbox composition"
-  blocker_or_risk: "No local execution blocker. Residual risk is deployment-only: staging must serve 48b8710c or its coherent Definition receipt, preserve authenticated browser/desktop route behavior, and keep CDP capability/cleanup dependent on the configured Obscura binary. The repository-wide comprehensive runtime tag remains independently stale (prompt/texture historical compile errors); scoped owner tests, production type-check, runtime shard 0/4, and exact ratchet pass."
-  next_action: "Commit this accepted red candidate receipt, push to origin/main, monitor CI and staging identity, then run authenticated deployed browser capabilities/session and desktop state acceptance before marking this slice complete."
+    - "content-map: internal/runtime/content.go; content_extract.go; content_test.go; content_extract_test.go; internal/apihandler/routes.go content routes; Runtime callers in podcast.go, texture_media_sources.go, tools_research.go, api.go"
+    - "content-shared-map: runtime Texture callers of normalize/detect/appHint/media/hash/source-path helpers in texture.go, texture_import.go, texture_media_sources.go, texture_lineage.go, texture_diagnosis.go; general firstNonEmptyString remains runtime-owned"
+    - "media-map: internal/runtime/media_state.go; media_state_test.go; internal/apihandler/routes.go media progress/recents/theme routes; store media/preference methods; product events"
+    - "replacement-check: no internal/content, internal/mediastate, or equivalent server owner exists; internal/desktop is unrelated client sync"
+    - "preceding-deploy: https://github.com/choir-hip/go-choir/actions/runs/29349986819; deploy-job:87144519480; activation-receipt:a0b7c9d904be618c8ace59d0b19b6d10bb7d4226@2026-07-14T16:38:25Z"
+  blocker_or_risk: "No execution blocker. Highest risk is hidden shared-helper authority: moving content files without migrating Runtime/Texture classification and source-path callers would either fail compilation or create a second convention. Content provider/network behavior, 2/25 MiB bounds, 300 KiB text cap, SSRF validation, owner dedupe, YouTube provider auth/redaction, SearXNG alternate ordering, and event payloads must remain exact. Runtime may hold only an injected content service pointer for direct callers; no Runtime import method, adapter pass-through, API wrapper, or direct content/media store write may remain."
+  next_action: "Commit this terminal browser/desktop receipt and frozen content/media problem-owner boundary before behavior-changing code. Then extract content and media owners in an isolated candidate, migrate shared helpers and every direct caller, regenerate the inventory, and prove focused contracts before frozen independent review."
 
 receipts:
   - id: predecessor-B0-authority
@@ -273,6 +269,13 @@ receipts:
     commit_or_artifact: cb0e36ba9cb9568f838e470935a90345446e69eb
     proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29345667840", "deploy-job:87129761444", "activation-receipt:cb0e36ba9cb9568f838e470935a90345446e69eb@2026-07-14T15:38:14Z", "focused-candidate-transitions:PASS", "runtime-shard-0/4:PASS", "runtime-ratchet:PASS", "candidate-transition-review:ACCEPT", "candidate-authority-review:ACCEPT", "staging-review-unauthenticated:HTTP-401", "staging-review-owner-scoped-missing:HTTP-404", "staging-review-write-blocked:HTTP-405", "staging-full-intake-read-absent:HTTP-404", "staging-full-intake-write-blocked:HTTP-405"]
     rollback_ref: 2f6215ab4256eb1ad4acead67a788d1825a6c0af
+    disposition: complete
+
+  - id: R1-browser-desktop-owner-cutover-13
+    boundary: implement
+    commit_or_artifact: a0b7c9d904be618c8ace59d0b19b6d10bb7d4226
+    proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29349986819", "deploy-job:87144519480", "activation-receipt:a0b7c9d904be618c8ace59d0b19b6d10bb7d4226@2026-07-14T16:38:25Z", "browser-owner-tests:PASS", "desktop-owner-tests:PASS", "runtime-shard-0/4:PASS", "runtime-ratchet:PASS", "browser-transition-review:ACCEPT", "desktop-authority-review:ACCEPT", "staging-browser-capabilities:HTTP-200-ready", "staging-browser-sessions:HTTP-200", "staging-browser-lifecycle:7e28e2bb-a20e-40b6-b30c-53951b0dcbb8-idle-to-closed", "staging-desktop-state:HTTP-200-owner-scoped"]
+    rollback_ref: b3d8205fe3047ccbde392abbaed681a2e60dbee1
     disposition: complete
 
 view:
