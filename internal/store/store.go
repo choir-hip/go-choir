@@ -903,6 +903,20 @@ func (s *Store) GetAgent(ctx context.Context, agentID string) (types.AgentRecord
 
 // CreateRun inserts a new run record.
 func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+
+	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
+	if rec.State.Active() && trajectoryID != "" {
+		trajectory, err := s.GetTrajectoryOG(ctx, rec.OwnerID, trajectoryID)
+		if err == nil {
+			if trajectory.Status == types.TrajectorySettled || trajectory.Status == types.TrajectoryCancelled {
+				return fmt.Errorf("create run on terminal trajectory: %w", ErrConcurrentStateChange)
+			}
+		} else if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+	}
 	return s.CreateRunOG(ctx, rec)
 }
 
@@ -1072,59 +1086,33 @@ func (s *Store) ListRunsByChannel(ctx context.Context, ownerID, channelID string
 }
 
 // ListActiveRunsByTrajectory returns pending/running/blocked activations on a
-// trajectory. Trajectory cancellation uses this instead of requested_by_run_id
-// recursion so requester provenance does not decide lifecycle control.
+// trajectory. The metadata keyset is exhausted before owner and state filters
+// are applied. A non-positive limit returns every matching active run.
 func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, trajectoryID string, limit int) ([]types.RunRecord, error) {
-	return s.ListActiveRunsByTrajectoryExcluding(ctx, ownerID, trajectoryID, nil, limit)
-}
-
-// ListActiveRunsByTrajectoryExcluding returns active trajectory activations
-// excluding run IDs already handled by a caller-side drain loop.
-func (s *Store) ListActiveRunsByTrajectoryExcluding(ctx context.Context, ownerID, trajectoryID string, excludeRunIDs []string, limit int) ([]types.RunRecord, error) {
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	if ownerID == "" || trajectoryID == "" {
 		return nil, nil
 	}
-	if limit <= 0 {
-		limit = 200
-	}
-	// Fetch runs by trajectory from OG and filter in Go for state and exclusions.
-	fetchLimit := limit
-	if fetchLimit < 5000 {
-		fetchLimit = 5000
-	}
-	objs, err := s.ogListByMetadata(ctx, ogKindRun, "trajectory_id", trajectoryID, fetchLimit)
+	objs, err := s.ogListAllByMetadata(ctx, ogKindRun, "trajectory_id", trajectoryID)
 	if err != nil {
 		return nil, err
 	}
-	excludeSet := make(map[string]bool, len(excludeRunIDs))
-	for _, id := range excludeRunIDs {
-		id = strings.TrimSpace(id)
-		if id != "" {
-			excludeSet[id] = true
-		}
+	resultCapacity := len(objs)
+	if limit > 0 && limit < resultCapacity {
+		resultCapacity = limit
 	}
-	runs := make([]types.RunRecord, 0, len(objs))
+	runs := make([]types.RunRecord, 0, resultCapacity)
 	for _, obj := range objs {
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
 		}
-		if rec.OwnerID != ownerID {
-			continue
-		}
-		if rec.TrajectoryID != trajectoryID {
-			continue
-		}
-		if rec.State != types.RunPending && rec.State != types.RunRunning && rec.State != types.RunBlocked {
-			continue
-		}
-		if excludeSet[rec.RunID] {
+		if rec.OwnerID != ownerID || rec.TrajectoryID != trajectoryID || !rec.State.Active() {
 			continue
 		}
 		runs = append(runs, rec)
-		if len(runs) >= limit {
+		if limit > 0 && len(runs) >= limit {
 			break
 		}
 	}

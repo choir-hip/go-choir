@@ -6,8 +6,8 @@ counts:
     go_files: 131
     production_files: 68
     test_files: 63
-    production_loc: 43041
-    test_loc: 50232
+    production_loc: 43034
+    test_loc: 50233
     exports: 945
     export_caller_edges: 296
     initial_unused_export_debt: 15
@@ -193,7 +193,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3678
+      loc: 3671
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -376,7 +376,7 @@ files:
       loc: 143
     - id: internal/runtime/trajectory_test.go [test]
       disposition: core
-      loc: 900
+      loc: 901
     - id: internal/runtime/universal_wire.go [production]
       disposition: wire
       loc: 30
@@ -2935,7 +2935,7 @@ compatibility_markers:
       disposition: delete
     - id: internal/runtime/runtime.go:102:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
-    - id: internal/runtime/runtime.go:1986:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1979:This is the legacy execution path used when no tool registry is configured
       disposition: delete
     - id: internal/runtime/tools_capsule.go:297:This preserves backward compatibility with existing callers.
       disposition: delete
@@ -3256,7 +3256,7 @@ store_calls:
       disposition: wire
     - id: internal/runtime/runtime.go:createSpawnedCoagentWorkItem:internal/store.method:Store.GetRun
       disposition: read
-    - id: internal/runtime/runtime.go:drainCancelledTrajectoryActivations:internal/store.method:Store.ListActiveRunsByTrajectoryExcluding
+    - id: internal/runtime/runtime.go:drainCancelledTrajectoryActivations:internal/store.method:Store.ListActiveRunsByTrajectory
       disposition: read
     - id: internal/runtime/runtime.go:emitEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle

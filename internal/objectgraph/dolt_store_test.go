@@ -58,14 +58,14 @@ func TestDoltStoreEnsureSchema(t *testing.T) {
 
 	// Verify tables exist by inserting and reading back.
 	obj := Object{
-		CanonicalID:  "obj:choir.agent:test-owner:key-test",
-		ObjectKind:   "choir.agent",
-		OwnerID:      "test-owner",
-		ContentHash:  "sha256:abc123",
-		Body:         []byte(`{"name":"test"}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    time.Now().UTC(),
-		UpdatedAt:    time.Now().UTC(),
+		CanonicalID: "obj:choir.agent:test-owner:key-test",
+		ObjectKind:  "choir.agent",
+		OwnerID:     "test-owner",
+		ContentHash: "sha256:abc123",
+		Body:        []byte(`{"name":"test"}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
 	}
 	if err := store.PutObject(ctx, obj); err != nil {
 		t.Fatalf("put object: %v", err)
@@ -98,14 +98,14 @@ func TestDoltStoreListObjects(t *testing.T) {
 	now := time.Now().UTC()
 	for i := range 5 {
 		obj := Object{
-			CanonicalID:  fmt.Sprintf("obj:choir.agent:owner%d:key-%d", i, i),
-			ObjectKind:   "choir.agent",
-			OwnerID:      "owner0",
-			ContentHash:  fmt.Sprintf("sha256:hash%d", i),
-			Body:         []byte(`{}`),
-			Metadata:     json.RawMessage(`{}`),
-			CreatedAt:    now.Add(time.Duration(i) * time.Second),
-			UpdatedAt:    now.Add(time.Duration(i) * time.Second),
+			CanonicalID: fmt.Sprintf("obj:choir.agent:owner%d:key-%d", i, i),
+			ObjectKind:  "choir.agent",
+			OwnerID:     "owner0",
+			ContentHash: fmt.Sprintf("sha256:hash%d", i),
+			Body:        []byte(`{}`),
+			Metadata:    json.RawMessage(`{}`),
+			CreatedAt:   now.Add(time.Duration(i) * time.Second),
+			UpdatedAt:   now.Add(time.Duration(i) * time.Second),
 		}
 		if err := store.PutObject(ctx, obj); err != nil {
 			t.Fatalf("put object %d: %v", i, err)
@@ -114,14 +114,14 @@ func TestDoltStoreListObjects(t *testing.T) {
 
 	// Add a different owner's object to verify filtering.
 	other := Object{
-		CanonicalID:  "obj:choir.agent:otherowner:key-other",
-		ObjectKind:   "choir.agent",
-		OwnerID:      "otherowner",
-		ContentHash:  "sha256:other",
-		Body:         []byte(`{}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CanonicalID: "obj:choir.agent:otherowner:key-other",
+		ObjectKind:  "choir.agent",
+		OwnerID:     "otherowner",
+		ContentHash: "sha256:other",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	if err := store.PutObject(ctx, other); err != nil {
 		t.Fatalf("put other object: %v", err)
@@ -142,6 +142,128 @@ func TestDoltStoreListObjects(t *testing.T) {
 	}
 }
 
+func TestDoltStoreListObjectsByMetadataPage(t *testing.T) {
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	ctx := context.Background()
+
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+
+	tiedTimestamp := time.Now().UTC()
+	objects := []Object{
+		{CanonicalID: "obj:choir.run:owner:key-01", ObjectKind: "choir.run", OwnerID: "owner", ContentHash: "sha256:01", Body: []byte(`{}`), Metadata: json.RawMessage(`{"trajectory_id":"target"}`), CreatedAt: tiedTimestamp, UpdatedAt: tiedTimestamp},
+		{CanonicalID: "obj:choir.run:owner:key-02", ObjectKind: "choir.run", OwnerID: "owner", ContentHash: "sha256:02", Body: []byte(`{}`), Metadata: json.RawMessage(`{"trajectory_id":"other"}`), CreatedAt: tiedTimestamp, UpdatedAt: tiedTimestamp},
+		{CanonicalID: "obj:choir.run:owner:key-03", ObjectKind: "choir.run", OwnerID: "owner", ContentHash: "sha256:03", Body: []byte(`{}`), Metadata: json.RawMessage(`{"trajectory_id":"target"}`), CreatedAt: tiedTimestamp, UpdatedAt: tiedTimestamp},
+		{CanonicalID: "obj:choir.agent:owner:key-04", ObjectKind: "choir.agent", OwnerID: "owner", ContentHash: "sha256:04", Body: []byte(`{}`), Metadata: json.RawMessage(`{"trajectory_id":"target"}`), CreatedAt: tiedTimestamp, UpdatedAt: tiedTimestamp},
+		{CanonicalID: "obj:choir.run:owner:key-05", ObjectKind: "choir.run", OwnerID: "owner", ContentHash: "sha256:05", Body: []byte(`{}`), Metadata: json.RawMessage(`{"trajectory_id":"target"}`), CreatedAt: tiedTimestamp, UpdatedAt: tiedTimestamp},
+		{CanonicalID: "obj:choir.run:owner:key-06", ObjectKind: "choir.run", OwnerID: "owner", ContentHash: "sha256:06", Body: []byte(`{}`), Metadata: json.RawMessage(`{"different_field":"target"}`), CreatedAt: tiedTimestamp, UpdatedAt: tiedTimestamp},
+		{CanonicalID: "obj:choir.run:owner:key-07", ObjectKind: "choir.run", OwnerID: "owner", ContentHash: "sha256:07", Body: []byte(`{}`), Metadata: json.RawMessage(`{"trajectory_id":"target"}`), CreatedAt: tiedTimestamp, UpdatedAt: tiedTimestamp},
+		{CanonicalID: "obj:choir.run:owner:key-09", ObjectKind: "choir.run", OwnerID: "owner", ContentHash: "sha256:09", Body: []byte(`{}`), Metadata: json.RawMessage(`{"trajectory_id":"target"}`), CreatedAt: tiedTimestamp, UpdatedAt: tiedTimestamp},
+	}
+	for _, obj := range objects {
+		if err := store.PutObject(ctx, obj); err != nil {
+			t.Fatalf("put object %s: %v", obj.CanonicalID, err)
+		}
+	}
+
+	var gotIDs []string
+	cursor := ""
+	for {
+		page, err := store.ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", cursor, 2)
+		if err != nil {
+			t.Fatalf("list page after %q: %v", cursor, err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		if len(page) > 2 {
+			t.Fatalf("page after %q exceeded limit: got %d objects", cursor, len(page))
+		}
+		for _, obj := range page {
+			if obj.CanonicalID <= cursor {
+				t.Fatalf("page after %q returned non-advancing ID %q", cursor, obj.CanonicalID)
+			}
+			gotIDs = append(gotIDs, obj.CanonicalID)
+		}
+		cursor = page[len(page)-1].CanonicalID
+	}
+
+	wantIDs := []string{
+		"obj:choir.run:owner:key-01",
+		"obj:choir.run:owner:key-03",
+		"obj:choir.run:owner:key-05",
+		"obj:choir.run:owner:key-07",
+		"obj:choir.run:owner:key-09",
+	}
+	if len(gotIDs) != len(wantIDs) {
+		t.Fatalf("paged IDs: got %v, want %v", gotIDs, wantIDs)
+	}
+	for i := range wantIDs {
+		if gotIDs[i] != wantIDs[i] {
+			t.Fatalf("paged IDs: got %v, want %v", gotIDs, wantIDs)
+		}
+	}
+
+	strictPage, err := store.ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", "obj:choir.run:owner:key-03", 2)
+	if err != nil {
+		t.Fatalf("list strict cursor page: %v", err)
+	}
+	if len(strictPage) != 2 {
+		t.Fatalf("strict cursor page: got %d objects, want 2", len(strictPage))
+	}
+	if strictPage[0].CanonicalID != "obj:choir.run:owner:key-05" || strictPage[1].CanonicalID != "obj:choir.run:owner:key-07" {
+		t.Fatalf("strict cursor page: got IDs %q and %q", strictPage[0].CanonicalID, strictPage[1].CanonicalID)
+	}
+
+	finalPage, err := store.ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", wantIDs[len(wantIDs)-1], 2)
+	if err != nil {
+		t.Fatalf("list final page: %v", err)
+	}
+	if len(finalPage) != 0 {
+		t.Fatalf("final page: got %d objects, want 0", len(finalPage))
+	}
+
+	defaultLimitPage, err := store.ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", "", 0)
+	if err != nil {
+		t.Fatalf("list page with normalized limit: %v", err)
+	}
+	if len(defaultLimitPage) != len(wantIDs) {
+		t.Fatalf("normalized limit page: got %d objects, want %d", len(defaultLimitPage), len(wantIDs))
+	}
+}
+
+func TestDoltStoreListObjectsByMetadataPageErrors(t *testing.T) {
+	ctx := context.Background()
+
+	var nilStore *DoltStore
+	_, err := nilStore.ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", "", 2)
+	if err == nil {
+		t.Fatal("nil receiver: expected error")
+	}
+	if got, want := err.Error(), "objectgraph dolt: nil store"; got != want {
+		t.Fatalf("nil receiver error: got %q, want %q", got, want)
+	}
+
+	_, err = NewDoltStore(nil).ListObjectsByMetadataPage(ctx, "choir.run", "$.trajectory_id", "target", "", 2)
+	if err == nil {
+		t.Fatal("nil database: expected error")
+	}
+	if got, want := err.Error(), "objectgraph dolt: nil store"; got != want {
+		t.Fatalf("nil database error: got %q, want %q", got, want)
+	}
+
+	db := openTestDoltDB(t)
+	store := NewDoltStore(db)
+	if err := store.EnsureSchema(ctx); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+	if _, err := store.ListObjectsByMetadataPage(ctx, "choir.run", "not-a-json-path", "target", "", 2); err == nil {
+		t.Fatal("invalid JSON path: expected error")
+	}
+}
+
 func TestDoltStorePutAndListEdges(t *testing.T) {
 	db := openTestDoltDB(t)
 	store := NewDoltStore(db)
@@ -153,24 +275,24 @@ func TestDoltStorePutAndListEdges(t *testing.T) {
 
 	now := time.Now().UTC()
 	fromObj := Object{
-		CanonicalID:  "obj:choir.run:owner1:key-run1",
-		ObjectKind:   "choir.run",
-		OwnerID:      "owner1",
-		ContentHash:  "sha256:run1",
-		Body:         []byte(`{}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CanonicalID: "obj:choir.run:owner1:key-run1",
+		ObjectKind:  "choir.run",
+		OwnerID:     "owner1",
+		ContentHash: "sha256:run1",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	toObj := Object{
-		CanonicalID:  "obj:choir.agent:owner1:key-agent1",
-		ObjectKind:   "choir.agent",
-		OwnerID:      "owner1",
-		ContentHash:  "sha256:agent1",
-		Body:         []byte(`{}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CanonicalID: "obj:choir.agent:owner1:key-agent1",
+		ObjectKind:  "choir.agent",
+		OwnerID:     "owner1",
+		ContentHash: "sha256:agent1",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	if err := store.PutObject(ctx, fromObj); err != nil {
 		t.Fatalf("put from object: %v", err)
@@ -222,24 +344,24 @@ func TestDoltStorePutBatch(t *testing.T) {
 
 	now := time.Now().UTC()
 	obj1 := Object{
-		CanonicalID:  "obj:choir.run:owner2:key-run2",
-		ObjectKind:   "choir.run",
-		OwnerID:      "owner2",
-		ContentHash:  "sha256:run2",
-		Body:         []byte(`{}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CanonicalID: "obj:choir.run:owner2:key-run2",
+		ObjectKind:  "choir.run",
+		OwnerID:     "owner2",
+		ContentHash: "sha256:run2",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	obj2 := Object{
-		CanonicalID:  "obj:choir.agent:owner2:key-agent2",
-		ObjectKind:   "choir.agent",
-		OwnerID:      "owner2",
-		ContentHash:  "sha256:agent2",
-		Body:         []byte(`{}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CanonicalID: "obj:choir.agent:owner2:key-agent2",
+		ObjectKind:  "choir.agent",
+		OwnerID:     "owner2",
+		ContentHash: "sha256:agent2",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	edgeID, _ := BuildEdgeID(obj1.CanonicalID, obj2.CanonicalID, "run_agent", json.RawMessage(`{}`))
 	edge := Edge{
@@ -297,34 +419,34 @@ func TestDoltStoreListEdgesByKind(t *testing.T) {
 
 	now := time.Now().UTC()
 	fromObj := Object{
-		CanonicalID:  "obj:choir.run:owner3:key-run3",
-		ObjectKind:   "choir.run",
-		OwnerID:      "owner3",
-		ContentHash:  "sha256:run3",
-		Body:         []byte(`{}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CanonicalID: "obj:choir.run:owner3:key-run3",
+		ObjectKind:  "choir.run",
+		OwnerID:     "owner3",
+		ContentHash: "sha256:run3",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	agentObj := Object{
-		CanonicalID:  "obj:choir.agent:owner3:key-agent3",
-		ObjectKind:   "choir.agent",
-		OwnerID:      "owner3",
-		ContentHash:  "sha256:agent3",
-		Body:         []byte(`{}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CanonicalID: "obj:choir.agent:owner3:key-agent3",
+		ObjectKind:  "choir.agent",
+		OwnerID:     "owner3",
+		ContentHash: "sha256:agent3",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	trajObj := Object{
-		CanonicalID:  "obj:choir.trajectory:owner3:key-traj3",
-		ObjectKind:   "choir.trajectory",
-		OwnerID:      "owner3",
-		ContentHash:  "sha256:traj3",
-		Body:         []byte(`{}`),
-		Metadata:     json.RawMessage(`{}`),
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		CanonicalID: "obj:choir.trajectory:owner3:key-traj3",
+		ObjectKind:  "choir.trajectory",
+		OwnerID:     "owner3",
+		ContentHash: "sha256:traj3",
+		Body:        []byte(`{}`),
+		Metadata:    json.RawMessage(`{}`),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 	for _, obj := range []Object{fromObj, agentObj, trajObj} {
 		if err := store.PutObject(ctx, obj); err != nil {

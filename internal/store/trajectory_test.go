@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -623,5 +624,214 @@ func TestListOpenWorkItemsByKindReturnsRecoveryMarkers(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].WorkItemID != orphan.WorkItemID {
 		t.Fatalf("recovery markers = %+v, want only orphan %s", got, orphan.WorkItemID)
+	}
+}
+
+func TestCancelTrajectoryAuthorityPagesAllOldOpenWorkItems(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	const itemCount = ogMetadataPageSize + 17
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: "traj-many-old-open",
+		OwnerID:      "user-alice",
+		Kind:         types.TrajectoryKindTask,
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	old := time.Now().UTC().Add(-30 * 24 * time.Hour)
+	itemIDs := make([]string, 0, itemCount)
+	for i := range itemCount {
+		itemID := fmt.Sprintf("old-open-%04d", i)
+		if _, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+			WorkItemID:   itemID,
+			OwnerID:      "user-alice",
+			TrajectoryID: "traj-many-old-open",
+			Objective:    fmt.Sprintf("old obligation %d", i),
+			CreatedAt:    old.Add(time.Duration(i) * time.Second),
+			UpdatedAt:    old.Add(time.Duration(i) * time.Second),
+		}); err != nil {
+			t.Fatalf("create old open work item %d: %v", i, err)
+		}
+		itemIDs = append(itemIDs, itemID)
+	}
+
+	if _, err := s.CancelTrajectoryAuthority(ctx, "user-alice", "traj-many-old-open"); err != nil {
+		t.Fatalf("cancel trajectory authority: %v", err)
+	}
+	for _, itemID := range itemIDs {
+		item, err := s.GetWorkItem(ctx, "user-alice", itemID)
+		if err != nil {
+			t.Fatalf("get work item %s: %v", itemID, err)
+		}
+		if item.Status != types.WorkItemCancelled {
+			t.Fatalf("work item %s status = %q, want cancelled", itemID, item.Status)
+		}
+	}
+}
+
+func TestListOpenWorkItemsByKindPagesAllOldRecoveryMarkers(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	const markerCount = ogMetadataPageSize + 17
+	old := time.Now().UTC().Add(-30 * 24 * time.Hour)
+	for i := range markerCount {
+		if _, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+			WorkItemID:   fmt.Sprintf("old-recovery-%04d", i),
+			OwnerID:      "user-alice",
+			TrajectoryID: "missing-recovery-trajectory",
+			Objective:    fmt.Sprintf("recover old marker %d", i),
+			Details:      map[string]any{"kind": "wire_publication"},
+			CreatedAt:    old.Add(time.Duration(i) * time.Second),
+			UpdatedAt:    old.Add(time.Duration(i) * time.Second),
+		}); err != nil {
+			t.Fatalf("create old recovery marker %d: %v", i, err)
+		}
+	}
+	for i := range 17 {
+		if _, err := s.CreateWorkItem(ctx, types.WorkItemRecord{
+			WorkItemID:   fmt.Sprintf("other-recovery-%04d", i),
+			OwnerID:      "user-alice",
+			TrajectoryID: "missing-recovery-trajectory",
+			Objective:    fmt.Sprintf("other recovery marker %d", i),
+			Details:      map[string]any{"kind": "other"},
+		}); err != nil {
+			t.Fatalf("create other recovery marker %d: %v", i, err)
+		}
+	}
+
+	got, err := s.ListOpenWorkItemsByKind(ctx, "wire_publication", 0)
+	if err != nil {
+		t.Fatalf("list old recovery markers: %v", err)
+	}
+	if len(got) != markerCount {
+		t.Fatalf("recovery markers = %d, want %d", len(got), markerCount)
+	}
+	for _, item := range got {
+		if kind, _ := item.Details["kind"].(string); kind != "wire_publication" {
+			t.Fatalf("recovery marker %s kind = %q, want wire_publication", item.WorkItemID, kind)
+		}
+	}
+}
+
+func TestCreateRunRejectsActiveAdmissionToTerminalTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for _, trajectoryStatus := range []types.TrajectoryStatus{types.TrajectorySettled, types.TrajectoryCancelled} {
+		trajectoryID := "traj-" + string(trajectoryStatus)
+		if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+			TrajectoryID: trajectoryID,
+			OwnerID:      "user-alice",
+			Kind:         types.TrajectoryKindTask,
+		}); err != nil {
+			t.Fatalf("create %s trajectory: %v", trajectoryStatus, err)
+		}
+		if _, err := s.UpdateTrajectoryStatus(ctx, "user-alice", trajectoryID, trajectoryStatus); err != nil {
+			t.Fatalf("make trajectory %s: %v", trajectoryStatus, err)
+		}
+		for _, runState := range []types.RunState{types.RunPending, types.RunRunning, types.RunBlocked} {
+			runID := fmt.Sprintf("rejected-%s-%s", trajectoryStatus, runState)
+			err := s.CreateRun(ctx, types.RunRecord{
+				RunID:        runID,
+				OwnerID:      "user-alice",
+				TrajectoryID: trajectoryID,
+				State:        runState,
+			})
+			if !errors.Is(err, ErrConcurrentStateChange) {
+				t.Fatalf("create %s run on %s trajectory error = %v, want ErrConcurrentStateChange", runState, trajectoryStatus, err)
+			}
+			if _, err := s.GetRun(ctx, runID); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("rejected run %s persisted: %v", runID, err)
+			}
+		}
+	}
+}
+
+func TestCreateRunAllowsHistoricalAndMissingTrajectoryAuthority(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+		TrajectoryID: "traj-terminal-history",
+		OwnerID:      "user-alice",
+		Kind:         types.TrajectoryKindTask,
+	}); err != nil {
+		t.Fatalf("create trajectory: %v", err)
+	}
+	if _, err := s.UpdateTrajectoryStatus(ctx, "user-alice", "traj-terminal-history", types.TrajectorySettled); err != nil {
+		t.Fatalf("settle trajectory: %v", err)
+	}
+
+	allowed := []types.RunRecord{
+		{RunID: "historical-completed", OwnerID: "user-alice", TrajectoryID: "traj-terminal-history", State: types.RunCompleted},
+		{RunID: "historical-failed", OwnerID: "user-alice", TrajectoryID: "traj-terminal-history", State: types.RunFailed},
+		{RunID: "historical-cancelled", OwnerID: "user-alice", TrajectoryID: "traj-terminal-history", State: types.RunCancelled},
+		{RunID: "active-without-trajectory", OwnerID: "user-alice", State: types.RunPending},
+		{RunID: "active-with-missing-trajectory", OwnerID: "user-alice", TrajectoryID: "traj-missing", State: types.RunRunning},
+		{RunID: "active-other-owner", OwnerID: "user-bob", TrajectoryID: "traj-terminal-history", State: types.RunBlocked},
+	}
+	for _, rec := range allowed {
+		if err := s.CreateRun(ctx, rec); err != nil {
+			t.Fatalf("create allowed run %s: %v", rec.RunID, err)
+		}
+		if _, err := s.GetRun(ctx, rec.RunID); err != nil {
+			t.Fatalf("get allowed run %s: %v", rec.RunID, err)
+		}
+	}
+}
+
+func TestListActiveRunsByTrajectoryExhaustsPagesBeforeResultLimit(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	const activeCount = ogMetadataPageSize + 17
+	states := []types.RunState{types.RunPending, types.RunRunning, types.RunBlocked}
+	for i := range activeCount {
+		if err := s.CreateRun(ctx, types.RunRecord{
+			RunID:        fmt.Sprintf("active-trajectory-run-%04d", i),
+			OwnerID:      "user-alice",
+			TrajectoryID: "traj-many-active",
+			State:        states[i%len(states)],
+		}); err != nil {
+			t.Fatalf("create active run %d: %v", i, err)
+		}
+	}
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID:        "terminal-trajectory-run",
+		OwnerID:      "user-alice",
+		TrajectoryID: "traj-many-active",
+		State:        types.RunCompleted,
+	}); err != nil {
+		t.Fatalf("create terminal run: %v", err)
+	}
+	if err := s.CreateRun(ctx, types.RunRecord{
+		RunID:        "other-owner-trajectory-run",
+		OwnerID:      "user-bob",
+		TrajectoryID: "traj-many-active",
+		State:        types.RunPending,
+	}); err != nil {
+		t.Fatalf("create other-owner run: %v", err)
+	}
+
+	all, err := s.ListActiveRunsByTrajectory(ctx, "user-alice", "traj-many-active", 0)
+	if err != nil {
+		t.Fatalf("list every active trajectory run: %v", err)
+	}
+	if len(all) != activeCount {
+		t.Fatalf("active trajectory runs = %d, want %d", len(all), activeCount)
+	}
+	limited, err := s.ListActiveRunsByTrajectory(ctx, "user-alice", "traj-many-active", 7)
+	if err != nil {
+		t.Fatalf("list limited active trajectory runs: %v", err)
+	}
+	if len(limited) != 7 {
+		t.Fatalf("limited active trajectory runs = %d, want 7", len(limited))
+	}
+	for _, rec := range limited {
+		if rec.OwnerID != "user-alice" || !rec.State.Active() {
+			t.Fatalf("limited result contains ineligible run: %+v", rec)
+		}
 	}
 }

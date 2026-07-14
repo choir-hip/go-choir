@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // SchemaDDL creates the og_objects and og_edges tables if they do not
@@ -307,6 +308,37 @@ func (s *DoltStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, v
 		kind, jsonPath, value, NormalizedLimit(limit))
 	if err != nil {
 		return nil, fmt.Errorf("objectgraph dolt: list by metadata: %w", err)
+	}
+	defer rows.Close()
+	var out []Object
+	for rows.Next() {
+		obj, err := scanDoltObject(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
+// ListObjectsByMetadataPage finds objects by kind + a metadata JSON path
+// equality check, continuing strictly after afterCanonicalID in canonical ID
+// order.
+func (s *DoltStore) ListObjectsByMetadataPage(ctx context.Context, kind, jsonPath, value, afterCanonicalID string, limit int) ([]Object, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	if !strings.HasPrefix(jsonPath, "$.") {
+		return nil, fmt.Errorf("objectgraph dolt: invalid metadata JSON path %q", jsonPath)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE object_kind = ? AND JSON_UNQUOTE(JSON_EXTRACT(CAST(metadata AS JSON), ?)) = ? AND canonical_id > ?
+		 ORDER BY canonical_id ASC LIMIT ?`,
+		kind, jsonPath, value, afterCanonicalID, NormalizedLimit(limit))
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: list by metadata page: %w", err)
 	}
 	defer rows.Close()
 	var out []Object

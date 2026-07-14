@@ -1215,25 +1215,18 @@ func (rt *Runtime) drainCancelledTrajectoryActivations(ctx context.Context, owne
 	defer cancel()
 
 	cancelled := []string{}
-	excluded := []string{}
-	for {
-		active, err := rt.store.ListActiveRunsByTrajectoryExcluding(drainCtx, ownerID, trajectoryID, excluded, 200)
-		if err != nil {
-			return cancelled, fmt.Errorf("list active trajectory activations: %w", err)
-		}
-		if len(active) == 0 {
-			break
-		}
-		for _, run := range active {
-			excluded = append(excluded, run.RunID)
-			if err := rt.CancelRun(drainCtx, run.RunID, ownerID); err != nil {
-				if strings.Contains(err.Error(), "cannot cancel run in") {
-					continue
-				}
-				return cancelled, err
+	active, err := rt.store.ListActiveRunsByTrajectory(drainCtx, ownerID, trajectoryID, 0)
+	if err != nil {
+		return cancelled, fmt.Errorf("list active trajectory activations: %w", err)
+	}
+	for _, run := range active {
+		if err := rt.CancelRun(drainCtx, run.RunID, ownerID); err != nil {
+			if strings.Contains(err.Error(), "cannot cancel run in") {
+				continue
 			}
-			cancelled = append(cancelled, run.RunID)
+			return cancelled, err
 		}
+		cancelled = append(cancelled, run.RunID)
 	}
 	return cancelled, nil
 }

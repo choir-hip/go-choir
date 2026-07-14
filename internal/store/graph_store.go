@@ -119,6 +119,39 @@ func (s *Store) ogGetByKey(ctx context.Context, kind objectgraph.ObjectKind, met
 	return store.GetObjectByMetadata(ctx, string(kind), "$."+metadataField, value)
 }
 
+const ogMetadataPageSize = 256
+
+// ogListAllByMetadata exhausts the canonical-ID keyset for one metadata
+// equality query. Callers must apply any body-level filters only after every
+// page has been collected.
+func (s *Store) ogListAllByMetadata(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string) ([]objectgraph.Object, error) {
+	store := s.ogReadStore
+	if store == nil {
+		store = s.ogStore
+	}
+	if store == nil {
+		return nil, fmt.Errorf("store: object graph not initialized")
+	}
+
+	var objects []objectgraph.Object
+	afterCanonicalID := ""
+	for {
+		page, err := store.ListObjectsByMetadataPage(ctx, string(kind), "$."+metadataField, value, afterCanonicalID, ogMetadataPageSize)
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			return objects, nil
+		}
+		nextCursor := page[len(page)-1].CanonicalID
+		if nextCursor == "" || nextCursor <= afterCanonicalID {
+			return nil, fmt.Errorf("store: metadata page did not advance canonical ID cursor")
+		}
+		objects = append(objects, page...)
+		afterCanonicalID = nextCursor
+	}
+}
+
 // ogListByMetadata lists objects by kind + a metadata field equality
 // check, with an optional owner filter.
 func (s *Store) ogListByMetadata(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string, limit int) ([]objectgraph.Object, error) {
@@ -740,11 +773,7 @@ func (s *Store) GetWorkItemOG(ctx context.Context, ownerID, workItemID string) (
 
 // ListWorkItemsByTrajectoryOG lists work items for a trajectory.
 func (s *Store) ListWorkItemsByTrajectoryOG(ctx context.Context, ownerID, trajectoryID string, openOnly bool) ([]types.WorkItemRecord, error) {
-	// Fetch a large window since ogListByMetadata orders by updated_at
-	// DESC and we need all matching records to filter by owner/open
-	// status. Using a small limit can miss older work items that are
-	// still open.
-	objs, err := s.ogListByMetadata(ctx, ogKindWorkItem, "trajectory_id", trajectoryID, 100000)
+	objs, err := s.ogListAllByMetadata(ctx, ogKindWorkItem, "trajectory_id", trajectoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -839,7 +868,7 @@ func (s *Store) cancelTrajectoryAuthorityOG(ctx context.Context, ownerID, trajec
 		return trajectory, fmt.Errorf("cancel trajectory authority: %w", ErrConcurrentStateChange)
 	}
 
-	objs, err := s.ogListByMetadata(ctx, ogKindWorkItem, "trajectory_id", trajectoryID, 100000)
+	objs, err := s.ogListAllByMetadata(ctx, ogKindWorkItem, "trajectory_id", trajectoryID)
 	if err != nil {
 		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory authority: list work items: %w", err)
 	}
@@ -879,10 +908,7 @@ func (s *Store) cancelTrajectoryAuthorityOG(ctx context.Context, ownerID, trajec
 }
 
 func (s *Store) ListOpenWorkItemsByKindOG(ctx context.Context, kind string, limit int) ([]types.WorkItemRecord, error) {
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:  ogKindWorkItem,
-		Limit: 100000,
-	})
+	objs, err := s.ogListAllByMetadata(ctx, ogKindWorkItem, "status", string(types.WorkItemOpen))
 	if err != nil {
 		return nil, fmt.Errorf("list open work items by kind: %w", err)
 	}

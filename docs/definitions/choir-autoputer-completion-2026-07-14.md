@@ -159,14 +159,14 @@ now:
     heresy_delta:
       discovered: "A publication side effect can open a durable work item, fail, and return without a terminal state; the document cancel route refuses to act once its pending mutation is gone."
       introduced: none
-      repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; the exact 1345-citer baseline passes."
+      repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; trajectory cancellation and terminal admission now share one authority lock; work-item, active-run, and boot-recovery reads exhaust canonical-ID keyset pages instead of trusting fixed prefixes."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: rereview_repair_required
+    state: verified_cardinality_repair_local
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
-    digest: frozen_commit:1bd90936c69f7ed599c367fc9ff57ae9eb77e5d7; repair_delta_sha256:a97de92176571bba3108a5ece243e8ad92a6f79ed5eafbc3f8ec0d540c349ae0
+    digest: frozen_commit:1bd90936c69f7ed599c367fc9ff57ae9eb77e5d7; atomic_repair_commit:c7827b3e; cardinality_repair_delta_sha256:81bff98917fb349766a2bc6b84da35aa75e2d9cdcf0bbfd846e82470147432f1
     scope: [trajectory_cancellation_authority, wire_publication_failure_terminalization, owner_trajectory_cancel_api]
   decision:
     selected: "Extract the trajectory/work-item state transition behind existing run-based cancellation into one shared authority. Explicit owner cancellation also stops active runs; in-process publication failure uses the same authority transition without cancelling its currently executing activation. Expose owner-scoped POST cancellation and a Choir CLI command."
@@ -192,11 +192,14 @@ now:
     - "repair-cli-ratchet:PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
     - "atomic-repair-review:REPAIR; fixed-prefix work-item, activation, and boot-marker scans can report success while older authority remains"
     - "owner-path-repair-review:REPAIR; CreateRun admission can race terminalization and the 5000-run window can strand older activations; path/auth/status findings accepted"
+    - "cardinality-repair:objectgraph and full store packages PASS; >page work-item cancellation, boot-marker recovery, terminal CreateRun admission, and exhaustive active-run contracts"
+    - "cardinality-runtime:280/280 shard tests PASS including 205-run activation drain and legacy settled-activation compatibility"
+    - "cardinality-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "Re-review accepted the path, owner, status, transaction, detached-context, and boot-order repairs but found four remaining substrate gaps: active run creation is outside terminal admission; cancellation scans only a fixed work-item prefix; activation drain scans only the newest run prefix; and boot recovery scans only a fixed global marker prefix."
-  next_action: "Commit this re-review checkpoint before repair. Then add keyset-paged ObjectGraph metadata reads, exhaust every matching claim and marker, serialize active CreateRun admission with trajectory terminal state, replace caller-side exclusion draining with one exhaustive active-run snapshot, and add cardinality/race contracts."
+  blocker_or_risk: "The four fixed-prefix/admission blockers are repaired and locally verified. The candidate remains red and unaccepted until a frozen-commit independent review, push, CI, staging identity, and authenticated deployed cancellation proof succeed."
+  next_action: "Commit the cardinality repair, independently review the frozen candidate against both prior repair reports, then push and execute the landing loop only if reviewers return ACCEPT."
 
 receipts:
   - id: predecessor-B0-authority

@@ -530,8 +530,9 @@ func TestCancelTrajectoryReturnsSettledTruthWithoutCancellingActivations(t *test
 	if _, err := s.UpdateTrajectoryStatus(ctx, ownerID, trajectoryID, types.TrajectorySettled); err != nil {
 		t.Fatalf("settle trajectory: %v", err)
 	}
+	// Seed a legacy activation that predates terminal-trajectory admission guards.
 	now := time.Now().UTC()
-	if err := s.CreateRun(ctx, types.RunRecord{
+	if err := s.CreateRunOG(ctx, types.RunRecord{
 		RunID:        runID,
 		AgentID:      "agent-settled-cancel-truth",
 		AgentProfile: agentprofile.CoSuper,
