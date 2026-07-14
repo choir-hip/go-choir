@@ -333,6 +333,9 @@ func run(manifestPath, graphPath, assertionPath, actor, writeAttempt string) (re
 		if reachable[info.Path] {
 			continue
 		}
+		if isExpectedUnreachableHistoricalEvidence(info) {
+			continue
+		}
 		switch {
 		case info.IsEvidence:
 			warnings = append(warnings, warning{Rule: "R3", Severity: "info", Path: info.Path, Message: "evidence doc is not reachable from current entry roots"})
@@ -478,6 +481,8 @@ func classifyDoc(path string, md manifestDoc, manifested, exists bool) docInfo {
 func inferClassification(path string) (string, bool) {
 	base := filepath.Base(path)
 	switch {
+	case isHistoricalArchive(path):
+		return "historical", true
 	case strings.HasPrefix(path, "docs/mission-") && strings.HasSuffix(path, ".ledger.md"):
 		return "historical", true
 	case strings.HasPrefix(path, "docs/mission-"):
@@ -489,6 +494,17 @@ func inferClassification(path string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func isHistoricalArchive(path string) bool {
+	return strings.HasPrefix(cleanPath(path), "docs/archive/")
+}
+
+// Archive documents are deliberately searchable historical evidence, not part
+// of the current entry graph. Reporting one unreachable-document warning per
+// archive file would obscure live documentation drift without adding signal.
+func isExpectedUnreachableHistoricalEvidence(info *docInfo) bool {
+	return info.IsEvidence && isHistoricalArchive(info.Path)
 }
 
 func normalizeRootKinds(v interface{}) []string {

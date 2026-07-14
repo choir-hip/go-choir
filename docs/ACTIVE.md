@@ -40,8 +40,9 @@ are historical evidence, not `/goal` entrypoints.
 
 [`definitions/documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md)
 is **complete**. It remains in the retained packet as the deletion receipt and
-maintenance boundary; it is not active work and cannot revise the product
-umbrella's semantics.
+maintenance boundary; its 2026-07-14 owner correction restores
+[`archive/`](archive/README.md) as searchable historical context without making
+it active work or revising the product umbrella's semantics.
 
 ## Next Executable Work
 

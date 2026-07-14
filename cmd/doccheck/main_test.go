@@ -177,6 +177,19 @@ func TestClassifyHeresyContext(t *testing.T) {
 	}
 }
 
+func TestInferClassificationTreatsArchiveAsHistoricalEvidence(t *testing.T) {
+	scope, evidence := inferClassification("docs/archive/north-star.md")
+	if scope != "historical" || !evidence {
+		t.Fatalf("inferClassification(archive) = (%q, %v), want (historical, true)", scope, evidence)
+	}
+	if !isExpectedUnreachableHistoricalEvidence(&docInfo{Path: "docs/archive/north-star.md", IsEvidence: true}) {
+		t.Fatal("historical archive evidence should not require current-entry reachability")
+	}
+	if isExpectedUnreachableHistoricalEvidence(&docInfo{Path: "docs/current.md", IsEvidence: true}) {
+		t.Fatal("non-archive evidence should retain its reachability diagnostic")
+	}
+}
+
 func TestTextureRetiredNameAllowlist(t *testing.T) {
 	retiredName := "v" + "text"
 	retiredDisplay := "V" + "Text"
