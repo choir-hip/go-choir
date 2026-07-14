@@ -141,9 +141,9 @@ now:
   slice: "land and accept model and research owner cutover"
   question: "Does the direct modelpolicy/researchtools owner cutover preserve all model-selection, verification, source/search/content tool, and researcher checkpoint contracts without Runtime wrappers?"
   reconciliation:
-    observed_at: 2026-07-14T18:35:40Z
-    source_ref: refs/heads/autoputer-definition-v2@1f6ca33e
-    deploy_identity: "Predecessor 0f905ffcfeba3db85f0958382d9beb68f013a498 is deployed; final repaired candidate is local and not pushed."
+    observed_at: 2026-07-14T18:38:48Z
+    source_ref: refs/heads/autoputer-definition-v2@28a20326
+    deploy_identity: "Predecessor 0f905ffcfeba3db85f0958382d9beb68f013a498 is deployed; independently accepted candidate 28a20326 is local and not pushed."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,7 +151,7 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: final_review_repairs_local_pass_ready_for_rereview
+    status: accepted_local_ready_to_land
     protected_surfaces: [model_policy, provider_routing, verifier_calls, researcher_tools, search_gateway, source_artifacts, content_service, evidence_state, user_isolation, texture_authority]
     admissible_evidence: "Exact caller/provider/store/tool map; policy parsing/cache/overlay and model verification contracts; research tool schemas/results/content/source behavior; direct registry composition; no runtime wrappers; modelpolicy/researchtools tests; all four runtime shards; owner composition packages; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed model-policy/research acceptance."
     rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
@@ -162,8 +162,8 @@ now:
       repaired: "Modelpolicy fixture synchronization is accepted by independent re-review. The three negative Texture contracts now send hostile author_kind/author_label values through raw map bodies while production textureCreateRevisionRequest remains authority-free; each proves the server persists authenticated-user authorship. Focused comprehensive authority/model/research contracts and comprehensive compile pass; ratchet remains exact at test_loc 46495 and citer count 1347."
   candidate:
     id: R1-model-research-owner-cutover-15
-    state: final_review_repairs_local_pass_ready_for_rereview
-    ref: refs/heads/autoputer-definition-v2@1f6ca33e
+    state: accepted_local_ready_to_land
+    ref: refs/heads/autoputer-definition-v2@28a20326
     owner: orchestrator
     base: refs/remotes/origin/main@0f905ffcfeba3db85f0958382d9beb68f013a498
     digest: "Create internal/modelpolicy Manager as sole policy file/default/parser/overlay/cache/metadata owner and move model verification tool construction beside it. Create internal/researchtools as sole generic research tool registration/implementation owner with explicit Store/content/search/source/HTTP dependencies. Runtime composes and calls these owners directly; delete model_policy.go, tools_model_verify.go, and tools_research.go after every caller migrates. Retain prompts.go, tools_researcher.go, and researcher_checkpoint_fallback.go for later core/Texture settlement cutovers; do not add callbacks or wrappers."
@@ -173,8 +173,8 @@ now:
     - "research-map: internal/runtime/tools_research.go nine tools; direct dependencies content Service, Store, search.Client, source client, HTTP; registration in tool_profiles.go"
     - "replacement-check: internal/modelcatalog is static capability metadata only; promptstore already owns prompt persistence; search/source/content own substrates; no model-policy or research-tool owner package exists"
     - "deferred-settlement: tools_researcher.go and researcher_checkpoint_fallback.go retain lifecycle/evidence/channel/Texture wake authority for later cutover"
-  blocker_or_risk: "No local blocker. Both rounds of reviewer findings are repaired without changing production owner semantics or restoring client-controlled Texture authority. Remaining gates are final frozen re-review, canonical CI/deploy identity, and authenticated staging model-policy/research acceptance."
-  next_action: "Commit the negative-authority repair, obtain final frozen re-review, then push origin/main and execute CI/deploy/staging model-policy and researcher product-path acceptance."
+  blocker_or_risk: "No local blocker. Final independent review accepts both modelpolicy fixture synchronization and the repaired hostile-authorship ratchet; production owner semantics and Texture authority remain unchanged. Remaining gates are canonical CI/deploy identity and authenticated staging model-policy/research acceptance."
+  next_action: "Commit this acceptance receipt, push the coherent candidate to origin/main, monitor CI/deploy identity, then execute authenticated staging model-policy and researcher product-path acceptance."
 
 receipts:
   - id: predecessor-B0-authority
@@ -283,6 +283,13 @@ receipts:
     proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29353600501", "deploy-job:87156686176", "activation-receipt:474b9b70214ba6c063e6e3231430ce75474e014c@2026-07-14T17:31:15Z", "content-owner-tests:PASS", "media-owner-tests:PASS", "runtime-shard-1/4:PASS", "runtime-ratchet:PASS", "content-media-transition-review:ACCEPT", "content-media-authority-review:ACCEPT", "staging-content-import:HTTP-201:0b807e44-8b7a-4ce7-846a-0b7c046e1e65", "staging-content-list-get:HTTP-200", "staging-media-progress-put-get:HTTP-200", "staging-media-recents-put-get:HTTP-200"]
     rollback_ref: b3d8205fe3047ccbde392abbaed681a2e60dbee1
     disposition: complete
+
+  - id: R1-model-research-owner-cutover-15
+    boundary: implement
+    commit_or_artifact: 28a20326
+    proof_refs: ["modelpolicy-tests:PASS", "researchtools-tests:PASS", "runtime-shard-1/4:PASS", "runtime-shard-2/4:PASS", "runtime-shard-3/4:PASS", "runtime-shard-4/4:PASS", "runtime-ratchet:PASS", "model-research-authority-review:ACCEPT", "model-research-behavior-review:ACCEPT", "owner-contract-repair-review:ACCEPT", "final-owner-authority-review:ACCEPT"]
+    rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
+    disposition: accepted_local_ready_to_land
 
 view:
   path: none
