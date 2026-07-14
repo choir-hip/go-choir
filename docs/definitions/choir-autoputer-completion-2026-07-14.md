@@ -138,10 +138,10 @@ measures:
 
 now:
   status: blocked_ci
-  slice: "repair the stale integration-tagged Texture API owner after canonical CI exposed it"
-  question: "Will the comprehensive/integration Texture real-LLM contract compile against textureowner without reintroducing an agentcore API facade?"
+  slice: "repair stale integration-tagged Texture API ownership after canonical CI exposed the substrate"
+  question: "Will both integration/comprehensive Texture contracts compile against textureowner without reintroducing agentcore API or verification facades?"
   reconciliation:
-    observed_at: 2026-07-14T23:46:41Z
+    observed_at: 2026-07-14T23:51:07Z
     source_ref: commit:e278b8022e872ea26d503b9c7430e5dad66fae48
     deploy_identity: not_deployed_ci_blocked
     authority_identities:
@@ -155,11 +155,11 @@ now:
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact owner/caller map; focused production-order restart tests; exact delegation validation tests; exhaustive legal-Go ratchet fixtures; all four agentcore and Texture owner shards; frozen independent review; CI, staging identity, and deployed product-path acceptance."
     rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    conjecture_delta: "Canonical CI exercised the integration-tagged smoke path omitted by the local non-tagged build. The production owner cutover is intact; one integration-only real-LLM contract still compiles inside agentcore and calls deleted Texture API methods/types. The correct repair is to move the contract to textureowner and compose exported agentcore runtime capability, not restore a facade."
+    conjecture_delta: "Canonical CI exposed one stale real-LLM owner; reproducing the tagged compile after moving it exposed a second stale live-workflow owner hidden behind the same tags. Both are symptoms of the integration-test ownership substrate: production Texture API and workflow verification moved, but tagged tests were not moved with them. The repair must move both contracts to textureowner and delete, not recreate, agentcore facades."
     heresy_delta:
-      discovered: "CI run 29376823215 failed job 87231968694 because internal/agentcore/texture_real_llm_test.go still owns Texture HTTP tests and references deleted agentcore HandleTexture* methods and texture* response/request types."
-      introduced: "The stale integration-test ownership reached origin/main in e278b802; staging deployment was correctly blocked, so no product runtime regression was deployed."
-      repaired: "The eleven reviewed candidate findings remain repaired. The integration-tagged owner mismatch is documented but not yet repaired."
+      discovered: "CI run 29376823215 exposed internal/agentcore/texture_real_llm_test.go. The exact local tagged compile then exposed internal/agentcore/texture_live_llm_workflow_test.go references to deleted HandlePromptBar, Runtime.VerifyTextureWorkflow, and runtime.TextureWorkflowVerificationOptions."
+      introduced: "Both stale tagged-test owners reached origin/main in e278b802; staging deployment was correctly blocked, so no product runtime regression was deployed."
+      repaired: "The eleven reviewed candidate findings remain repaired. The real-LLM test has an uncommitted owner move; the live-workflow test is documented but not yet repaired."
   candidate:
     id: R1-texture-owner-cutover-16
     state: canonical_landed_ci_failed_integration_owner
@@ -180,8 +180,9 @@ now:
     - "alias-repair-proof: TestSpawnAgentRejectsInvalidExplicitProfile and full internal/coagentowner passed; runtime dissolution ratchet PASS with unchanged counts; git diff --check passed."
     - "independent-review:focused exact diff 6f63fdd7..7782227e accepted with confidence 0.99 and no blockers; explicit aliases/case/token variants reject before StartCoagentRun while fuzzy role and omitted-profile paths remain unchanged."
     - "ci-failure:https://github.com/choir-hip/go-choir/actions/runs/29376823215 job 87231968694; non-tagged agentcore/textureowner shard passed, then integration-tagged agentcore build failed on deleted HandleTextureCreateDocument, HandleTextureRevisions, HandleTextureAgentRevision, and unexported texture payload types; deploy job skipped."
-  blocker_or_risk: "Canonical CI is red and staging was not deployed. Production compiles and focused owner contracts pass, but the integration/comprehensive build contract is broken until the stale real-LLM test moves to textureowner or otherwise composes the new owner without a reverse dependency."
-  next_action: "Commit this CI problem receipt before repair code, move the integration-tagged Texture real-LLM contract to textureowner with direct owner composition, run the exact tagged smoke locally, then push and re-enter the CI/deploy loop."
+    - "local-reproduction: go test -tags=integration ./internal/agentcore ./internal/textureowner -run '^$' compiled the moved real-LLM test under textureowner, then failed agentcore/texture_live_llm_workflow_test.go on deleted HandlePromptBar, VerifyTextureWorkflow, and TextureWorkflowVerificationOptions."
+  blocker_or_risk: "Canonical CI is red and staging was not deployed. Two integration-tagged tests remain on the retired agentcore Texture surface; this is one ownership-substrate miss, not evidence that production facades should return."
+  next_action: "Commit this expanded problem receipt without staging the in-progress source move, map the live-workflow contract to textureowner APIs, complete both owner moves, and rerun the exact integration and comprehensive compile paths before pushing."
 
 receipts:
   - id: predecessor-B0-authority
