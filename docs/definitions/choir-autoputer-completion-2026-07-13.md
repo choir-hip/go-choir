@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T05:21:47Z
+  updated_at: 2026-07-14T05:24:41Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@d6014fa7
+  expected_parent_or_authority_ref: refs/heads/main@origin@c70f083e
   status: working
   current_subgoal: R1-toolregistry-facade-extinction-07
   active_phase: R1-runtime-dissolution
@@ -1149,6 +1149,7 @@ state_capsule:
       validation_notes:
         - Runtime baseline before this Define is go_files 132, production_files 69, test_files 63, production_loc 43047, test_loc 49769, exports 955, export_caller_edges 308, initial_unused_export_debt 15, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 333.
         - This Define mechanically raises documentation citers from 333 to exactly 391 while every source-category count remains unchanged. Implementation must rebaseline that reviewed documentation-only rise, then reduce runtime production files, production LOC, test LOC, and wrappers without increasing any other source category.
+        - Problem documented before scope correction: implementation preflight proved internal/toolregistry/toolregistry_test.go does not exist; the package's existing behavior test owner is internal/toolregistry/toolloop_test.go. The reviewed lock therefore names an impossible owner-test path and cannot execute until a separate authority commit replaces only that path and independently verifies the repaired scope.
       heresy_delta:
         discovered:
           - runtime declares a Tool alias plus schema, prompt-catalog, projection, and result-encoding facades over the existing toolregistry owner
