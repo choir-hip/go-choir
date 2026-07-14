@@ -1,8 +1,10 @@
 # Historical Corpus
 
 This directory holds historical designs, missions, reviews, and hypotheses
-restored by owner direction on 2026-07-14 from Git snapshot
-`2783a97a2221cae812f7eb46de840550a4a802d5`.
+restored by owner direction on 2026-07-14 from Git history. Most records come
+from snapshot `2783a97a2221cae812f7eb46de840550a4a802d5`; a separately deleted
+historical Vision record is preserved verbatim from its last pre-deletion
+revision (`99a995eb^`).
 
 It is intentionally visible and searchable. Its value is recall: an older idea
 may become useful again, may reveal a discarded alternative, or may supply a
