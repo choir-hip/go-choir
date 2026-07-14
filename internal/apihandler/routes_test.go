@@ -13,7 +13,7 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 	t.Parallel()
 
 	srv := server.NewServer("apihandler-routes-test", "0")
-	RegisterRoutes(srv, runtime.NewAPIHandler(nil), false)
+	RegisterRoutes(srv, runtime.NewAPIHandler(nil), NewHandler(nil), false)
 
 	for _, path := range []string{
 		"/health",
@@ -91,13 +91,13 @@ func TestRegisterRoutesGatesTestAPIs(t *testing.T) {
 		"/api/test/texture/worker-update",
 	} {
 		disabled := server.NewServer("apihandler-routes-test-disabled", "0")
-		RegisterRoutes(disabled, runtime.NewAPIHandler(nil), false)
+		RegisterRoutes(disabled, runtime.NewAPIHandler(nil), NewHandler(nil), false)
 		if registeredRouteResponds(disabled, path) {
 			t.Fatalf("test route %q registered while disabled", path)
 		}
 
 		enabled := server.NewServer("apihandler-routes-test-enabled", "0")
-		RegisterRoutes(enabled, runtime.NewAPIHandler(nil), true)
+		RegisterRoutes(enabled, runtime.NewAPIHandler(nil), NewHandler(nil), true)
 		if !registeredRouteResponds(enabled, path) {
 			t.Fatalf("test route %q not registered while enabled", path)
 		}

@@ -181,9 +181,10 @@ func Run() {
 		log.Printf("sandbox: tool profiles DISABLED via RUNTIME_DISABLE_TOOLS (stub-only mode)")
 	}
 
-	// Register runtime API routes (overrides default /health).
-	apiHandler := runtime.NewAPIHandler(rt.Runtime)
-	apihandler.RegisterRoutes(s, apiHandler, rtRuntimeCfg.EnableTestAPIs)
+	// Register canonical API routes (overrides default /health).
+	runtimeHandler := runtime.NewAPIHandler(rt.Runtime)
+	apiHandler := apihandler.NewHandler(rt.Runtime.Store())
+	apihandler.RegisterRoutes(s, runtimeHandler, apiHandler, rtRuntimeCfg.EnableTestAPIs)
 	if toolsEnabled {
 		superRegistry := rt.Runtime.ToolRegistryForProfile(agentprofile.Super)
 		if err := apihandler.RegisterProductAPIRequestTool(s, superRegistry); err != nil {

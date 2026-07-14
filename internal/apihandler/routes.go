@@ -8,14 +8,14 @@ import (
 // RegisterRoutes registers the canonical sandbox API route table.
 // The health handler overrides the default server health handler to report
 // runtime readiness.
-func RegisterRoutes(s *server.Server, h *runtime.APIHandler, enableTestAPIs bool) {
+func RegisterRoutes(s *server.Server, h *runtime.APIHandler, api *Handler, enableTestAPIs bool) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/api/prompt-bar", h.HandlePromptBar)
 	s.HandleFunc("/api/prompt-bar/submissions/", h.HandlePromptBarSubmission)
 	s.HandleFunc("/api/agent/loops", h.HandleRunList)
 	s.HandleFunc("/api/agent/cancel", h.HandleCancel)
 	s.HandleFunc("/api/model-policy/", h.HandleModelPolicyRouter)
-	s.HandleFunc("/api/costs", h.HandleCosts)
+	s.HandleFunc("/api/costs", api.HandleCosts)
 	s.HandleFunc("/api/podcast/subscriptions/refresh", h.HandlePodcastSubscriptionsRefresh)
 	s.HandleFunc("/api/podcast/subscriptions", h.HandlePodcastSubscriptions)
 	s.HandleFunc("/api/podcast/search", h.HandlePodcastSearch)

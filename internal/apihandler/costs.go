@@ -1,4 +1,4 @@
-package runtime
+package apihandler
 
 import (
 	"log"
@@ -32,7 +32,7 @@ type costsResponse struct {
 //   - to:    RFC3339 upper bound on event timestamp (inclusive)
 //   - detail: if "1" or "true", include per-call entries in the response
 //   - models: if "1" or "true", include the known pricing table
-func (h *APIHandler) HandleCosts(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleCosts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 		return
@@ -68,7 +68,7 @@ func (h *APIHandler) HandleCosts(w http.ResponseWriter, r *http.Request) {
 	includeModels := strings.TrimSpace(r.URL.Query().Get("models")) == "1" ||
 		strings.EqualFold(strings.TrimSpace(r.URL.Query().Get("models")), "true")
 
-	events, err := h.rt.Store().ListEventsByOwner(r.Context(), ownerID, limit)
+	events, err := h.store.ListEventsByOwner(r.Context(), ownerID, limit)
 	if err != nil {
 		log.Printf("runtime costs: list events by owner: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load cost data"})

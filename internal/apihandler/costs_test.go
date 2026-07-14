@@ -1,22 +1,24 @@
 //go:build comprehensive
 
-package runtime
+package apihandler
 
 import (
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/llmcost"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 func TestHandleCostsRequiresAuth(t *testing.T) {
 	t.Parallel()
-	_, handler := testAPISetup(t)
+	_, handler := testCostsSetup(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/costs", nil)
 	w := httptest.NewRecorder()
@@ -29,9 +31,9 @@ func TestHandleCostsRequiresAuth(t *testing.T) {
 
 func TestHandleCostsRejectsPost(t *testing.T) {
 	t.Parallel()
-	_, handler := testAPISetup(t)
+	_, handler := testCostsSetup(t)
 
-	req := authenticatedRequest(http.MethodPost, "/api/costs", "", "user-alice")
+	req := authenticatedCostsRequest(http.MethodPost, "/api/costs", "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandleCosts(w, req)
 
@@ -42,11 +44,11 @@ func TestHandleCostsRejectsPost(t *testing.T) {
 
 func TestHandleCostsReturnsEstimate(t *testing.T) {
 	t.Parallel()
-	rt, handler := testAPISetup(t)
+	s, handler := testCostsSetup(t)
 
-	seedCostEvents(t, rt, "user-alice")
+	seedCostEvents(t, s, "user-alice")
 
-	req := authenticatedRequest(http.MethodGet, "/api/costs", "", "user-alice")
+	req := authenticatedCostsRequest(http.MethodGet, "/api/costs", "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandleCosts(w, req)
 
@@ -86,11 +88,11 @@ func TestHandleCostsReturnsEstimate(t *testing.T) {
 
 func TestHandleCostsDetailIncludesEntries(t *testing.T) {
 	t.Parallel()
-	rt, handler := testAPISetup(t)
+	s, handler := testCostsSetup(t)
 
-	seedCostEvents(t, rt, "user-alice")
+	seedCostEvents(t, s, "user-alice")
 
-	req := authenticatedRequest(http.MethodGet, "/api/costs?detail=1", "", "user-alice")
+	req := authenticatedCostsRequest(http.MethodGet, "/api/costs?detail=1", "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandleCosts(w, req)
 
@@ -109,9 +111,9 @@ func TestHandleCostsDetailIncludesEntries(t *testing.T) {
 
 func TestHandleCostsModelsFlagIncludesPricing(t *testing.T) {
 	t.Parallel()
-	_, handler := testAPISetup(t)
+	_, handler := testCostsSetup(t)
 
-	req := authenticatedRequest(http.MethodGet, "/api/costs?models=1", "", "user-alice")
+	req := authenticatedCostsRequest(http.MethodGet, "/api/costs?models=1", "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandleCosts(w, req)
 
@@ -139,13 +141,13 @@ func TestHandleCostsModelsFlagIncludesPricing(t *testing.T) {
 
 func TestHandleCostsOwnerScoped(t *testing.T) {
 	t.Parallel()
-	rt, handler := testAPISetup(t)
+	s, handler := testCostsSetup(t)
 
 	// Seed events for alice.
-	seedCostEvents(t, rt, "user-alice")
+	seedCostEvents(t, s, "user-alice")
 
 	// Bob should see zero calls.
-	req := authenticatedRequest(http.MethodGet, "/api/costs", "", "user-bob")
+	req := authenticatedCostsRequest(http.MethodGet, "/api/costs", "user-bob")
 	w := httptest.NewRecorder()
 	handler.HandleCosts(w, req)
 
@@ -164,13 +166,13 @@ func TestHandleCostsOwnerScoped(t *testing.T) {
 
 func TestHandleCostsTimeWindowFilter(t *testing.T) {
 	t.Parallel()
-	rt, handler := testAPISetup(t)
+	s, handler := testCostsSetup(t)
 
-	seedCostEvents(t, rt, "user-alice")
+	seedCostEvents(t, s, "user-alice")
 
 	// Use a from bound in the future to exclude all events.
 	future := time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
-	req := authenticatedRequest(http.MethodGet, "/api/costs?from="+future, "", "user-alice")
+	req := authenticatedCostsRequest(http.MethodGet, "/api/costs?from="+future, "user-alice")
 	w := httptest.NewRecorder()
 	handler.HandleCosts(w, req)
 
@@ -187,9 +189,31 @@ func TestHandleCostsTimeWindowFilter(t *testing.T) {
 	}
 }
 
+func testCostsSetup(t *testing.T) (*store.Store, *Handler) {
+	t.Helper()
+	s, err := store.Open(filepath.Join(t.TempDir(), "costs.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Errorf("close store: %v", err)
+		}
+	})
+	return s, NewHandler(s)
+}
+
+func authenticatedCostsRequest(method, path, user string) *http.Request {
+	req := httptest.NewRequest(method, path, nil)
+	if user != "" {
+		req.Header.Set("X-Authenticated-User", user)
+	}
+	return req
+}
+
 // seedCostEvents appends two tool_loop progress events with token usage for
 // the given owner so the costs API has data to aggregate.
-func seedCostEvents(t *testing.T, rt *Runtime, ownerID string) {
+func seedCostEvents(t *testing.T, s *store.Store, ownerID string) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -238,13 +262,13 @@ func seedCostEvents(t *testing.T, rt *Runtime, ownerID string) {
 		},
 	}
 	for _, ev := range events {
-		if err := rt.Store().AppendEvent(ctx, &ev); err != nil {
+		if err := s.AppendEvent(ctx, &ev); err != nil {
 			t.Fatalf("append cost event: %v", err)
 		}
 	}
 }
 
-// Verify the llmcost package integrates with the runtime import graph.
+// Verify the llmcost package integrates with the canonical API handler import graph.
 func TestLLMCostPackageIntegration(t *testing.T) {
 	t.Parallel()
 	cost := llmcost.EstimateCall("gpt-4o", 1000, 500)

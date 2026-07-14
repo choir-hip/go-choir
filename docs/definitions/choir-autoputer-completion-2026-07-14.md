@@ -141,8 +141,8 @@ now:
   slice: "extract one cohesive API ownership boundary from internal/runtime"
   question: "Which API boundary can move with every caller to its canonical owner while deleting runtime ownership without changing product behavior or creating a second route authority?"
   reconciliation:
-    observed_at: 2026-07-14T12:32:00Z
-    source_ref: refs/heads/main@93af4b20bdd9a9d62c6d82a2b39db41480e6e685
+    observed_at: 2026-07-14T12:40:00Z
+    source_ref: refs/heads/main@5fd2fd24
     deploy_identity: "CI 29332283029; deploy job 87083822349; VM activation job 57518b1d-97b1-5d6b-bb63-276202e25485"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -154,35 +154,35 @@ now:
     status: reconciled
     protected_surfaces: [runtime_api_ownership, owner_product_api, route_authority]
     admissible_evidence: "Exact owner/caller map; focused behavior contracts; scoped runtime ratchet; green CI and staging deploy identity when behavior changes; independent review of frozen protected candidates."
-    rollback_ref: 93af4b20bdd9a9d62c6d82a2b39db41480e6e685
-    conjecture_delta: "A cohesive API-owned slice can leave internal/runtime only when its handler and every production caller move together to one canonical owner without changing route registration or behavior."
+    rollback_ref: 5fd2fd24
+    conjecture_delta: "The self-contained costs API can leave runtime when its store dependency is injected into the canonical apihandler owner and the route table points directly at that owner."
     heresy_delta:
-      discovered: none
+      discovered: "The canonical route package still imported runtime.APIHandler for every implementation, preserving the documented S3 package-cycle blocker even for a self-contained store-backed endpoint."
       introduced: none
-      repaired: none
+      repaired: "GET /api/costs now has one implementation owner in internal/apihandler, one direct route registration, and no runtime source or test copy."
   candidate:
     id: R1-api-owner-cutover-10
-    state: mapping
+    state: verified_local_pending_review
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
-    base: refs/heads/main@93af4b20bdd9a9d62c6d82a2b39db41480e6e685
-    digest: pending_exact_owner_caller_map
-    scope: [runtime_api_ownership, canonical_apihandler_owner, direct_callers]
+    base: refs/heads/main@5fd2fd24
+    digest: pending_frozen_commit
+    scope: [costs_api_handler, canonical_apihandler_owner, sandbox_store_injection, direct_route_registration]
   decision:
-    selected: pending_owner_caller_map
+    selected: "Move GET /api/costs and all eight focused contracts from internal/runtime to an injected store-backed internal/apihandler.Handler; register that method directly while leaving the remaining runtime handler surface unchanged."
     kind: operational
-    status: open
+    status: settled
     source: orchestrator
-    evidence_ref: pending
+    evidence_ref: "docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md; exact inventory and caller map; canonical route table; focused costs contracts"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T12:32:00Z
-    consequence: "Do not edit until one deletion-first boundary has a complete symbol/caller map, an existing canonical owner, focused behavior contracts, and an exact mechanically justified ratchet delta."
+    recorded_at: 2026-07-14T12:40:00Z
+    consequence: "The cutover deletes one production and one test file from runtime, adds no compatibility alias or callback seam, and establishes the canonical handler/store injection pattern for later cohesive API slices."
   evidence_refs:
-    - "prior-slice-ci:https://github.com/choir-hip/go-choir/actions/runs/29332283029"
-    - "prior-slice-deploy-job:87083822349"
-    - "prior-slice-authenticated-staging:trajectory a57593ae-3ab1-4dd6-b4d3-88f1d851ef31 cancelled with zero open work items"
-  blocker_or_risk: "No blocker. The exact API extraction boundary is not yet selected; broad package movement would risk route and authority drift."
-  next_action: "Map API-owned production files and callers against canonical internal/apihandler ownership, then choose one cohesive deletion-first cutover with focused behavior contracts and an exact ratchet delta."
+    - "focused-apihandler:go test -tags comprehensive ./internal/apihandler -run TestHandleCosts|TestLLMCostPackageIntegration|TestRegisterRoutes PASS"
+    - "sandbox-wiring:go test ./internal/sandbox PASS"
+    - "runtime-ratchet:PASS; 129 Go files, 67 production, 62 test, 42915 production LOC, 49998 test LOC, 936 exports, 294 caller edges, 441 classified store calls, 1347 citers"
+  blocker_or_risk: "Local focused behavior and structural gates pass. The candidate still needs a frozen commit and independent API-ownership review before landing."
+  next_action: "Freeze the coherent costs API cutover, obtain independent review of behavior parity and authority topology, then land only if accepted."
 
 receipts:
   - id: predecessor-B0-authority
