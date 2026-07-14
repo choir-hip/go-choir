@@ -69,7 +69,7 @@ func resolveResearcherFindingsTarget(ctx context.Context, rt *Runtime, explicitA
 func resolveCoagentFindingsTarget(ctx context.Context, rt *Runtime, explicitAgentID string) (string, string, error) {
 	runRec := toolregistry.ExecutionContextFrom(ctx).RunRecord
 
-	if runRec != nil && isTextureProfileValue(metadataStringValue(runRec.Metadata, "requested_by_profile")) {
+	if runRec != nil && agentprofile.IsTexture(metadataStringValue(runRec.Metadata, "requested_by_profile")) {
 		requesterAgentID := metadataStringValue(runRec.Metadata, "requested_by_agent_id")
 		if requesterAgentID != "" {
 			target, err := rt.store.GetAgent(ctx, requesterAgentID)

@@ -61,7 +61,7 @@ func promptSourceLabel(source string) string {
 	}
 }
 
-func rolePolicyFromSpec(spec AgentRoleSpec) rolePolicyResponse {
+func rolePolicyFromSpec(spec agentprofile.Policy) rolePolicyResponse {
 	return rolePolicyResponse{
 		Profile:                spec.Profile,
 		AllowedDelegateTargets: append([]string(nil), spec.AllowedDelegateTargets...),
@@ -131,7 +131,7 @@ func (h *APIHandler) promptResponse(ownerID string, prompt promptstore.Descripto
 	}
 	registry := h.rt.ToolRegistryForProfile(prompt.Role)
 	effective := buildSystemPromptWithTools(systemPrompt, registry)
-	rolePolicy := rolePolicyFromSpec(roleSpec(prompt.Role))
+	rolePolicy := rolePolicyFromSpec(agentprofile.PolicyFor(prompt.Role))
 	providerPolicy := providerPolicyForRuntime(h.rt.provider)
 	if !rolePolicy.AllowCoAgentTools {
 		providerPolicy.SupportsPerRunModelOverride = false

@@ -422,7 +422,7 @@ func (rt *Runtime) findExistingWorkerVMDelegation(ctx context.Context, runID str
 	if err != nil {
 		return "", false, fmt.Errorf("delegate_worker_vm dedupe scan: %w", err)
 	}
-	profile = canonicalAgentProfile(profile)
+	profile = agentprofile.Canonical(profile)
 	var candidate string
 	for _, ev := range eventsForRun {
 		if ev.Kind != types.EventToolResult {
@@ -443,7 +443,7 @@ func (rt *Runtime) findExistingWorkerVMDelegation(ctx context.Context, runID str
 		if !workerVMLeaseKeyFromDelegateOutput(output).Matches(key) {
 			continue
 		}
-		if outputProfile := canonicalAgentProfile(stringMapValue(output, "profile")); profile != "" && outputProfile != "" && outputProfile != profile {
+		if outputProfile := agentprofile.Canonical(stringMapValue(output, "profile")); profile != "" && outputProfile != "" && outputProfile != profile {
 			continue
 		}
 		if !delegateWorkerVMResultReusable(output) {
@@ -676,7 +676,7 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 		return "", fmt.Errorf("objective must not be empty")
 	}
 	delegatedObjective := objective
-	profile := canonicalAgentProfile(in.Profile)
+	profile := agentprofile.Canonical(in.Profile)
 	if profile == "" {
 		profile = agentprofile.VSuper
 	}
@@ -955,7 +955,7 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 				"worker_run_id":       workerRunID,
 				"app_change_packages": []map[string]any{},
 			}
-			if profile := canonicalAgentProfile(in.Profile); profile != "" {
+			if profile := agentprofile.Canonical(in.Profile); profile != "" {
 				result["profile"] = profile
 			}
 			if statusErr != nil {
@@ -1049,7 +1049,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 				"loop_id":             workerRunID,
 				"worker_run_id":       workerRunID,
 				"agent_id":            status.AgentID,
-				"profile":             firstNonEmpty(status.AgentProfile, canonicalAgentProfile(in.Profile)),
+				"profile":             firstNonEmpty(status.AgentProfile, agentprofile.Canonical(in.Profile)),
 				"state":               status.State,
 				"result":              status.Result,
 				"error":               status.Error,
@@ -1087,7 +1087,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			if evidenceErr != nil {
 				result["worker_event_error"] = evidenceErr.Error()
 			} else {
-				profile := firstNonEmpty(stringMapValue(result, "profile"), canonicalAgentProfile(in.Profile))
+				profile := firstNonEmpty(stringMapValue(result, "profile"), agentprofile.Canonical(in.Profile))
 				timeout := time.Duration(in.TimeoutSeconds) * time.Second
 				if timeout <= 0 {
 					timeout = defaultDelegateWorkerVMTimeout
@@ -1467,7 +1467,7 @@ func prepareRemoteWorkerRepoBootstrap(ctx context.Context, cwd, workerSandboxURL
 	if sameRuntimeWorkerURL(workerSandboxURL) {
 		return remoteWorkerRepoBootstrap{}, nil
 	}
-	profile = canonicalAgentProfile(profile)
+	profile = agentprofile.Canonical(profile)
 	if profile != agentprofile.VSuper && profile != agentprofile.CoSuper {
 		return remoteWorkerRepoBootstrap{}, nil
 	}
@@ -2131,7 +2131,7 @@ func vSuperDelegateIncomplete(evidence workerRunEvidence, packages []map[string]
 }
 
 func delegateRequiresAppChangePackage(profile, objective string) bool {
-	if canonicalAgentProfile(profile) != agentprofile.VSuper {
+	if agentprofile.Canonical(profile) != agentprofile.VSuper {
 		return false
 	}
 	objective = strings.ToLower(objective)

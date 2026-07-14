@@ -108,7 +108,7 @@ func delegateWorkerUpdateTarget(rec *types.RunRecord) (string, string, bool) {
 		return "", "", false
 	}
 	targetAgentID := metadataStringValue(rec.Metadata, "requested_by_agent_id")
-	if targetAgentID == "" && isTextureProfileValue(metadataStringValue(rec.Metadata, "requested_by_profile")) {
+	if targetAgentID == "" && agentprofile.IsTexture(metadataStringValue(rec.Metadata, "requested_by_profile")) {
 		targetAgentID = currentTextureAgentID(channelID)
 	}
 	if !isTextureAgentID(targetAgentID) {

@@ -489,7 +489,7 @@ func (rt *Runtime) findExistingSuperExecutionRequest(ctx context.Context, ownerI
 		if msg.ToAgentID == superAgentID &&
 			msg.FromRunID == requesterRunID &&
 			msg.FromAgentID == requesterAgentID &&
-			isTextureProfileValue(msg.Role) {
+			agentprofile.IsTexture(msg.Role) {
 			return msg, true, nil
 		}
 	}

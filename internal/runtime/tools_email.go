@@ -77,7 +77,7 @@ func newRequestEmailDraftTool(rt *Runtime) Tool {
 			"approval_mode":       map[string]any{"type": "string", "enum": []string{"owner_click", "owner_click_or_email_reply"}, "description": "How the owner may approve this exact draft version."},
 		}, []string{"doc_id", "revision_id", "to_addresses", "subject", "body_text"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			if canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile) != agentprofile.Texture {
+			if agentprofile.Canonical(toolregistry.ExecutionContextFrom(ctx).Profile) != agentprofile.Texture {
 				return "", fmt.Errorf("request_email_draft is only available to texture agents")
 			}
 			rec := toolregistry.ExecutionContextFrom(ctx).RunRecord

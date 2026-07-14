@@ -275,17 +275,17 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 
 func toolCallVSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 	var in struct {
-		Role string `json:"role"`
-		Profile string `json:"profile"`
-		Slot string `json:"slot"`
+		Role      string `json:"role"`
+		Profile   string `json:"profile"`
+		Slot      string `json:"slot"`
 		ChannelID string `json:"channel_id"`
 	}
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return "", false
 	}
-	profile := canonicalAgentProfile(in.Profile)
+	profile := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile = canonicalAgentProfile(in.Role)
+		profile = agentprofile.Canonical(in.Role)
 	}
 	if profile != agentprofile.CoSuper {
 		return "", false
@@ -299,17 +299,17 @@ func toolCallVSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 
 func toolCallTextureResearcherSpawnKey(call types.ToolCall) (string, bool) {
 	var in struct {
-		Role string `json:"role"`
-		Profile string `json:"profile"`
+		Role      string `json:"role"`
+		Profile   string `json:"profile"`
 		ChannelID string `json:"channel_id"`
 		Objective string `json:"objective"`
 	}
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return "", false
 	}
-	profile := canonicalAgentProfile(in.Profile)
+	profile := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile = canonicalAgentProfile(in.Role)
+		profile = agentprofile.Canonical(in.Role)
 	}
 	if profile != agentprofile.Researcher {
 		return "", false
@@ -340,43 +340,17 @@ func normalizedToolCallArgs(call types.ToolCall) string {
 
 func toolCallSpawnProfile(call types.ToolCall) string {
 	var in struct {
-		Role string `json:"role"`
+		Role    string `json:"role"`
 		Profile string `json:"profile"`
 	}
 	if err := json.Unmarshal(call.Arguments, &in); err != nil {
 		return ""
 	}
-	profile := canonicalAgentProfile(in.Profile)
+	profile := agentprofile.Canonical(in.Profile)
 	if profile == "" {
-		profile = canonicalAgentProfile(in.Role)
+		profile = agentprofile.Canonical(in.Role)
 	}
 	return profile
-}
-
-func canonicalAgentProfile(profile string) string {
-	normalized := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(profile), "_", "-"))
-	switch normalized {
-	case "researcher", "researchers", "research", "research-agent", "research-worker", "web-research", "web-researcher":
-		return agentprofile.Researcher
-	case "cosuper", "co-super", "coagent", "co-agent":
-		return agentprofile.CoSuper
-	case "vsuper", "v-super", "virtual-super", "vm-super", "candidate-super":
-		return agentprofile.VSuper
-	case "texture", "texture-agent", "document-agent":
-		return agentprofile.Texture
-	case "processor", "news-processor", "source-processor", "universal-wire-processor":
-		return agentprofile.Processor
-	case "reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "universal-wire-reconciler":
-		return agentprofile.Reconciler
-	case "email", "email-agent", "email-appagent", "mail", "mail-agent":
-		return agentprofile.Email
-	case agentprofile.Super:
-		return agentprofile.Super
-	case agentprofile.Conductor:
-		return agentprofile.Conductor
-	default:
-		return normalized
-	}
 }
 
 func normalizeVSuperCoSuperSlot(raw string) string {
@@ -399,9 +373,9 @@ func capToolOutput(output string) string {
 }
 
 type toolOutputProjection struct {
-	ModelOutput string
+	ModelOutput   string
 	DurableOutput string
-	Metadata map[string]any
+	Metadata      map[string]any
 }
 
 func parseToolOutputProjection(output string) *toolOutputProjection {

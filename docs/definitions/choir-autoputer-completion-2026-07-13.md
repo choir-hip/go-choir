@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T01:37:20Z
+  updated_at: 2026-07-14T02:06:03Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@fb97e4b36ec32df9b6edb6b3eaf69e812e722b4e
+  expected_parent_or_authority_ref: refs/heads/main@origin@da22c4e4
   status: working
   current_subgoal: R1-agent-profile-policy-cutover-04
   active_phase: R1-runtime-dissolution
@@ -521,7 +521,7 @@ state_capsule:
         repaired:
           - nested runtime ownership of prompt persistence and seeded defaults
     - id: R1-agent-profile-policy-cutover-04
-      status: defined
+      status: verified_local
       mutation_class: red
       classification_rationale: Agent-profile normalization, per-profile tool capability grants, and delegation allowlists are authorization authority. This is a source-ownership-only cutover with no intended policy delta, but moving that authority is red and requires protected-surface acceptance.
       conjecture: The two duplicate canonical profile alias tables plus the complete role capability/delegation policy can move atomically from internal/runtime/tool_profiles.go and internal/toolregistry/batch_executor.go into the existing dependency-leaf internal/agentprofile owner, with all 68 normalization callers and every policy caller cut directly to one concrete API and no change to profile aliases, default/unknown handling, batch spawn classification, tool grants, delegation targets, tool registration, runtime identity, provider/model selection, routes, or persisted state.
@@ -601,12 +601,44 @@ state_capsule:
             - google-antigravity/gemini-3.5-flash: PASS
           adjudication: The first panel exposed the pre-existing duplicate canonicalization table and six omitted toolregistry callers. The repaired lock now deletes both copies, binds all 68 callers across 14 files, includes batch classification tests, states the exact 11-to-10 role-policy transition and four type edges, reconciles the prior 270 Define-only peak with the landed 269 baseline, and leaves discovered heresy unrepaired until implementation. Both reviewers independently recomputed the repaired graph and found no remaining blocker.
           no_rerun_rationale: Appending this review receipt and the mechanically verified 269-to-292 documentation-citer baseline changes only non-authoritative assurance provenance and ratchet data; it does not change the reviewed lock, graph, evidence floor, or stopping condition.
+        implementation_review_result:
+          candidate_diff_sha256: 4b2bf313db1d0a25b287e833e80e5cccb8e7e3ad8a1ad1cf6c6b454a541b5800
+          reviewers:
+            - opencode/hy3-free: PASS
+            - google-antigravity/gemini-3.5-flash: PASS
+          adjudication: Both independent reviewers matched the frozen candidate digest, recomputed sole ownership and behavioral equivalence of aliases, unknown/default handling, all profile grants and delegate ordering, all 68 normalization calls and 11 policy resolutions, the batch classification edge, direct exhaustive tests, authorized ratchet reductions, and absence of wrappers, alternate authority, dependencies, or protected-surface deltas. Neither found a blocker.
+          no_rerun_rationale: Appending this immutable-candidate review receipt changes only non-authoritative assurance provenance; it does not change implementation, tests, inventory, reviewed authority, evidence floor, or stopping condition.
+      local_evidence:
+        - class: E0
+          observation: canonical implementation parent da22c4e4; every candidate source and test change is within the reviewed lock
+        - class: E1
+          observation: both prior canonicalization tables and all five prior runtime policy symbols are absent; 68 normalization calls, 11 policy resolutions, four concrete Policy edges, one delegation decision edge, and three Texture predicate edges bind directly to the single agentprofile owner
+        - class: E1
+          observation: runtime ratchet passed after authoritative rebaseline at go_files 135, production_files 71, test_files 64, production_loc 43308, test_loc 49836, exports 957, export_caller_edges 308, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, citers 291; only production LOC, exports, caller edges, and the removed stale package-comment citer decreased
+        - class: E2
+          observation: exhaustive direct Canonical, PolicyFor, CanDelegate, and IsTexture tests plus all toolregistry batch-executor tests passed
+          artifact_ref: artifact://279
+        - class: E2
+          observation: focused runtime registry exposure, processor/reconciler delegation, Email authority, worker update, internal run profile constraint, prompt policy, and Texture policy behavior tests passed
+          artifact_ref: artifact://277
+        - class: E2
+          observation: runtime compiled with no tests selected, and go vet passed for agentprofile, toolregistry, and runtime
+          artifact_ref: artifact://270
+        - class: E2
+          observation: gopls reported no diagnostics in the new owner, runtime policy edge, or toolregistry batch edge after workspace refresh
+        - class: E6
+          observation: opencode/hy3-free and google-antigravity/gemini-3.5-flash independently passed immutable candidate 4b2bf313db1d0a25b287e833e80e5cccb8e7e3ad8a1ad1cf6c6b454a541b5800 with no required repair
+      validation_notes:
+        - The comprehensive-tag runtime test target remains independently non-compilable across pre-existing stale prompt, API, and Texture tests; the attempted prompt-list test never ran, is excluded from evidence, and makes deployed E5 role-policy observation mandatory.
       heresy_delta:
         discovered:
           - This Define authority mechanically raises documentation citers from 269 to 292 before implementation; all source-category counts remain unchanged. The prior lock's Define-only 268-to-270 rise closed at 269 because implementation redirected one current old-path citer.
-          - toolregistry/batch_executor.go contains a second pre-existing canonical profile alias table; a source-authority clean cutover must delete both copies and move all 68 callers, not only the runtime copy.
+          - toolregistry/batch_executor.go contained a second pre-existing canonical profile alias table; a source-authority clean cutover had to delete both copies and move all 68 callers, not only the runtime copy.
+          - The comprehensive-tag runtime test target is independently stale across unrelated prompt, API, and Texture tests and cannot currently provide focused prompt-policy evidence.
         introduced: []
-        repaired: []
+        repaired:
+          - duplicate canonical profile normalization tables in runtime and toolregistry
+          - nested runtime ownership of capability and delegation policy
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin

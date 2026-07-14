@@ -43,7 +43,7 @@ type textureHandoffDecision struct {
 }
 
 func textureHandoffKindForCaller(profile string) textureHandoffKind {
-	switch canonicalAgentProfile(profile) {
+	switch agentprofile.Canonical(profile) {
 	case agentprofile.Conductor:
 		return textureHandoffKindUserPrompt
 	case agentprofile.Processor:

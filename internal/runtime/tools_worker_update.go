@@ -186,15 +186,15 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			if canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile) == agentprofile.Researcher {
+			if agentprofile.Canonical(toolregistry.ExecutionContextFrom(ctx).Profile) == agentprofile.Researcher {
 				if explicitChannel := strings.TrimSpace(in.ChannelID); explicitChannel != "" && explicitChannel != targetChannelID {
 					return "", fmt.Errorf("update_coagent channel_id %q does not match Texture coagent %q channel %q", explicitChannel, targetAgentID, targetChannelID)
 				}
 			}
 			if target, err := rt.store.GetAgent(ctx, targetAgentID); err == nil {
-				targetProfile := canonicalAgentProfile(target.Profile)
+				targetProfile := agentprofile.Canonical(target.Profile)
 				if targetProfile == agentprofile.Email {
-					return "", fmt.Errorf("%s cannot send arbitrary coagent updates to Email appagent %s; use a Texture-owned request_email_draft artifact handoff", canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile), target.AgentID)
+					return "", fmt.Errorf("%s cannot send arbitrary coagent updates to Email appagent %s; use a Texture-owned request_email_draft artifact handoff", agentprofile.Canonical(toolregistry.ExecutionContextFrom(ctx).Profile), target.AgentID)
 				}
 				if err := enforceCoagentUpdateAuthority(ctx, rt, target, targetProfile); err != nil {
 					return "", err
@@ -258,7 +258,7 @@ func enforceCoagentUpdateAuthority(ctx context.Context, rt *Runtime, target type
 	if rt == nil || rt.store == nil {
 		return nil
 	}
-	if canonicalAgentProfile(toolregistry.ExecutionContextFrom(ctx).Profile) != agentprofile.Super || targetProfile != agentprofile.CoSuper {
+	if agentprofile.Canonical(toolregistry.ExecutionContextFrom(ctx).Profile) != agentprofile.Super || targetProfile != agentprofile.CoSuper {
 		return nil
 	}
 	ownerID := toolregistry.ExecutionContextFrom(ctx).OwnerID
