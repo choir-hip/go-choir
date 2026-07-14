@@ -141,9 +141,9 @@ now:
   slice: "extract candidate-package intake ownership boundary from internal/runtime"
   question: "Which canonical owner can contain candidate-package intake review, source-lineage validation, adoption-boundary approval, publication-draft gating, and promotion-switch evidence without duplicating promotion authority or leaving runtime writes?"
   reconciliation:
-    observed_at: 2026-07-14T15:27:00Z
-    source_ref: refs/heads/main@2f6215ab4256eb1ad4acead67a788d1825a6c0af
-    deploy_identity: "CI 29342824267 PASS; deploy job 87119847487; activation receipt target fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df at 2026-07-14T14:58:52Z"
+    observed_at: 2026-07-14T15:40:00Z
+    source_ref: refs/remotes/origin/main@cb0e36ba9cb9568f838e470935a90345446e69eb
+    deploy_identity: "CI 29345667840 PASS; deploy job 87129761444; activation receipt target cb0e36ba9cb9568f838e470935a90345446e69eb at 2026-07-14T15:38:14Z"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,7 +151,7 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: accepted_local_ready_to_land
+    status: accepted_deployed_slice_complete
     protected_surfaces: [candidate_package_intake, computer_source_lineage, adoption_boundary, promotion_switch_evidence, publication_draft]
     admissible_evidence: "Exact owner/caller/store/state-transition map; source-lineage CAS and owner-isolation contracts; blocked-transition preservation; scoped runtime ratchet; independent transition and authority review; green CI, staging identity, and authenticated product-path acceptance."
     rollback_ref: 2f6215ab4256eb1ad4acead67a788d1825a6c0af
@@ -162,8 +162,8 @@ now:
       repaired: "Candidate-package intake methods, helpers, and event persistence moved to internal/candidatepackage.Service; Runtime retains only service construction and HTTP transport. promotion.Service is called only for EnsureComputerSourceLineage. The intentionally blocked publication/deployed-route/vm-lifecycle semantics, owner isolation, transition order, errors, JSON, and events are preserved."
   candidate:
     id: R1-candidate-package-owner-cutover-12
-    state: accepted_local_ready_to_land
-    ref: refs/heads/autoputer-definition-v2@d1bd22c0e10a89d070470b1b86c129ece8ea38fa
+    state: complete
+    ref: refs/remotes/origin/main@cb0e36ba9cb9568f838e470935a90345446e69eb
     owner: orchestrator
     base: refs/heads/main@2f6215ab4256eb1ad4acead67a788d1825a6c0af
     digest: "internal/candidatepackage.Service owns the complete intake/adoption-review state machine and direct store/event writes; runtime retains construction and HTTP transport only; promotion.Service remains the sole source-lineage initializer and deployed promotion owner. Runtime dissolution inventory: 126 Go files, 65 production files, 61 test files, 39985 production LOC, 49958 test LOC, 905 exports, 265 export caller edges, 14 initial unused exports, 2 routes, 48 tools, 4 production importers, 4 wrappers, 6 compatibility markers, 391 store calls, 4 interface candidates, 1347 citers."
@@ -178,8 +178,11 @@ now:
     - "candidate-package-ratchet: go test ./cmd/runtime-ratchet PASS; go run ./cmd/runtime-ratchet -root . PASS at candidate digest counts"
     - "candidate-transition-review: ACCEPT d1bd22c0; transition/store/event/API parity; confidence 0.98"
     - "candidate-authority-review: ACCEPT d1bd22c0; sole owner, one-way promotion dependency, owner scoping, deployed read-only route, and protected blocks preserved; confidence 0.98"
-  blocker_or_risk: "No local blocker. The frozen d1bd22c0 candidate passes focused transitions, runtime shard 0/4, the exact runtime ratchet, and two independent reviews. Residual risk is deployment-only: staging still serves fc0e3a0f until this candidate lands, CI passes, staging identity advances, and authenticated candidate-package product-path acceptance is repeated."
-  next_action: "Commit this acceptance receipt, push the coherent candidate to origin/main, monitor CI and staging identity, then exercise authenticated owner-scoped candidate-package review and source-lineage switch/rollback/roll-forward acceptance before marking this slice complete."
+    - "candidate-package-landing-ci:PASS https://github.com/choir-hip/go-choir/actions/runs/29345667840"
+    - "candidate-package-deploy:job 87129761444; activation target cb0e36ba9cb9568f838e470935a90345446e69eb at 2026-07-14T15:38:14Z"
+    - "candidate-package-deployed-boundary: authenticated read-only review surface owner-scoped miss HTTP-404; unauthenticated HTTP-401; review write HTTP-405; full intake root read absent HTTP-404 and write HTTP-405"
+  blocker_or_risk: "No slice blocker. Deployed acceptance proves the intended product boundary: only the authenticated owner-scoped review surface is mounted; review writes and the full intake mutation surface remain unavailable in cloud. Switch/rollback/roll-forward transition parity is proved locally because exposing those writes in staging would violate this slice's protected deployment contract."
+  next_action: "Advance to the browser/desktop ownership extraction slice. Reconcile current origin/main and staging identity, map runtime-owned browser/CDP/desktop state and callers, identify any existing dedicated owner, and checkpoint the problem/owner boundary before behavior-changing code."
 
 receipts:
   - id: predecessor-B0-authority
@@ -266,6 +269,13 @@ receipts:
     commit_or_artifact: fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
     proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29342824267", "deploy-job:87119847487", "activation-receipt:fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df@2026-07-14T14:58:52Z", "staging-package:c81c9e67-157d-45b1-bff3-e1090be31849", "staging-adoption:74e7ccba-e929-445c-822b-37f33cd9e72b", "staging-trajectory:promotion-acceptance-20260714140154206", "run-acceptance:runacc-9704ea95ef27a1b1c0f4:promotion-level:accepted"]
     rollback_ref: 4f8032d52b9d3bef90b9e81d1bb832e272550b75
+    disposition: complete
+
+  - id: R1-candidate-package-owner-cutover-12
+    boundary: implement
+    commit_or_artifact: cb0e36ba9cb9568f838e470935a90345446e69eb
+    proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29345667840", "deploy-job:87129761444", "activation-receipt:cb0e36ba9cb9568f838e470935a90345446e69eb@2026-07-14T15:38:14Z", "focused-candidate-transitions:PASS", "runtime-shard-0/4:PASS", "runtime-ratchet:PASS", "candidate-transition-review:ACCEPT", "candidate-authority-review:ACCEPT", "staging-review-unauthenticated:HTTP-401", "staging-review-owner-scoped-missing:HTTP-404", "staging-review-write-blocked:HTTP-405", "staging-full-intake-read-absent:HTTP-404", "staging-full-intake-write-blocked:HTTP-405"]
+    rollback_ref: 2f6215ab4256eb1ad4acead67a788d1825a6c0af
     disposition: complete
 
 view:
