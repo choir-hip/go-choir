@@ -73,7 +73,7 @@ finish:
 
 boundaries:
   mutation_class: red
-  reclassification_rule: "The active promotion ownership slice is red because it touches candidate verification, recipient build proof, source-lineage CAS, route switching, rollback, roll-forward, and owner product APIs; implementation rollback is 21e150bfc2bd591fb5de356b7b2b250309a4ab43."
+  reclassification_rule: "The active model/research ownership slice is red because it moves computer-owned model policy, provider/model selection, verification calls, source/search tools, content/evidence reads, and researcher checkpoint pressure. Implementation rollback is 474b9b70214ba6c063e6e3231430ce75474e014c."
   authority_sources:
     - "owner direction recorded for this 2026-07-14 reconciliation"
     - AGENTS.md
@@ -139,11 +139,11 @@ measures:
 now:
   status: working
   slice: "map model and research ownership from internal/runtime"
-  question: "Which canonical owners can absorb model policy, prompt/default configuration, researcher/search/browser-source tools, and their route/provider/store contracts without recreating a runtime facade or moving Texture authority prematurely?"
+  question: "Can model-policy loading/resolution/verification and generic research/search/content-source tools move to dedicated owners while prompt enrichment and researcher settlement remain with the later core/Texture boundary rather than being connected through callbacks?"
   reconciliation:
-    observed_at: 2026-07-14T17:35:05Z
-    source_ref: refs/heads/autoputer-definition-v2@474b9b70214ba6c063e6e3231430ce75474e014c
-    deploy_identity: "CI 29353600501 PASS; deploy job 87156686176; activation receipt 474b9b70214ba6c063e6e3231430ce75474e014c at 2026-07-14T17:31:15Z; authenticated staging sandbox reports 474b9b70."
+    observed_at: 2026-07-14T17:43:07Z
+    source_ref: refs/heads/autoputer-definition-v2@0f905ffcfeba3db85f0958382d9beb68f013a498
+    deploy_identity: "CI 29353600501 PASS; deploy job 87156686176; activation receipt 474b9b70214ba6c063e6e3231430ce75474e014c at 2026-07-14T17:31:15Z."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,30 +151,30 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:b3d8205fe3047ccbde392abbaed681a2e60dbee1
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: content_media_complete_next_boundary_unobserved
-    protected_surfaces: [model_policy, prompt_defaults, provider_routing, researcher_tools, search_gateway, source_artifacts, user_isolation, content_service, texture_authority]
-    admissible_evidence: "Exact model/research route/caller/provider/store/tool map; settled authority conformance; existing replacement check; focused owner contracts; runtime ratchet; frozen independent reviews; green CI, staging identity, and authenticated deployed acceptance."
-    rollback_ref: 5fbe4d50
-    conjecture_delta: "Content/media ownership is deployed and confirmed: authenticated URL import produced content item 0b807e44-8b7a-4ce7-846a-0b7c046e1e65 through html_readability_lite, then list/get recovered it; media progress and recents round-tripped owner-scoped state. The next unknown is whether model policy and researcher tooling share an owner boundary or require separate packages."
+    status: owner_boundary_frozen
+    protected_surfaces: [model_policy, provider_routing, verifier_calls, researcher_tools, search_gateway, source_artifacts, content_service, evidence_state, user_isolation, texture_authority]
+    admissible_evidence: "Exact caller/provider/store/tool map; policy parsing/cache/overlay and model verification contracts; research tool schemas/results/content/source behavior; direct registry composition; no runtime wrappers; focused tests, scoped runtime shard and ratchet; frozen independent reviews; CI, staging identity, and deployed model-policy/research acceptance."
+    rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
+    conjecture_delta: "Model selection is a computer-owned policy service, not run orchestration; internal/modelcatalog is complementary metadata, not a replacement. Generic research tools can depend directly on Store, content Service, search.Client, source clients, and HTTP, while tools_researcher.go and researcher_checkpoint_fallback.go are settlement/Texture lifecycle and must remain for later ownership. Prompt persistence already belongs to promptstore, but prompts.go enriches responses from live tool profiles and system prompts; moving it now would require a forbidden callback seam, so it stays with the final core/profile cutover."
     heresy_delta:
-      discovered: "The next model/research boundary has not yet been mapped; do not infer an owner from filenames. Independently stale comprehensive prompt and Texture tests predate the completed content/media slice."
+      discovered: "internal/runtime/model_policy.go owns 667 lines of policy defaults, file creation/parsing, overlays, last-valid cache, and metadata enrichment; tools_model_verify.go owns provider capability probes. internal/runtime/tools_research.go owns 1,091 lines and nine generic tools but depends on Runtime only for content Service, Store reads, and checkpoint-event inspection. internal/modelcatalog does not load policy; search/source/content packages own substrates but no generic research tool owner exists. tools_researcher.go and researcher_checkpoint_fallback.go own settlement/evidence/channel/Texture wake behavior, not generic research."
       introduced: none
-      repaired: "Content/media cutover is deployed: internal/content and internal/mediastate are sole owners; authenticated staging returned content import HTTP 201, list/get HTTP 200, media progress PUT/GET HTTP 200 with exact 42.5/120/1.25 state, and recents PUT/GET HTTP 200."
+      repaired: "The preceding content/media cutover is deployed and accepted with CI, activation identity, authenticated content import/list/get, and media progress/recents round trips."
   candidate:
-    id: R1-model-research-owner-boundary-15
-    state: mapping
-    ref: refs/heads/autoputer-definition-v2@474b9b70214ba6c063e6e3231430ce75474e014c
+    id: R1-model-research-owner-cutover-15
+    state: owner_boundary_frozen_ready_to_implement
+    ref: refs/heads/autoputer-definition-v2@0f905ffcfeba3db85f0958382d9beb68f013a498
     owner: orchestrator
-    base: refs/remotes/origin/main@474b9b70214ba6c063e6e3231430ce75474e014c
-    digest: unknown_pending_source_map
-    scope: [model_policy, prompts, provider_selection, researcher_tools, search_tools, source_artifacts, browser_source_reading]
+    base: refs/remotes/origin/main@0f905ffcfeba3db85f0958382d9beb68f013a498
+    digest: "Create internal/modelpolicy Manager as sole policy file/default/parser/overlay/cache/metadata owner and move model verification tool construction beside it. Create internal/researchtools as sole generic research tool registration/implementation owner with explicit Store/content/search/source/HTTP dependencies. Runtime composes and calls these owners directly; delete model_policy.go, tools_model_verify.go, and tools_research.go after every caller migrates. Retain prompts.go, tools_researcher.go, and researcher_checkpoint_fallback.go for later core/Texture settlement cutovers; do not add callbacks or wrappers."
+    scope: [model_policy, policy_overlay, llm_metadata_resolution, model_verification_tool, web_search, source_search, content_import_tools, content_selector_tools, wire_corpus_search, research_checkpoint_pressure]
   evidence_refs:
-    - "preceding-ci: https://github.com/choir-hip/go-choir/actions/runs/29353600501"
-    - "preceding-deploy: deploy-job:87156686176; activation-receipt:474b9b70214ba6c063e6e3231430ce75474e014c@2026-07-14T17:31:15Z"
-    - "preceding-content-acceptance: HTTP-401 unauthenticated list; HTTP-201 URL import; content-item:0b807e44-8b7a-4ce7-846a-0b7c046e1e65; HTTP-200 list/get; extraction_adapter:html_readability_lite"
-    - "preceding-media-acceptance: progress PUT/GET HTTP-200 exact state; recents PUT/GET HTTP-200 present; sandbox-build:474b9b70"
-  blocker_or_risk: "No current execution blocker. The model/research surface may conceal settled provider-routing authority, direct store writes, tool registration coupling, and Texture-specific source behavior. Mapping and replacement checks must precede any owner decision or code mutation."
-  next_action: "Map model-policy/prompt routes, provider/store contracts, researcher/search/source tools, registrations, tests, and every caller; check existing owner packages and settled decisions; then freeze the smallest deletion-first owner boundary before behavior-changing code."
+    - "model-map: internal/runtime/model_policy.go; tools_model_verify.go; callers in runtime.go, api.go, api_texture_prompt_eval.go, texture_merge.go, run start paths, tool_profiles.go"
+    - "research-map: internal/runtime/tools_research.go nine tools; direct dependencies content Service, Store, search.Client, source client, HTTP; registration in tool_profiles.go"
+    - "replacement-check: internal/modelcatalog is static capability metadata only; promptstore already owns prompt persistence; search/source/content own substrates; no model-policy or research-tool owner package exists"
+    - "deferred-settlement: tools_researcher.go and researcher_checkpoint_fallback.go retain lifecycle/evidence/channel/Texture wake authority for later cutover"
+  blocker_or_risk: "No execution blocker. Highest risk is broad unexported runtime metadata/helper coupling and tool result/schema drift. The cutover must export a narrow modelpolicy metadata contract, give researchtools explicit dependencies, preserve all tool names/schemas/results and provider/source failure semantics, and avoid moving prompt enrichment or researcher settlement through callbacks."
+  next_action: "Commit this frozen problem-owner boundary, implement the two owner packages in parallel without shared integration edits, then migrate Runtime/API/Texture/tool-profile callers serially, delete the old files, regenerate the inventory, and prove focused contracts before independent review."
 
 receipts:
   - id: predecessor-B0-authority
