@@ -162,7 +162,7 @@ now:
       repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, event, and non-candidate package import now enters internal/promotion.Service; API, worker mirror, candidate-intake lineage setup, and shipper callers are direct; the dead Runtime adapter option and all Runtime promotion methods are deleted."
   candidate:
     id: R1-promotion-owner-cutover-11
-    state: accepted_local_ready_to_land
+    state: landing_ci_timeout_documented_retry_required
     ref: refs/heads/autoputer-definition-v2@0dc665f2
     owner: orchestrator
     base: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
@@ -193,8 +193,9 @@ now:
     - "owner-repair-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41609 production LOC, 917 exports, 14 initial unused exports, 422 classified store calls, 1349 citers"
     - "atomic-transition-review:ACCEPT 0dc665f2; all eight config fields, subprocesses, CAS, adapter ordering, async lifetime, events, rollback/roll-forward, imports, and candidate-intake boundary preserved"
     - "atomic-owner-security-review:ACCEPT 0dc665f2; one private promotion.Service owner, no Runtime facade/adapter seam/write bypass, owner/auth isolation intact"
-  blocker_or_risk: "No local blocker. Atomic transition and owner/security reviews accept the repaired frozen commit. Remaining acceptance requires CI, staging identity, and authenticated deployed promotion artifacts. Candidate-package source-lineage-only review remains explicitly deferred."
-  next_action: "Commit this acceptance receipt, push the candidate to origin/main, monitor CI and staging identity, then execute authenticated deployed promotion acceptance."
+    - "landing-ci:FAIL https://github.com/choir-hip/go-choir/actions/runs/29337911803 job 87101791105; internal/runtime shard 2 reached the command deadline with no failed test and an empty still-running list after reporting selected tests PASS"
+  blocker_or_risk: "Landing CI 29337911803 timed out only in internal/runtime shard 2; the log reports no failed test and no named still-running test, while the same frozen source passed full local internal/runtime and all other CI compile/test lanes. Deployment was correctly gated. This is documented before any repair; a clean retry must distinguish transient runner timing from a reproducible suite deadline regression."
+  next_action: "Commit and push this problem receipt without code changes, monitor the resulting clean CI retry, and repair code only if the deadline failure reproduces with a named or locally reproducible cause."
 
 receipts:
   - id: predecessor-B0-authority
