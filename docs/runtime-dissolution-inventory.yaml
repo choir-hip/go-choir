@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 8
     store_calls: 443
     interface_candidates: 4
-    citers: 291
+    citers: 307
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -4055,9 +4055,21 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:`/internal/runtime/runs`). Every attempt executing that definition therefore
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/agent_tools_test.go
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/api.go
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/api.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/api_test.go
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/delegate_worker_update_fallback.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/objective_fingerprint.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/objective_fingerprint.go:func:normalizeObjectiveText
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/objective_fingerprint.go:func:objectiveFingerprint
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_defaults
       disposition: block
@@ -4084,6 +4096,8 @@ citers:
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime.go#2
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime.go#3
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime.go#4
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime_test.go
       disposition: block
@@ -4127,7 +4141,25 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/trajectory.go
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/trajectory_test.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/update_coagent_cutover_test.go
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_metadata.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_processor_decision_test.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_publication.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_publication.go:func:wireProcessorDecisionWorkItemFingerprint
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_publication.go:func:wireProcessorSourceItemDecisionWorkItemFingerprint
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_publication.go:func:wirePublicationWorkItemFingerprint
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_publication.go:func:wireStoryResolutionWorkItemFingerprint
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_publication_test.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:1. dissolve `internal/runtime` into cohesive owners and delete it;
       disposition: block

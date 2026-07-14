@@ -394,14 +394,14 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T02:06:03Z
+  updated_at: 2026-07-14T02:31:45Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@da22c4e4
+  expected_parent_or_authority_ref: refs/heads/main@origin@0490b4de1f784d5753baa215979ec7a1a076becd
   status: working
-  current_subgoal: R1-agent-profile-policy-cutover-04
+  current_subgoal: R1-work-item-fingerprint-owner-cutover-05
   active_phase: R1-runtime-dissolution
   active_frontier:
-    - R1-agent-profile-policy-cutover-04
+    - R1-work-item-fingerprint-owner-cutover-05
   locks:
     - id: R1-prompt-store-package-cutover-03
       status: complete
@@ -521,7 +521,7 @@ state_capsule:
         repaired:
           - nested runtime ownership of prompt persistence and seeded defaults
     - id: R1-agent-profile-policy-cutover-04
-      status: verified_local
+      status: complete
       mutation_class: red
       classification_rationale: Agent-profile normalization, per-profile tool capability grants, and delegation allowlists are authorization authority. This is a source-ownership-only cutover with no intended policy delta, but moving that authority is red and requires protected-surface acceptance.
       conjecture: The two duplicate canonical profile alias tables plus the complete role capability/delegation policy can move atomically from internal/runtime/tool_profiles.go and internal/toolregistry/batch_executor.go into the existing dependency-leaf internal/agentprofile owner, with all 68 normalization callers and every policy caller cut directly to one concrete API and no change to profile aliases, default/unknown handling, batch spawn classification, tool grants, delegation targets, tool registration, runtime identity, provider/model selection, routes, or persisted state.
@@ -630,15 +630,134 @@ state_capsule:
           observation: opencode/hy3-free and google-antigravity/gemini-3.5-flash independently passed immutable candidate 4b2bf313db1d0a25b287e833e80e5cccb8e7e3ad8a1ad1cf6c6b454a541b5800 with no required repair
       validation_notes:
         - The comprehensive-tag runtime test target remains independently non-compilable across pre-existing stale prompt, API, and Texture tests; the attempted prompt-list test never ran, is excluded from evidence, and makes deployed E5 role-policy observation mandatory.
+      landed_receipts:
+        commit: 0490b4de1f784d5753baa215979ec7a1a076becd
+        ci:
+          run_id: 29300688070
+          status: success
+          url: https://github.com/choir-hip/go-choir/actions/runs/29300688070
+        deployment:
+          job_id: 86984154290
+          status: success
+          activated_at: 2026-07-14T02:24:11Z
+          ordinary_guest: active
+          sandbox: active
+          active_computers: active
+          gateway: active
+        staging_computer:
+          desktop_id: primary
+          epoch: 1872
+          runtime_status: ready
+          lookup_status: ok
+        staging_acceptance:
+          submission_id: 91dd8fa2-45d0-4d6f-977d-aa9af5223373
+          trajectory_id: 91dd8fa2-45d0-4d6f-977d-aa9af5223373
+          doc_id: f5526dd7-c522-4453-88cf-c4e1e71d9582
+          revision_id: 6545e764-afe1-46c1-8f57-2f72f043a991
+          revision_hash: rev2:22bbfa9047dbbc1547c27df9a9900f20d0ec7ba778ad34845a4f6d579be22eae
+          observed_profile: texture
+          observed_tool: patch_texture
+          observation: The authenticated product path created the exact requested Texture content through patch_texture in 141 ms with no researcher or super request and no pending or consumed worker update.
+          evidence_note: The production route intentionally excludes the settings/test prompt-list endpoint, which returned 404; deployed policy evidence is therefore the authenticated Texture role and tool transition plus the exact artifact, bound to the activation receipt and exact local policy matrices.
+        acceptance_level: E6
+        verifier_contracts:
+          - sole agentprofile source authority
+          - byte-identical profile normalization and policy matrices
+          - unchanged protected role and tool behavior
+          - authenticated product-path Texture role and patch_texture transition
+        residual_risks:
+          - The comprehensive-tag runtime test target remains stale independently of this cutover.
+          - The production route has no direct settings endpoint for enumerating all role-policy matrices; exact deny-side coverage remains local and CI-bound while staging proves the positive Texture transition and absence of forbidden delegation on the accepted trajectory.
+        next_realism_axis: Move deterministic durable work-item fingerprint authority out of runtime, then stage a real coagent work-item transition.
+      completion_adjudication: The reviewed cutover landed at the canonical SHA; CI, deployment, activation identity, computer health, exact profile-policy tests, ratchet reductions, independent verification, authenticated Texture role/tool behavior, and the exact durable artifact all passed. The production settings route is intentionally unavailable, so staging policy evidence binds the positive Texture tool transition and no-delegation result rather than a test-only matrix endpoint; local and CI matrices cover all grant and deny cases.
       heresy_delta:
         discovered:
-          - This Define authority mechanically raises documentation citers from 269 to 292 before implementation; all source-category counts remain unchanged. The prior lock's Define-only 268-to-270 rise closed at 269 because implementation redirected one current old-path citer.
+          - This Define authority mechanically raised documentation citers from 269 to 292 before implementation; all source-category counts remained unchanged. The prior lock's Define-only 268-to-270 rise closed at 269 because implementation redirected one current old-path citer.
           - toolregistry/batch_executor.go contained a second pre-existing canonical profile alias table; a source-authority clean cutover had to delete both copies and move all 68 callers, not only the runtime copy.
           - The comprehensive-tag runtime test target is independently stale across unrelated prompt, API, and Texture tests and cannot currently provide focused prompt-policy evidence.
         introduced: []
         repaired:
           - duplicate canonical profile normalization tables in runtime and toolregistry
           - nested runtime ownership of capability and delegation policy
+    - id: R1-work-item-fingerprint-owner-cutover-05
+      status: defined
+      mutation_class: red
+      classification_rationale: Deterministic work-item identities control durable deduplication, obligation reuse, and run-lifecycle behavior. The cutover intends no byte or policy delta, but moving this authority touches lifecycle identity and therefore requires red ceremony.
+      conjecture: All five deterministic work-item fingerprint constructors can move atomically from runtime into one dependency-leaf internal/workitem owner, with every production and test caller cut directly to its concrete API and no change to normalized objective bytes, hash bytes, prefix formats, empty-input behavior, persisted fingerprints, work-item deduplication, trajectory obligations, completion, or restart behavior.
+      conjecture_delta: Durable work-item identity becomes one explicit domain authority instead of two private runtime helper groups; runtime lifecycle and wire behavior remain unchanged.
+      object: deterministic durable work-item fingerprint construction
+      selection_rationale: The five pure constructors plus their one objective normalizer are the complete six-symbol WorkItemRecord fingerprint domain in runtime. They share one persisted identity purpose, import only the standard library, have a finite caller graph, and can move without interfaces, callbacks, wrappers, accessors, or store changes. No replacement workitem owner exists to connect. internal/vmctl/ownership.go retains a separate five-field worker-VM ownership fingerprint with desktop-ID normalization; it is not a WorkItemRecord identity, this move replaces rather than adds the runtime normalizer, and coalescing the vmctl function would cross a distinct protected VM lifecycle boundary.
+      exact_source_scope:
+        - internal/runtime/objective_fingerprint.go
+        - internal/runtime/runtime.go
+        - internal/runtime/api.go
+        - internal/runtime/wire_publication.go
+        - internal/runtime/update_coagent_cutover_test.go
+        - internal/runtime/trajectory_test.go
+        - internal/runtime/wire_processor_decision_test.go
+        - internal/runtime/wire_publication_test.go
+        - internal/runtime/agent_tools_test.go
+        - internal/runtime/api_test.go
+        - internal/workitem/fingerprint.go
+        - internal/workitem/fingerprint_test.go
+        - docs/runtime-dissolution-inventory.yaml
+        - docs/definitions/choir-autoputer-completion-2026-07-13.md
+      exact_symbols:
+        - internal/runtime/objective_fingerprint.go:func:objectiveFingerprint
+        - internal/runtime/objective_fingerprint.go:func:normalizeObjectiveText
+        - internal/runtime/wire_publication.go:func:wirePublicationWorkItemFingerprint
+        - internal/runtime/wire_publication.go:func:wireStoryResolutionWorkItemFingerprint
+        - internal/runtime/wire_publication.go:func:wireProcessorDecisionWorkItemFingerprint
+        - internal/runtime/wire_publication.go:func:wireProcessorSourceItemDecisionWorkItemFingerprint
+        - internal/workitem/fingerprint.go:func:ObjectiveFingerprint
+        - internal/workitem/fingerprint.go:func:PublicationFingerprint
+        - internal/workitem/fingerprint.go:func:StoryResolutionFingerprint
+        - internal/workitem/fingerprint.go:func:ProcessorDecisionFingerprint
+        - internal/workitem/fingerprint.go:func:SourceItemDecisionFingerprint
+      caller_graph:
+        objective: one production caller in runtime.go; add one direct runtime wiring assertion
+        publication: one production caller in wire_publication.go
+        story_resolution: two production callers in wire_publication.go and three existing test callers across wire_processor_decision_test.go, wire_publication_test.go, and agent_tools_test.go
+        processor_decision: six production callers across api.go, runtime.go, and wire_publication.go plus eight existing test callers across trajectory_test.go, wire_processor_decision_test.go, agent_tools_test.go, and api_test.go
+        source_item_decision: three production callers in wire_publication.go plus five existing test callers
+      invariants:
+        - Preserve ObjectiveFingerprint byte-for-byte: trim owner, trajectory, and parent-run IDs; lowercase and tokenize the objective on every non-Unicode-letter or non-Unicode-digit boundary; join the four fields with NUL bytes; return lowercase SHA-256 hex.
+        - Preserve the exact wire prefixes and separators for publication, story-resolution, processor-decision, and source-item-decision fingerprints, including the current empty-string return whenever any required component is blank after trimming.
+        - Cut every caller directly to workitem.ObjectiveFingerprint, PublicationFingerprint, StoryResolutionFingerprint, ProcessorDecisionFingerprint, or SourceItemDecisionFingerprint. Delete the runtime helper file and all four wire helper functions; add no alias, forwarding symbol, wrapper, facade, accessor, interface, callback, duplicate implementation, or compatibility path.
+        - Keep the separate worker-VM ownership fingerprint and normalizer in internal/vmctl/ownership.go unchanged. It has a different five-field schema and desktop-ID authority; this lock moves one existing WorkItemRecord normalizer without creating a third copy or claiming generic objective-text authority.
+        - Preserve every already-persisted and newly-created fingerprint byte, store lookup, deduplication decision, work-item detail, assignment, status transition, trajectory obligation, run metadata field, route, provider/model choice, and restart behavior.
+        - Add direct table-driven owner tests with hard-coded golden objective hashes, Unicode/punctuation normalization, whitespace and empty cases, every wire prefix, and every missing-component case. Strengthen the spawned-coagent runtime test to assert the exact owner-produced fingerprint.
+        - Retain focused spawned-coagent completion/restart, trajectory, processor decision, wire publication, and store fingerprint-deduplication tests.
+        - Regenerate the runtime inventory without weakening debt authority. This Define mechanically raises documentation citers from the landed 291 to exactly 307 before implementation while all source-category counts remain unchanged. Runtime production files and LOC must decrease; runtime exports, export caller edges, initial unused-export debt, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, legacy state writers, and legacy store reads may not increase. Test LOC may rise only for the exact wiring assertion.
+      protected_surfaces:
+        - durable work-item identity and fingerprint deduplication
+        - trajectory obligation reuse and settlement inputs
+        - spawned-coagent work-item creation and restart recovery
+        - wire publication and processor decision obligations
+      admissible_evidence:
+        - E0 clean canonical source identity and exact pre-mutation fingerprint vectors
+        - E1 complete LSP caller migration, absent runtime helpers, one concrete dependency-leaf owner, byte-identical golden vectors, passing ratchet, and reduced runtime production files and LOC
+        - E2 direct workitem tests plus focused spawned-coagent completion/restart, trajectory, processor-decision, wire-publication, and store fingerprint-deduplication tests
+        - E5 canonical CI/deploy identity and an authenticated staging coagent work-item transition producing an exact Texture artifact
+        - E6 independent immutable-candidate verification bound to exact diff, caller graph, golden vectors, ratchet delta, and focused lifecycle tests
+      rollback_ref: 0490b4de1f784d5753baa215979ec7a1a076becd
+      close_condition: Runtime contains none of the six superseded fingerprint helpers; workitem is the sole concrete constructor owner with direct golden tests; every production and test caller uses it directly; all persisted bytes, deduplication decisions, obligations, statuses, routes, stores, providers, and restart behavior are unchanged; the ratchet passes with only authorized documentation/test growth and required runtime reductions; independent review finds no authority delta or seam; and canonical CI/deploy plus an authenticated staging coagent work-item and exact artifact bind the landed commit.
+      assurance:
+        independent_verifier: required
+        panel: compact
+        review_binding: frozen base, exact diff digest, complete LSP caller graph, pre/post golden vectors, ratchet delta, focused lifecycle tests, and staging work-item transition
+        define_review_result:
+          candidate_diff_sha256: a4e28cd37a20631167c00945225dd786451dbca03a2b54f05cca981a5b0c389d
+          reviewers:
+            - opencode/hy3-free: PASS after repair
+            - google-antigravity/gemini-3.5-flash: PASS after repair
+          adjudication: The first panel found two omitted comprehensive test files, three omitted callers, an implicit five-constructor versus six-symbol distinction, and an unaddressed separate worker-VM normalizer. The repaired lock includes both files, binds three story-resolution and eight processor-decision test callers, names five constructors plus one normalizer, keeps the distinct five-field worker-VM identity outside this WorkItemRecord boundary, and records the measured 291-to-307 documentation-only citer rise. Both reviewers independently recomputed the repair and found no remaining blocker.
+          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, caller graph, evidence floor, or stopping condition.
+      heresy_delta:
+        discovered:
+          - deterministic durable work-item identity is split between a standalone runtime objective helper file and four private wire-publication helpers
+        introduced: []
+        repaired: []
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin
