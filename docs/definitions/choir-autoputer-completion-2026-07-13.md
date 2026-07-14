@@ -394,10 +394,10 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T05:41:19Z
+  updated_at: 2026-07-14T05:51:23Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@186a7986
-  status: working
+  expected_parent_or_authority_ref: refs/heads/main@origin@16413ef4
+  status: blocked
   current_subgoal: R1-toolregistry-facade-extinction-07
   active_phase: R1-runtime-dissolution
   active_frontier:
@@ -1002,7 +1002,8 @@ state_capsule:
         repaired:
           - gateway-backed search transport and response authority nested in runtime beside an unwired direct-provider search package
     - id: R1-toolregistry-facade-extinction-07
-      status: defined
+      status: blocked
+      blocker: Three implementation-preflight failures now form one Definition/ratchet substrate cluster. Owner direction is required before another authority or implementation patch.
       mutation_class: orange
       classification_rationale: Tool construction, schema rendering, system-prompt catalogs, projection envelopes, and result JSON are direct runtime behavior. The cutover removes only runtime aliases and forwarding helpers while preserving exact bytes and tool contracts; it does not change provider routing, tool authorization, tool implementations, Trace persistence, state authority, or any red protected mutation.
       conjecture: The runtime Tool alias and five toolregistry forwarding/encoding helpers can be deleted atomically by extending the existing internal/toolregistry owner with the two missing pure encoders and prompt-catalog composition, then migrating every caller directly, without changing any tool definition, schema, catalog bytes, result bytes, projection envelope, execution behavior, role exposure, or Trace evidence.
@@ -1159,13 +1160,16 @@ state_capsule:
           candidate_diff_sha256: cfc37f13eee20d6fb6112ef1f2f5bbcd7df9fa8bb7f158bdb3796493745a64d6
           reviewer: google-antigravity/gemini-3.5-flash
           result: PASS
-          adjudication: Independent review verified the two-file detector scope, equal recognition of Tool and toolregistry.Tool literals, preservation of the baseline :Tool: identities and count 48, and no product-contract change.
+          adjudication: >-
+            Independent review verified the two-file detector scope, equal recognition of Tool and toolregistry.Tool literals, preservation of the baseline :Tool: identities and count 48, and no product-contract change.
           no_rerun_rationale: Appending this receipt changes assurance provenance only and does not alter the reviewed detector correction.
       validation_notes:
         - Runtime baseline before this Define is go_files 132, production_files 69, test_files 63, production_loc 43047, test_loc 49769, exports 955, export_caller_edges 308, initial_unused_export_debt 15, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 333.
         - This Define mechanically raises documentation citers from 333 to exactly 391 while every source-category count remains unchanged. Implementation must rebaseline that reviewed documentation-only rise, then reduce runtime production files, production LOC, test LOC, and wrappers without increasing any other source category.
         - Problem documented before scope correction: implementation preflight proved internal/toolregistry/toolregistry_test.go does not exist; the package's existing behavior test owner is internal/toolregistry/toolloop_test.go. The reviewed lock therefore names an impossible owner-test path and cannot execute until a separate authority commit replaces only that path and independently verifies the repaired scope.
         - Problem documented before detector correction: the first implementation ratchet measured tools 48 to 0 even though all 48 registrations remain, because cmd/runtime-ratchet/inventory.go recognizes only unqualified Tool composite literals and not the required direct toolregistry.Tool owner type. Rebaselining zero would corrupt the semantic inventory. The lock cannot complete until a separate authority commit adds the detector and its focused test to exact scope and requires the tool count and identities to remain 48.
+        - >-
+          Root-cause clustering assessment after the third same-lock preflight failure: symptom one was a nonexistent owner-test path; symptom two was a tool detector blind to the required qualified owner type; symptom three is the lock's requirement that wrappers decrease although the ratchet never classified internal/runtime/tools.go or its forwarding functions as wrappers. The measured implementation now honestly passes after preserving all 48 tool identities with counts go_files 131, production_files 68, test_files 63, production_loc 42899, test_loc 49316, exports 935, export_caller_edges 293, initial_unused_export_debt 15, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 391. The common substrate is a Definition review path that accepted inferred ratchet-category effects without executing the candidate transformation against the detector. Dependency graph: lock semantics authorize exact scope and stopping condition; direct-owner migration changes syntax; the ratchet classifies syntax into category identities; inventory rebaseline may record only effects the lock authorized. Existing replacement opportunity: the executable runtime-ratchet already supplies authoritative measured categories and should govern over prose inference; no unrelated wrapper should be deleted merely to satisfy a false prediction. The smallest safe authority repair would require wrappers to remain flat at four while retaining the proven file, production LOC, test LOC, export, and caller-edge reductions, then add a future Definition-review preflight that tests detector-recognized category effects before lock settlement. Per root-cause clustering and dead-end escalation, no fourth incremental authority or implementation patch is authorized without explicit owner direction.
       heresy_delta:
         discovered:
           - runtime declares a Tool alias plus schema, prompt-catalog, projection, and result-encoding facades over the existing toolregistry owner
