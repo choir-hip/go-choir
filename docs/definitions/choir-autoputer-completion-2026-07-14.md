@@ -73,7 +73,7 @@ finish:
 
 boundaries:
   mutation_class: red
-  reclassification_rule: "The archive-citer classifier repair is yellow and rolls back to 9aa0b39c. The active trajectory terminalization slice is red because it changes work-item and trajectory authority plus an owner product API; implementation rollback is 9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0."
+  reclassification_rule: "The active promotion ownership slice is red because it touches candidate verification, recipient build proof, source-lineage CAS, route switching, rollback, roll-forward, and owner product APIs; implementation rollback is 21e150bfc2bd591fb5de356b7b2b250309a4ab43."
   authority_sources:
     - "owner direction recorded for this 2026-07-14 reconciliation"
     - AGENTS.md
@@ -138,12 +138,12 @@ measures:
 
 now:
   status: working
-  slice: "extract one cohesive API ownership boundary from internal/runtime"
-  question: "Which API boundary can move with every caller to its canonical owner while deleting runtime ownership without changing product behavior or creating a second route authority?"
+  slice: "extract promotion ownership boundary from internal/runtime"
+  question: "Can one canonical promotion owner contain verification, recipient build proof, source-lineage CAS, switch, rollback, and roll-forward while runtime becomes only a caller?"
   reconciliation:
-    observed_at: 2026-07-14T12:40:00Z
-    source_ref: refs/heads/main@5fd2fd24
-    deploy_identity: "CI 29332283029; deploy job 87083822349; VM activation job 57518b1d-97b1-5d6b-bb63-276202e25485"
+    observed_at: 2026-07-14T13:00:00Z
+    source_ref: refs/heads/main@21e150bfc2bd591fb5de356b7b2b250309a4ab43
+    deploy_identity: "CI 29334142720; deploy job 87090051004; activation receipt target 21e150bfc2bd591fb5de356b7b2b250309a4ab43 at 2026-07-14T12:59:00Z"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -152,40 +152,38 @@ now:
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
     status: reconciled
-    protected_surfaces: [runtime_api_ownership, owner_product_api, route_authority]
-    admissible_evidence: "Exact owner/caller map; focused behavior contracts; scoped runtime ratchet; green CI and staging deploy identity when behavior changes; independent review of frozen protected candidates."
-    rollback_ref: 5fd2fd24
-    conjecture_delta: "The self-contained costs API can leave runtime when its store dependency is injected into the canonical apihandler owner and the route table points directly at that owner."
+    protected_surfaces: [candidate_computers, promotion, rollback, roll_forward, computer_source_lineage, owner_product_api]
+    admissible_evidence: "Exact owner/caller and state-transition map; focused verification/build/CAS/switch/rollback/roll-forward contracts; scoped runtime ratchet; independent protected-surface review; green CI, staging identity, and authenticated promotion artifacts."
+    rollback_ref: 21e150bfc2bd591fb5de356b7b2b250309a4ab43
+    conjecture_delta: "Promotion can leave runtime only if one canonical owner receives the complete state machine and store authority without weakening freshness, recipient-build, evidence, or rollback invariants."
     heresy_delta:
-      discovered: "The canonical route package still imported runtime.APIHandler for every implementation, preserving the documented S3 package-cycle blocker even for a self-contained store-backed endpoint."
+      discovered: none
       introduced: none
-      repaired: "GET /api/costs now has one implementation owner in internal/apihandler, one direct route registration, and no runtime source or test copy."
+      repaired: none
   candidate:
-    id: R1-api-owner-cutover-10
-    state: accepted_local_ready_to_land
+    id: R1-promotion-owner-cutover-11
+    state: mapping
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
-    base: refs/heads/main@5fd2fd24
-    digest: frozen_commit:04a7d4f4; inventory_repair_commit:e9d4ecff
-    scope: [costs_api_handler, canonical_apihandler_owner, sandbox_store_injection, direct_route_registration]
+    base: refs/heads/main@21e150bfc2bd591fb5de356b7b2b250309a4ab43
+    digest: pending_exact_state_machine_map
+    scope: [promotion_owner, recipient_build_verification, source_lineage_cas, switch_rollback_roll_forward, promotion_api]
   decision:
-    selected: "Move GET /api/costs and all eight focused contracts from internal/runtime to an injected store-backed internal/apihandler.Handler; register that method directly while leaving the remaining runtime handler surface unchanged."
+    selected: pending_owner_state_machine_map
     kind: operational
-    status: settled
+    status: open
     source: orchestrator
-    evidence_ref: "docs/evidence/s3-api-handler-ownership-blocker-2026-07-13.md; exact inventory and caller map; canonical route table; focused costs contracts"
+    evidence_ref: pending
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T12:40:00Z
-    consequence: "The cutover deletes one production and one test file from runtime, adds no compatibility alias or callback seam, and establishes the canonical handler/store injection pattern for later cohesive API slices."
+    recorded_at: 2026-07-14T13:00:00Z
+    consequence: "Do not edit until every promotion transition, store write, API/tool caller, subprocess/build dependency, and verifier contract is mapped to one owner with a rollback-preserving move order."
   evidence_refs:
-    - "focused-apihandler:go test -tags comprehensive ./internal/apihandler -run TestHandleCosts|TestLLMCostPackageIntegration|TestRegisterRoutes PASS"
-    - "sandbox-wiring:go test ./internal/sandbox PASS"
-    - "runtime-ratchet:PASS; 129 Go files, 67 production, 62 test, 42915 production LOC, 49998 test LOC, 936 exports, 294 caller edges, 441 classified store calls, 1347 citers"
-    - "independent-costs-behavior-review:ACCEPT; method, authentication, owner isolation, query/filter semantics, JSON envelope, store dependency, and route wiring preserved"
-    - "independent-costs-topology-review:REPAIR; clean cutover accepted, but inventory captured a pre-final-Definition citer and required regeneration"
-    - "independent-costs-topology-rereview:ACCEPT e9d4ecff; stale citer closed, 1347-citer inventory mechanically reproducible, clean cutover unchanged"
-  blocker_or_risk: "No local blocker. Independent behavior and topology reviewers accept the frozen candidate; deployed route, authentication, owner-scope, and response proof remain required."
-  next_action: "Push the accepted candidate to origin/main, monitor CI and staging deployment identity, then fetch GET /api/costs with authenticated owner scope."
+    - "prior-costs-ci:https://github.com/choir-hip/go-choir/actions/runs/29334142720"
+    - "prior-costs-deploy-job:87090051004"
+    - "prior-costs-activation:ordinary guest, sandbox, active computers, and gateway at 21e150bfc2bd591fb5de356b7b2b250309a4ab43"
+    - "prior-costs-staging:unauthenticated GET 401; authenticated POST 405; authenticated GET 200 with estimate, recent window, summary, and known models"
+  blocker_or_risk: "No blocker. Promotion is a protected state machine; partial movement or a callback seam would create dual authority, so the exact transition and dependency graph must precede implementation."
+  next_action: "Map all promotion production symbols, store transitions, API and tool callers, build subprocesses, tests, and any existing replacement owner; then select one complete move or document why the boundary cannot yet cut over."
 
 receipts:
   - id: predecessor-B0-authority
@@ -259,6 +257,12 @@ receipts:
     commit_or_artifact: 93af4b20bdd9a9d62c6d82a2b39db41480e6e685
     proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29332283029", "deploy-job:87083822349", "vm-activation-job:57518b1d-97b1-5d6b-bb63-276202e25485", "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31", "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908", "authenticated-cancel:HTTP-200-idempotent", "boot-recovery-terminalized-at:2026-07-14T12:30:23.942315805Z"]
     rollback_ref: bfefa64f1f1d9df9a58a38f782e21f6a8fc5aedf
+    disposition: complete
+  - id: R1-api-owner-cutover-10
+    boundary: implement
+    commit_or_artifact: 21e150bfc2bd591fb5de356b7b2b250309a4ab43
+    proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29334142720", "deploy-job:87090051004", "activation-receipt:21e150bfc2bd591fb5de356b7b2b250309a4ab43@2026-07-14T12:59:00Z", "staging-costs-unauthenticated:HTTP-401", "staging-costs-wrong-method:HTTP-405", "staging-costs-authenticated:HTTP-200-estimate-recent-summary-known-models"]
+    rollback_ref: 5fd2fd24
     disposition: complete
 
 view:
