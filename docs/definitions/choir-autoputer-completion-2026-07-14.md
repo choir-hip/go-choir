@@ -162,7 +162,7 @@ now:
       repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, and event moved to internal/promotion.Service; API, candidate-intake lineage setup, and shipper callers are direct; Runtime has no promotion methods or adapter authority."
   candidate:
     id: R1-promotion-owner-cutover-11
-    state: verified_local_ready_for_frozen_review
+    state: owner_review_repair_required
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
@@ -185,8 +185,10 @@ now:
     - "focused-runtime:go test ./internal/runtime -run Test(AppChangePackage|AppAdoption|CandidatePackage) PASS"
     - "runtime-shards:279/279 top-level tests PASS across explicit shards 0/4, 1/4, 2/4, 3/4"
     - "runtime-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41620 production LOC, 424 classified store calls, 1348 citers"
-  blocker_or_risk: "No local blocker. Remaining acceptance requires independent frozen protected-surface review, CI, staging identity, and authenticated deployed promotion artifacts. Candidate-package source-lineage-only review remains runtime-owned until the next named extraction and must not be mistaken for this direct app-adoption owner."
-  next_action: "Freeze this locally verified red candidate, obtain independent transition/owner/security review, repair only exact blockers, then land through CI and authenticated staging promotion acceptance."
+    - "independent-transition-review:ACCEPT dcc67735; exact transition/build/CAS/adapter/event parity preserved"
+    - "independent-owner-review:REPAIR dcc67735; Runtime.WithPromotionAdapter remains an exported forwarding seam and internal API/worker mirror package imports bypass promotion.Service"
+  blocker_or_risk: "Independent owner review found three clean-cutover blockers: dead exported Runtime.WithPromotionAdapter forwards adapter authority; APIHandler.HandleInternalAppChangePackagesRoot writes imported package records directly; Runtime.mirrorWorkerAppChangePackages writes mirrored package records directly. Transition review otherwise accepts dcc67735. Candidate-package source-lineage-only review remains explicitly deferred."
+  next_action: "Checkpoint this review receipt before repair. Delete the dead Runtime adapter option, add one canonical promotion.Service package-import write, route both internal API and worker-mirror writers through it, regenerate inventory, rerun focused/full contracts, then freeze and re-review."
 
 receipts:
   - id: predecessor-B0-authority
