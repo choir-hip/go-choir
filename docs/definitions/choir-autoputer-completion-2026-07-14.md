@@ -72,8 +72,8 @@ finish:
     - "Autopaper is treated as automatically authorized"
 
 boundaries:
-  mutation_class: yellow
-  reclassification_rule: "This authority/registry migration is yellow; every later implementation slice is classified independently, with orange/red ceremony and evidence when its actual surfaces require it."
+  mutation_class: orange
+  reclassification_rule: "The completed authority/registry migration was yellow. The active toolregistry clean-cutover slice changes runtime harness behavior and is orange; rollback restores ba90974c19a5ca1bdcd861302a225aa318087f56. Later slices are classified independently, with red ceremony when they touch a protected surface."
   authority_sources:
     - "owner direction recorded for this 2026-07-14 reconciliation"
     - AGENTS.md
@@ -138,11 +138,11 @@ measures:
 
 now:
   status: working
-  slice: "reconcile and rehearse the toolregistry clean cutover"
-  question: "Does the protected candidate's complete symbol/caller map and focused evidence justify adopt, rebuild, or discard?"
+  slice: "rebuild the toolregistry clean cutover from the protected candidate"
+  question: "Does the rebuilt cutover preserve every ToolRegistry contract while deleting the runtime facade and keeping the ratchet mechanically exact?"
   reconciliation:
-    observed_at: 2026-07-14T08:25:48Z
-    source_ref: refs/heads/main@7b143240c93c65650745e73eabea66bd94ef21d6
+    observed_at: 2026-07-14T09:10:00Z
+    source_ref: refs/heads/autoputer-definition-v2@ba90974c19a5ca1bdcd861302a225aa318087f56
     deploy_identity: unknown
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -153,28 +153,29 @@ now:
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
     status: reconciled
   candidate:
-    id: R1-toolregistry-facade-extinction-07
-    state: paused
-    ref: /Users/wiz/go-choir
-    owner: user
-    base: refs/heads/main@7b143240c93c65650745e73eabea66bd94ef21d6
-    digest: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    scope: [protected_25_path_user_wip]
+    id: R1-toolregistry-facade-extinction-08-rebuild
+    state: authorized_rebuild
+    ref: /Users/wiz/go-choir-autoputer-v2
+    owner: orchestrator
+    base: refs/heads/autoputer-definition-v2@ba90974c19a5ca1bdcd861302a225aa318087f56
+    digest: pending
+    scope: [toolregistry_facade_clean_cutover]
   decision:
-    selected: "Protect the paused candidate and reconcile it read-only before adopt, rebuild, or discard."
+    selected: "Rebuild the protected candidate in the isolated worktree: retain its sound direct-owner production cutover, preserve or relocate deleted ToolRegistry contract coverage, and regenerate the runtime inventory from the actual source."
     kind: operational
     status: settled
-    source: owner
-    evidence_ref: owner_direction@2026-07-14T08:25:48Z
+    source: orchestrator
+    evidence_ref: "read-only symbol/caller and ratchet reconciliation of sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T08:25:48Z
-    consequence: "Mapping and proof may inspect the candidate, but no protected-path mutation or candidate promotion is authorized."
+    recorded_at: 2026-07-14T09:10:00Z
+    consequence: "The protected 25-path user WIP remains untouched. The isolated rebuild must delete internal/runtime/tools.go and move all callers directly to internal/toolregistry without losing registry behavior coverage or accepting stale inventory provenance."
   evidence_refs:
     - docs/runtime-dissolution-inventory.yaml
     - docs/definitions/choir-autoputer-completion-2026-07-13.md
     - sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-  blocker_or_risk: "The candidate is protected read-only, its current caller/owner proof is unreconciled, the runtime inventory parent is stale, and deployed identity is unknown."
-  next_action: "In this isolated worktree, map each removed runtime facade symbol and caller to its canonical internal/toolregistry owner using sg/ast-grep, LSP, focused tests, and the runtime ratchet; then decide adopt, rebuild, or discard the candidate."
+    - "source-map: Tool, jsonSchemaObject, cloneSchemaMap, buildSystemPromptWithTools, toolProjectionResultJSON, toolResultJSON -> internal/toolregistry"
+  blocker_or_risk: "The protected production cutover is sound, but its ratchet kept a stale canonical parent and its test rewrite removed focused ToolRegistry contracts without equivalent owner-package coverage."
+  next_action: "Rebuild the production migration in /Users/wiz/go-choir-autoputer-v2, preserve the focused ToolRegistry contracts under internal/toolregistry, regenerate the runtime inventory, and run focused owner/caller tests plus the scoped ratchet."
 
 receipts:
   - id: predecessor-B0-authority
