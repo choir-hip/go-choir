@@ -968,7 +968,7 @@ func TestTextureAPICreateRevisionUserEdit(t *testing.T) {
 
 	// Create a user-authored revision. Public revision POSTs ignore
 	// browser-supplied author labels and use the authenticated owner.
-	revReq := textureCreateRevisionRequest{Content: "Hello, world!"}
+	revReq := map[string]any{"content": "Hello, world!", "author_kind": "appagent", "author_label": "alice"}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleTextureRevisions(w, req)
@@ -1137,8 +1137,8 @@ func TestTextureAPICreateRevisionIgnoresAppAgentAuthorFields(t *testing.T) {
 
 	// Attempt to create an appagent revision through the public revision
 	// endpoint. This must still be stored as a user-authored edit.
-	revReq = textureCreateRevisionRequest{Content: "AI-improved draft"}
-	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
+	hostileReq := map[string]any{"content": "AI-improved draft", "author_kind": "appagent", "author_label": "appagent"}
+	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", hostileReq)
 	w = httptest.NewRecorder()
 	h.HandleTextureRevisions(w, req)
 
@@ -1175,7 +1175,7 @@ func TestTextureAPIIgnoresInvalidAuthorKind(t *testing.T) {
 	// Try to create a revision with "worker" author kind. Public callers
 	// cannot select canonical authorship, so the request is accepted as a
 	// normal user edit instead of exposing an author-kind validator.
-	revReq := textureCreateRevisionRequest{Content: "Worker content"}
+	revReq := map[string]any{"content": "Worker content", "author_kind": "worker", "author_label": "worker-1"}
 	req = textureRequest(t, http.MethodPost, "/api/texture/documents/"+docResp.DocID+"/revisions", revReq)
 	w = httptest.NewRecorder()
 	h.HandleTextureRevisions(w, req)
