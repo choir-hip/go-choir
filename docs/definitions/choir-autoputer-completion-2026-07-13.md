@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T04:00:58Z
+  updated_at: 2026-07-14T04:18:04Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@4a1bbdd1a43b0d0cbda6b5ef03950aa48785a97
+  expected_parent_or_authority_ref: refs/heads/main@origin@029e3dd859ac9fd7122ca0f0f2c52df03fdda5d0
   status: working
   current_subgoal: R1-search-gateway-owner-cutover-06
   active_phase: R1-runtime-dissolution
@@ -923,7 +923,7 @@ state_capsule:
         - E5 canonical CI/deploy identity plus an authenticated staging coagent web_search transition whose Trace evidence proves gateway-backed results or an honest structured outage
         - E6 independent immutable-candidate verification bound to exact diff, caller graph, request/response golden behavior, ratchet delta, and focused tests
       rollback_ref: 4a1bbdd1a43b0d0cbda6b5ef03950aa48785a97
-      close_condition: Runtime contains none of its private gateway-search client, response, or outage types and no search_gateway files; internal/search contains only the gateway-backed client contract and direct tests, with every legacy direct-provider symbol absent; all callers use the owner directly; request, response, outage, error, tool-policy, provider-routing, role exposure, and evidence behavior are unchanged; the ratchet passes with runtime file/LOC/interface reductions and only authorized documentation changes; independent review finds no authority delta or seam; and canonical CI/deploy plus an authenticated staging coagent web_search transition bind the landed commit.
+      close_condition: Runtime contains none of its private gateway-search client, response, or outage types and no search_gateway files; internal/search contains only the gateway-backed client contract and direct tests, with every legacy direct-provider symbol absent; all callers use the owner directly; request, response, outage, error, tool-policy, provider-routing, role exposure, and evidence behavior are unchanged; the ratchet passes with runtime file and LOC reductions, flat unrelated interface candidates, and only authorized documentation changes; independent review finds no authority delta or seam; and canonical CI/deploy plus an authenticated staging coagent web_search transition bind the landed commit.
       assurance:
         independent_verifier: required
         panel: compact
@@ -940,6 +940,16 @@ state_capsule:
             reviewer: opencode/hy3-free
             result: PASS
             observation: Independent rerun of the ratchet confirmed citers 307 to 333 with every source-category count unchanged and the semantic repairs intact.
+          ratchet_correction_review:
+            candidate_diff_sha256: 593969b367c91068d349a7d89530dbb84b4009e7194ddf5485b97376ac3c9f2b
+            reviewer: opencode/hy3-free
+            result: PASS
+            observation: Exact parent 029e3dd859ac9fd7122ca0f0f2c52df03fdda5d0 and correction digest were independently verified; the four candidates are unrelated runtime-to-store boundaries, flat-at-four preserves debt authority, and required runtime file and LOC reductions remain binding.
+            yaml_repair_review:
+              candidate_diff_sha256: 1e3c9a0ff8ba762c2ca27126d51aeac43babead71e37e2a843c2aae786f1c6d8
+              reviewer: opencode/hy3-free
+              result: PASS
+              observation: Independent parsing confirmed the quoted problem note is a scalar, the exact parent and correction semantics are unchanged, and the prior correction receipt remains present.
           no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, caller graph, behavior invariants, evidence floor, or stopping condition.
       local_evidence:
         - class: E0
@@ -948,7 +958,8 @@ state_capsule:
           observation: the inventory classifies gatewaySearchClient.Search as delete and the containing search_gateway.go file under the research domain; R1 requires the file itself to leave runtime. The existing internal/search direct-provider implementation is unwired and would violate the canonical gateway provider-routing boundary if connected.
       validation_notes:
         - Runtime baseline before this Define is go_files 134, production_files 70, test_files 64, production_loc 43230, test_loc 49847, exports 957, export_caller_edges 308, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 307.
-        - This Define mechanically raises documentation citers from 307 to exactly 333 before implementation; all source-category counts remain unchanged. The implementation must rebaseline that authorized documentation-only rise, then reduce runtime production files, test files, production LOC, test LOC, and interface candidates without increasing any other source category.
+        - This Define mechanically raises documentation citers from 307 to exactly 333 before implementation; all source-category counts remain unchanged. The implementation must rebaseline that authorized documentation-only rise, then reduce runtime production files, test files, production LOC, and test LOC without increasing any other source category; interface candidates must remain flat at four.
+        - 'Problem documented before ratchet correction: the first implementation measurement showed interface_candidates remained four, not lower. That category enumerates four pre-existing runtime-to-store interface call boundaries and does not count the private webSearchClient declaration being moved. Requiring a decrease would force unrelated scope or a false reclassification. Correcting the lock to require the category remain flat preserves debt authority and changes no source behavior.'
       heresy_delta:
         discovered:
           - gateway-backed search transport and response authority are nested in runtime beside an unwired internal/search package that directly selects providers and reads provider credentials
