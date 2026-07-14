@@ -162,7 +162,7 @@ now:
       repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; trajectory cancellation, CreateRun, and inactive-to-active UpdateRun admission share one authority lock; work-item, active-run, and boot-recovery reads exhaust canonical-ID keyset pages; decoded legacy run identity is normalized before owner/state filtering."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: verified_legacy_reindex_repair_local
+    state: accepted_local_ready_to_land
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
@@ -205,11 +205,12 @@ now:
     - "legacy-reindex-repair:full store PASS; live indexed legacy reactivation persists canonical TrajectoryID and remains queryable; terminal reactivation remains rejected"
     - "legacy-reindex-runtime:280/280 shard tests PASS; legacy-addressed sibling drain and 205-run drain PASS"
     - "legacy-reindex-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
+    - "final-atomic-cardinality-rereview:ACCEPT a2cba343; reindex blocker closed, terminal admission preserved, no lock inversion introduced"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "The reindex escape is repaired and locally verified: active CreateRun and UpdateRun paths normalize fallback trajectory identity under trajectoryMu before persistence, preserving the ObjectGraph index. Owner/security is ACCEPT; atomic review must confirm the frozen repair. Residual risks remain process-local locking, retry-dependent 30-second drain, and log-and-retry orphan recovery."
-  next_action: "Commit the legacy reindex repair, obtain final atomic ACCEPT on the frozen commit, then push and execute the landing loop."
+  blocker_or_risk: "Independent atomic/cardinality and owner/security reviewers ACCEPT the frozen candidate. Residual risks are process-local locking, retry-dependent 30-second drain, log-and-retry orphan recovery, and a pre-existing 100000-item assigned-work boot scan; deployed acceptance remains required."
+  next_action: "Push the accepted candidate to origin/main, monitor CI and staging deployment identity, then run authenticated staging trajectory cancellation against the observed stuck trajectory and fetch its terminal state."
 
 receipts:
   - id: predecessor-B0-authority
