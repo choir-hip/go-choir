@@ -138,12 +138,12 @@ measures:
 
 now:
   status: working
-  slice: "extract promotion ownership boundary from internal/runtime"
-  question: "Can one canonical promotion owner contain verification, recipient build proof, source-lineage CAS, switch, rollback, and roll-forward while runtime becomes only a caller?"
+  slice: "extract candidate-package intake ownership boundary from internal/runtime"
+  question: "Which canonical owner can contain candidate-package intake review, source-lineage validation, adoption-boundary approval, publication-draft gating, and promotion-switch evidence without duplicating promotion authority or leaving runtime writes?"
   reconciliation:
-    observed_at: 2026-07-14T13:08:00Z
-    source_ref: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
-    deploy_identity: "CI 29334142720; deploy job 87090051004; activation receipt target 21e150bfc2bd591fb5de356b7b2b250309a4ab43 at 2026-07-14T12:59:00Z"
+    observed_at: 2026-07-14T15:00:29Z
+    source_ref: refs/heads/main@fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
+    deploy_identity: "CI 29342824267 PASS; deploy job 87119847487; activation receipt target fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df at 2026-07-14T14:58:52Z"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -152,62 +152,28 @@ now:
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
     status: reconciled
-    protected_surfaces: [candidate_computers, promotion, rollback, roll_forward, computer_source_lineage, owner_product_api]
-    admissible_evidence: "Exact owner/caller and state-transition map; focused verification/build/CAS/switch/rollback/roll-forward contracts; scoped runtime ratchet; independent protected-surface review; green CI, staging identity, and authenticated promotion artifacts."
-    rollback_ref: 4f8032d52b9d3bef90b9e81d1bb832e272550b75
-    conjecture_delta: "The direct app-adoption state machine can leave runtime when one promotion service owns its store transitions, recipient build, freshness guard, Dolt tag/reset integration, and events while transports and tools call it directly. Candidate-package intake retains its explicitly blocked source-lineage-only review path for the next ownership slice."
+    protected_surfaces: [candidate_package_intake, computer_source_lineage, adoption_boundary, promotion_switch_evidence, publication_draft]
+    admissible_evidence: "Exact owner/caller/store/state-transition map; source-lineage CAS and owner-isolation contracts; blocked-transition preservation; scoped runtime ratchet; independent transition and authority review; green CI, staging identity, and authenticated product-path acceptance."
+    rollback_ref: fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
+    conjecture_delta: "Candidate-package intake is a distinct pre-adoption review authority, not a second promotion service. It can leave runtime only after mapping every state transition and choosing an owner that calls promotion for promotion-owned effects without absorbing or bypassing promotion authority."
     heresy_delta:
-      discovered: "Operational direct app-adoption authority lived on Runtime even though computerversion already owned inert evidence schemas and the Dolt adapter. Candidate-package intake also depends on shared ref/profile semantics but remains a separate blocked review owner pending its named extraction slice. Deployed acceptance runacc-9704ea95ef27a1b1c0f4 blocks a completed publish/build/verify/promote/rollback/roll-forward trajectory because its superseded verification_started checkpoint remains pending and checkpoint_causal_order rejects the repeated promoted observation despite its own contract saying superseded async probes and repeated observations are tolerated."
+      discovered: "Runtime still owns candidate-package intake records, reviews, adoption-boundary decisions, publication-draft gating, and promotion-switch evidence after direct app promotion moved to internal/promotion.Service."
       introduced: none
-      repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, event, and non-candidate package import now enters internal/promotion.Service; API, worker mirror, candidate-intake lineage setup, and shipper callers are direct; the dead Runtime adapter option and all Runtime promotion methods are deleted. Run acceptance now correlates verification starts and terminals by authoritative adoption ID with unique legacy package/target fallback, preserves concurrent same-target adoptions, removes only superseded pending probes, and anchors promoted/rollback checkpoints at the first promotion boundary."
+      repaired: "The preceding promotion-owner slice and its run-acceptance reducer repair are deployed and accepted at promotion level."
   candidate:
-    id: R1-promotion-owner-cutover-11
-    state: accepted_local_ready_to_land
-    ref: refs/heads/autoputer-definition-v2@d4d5c429
+    id: R1-candidate-package-owner-cutover-12
+    state: mapping_required
+    ref: refs/heads/autoputer-definition-v2@fc0e3a0f
     owner: orchestrator
-    base: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
-    digest: "internal/promotion owns service.go and build.go; deleted runtime app_promotion.go/app_promotion_build.go and WithPromotionAdapter; direct callers api_app_promotion.go, candidate_package_intake.go, tools_shipper.go, and worker mirror; acceptance reducer uses set-valued adoption/package-target correlation; inventory 128 Go files, 67 production files, 61 test files, 41719 production LOC, 919 exports, 14 initial unused exports, 422 classified store calls, 1352 citers"
-    scope: [promotion_service, recipient_build_verification, source_lineage_cas, dolt_fork_promote_rollback, direct_api_and_tool_callers]
-  decision:
-    selected: "Move the complete source-level adoption state machine and build materializer into internal/promotion.Service with an explicit promotion.Config and direct store ownership. Runtime constructs the service; API transport and shipper tool call it directly; delete every promotion method on Runtime. Preserve computerversion as evidence/Dolt substrate and leave vmctl product activation for the later explicit product-completion boundary."
-    kind: operational
-    status: settled
-    source: orchestrator
-    evidence_ref: "exact inventory owner/caller/store map; docs/computer-ontology.md; computerversion promotion certificate and candidate activation contracts; vmctl PublishDesktop implementation"
-    owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T13:08:00Z
-    consequence: "One production service owns the direct app package/adoption lifecycle: publication, adoption, verification, owner approval, freshness, promotion, rollback, roll-forward, build evidence, lineage writes, adapter calls, and events. No Runtime compatibility methods or callback seams remain. Candidate-package intake's blocked source-lineage-only review remains explicit for the next extraction; this slice does not claim or perform vmctl product activation."
+    base: refs/heads/main@fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
+    digest: pending_exact_owner_caller_store_transition_map
+    scope: [candidate_package_intake, owner_review, source_lineage, adoption_boundary, publication_draft, promotion_switch_evidence]
   evidence_refs:
-    - "source-cutover:internal/promotion/service.go and internal/promotion/build.go; deleted internal/runtime/app_promotion.go and app_promotion_build.go"
-    - "direct-callers:internal/runtime/api_app_promotion.go, candidate_package_intake.go, and tools_shipper.go"
-    - "replacement-check:computerversion evidence and Dolt primitives remain wired substrate but explicitly inert; vmctl PublishDesktop marks a desktop switchable but is not the missing activation contract"
-    - "focused-promotion:go test ./internal/promotion PASS"
-    - "focused-runtime:go test ./internal/runtime -run Test(AppChangePackage|AppAdoption|CandidatePackage) PASS"
-    - "runtime-shards:279/279 top-level tests PASS across explicit shards 0/4, 1/4, 2/4, 3/4"
-    - "runtime-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41620 production LOC, 424 classified store calls, 1348 citers"
-    - "independent-transition-review:ACCEPT dcc67735; exact transition/build/CAS/adapter/event parity preserved"
-    - "independent-owner-review:REPAIR dcc67735; Runtime.WithPromotionAdapter remains an exported forwarding seam and internal API/worker mirror package imports bypass promotion.Service"
-    - "owner-repair:promotion.Service.ImportAppChangePackage owns internal API and worker-mirror writes; Runtime.WithPromotionAdapter deleted"
-    - "owner-repair-focused:internal promotion/API/worker mirror contracts PASS"
-    - "owner-repair-full:go test ./internal/runtime PASS"
-    - "owner-repair-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41609 production LOC, 917 exports, 14 initial unused exports, 422 classified store calls, 1349 citers"
-    - "atomic-transition-review:ACCEPT 0dc665f2; all eight config fields, subprocesses, CAS, adapter ordering, async lifetime, events, rollback/roll-forward, imports, and candidate-intake boundary preserved"
-    - "atomic-owner-security-review:ACCEPT 0dc665f2; one private promotion.Service owner, no Runtime facade/adapter seam/write bypass, owner/auth isolation intact"
-    - "landing-ci:FAIL https://github.com/choir-hip/go-choir/actions/runs/29337911803 job 87101791105; internal/runtime shard 2 reached the command deadline with no failed test and an empty still-running list after reporting selected tests PASS"
-    - "landing-ci-retry:PASS https://github.com/choir-hip/go-choir/actions/runs/29337911803 attempt 2; deploy job 87104286862"
-    - "staging-activation:fe6f0844d70cad36ec544f642335c46fb2730a5a at 2026-07-14T13:58:29Z; sandbox/corpusd/gateway active"
-    - "staging-package:c81c9e67-157d-45b1-bff3-e1090be31849; manifest 434ccfee47520b4c58164416730fa9d8e0d3e585cbdfd997394ab8f6e4b9856a; durable detail/list HTTP 200"
-    - "staging-adoption:74e7ccba-e929-445c-822b-37f33cd9e72b; actual recipient build PASS; runtime sha256:72a8818b1947af1ac83dde7f12f0b1d8175657b69ae72048fc32017d82312b31; UI sha256:9e96baefded5987db7dd566f3123fb9ed2defb35c8590785c393451d35822146"
-    - "staging-lifecycle:owner_approved -> adopted -> rolled_back -> adopted; final source lineage refs/computers/acceptance-target-20260714140154206/candidates/candidate-target-20260714140154206"
-    - "staging-run-acceptance:runacc-9704ea95ef27a1b1c0f4 promotion-level BLOCKED; package/verified/promoted/rollback checkpoints pass, but superseded verifying stays pending and checkpoint_causal_order blocks repeated promoted evidence"
-    - "acceptance-problem-first:f76529bb committed and pushed before repair; deployed blocker and exact event sequence recorded"
-    - "acceptance-regression:go test ./internal/runtime -run 'TestAppPromotionCheckpoints|TestAcceptanceServingCommit' PASS; prior reducer reproduced stale pending and causal-order failure"
-    - "acceptance-runtime-shard:70/280 selected top-level tests PASS in shard 0/4 after reducer repair"
-    - "acceptance-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41719 production LOC, 919 exports, 14 initial unused exports, 422 classified store calls, 1352 citers"
-    - "acceptance-reducer-review:ACCEPT d4d5c429; exact IDs authoritative, unique unclaimed legacy fallback, ambiguous ID-less terminals retained, concurrent same-target adoptions preserved"
-    - "acceptance-evidence-review:ACCEPT d4d5c429; regressions pin stale-probe removal, first-promotion checkpoint boundaries, mixed legacy IDs, retry correlation, concurrent adoption isolation, unknown terminal isolation, and invariant existence"
-  blocker_or_risk: "No local blocker. The frozen red repair d4d5c429 passes focused acceptance contracts, runtime shard 0/4, the exact runtime ratchet, and two independent reviews. Residual acceptance risk is deployment-only: staging still serves fe6f0844 and runacc-9704ea95ef27a1b1c0f4 remains the expected blocked pre-repair record until the repair lands and a new authenticated acceptance is synthesized."
-  next_action: "Commit this coherent Definition receipt, push the accepted candidate to origin/main, monitor CI and staging identity, then repeat the authenticated promotion run-acceptance synthesis and require promotion-level accepted state."
+    - "promotion-landing-ci:PASS https://github.com/choir-hip/go-choir/actions/runs/29342824267"
+    - "promotion-deploy:job 87119847487; activation target fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df"
+    - "promotion-run-acceptance:runacc-9704ea95ef27a1b1c0f4 promotion-level ACCEPTED; deployment_commit and health_commit fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df; checkpoint_causal_order passed"
+  blocker_or_risk: "No execution blocker. Ownership is deliberately unsettled until the exact candidate-package state machine, callers, store methods, shared promotion dependencies, and any existing replacement owner are mapped. Implementing before that map risks creating a second promotion authority."
+  next_action: "Map every candidate-package production symbol, route/tool caller, store transition, source-lineage dependency, promotion call, test contract, and generated inventory effect; then freeze an owner recommendation for independent review before implementation."
 
 receipts:
   - id: predecessor-B0-authority
@@ -287,6 +253,13 @@ receipts:
     commit_or_artifact: 21e150bfc2bd591fb5de356b7b2b250309a4ab43
     proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29334142720", "deploy-job:87090051004", "activation-receipt:21e150bfc2bd591fb5de356b7b2b250309a4ab43@2026-07-14T12:59:00Z", "staging-costs-unauthenticated:HTTP-401", "staging-costs-wrong-method:HTTP-405", "staging-costs-authenticated:HTTP-200-estimate-recent-summary-known-models"]
     rollback_ref: 5fd2fd24
+    disposition: complete
+
+  - id: R1-promotion-owner-cutover-11
+    boundary: implement
+    commit_or_artifact: fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
+    proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29342824267", "deploy-job:87119847487", "activation-receipt:fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df@2026-07-14T14:58:52Z", "staging-package:c81c9e67-157d-45b1-bff3-e1090be31849", "staging-adoption:74e7ccba-e929-445c-822b-37f33cd9e72b", "staging-trajectory:promotion-acceptance-20260714140154206", "run-acceptance:runacc-9704ea95ef27a1b1c0f4:promotion-level:accepted"]
+    rollback_ref: 4f8032d52b9d3bef90b9e81d1bb832e272550b75
     disposition: complete
 
 view:
