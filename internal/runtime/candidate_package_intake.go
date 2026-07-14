@@ -482,7 +482,7 @@ func (rt *Runtime) CreateCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	if targetKind == "" {
 		targetKind = computerKindForID(targetComputerID)
 	}
-	lineage, err := rt.EnsureComputerSourceLineage(ctx, ownerID, targetComputerID, targetKind, "")
+	lineage, err := rt.promotion.EnsureComputerSourceLineage(ctx, ownerID, targetComputerID, targetKind, "")
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -516,7 +516,7 @@ func (rt *Runtime) CreateCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionProposed, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionProposed, "adoption", map[string]any{
 		"adoption_id":                  rec.AdoptionID,
 		"package_id":                   rec.PackageID,
 		"candidate_package_intake_id":  intake.IntakeID,
@@ -579,7 +579,7 @@ func (rt *Runtime) ReviewCandidatePackageIntakeAdoption(ctx context.Context, own
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionOwnerReviewResolved, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionOwnerReviewResolved, "adoption", map[string]any{
 		"adoption_id":                 rec.AdoptionID,
 		"package_id":                  rec.PackageID,
 		"candidate_package_intake_id": intake.IntakeID,
@@ -659,7 +659,7 @@ func (rt *Runtime) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionSourceLineageSwitched, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionSourceLineageSwitched, "adoption", map[string]any{
 		"adoption_id":                 rec.AdoptionID,
 		"package_id":                  rec.PackageID,
 		"candidate_package_intake_id": intake.IntakeID,
@@ -745,7 +745,7 @@ func (rt *Runtime) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Cont
 	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionRolledBack, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionRolledBack, "adoption", map[string]any{
 		"adoption_id":                 rec.AdoptionID,
 		"package_id":                  rec.PackageID,
 		"candidate_package_intake_id": intake.IntakeID,
@@ -826,7 +826,7 @@ func (rt *Runtime) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.C
 	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionSourceLineageSwitched, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionSourceLineageSwitched, "adoption", map[string]any{
 		"adoption_id":                 rec.AdoptionID,
 		"package_id":                  rec.PackageID,
 		"candidate_package_intake_id": intake.IntakeID,

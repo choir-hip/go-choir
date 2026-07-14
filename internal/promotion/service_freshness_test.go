@@ -1,4 +1,4 @@
-package runtime
+package promotion
 
 import (
 	"encoding/json"

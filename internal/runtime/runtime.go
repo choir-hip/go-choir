@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -87,12 +88,7 @@ type Runtime struct {
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 
-	// promotionAdapter is the optional Dolt promotion adapter. When set,
-	// the promotion runtime calls Fork/Promote/Rollback to create
-	// tamper-evident DOLT_TAG certificates and DOLT_RESET rollback. When
-	// nil, the promotion flow works exactly as before (no Dolt tags).
-	// This is the safety net for the Dolt promotion integration.
-	promotionAdapter *computerversion.DoltPromotionAdapter
+	promotion *promotion.Service
 }
 
 type textureWakeTimer interface {
@@ -117,6 +113,16 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 		browserOps:       make(map[string]*sync.Mutex),
 		browserCDP:       make(map[string]*browserCDPSession),
 		modelPolicies:    make(map[string]ModelPolicy),
+		promotion: promotion.NewService(s, promotion.Config{
+			SourceLedgerRepo:                cfg.SourceLedgerRepo,
+			PromotionSourceRepo:             cfg.PromotionSourceRepo,
+			PromotionWorkspaceRoot:          cfg.PromotionWorkspaceRoot,
+			AppPromotionBuildTimeout:        cfg.AppPromotionBuildTimeout,
+			AppPromotionRuntimeBuildCommand: cfg.AppPromotionRuntimeBuildCommand,
+			AppPromotionRuntimeArtifactPath: cfg.AppPromotionRuntimeArtifactPath,
+			AppPromotionUIBuildCommand:      cfg.AppPromotionUIBuildCommand,
+			AppPromotionUIArtifactPath:      cfg.AppPromotionUIArtifactPath,
+		}),
 	}
 	for _, opt := range opts {
 		opt(rt)
@@ -423,7 +429,7 @@ func WithTraceStore(s trace.Store) RuntimeOption {
 // the promotion flow works exactly as before (no Dolt tags).
 func WithPromotionAdapter(adapter *computerversion.DoltPromotionAdapter) RuntimeOption {
 	return func(rt *Runtime) {
-		rt.promotionAdapter = adapter
+		rt.promotion.SetPromotionAdapter(adapter)
 	}
 }
 

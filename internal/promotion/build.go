@@ -1,4 +1,4 @@
-package runtime
+package promotion
 
 import (
 	"bytes"
@@ -41,16 +41,16 @@ type appPromotionCommandReport struct {
 	Duration string `json:"duration,omitempty"`
 }
 
-func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg types.AppChangePackageRecord, rec types.AppAdoptionRecord, cutoverRef string) (appAdoptionBuildReport, error) {
+func (s *Service) materializeAppAdoptionCandidate(ctx context.Context, pkg types.AppChangePackageRecord, rec types.AppAdoptionRecord, cutoverRef string) (appAdoptionBuildReport, error) {
 	report := appAdoptionBuildReport{Required: true, Status: "pending"}
-	if rt == nil {
+	if s == nil {
 		return report, fmt.Errorf("recipient build: runtime unavailable")
 	}
-	sourceRepo := strings.TrimSpace(rt.cfg.PromotionSourceRepo)
+	sourceRepo := strings.TrimSpace(s.cfg.PromotionSourceRepo)
 	if sourceRepo == "" {
 		return report, fmt.Errorf("recipient build: promotion source repo is not configured")
 	}
-	root := strings.TrimSpace(rt.cfg.PromotionWorkspaceRoot)
+	root := strings.TrimSpace(s.cfg.PromotionWorkspaceRoot)
 	if root == "" {
 		return report, fmt.Errorf("recipient build: promotion workspace root is not configured")
 	}
@@ -74,8 +74,8 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 
 	buildCtx := ctx
 	cancel := func() {}
-	if rt.cfg.AppPromotionBuildTimeout > 0 {
-		buildCtx, cancel = context.WithTimeout(ctx, rt.cfg.AppPromotionBuildTimeout)
+	if s.cfg.AppPromotionBuildTimeout > 0 {
+		buildCtx, cancel = context.WithTimeout(ctx, s.cfg.AppPromotionBuildTimeout)
 	}
 	defer cancel()
 
@@ -125,25 +125,25 @@ func (rt *Runtime) materializeAppAdoptionCandidate(ctx context.Context, pkg type
 		return report, fmt.Errorf("recipient build: resolve candidate sha: %w", err)
 	}
 
-	cmdReport, err = runAppPromotionShellCommand(buildCtx, repoPath, buildEnv, "runtime-build", rt.cfg.AppPromotionRuntimeBuildCommand)
+	cmdReport, err = runAppPromotionShellCommand(buildCtx, repoPath, buildEnv, "runtime-build", s.cfg.AppPromotionRuntimeBuildCommand)
 	report.Commands = append(report.Commands, cmdReport)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: runtime build: %w", err)
 	}
-	runtimePath := filepath.Join(repoPath, rt.cfg.AppPromotionRuntimeArtifactPath)
-	report.RuntimeArtifactPath = rt.cfg.AppPromotionRuntimeArtifactPath
+	runtimePath := filepath.Join(repoPath, s.cfg.AppPromotionRuntimeArtifactPath)
+	report.RuntimeArtifactPath = s.cfg.AppPromotionRuntimeArtifactPath
 	report.RuntimeArtifactDigest, err = hashAppPromotionPath(runtimePath)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: hash runtime artifact: %w", err)
 	}
 
-	cmdReport, err = runAppPromotionShellCommand(buildCtx, repoPath, buildEnv, "ui-build", rt.cfg.AppPromotionUIBuildCommand)
+	cmdReport, err = runAppPromotionShellCommand(buildCtx, repoPath, buildEnv, "ui-build", s.cfg.AppPromotionUIBuildCommand)
 	report.Commands = append(report.Commands, cmdReport)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: UI build: %w", err)
 	}
-	uiPath := filepath.Join(repoPath, rt.cfg.AppPromotionUIArtifactPath)
-	report.UIArtifactPath = rt.cfg.AppPromotionUIArtifactPath
+	uiPath := filepath.Join(repoPath, s.cfg.AppPromotionUIArtifactPath)
+	report.UIArtifactPath = s.cfg.AppPromotionUIArtifactPath
 	report.UIArtifactDigest, err = hashAppPromotionPath(uiPath)
 	if err != nil {
 		return report, fmt.Errorf("recipient build: hash UI artifact: %w", err)
@@ -372,4 +372,15 @@ func safeAppPromotionChildPath(root, child string) (string, error) {
 		return "", fmt.Errorf("recipient build: unsafe workspace child")
 	}
 	return path, nil
+}
+
+func setEnvValue(env []string, key, value string) []string {
+	prefix := key + "="
+	for i, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
 }

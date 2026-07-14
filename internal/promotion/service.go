@@ -1,4 +1,4 @@
-package runtime
+package promotion
 
 import (
 	"context"
@@ -12,11 +12,40 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-type publishAppChangePackageInput struct {
+type Config struct {
+	SourceLedgerRepo                string
+	PromotionSourceRepo             string
+	PromotionWorkspaceRoot          string
+	AppPromotionBuildTimeout        time.Duration
+	AppPromotionRuntimeBuildCommand string
+	AppPromotionRuntimeArtifactPath string
+	AppPromotionUIBuildCommand      string
+	AppPromotionUIArtifactPath      string
+}
+
+type Service struct {
+	store   *store.Store
+	cfg     Config
+	adapter *computerversion.DoltPromotionAdapter
+}
+
+func NewService(s *store.Store, cfg Config) *Service {
+	return &Service{store: s, cfg: cfg}
+}
+
+func (s *Service) SetPromotionAdapter(adapter *computerversion.DoltPromotionAdapter) {
+	if s == nil {
+		return
+	}
+	s.adapter = adapter
+}
+
+type PublishAppChangePackageInput struct {
 	PackageID                   string          `json:"package_id,omitempty"`
 	AppID                       string          `json:"app_id,omitempty"`
 	Visibility                  string          `json:"visibility,omitempty"`
@@ -38,7 +67,7 @@ type publishAppChangePackageInput struct {
 	TraceID                     string          `json:"trace_id,omitempty"`
 }
 
-type createAppAdoptionInput struct {
+type CreateAppAdoptionInput struct {
 	AdoptionID                string `json:"adoption_id,omitempty"`
 	PackageID                 string `json:"package_id"`
 	TargetComputerKind        string `json:"target_computer_kind,omitempty"`
@@ -51,7 +80,7 @@ type createAppAdoptionInput struct {
 	MergeStrategy             string `json:"merge_strategy,omitempty"`
 }
 
-type verifyAppAdoptionInput struct {
+type VerifyAppAdoptionInput struct {
 	TargetActiveSourceRefAtCutover string          `json:"target_active_source_ref_at_cutover,omitempty"`
 	ForegroundTailMergeResult      string          `json:"foreground_tail_merge_result,omitempty"`
 	MergeStrategy                  string          `json:"merge_strategy,omitempty"`
@@ -65,8 +94,8 @@ type appAdoptionVerificationState struct {
 	cutoverRef string
 }
 
-func (rt *Runtime) EnsureComputerSourceLineage(ctx context.Context, ownerID, computerID, kind, activeRef string) (types.ComputerSourceLineageRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) EnsureComputerSourceLineage(ctx context.Context, ownerID, computerID, kind, activeRef string) (types.ComputerSourceLineageRecord, error) {
+	if s == nil || s.store == nil {
 		return types.ComputerSourceLineageRecord{}, fmt.Errorf("source lineage: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -77,7 +106,7 @@ func (rt *Runtime) EnsureComputerSourceLineage(ctx context.Context, ownerID, com
 	if computerID == "" {
 		return types.ComputerSourceLineageRecord{}, fmt.Errorf("source lineage: computer_id is required")
 	}
-	if rec, err := rt.store.GetComputerSourceLineage(ctx, ownerID, computerID); err == nil {
+	if rec, err := s.store.GetComputerSourceLineage(ctx, ownerID, computerID); err == nil {
 		return rec, nil
 	} else if err != store.ErrNotFound {
 		return types.ComputerSourceLineageRecord{}, err
@@ -90,7 +119,7 @@ func (rt *Runtime) EnsureComputerSourceLineage(ctx context.Context, ownerID, com
 	if activeRef == "" {
 		activeRef = activeSourceRefForComputer(computerID, kind)
 	}
-	return rt.store.UpsertComputerSourceLineage(ctx, types.ComputerSourceLineageRecord{
+	return s.store.UpsertComputerSourceLineage(ctx, types.ComputerSourceLineageRecord{
 		OwnerID:         ownerID,
 		ComputerID:      computerID,
 		ComputerKind:    kind,
@@ -99,8 +128,8 @@ func (rt *Runtime) EnsureComputerSourceLineage(ctx context.Context, ownerID, com
 	})
 }
 
-func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, in publishAppChangePackageInput) (types.AppChangePackageRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) PublishAppChangePackage(ctx context.Context, ownerID string, in PublishAppChangePackageInput) (types.AppChangePackageRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppChangePackageRecord{}, fmt.Errorf("publish app change package: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -126,7 +155,7 @@ func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, 
 		appID = "podcast"
 	}
 	visibility := normalizePackageVisibility(in.Visibility)
-	sourceLineage, err := rt.EnsureComputerSourceLineage(ctx, ownerID, in.SourceComputerID, "", in.SourceActiveRef)
+	sourceLineage, err := s.EnsureComputerSourceLineage(ctx, ownerID, in.SourceComputerID, "", in.SourceActiveRef)
 	if err != nil {
 		return types.AppChangePackageRecord{}, err
 	}
@@ -167,7 +196,7 @@ func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, 
 		"source_ui_artifact_digest":      sourceUIDigest,
 		"visibility":                     visibility,
 		"recipient_build_required":       true,
-		"source_ledger_repo":             firstNonEmptyPromotion(strings.TrimSpace(in.SourceLedgerRepo), rt.cfg.SourceLedgerRepo),
+		"source_ledger_repo":             firstNonEmptyPromotion(strings.TrimSpace(in.SourceLedgerRepo), s.cfg.SourceLedgerRepo),
 		"source_ledger_base_ref":         strings.TrimSpace(in.SourceLedgerBaseRef),
 		"source_ledger_candidate_ref":    firstNonEmptyPromotion(strings.TrimSpace(in.SourceLedgerCandidateRef), candidateRef),
 		"source_ledger_commit_sha":       strings.TrimSpace(in.SourceLedgerCommitSHA),
@@ -200,11 +229,11 @@ func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, 
 		ProvenanceRefsJSON:          rawJSONOrFallback(in.ProvenanceRefs, "[]"),
 		TraceID:                     strings.TrimSpace(in.TraceID),
 	}
-	rec, err = rt.store.UpsertAppChangePackage(ctx, rec)
+	rec, err = s.store.UpsertAppChangePackage(ctx, rec)
 	if err != nil {
 		return types.AppChangePackageRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppChangePackagePublished, "package", map[string]any{
+	s.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppChangePackagePublished, "package", map[string]any{
 		"package_id":               rec.PackageID,
 		"app_id":                   rec.AppID,
 		"status":                   rec.Status,
@@ -221,8 +250,8 @@ func (rt *Runtime) PublishAppChangePackage(ctx context.Context, ownerID string, 
 	return rec, nil
 }
 
-func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetComputerID string, in createAppAdoptionInput) (types.AppAdoptionRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) CreateAppAdoption(ctx context.Context, ownerID, targetComputerID string, in CreateAppAdoptionInput) (types.AppAdoptionRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppAdoptionRecord{}, fmt.Errorf("create app adoption: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -233,7 +262,7 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 	if targetComputerID == "" {
 		return types.AppAdoptionRecord{}, fmt.Errorf("create app adoption: target_computer_id is required")
 	}
-	pkg, err := rt.store.GetAppChangePackageForViewer(ctx, ownerID, strings.TrimSpace(in.PackageID))
+	pkg, err := s.store.GetAppChangePackageForViewer(ctx, ownerID, strings.TrimSpace(in.PackageID))
 	if err != nil {
 		return types.AppAdoptionRecord{}, fmt.Errorf("create app adoption: package not found or not visible")
 	}
@@ -241,7 +270,7 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 	if targetKind == "" {
 		targetKind = computerKindForID(targetComputerID)
 	}
-	lineage, err := rt.EnsureComputerSourceLineage(ctx, ownerID, targetComputerID, targetKind, "")
+	lineage, err := s.EnsureComputerSourceLineage(ctx, ownerID, targetComputerID, targetKind, "")
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -283,8 +312,8 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 	//
 	// If the adapter is nil or the fork fails, the adoption proceeds
 	// without a Dolt fork tag (graceful degradation).
-	if rt.promotionAdapter != nil {
-		fork, forkErr := rt.promotionAdapter.Fork(ctx, targetCandidateID)
+	if s.adapter != nil {
+		fork, forkErr := s.adapter.Fork(ctx, targetCandidateID)
 		if forkErr != nil {
 			log.Printf("app promotion: create adoption: dolt fork for candidate %s: %v (proceeding without fork tag)", targetCandidateID, forkErr)
 		} else {
@@ -295,11 +324,11 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 		}
 	}
 
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	rec, err = s.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionProposed, "adoption", map[string]any{
+	s.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionProposed, "adoption", map[string]any{
 		"adoption_id":              rec.AdoptionID,
 		"package_id":               rec.PackageID,
 		"target_computer_id":       rec.TargetComputerID,
@@ -311,29 +340,29 @@ func (rt *Runtime) CreateAppAdoption(ctx context.Context, ownerID, targetCompute
 	return rec, nil
 }
 
-func (rt *Runtime) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
-	state, err := rt.startAppAdoptionVerification(ctx, ownerID, adoptionID, in)
+func (s *Service) VerifyAppAdoption(ctx context.Context, ownerID, adoptionID string, in VerifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
+	state, err := s.startAppAdoptionVerification(ctx, ownerID, adoptionID, in)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	return rt.finishAppAdoptionVerification(ctx, ownerID, state)
+	return s.finishAppAdoptionVerification(ctx, ownerID, state)
 }
 
-func (rt *Runtime) StartVerifyAppAdoptionAsync(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
-	state, err := rt.startAppAdoptionVerification(ctx, ownerID, adoptionID, in)
+func (s *Service) StartVerifyAppAdoptionAsync(ctx context.Context, ownerID, adoptionID string, in VerifyAppAdoptionInput) (types.AppAdoptionRecord, error) {
+	state, err := s.startAppAdoptionVerification(ctx, ownerID, adoptionID, in)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	go func() {
-		if _, err := rt.finishAppAdoptionVerification(context.Background(), ownerID, state); err != nil {
+		if _, err := s.finishAppAdoptionVerification(context.Background(), ownerID, state); err != nil {
 			log.Printf("runtime: async app adoption verification adoption=%s: %v", state.rec.AdoptionID, err)
 		}
 	}()
 	return state.rec, nil
 }
 
-func (rt *Runtime) startAppAdoptionVerification(ctx context.Context, ownerID, adoptionID string, in verifyAppAdoptionInput) (appAdoptionVerificationState, error) {
-	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+func (s *Service) startAppAdoptionVerification(ctx context.Context, ownerID, adoptionID string, in VerifyAppAdoptionInput) (appAdoptionVerificationState, error) {
+	rec, pkg, lineage, err := s.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return appAdoptionVerificationState{}, err
 	}
@@ -355,11 +384,11 @@ func (rt *Runtime) startAppAdoptionVerification(ctx context.Context, ownerID, ad
 	startedResults := appAdoptionVerificationStartedResults(pkg, rec, buildReport)
 	startedResultsJSON, _ := json.Marshal(startedResults)
 	rec.VerifierResultsJSON = startedResultsJSON
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	rec, err = s.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return appAdoptionVerificationState{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionVerificationStarted, "adoption", map[string]any{
+	s.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionVerificationStarted, "adoption", map[string]any{
 		"adoption_id":                  rec.AdoptionID,
 		"package_id":                   rec.PackageID,
 		"target_computer_id":           rec.TargetComputerID,
@@ -373,10 +402,10 @@ func (rt *Runtime) startAppAdoptionVerification(ctx context.Context, ownerID, ad
 	return appAdoptionVerificationState{rec: rec, pkg: pkg, cutoverRef: cutoverRef}, nil
 }
 
-func (rt *Runtime) finishAppAdoptionVerification(ctx context.Context, ownerID string, state appAdoptionVerificationState) (types.AppAdoptionRecord, error) {
+func (s *Service) finishAppAdoptionVerification(ctx context.Context, ownerID string, state appAdoptionVerificationState) (types.AppAdoptionRecord, error) {
 	rec := state.rec
 	pkg := state.pkg
-	buildReport, buildErr := rt.materializeAppAdoptionCandidate(ctx, pkg, rec, state.cutoverRef)
+	buildReport, buildErr := s.materializeAppAdoptionCandidate(ctx, pkg, rec, state.cutoverRef)
 	if buildErr != nil {
 		buildReport.Required = true
 		buildReport.Status = "failed"
@@ -396,7 +425,7 @@ func (rt *Runtime) finishAppAdoptionVerification(ctx context.Context, ownerID st
 		rec.Error = ""
 	}
 	var err error
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	rec, err = s.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -404,7 +433,7 @@ func (rt *Runtime) finishAppAdoptionVerification(ctx context.Context, ownerID st
 	if rec.Status == types.AppAdoptionBlocked {
 		kind = types.EventAppAdoptionBlocked
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, kind, "adoption", map[string]any{
+	s.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, kind, "adoption", map[string]any{
 		"adoption_id":                    rec.AdoptionID,
 		"package_id":                     rec.PackageID,
 		"target_computer_id":             rec.TargetComputerID,
@@ -430,8 +459,8 @@ func (rt *Runtime) finishAppAdoptionVerification(ctx context.Context, ownerID st
 // verified transition; it does not replace verification. Promotion requires
 // this transition — verification alone never makes a change user-visible
 // (specs/promotion_protocol.tla ApprovalGate).
-func (rt *Runtime) ApproveAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
-	rec, pkg, _, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+func (s *Service) ApproveAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	rec, pkg, _, err := s.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -443,11 +472,11 @@ func (rt *Runtime) ApproveAppAdoption(ctx context.Context, ownerID, adoptionID s
 	}
 	rec.Status = types.AppAdoptionOwnerApproved
 	rec.Error = ""
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	rec, err = s.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionOwnerApproved, "adoption", map[string]any{
+	s.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionOwnerApproved, "adoption", map[string]any{
 		"adoption_id":           rec.AdoptionID,
 		"package_id":            pkg.PackageID,
 		"target_computer_id":    rec.TargetComputerID,
@@ -475,8 +504,8 @@ func promoteFreshnessCAS(rec types.AppAdoptionRecord, lineage types.ComputerSour
 	return nil
 }
 
-func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
-	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+func (s *Service) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	rec, pkg, lineage, err := s.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -495,7 +524,7 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	}
 	rec.Status = types.AppAdoptionAdopted
 	rec.Error = ""
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	rec, err = s.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -511,18 +540,18 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	// If the adapter is nil or the promote fails, the adoption proceeds
 	// without a Dolt promotion tag (graceful degradation). The lineage
 	// update still happens.
-	if rt.promotionAdapter != nil {
+	if s.adapter != nil {
 		forkTag := stringFromMap(jsonRawToMap(rec.RollbackProfileJSON), "dolt_fork_tag")
 		if forkTag != "" {
-			promo, promoErr := rt.promotionAdapter.Promote(ctx, rec.TargetCandidateID, forkTag)
+			promo, promoErr := s.adapter.Promote(ctx, rec.TargetCandidateID, forkTag)
 			if promoErr != nil {
 				log.Printf("app promotion: promote adoption %s: dolt promote: %v (proceeding without promotion tag)", rec.AdoptionID, promoErr)
 			} else {
 				rec.RollbackProfileJSON = mergeRollbackProfile(rec.RollbackProfileJSON, map[string]any{
 					"dolt_promotion_tag": promo.PromotionTag,
-					"dolt_merge_commit":   promo.MergeCommit,
+					"dolt_merge_commit":  promo.MergeCommit,
 				})
-				rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+				rec, err = s.store.UpsertAppAdoption(ctx, rec)
 				if err != nil {
 					return types.AppAdoptionRecord{}, err
 				}
@@ -539,10 +568,10 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	lineage.LastPackageID = pkg.PackageID
 	lineage.LastCandidateRef = rec.CandidateSourceRef
 	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+	if _, err := s.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionPromoted, "adoption", map[string]any{
+	s.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionPromoted, "adoption", map[string]any{
 		"adoption_id":             rec.AdoptionID,
 		"package_id":              rec.PackageID,
 		"target_computer_id":      rec.TargetComputerID,
@@ -557,8 +586,8 @@ func (rt *Runtime) PromoteAppAdoption(ctx context.Context, ownerID, adoptionID s
 	return rec, nil
 }
 
-func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
-	rec, _, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+func (s *Service) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	rec, _, lineage, err := s.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -580,10 +609,10 @@ func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID 
 	// If the adapter is nil or the rollback fails, the lineage restore
 	// still happens (graceful degradation). The Dolt reset is best-effort
 	// and does not block the lineage rollback.
-	if rt.promotionAdapter != nil {
+	if s.adapter != nil {
 		forkTag := stringFromMap(rollback, "dolt_fork_tag")
 		if forkTag != "" {
-			if rbErr := rt.promotionAdapter.Rollback(ctx, forkTag); rbErr != nil {
+			if rbErr := s.adapter.Rollback(ctx, forkTag); rbErr != nil {
 				log.Printf("app promotion: rollback adoption %s: dolt reset to fork tag %s: %v (lineage restore still proceeds)", rec.AdoptionID, forkTag, rbErr)
 			}
 		}
@@ -596,15 +625,15 @@ func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID 
 	lineage.LastAdoptionID = rec.AdoptionID
 	lineage.LastPackageID = rec.PackageID
 	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+	if _, err := s.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return rec, err
 	}
 	rec.Status = types.AppAdoptionRolledBack
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	rec, err = s.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionRolledBack, "adoption", map[string]any{
+	s.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionRolledBack, "adoption", map[string]any{
 		"adoption_id":           rec.AdoptionID,
 		"package_id":            rec.PackageID,
 		"target_computer_id":    rec.TargetComputerID,
@@ -614,8 +643,8 @@ func (rt *Runtime) RollbackAppAdoption(ctx context.Context, ownerID, adoptionID 
 	return rec, nil
 }
 
-func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
-	rec, pkg, lineage, err := rt.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
+func (s *Service) RollForwardAppAdoption(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
+	rec, pkg, lineage, err := s.loadAdoptionPackageLineage(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -637,7 +666,7 @@ func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoption
 	}
 	rec.Status = types.AppAdoptionAdopted
 	rec.Error = ""
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	rec, err = s.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -650,10 +679,10 @@ func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoption
 	lineage.LastPackageID = pkg.PackageID
 	lineage.LastCandidateRef = rec.CandidateSourceRef
 	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+	if _, err := s.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	rt.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionPromoted, "adoption", map[string]any{
+	s.emitAppPromotionEvent(ctx, ownerID, rec.TraceID, types.EventAppAdoptionPromoted, "adoption", map[string]any{
 		"adoption_id":             rec.AdoptionID,
 		"package_id":              rec.PackageID,
 		"target_computer_id":      rec.TargetComputerID,
@@ -669,19 +698,19 @@ func (rt *Runtime) RollForwardAppAdoption(ctx context.Context, ownerID, adoption
 	return rec, nil
 }
 
-func (rt *Runtime) loadAdoptionPackageLineage(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, types.AppChangePackageRecord, types.ComputerSourceLineageRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) loadAdoptionPackageLineage(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, types.AppChangePackageRecord, types.ComputerSourceLineageRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppAdoptionRecord{}, types.AppChangePackageRecord{}, types.ComputerSourceLineageRecord{}, fmt.Errorf("app adoption: runtime store is unavailable")
 	}
-	rec, err := rt.store.GetAppAdoption(ctx, ownerID, strings.TrimSpace(adoptionID))
+	rec, err := s.store.GetAppAdoption(ctx, ownerID, strings.TrimSpace(adoptionID))
 	if err != nil {
 		return rec, types.AppChangePackageRecord{}, types.ComputerSourceLineageRecord{}, err
 	}
-	pkg, err := rt.store.GetAppChangePackageForViewer(ctx, ownerID, rec.PackageID)
+	pkg, err := s.store.GetAppChangePackageForViewer(ctx, ownerID, rec.PackageID)
 	if err != nil {
 		return rec, pkg, types.ComputerSourceLineageRecord{}, err
 	}
-	lineage, err := rt.EnsureComputerSourceLineage(ctx, ownerID, rec.TargetComputerID, rec.TargetComputerKind, rec.TargetActiveSourceRefAtCandidateStart)
+	lineage, err := s.EnsureComputerSourceLineage(ctx, ownerID, rec.TargetComputerID, rec.TargetComputerKind, rec.TargetActiveSourceRefAtCandidateStart)
 	return rec, pkg, lineage, err
 }
 
@@ -852,8 +881,8 @@ func appChangePackageManifest(pkg types.AppChangePackageRecord) map[string]any {
 	return manifest
 }
 
-func (rt *Runtime) emitAppPromotionEvent(ctx context.Context, ownerID, traceID string, kind types.EventKind, phase string, payload map[string]any) {
-	if rt == nil || rt.store == nil {
+func (s *Service) emitAppPromotionEvent(ctx context.Context, ownerID, traceID string, kind types.EventKind, phase string, payload map[string]any) {
+	if s == nil || s.store == nil {
 		return
 	}
 	traceID = strings.TrimSpace(traceID)
@@ -874,7 +903,7 @@ func (rt *Runtime) emitAppPromotionEvent(ctx context.Context, ownerID, traceID s
 		Phase:        phase,
 		Payload:      data,
 	}
-	if err := rt.store.AppendEvent(ctx, evRec); err != nil {
+	if err := s.store.AppendEvent(ctx, evRec); err != nil {
 		log.Printf("runtime: persist app promotion event %s: %v", evRec.EventID, err)
 	}
 }

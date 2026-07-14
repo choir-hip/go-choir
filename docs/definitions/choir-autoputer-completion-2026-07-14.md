@@ -141,8 +141,8 @@ now:
   slice: "extract promotion ownership boundary from internal/runtime"
   question: "Can one canonical promotion owner contain verification, recipient build proof, source-lineage CAS, switch, rollback, and roll-forward while runtime becomes only a caller?"
   reconciliation:
-    observed_at: 2026-07-14T13:00:00Z
-    source_ref: refs/heads/main@21e150bfc2bd591fb5de356b7b2b250309a4ab43
+    observed_at: 2026-07-14T13:08:00Z
+    source_ref: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
     deploy_identity: "CI 29334142720; deploy job 87090051004; activation receipt target 21e150bfc2bd591fb5de356b7b2b250309a4ab43 at 2026-07-14T12:59:00Z"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -154,36 +154,39 @@ now:
     status: reconciled
     protected_surfaces: [candidate_computers, promotion, rollback, roll_forward, computer_source_lineage, owner_product_api]
     admissible_evidence: "Exact owner/caller and state-transition map; focused verification/build/CAS/switch/rollback/roll-forward contracts; scoped runtime ratchet; independent protected-surface review; green CI, staging identity, and authenticated promotion artifacts."
-    rollback_ref: 21e150bfc2bd591fb5de356b7b2b250309a4ab43
-    conjecture_delta: "Promotion can leave runtime only if one canonical owner receives the complete state machine and store authority without weakening freshness, recipient-build, evidence, or rollback invariants."
+    rollback_ref: 4f8032d52b9d3bef90b9e81d1bb832e272550b75
+    conjecture_delta: "The direct app-adoption state machine can leave runtime when one promotion service owns its store transitions, recipient build, freshness guard, Dolt tag/reset integration, and events while transports and tools call it directly. Candidate-package intake retains its explicitly blocked source-lineage-only review path for the next ownership slice."
     heresy_delta:
-      discovered: none
+      discovered: "Operational direct app-adoption authority lived on Runtime even though computerversion already owned inert evidence schemas and the Dolt adapter. Candidate-package intake also depends on shared ref/profile semantics but remains a separate blocked review owner pending its named extraction slice."
       introduced: none
-      repaired: none
+      repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, and event moved to internal/promotion.Service; API, candidate-intake lineage setup, and shipper callers are direct; Runtime has no promotion methods or adapter authority."
   candidate:
     id: R1-promotion-owner-cutover-11
-    state: mapping
+    state: verified_local_ready_for_frozen_review
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
-    base: refs/heads/main@21e150bfc2bd591fb5de356b7b2b250309a4ab43
-    digest: pending_exact_state_machine_map
-    scope: [promotion_owner, recipient_build_verification, source_lineage_cas, switch_rollback_roll_forward, promotion_api]
+    base: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
+    digest: "internal/promotion owns service.go and build.go; deleted runtime app_promotion.go/app_promotion_build.go; direct callers api_app_promotion.go, candidate_package_intake.go, and tools_shipper.go; inventory 128 Go files, 67 production files, 61 test files, 41620 production LOC, 424 classified store calls, 1348 citers"
+    scope: [promotion_service, recipient_build_verification, source_lineage_cas, dolt_fork_promote_rollback, direct_api_and_tool_callers]
   decision:
-    selected: pending_owner_state_machine_map
+    selected: "Move the complete source-level adoption state machine and build materializer into internal/promotion.Service with an explicit promotion.Config and direct store ownership. Runtime constructs the service; API transport and shipper tool call it directly; delete every promotion method on Runtime. Preserve computerversion as evidence/Dolt substrate and leave vmctl product activation for the later explicit product-completion boundary."
     kind: operational
-    status: open
+    status: settled
     source: orchestrator
-    evidence_ref: pending
+    evidence_ref: "exact inventory owner/caller/store map; docs/computer-ontology.md; computerversion promotion certificate and candidate activation contracts; vmctl PublishDesktop implementation"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T13:00:00Z
-    consequence: "Do not edit until every promotion transition, store write, API/tool caller, subprocess/build dependency, and verifier contract is mapped to one owner with a rollback-preserving move order."
+    recorded_at: 2026-07-14T13:08:00Z
+    consequence: "One production service owns the direct app package/adoption lifecycle: publication, adoption, verification, owner approval, freshness, promotion, rollback, roll-forward, build evidence, lineage writes, adapter calls, and events. No Runtime compatibility methods or callback seams remain. Candidate-package intake's blocked source-lineage-only review remains explicit for the next extraction; this slice does not claim or perform vmctl product activation."
   evidence_refs:
-    - "prior-costs-ci:https://github.com/choir-hip/go-choir/actions/runs/29334142720"
-    - "prior-costs-deploy-job:87090051004"
-    - "prior-costs-activation:ordinary guest, sandbox, active computers, and gateway at 21e150bfc2bd591fb5de356b7b2b250309a4ab43"
-    - "prior-costs-staging:unauthenticated GET 401; authenticated POST 405; authenticated GET 200 with estimate, recent window, summary, and known models"
-  blocker_or_risk: "No blocker. Promotion is a protected state machine; partial movement or a callback seam would create dual authority, so the exact transition and dependency graph must precede implementation."
-  next_action: "Map all promotion production symbols, store transitions, API and tool callers, build subprocesses, tests, and any existing replacement owner; then select one complete move or document why the boundary cannot yet cut over."
+    - "source-cutover:internal/promotion/service.go and internal/promotion/build.go; deleted internal/runtime/app_promotion.go and app_promotion_build.go"
+    - "direct-callers:internal/runtime/api_app_promotion.go, candidate_package_intake.go, and tools_shipper.go"
+    - "replacement-check:computerversion evidence and Dolt primitives remain wired substrate but explicitly inert; vmctl PublishDesktop marks a desktop switchable but is not the missing activation contract"
+    - "focused-promotion:go test ./internal/promotion PASS"
+    - "focused-runtime:go test ./internal/runtime -run Test(AppChangePackage|AppAdoption|CandidatePackage) PASS"
+    - "runtime-shards:279/279 top-level tests PASS across explicit shards 0/4, 1/4, 2/4, 3/4"
+    - "runtime-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41620 production LOC, 424 classified store calls, 1348 citers"
+  blocker_or_risk: "No local blocker. Remaining acceptance requires independent frozen protected-surface review, CI, staging identity, and authenticated deployed promotion artifacts. Candidate-package source-lineage-only review remains runtime-owned until the next named extraction and must not be mistaken for this direct app-adoption owner."
+  next_action: "Freeze this locally verified red candidate, obtain independent transition/owner/security review, repair only exact blockers, then land through CI and authenticated staging promotion acceptance."
 
 receipts:
   - id: predecessor-B0-authority

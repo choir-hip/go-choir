@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
@@ -191,7 +192,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) toolregistry.Tool {
 			}
 			provenanceRefs := humanProofProvenanceRefs(proofInput)
 			verifierContracts := humanProofVerifierContracts(proofInput)
-			rec, err := rt.PublishAppChangePackage(ctx, ownerID, publishAppChangePackageInput{
+			rec, err := rt.promotion.PublishAppChangePackage(ctx, ownerID, promotion.PublishAppChangePackageInput{
 				AppID:                       appID,
 				Visibility:                  visibility,
 				SourceComputerID:            sourceComputerID,

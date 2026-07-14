@@ -26,6 +26,7 @@ func TestAppChangePackageMigratesAcrossCandidateComputers(t *testing.T) {
 	rt.cfg.AppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/runtime.txt"
 	rt.cfg.AppPromotionUIBuildCommand = `mkdir -p frontend/dist/assets && cp frontend/ui.txt frontend/dist/ui.txt && printf '<script type="module" src="/assets/app.js"></script><div id="app">candidate UI</div>' > frontend/dist/index.html && printf 'console.log("candidate app")' > frontend/dist/assets/app.js`
 	rt.cfg.AppPromotionUIArtifactPath = "frontend/dist"
+	testResetPromotionService(rt)
 
 	runtimePatch := testGitDiffForPath(t, sourceRepo, "runtime.txt", "runtime v1\n")
 	uiPatch := testGitDiffForPath(t, sourceRepo, "frontend/ui.txt", "ui v1\n")

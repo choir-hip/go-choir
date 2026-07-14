@@ -275,7 +275,7 @@ func TestCandidatePackageIntakeAdoptionReviewRouteCreatesOwnerReviewWithoutPromo
 	publicationContractRef := "texture://contracts/" + intakeID + "/publication"
 	draftEvidenceRef := "texture://evidence/" + intakeID + "/draft"
 
-	if _, err := rt.EnsureComputerSourceLineage(ctx, "user-alice", targetComputerID, "workspace", targetActiveRef); err != nil {
+	if _, err := rt.promotion.EnsureComputerSourceLineage(ctx, "user-alice", targetComputerID, "workspace", targetActiveRef); err != nil {
 		t.Fatalf("seed target source lineage: %v", err)
 	}
 	ready := createCandidatePackageIntakeReadyForPublication(t, srv, "user-alice", intakeID, map[string]any{
@@ -1459,7 +1459,7 @@ func TestCandidatePackageIntakeAdoptionReviewRouteRejectsUnsafeTransitions(t *te
 		createCandidatePackageIntakePublicationDraftThroughRoute(t, srv, ready, "user-alice", "candidate-intake-adoption-review-duplicate-app", "texture://contracts/"+intakeID+"/publication", "texture://evidence/"+intakeID+"/draft")
 		targetComputerID := "computer-adoption-review-duplicate-target"
 		targetActiveRef := "refs/computers/" + targetComputerID + "/active-before-review"
-		if _, err := rt.EnsureComputerSourceLineage(context.Background(), "user-alice", targetComputerID, "workspace", targetActiveRef); err != nil {
+		if _, err := rt.promotion.EnsureComputerSourceLineage(context.Background(), "user-alice", targetComputerID, "workspace", targetActiveRef); err != nil {
 			t.Fatalf("seed duplicate target source lineage: %v", err)
 		}
 		firstW := serveCandidatePackageIntakeRequest(srv, http.MethodPost, "/api/candidate-package-intakes/"+ready.IntakeID+"/adoption-review", candidatePackageIntakeAdoptionReviewRequestBody(t, map[string]any{
@@ -1498,7 +1498,7 @@ func TestCandidatePackageIntakeAdoptionReviewRouteRejectsUnsafeTransitions(t *te
 		intakeID := "intake-adoption-review-reject"
 		targetComputerID := "computer-adoption-review-reject-target"
 		targetActiveRef := "refs/computers/" + targetComputerID + "/active-before-review"
-		if _, err := rt.EnsureComputerSourceLineage(context.Background(), "user-alice", targetComputerID, "workspace", targetActiveRef); err != nil {
+		if _, err := rt.promotion.EnsureComputerSourceLineage(context.Background(), "user-alice", targetComputerID, "workspace", targetActiveRef); err != nil {
 			t.Fatalf("seed reject target source lineage: %v", err)
 		}
 		ready := createCandidatePackageIntakeReadyForPublication(t, srv, "user-alice", intakeID, map[string]any{
@@ -1537,7 +1537,7 @@ func TestCandidatePackageIntakeAdoptionReviewRouteRejectsUnsafeTransitions(t *te
 		intakeID := "intake-adoption-review-terminal-rejected"
 		targetComputerID := "computer-adoption-review-terminal-rejected-target"
 		targetActiveRef := "refs/computers/" + targetComputerID + "/active-before-review"
-		if _, err := rt.EnsureComputerSourceLineage(context.Background(), "user-alice", targetComputerID, "workspace", targetActiveRef); err != nil {
+		if _, err := rt.promotion.EnsureComputerSourceLineage(context.Background(), "user-alice", targetComputerID, "workspace", targetActiveRef); err != nil {
 			t.Fatalf("seed terminal reject target source lineage: %v", err)
 		}
 		ready := createCandidatePackageIntakeReadyForPublication(t, srv, "user-alice", intakeID, map[string]any{
@@ -2593,7 +2593,7 @@ func createCandidatePackageIntakePromotionSwitchReviewThroughRoute(t *testing.T,
 	publicationContractRef := "texture://contracts/" + intakeID + "/publication"
 	draftEvidenceRef := "texture://evidence/" + intakeID + "/draft"
 	adoptionReviewContractRef := "texture://contracts/" + intakeID + "/adoption-review"
-	if _, err := rt.EnsureComputerSourceLineage(context.Background(), ownerID, targetComputerID, "workspace", targetActiveRef); err != nil {
+	if _, err := rt.promotion.EnsureComputerSourceLineage(context.Background(), ownerID, targetComputerID, "workspace", targetActiveRef); err != nil {
 		t.Fatalf("seed promotion switch target source lineage: %v", err)
 	}
 	ready := createCandidatePackageIntakeReadyForPublication(t, srv, ownerID, intakeID, map[string]any{

@@ -3,22 +3,22 @@ canonical_parent: db1ea597cf862b77f5ccb288f8eb76a08309b64d
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 129
+    go_files: 128
     production_files: 67
-    test_files: 62
-    production_loc: 42915
-    test_loc: 49998
-    exports: 936
-    export_caller_edges: 294
+    test_files: 61
+    production_loc: 41620
+    test_loc: 49817
+    exports: 918
+    export_caller_edges: 280
     initial_unused_export_debt: 15
     routes: 2
     tools: 48
     production_importers: 4
     wrappers: 4
-    compatibility_markers: 8
-    store_calls: 441
+    compatibility_markers: 6
+    store_calls: 424
     interface_candidates: 4
-    citers: 1346
+    citers: 1348
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -28,7 +28,7 @@ files:
       loc: 1393
     - id: internal/runtime/api_app_promotion.go [production]
       disposition: promotion
-      loc: 858
+      loc: 859
     - id: internal/runtime/api_candidate_package_intake.go [production]
       disposition: candidate_package
       loc: 430
@@ -41,27 +41,21 @@ files:
     - id: internal/runtime/api_trajectory.go [production]
       disposition: api
       loc: 126
-    - id: internal/runtime/app_promotion.go [production]
-      disposition: promotion
-      loc: 1065
-    - id: internal/runtime/app_promotion_build.go [production]
-      disposition: promotion
-      loc: 375
     - id: internal/runtime/app_promotion_build_test.go [test]
       disposition: promotion
-      loc: 374
-    - id: internal/runtime/app_promotion_freshness_test.go [test]
-      disposition: promotion
-      loc: 59
+      loc: 251
     - id: internal/runtime/app_promotion_test.go [test]
       disposition: promotion
-      loc: 645
+      loc: 646
     - id: internal/runtime/browser.go [production]
       disposition: browser
       loc: 1508
     - id: internal/runtime/browser_live_test.go [test]
       disposition: browser
       loc: 151
+    - id: internal/runtime/candidate_package_events.go [production]
+      disposition: candidate_package
+      loc: 41
     - id: internal/runtime/candidate_package_intake.go [production]
       disposition: candidate_package
       loc: 1697
@@ -187,7 +181,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3671
+      loc: 3677
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -340,7 +334,7 @@ files:
       loc: 268
     - id: internal/runtime/tools_shipper.go [production]
       disposition: tools
-      loc: 361
+      loc: 362
     - id: internal/runtime/tools_test.go [test]
       disposition: tools
       loc: 1451
@@ -386,6 +380,9 @@ files:
     - id: internal/runtime/update_coagent_survivor_contract_test.go [test]
       disposition: core
       loc: 608
+    - id: internal/runtime/value_helpers.go [production]
+      disposition: core
+      loc: 96
     - id: internal/runtime/wire_metadata.go [production]
       disposition: wire
       loc: 41
@@ -799,66 +796,9 @@ exports:
       disposition: api
       production_callers:
         - internal/apihandler/routes.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):ApproveAppAdoption
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):CreateAppAdoption
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):EnsureComputerSourceLineage
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
-        - internal/runtime/app_promotion.go
-        - internal/runtime/candidate_package_intake.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):PromoteAppAdoption
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):PublishAppChangePackage
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
-        - internal/runtime/tools_shipper.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):RollForwardAppAdoption
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):RollbackAppAdoption
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):StartVerifyAppAdoptionAsync
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
-    - id: internal/runtime/app_promotion.go:method(*Runtime):VerifyAppAdoption
-      disposition: promotion
-      production_callers:
-        - internal/runtime/api_app_promotion.go
     - id: internal/runtime/app_promotion_build_test.go:func:TestAppAdoptionRequiresActualRecipientBuild
       disposition: promotion
     - id: internal/runtime/app_promotion_build_test.go:func:TestAppAdoptionVerificationLeavesStartedEvidenceOnBuildFailure
-      disposition: promotion
-    - id: internal/runtime/app_promotion_build_test.go:func:TestAppPromotionBaseRefNormalizesLedgerGitToken
-      disposition: promotion
-    - id: internal/runtime/app_promotion_build_test.go:func:TestAppPromotionBaseRefNormalizesLedgerRoleToken
-      disposition: promotion
-    - id: internal/runtime/app_promotion_build_test.go:func:TestAppPromotionBaseRefNormalizesPlainGitSHARef
-      disposition: promotion
-    - id: internal/runtime/app_promotion_build_test.go:func:TestAppPromotionBaseRefPrefersPackageLedgerBase
-      disposition: promotion
-    - id: internal/runtime/app_promotion_build_test.go:func:TestAppPromotionBaseRefSkipsProductOnlyComputerRefs
-      disposition: promotion
-    - id: internal/runtime/app_promotion_build_test.go:func:TestAppPromotionBuildEnvUsesWorkspaceScratchPaths
-      disposition: promotion
-    - id: internal/runtime/app_promotion_build_test.go:func:TestDefaultAppPromotionBuildCommandsUseBuildCapableMemoryCaps
-      disposition: promotion
-    - id: internal/runtime/app_promotion_build_test.go:func:TestTruncateAppPromotionOutputPreservesHeadAndTail
-      disposition: promotion
-    - id: internal/runtime/app_promotion_freshness_test.go:func:TestPromoteFreshnessCAS
       disposition: promotion
     - id: internal/runtime/app_promotion_test.go:func:TestAppChangePackageMigratesAcrossCandidateComputers
       disposition: promotion
@@ -1608,8 +1548,6 @@ exports:
         - internal/actorruntime/handler.go
         - internal/runtime/api.go
         - internal/runtime/api_app_promotion.go
-        - internal/runtime/app_promotion.go
-        - internal/runtime/app_promotion_build.go
         - internal/runtime/browser.go
         - internal/runtime/candidate_package_intake.go
         - internal/runtime/channel_store.go
@@ -2902,13 +2840,9 @@ wrappers:
     - id: internal/apihandler/routes.go:field:runtime.APIHandler
       disposition: delete
 compatibility_markers:
-    - id: internal/runtime/app_promotion.go:462:Legacy records without the captured base skip the check.
+    - id: internal/runtime/runtime.go:1985:This is the legacy execution path used when no tool registry is configured
       disposition: delete
-    - id: internal/runtime/app_promotion.go:944:normalizeRouteProfile converts a legacy "route:computerID" RouteProfile to
-      disposition: delete
-    - id: internal/runtime/runtime.go:102:New creates a new Runtime with the given config, store, event bus, and
-      disposition: delete
-    - id: internal/runtime/runtime.go:1979:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:98:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
     - id: internal/runtime/tools_capsule.go:297:This preserves backward compatibility with existing callers.
       disposition: delete
@@ -2955,42 +2889,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/api_trajectory.go:HandleTrajectoriesRoot:internal/store.method:Store.ListTrajectoriesByOwner
       disposition: read
-    - id: internal/runtime/app_promotion.go:ApproveAppAdoption:internal/store.method:Store.UpsertAppAdoption
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:CreateAppAdoption:internal/store.method:Store.GetAppChangePackageForViewer
-      disposition: read
-    - id: internal/runtime/app_promotion.go:CreateAppAdoption:internal/store.method:Store.UpsertAppAdoption
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:EnsureComputerSourceLineage:internal/store.method:Store.GetComputerSourceLineage
-      disposition: read
-    - id: internal/runtime/app_promotion.go:EnsureComputerSourceLineage:internal/store.method:Store.UpsertComputerSourceLineage
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:PromoteAppAdoption:internal/store.method:Store.UpsertAppAdoption
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:PromoteAppAdoption:internal/store.method:Store.UpsertAppAdoption#2
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:PromoteAppAdoption:internal/store.method:Store.UpsertComputerSourceLineage
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:PublishAppChangePackage:internal/store.method:Store.UpsertAppChangePackage
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:RollForwardAppAdoption:internal/store.method:Store.UpsertAppAdoption
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:RollForwardAppAdoption:internal/store.method:Store.UpsertComputerSourceLineage
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:RollbackAppAdoption:internal/store.method:Store.UpsertAppAdoption
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:RollbackAppAdoption:internal/store.method:Store.UpsertComputerSourceLineage
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:emitAppPromotionEvent:internal/store.method:Store.AppendEvent
-      disposition: lifecycle
-    - id: internal/runtime/app_promotion.go:finishAppAdoptionVerification:internal/store.method:Store.UpsertAppAdoption
-      disposition: promotion
-    - id: internal/runtime/app_promotion.go:loadAdoptionPackageLineage:internal/store.method:Store.GetAppAdoption
-      disposition: read
-    - id: internal/runtime/app_promotion.go:loadAdoptionPackageLineage:internal/store.method:Store.GetAppChangePackageForViewer
-      disposition: read
-    - id: internal/runtime/app_promotion.go:startAppAdoptionVerification:internal/store.method:Store.UpsertAppAdoption
-      disposition: promotion
     - id: internal/runtime/browser.go:HandleBrowserSessionClose:internal/store.method:Store.GetBrowserSession
       disposition: read
     - id: internal/runtime/browser.go:HandleBrowserSessionClose:internal/store.method:Store.UpdateBrowserSession
@@ -3016,6 +2914,8 @@ store_calls:
     - id: internal/runtime/browser.go:HandleBrowserSessionsRoot:internal/store.method:Store.ListBrowserSessions
       disposition: read
     - id: internal/runtime/browser.go:emitBrowserSessionEvent:internal/store.method:Store.AppendEvent
+      disposition: lifecycle
+    - id: internal/runtime/candidate_package_events.go:emitCandidatePackagePromotionEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
     - id: internal/runtime/candidate_package_intake.go:BindCandidatePackageIntakeAdoptionBoundary:internal/store.method:Store.GetCandidatePackageIntake
       disposition: read
@@ -6161,7 +6061,11 @@ citers:
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive production-used research boundary. internal/runtime/search_gateway.go is already classified for deletion, and its only production constructor caller … [sha256:46acc30961dbacb964c02bb43a927ebdce54c6be5e07602cb6e6269b2ac45eb7]'
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "caller-map:internal/runtime/api_app_promotion.go and internal/runtime/tools_shipper.go"
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "internal/runtime, a compatibility facade, or dual ownership remains"
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "source-map:internal/runtime/app_promotion.go and app_promotion_build.go"
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:slice: "extract promotion ownership boundary from internal/runtime"'
       disposition: block
