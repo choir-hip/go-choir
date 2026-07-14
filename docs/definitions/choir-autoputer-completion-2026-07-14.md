@@ -162,7 +162,7 @@ now:
       repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; trajectory cancellation, CreateRun, and inactive-to-active UpdateRun admission share one authority lock; work-item, active-run, and boot-recovery reads exhaust canonical-ID keyset pages; decoded legacy run identity is normalized before owner/state filtering."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: verified_lifecycle_compatibility_repair_local
+    state: legacy_reactivation_reindex_repair_required
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
@@ -200,11 +200,13 @@ now:
     - "lifecycle-compatibility-repair:full store PASS; terminal passivated reactivation rejected; indexed legacy body identity normalized; legacy-addressed sibling activation drain PASS"
     - "lifecycle-runtime:280/280 shard tests PASS; 205-run drain remains within detached retry contract"
     - "lifecycle-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
+    - "final-owner-security-rereview:ACCEPT; legacy sibling drain, owner isolation, terminal truth, and reactivation guard accepted"
+    - "final-atomic-cardinality-rereview:REPAIR; successful live reactivation of an indexed legacy body rewrites object metadata from empty TrajectoryID and erases the drain index"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "Both lifecycle compatibility escapes are repaired and locally verified: inactive-to-active UpdateRun admission rejects terminal authority under trajectoryMu, and indexed legacy run bodies are normalized before exhaustive drain filtering. Residual risks remain process-local locking, retry-dependent 30-second drain, and log-and-retry orphan recovery."
-  next_action: "Commit the lifecycle compatibility repair and re-run both independent reviewers against the frozen candidate. Push and execute the landing loop only after both return ACCEPT."
+  blocker_or_risk: "Owner/security re-review accepts the repair. Atomic re-review found one persistence escape: UpdateRun admission resolves legacy trajectory identity for the guard but does not write it into rec.TrajectoryID, so UpdateRunOG can erase the indexed trajectory_id during a permitted live reactivation and make the active run invisible to later cancellation."
+  next_action: "Commit this persistence blocker before repair. Normalize rec.TrajectoryID under trajectoryMu before any permitted active UpdateRun persistence, preserve the indexed identity, add live legacy reactivation-then-cancellation coverage, and repeat atomic review."
 
 receipts:
   - id: predecessor-B0-authority
