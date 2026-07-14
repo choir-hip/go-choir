@@ -162,7 +162,7 @@ now:
       repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; the exact 1345-citer baseline passes."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: verified_repaired_local
+    state: rereview_repair_required
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
@@ -190,11 +190,13 @@ now:
     - "repair-store:full package PASS; atomic batch, terminal admission, late completion, and recovery marker contracts"
     - "repair-runtime:280/280 shard tests PASS; detached drain, truthful terminal state, escaped owner API, immediate cleanup, and boot recovery contracts"
     - "repair-cli-ratchet:PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
+    - "atomic-repair-review:REPAIR; fixed-prefix work-item, activation, and boot-marker scans can report success while older authority remains"
+    - "owner-path-repair-review:REPAIR; CreateRun admission can race terminalization and the 5000-run window can strand older activations; path/auth/status findings accepted"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "The repaired candidate is locally verified but not yet frozen for re-review, pushed, deployed, or exercised against the observed stuck staging trajectory."
-  next_action: "Commit the verified repair, independently re-review the frozen delta against every prior blocker, then push and execute authenticated staging trajectory cancellation if review accepts."
+  blocker_or_risk: "Re-review accepted the path, owner, status, transaction, detached-context, and boot-order repairs but found four remaining substrate gaps: active run creation is outside terminal admission; cancellation scans only a fixed work-item prefix; activation drain scans only the newest run prefix; and boot recovery scans only a fixed global marker prefix."
+  next_action: "Commit this re-review checkpoint before repair. Then add keyset-paged ObjectGraph metadata reads, exhaust every matching claim and marker, serialize active CreateRun admission with trajectory terminal state, replace caller-side exclusion draining with one exhaustive active-run snapshot, and add cardinality/race contracts."
 
 receipts:
   - id: predecessor-B0-authority
