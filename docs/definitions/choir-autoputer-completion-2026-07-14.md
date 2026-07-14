@@ -161,14 +161,14 @@ now:
     digest: sha256:faa525991e2f80344ea2629e5fbbfbe7fa2640cdb1904769e646c26c9552a827
     scope: [toolregistry_facade_clean_cutover]
   decision:
-    selected: "Do not roll back the source cutover; independently accepted source and owner tests remain green. Repair the evidence scope and ratchet provenance before closing the slice."
+    selected: "Do not roll back the source cutover. Before evidence closeout, repair the ratchet's archive-citer classifier: restored historical mission documents are evidence, not live deletion blockers."
     kind: operational
     status: settled
     source: orchestrator
-    evidence_ref: "code reviewer ACCEPT; evidence reviewer REPAIR at frozen commit fd049fc5462f9f16d142986c0c2323d15b66d172"
+    evidence_ref: "code reviewer ACCEPT; evidence reviewer REPAIR at frozen commit fd049fc5462f9f16d142986c0c2323d15b66d172; exact citer set reconciliation sha256:1dc6b844515d4a5f2087f69eb1d7b4d1343305db1c2efd2241b540b8f91bc5ff"
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-14T09:48:00Z
-    consequence: "Staging directly proves registry-driven researcher completion, exact durable result, and patch_texture execution/result. Exact schema, prompt-catalog, result-envelope, and projection bytes remain source-and-golden-test claims; they were not exposed by staging. The ratchet's citer increase from 333 to 1346 reflects previously un-reconciled archive and active-Definition surfaces and was not separately authorized before the baseline rewrite."
+    consequence: "The stale 333-entry baseline omitted 1013 source citers already present at its canonical parent: 952 under docs/archive and 61 in active Definitions. All 1013 were mechanically regenerated as block, but the scanner only recognizes docs/evidence as historical evidence; treating restored docs/archive missions as live blockers would prevent clean deletion based on superseded history. The repair is detector-only: classify docs/archive citers as historical evidence, preserve active Definition blockers, remove the one now-absent citer, and regenerate the exact current baseline."
   evidence_refs:
     - "https://github.com/choir-hip/go-choir/actions/runs/29321638256"
     - "deploy-job:87049067469"
@@ -177,8 +177,8 @@ now:
     - "work-item:0a62fefa-9438-47b9-aaa5-5072688c185b"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
     - "texture-revision-hash:rev2:07a51c69cad5e791cf228cab37c105e77c00a1da9d475f5f9dbcb60e656d776c"
-  blocker_or_risk: "The committed card is stale; the 1013-citer baseline increase lacks a separate reconciliation boundary; staging did not expose raw moved-helper bytes; and trajectory a57593ae-3ab1-4dd6-b4d3-88f1d851ef31 is not settlement-ready because autonomous wire-publication item c9812e4a-79a7-462e-a04d-faba6dd77908 remains open."
-  next_action: "Commit this code-free problem receipt, then separately reconcile and authorize the archive-derived citer baseline, bound staging claims to fetched artifacts, and close or safely disposition the open publication work item before deciding the slice."
+  blocker_or_risk: "The detector misclassifies 952 restored archive citations as live blockers; one 7/14 Definition citer retained in the baseline no longer exists; staging helper-byte claims require bounded wording; and autonomous publication item c9812e4a-79a7-462e-a04d-faba6dd77908 has no supported terminal owner path after its creating revision completed."
+  next_action: "Commit this classifier problem receipt, then teach the ratchet that docs/archive is historical evidence, add focused classification coverage, regenerate the exact baseline, and re-run the ratchet before closing the toolregistry evidence boundary."
 
 receipts:
   - id: predecessor-B0-authority
