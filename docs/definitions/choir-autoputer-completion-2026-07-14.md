@@ -138,12 +138,12 @@ measures:
 
 now:
   status: working
-  slice: "terminalize autonomous wire publication failures through one trajectory authority"
-  question: "Can every failed publication fate-share with its work-item claim and can the owner safely cancel an already-stuck trajectory without SSH or direct store access?"
+  slice: "extract one cohesive API ownership boundary from internal/runtime"
+  question: "Which API boundary can move with every caller to its canonical owner while deleting runtime ownership without changing product behavior or creating a second route authority?"
   reconciliation:
-    observed_at: 2026-07-14T10:05:00Z
-    source_ref: refs/heads/main@9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0
-    deploy_identity: "toolregistry CI 29321638256; deploy job 87049067469"
+    observed_at: 2026-07-14T12:32:00Z
+    source_ref: refs/heads/main@93af4b20bdd9a9d62c6d82a2b39db41480e6e685
+    deploy_identity: "CI 29332283029; deploy job 87083822349; VM activation job 57518b1d-97b1-5d6b-bb63-276202e25485"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -152,65 +152,37 @@ now:
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
     status: reconciled
-    protected_surfaces: [trajectory_status, work_item_status, wire_publication, owner_product_api]
-    admissible_evidence: "Focused authority, handler, CLI, and publication-failure contracts; runtime shards; green CI and staging deploy identity; authenticated staging cancellation of the observed stuck trajectory followed by a fetched terminal trajectory receipt."
-    rollback_ref: 9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0
-    conjecture_delta: "A single shared trajectory-cancellation authority can close both explicit owner cancellation and in-process publication failure without falsely settling failed work or cancelling an unrelated trajectory."
+    protected_surfaces: [runtime_api_ownership, owner_product_api, route_authority]
+    admissible_evidence: "Exact owner/caller map; focused behavior contracts; scoped runtime ratchet; green CI and staging deploy identity when behavior changes; independent review of frozen protected candidates."
+    rollback_ref: 93af4b20bdd9a9d62c6d82a2b39db41480e6e685
+    conjecture_delta: "A cohesive API-owned slice can leave internal/runtime only when its handler and every production caller move together to one canonical owner without changing route registration or behavior."
     heresy_delta:
-      discovered: "A publication side effect can open a durable work item, fail, and return without a terminal state; the document cancel route refuses to act once its pending mutation is gone."
+      discovered: none
       introduced: none
-      repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; trajectory cancellation, CreateRun, and inactive-to-active UpdateRun admission share one authority lock; work-item, active-run, and boot-recovery reads exhaust canonical-ID keyset pages; decoded legacy run identity is normalized before owner/state filtering."
+      repaired: none
   candidate:
-    id: R1-wire-publication-terminalization-09
-    state: accepted_local_ready_to_land
+    id: R1-api-owner-cutover-10
+    state: mapping
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
-    base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
-    digest: frozen_commit:1bd90936c69f7ed599c367fc9ff57ae9eb77e5d7; atomic_repair_commit:c7827b3e; cardinality_repair_commit:b90dcf0d; lifecycle_repair_commit:3bdd1597; legacy_reindex_delta_sha256:9b04303a828a8c691e3fd04472971717b5dfb3da301361f2a2f4d71fea548afb
-    scope: [trajectory_cancellation_authority, wire_publication_failure_terminalization, owner_trajectory_cancel_api]
+    base: refs/heads/main@93af4b20bdd9a9d62c6d82a2b39db41480e6e685
+    digest: pending_exact_owner_caller_map
+    scope: [runtime_api_ownership, canonical_apihandler_owner, direct_callers]
   decision:
-    selected: "Extract the trajectory/work-item state transition behind existing run-based cancellation into one shared authority. Explicit owner cancellation also stops active runs; in-process publication failure uses the same authority transition without cancelling its currently executing activation. Expose owner-scoped POST cancellation and a Choir CLI command."
+    selected: pending_owner_caller_map
     kind: operational
-    status: settled
+    status: open
     source: orchestrator
-    evidence_ref: "staging trajectory a57593ae-3ab1-4dd6-b4d3-88f1d851ef31 and work item c9812e4a-79a7-462e-a04d-faba6dd77908; source inspection of publication error exits and document-cancel no-pending branch"
+    evidence_ref: pending
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T10:05:00Z
-    consequence: "Failure must cancel every open claim and mark the trajectory cancelled with durable owner-visible state; it must never report settled. The owner API is trajectory-addressed and owner-scoped. Existing run-addressed cancellation delegates to the same authority, and activation cancellation remains outside the authority transition so publication cleanup cannot cancel itself."
+    recorded_at: 2026-07-14T12:32:00Z
+    consequence: "Do not edit until one deletion-first boundary has a complete symbol/caller map, an existing canonical owner, focused behavior contracts, and an exact mechanically justified ratchet delta."
   evidence_refs:
-    - "ratchet-test:go test ./cmd/runtime-ratchet"
-    - "ratchet-command:go run ./cmd/runtime-ratchet -root ."
-    - "ratchet-citers:1345"
-    - "focused-runtime:trajectory authority, HTTP owner isolation, publication failure, and success-path contracts PASS"
-    - "focused-cli:trajectory cancel and detail contracts PASS"
-    - "runtime-shards:275/275 PASS"
-    - "cli-and-ratchet:PASS; inventory 1345 citers and 8 compatibility markers"
-    - "independent-authority-review:REPAIR; atomicity, detached activation drain, durable cleanup recovery, and truthful settled response required"
-    - "independent-owner-security-review:REPAIR; escaped path parsing, truthful response, terminal admission, and candidate-base correction required"
-    - "repair-store:full package PASS; atomic batch, terminal admission, late completion, and recovery marker contracts"
-    - "repair-runtime:280/280 shard tests PASS; detached drain, truthful terminal state, escaped owner API, immediate cleanup, and boot recovery contracts"
-    - "repair-cli-ratchet:PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
-    - "atomic-repair-review:REPAIR; fixed-prefix work-item, activation, and boot-marker scans can report success while older authority remains"
-    - "owner-path-repair-review:REPAIR; CreateRun admission can race terminalization and the 5000-run window can strand older activations; path/auth/status findings accepted"
-    - "cardinality-repair:objectgraph and full store packages PASS; >page work-item cancellation, boot-marker recovery, terminal CreateRun admission, and exhaustive active-run contracts"
-    - "cardinality-runtime:280/280 shard tests PASS including 205-run activation drain and legacy settled-activation compatibility"
-    - "cardinality-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
-    - "final-atomic-cardinality-review:REPAIR; passivated trajectory runs are absent from active drain and can reactivate after terminal cancellation because UpdateRun lacks terminal admission"
-    - "final-owner-security-review:REPAIR; multiple active legacy metadata-only sibling runs on one trajectory are filtered out of exhaustive drain after only the addressed run is upgraded"
-    - "lifecycle-compatibility-repair:full store PASS; terminal passivated reactivation rejected; indexed legacy body identity normalized; legacy-addressed sibling activation drain PASS"
-    - "lifecycle-runtime:280/280 shard tests PASS; 205-run drain remains within detached retry contract"
-    - "lifecycle-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
-    - "final-owner-security-rereview:ACCEPT; legacy sibling drain, owner isolation, terminal truth, and reactivation guard accepted"
-    - "final-atomic-cardinality-rereview:REPAIR; successful live reactivation of an indexed legacy body rewrites object metadata from empty TrajectoryID and erases the drain index"
-    - "legacy-reindex-repair:full store PASS; live indexed legacy reactivation persists canonical TrajectoryID and remains queryable; terminal reactivation remains rejected"
-    - "legacy-reindex-runtime:280/280 shard tests PASS; legacy-addressed sibling drain and 205-run drain PASS"
-    - "legacy-reindex-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
-    - "final-atomic-cardinality-rereview:ACCEPT a2cba343; reindex blocker closed, terminal admission preserved, no lock inversion introduced"
-    - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
-    - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
-    - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "Independent atomic/cardinality and owner/security reviewers ACCEPT the frozen candidate. Residual risks are process-local locking, retry-dependent 30-second drain, log-and-retry orphan recovery, and a pre-existing 100000-item assigned-work boot scan; deployed acceptance remains required."
-  next_action: "Push the accepted candidate to origin/main, monitor CI and staging deployment identity, then run authenticated staging trajectory cancellation against the observed stuck trajectory and fetch its terminal state."
+    - "prior-slice-ci:https://github.com/choir-hip/go-choir/actions/runs/29332283029"
+    - "prior-slice-deploy-job:87083822349"
+    - "prior-slice-authenticated-staging:trajectory a57593ae-3ab1-4dd6-b4d3-88f1d851ef31 cancelled with zero open work items"
+  blocker_or_risk: "No blocker. The exact API extraction boundary is not yet selected; broad package movement would risk route and authority drift."
+  next_action: "Map API-owned production files and callers against canonical internal/apihandler ownership, then choose one cohesive deletion-first cutover with focused behavior contracts and an exact ratchet delta."
 
 receipts:
   - id: predecessor-B0-authority
@@ -278,6 +250,12 @@ receipts:
     commit_or_artifact: 59f514efae75bd00a07743c4944a7018d23a49d8
     proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29306556937", "deploy-job:87001461766", "staging-trajectory:4ba004d6-ac56-4a2a-9c49-284c15376b82", "researcher-run:6eeedde6-7e44-40c0-91d5-55c7c2f491c4"]
     rollback_ref: 4a1bbdd1a43b0d0cbda6b5ef03950aa48785a97
+    disposition: complete
+  - id: R1-wire-publication-terminalization-09
+    boundary: implement
+    commit_or_artifact: 93af4b20bdd9a9d62c6d82a2b39db41480e6e685
+    proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29332283029", "deploy-job:87083822349", "vm-activation-job:57518b1d-97b1-5d6b-bb63-276202e25485", "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31", "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908", "authenticated-cancel:HTTP-200-idempotent", "boot-recovery-terminalized-at:2026-07-14T12:30:23.942315805Z"]
+    rollback_ref: bfefa64f1f1d9df9a58a38f782e21f6a8fc5aedf
     disposition: complete
 
 view:
