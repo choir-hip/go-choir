@@ -394,105 +394,86 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T00:20:06Z
+  updated_at: 2026-07-14T00:56:02Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@6627cc3294c8e950f5b7c5339b8e0bb056ace3d8
+  expected_parent_or_authority_ref: refs/heads/main@origin@1b28520d6a3d31ecf36b2a645623367b4630faa0
   status: working
-  current_subgoal: R1-prompt-packages-cutover-02
+  current_subgoal: R1-prompt-store-package-cutover-03
   active_phase: R1-runtime-dissolution
   active_frontier:
-    - R1-prompt-packages-cutover-02
+    - R1-prompt-store-package-cutover-03
   locks:
-    - id: R1-prompt-packages-cutover-02
-      status: verified_local
+    - id: R1-prompt-store-package-cutover-03
+      status: defined
       mutation_class: orange
-      classification_rationale: Runtime package ownership changes are orange even when byte-identical prompt assets and loaders preserve behavior; no red protected surface is touched.
-      conjecture: The self-contained runtime and Texture prompt asset packages can move atomically to top-level cohesive owners without changing any embedded prompt byte, parser/rendering behavior, role policy, route, tool, state authority, provider routing, or model selection.
-      object: nested runtimeprompts and textureprompts package ownership
-      selection_rationale: Both packages depend only on the settled top-level promptspec owner plus the standard library, own their embedded prompt assets and direct tests, and have a finite caller set; moving them removes two complete nested runtime ownership domains without a new behavioral boundary.
+      classification_rationale: Prompt persistence and default-loading ownership are runtime behavior, so their package cutover is orange even when prompt bytes, filesystem state, and API behavior remain unchanged; no red protected surface is touched.
+      conjecture: The prompt store, its direct tests, and all seeded default assets can move atomically to a top-level internal/promptstore owner with a clean Store/Descriptor/New API, without changing prompt bytes, override/reset semantics, persistent paths, role policy, routes, tools, state authority, provider routing, or model selection.
+      object: prompt store and seeded-default package ownership
+      selection_rationale: The store imports only settled top-level owners and the standard library, owns one cohesive persistence/default-loading domain with direct tests, and is consumed through one runtime field and accessor; moving it removes the next dependency-leaf production file plus its test and eight embedded assets.
       exact_source_scope:
-        - internal/runtime/runtimeprompts
-        - internal/runtime/textureprompts
         - internal/runtime/prompt_store.go
-        - internal/runtime/texture_agent_revision.go
-        - internal/runtime/texture_prompt_unit_test.go
-        - internal/runtime/tool_profiles.go
-        - internal/runtimeprompts
-        - internal/textureprompts
+        - internal/runtime/prompt_store_test.go
+        - internal/runtime/prompt_defaults
+        - internal/promptstore/store.go
+        - internal/promptstore/store_test.go
+        - internal/promptstore/defaults
+        - internal/runtime/runtime.go
+        - internal/runtime/prompts.go
+        - internal/runtime/test_helpers_test.go
         - cmd/doccheck/main.go
         - cmd/doccheck/main_test.go
         - docs/choir-prompting-invariants.md
-        - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
         - docs/runtime-dissolution-inventory.yaml
         - docs/definitions/choir-autoputer-completion-2026-07-13.md
       production_callers:
-        - internal/runtime/prompt_store.go
-        - internal/runtime/texture_agent_revision.go
+        - internal/runtime/runtime.go
+        - internal/runtime/prompts.go
         - internal/runtime/tool_profiles.go
       test_callers:
-        - internal/runtime/texture_prompt_unit_test.go
+        - internal/runtime/prompt_store_test.go
+        - internal/runtime/runtime_test.go
+        - internal/runtime/test_helpers_test.go
       path_consumers:
         - cmd/doccheck/main.go
+        - cmd/doccheck/main_test.go
         - docs/choir-prompting-invariants.md
-        - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
       exact_deletions:
-        - internal/runtime/runtimeprompts
-        - internal/runtime/textureprompts
+        - internal/runtime/prompt_store.go
+        - internal/runtime/prompt_store_test.go
+        - internal/runtime/prompt_defaults
       invariants:
-        - Move every Go file, direct test, embedded YAML asset, and overlay with its package; preserve file bytes exactly.
-        - Rewrite every production and test import in the same landing, and cut the doccheck runtime-prompt classifier plus its user hint to the new Texture prompt path with a focused regression test.
-        - Add no alias, forwarding package, wrapper, accessor, callback, interface, duplicate implementation, compatibility path, or copied asset.
-        - Keep prompt content, prompt rendering, role policy, route registrations, tool registrations, state authorities, provider routing, and model policy unchanged.
-        - Redirect every current doctrine, invariant, and subordinate-contract citer to the new owners in the same landing; immutable historical evidence retains its historical path.
-        - Regenerate the runtime inventory without weakening debt authority; every category must stay flat or decrease, and runtime Go files plus runtime LOC must decrease.
+        - Preserve every seeded default YAML byte and every LoadCore, List, Load, Save, Reset, validation, sanitization, override, reset, and filesystem persistence behavior.
+        - Cut PromptStore, PromptDescriptor, and NewPromptStore directly to promptstore.Store, promptstore.Descriptor, and promptstore.New; add no alias, forwarding symbol, wrapper, accessor, callback, interface, duplicate implementation, compatibility path, or copied asset.
+        - Keep the runtime PromptStore accessor only as the existing product-facing ownership edge, returning the new concrete owner; update construction and test fixtures in the same landing.
+        - Move the eight embedded defaults with their owner, change only the embed-relative path, redirect current invariant citers, and retain dated historical path evidence unchanged.
+        - Make doccheck classify the new default asset path as runtime-prompt and continue rejecting Markdown beside default YAML through focused behavioral tests; remove recognition of the deleted path.
+        - Keep prompt content, persistent root/defaults/users layout, role policy, route registrations, tool registrations, state authorities, provider routing, and model policy unchanged.
+        - Regenerate the runtime inventory without weakening debt authority. The implementation may rebaseline documentation citers from the landed 268 to exactly the mechanically observed post-Define value 270; production files, production LOC, exports, export caller edges, initial unused-export debt, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, legacy state writers, and legacy store reads may not increase, while runtime Go files and runtime LOC must decrease.
       protected_surfaces: []
       admissible_evidence:
         - E0 clean canonical source identity
-        - E1 byte identities for every moved file, zero Go imports of either old path, absent old filesystem packages, current citer redirects, and runtime ratchet PASS with decreased runtime file and LOC counts
-        - E2 direct runtimeprompts and textureprompts tests plus focused prompt-store, texture-revision, tool-profile, prompt-rendering, and doccheck path-classification behavior
+        - E1 byte identities for all eight moved YAML assets, absent old files and directory, zero stale symbols/path imports in current source, current citer redirects, and runtime ratchet PASS with decreased runtime file and LOC counts plus only the explicitly authorized documentation-citer rebaseline
+        - E2 direct promptstore persistence/default tests, doccheck classification/Markdown tests, focused runtime prompt API/override/default-loading tests, and full affected package tests
         - E6 independent immutable-candidate verification
-      rollback_ref: 6627cc3294c8e950f5b7c5339b8e0bb056ace3d8
-      close_condition: Both old directories and all Go imports are absent, both new owners contain byte-identical implementations, assets, and direct tests, focused behavior and ratchet checks pass without category growth, independent review finds no forbidden seam or policy delta, and canonical CI/deploy/authenticated prompt-artifact receipts bind the landed commit.
+      rollback_ref: 1b28520d6a3d31ecf36b2a645623367b4630faa0
+      close_condition: The old store files/default directory and stale symbols are absent, the new concrete owner contains the implementation, direct tests, and eight byte-identical YAML assets, persistent/API behavior and doccheck enforcement pass, the regenerated ratchet passes with only the authorized documentation-citer rebaseline and no source-category growth, independent review finds no forbidden seam or behavior delta, and canonical CI/deploy/authenticated prompt-artifact receipts bind the landed commit.
       assurance:
         independent_verifier: required
         panel: compact
-        review_binding: frozen base, exact diff digest, byte-identity manifest, commands, and ratchet delta
+        review_binding: frozen base, exact diff digest, asset byte-identity manifest, commands, ratchet delta, and persistent-path/API assertions
         define_review_result:
-          candidate_diff_sha256: 4af62491bf7687865cf3c68f46b8e2b1484eeec04dc14c3c20d46278fc8a0661
-          reviewers:
-            - google-antigravity/gemini-3.5-flash: PASS
-            - opencode/hy3-free: timed out after repository scan without a final verdict
-          adjudication: The first panel run found a missing doccheck path consumer; the lock now includes the classifier, hint, focused test, and all current doctrine/subordinate citers. Gemini independently verified the repaired complete scope, closure receipts, authority identity, dependencies, and diff digest. The second opencode run confirmed the target trees and enumerated the repaired callers and citers before timing out without a new finding.
-          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, graph, evidence floor, or stopping condition.
-        implementation_review_result:
-          candidate_diff_sha256: 4953f9203e258c92bd13f253bfca666557440f106c0a5e59c1722a7330d781e9
+          candidate_diff_sha256: 4b0581652ed85606a414c1f3eff998c0706e3a6ef19705dee53a2b2b6ed40053
           reviewers:
             - opencode/hy3-free: PASS
             - google-antigravity/gemini-3.5-flash: PASS
-          adjudication: Both reviewers independently recomputed all 20 byte-identical renames, every Go caller and current citer cutover, doccheck path behavior, exact ratchet reductions, absent forbidden seams, coherent state, and focused build/test results. No blocking finding remained.
-          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed source, inventory, lock, graph, evidence floor, or stopping condition.
-      local_evidence:
-        - class: E0
-          observation: canonical implementation parent 6627cc3294c8e950f5b7c5339b8e0bb056ace3d8; all candidate changes are within the reviewed lock
-        - class: E1
-          observation: all 20 package Go, test, and embedded YAML files are detected as 100% byte-identical renames; old package directories and old Go import searches are empty; regenerated runtime ratchet PASS at go_files 137, production_files 72, test_files 65, production_loc 43694, test_loc 49918, exports 968, export_caller_edges 323, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, citers 268
-        - class: E2
-          observation: direct runtimeprompts, textureprompts, and full doccheck package tests passed
-          artifact_ref: artifact://111
-        - class: E2
-          observation: focused runtime prompt-store, system-prompt, Texture-prompt, revision-prompt, and provider-prompt consumer tests passed
-          artifact_ref: artifact://113
-        - class: E2
-          observation: runtime ratchet unit tests passed
-          artifact_ref: artifact://116
-        - class: E2
-          observation: gopls reported no diagnostics in either moved package or cmd/doccheck after workspace refresh
+          adjudication: Both reviewers independently confirmed the eight assets, complete concrete symbol and caller graph, path consumers, current-versus-historical citer policy, exact 268-to-270 Define-only citer drift, closure receipts, authority identity, and executable clean-cutover constraints. No blocking finding remained.
+          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, graph, evidence floor, or stopping condition.
       heresy_delta:
-        discovered: []
+        discovered:
+          - This Define authority replaces the prior lock and mechanically raises documentation citers from 268 to 270 before implementation; source counts remain unchanged.
         introduced: []
         repaired:
-          - nested runtime ownership of the runtime prompt overlay domain
-          - nested runtime ownership of the Texture prompt asset domain
+          - nested runtime ownership of prompt persistence and seeded defaults
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin
@@ -539,11 +520,23 @@ state_capsule:
       rollback_refs: [f4d47c1b5cd412333384de7ef516a7d723c443b3]
       result: CI and all race shards passed; activation receipt bound ordinary guest, sandbox, active computers, and gateway to the implementation commit; an authenticated CLI prompt completed and its fetched Texture artifact contained the exact requested deployed-parser sentence.
       invalidation_triggers: [reproduced prompt parsing or rendering failure, old package path reintroduced, runtime ratchet regression]
+    - id: R1-prompt-packages-cutover-02
+      status: complete
+      artifact_ref: 488664d98b7466f47b7639607ef318b241be44e7
+      evidence_refs:
+        - https://github.com/choir-hip/go-choir/actions/runs/29295978398
+        - https://github.com/choir-hip/go-choir/actions/runs/29295978398#job-86971008673
+        - staging-submission:abd95009-6186-40f4-8525-8532959d04fa
+        - texture-document:51d1047f-4727-481e-8aa2-3b6019796eab
+        - texture-revision:8fb7afe3-2d2b-4286-9cea-52a4dcc34f25
+      rollback_refs: [6627cc3294c8e950f5b7c5339b8e0bb056ace3d8]
+      result: CI, every selected race shard, differential SBOM, and deploy passed; the activation receipt bound ordinary guest, sandbox, active computers, and gateway to the implementation commit; an authenticated CLI prompt completed and its fetched Texture artifact contained the exact requested relocated-package acceptance sentence.
+      invalidation_triggers: [reproduced prompt rendering or embedded asset failure, old package path reintroduced, runtime ratchet regression]
   artifact_identity:
-    source: refs/heads/main@origin@642b391a1589196cccf8c35169b1d32b5e791131
-    build: https://github.com/choir-hip/go-choir/actions/runs/29293772373
-    deploy: https://github.com/choir-hip/go-choir/actions/runs/29293772373#job-86964336512
-    staging: submission c8e6d073-2382-4d01-81a8-3616bcd08de0 completed and Texture revision 7b837837-29b8-4a6c-a6ad-491f42a024ae fetched after activation
+    source: refs/heads/main@origin@1b28520d6a3d31ecf36b2a645623367b4630faa0
+    build: https://github.com/choir-hip/go-choir/actions/runs/29295978398
+    deploy: https://github.com/choir-hip/go-choir/actions/runs/29295978398#job-86971008673
+    staging: submission abd95009-6186-40f4-8525-8532959d04fa completed and Texture revision 8fb7afe3-2d2b-4286-9cea-52a4dcc34f25 fetched after activation
   variant:
     measure: unsatisfied_phase_contracts
     value: 7
@@ -567,6 +560,9 @@ state_capsule:
     - claim: Define and Implement are the only routine Git durability boundaries.
       source: operational-preference
       execution_effect: Process telemetry remains external to the canonical capsule.
+    - claim: Race checks and differential SBOM generation are temporarily paused in canonical CI.
+      source: user-stated
+      execution_effect: Keep both jobs skipped until the owner directs re-enablement; commit 1b28520d6a3d31ecf36b2a645623367b4630faa0 is the rollback boundary.
   open_findings:
     - S3 whole-handler transport-first cutover is compile-falsified by private domain dependencies.
     - Staging gateway readiness failures caused by local runtime/Dolt/Ollama refusal remain non-attributable to the deployed product until reproduced there.
@@ -575,8 +571,9 @@ state_capsule:
     - Repeated orchestration receipts increased context and commit volume without increasing product evidence.
     - Domain-first cohesive extraction followed by thin transport cutover is the current evidence-backed route.
     - The first clean cutover proved that leaf prompt ownership can leave the runtime directory without new indirection, source-category growth, or deployed prompt regression.
-  highest_impact_remaining_uncertainty: Whether the two remaining self-contained prompt packages and all embedded assets can move together with byte identity and complete production/test caller cutover.
-  next_executable_probe: Freeze and review this code-free R1-prompt-packages-cutover-02 boundary, commit it, then move both complete package trees and every caller atomically before regenerating the ratchet.
+    - Two consecutive clean leaf cutovers preserved deployed prompt behavior while reducing runtime from 143 to 137 Go files without increasing any source-debt category.
+  highest_impact_remaining_uncertainty: Whether prompt persistence, seeded defaults, runtime construction, and doccheck enforcement can leave the runtime package together without changing bytes, filesystem state, or API behavior.
+  next_executable_probe: Freeze and review this code-free R1-prompt-store-package-cutover-03 boundary, commit it, then move the store, direct tests, eight assets, concrete construction edge, path enforcement, and current citer atomically before regenerating the ratchet.
   evidence_index_refs:
     - docs/definitions/choir-autoputer-completion-suite-2026-07-11.md
     - docs/runtime-dissolution-inventory.yaml
