@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -499,12 +498,4 @@ func (rt *Runtime) ToolRegistryForProfile(profile string) *toolregistry.ToolRegi
 		return nil
 	}
 	return rt.toolProfiles[strings.TrimSpace(profile)]
-}
-
-func toolResultJSON(v map[string]any) (string, error) {
-	out, err := json.Marshal(v)
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
 }

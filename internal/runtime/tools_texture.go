@@ -21,7 +21,7 @@ import (
 )
 
 func RegisterTextureTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newPatchTextureTool(rt),
 		newRewriteTextureTool(rt),
 		newRecordTextureDecisionTool(rt),
@@ -86,11 +86,10 @@ func isTextureWriteToolName(name string) bool {
 	}
 }
 
-func newPatchTextureTool(rt *Runtime) Tool {
-	return Tool{
-		Name:        "patch_texture",
+func newPatchTextureTool(rt *Runtime) toolregistry.Tool {
+	return toolregistry.Tool{Name: "patch_texture",
 		Description: "Apply validated structured operations to the current Texture document BodyDoc and store the next canonical version. Use update_block_text, insert_block, append_block, delete_node, insert_source_ref, and mark_source_unused. insert_source_ref with display_mode numbered_ref is the default inline citation; use display_mode expanded_ref only when a visible block excerpt is editorially required. Do not send raw document JSON, markdown source links, find/replace patches, or metadata source sidecars.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"doc_id":           map[string]any{"type": "string"},
 			"base_revision_id": map[string]any{"type": "string"},
 			"rationale":        map[string]any{"type": "string"},
@@ -129,15 +128,13 @@ func newPatchTextureTool(rt *Runtime) Tool {
 			in.Content = ""
 			in.SourceTool = "patch_texture"
 			return rt.executeTextureEditTool(ctx, "patch_texture", in)
-		},
-	}
+		}}
 }
 
-func newRewriteTextureTool(rt *Runtime) Tool {
-	return Tool{
-		Name:        "rewrite_texture",
+func newRewriteTextureTool(rt *Runtime) toolregistry.Tool {
+	return toolregistry.Tool{Name: "rewrite_texture",
 		Description: "Exceptionally rewrite the whole Texture document from plain prose through server-owned StructuredTextureDoc conversion and validation. Use only for explicit recovery rewrites or owner-requested full transformations after auditing source/ref loss. Rationale is required.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"doc_id":           map[string]any{"type": "string"},
 			"base_revision_id": map[string]any{"type": "string"},
 			"content":          map[string]any{"type": "string"},
@@ -154,8 +151,7 @@ func newRewriteTextureTool(rt *Runtime) Tool {
 			in.Operation = "replace_all"
 			in.SourceTool = "rewrite_texture"
 			return rt.executeTextureEditTool(ctx, "rewrite_texture", in)
-		},
-	}
+		}}
 }
 
 func (rt *Runtime) executeTextureEditTool(ctx context.Context, toolName string, in editTextureArgs) (string, error) {
@@ -176,7 +172,7 @@ func (rt *Runtime) executeTextureEditTool(ctx context.Context, toolName string, 
 		"base_revision_id": rev.ParentRevisionID,
 		"status":           "stored",
 	}
-	return toolResultJSON(result)
+	return toolregistry.ResultJSON(result)
 }
 
 type recordTextureDecisionArgs struct {
@@ -187,7 +183,7 @@ type recordTextureDecisionArgs struct {
 	NextAction   string   `json:"next_action,omitempty"`
 }
 
-func newRecordTextureDecisionTool(rt *Runtime) Tool {
+func newRecordTextureDecisionTool(rt *Runtime) toolregistry.Tool {
 	allowedKinds := []string{
 		"delegation_opened",
 		"delegation_skipped",
@@ -196,10 +192,9 @@ func newRecordTextureDecisionTool(rt *Runtime) Tool {
 		"blocker",
 		"no_worker_needed",
 	}
-	return Tool{
-		Name:        "record_texture_decision",
+	return toolregistry.Tool{Name: "record_texture_decision",
 		Description: "Record an audit-worthy Texture decision outside the canonical document. Use this for reasoned delegation choices, waits, blockers, or no-worker decisions that reviewers may need later. If the owner explicitly asks Texture to record an off-document decision note and the requested record is truthful and within Texture authority, call this tool. Do not use it for ordinary sentence-level edits, and do not put agent process rationale into document text.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"doc_id": map[string]any{
 				"type":        "string",
 				"description": "The Texture document id. Omit only when the current Texture run is already scoped to the document.",
@@ -263,7 +258,7 @@ func newRecordTextureDecisionTool(rt *Runtime) Tool {
 			if existing, err := rt.store.ListTextureDecisionsByDocument(ctx, rec.OwnerID, docID, 100); err == nil {
 				for _, prior := range existing {
 					if prior.RunID == rec.RunID && prior.DecisionKind == decisionKind && prior.Reason == reason {
-						return toolResultJSON(map[string]any{
+						return toolregistry.ResultJSON(map[string]any{
 							"decision_id":   prior.DecisionID,
 							"doc_id":        prior.DocID,
 							"decision_kind": prior.DecisionKind,
@@ -291,15 +286,14 @@ func newRecordTextureDecisionTool(rt *Runtime) Tool {
 				return "", err
 			}
 			rt.emitTextureDecisionRecordedEvent(ctx, rec, decision)
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"decision_id":   decision.DecisionID,
 				"doc_id":        decision.DocID,
 				"decision_kind": decision.DecisionKind,
 				"status":        "recorded",
 				"created_at":    decision.CreatedAt.Format(time.RFC3339Nano),
 			})
-		},
-	}
+		}}
 }
 
 func validTextureDecisionKind(kind string) bool {
@@ -311,16 +305,15 @@ func validTextureDecisionKind(kind string) bool {
 	}
 }
 
-func newRequestSuperExecutionTool(rt *Runtime) Tool {
+func newRequestSuperExecutionTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Objective string `json:"objective"`
 		ChannelID string `json:"channel_id,omitempty"`
 		Model     string `json:"model,omitempty"`
 	}
-	return Tool{
-		Name:        "request_super_execution",
+	return toolregistry.Tool{Name: "request_super_execution",
 		Description: "Request privileged execution from the persistent super agent without spawning a new super.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"objective":  map[string]any{"type": "string"},
 			"channel_id": map[string]any{"type": "string"},
 			"model":      map[string]any{"type": "string"},
@@ -351,9 +344,8 @@ func newRequestSuperExecutionTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(result)
-		},
-	}
+			return toolregistry.ResultJSON(result)
+		}}
 }
 
 func (rt *Runtime) requestPersistentSuperExecution(ctx context.Context, ownerID, channelID, requesterRunID, requesterAgentID, objective, model string) (map[string]any, error) {

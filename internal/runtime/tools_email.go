@@ -59,11 +59,10 @@ type maildRiskAlertResponse struct {
 	ProviderMessageID string `json:"provider_message_id"`
 }
 
-func newRequestEmailDraftTool(rt *Runtime) Tool {
-	return Tool{
-		Name:        "request_email_draft",
+func newRequestEmailDraftTool(rt *Runtime) toolregistry.Tool {
+	return toolregistry.Tool{Name: "request_email_draft",
 		Description: "Texture-only handoff to the Email appagent. Creates a Trace-visible versioned email draft request; it never sends mail.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"doc_id":              map[string]any{"type": "string", "description": "Canonical Texture document id that owns the email content."},
 			"revision_id":         map[string]any{"type": "string", "description": "Exact Texture revision id containing the email artifact."},
 			"source_content_hash": map[string]any{"type": "string", "description": "Hash of the exact Texture source artifact/version being handed to Email."},
@@ -92,9 +91,8 @@ func newRequestEmailDraftTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(result)
-		},
-	}
+			return toolregistry.ResultJSON(result)
+		}}
 }
 
 func (rt *Runtime) recordEmailDraftRequest(ctx context.Context, parent *types.RunRecord, in requestEmailDraftArgs) (map[string]any, error) {

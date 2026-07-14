@@ -92,11 +92,18 @@ func TestInventoryRejectsDispositionErrors(t *testing.T) {
 
 func TestSyntaxAwareInventory(t *testing.T) {
 	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/toolregistry/toolregistry.go", `package toolregistry
+
+type Tool struct { Name string }
+`)
 	writeFixture(t, root, "internal/runtime/registration.go", `package runtime
+
+import "github.com/yusefmosiah/go-choir/internal/toolregistry"
 
 func register(s interface{ HandleFunc(string, any) }, r interface{ Register(any) error }) {
 	s.HandleFunc("/api/example", handler)
 	_ = r.Register(Tool{Name: "example_tool"})
+	_ = r.Register(toolregistry.Tool{Name: "qualified_tool"})
 }
 
 var handler any
@@ -110,8 +117,8 @@ const notAnImport = "github.com/yusefmosiah/go-choir/internal/runtime"
 	if len(inv.Routes) != 1 || !strings.Contains(inv.Routes[0].ID, "/api/example") {
 		t.Fatalf("routes = %+v, want syntax-derived /api/example registration", inv.Routes)
 	}
-	if len(inv.Tools) != 1 || !strings.Contains(inv.Tools[0].ID, "example_tool") {
-		t.Fatalf("tools = %+v, want syntax-derived example_tool registration", inv.Tools)
+	if len(inv.Tools) != 2 || !strings.Contains(inv.Tools[0].ID, "example_tool") || !strings.Contains(inv.Tools[1].ID, "qualified_tool") {
+		t.Fatalf("tools = %+v, want identical unqualified and qualified syntax-derived registrations", inv.Tools)
 	}
 	if len(inv.ProductionImporters) != 0 {
 		t.Fatalf("production importers = %+v, string literal must not count as import", inv.ProductionImporters)
@@ -158,19 +165,19 @@ func writeState(value *store.Store) {
 `)
 	inventory := mustScan(t, root)
 	required := map[string]string{
-		"CreateDocument": "wire",
-		"CreateRevision": "wire",
-		"UpdateDocument": "wire",
-		"CreateWorkItem": "wire",
-		"UpdateTrajectoryStatus": "wire",
-		"PatchRevisionMetadata": "wire",
-		"ClaimCoSuperSlot": "lifecycle",
-		"ReleaseCoSuperSlotClaim": "lifecycle",
-		"CancelAgentMutation": "lifecycle",
-		"UpsertAppAdoption": "promotion",
+		"CreateDocument":              "wire",
+		"CreateRevision":              "wire",
+		"UpdateDocument":              "wire",
+		"CreateWorkItem":              "wire",
+		"UpdateTrajectoryStatus":      "wire",
+		"PatchRevisionMetadata":       "wire",
+		"ClaimCoSuperSlot":            "lifecycle",
+		"ReleaseCoSuperSlotClaim":     "lifecycle",
+		"CancelAgentMutation":         "lifecycle",
+		"UpsertAppAdoption":           "promotion",
 		"UpsertComputerSourceLineage": "promotion",
-		"UpsertAppChangePackage": "promotion",
-		"UpdateAppAdoptionIfCurrent": "promotion",
+		"UpsertAppChangePackage":      "promotion",
+		"UpdateAppAdoptionIfCurrent":  "promotion",
 	}
 	for index := range inventory.StoreCalls {
 		call := &inventory.StoreCalls[index]
@@ -283,19 +290,19 @@ var stateStore *store.Store
 
 func TestStoreWriterDispositionsCannotBeLaundered(t *testing.T) {
 	required := map[string]string{
-		"CreateBrowserSession": "lifecycle",
-		"UpdateBrowserSession": "lifecycle",
+		"CreateBrowserSession":      "lifecycle",
+		"UpdateBrowserSession":      "lifecycle",
 		"UpsertPodcastSubscription": "lifecycle",
-		"UpsertMediaProgress": "lifecycle",
-		"UpsertMediaRecent": "lifecycle",
-		"SaveUserPreference": "lifecycle",
-		"UpsertDocumentAlias": "wire",
-		"DeleteDocument": "wire",
+		"UpsertMediaProgress":       "lifecycle",
+		"UpsertMediaRecent":         "lifecycle",
+		"SaveUserPreference":        "lifecycle",
+		"UpsertDocumentAlias":       "wire",
+		"DeleteDocument":            "wire",
 	}
 	for method, expected := range required {
 		t.Run(method, func(t *testing.T) {
 			inventory := Inventory{StoreCalls: []Entry{{
-				ID: "internal/runtime/fixture.go:use:internal/store.method:Store." + method,
+				ID:          "internal/runtime/fixture.go:use:internal/store.method:Store." + method,
 				Disposition: "read",
 			}}}
 			assertDiagnostic(t, errors.New(strings.Join(validateStoreCalls(inventory.StoreCalls), "\n")), "must use "+expected+" disposition")
@@ -330,9 +337,6 @@ func readStore(value *store.Store) { value.GetDocument() }
 		t.Fatalf("baseline-dispositioned read: %v", err)
 	}
 }
-
-
-
 
 func TestStoreMethodValuesAreInventoried(t *testing.T) {
 	t.Run("mutating method value is new call identity", func(t *testing.T) {
@@ -730,8 +734,6 @@ func TestCiterSuffixDriftChangesDigestIdentity(t *testing.T) {
 	err := compareInventory(baseline, mustScan(t, root))
 	assertDiagnostic(t, err, "citers: added item")
 }
-
-
 
 func rebaseInitialDebt(inventory *Inventory, initial []Entry) {
 	current := make(map[string]Entry, len(inventory.Exports))

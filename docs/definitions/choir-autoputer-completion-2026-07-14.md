@@ -138,44 +138,46 @@ measures:
 
 now:
   status: working
-  slice: "rebuild the toolregistry clean cutover from the protected candidate"
-  question: "Does the rebuilt cutover preserve every ToolRegistry contract while deleting the runtime facade and keeping the ratchet mechanically exact?"
+  slice: "land the verified toolregistry clean cutover"
+  question: "Does pushed staging preserve product-path tool execution after the runtime facade is deleted?"
   reconciliation:
-    observed_at: 2026-07-14T09:10:00Z
-    source_ref: refs/heads/autoputer-definition-v2@ba90974c19a5ca1bdcd861302a225aa318087f56
+    observed_at: 2026-07-14T09:24:01Z
+    source_ref: refs/heads/autoputer-definition-v2@db1ea597cf862b77f5ccb288f8eb76a08309b64d
     deploy_identity: unknown
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-      - docs/runtime-dissolution-inventory.yaml@canonical_parent:f72a141ef0f97fbec6521831dc3f5836b9526631-stale
+      - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
     status: reconciled
   candidate:
     id: R1-toolregistry-facade-extinction-08-rebuild
-    state: authorized_rebuild
+    state: verified_local
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
-    base: refs/heads/autoputer-definition-v2@ba90974c19a5ca1bdcd861302a225aa318087f56
-    digest: pending
+    base: refs/heads/autoputer-definition-v2@db1ea597cf862b77f5ccb288f8eb76a08309b64d
+    digest: sha256:faa525991e2f80344ea2629e5fbbfbe7fa2640cdb1904769e646c26c9552a827
     scope: [toolregistry_facade_clean_cutover]
   decision:
-    selected: "Rebuild the protected candidate in the isolated worktree: retain its sound direct-owner production cutover, preserve or relocate deleted ToolRegistry contract coverage, and regenerate the runtime inventory from the actual source."
+    selected: "Accept the rebuilt candidate for landing: internal/toolregistry is the sole owner, focused owner contracts were preserved, the complete runtime shard suite passed, and the scoped ratchet is exact."
     kind: operational
     status: settled
     source: orchestrator
-    evidence_ref: "read-only symbol/caller and ratchet reconciliation of sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e"
+    evidence_ref: "toolregistry tests PASS; runtime focused tests PASS; runtime shards 272/272 PASS; runtime-ratchet PASS"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-14T09:10:00Z
-    consequence: "The protected 25-path user WIP remains untouched. The isolated rebuild must delete internal/runtime/tools.go and move all callers directly to internal/toolregistry without losing registry behavior coverage or accepting stale inventory provenance."
+    recorded_at: 2026-07-14T09:24:01Z
+    consequence: "Land and prove staging before selecting another ownership slice. Conjecture delta: direct canonical ownership preserves tool execution without runtime facades. Heresy delta: discovered missing owner-test migration in the protected candidate; introduced none; repaired the test-authority and stale-inventory gaps."
   evidence_refs:
-    - docs/runtime-dissolution-inventory.yaml
-    - docs/definitions/choir-autoputer-completion-2026-07-13.md
-    - sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    - "source-map: Tool, jsonSchemaObject, cloneSchemaMap, buildSystemPromptWithTools, toolProjectionResultJSON, toolResultJSON -> internal/toolregistry"
-  blocker_or_risk: "The protected production cutover is sound, but its ratchet kept a stale canonical parent and its test rewrite removed focused ToolRegistry contracts without equivalent owner-package coverage."
-  next_action: "Rebuild the production migration in /Users/wiz/go-choir-autoputer-v2, preserve the focused ToolRegistry contracts under internal/toolregistry, regenerate the runtime inventory, and run focused owner/caller tests plus the scoped ratchet."
+    - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
+    - sha256:faa525991e2f80344ea2629e5fbbfbe7fa2640cdb1904769e646c26c9552a827
+    - "go test ./internal/toolregistry: PASS"
+    - "go test ./internal/runtime -run focused-tool-and-run-memory-contracts: PASS"
+    - "scripts/go-test-runtime-shards: 272/272 PASS"
+    - "go run ./cmd/runtime-ratchet -root .: PASS"
+  blocker_or_risk: "The candidate has only local source/test evidence; pushed identity, CI, staging deploy identity, and authenticated product-path acceptance are still missing."
+  next_action: "Commit and push the verified candidate to origin/main, monitor CI and staging deployment for that SHA, then run an authenticated staging product-path tool operation and fetch its durable artifact."
 
 receipts:
   - id: predecessor-B0-authority

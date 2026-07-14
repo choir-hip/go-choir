@@ -26,11 +26,11 @@ type submitCoagentUpdateArgs struct {
 	types.CoagentSourcePacketPayload
 }
 
-func newUpdateCoagentTool(rt *Runtime) Tool {
-	return Tool{
+func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
+	return toolregistry.Tool{
 		Name:        "update_coagent",
 		Description: "Append one addressed coagent source packet and wake the target actor. The canonical packet shape is schema_version, kind, summary, claims, sources, actions, questions, and notes. Texture may cite/embed only packet.sources; Super may execute only kind=execution_request packets with actions. Runtime derives update_id; do not send update_id or legacy findings/evidence_ids/evidence/artifacts/refs/tests/proposals/capability_requests fields.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"schema_version": map[string]any{"type": "string", "enum": []string{types.CoagentSourcePacketSchemaV1}},
 			"kind":           map[string]any{"type": "string", "enum": []string{"evidence_update", "execution_request", "execution_result", "blocker", "question", "proposal", "decision_request"}},
 			"summary":        map[string]any{"type": "string"},
@@ -242,7 +242,7 @@ func newUpdateCoagentTool(rt *Runtime) Tool {
 				rt.wakeUpdatedCoagent(ctx, stored)
 			}
 
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"update_id":     stored.UpdateID,
 				"agent_id":      stored.TargetAgentID,
 				"channel_id":    stored.ChannelID,

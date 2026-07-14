@@ -21,11 +21,11 @@ type recordWireProcessorDecisionArgs struct {
 	CoveredByDocID string   `json:"covered_by_doc_id,omitempty"`
 }
 
-func newRecordWireProcessorDecisionTool(rt *Runtime) Tool {
-	return Tool{
+func newRecordWireProcessorDecisionTool(rt *Runtime) toolregistry.Tool {
+	return toolregistry.Tool{
 		Name:        "record_wire_processor_decision",
 		Description: "Record a typed non-publication decision for the current Universal Wire processor request. Use this when no Texture story should open, so the request does not disappear behind terminal run state or a prose-only checkpoint.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"decision": map[string]any{
 				"type": "string",
 				"enum": []string{
@@ -85,7 +85,7 @@ func newRecordWireProcessorDecisionTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"trajectory_id":     runRec.TrajectoryID,
 				"work_item_id":      item.WorkItemID,
 				"decision":          decision,

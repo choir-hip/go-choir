@@ -262,7 +262,7 @@ func RunToolLoop(ctx context.Context, provider provideriface.ToolLoopProvider, r
 	toolDefs := []provideriface.ToolDefinition{}
 	if registry != nil {
 		toolDefs = registry.Definitions()
-		systemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
+		systemPrompt = BuildSystemPrompt(systemPrompt, registry)
 	}
 	forceInitialToolChoiceRetry := false
 	relaxInitialExactToolChoice := false
@@ -1667,13 +1667,6 @@ func stringMapValue(m map[string]any, key string) string {
 		return strings.TrimSpace(rv.String())
 	}
 	return ""
-}
-
-func buildSystemPromptWithTools(basePrompt string, registry *ToolRegistry) string {
-	if registry == nil || registry.Size() == 0 {
-		return basePrompt
-	}
-	return basePrompt + "\n\n" + registry.Catalog()
 }
 
 func runMemoryMessageRole(msg json.RawMessage) string {

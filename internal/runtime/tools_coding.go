@@ -19,7 +19,7 @@ import (
 )
 
 func RegisterFileTools(registry *toolregistry.ToolRegistry, cwd string) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newReadFileTool(cwd),
 		newWriteFileTool(cwd),
 		newEditFileTool(cwd),
@@ -34,7 +34,7 @@ func RegisterFileTools(registry *toolregistry.ToolRegistry, cwd string) error {
 }
 
 func RegisterReadOnlyFileTools(registry *toolregistry.ToolRegistry, cwd string) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newReadFileTool(cwd),
 		newGlobTool(cwd),
 		newGrepTool(cwd),
@@ -47,7 +47,7 @@ func RegisterReadOnlyFileTools(registry *toolregistry.ToolRegistry, cwd string) 
 }
 
 func RegisterCodingTools(registry *toolregistry.ToolRegistry, cwd string) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newBashTool(cwd),
 		newGitStatusTool(cwd),
 		newGitDiffTool(cwd),
@@ -59,14 +59,13 @@ func RegisterCodingTools(registry *toolregistry.ToolRegistry, cwd string) error 
 	return nil
 }
 
-func newReadFileTool(cwd string) Tool {
+func newReadFileTool(cwd string) toolregistry.Tool {
 	type args struct {
 		Path string `json:"path"`
 	}
-	return Tool{
-		Name:        "read_file",
+	return toolregistry.Tool{Name: "read_file",
 		Description: "Read a file from disk relative to the sandbox working directory.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"path": map[string]any{"type": "string"},
 		}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -87,23 +86,21 @@ func newReadFileTool(cwd string) Tool {
 			if len(content) > 100*1024 {
 				content = content[:100*1024] + fmt.Sprintf("\n\n[file truncated — %d bytes total, showing first 100KB]", len(data))
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"path":    resolved,
 				"content": content,
 			})
-		},
-	}
+		}}
 }
 
-func newWriteFileTool(cwd string) Tool {
+func newWriteFileTool(cwd string) toolregistry.Tool {
 	type args struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
 	}
-	return Tool{
-		Name:        "write_file",
+	return toolregistry.Tool{Name: "write_file",
 		Description: "Create or overwrite a file relative to the sandbox working directory.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"path":    map[string]any{"type": "string"},
 			"content": map[string]any{"type": "string"},
 		}, []string{"path", "content"}, false),
@@ -126,25 +123,23 @@ func newWriteFileTool(cwd string) Tool {
 			if err := os.WriteFile(resolved, []byte(in.Content), 0o644); err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"path":          resolved,
 				"bytes_written": len(in.Content),
 			})
-		},
-	}
+		}}
 }
 
-func newEditFileTool(cwd string) Tool {
+func newEditFileTool(cwd string) toolregistry.Tool {
 	type args struct {
 		Path       string `json:"path"`
 		OldString  string `json:"old_string"`
 		NewString  string `json:"new_string"`
 		ReplaceAll bool   `json:"replace_all,omitempty"`
 	}
-	return Tool{
-		Name:        "edit_file",
+	return toolregistry.Tool{Name: "edit_file",
 		Description: "Replace text in an existing file.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"path":        map[string]any{"type": "string"},
 			"old_string":  map[string]any{"type": "string"},
 			"new_string":  map[string]any{"type": "string"},
@@ -183,22 +178,20 @@ func newEditFileTool(cwd string) Tool {
 				return "", err
 			}
 			if in.ReplaceAll {
-				return toolResultJSON(map[string]any{"path": resolved, "replacements": matches})
+				return toolregistry.ResultJSON(map[string]any{"path": resolved, "replacements": matches})
 			}
-			return toolResultJSON(map[string]any{"path": resolved, "replacements": 1})
-		},
-	}
+			return toolregistry.ResultJSON(map[string]any{"path": resolved, "replacements": 1})
+		}}
 }
 
-func newGlobTool(cwd string) Tool {
+func newGlobTool(cwd string) toolregistry.Tool {
 	type args struct {
 		Pattern string `json:"pattern"`
 		Limit   int    `json:"limit,omitempty"`
 	}
-	return Tool{
-		Name:        "glob",
+	return toolregistry.Tool{Name: "glob",
 		Description: "Find files by glob-like pattern relative to the sandbox working directory.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"pattern": map[string]any{"type": "string"},
 			"limit":   map[string]any{"type": "integer"},
 		}, []string{"pattern"}, false),
@@ -247,25 +240,23 @@ func newGlobTool(cwd string) Tool {
 				return "", err
 			}
 			sort.Strings(matches)
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"pattern": in.Pattern,
 				"matches": matches,
 			})
-		},
-	}
+		}}
 }
 
-func newGrepTool(cwd string) Tool {
+func newGrepTool(cwd string) toolregistry.Tool {
 	type args struct {
 		Pattern         string `json:"pattern"`
 		Path            string `json:"path,omitempty"`
 		Limit           int    `json:"limit,omitempty"`
 		CaseInsensitive bool   `json:"case_insensitive,omitempty"`
 	}
-	return Tool{
-		Name:        "grep",
+	return toolregistry.Tool{Name: "grep",
 		Description: "Search file contents for a regular expression.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"pattern":          map[string]any{"type": "string"},
 			"path":             map[string]any{"type": "string"},
 			"limit":            map[string]any{"type": "integer"},
@@ -330,23 +321,21 @@ func newGrepTool(cwd string) Tool {
 			if err != nil && err != errToolLimitReached {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"pattern": in.Pattern,
 				"matches": matches,
 			})
-		},
-	}
+		}}
 }
 
-func newBashTool(cwd string) Tool {
+func newBashTool(cwd string) toolregistry.Tool {
 	type args struct {
 		Command   string `json:"command"`
 		TimeoutMS int    `json:"timeout_ms,omitempty"`
 	}
-	return Tool{
-		Name:        "bash",
+	return toolregistry.Tool{Name: "bash",
 		Description: "Execute a shell command in the sandbox working directory.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"command":    map[string]any{"type": "string"},
 			"timeout_ms": map[string]any{"type": "integer", "minimum": 1},
 		}, []string{"command"}, false),
@@ -405,17 +394,15 @@ func newBashTool(cwd string) Tool {
 			if isPersistentSuperInboxRun(toolregistry.ExecutionContextFrom(ctx).RunRecord) {
 				result["next_instruction"] = "Report this command result to the addressed Texture document before running more commands or ending the run. Include the command, exit code, stdout/stderr or error summary, and any blocker so Texture can consume the evidence."
 			}
-			return toolResultJSON(result)
-		},
-	}
+			return toolregistry.ResultJSON(result)
+		}}
 }
 
-func newGitStatusTool(cwd string) Tool {
+func newGitStatusTool(cwd string) toolregistry.Tool {
 	type args struct{}
-	return Tool{
-		Name:        "git_status",
+	return toolregistry.Tool{Name: "git_status",
 		Description: "Run git status --short in the working directory.",
-		Parameters:  jsonSchemaObject(map[string]any{}, nil, false),
+		Parameters:  toolregistry.JSONSchemaObject(map[string]any{}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			cmd := exec.CommandContext(ctx, "git", "status", "--short")
 			cmd.Dir = effectiveToolCWD(ctx, cwd)
@@ -423,21 +410,19 @@ func newGitStatusTool(cwd string) Tool {
 			if err != nil {
 				return "", fmt.Errorf("git status: %w: %s", err, strings.TrimSpace(string(data)))
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"output": strings.TrimSpace(string(data)),
 			})
-		},
-	}
+		}}
 }
 
-func newGitDiffTool(cwd string) Tool {
+func newGitDiffTool(cwd string) toolregistry.Tool {
 	type args struct {
 		Path string `json:"path,omitempty"`
 	}
-	return Tool{
-		Name:        "git_diff",
+	return toolregistry.Tool{Name: "git_diff",
 		Description: "Run git diff, optionally scoped to a path.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"path": map[string]any{"type": "string"},
 		}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -459,11 +444,10 @@ func newGitDiffTool(cwd string) Tool {
 			if len(diff) > 100*1024 {
 				diff = diff[:100*1024] + "\n\n[diff truncated — showing first 100KB]"
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"diff": diff,
 			})
-		},
-	}
+		}}
 }
 
 func effectiveToolCWD(ctx context.Context, defaultCWD string) string {

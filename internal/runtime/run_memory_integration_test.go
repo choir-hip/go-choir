@@ -418,7 +418,7 @@ func (p *runtimeOverflowProvider) CallWithTools(ctx context.Context, req provide
 func testRunMemoryRegistry(t *testing.T) *toolregistry.ToolRegistry {
 	t.Helper()
 	registry := toolregistry.NewToolRegistry()
-	if err := registry.Register(Tool{
+	if err := registry.Register(toolregistry.Tool{
 		Name: "echo",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return string(args), nil

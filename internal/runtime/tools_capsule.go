@@ -51,7 +51,7 @@ func capsuleCtxFromCtx(ctx context.Context) *CapsuleToolCtx {
 // spawn_capsule, destroy_capsule, mint_capability, list_capsules,
 // commit_transaction, inspect_capsule.
 func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newSpawnCapsuleTool(),
 		newDestroyCapsuleTool(),
 		newListCapsulesTool(),
@@ -70,7 +70,7 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 // for the cosuper role: capsule_exec, capsule_read_file, capsule_write_file,
 // capsule_list_dir. These route through the broker via capability-verified RPCs.
 func RegisterCapsuleExecTools(registry *toolregistry.ToolRegistry) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newCapsuleExecTool(),
 		newCapsuleReadFileTool(),
 		newCapsuleWriteFileTool(),
@@ -83,17 +83,16 @@ func RegisterCapsuleExecTools(registry *toolregistry.ToolRegistry) error {
 	return nil
 }
 
-func newSpawnCapsuleTool() Tool {
+func newSpawnCapsuleTool() toolregistry.Tool {
 	type args struct {
 		MemoryMaxMB int64  `json:"memory_max_mb"`
 		CpuQuota    int64  `json:"cpu_quota"`
 		PidsMax     int64  `json:"pids_max"`
 		WorkingDir  string `json:"working_dir"`
 	}
-	return Tool{
-		Name:        "spawn_capsule",
+	return toolregistry.Tool{Name: "spawn_capsule",
 		Description: "Spawn a new isolated capsule (lightweight container) with the specified resource limits. Returns a capsule handle.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"memory_max_mb": map[string]any{"type": "integer", "description": "Memory limit in MB (default 1024)"},
 			"cpu_quota":     map[string]any{"type": "integer", "description": "CPU quota in microseconds per period (default 100000 = 1 CPU)"},
 			"pids_max":      map[string]any{"type": "integer", "description": "Max processes (default 256)"},
@@ -143,26 +142,24 @@ func newSpawnCapsuleTool() Tool {
 				return "", fmt.Errorf("failed to spawn capsule: %w", err)
 			}
 
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"capsule_id": caps.ID,
 				"state":      caps.State.String(),
 				"memory_max": spec.MemoryMax,
 				"cpu_quota":  spec.CpuQuota,
 				"pids_max":   spec.PidsMax,
 			})
-		},
-	}
+		}}
 }
 
-func newDestroyCapsuleTool() Tool {
+func newDestroyCapsuleTool() toolregistry.Tool {
 	type args struct {
 		CapsuleID string `json:"capsule_id"`
 		Force     bool   `json:"force"`
 	}
-	return Tool{
-		Name:        "destroy_capsule",
+	return toolregistry.Tool{Name: "destroy_capsule",
 		Description: "Destroy a capsule, cleaning up all resources (processes, overlayfs, cgroups).",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"capsule_id": map[string]any{"type": "string"},
 			"force":      map[string]any{"type": "boolean", "description": "Force destroy (SIGKILL)"},
 		}, []string{"capsule_id"}, false),
@@ -190,19 +187,17 @@ func newDestroyCapsuleTool() Tool {
 				return "", fmt.Errorf("failed to destroy capsule: %w", err)
 			}
 
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"capsule_id": in.CapsuleID,
 				"destroyed":  true,
 			})
-		},
-	}
+		}}
 }
 
-func newListCapsulesTool() Tool {
-	return Tool{
-		Name:        "list_capsules",
+func newListCapsulesTool() toolregistry.Tool {
+	return toolregistry.Tool{Name: "list_capsules",
 		Description: "List all active capsules with their state and resource usage.",
-		Parameters:  jsonSchemaObject(map[string]any{}, nil, false),
+		Parameters:  toolregistry.JSONSchemaObject(map[string]any{}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			ctc := capsuleCtxFromCtx(ctx)
 			if ctc == nil || ctc.Executor == nil {
@@ -210,25 +205,23 @@ func newListCapsulesTool() Tool {
 			}
 
 			summaries := ctc.Executor.ListCapsules()
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"capsules": summaries,
 				"count":    len(summaries),
 			})
-		},
-	}
+		}}
 }
 
-func newMintCapabilityTool() Tool {
+func newMintCapabilityTool() toolregistry.Tool {
 	type args struct {
 		AgentRunID string `json:"agent_run_id"`
 		Role       string `json:"role"`
 		CapsuleID  string `json:"capsule_id"`
 		TTLHours   int    `json:"ttl_hours"`
 	}
-	return Tool{
-		Name:        "mint_capability",
+	return toolregistry.Tool{Name: "mint_capability",
 		Description: "Mint an Ed25519-signed capability for an agent to access a capsule. Super only.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"agent_run_id": map[string]any{"type": "string"},
 			"role":         map[string]any{"type": "string", "enum": []string{"cosuper", "researcher"}},
 			"capsule_id":   map[string]any{"type": "string"},
@@ -262,25 +255,23 @@ func newMintCapabilityTool() Tool {
 				return "", fmt.Errorf("failed to mint capability: %w", err)
 			}
 
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"handle":         cap.Handle,
 				"capability_id":  cap.CapabilityID,
 				"role":           cap.AgentRole,
 				"target_capsule": cap.TargetCapsule,
 				"expires_at":     cap.ExpiresAt,
 			})
-		},
-	}
+		}}
 }
 
-func newCommitTransactionTool() Tool {
+func newCommitTransactionTool() toolregistry.Tool {
 	type args struct {
 		CapsuleID string `json:"capsule_id"`
 	}
-	return Tool{
-		Name:        "commit_transaction",
+	return toolregistry.Tool{Name: "commit_transaction",
 		Description: "Extract the capsule diff, classify it, and commit to the tape. Super only.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"capsule_id": map[string]any{"type": "string"},
 		}, []string{"capsule_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -305,7 +296,7 @@ func newCommitTransactionTool() Tool {
 			// If no transaction builder is configured, fall back to raw changes.
 			// This preserves backward compatibility with existing callers.
 			if ctc.TransactionBuilder == nil {
-				return toolResultJSON(map[string]any{
+				return toolregistry.ResultJSON(map[string]any{
 					"capsule_id":   in.CapsuleID,
 					"change_count": len(changes),
 					"changes":      changes,
@@ -321,7 +312,7 @@ func newCommitTransactionTool() Tool {
 
 			// If the record is rejected (unknown paths), do not append to tape.
 			if record.Rejected {
-				return toolResultJSON(map[string]any{
+				return toolregistry.ResultJSON(map[string]any{
 					"capsule_id":    in.CapsuleID,
 					"change_count":  len(changes),
 					"rejected":      true,
@@ -341,7 +332,7 @@ func newCommitTransactionTool() Tool {
 				tapeLen = ctc.TransactionTape.Len()
 			}
 
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"capsule_id":         in.CapsuleID,
 				"change_count":       len(changes),
 				"classifier_version": record.ClassifierV,
@@ -352,18 +343,16 @@ func newCommitTransactionTool() Tool {
 				"tape_hash":          tapeHash,
 				"tape_length":        tapeLen,
 			})
-		},
-	}
+		}}
 }
 
-func newInspectCapsuleTool() Tool {
+func newInspectCapsuleTool() toolregistry.Tool {
 	type args struct {
 		CapsuleID string `json:"capsule_id"`
 	}
-	return Tool{
-		Name:        "inspect_capsule",
+	return toolregistry.Tool{Name: "inspect_capsule",
 		Description: "Inspect a capsule's state, resource usage, and diagnostics. Bypasses broker.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"capsule_id": map[string]any{"type": "string"},
 		}, []string{"capsule_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -382,7 +371,7 @@ func newInspectCapsuleTool() Tool {
 				return "", fmt.Errorf("failed to inspect capsule: %w", err)
 			}
 
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"id":           diag.ID,
 				"state":        diag.State.String(),
 				"pid":          diag.PID,
@@ -390,22 +379,20 @@ func newInspectCapsuleTool() Tool {
 				"memory_max":   diag.MemoryMax,
 				"uptime":       diag.Uptime,
 			})
-		},
-	}
+		}}
 }
 
 // Capsule exec tools (cosuper role — route through broker)
 
-func newCapsuleExecTool() Tool {
+func newCapsuleExecTool() toolregistry.Tool {
 	type args struct {
 		Command   string `json:"command"`
 		Cwd       string `json:"cwd"`
 		TimeoutMS int    `json:"timeout_ms"`
 	}
-	return Tool{
-		Name:        "capsule_exec",
+	return toolregistry.Tool{Name: "capsule_exec",
 		Description: "Execute a command inside the capsule via the broker. Requires cosuper capability.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"command":    map[string]any{"type": "string"},
 			"cwd":        map[string]any{"type": "string"},
 			"timeout_ms": map[string]any{"type": "integer"},
@@ -435,23 +422,21 @@ func newCapsuleExecTool() Tool {
 			// TODO: Get the capsule and call Exec.
 			// This requires the Executor to expose a method to get a capsule
 			// and call Exec on it with the capability.
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"command": in.Command,
 				"status":  "not_implemented",
 				"message": "capsule exec routing requires broker connection setup",
 			})
-		},
-	}
+		}}
 }
 
-func newCapsuleReadFileTool() Tool {
+func newCapsuleReadFileTool() toolregistry.Tool {
 	type args struct {
 		Path string `json:"path"`
 	}
-	return Tool{
-		Name:        "capsule_read_file",
+	return toolregistry.Tool{Name: "capsule_read_file",
 		Description: "Read a file from inside the capsule via the broker.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"path": map[string]any{"type": "string"},
 		}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -466,23 +451,21 @@ func newCapsuleReadFileTool() Tool {
 			}
 
 			// TODO: Route through broker.
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"path":   in.Path,
 				"status": "not_implemented",
 			})
-		},
-	}
+		}}
 }
 
-func newCapsuleWriteFileTool() Tool {
+func newCapsuleWriteFileTool() toolregistry.Tool {
 	type args struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
 	}
-	return Tool{
-		Name:        "capsule_write_file",
+	return toolregistry.Tool{Name: "capsule_write_file",
 		Description: "Write a file inside the capsule via the broker.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"path":    map[string]any{"type": "string"},
 			"content": map[string]any{"type": "string"},
 		}, []string{"path", "content"}, false),
@@ -498,22 +481,20 @@ func newCapsuleWriteFileTool() Tool {
 			}
 
 			// TODO: Route through broker.
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"path":   in.Path,
 				"status": "not_implemented",
 			})
-		},
-	}
+		}}
 }
 
-func newCapsuleListDirTool() Tool {
+func newCapsuleListDirTool() toolregistry.Tool {
 	type args struct {
 		Path string `json:"path"`
 	}
-	return Tool{
-		Name:        "capsule_list_dir",
+	return toolregistry.Tool{Name: "capsule_list_dir",
 		Description: "List directory contents inside the capsule via the broker.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"path": map[string]any{"type": "string"},
 		}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -528,12 +509,11 @@ func newCapsuleListDirTool() Tool {
 			}
 
 			// TODO: Route through broker.
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"path":   in.Path,
 				"status": "not_implemented",
 			})
-		},
-	}
+		}}
 }
 
 // generateCapsuleID generates a unique capsule ID using crypto/rand.

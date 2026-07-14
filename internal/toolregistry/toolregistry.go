@@ -185,6 +185,14 @@ func (r *ToolRegistry) Catalog() string {
 	return b.String()
 }
 
+// BuildSystemPrompt appends the deterministic tool catalog to a base prompt.
+func BuildSystemPrompt(basePrompt string, registry *ToolRegistry) string {
+	if registry == nil || registry.Size() == 0 {
+		return basePrompt
+	}
+	return basePrompt + "\n\n" + registry.Catalog()
+}
+
 // Size returns the number of registered tools.
 func (r *ToolRegistry) Size() int {
 	r.mu.RLock()
@@ -236,4 +244,27 @@ func cloneSchemaValue(v any) any {
 	default:
 		return v
 	}
+}
+
+// ResultJSON encodes a tool result as compact JSON.
+func ResultJSON(v any) (string, error) {
+	out, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// ProjectionResultJSON encodes the model-visible and durable forms of a
+// projected tool result in the canonical tool envelope.
+func ProjectionResultJSON(modelOutput, durableOutput any, metadata map[string]any) (string, error) {
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+	return ResultJSON(map[string]any{
+		"__choir_tool_projection": true,
+		"model_output":            modelOutput,
+		"durable_output":          durableOutput,
+		"projection":              metadata,
+	})
 }

@@ -1701,7 +1701,7 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	llmConfig := provideriface.ResolvedLLMConfigFromMetadata(rec.Metadata)
 	renderedSystemPrompt := systemPrompt
 	if registry != nil {
-		renderedSystemPrompt = buildSystemPromptWithTools(systemPrompt, registry)
+		renderedSystemPrompt = toolregistry.BuildSystemPrompt(systemPrompt, registry)
 	}
 	memory := newRunMemoryManager(rt.store, rec, rt.cfg, emit).
 		withLLMCompactor(tlp, llmConfig, estimateTextTokens(renderedSystemPrompt))

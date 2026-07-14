@@ -34,369 +34,15 @@ func TestNormalizeDelegateTargetValueAllowsSingleNoisyAllowedTarget(t *testing.T
 	}
 }
 
-// --- Tool Registry Tests ---
-
-func TestToolRegistryRegister(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	tool := Tool{
-		Name:        "read_file",
-		Description: "Read a file from the sandbox filesystem",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "file contents", nil
-		},
-	}
-
-	if err := registry.Register(tool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	if registry.Size() != 1 {
-		t.Errorf("size: got %d, want 1", registry.Size())
-	}
-}
-
-func TestToolRegistryRegisterDuplicate(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	tool := Tool{
-		Name: "duplicate",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "", nil
-		},
-	}
-
-	if err := registry.Register(tool); err != nil {
-		t.Fatalf("first register: %v", err)
-	}
-
-	if err := registry.Register(tool); err == nil {
-		t.Error("expected error for duplicate registration")
-	}
-}
-
-func TestToolRegistryRegisterValidateNoName(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	tool := Tool{
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "", nil
-		},
-	}
-
-	if err := registry.Register(tool); err == nil {
-		t.Error("expected error for tool with no name")
-	}
-}
-
-func TestToolRegistryRegisterValidateNilFunc(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	tool := Tool{
-		Name: "nil_func",
-	}
-
-	if err := registry.Register(tool); err == nil {
-		t.Error("expected error for tool with nil func")
-	}
-}
-
-func TestToolRegistryExecute(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	echoTool := Tool{
-		Name:        "echo",
-		Description: "Echo back the input arguments",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return string(args), nil
-		},
-	}
-
-	if err := registry.Register(echoTool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	result, err := registry.Execute(context.Background(), "echo", json.RawMessage(`{"message":"hello"}`))
-	if err != nil {
-		t.Fatalf("execute: %v", err)
-	}
-
-	if result != `{"message":"hello"}` {
-		t.Errorf("result: got %q, want %q", result, `{"message":"hello"}`)
-	}
-}
-
-func TestToolRegistryExecuteNotFound(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	_, err := registry.Execute(context.Background(), "nonexistent", nil)
-	if err == nil {
-		t.Error("expected error for nonexistent tool")
-	}
-}
-
-func TestToolRegistryExecuteError(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	failTool := Tool{
-		Name: "fail",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "", fmt.Errorf("tool failure")
-		},
-	}
-
-	if err := registry.Register(failTool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	_, err := registry.Execute(context.Background(), "fail", nil)
-	if err == nil {
-		t.Error("expected error from failing tool")
-	}
-}
-
-func TestToolRegistryLookup(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	tool := Tool{
-		Name: "findme",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return "found", nil
-		},
-	}
-
-	if err := registry.Register(tool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	found, ok := registry.Lookup("findme")
-	if !ok {
-		t.Fatal("expected to find tool")
-	}
-	if found.Name != "findme" {
-		t.Errorf("name: got %q, want findme", found.Name)
-	}
-
-	_, ok = registry.Lookup("nonexistent")
-	if ok {
-		t.Error("should not find nonexistent tool")
-	}
-}
-
-func TestToolRegistryCatalog(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	tools := []Tool{
-		{
-			Name:        "read_file",
-			Description: "Read a file from the sandbox filesystem",
-			Func:        func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil },
-		},
-		{
-			Name:        "list_files",
-			Description: "List files in a directory within the sandbox",
-			Func:        func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil },
-		},
-	}
-
-	for _, tool := range tools {
-		if err := registry.Register(tool); err != nil {
-			t.Fatalf("register %s: %v", tool.Name, err)
-		}
-	}
-
-	catalog := registry.Catalog()
-	if catalog == "" {
-		t.Error("catalog should not be empty")
-	}
-
-	// Catalog should list both tools.
-	if !contains(catalog, "read_file") {
-		t.Error("catalog should contain read_file")
-	}
-	if !contains(catalog, "list_files") {
-		t.Error("catalog should contain list_files")
-	}
-}
-
-func TestToolRegistryDefinitions(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	tool := Tool{
-		Name:        "test_tool",
-		Description: "A test tool",
-		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"path": map[string]any{"type": "string"},
-			},
-		},
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil },
-	}
-
-	if err := registry.Register(tool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	defs := registry.Definitions()
-	if len(defs) != 1 {
-		t.Fatalf("definitions: got %d, want 1", len(defs))
-	}
-	if defs[0].Name != "test_tool" {
-		t.Errorf("name: got %q, want test_tool", defs[0].Name)
-	}
-	if defs[0].Description != "A test tool" {
-		t.Errorf("description: got %q, want A test tool", defs[0].Description)
-	}
-}
-
-func TestToolRegistryDefaultParameters(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	// Tool without parameters should get a default empty object schema.
-	tool := Tool{
-		Name: "no_params",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil },
-	}
-
-	if err := registry.Register(tool); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	found, ok := registry.Lookup("no_params")
-	if !ok {
-		t.Fatal("expected to find tool")
-	}
-	if found.Parameters == nil {
-		t.Error("parameters should not be nil (should have default empty object)")
-	}
-}
-
-func TestNewToolRegistryWithTools(t *testing.T) {
-	tools := []Tool{
-		{
-			Name: "tool_a",
-			Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "a", nil },
-		},
-		{
-			Name: "tool_b",
-			Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "b", nil },
-		},
-	}
-
-	registry, err := toolregistry.NewToolRegistryWithTools(tools...)
-	if err != nil {
-		t.Fatalf("new with tools: %v", err)
-	}
-
-	if registry.Size() != 2 {
-		t.Errorf("size: got %d, want 2", registry.Size())
-	}
-}
-
-func TestMustNewToolRegistryPanics(t *testing.T) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			t.Error("expected panic for invalid tool")
-		}
-	}()
-
-	toolregistry.MustNewToolRegistry(Tool{Name: ""})
-}
-
-func TestToolRegistryToolsSorted(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-
-	// Register in non-alphabetical order.
-	names := []string{"z_tool", "a_tool", "m_tool"}
-	for _, name := range names {
-		tool := Tool{
-			Name: name,
-			Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil },
-		}
-		if err := registry.Register(tool); err != nil {
-			t.Fatalf("register %s: %v", name, err)
-		}
-	}
-
-	tools := registry.Tools()
-	if len(tools) != 3 {
-		t.Fatalf("tools: got %d, want 3", len(tools))
-	}
-
-	// Should be sorted alphabetically.
-	if tools[0].Name != "a_tool" || tools[1].Name != "m_tool" || tools[2].Name != "z_tool" {
-		t.Errorf("tools not sorted: got %s, %s, %s", tools[0].Name, tools[1].Name, tools[2].Name)
-	}
-}
-
-// --- Tool Struct Tests ---
-
-func TestToolValidate(t *testing.T) {
-	tests := []struct {
-		name    string
-		tool    Tool
-		wantErr bool
-	}{
-		{
-			name:    "valid tool",
-			tool:    Tool{Name: "valid", Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil }},
-			wantErr: false,
-		},
-		{
-			name:    "empty name",
-			tool:    Tool{Name: "", Func: func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil }},
-			wantErr: true,
-		},
-		{
-			name:    "nil func",
-			tool:    Tool{Name: "nil_func"},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.tool.Validate()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestToolDefinition(t *testing.T) {
-	tool := Tool{
-		Name:        "test",
-		Description: "desc",
-		Parameters:  map[string]any{"type": "object"},
-		Func:        func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil },
-	}
-
-	def := tool.Definition()
-	if def.Name != "test" {
-		t.Errorf("name: got %q, want test", def.Name)
-	}
-	if def.Description != "desc" {
-		t.Errorf("description: got %q, want desc", def.Description)
-	}
-	if def.Parameters["type"] != "object" {
-		t.Errorf("parameters: got %v, want object", def.Parameters["type"])
-	}
-}
-
 // --- Batch executor contract tests ---
 
 func TestExecuteTools(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 
-	echoTool := Tool{
-		Name: "echo",
+	echoTool := toolregistry.Tool{Name: "echo",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return string(args), nil
-		},
-	}
+		}}
 	if err := registry.Register(echoTool); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -440,13 +86,11 @@ func TestExecuteTools(t *testing.T) {
 func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var executed int
-	if err := registry.Register(Tool{
-		Name: "patch_texture",
+	if err := registry.Register(toolregistry.Tool{Name: "patch_texture",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			executed++
 			return `{"status":"stored","revision_id":"rev-2"}`, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register patch_texture: %v", err)
 	}
 
@@ -478,16 +122,14 @@ func TestExecuteToolsSkipsDuplicateTextureEditsInSameTurn(t *testing.T) {
 func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var executed int
-	if err := registry.Register(Tool{
-		Name: "patch_texture",
+	if err := registry.Register(toolregistry.Tool{Name: "patch_texture",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			executed++
 			if strings.Contains(string(args), "bad") {
 				return "", fmt.Errorf("edit 0: find text not present")
 			}
 			return `{"status":"stored","revision_id":"rev-2"}`, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register patch_texture: %v", err)
 	}
 
@@ -519,8 +161,7 @@ func TestExecuteToolsDoesNotSkipTextureEditAfterFailedAttempt(t *testing.T) {
 func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var executed []string
-	if err := registry.Register(Tool{
-		Name: "spawn_agent",
+	if err := registry.Register(toolregistry.Tool{Name: "spawn_agent",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			var in struct {
 				Role      string `json:"role"`
@@ -531,8 +172,7 @@ func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T
 			}
 			executed = append(executed, in.Role+":"+in.Objective)
 			return in.Role, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register spawn_agent: %v", err)
 	}
 
@@ -567,16 +207,12 @@ func TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn(t *testing.T
 
 func TestExecuteToolsProjectionReturnsCompactOutputAndPreservesDurableEvidence(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name: "projected",
+	if err := registry.Register(toolregistry.Tool{Name: "projected",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return toolProjectionResultJSON(
-				map[string]any{"summary": "compact result", "results": []string{"a"}},
+			return toolregistry.ProjectionResultJSON(map[string]any{"summary": "compact result", "results": []string{"a"}},
 				map[string]any{"raw": strings.Repeat("full evidence ", 20)},
-				map[string]any{"type": "test_projection"},
-			)
-		},
-	}); err != nil {
+				map[string]any{"type": "test_projection"})
+		}}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 
@@ -1144,18 +780,14 @@ func TestResearcherCompletionSynthesizesCheckpointAfterSavedEvidence(t *testing.
 func TestExecuteToolsParallel(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 
-	slowTool := Tool{
-		Name: "slow",
+	slowTool := toolregistry.Tool{Name: "slow",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return "slow-result", nil
-		},
-	}
-	fastTool := Tool{
-		Name: "fast",
+		}}
+	fastTool := toolregistry.Tool{Name: "fast",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return "fast-result", nil
-		},
-	}
+		}}
 	if err := registry.Register(slowTool); err != nil {
 		t.Fatalf("register slow: %v", err)
 	}
@@ -1193,8 +825,7 @@ func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 	var order []string
 	register := func(name string) {
 		t.Helper()
-		if err := registry.Register(Tool{
-			Name: name,
+		if err := registry.Register(toolregistry.Tool{Name: name,
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 				mu.Lock()
 				order = append(order, "start:"+name)
@@ -1204,8 +835,7 @@ func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 				order = append(order, "end:"+name)
 				mu.Unlock()
 				return name + "-result", nil
-			},
-		}); err != nil {
+			}}); err != nil {
 			t.Fatalf("register %s: %v", name, err)
 		}
 	}
@@ -1229,12 +859,10 @@ func TestExecuteToolsSerializesHeavySideEffectTurns(t *testing.T) {
 func TestExecuteToolsError(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 
-	failTool := Tool{
-		Name: "fail",
+	failTool := toolregistry.Tool{Name: "fail",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return "", fmt.Errorf("tool failure")
-		},
-	}
+		}}
 	if err := registry.Register(failTool); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -1258,8 +886,7 @@ func TestExecuteToolsError(t *testing.T) {
 func TestExecuteToolsOutputTruncation(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 
-	bigTool := Tool{
-		Name: "big_output",
+	bigTool := toolregistry.Tool{Name: "big_output",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			// Return output larger than 100KB.
 			result := make([]byte, 150*1024)
@@ -1267,8 +894,7 @@ func TestExecuteToolsOutputTruncation(t *testing.T) {
 				result[i] = 'x'
 			}
 			return string(result), nil
-		},
-	}
+		}}
 	if err := registry.Register(bigTool); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -1290,8 +916,7 @@ func TestExecuteToolsOutputTruncation(t *testing.T) {
 func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	executed := []string{}
-	if err := registry.Register(Tool{
-		Name: "spawn_agent",
+	if err := registry.Register(toolregistry.Tool{Name: "spawn_agent",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			var in struct {
 				Role string `json:"role"`
@@ -1301,8 +926,7 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 			}
 			executed = append(executed, in.Role)
 			return in.Role, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 
@@ -1335,15 +959,13 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	counts := map[string]int{}
 	registerCountingTool := func(name string) {
 		t.Helper()
-		if err := registry.Register(Tool{
-			Name: name,
+		if err := registry.Register(toolregistry.Tool{Name: name,
 			Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 				mu.Lock()
 				counts[name]++
 				mu.Unlock()
 				return name + " ok", nil
-			},
-		}); err != nil {
+			}}); err != nil {
 			t.Fatalf("register %s: %v", name, err)
 		}
 	}
@@ -1394,15 +1016,13 @@ func TestExecuteToolsSuperSkipsDuplicateDelegateWorkerVM(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	executions := 0
-	if err := registry.Register(Tool{
-		Name: "delegate_worker_vm",
+	if err := registry.Register(toolregistry.Tool{Name: "delegate_worker_vm",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			mu.Lock()
 			executions++
 			mu.Unlock()
 			return `{"status":"worker_run_completed","worker_id":"worker-1","app_change_packages":[{"package_id":"package-1"}]}`, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register delegate_worker_vm: %v", err)
 	}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
@@ -1434,15 +1054,13 @@ func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	executions := 0
-	if err := registry.Register(Tool{
-		Name: "start_worker_delegation",
+	if err := registry.Register(toolregistry.Tool{Name: "start_worker_delegation",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			mu.Lock()
 			executions++
 			mu.Unlock()
 			return `{"status":"worker_run_started","worker_id":"worker-1","worker_run_id":"run-1","app_change_packages":[]}`, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register start_worker_delegation: %v", err)
 	}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
@@ -1521,15 +1139,13 @@ func TestExecuteToolsCoSuperSkipsDuplicateAppChangePackagePublish(t *testing.T) 
 	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	publishes := 0
-	if err := registry.Register(Tool{
-		Name: "publish_app_change_package",
+	if err := registry.Register(toolregistry.Tool{Name: "publish_app_change_package",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			mu.Lock()
 			publishes++
 			mu.Unlock()
 			return "publish ok", nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register publish_app_change_package: %v", err)
 	}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
@@ -1562,15 +1178,13 @@ func TestExecuteToolsCoSuperSkipsDuplicateBashCommand(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	executions := 0
-	if err := registry.Register(Tool{
-		Name: "bash",
+	if err := registry.Register(toolregistry.Tool{Name: "bash",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			mu.Lock()
 			executions++
 			mu.Unlock()
 			return "bash ok", nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register bash: %v", err)
 	}
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
@@ -1665,21 +1279,17 @@ func envValue(env []string, key string) string {
 func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var searches int32
-	if err := registry.Register(Tool{
-		Name: "web_search",
+	if err := registry.Register(toolregistry.Tool{Name: "web_search",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			atomic.AddInt32(&searches, 1)
 			return "search result", nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register web_search: %v", err)
 	}
-	if err := registry.Register(Tool{
-		Name: "fetch_url",
+	if err := registry.Register(toolregistry.Tool{Name: "fetch_url",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return "fetch result", nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register fetch_url: %v", err)
 	}
 
@@ -1709,21 +1319,17 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 func TestExecuteToolsDoesNotHiddenChainWorkerDelegation(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	delegated := false
-	if err := registry.Register(Tool{
-		Name: "request_worker_vm",
+	if err := registry.Register(toolregistry.Tool{Name: "request_worker_vm",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"worker_requested","handle":{"purpose":"tiny UX copy edit","worker_id":"worker-1","vm_id":"vm-1","sandbox_url":"http://worker"},"next_tool":"start_worker_delegation","start_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register request_worker_vm: %v", err)
 	}
-	if err := registry.Register(Tool{
-		Name: "start_worker_delegation",
+	if err := registry.Register(toolregistry.Tool{Name: "start_worker_delegation",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			delegated = true
 			return `{"status":"worker_run_completed","app_change_packages":[{"package_id":"package-worker-1","package_manifest_sha256":"manifest-sha"}]}`, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register start_worker_delegation: %v", err)
 	}
 
@@ -1769,21 +1375,17 @@ func TestExecuteToolsDoesNotHiddenChainWorkerDelegation(t *testing.T) {
 func TestExecuteToolsDoesNotPropagateHiddenWorkerDelegationBlocker(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	delegated := false
-	if err := registry.Register(Tool{
-		Name: "request_worker_vm",
+	if err := registry.Register(toolregistry.Tool{Name: "request_worker_vm",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			return `{"status":"worker_requested","next_tool":"start_worker_delegation","start_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register request_worker_vm: %v", err)
 	}
-	if err := registry.Register(Tool{
-		Name: "start_worker_delegation",
+	if err := registry.Register(toolregistry.Tool{Name: "start_worker_delegation",
 		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
 			delegated = true
 			return `{"status":"worker_run_incomplete","completion_blocker":"vsuper_completed_without_required_app_change_package","terminal_error":"worker vsuper completed without publish_app_change_package evidence","app_change_packages":[],"worker_event_summary":["tool.result delegate_worker_vm returned no package"]}`, nil
-		},
-	}); err != nil {
+		}}); err != nil {
 		t.Fatalf("register start_worker_delegation: %v", err)
 	}
 
@@ -1846,55 +1448,4 @@ func TestWorkerRunEventSummaryExposesSpawnAndChannelEvidence(t *testing.T) {
 	if summary[0]["tool"] != "spawn_agent" || summary[1]["role"] != "worker" {
 		t.Fatalf("summary = %#v, want spawn tool and worker channel role", summary)
 	}
-}
-
-// --- buildSystemPromptWithTools Tests ---
-
-func TestBuildSystemPromptWithTools(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	if err := registry.Register(Tool{
-		Name:        "test_tool",
-		Description: "A test tool for the prompt",
-		Func:        func(ctx context.Context, args json.RawMessage) (string, error) { return "", nil },
-	}); err != nil {
-		t.Fatalf("register: %v", err)
-	}
-
-	result := buildSystemPromptWithTools("Base prompt.", registry)
-	if result == "Base prompt." {
-		t.Error("should append tool catalog to base prompt")
-	}
-	if !contains(result, "test_tool") {
-		t.Error("should include tool name in catalog")
-	}
-}
-
-func TestBuildSystemPromptWithNilRegistry(t *testing.T) {
-	result := buildSystemPromptWithTools("Base prompt.", nil)
-	if result != "Base prompt." {
-		t.Errorf("nil registry should return base prompt unchanged, got %q", result)
-	}
-}
-
-func TestBuildSystemPromptWithEmptyRegistry(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	result := buildSystemPromptWithTools("Base prompt.", registry)
-	if result != "Base prompt." {
-		t.Errorf("empty registry should return base prompt unchanged, got %q", result)
-	}
-}
-
-// --- Helper ---
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
-}
-
-func containsSubstr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

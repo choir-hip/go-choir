@@ -27,11 +27,10 @@ type verifyModelCapabilityArgs struct {
 
 const verifierRedPixelPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP8z8AARQAHAQH/kX7rAAAAAElFTkSuQmCC"
 
-func newVerifyModelCapabilityTool(rt *Runtime) Tool {
-	return Tool{
-		Name:        "verify_model_capability",
+func newVerifyModelCapabilityTool(rt *Runtime) toolregistry.Tool {
+	return toolregistry.Tool{Name: "verify_model_capability",
 		Description: "Run a bounded provider-backed verification prompt through a selected role/model policy, optionally with one image, and return evidence without mutating product state.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"role":             map[string]any{"type": "string", "description": "Required model-policy role to resolve, for example verifier, verifier_multimodal, researcher, super, vsuper, co-super, or texture."},
 			"provider":         map[string]any{"type": "string", "description": "Optional explicit provider override from the configured model catalog."},
 			"model":            map[string]any{"type": "string", "description": "Optional explicit model override from the configured model catalog."},
@@ -48,8 +47,7 @@ func newVerifyModelCapabilityTool(rt *Runtime) Tool {
 				return "", fmt.Errorf("decode verify_model_capability args: %w", err)
 			}
 			return rt.verifyModelCapability(ctx, in)
-		},
-	}
+		}}
 }
 
 func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapabilityArgs) (string, error) {
@@ -91,7 +89,7 @@ func (rt *Runtime) verifyModelCapability(ctx context.Context, in verifyModelCapa
 	if err != nil {
 		return "", err
 	}
-	return toolResultJSON(map[string]any{
+	return toolregistry.ResultJSON(map[string]any{
 		"status":                    "verified",
 		"role":                      role,
 		"provider":                  selection.Provider,

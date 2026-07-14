@@ -17,11 +17,11 @@ import (
 )
 
 func RegisterCoAgentTools(registry *toolregistry.ToolRegistry, rt *Runtime, spec agentprofile.Policy) error {
-	tools := []Tool{
+	tools := []toolregistry.Tool{
 		newCancelAgentTool(rt),
 	}
 	if len(spec.AllowedDelegateTargets) > 0 {
-		tools = append([]Tool{newSpawnAgentTool(rt, spec)}, tools...)
+		tools = append([]toolregistry.Tool{newSpawnAgentTool(rt, spec)}, tools...)
 	}
 	for _, tool := range tools {
 		if err := registry.Register(tool); err != nil {
@@ -31,7 +31,7 @@ func RegisterCoAgentTools(registry *toolregistry.ToolRegistry, rt *Runtime, spec
 	return nil
 }
 
-func newSpawnAgentTool(rt *Runtime, spec agentprofile.Policy) Tool {
+func newSpawnAgentTool(rt *Runtime, spec agentprofile.Policy) toolregistry.Tool {
 	type args struct {
 		Objective            string   `json:"objective"`
 		Role                 string   `json:"role"`
@@ -50,10 +50,9 @@ func newSpawnAgentTool(rt *Runtime, spec agentprofile.Policy) Tool {
 	if spec.Profile == agentprofile.Conductor {
 		description = "Open a Texture document from a top-level conductor route. Conductor does not spawn researcher, super, or co-super workers."
 	}
-	return Tool{
-		Name:        "spawn_agent",
+	return toolregistry.Tool{Name: "spawn_agent",
 		Description: description,
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"objective":               map[string]any{"type": "string"},
 			"role":                    map[string]any{"type": "string", "enum": allowedTargets, "description": roleDescription},
 			"profile":                 map[string]any{"type": "string", "enum": allowedTargets, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
@@ -149,7 +148,7 @@ func newSpawnAgentTool(rt *Runtime, spec agentprofile.Policy) Tool {
 				}
 				if kind == textureHandoffKindUserPrompt {
 					conductor := decision.Conductor
-					return toolResultJSON(map[string]any{
+					return toolregistry.ResultJSON(map[string]any{
 						"action":                 conductor.Action,
 						"app":                    conductor.App,
 						"title":                  conductor.Title,
@@ -170,7 +169,7 @@ func newSpawnAgentTool(rt *Runtime, spec agentprofile.Policy) Tool {
 						"handoff_kind":           string(kind),
 					})
 				}
-				return toolResultJSON(map[string]any{
+				return toolregistry.ResultJSON(map[string]any{
 					"agent_id":             currentTextureAgentID(decision.DocID),
 					"doc_id":               decision.DocID,
 					"seed_revision_id":     decision.SeedRevisionID,
@@ -204,9 +203,8 @@ func newSpawnAgentTool(rt *Runtime, spec agentprofile.Policy) Tool {
 			if metadataBoolValue(child.Metadata, runMetadataSpawnReused) {
 				result["reused_existing_child"] = true
 			}
-			return toolResultJSON(result)
-		},
-	}
+			return toolregistry.ResultJSON(result)
+		}}
 }
 
 type coagentTextureRouteRequest struct {
@@ -974,14 +972,13 @@ func canonicalAllowedDelegateTargets(targets []string) []string {
 	return out
 }
 
-func newCancelAgentTool(rt *Runtime) Tool {
+func newCancelAgentTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		AgentID string `json:"agent_id"`
 	}
-	return Tool{
-		Name:        "cancel_agent",
+	return toolregistry.Tool{Name: "cancel_agent",
 		Description: "Cancel the latest active loop for an existing agent by agent id.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"agent_id": map[string]any{"type": "string"},
 		}, []string{"agent_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -1037,7 +1034,7 @@ func newCancelAgentTool(rt *Runtime) Tool {
 					return "", fmt.Errorf("check child export evidence before cancel: %w", err)
 				}
 				if hasSuccessfulToolResult(eventsForRun, "publish_app_change_package") {
-					return toolResultJSON(map[string]any{
+					return toolregistry.ResultJSON(map[string]any{
 						"agent_id": in.AgentID,
 						"loop_id":  target.RunID,
 						"status":   "not_cancelled",
@@ -1048,11 +1045,10 @@ func newCancelAgentTool(rt *Runtime) Tool {
 			if err := rt.CancelRun(ctx, target.RunID, ownerID); err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"agent_id": in.AgentID,
 				"loop_id":  target.RunID,
 				"status":   "cancelled",
 			})
-		},
-	}
+		}}
 }

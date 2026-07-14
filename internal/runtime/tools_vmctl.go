@@ -30,7 +30,7 @@ const (
 )
 
 func RegisterVMControlTools(registry *toolregistry.ToolRegistry, rt *Runtime, cwd string) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newForkDesktopTool(rt),
 		newPublishDesktopTool(rt),
 		newRequestWorkerVMTool(rt),
@@ -47,14 +47,14 @@ func RegisterVMControlTools(registry *toolregistry.ToolRegistry, rt *Runtime, cw
 	return nil
 }
 
-func newForkDesktopTool(rt *Runtime) Tool {
+func newForkDesktopTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		DesktopID string `json:"desktop_id,omitempty"`
 	}
-	return Tool{
+	return toolregistry.Tool{
 		Name:        "fork_desktop",
 		Description: "Create a background candidate desktop VM cloned from the current desktop's layout, without exposing it for user switching yet.",
-		Parameters:  jsonSchemaObject(map[string]any{"desktop_id": map[string]any{"type": "string"}}, nil, false),
+		Parameters:  toolregistry.JSONSchemaObject(map[string]any{"desktop_id": map[string]any{"type": "string"}}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in args
 			if len(raw) > 0 {
@@ -101,7 +101,7 @@ func newForkDesktopTool(rt *Runtime) Tool {
 				return "", fmt.Errorf("fork_desktop save cloned state: %w", err)
 			}
 
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"status":              "forked_background",
 				"desktop_id":          resolved.DesktopID,
 				"parent_desktop_id":   sourceDesktopID,
@@ -115,14 +115,14 @@ func newForkDesktopTool(rt *Runtime) Tool {
 	}
 }
 
-func newPublishDesktopTool(rt *Runtime) Tool {
+func newPublishDesktopTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		DesktopID string `json:"desktop_id"`
 	}
-	return Tool{
+	return toolregistry.Tool{
 		Name:        "publish_desktop",
 		Description: "Publish a prepared candidate desktop so it becomes user-switchable.",
-		Parameters:  jsonSchemaObject(map[string]any{"desktop_id": map[string]any{"type": "string"}}, []string{"desktop_id"}, false),
+		Parameters:  toolregistry.JSONSchemaObject(map[string]any{"desktop_id": map[string]any{"type": "string"}}, []string{"desktop_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
 			var in args
 			if err := json.Unmarshal(raw, &in); err != nil {
@@ -148,7 +148,7 @@ func newPublishDesktopTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"status":            "published",
 				"desktop_id":        resolved.DesktopID,
 				"parent_desktop_id": resolved.ParentDesktopID,
@@ -159,16 +159,16 @@ func newPublishDesktopTool(rt *Runtime) Tool {
 	}
 }
 
-func newRequestWorkerVMTool(rt *Runtime) Tool {
+func newRequestWorkerVMTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Purpose       string `json:"purpose"`
 		MachineClass  string `json:"machine_class,omitempty"`
 		AllowParallel bool   `json:"allow_parallel,omitempty"`
 	}
-	return Tool{
+	return toolregistry.Tool{
 		Name:        "request_worker_vm",
 		Description: "Request a headless worker VM under the current desktop and return a typed worker handle. This only leases the worker; after a successful result, call start_worker_delegation with start_args plus the full execution objective. Supported machine classes are worker-small, worker-medium, worker-large, and worker-playwright. Use worker-medium for repo/app/harness implementation work that may run Go/Svelte builds; use worker-small only for lightweight non-build probes; use worker-playwright only for high-fidelity browser evidence such as screenshots/video. Omitting machine_class still leases worker-small. A different requested machine_class receives a distinct lease instead of reusing the current run's ordinary worker.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"purpose":        map[string]any{"type": "string"},
 			"machine_class":  map[string]any{"type": "string", "enum": []string{"worker-small", "worker-medium", "worker-large", "worker-playwright"}},
 			"allow_parallel": map[string]any{"type": "boolean"},
@@ -238,7 +238,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 					result["machine_class_normalized_from"] = requestedMachineClass
 					result["machine_class"] = handle.MachineClass
 				}
-				out, err := toolResultJSON(result)
+				out, err := toolregistry.ResultJSON(result)
 				return out, err
 			}
 			handle, err := client.RequestWorker(vmctl.WorkerRequest{
@@ -259,7 +259,7 @@ func newRequestWorkerVMTool(rt *Runtime) Tool {
 				result["machine_class_normalized_from"] = requestedMachineClass
 				result["machine_class"] = handle.MachineClass
 			}
-			return toolResultJSON(result)
+			return toolregistry.ResultJSON(result)
 		},
 	}
 }
@@ -497,7 +497,7 @@ func markToolResultDeduped(raw, reason string) (string, error) {
 	}
 	output["deduped"] = true
 	output["dedupe_reason"] = reason
-	return toolResultJSON(output)
+	return toolregistry.ResultJSON(output)
 }
 
 type workerVMLeaseKey struct {
@@ -620,7 +620,7 @@ func normalizeRuntimeWorkerMachineClass(raw string) string {
 	}
 }
 
-func newStartWorkerDelegationTool(rt *Runtime, cwd string) Tool {
+func newStartWorkerDelegationTool(rt *Runtime, cwd string) toolregistry.Tool {
 	return newStartWorkerDelegationToolNamed(
 		"start_worker_delegation",
 		"Start a vsuper, co-super, or researcher run inside a leased worker VM and return immediately with an async worker run handle. Use observe_worker_delegation for checkpoints and finish_worker_delegation for terminal evidence.",
@@ -629,7 +629,7 @@ func newStartWorkerDelegationTool(rt *Runtime, cwd string) Tool {
 	)
 }
 
-func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
+func newDelegateWorkerVMTool(rt *Runtime, cwd string) toolregistry.Tool {
 	return newStartWorkerDelegationToolNamed(
 		"delegate_worker_vm",
 		"Deprecated compatibility alias for start_worker_delegation. It no longer waits for terminal completion; it starts the worker run and returns immediately.",
@@ -638,11 +638,11 @@ func newDelegateWorkerVMTool(rt *Runtime, cwd string) Tool {
 	)
 }
 
-func newStartWorkerDelegationToolNamed(name, description string, rt *Runtime, cwd string) Tool {
-	return Tool{
+func newStartWorkerDelegationToolNamed(name, description string, rt *Runtime, cwd string) toolregistry.Tool {
+	return toolregistry.Tool{
 		Name:        name,
 		Description: description,
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"worker_sandbox_url": map[string]any{"type": "string"},
 			"worker_id":          map[string]any{"type": "string"},
 			"vm_id":              map[string]any{"type": "string"},
@@ -781,7 +781,7 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 			"terminal_error":      err.Error(),
 		}
 		result = rt.invalidateWorkerVMRequestCacheForDelegateResult(ctx, result)
-		return toolResultJSON(result)
+		return toolregistry.ResultJSON(result)
 	}
 	result := map[string]any{
 		"status":              "worker_run_started",
@@ -811,7 +811,7 @@ func (rt *Runtime) startWorkerDelegation(ctx context.Context, cwd string, raw js
 		result["worker_repo_remote_url"] = metadataStringValue(metadata, runMetadataWorkerRepoRemote)
 		result["worker_repo_base_sha"] = metadataStringValue(metadata, runMetadataWorkerRepoBaseSHA)
 	}
-	return toolResultJSON(result)
+	return toolregistry.ResultJSON(result)
 }
 
 type workerAppChangePackagePreloadResult struct {
@@ -905,7 +905,7 @@ func workerAppChangePackagePreloadErrorPrompt(errors []string) string {
 	return "Some referenced AppChangePackages could not be preloaded into this worker runtime: " + strings.Join(errors, "; ") + ". If package inspection is required, fail fast with this preload blocker instead of probing unrelated local stores."
 }
 
-func newObserveWorkerDelegationTool(rt *Runtime) Tool {
+func newObserveWorkerDelegationTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		WorkerSandboxURL string `json:"worker_sandbox_url"`
 		WorkerID         string `json:"worker_id,omitempty"`
@@ -914,10 +914,10 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 		LoopID           string `json:"loop_id,omitempty"`
 		Profile          string `json:"profile,omitempty"`
 	}
-	return Tool{
+	return toolregistry.Tool{
 		Name:        "observe_worker_delegation",
 		Description: "Read bounded state and evidence for an async worker delegation without waiting for terminal completion.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"worker_sandbox_url": map[string]any{"type": "string"},
 			"worker_id":          map[string]any{"type": "string"},
 			"vm_id":              map[string]any{"type": "string"},
@@ -961,7 +961,7 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 			if statusErr != nil {
 				result["status"] = "worker_observe_status_failed"
 				result["error"] = statusErr.Error()
-				return toolResultJSON(result)
+				return toolregistry.ResultJSON(result)
 			}
 			result["agent_id"] = status.AgentID
 			result["profile"] = firstNonEmpty(status.AgentProfile, stringMapValue(result, "profile"))
@@ -978,12 +978,12 @@ func newObserveWorkerDelegationTool(rt *Runtime) Tool {
 			} else {
 				result["worker_update_checkpoint"] = "submitted_or_existing"
 			}
-			return toolResultJSON(result)
+			return toolregistry.ResultJSON(result)
 		},
 	}
 }
 
-func newFinishWorkerDelegationTool(rt *Runtime) Tool {
+func newFinishWorkerDelegationTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		WorkerSandboxURL string `json:"worker_sandbox_url"`
 		WorkerID         string `json:"worker_id,omitempty"`
@@ -994,10 +994,10 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 		Objective        string `json:"objective,omitempty"`
 		TimeoutSeconds   int    `json:"timeout_seconds,omitempty"`
 	}
-	return Tool{
+	return toolregistry.Tool{
 		Name:        "finish_worker_delegation",
 		Description: "Collect terminal evidence for an async worker delegation. If the worker is still active, returns active state instead of blocking.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"worker_sandbox_url": map[string]any{"type": "string"},
 			"worker_id":          map[string]any{"type": "string"},
 			"vm_id":              map[string]any{"type": "string"},
@@ -1029,7 +1029,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			client := &http.Client{Timeout: 15 * time.Second}
 			status, err := fetchInternalWorkerRunStatus(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
 			if err != nil {
-				return toolResultJSON(map[string]any{
+				return toolregistry.ResultJSON(map[string]any{
 					"status":              "worker_finish_status_failed",
 					"worker_id":           strings.TrimSpace(in.WorkerID),
 					"worker_vm_id":        strings.TrimSpace(in.VMID),
@@ -1081,7 +1081,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 				} else {
 					result["worker_update_checkpoint"] = "submitted_or_existing"
 				}
-				return toolResultJSON(result)
+				return toolregistry.ResultJSON(result)
 			}
 			evidence, evidenceErr := fetchWorkerRunEvidence(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID)
 			if evidenceErr != nil {
@@ -1117,7 +1117,7 @@ func newFinishWorkerDelegationTool(rt *Runtime) Tool {
 			} else {
 				result["worker_update_checkpoint"] = "submitted_or_existing"
 			}
-			return toolResultJSON(result)
+			return toolregistry.ResultJSON(result)
 		},
 	}
 }
@@ -1373,17 +1373,17 @@ func updateIDFromUpdateCoagentResult(ev types.EventRecord) string {
 	return strings.TrimSpace(output.UpdateID)
 }
 
-func newCancelWorkerDelegationTool(rt *Runtime) Tool {
+func newCancelWorkerDelegationTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		WorkerSandboxURL string `json:"worker_sandbox_url"`
 		WorkerRunID      string `json:"worker_run_id,omitempty"`
 		LoopID           string `json:"loop_id,omitempty"`
 		Reason           string `json:"reason,omitempty"`
 	}
-	return Tool{
+	return toolregistry.Tool{
 		Name:        "cancel_worker_delegation",
 		Description: "Request cancellation of an async worker delegation. The worker runtime records cancellation and preserves durable evidence already produced.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"worker_sandbox_url": map[string]any{"type": "string"},
 			"worker_run_id":      map[string]any{"type": "string"},
 			"loop_id":            map[string]any{"type": "string"},
@@ -1409,7 +1409,7 @@ func newCancelWorkerDelegationTool(rt *Runtime) Tool {
 			if err := cancelInternalWorkerRun(ctx, client, in.WorkerSandboxURL, ownerID, workerRunID); err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"status":  "cancel_requested",
 				"loop_id": workerRunID,
 				"reason":  strings.TrimSpace(in.Reason),

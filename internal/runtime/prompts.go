@@ -114,7 +114,7 @@ func toolResponsesForRegistry(registry *toolregistry.ToolRegistry) []toolDescrip
 		out = append(out, toolDescriptorResponse{
 			Name:        tool.Name,
 			Description: tool.Description,
-			Parameters:  cloneSchemaMap(tool.Parameters),
+			Parameters:  toolregistry.CloneSchemaMap(tool.Parameters),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -130,7 +130,7 @@ func (h *APIHandler) promptResponse(ownerID string, prompt promptstore.Descripto
 		return promptDescriptorResponse{}, err
 	}
 	registry := h.rt.ToolRegistryForProfile(prompt.Role)
-	effective := buildSystemPromptWithTools(systemPrompt, registry)
+	effective := toolregistry.BuildSystemPrompt(systemPrompt, registry)
 	rolePolicy := rolePolicyFromSpec(agentprofile.PolicyFor(prompt.Role))
 	providerPolicy := providerPolicyForRuntime(h.rt.provider)
 	if !rolePolicy.AllowCoAgentTools {

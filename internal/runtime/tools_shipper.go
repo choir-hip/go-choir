@@ -24,7 +24,7 @@ type publishPackageHumanProofInput struct {
 }
 
 func RegisterShipperTools(registry *toolregistry.ToolRegistry, rt *Runtime, cwd string) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newPublishAppChangePackageTool(rt, cwd),
 	} {
 		if err := registry.Register(tool); err != nil {
@@ -34,7 +34,7 @@ func RegisterShipperTools(registry *toolregistry.ToolRegistry, rt *Runtime, cwd 
 	return nil
 }
 
-func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
+func newPublishAppChangePackageTool(rt *Runtime, cwd string) toolregistry.Tool {
 	type args struct {
 		RepoPath                 string   `json:"repo_path"`
 		BaseSHA                  string   `json:"base_sha"`
@@ -60,10 +60,9 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 		ArtifactRefs             []string `json:"artifact_refs,omitempty"`
 		BehaviorContract         string   `json:"behavior_contract,omitempty"`
 	}
-	return Tool{
-		Name:        "publish_app_change_package",
+	return toolregistry.Tool{Name: "publish_app_change_package",
 		Description: "Publish committed candidate repo changes as an AppChangePackage source delta for recipient rebuild/adoption. Include human_summary plus Texture/screenshot/video/benchmark refs when the change is intended to be owner-reviewable. Build receipts, npm/go build success, unavailable screenshots/videos, and recommendation prose are not human proof; if real screenshots/video or measured behavior benchmarks are missing, publish honestly as evidence_pending. This tool cannot push to GitHub or promote active state.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"repo_path":                   map[string]any{"type": "string"},
 			"base_sha":                    map[string]any{"type": "string"},
 			"app_id":                      map[string]any{"type": "string"},
@@ -114,7 +113,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				} else if found {
 					reusedPackage["requested_by_run_id"] = runID
 					reusedPackage["reused_coagent_package"] = true
-					return toolResultJSON(reusedPackage)
+					return toolregistry.ResultJSON(reusedPackage)
 				}
 			}
 			baseCWD := effectiveToolCWD(ctx, cwd)
@@ -216,7 +215,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				return "", err
 			}
 
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"status":                         rec.Status,
 				"package_id":                     rec.PackageID,
 				"app_id":                         rec.AppID,
@@ -239,8 +238,7 @@ func newPublishAppChangePackageTool(rt *Runtime, cwd string) Tool {
 				"human_proof_state":              humanProofForAppChangePackage(rec).State,
 				"github_push":                    false,
 			})
-		},
-	}
+		}}
 }
 
 func explicitAppChangePackageAppID(ctx context.Context) string {

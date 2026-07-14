@@ -17,7 +17,7 @@ import (
 // These belong to roles that do ordinary evidence collection (researcher and the
 // execution roles), not to Texture's authoring/control-plane affordance.
 func RegisterEvidenceTools(registry *toolregistry.ToolRegistry, rt *Runtime) error {
-	for _, tool := range []Tool{
+	for _, tool := range []toolregistry.Tool{
 		newSaveEvidenceTool(rt),
 		newReadEvidenceTool(rt),
 		newListEvidenceTool(rt),
@@ -44,14 +44,13 @@ func RegisterModelDiagnosticTools(registry *toolregistry.ToolRegistry, rt *Runti
 	return registry.Register(newVerifyModelCapabilityTool(rt))
 }
 
-func newGetRunMemoryEntryTool(rt *Runtime) Tool {
+func newGetRunMemoryEntryTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		EntryID string `json:"entry_id"`
 	}
-	return Tool{
-		Name:        "get_run_memory_entry",
+	return toolregistry.Tool{Name: "get_run_memory_entry",
 		Description: "Retrieve an exact durable run-memory message or compaction by entry_id when a checkpoint summary is insufficient.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"entry_id": map[string]any{"type": "string"},
 		}, []string{"entry_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -71,7 +70,7 @@ func newGetRunMemoryEntryTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"entry_id":            entry.EntryID,
 				"loop_id":             entry.RunID,
 				"seq":                 entry.Seq,
@@ -85,11 +84,10 @@ func newGetRunMemoryEntryTool(rt *Runtime) Tool {
 				"details":             entry.Details,
 				"created_at":          entry.CreatedAt.Format(time.RFC3339Nano),
 			})
-		},
-	}
+		}}
 }
 
-func newSaveEvidenceTool(rt *Runtime) Tool {
+func newSaveEvidenceTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		Kind      string          `json:"kind"`
 		SourceURI string          `json:"source_uri,omitempty"`
@@ -97,10 +95,9 @@ func newSaveEvidenceTool(rt *Runtime) Tool {
 		Content   string          `json:"content"`
 		Metadata  json.RawMessage `json:"metadata,omitempty"`
 	}
-	return Tool{
-		Name:        "save_evidence",
+	return toolregistry.Tool{Name: "save_evidence",
 		Description: "Persist retrieved or evidentiary material into the user's embedded Dolt workspace.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"kind":       map[string]any{"type": "string"},
 			"source_uri": map[string]any{"type": "string"},
 			"title":      map[string]any{"type": "string"},
@@ -139,7 +136,7 @@ func newSaveEvidenceTool(rt *Runtime) Tool {
 			if err := rt.store.CreateEvidence(ctx, rec); err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"evidence_id": rec.EvidenceID,
 				"owner_id":    rec.OwnerID,
 				"agent_id":    rec.AgentID,
@@ -148,18 +145,16 @@ func newSaveEvidenceTool(rt *Runtime) Tool {
 				"title":       rec.Title,
 				"created_at":  rec.CreatedAt.Format(time.RFC3339Nano),
 			})
-		},
-	}
+		}}
 }
 
-func newReadEvidenceTool(rt *Runtime) Tool {
+func newReadEvidenceTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		EvidenceID string `json:"evidence_id"`
 	}
-	return Tool{
-		Name:        "read_evidence",
+	return toolregistry.Tool{Name: "read_evidence",
 		Description: "Read a saved evidence record from embedded Dolt.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"evidence_id": map[string]any{"type": "string"},
 		}, []string{"evidence_id"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
@@ -175,7 +170,7 @@ func newReadEvidenceTool(rt *Runtime) Tool {
 			if err != nil {
 				return "", err
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"evidence_id": rec.EvidenceID,
 				"owner_id":    rec.OwnerID,
 				"agent_id":    rec.AgentID,
@@ -186,19 +181,17 @@ func newReadEvidenceTool(rt *Runtime) Tool {
 				"metadata":    rec.Metadata,
 				"created_at":  rec.CreatedAt.Format(time.RFC3339Nano),
 			})
-		},
-	}
+		}}
 }
 
-func newListEvidenceTool(rt *Runtime) Tool {
+func newListEvidenceTool(rt *Runtime) toolregistry.Tool {
 	type args struct {
 		AgentID string `json:"agent_id,omitempty"`
 		Limit   int    `json:"limit,omitempty"`
 	}
-	return Tool{
-		Name:        "list_evidence",
+	return toolregistry.Tool{Name: "list_evidence",
 		Description: "List recent saved evidence records for an agent or owner scope.",
-		Parameters: jsonSchemaObject(map[string]any{
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"agent_id": map[string]any{"type": "string"},
 			"limit":    map[string]any{"type": "integer", "minimum": 1},
 		}, nil, false),
@@ -230,10 +223,9 @@ func newListEvidenceTool(rt *Runtime) Tool {
 					"created_at":  rec.CreatedAt.Format(time.RFC3339Nano),
 				})
 			}
-			return toolResultJSON(map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"agent_id": agentID,
 				"items":    items,
 			})
-		},
-	}
+		}}
 }

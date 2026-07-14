@@ -12,8 +12,8 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"io/fs"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,55 +27,55 @@ import (
 
 const (
 	inventorySchema = "runtime-dissolution-inventory/v6"
-	runtimeImport  = "github.com/yusefmosiah/go-choir/internal/runtime"
+	runtimeImport   = "github.com/yusefmosiah/go-choir/internal/runtime"
 )
 
 type Inventory struct {
-	Schema               string `yaml:"schema"`
-	CanonicalParent      string `yaml:"canonical_parent"`
-	DispatchNonce        string `yaml:"dispatch_nonce"`
-	Transition           string `yaml:"transition"`
-	Counts               Counts `yaml:"counts"`
+	Schema               string  `yaml:"schema"`
+	CanonicalParent      string  `yaml:"canonical_parent"`
+	DispatchNonce        string  `yaml:"dispatch_nonce"`
+	Transition           string  `yaml:"transition"`
+	Counts               Counts  `yaml:"counts"`
 	Files                []Entry `yaml:"files"`
 	Exports              []Entry `yaml:"exports"`
 	UnusedExportDebt     []Entry `yaml:"initial_unused_export_debt"`
 	Routes               []Entry `yaml:"routes"`
-	Tools                 []Entry `yaml:"tools"`
+	Tools                []Entry `yaml:"tools"`
 	ProductionImporters  []Entry `yaml:"production_importers"`
-	Wrappers              []Entry `yaml:"wrappers"`
+	Wrappers             []Entry `yaml:"wrappers"`
 	CompatibilityMarkers []Entry `yaml:"compatibility_markers"`
-	StoreCalls            []Entry `yaml:"store_calls"`
+	StoreCalls           []Entry `yaml:"store_calls"`
 	InterfaceCandidates  []Entry `yaml:"interface_candidates"`
-	LegacyStateWriters    []Entry `yaml:"state_writers,omitempty"`
-	LegacyStoreReads      []Entry `yaml:"declared_store_reads,omitempty"`
-	Citers                []Entry `yaml:"citers"`
+	LegacyStateWriters   []Entry `yaml:"state_writers,omitempty"`
+	LegacyStoreReads     []Entry `yaml:"declared_store_reads,omitempty"`
+	Citers               []Entry `yaml:"citers"`
 }
 
 type Counts struct {
-	GoFiles              int `yaml:"go_files"`
-	ProductionFiles      int `yaml:"production_files"`
-	TestFiles            int `yaml:"test_files"`
-	ProductionLOC        int `yaml:"production_loc"`
-	TestLOC              int `yaml:"test_loc"`
-	Exports              int `yaml:"exports"`
-	ExportCallerEdges    int `yaml:"export_caller_edges"`
+	GoFiles                 int `yaml:"go_files"`
+	ProductionFiles         int `yaml:"production_files"`
+	TestFiles               int `yaml:"test_files"`
+	ProductionLOC           int `yaml:"production_loc"`
+	TestLOC                 int `yaml:"test_loc"`
+	Exports                 int `yaml:"exports"`
+	ExportCallerEdges       int `yaml:"export_caller_edges"`
 	InitialUnusedExportDebt int `yaml:"initial_unused_export_debt"`
-	Routes               int `yaml:"routes"`
-	Tools                int `yaml:"tools"`
-	ProductionImporters  int `yaml:"production_importers"`
-	Wrappers              int `yaml:"wrappers"`
-	CompatibilityMarkers int `yaml:"compatibility_markers"`
-	StoreCalls           int `yaml:"store_calls"`
-	InterfaceCandidates  int `yaml:"interface_candidates"`
-	LegacyStateWriters   int `yaml:"state_writers,omitempty"`
-	LegacyStoreReads     int `yaml:"declared_store_reads,omitempty"`
-	Citers                int `yaml:"citers"`
+	Routes                  int `yaml:"routes"`
+	Tools                   int `yaml:"tools"`
+	ProductionImporters     int `yaml:"production_importers"`
+	Wrappers                int `yaml:"wrappers"`
+	CompatibilityMarkers    int `yaml:"compatibility_markers"`
+	StoreCalls              int `yaml:"store_calls"`
+	InterfaceCandidates     int `yaml:"interface_candidates"`
+	LegacyStateWriters      int `yaml:"state_writers,omitempty"`
+	LegacyStoreReads        int `yaml:"declared_store_reads,omitempty"`
+	Citers                  int `yaml:"citers"`
 }
 
 type Entry struct {
-	ID          string `yaml:"id"`
-	Disposition string `yaml:"disposition"`
-	LOC         int    `yaml:"loc,omitempty"`
+	ID                string   `yaml:"id"`
+	Disposition       string   `yaml:"disposition"`
+	LOC               int      `yaml:"loc,omitempty"`
 	ProductionCallers []string `yaml:"production_callers,omitempty"`
 }
 
@@ -83,10 +83,10 @@ var compatibilityRE = regexp.MustCompile(`(?i)\b(deprecated|compatib(?:ility|le)
 
 func scanRepository(root string) (Inventory, error) {
 	inv := Inventory{
-		Schema: inventorySchema,
-		CanonicalParent: "f72a141ef0f97fbec6521831dc3f5836b9526631",
-		DispatchNonce: "s0-runtime-inventory-ratchet-01-nonce-01",
-		Transition: "s0-runtime-inventory-ratchet-dispatch-intent-01",
+		Schema:          inventorySchema,
+		CanonicalParent: "db1ea597cf862b77f5ccb288f8eb76a08309b64d",
+		DispatchNonce:   "s0-runtime-inventory-ratchet-01-nonce-01",
+		Transition:      "s0-runtime-inventory-ratchet-dispatch-intent-01",
 	}
 	files, err := repositoryFiles(root)
 	if err != nil {
@@ -230,12 +230,13 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 	}
 	ordinals := map[string]int{}
 	ast.Inspect(file, func(n ast.Node) bool {
-		if lit, ok := n.(*ast.CompositeLit); ok && exprString(lit.Type) == "Tool" {
+		if lit, ok := n.(*ast.CompositeLit); ok && isToolCompositeType(lit.Type) {
 			if name, ok := toolName(lit); ok {
 				id := rel + ":Tool:" + name
 				inv.Tools = append(inv.Tools, Entry{ID: uniqueID(id, ordinals), Disposition: domainDisposition(rel)})
 			}
 		}
+
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
@@ -262,6 +263,15 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 				inv.CompatibilityMarkers = append(inv.CompatibilityMarkers, Entry{ID: id, Disposition: "delete"})
 			}
 		}
+	}
+}
+
+func isToolCompositeType(expr ast.Expr) bool {
+	switch exprString(expr) {
+	case "Tool", "toolregistry.Tool":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -651,8 +661,6 @@ func sameCallableSignature(left, right *types.Func) bool {
 		types.Identical(leftSignature.Results(), rightSignature.Results())
 }
 
-
-
 func attachProductionCallers(inv *Inventory, uses map[string]map[string]bool) {
 	const modulePrefix = "github.com/yusefmosiah/go-choir/"
 	for index := range inv.Exports {
@@ -684,7 +692,6 @@ func attachProductionCallers(inv *Inventory, uses map[string]map[string]bool) {
 		sort.Strings(entry.ProductionCallers)
 	}
 }
-
 
 func runtimeSurfaceType(expr ast.Expr, aliases map[string]string) string {
 	switch x := expr.(type) {
@@ -930,7 +937,6 @@ func seedUnusedExportDebt(inv *Inventory) {
 		return inv.UnusedExportDebt[i].ID < inv.UnusedExportDebt[j].ID
 	})
 }
-
 
 func setCounts(inv *Inventory) {
 	var c Counts
