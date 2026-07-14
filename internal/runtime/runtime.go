@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -420,16 +419,6 @@ type RuntimeOption func(*Runtime)
 func WithTraceStore(s trace.Store) RuntimeOption {
 	return func(rt *Runtime) {
 		rt.traceStore = s
-	}
-}
-
-// WithPromotionAdapter mounts a Dolt promotion adapter into the runtime.
-// When set, the promotion runtime calls Fork/Promote/Rollback to create
-// tamper-evident DOLT_TAG certificates and DOLT_RESET rollback. When nil,
-// the promotion flow works exactly as before (no Dolt tags).
-func WithPromotionAdapter(adapter *computerversion.DoltPromotionAdapter) RuntimeOption {
-	return func(rt *Runtime) {
-		rt.promotion.SetPromotionAdapter(adapter)
 	}
 }
 

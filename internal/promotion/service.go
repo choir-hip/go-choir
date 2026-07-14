@@ -45,6 +45,13 @@ func (s *Service) SetPromotionAdapter(adapter *computerversion.DoltPromotionAdap
 	s.adapter = adapter
 }
 
+func (s *Service) ImportAppChangePackage(ctx context.Context, rec types.AppChangePackageRecord) (types.AppChangePackageRecord, error) {
+	if s == nil || s.store == nil {
+		return types.AppChangePackageRecord{}, fmt.Errorf("import app change package: promotion store is unavailable")
+	}
+	return s.store.UpsertAppChangePackage(ctx, rec)
+}
+
 type PublishAppChangePackageInput struct {
 	PackageID                   string          `json:"package_id,omitempty"`
 	AppID                       string          `json:"app_id,omitempty"`

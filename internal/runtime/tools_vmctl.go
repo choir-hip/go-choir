@@ -2245,7 +2245,7 @@ func (rt *Runtime) mirrorWorkerAppChangePackages(ctx context.Context, client *ht
 			out = append(out, item)
 			continue
 		}
-		rec, err = rt.store.UpsertAppChangePackage(ctx, rec)
+		rec, err = rt.promotion.ImportAppChangePackage(ctx, rec)
 		if err != nil {
 			item["canonical_mirror_status"] = "failed"
 			item["canonical_mirror_error"] = err.Error()

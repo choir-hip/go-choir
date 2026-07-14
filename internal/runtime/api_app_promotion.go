@@ -169,7 +169,7 @@ func (h *APIHandler) HandleInternalAppChangePackagesRoot(w http.ResponseWriter, 
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid app change package import"})
 		return
 	}
-	imported, err := h.rt.store.UpsertAppChangePackage(r.Context(), rec)
+	imported, err := h.rt.promotion.ImportAppChangePackage(r.Context(), rec)
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 		return

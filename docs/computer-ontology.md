@@ -128,9 +128,11 @@ main branch via `DOLT_RESET --hard` is not an admissible production mechanism
 (I4); rollback is a route flip or an isolated-branch operation.
 
 **Do-not-wire warning:** the inert interim adapter's `Rollback` method still
-uses `DOLT_RESET --hard` on main. `WithPromotionAdapter` has no production
-`cmd/` callers. Wiring this adapter would introduce the I4 violation; it must
-remain unwired until the Phase D branch-based replacement lands.
+uses `DOLT_RESET --hard` on main. The former runtime `WithPromotionAdapter`
+forwarding seam has been deleted; the canonical promotion service's adapter
+setter has no production caller. Wiring this adapter would introduce the I4
+violation; it must remain unwired until the Phase D branch-based replacement
+lands.
 
 ## Ledger Split
 

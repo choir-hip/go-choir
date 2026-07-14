@@ -159,14 +159,14 @@ now:
     heresy_delta:
       discovered: "Operational direct app-adoption authority lived on Runtime even though computerversion already owned inert evidence schemas and the Dolt adapter. Candidate-package intake also depends on shared ref/profile semantics but remains a separate blocked review owner pending its named extraction slice."
       introduced: none
-      repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, and event moved to internal/promotion.Service; API, candidate-intake lineage setup, and shipper callers are direct; Runtime has no promotion methods or adapter authority."
+      repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, event, and non-candidate package import now enters internal/promotion.Service; API, worker mirror, candidate-intake lineage setup, and shipper callers are direct; the dead Runtime adapter option and all Runtime promotion methods are deleted."
   candidate:
     id: R1-promotion-owner-cutover-11
-    state: owner_review_repair_required
+    state: owner_review_repaired_ready_for_atomic_review
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
-    digest: "internal/promotion owns service.go and build.go; deleted runtime app_promotion.go/app_promotion_build.go; direct callers api_app_promotion.go, candidate_package_intake.go, and tools_shipper.go; inventory 128 Go files, 67 production files, 61 test files, 41620 production LOC, 424 classified store calls, 1348 citers"
+    digest: "internal/promotion owns service.go and build.go; deleted runtime app_promotion.go/app_promotion_build.go and WithPromotionAdapter; direct callers api_app_promotion.go, candidate_package_intake.go, tools_shipper.go, and worker mirror; inventory 128 Go files, 67 production files, 61 test files, 41609 production LOC, 917 exports, 14 initial unused exports, 422 classified store calls, 1349 citers"
     scope: [promotion_service, recipient_build_verification, source_lineage_cas, dolt_fork_promote_rollback, direct_api_and_tool_callers]
   decision:
     selected: "Move the complete source-level adoption state machine and build materializer into internal/promotion.Service with an explicit promotion.Config and direct store ownership. Runtime constructs the service; API transport and shipper tool call it directly; delete every promotion method on Runtime. Preserve computerversion as evidence/Dolt substrate and leave vmctl product activation for the later explicit product-completion boundary."
@@ -187,8 +187,12 @@ now:
     - "runtime-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41620 production LOC, 424 classified store calls, 1348 citers"
     - "independent-transition-review:ACCEPT dcc67735; exact transition/build/CAS/adapter/event parity preserved"
     - "independent-owner-review:REPAIR dcc67735; Runtime.WithPromotionAdapter remains an exported forwarding seam and internal API/worker mirror package imports bypass promotion.Service"
-  blocker_or_risk: "Independent owner review found three clean-cutover blockers: dead exported Runtime.WithPromotionAdapter forwards adapter authority; APIHandler.HandleInternalAppChangePackagesRoot writes imported package records directly; Runtime.mirrorWorkerAppChangePackages writes mirrored package records directly. Transition review otherwise accepts dcc67735. Candidate-package source-lineage-only review remains explicitly deferred."
-  next_action: "Checkpoint this review receipt before repair. Delete the dead Runtime adapter option, add one canonical promotion.Service package-import write, route both internal API and worker-mirror writers through it, regenerate inventory, rerun focused/full contracts, then freeze and re-review."
+    - "owner-repair:promotion.Service.ImportAppChangePackage owns internal API and worker-mirror writes; Runtime.WithPromotionAdapter deleted"
+    - "owner-repair-focused:internal promotion/API/worker mirror contracts PASS"
+    - "owner-repair-full:go test ./internal/runtime PASS"
+    - "owner-repair-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41609 production LOC, 917 exports, 14 initial unused exports, 422 classified store calls, 1349 citers"
+  blocker_or_risk: "The exact clean-cutover blockers from independent owner review are repaired and locally verified. Remaining acceptance requires atomic independent re-review of the repaired frozen commit, CI, staging identity, and authenticated deployed promotion artifacts. Candidate-package source-lineage-only review remains explicitly deferred."
+  next_action: "Commit the coherent owner repair, freeze the resulting commit, obtain atomic independent transition/owner re-review, then land only if both accept."
 
 receipts:
   - id: predecessor-B0-authority
