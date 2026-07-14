@@ -196,11 +196,12 @@ now:
     - "cardinality-runtime:280/280 shard tests PASS including 205-run activation drain and legacy settled-activation compatibility"
     - "cardinality-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
     - "final-atomic-cardinality-review:REPAIR; passivated trajectory runs are absent from active drain and can reactivate after terminal cancellation because UpdateRun lacks terminal admission"
+    - "final-owner-security-review:REPAIR; multiple active legacy metadata-only sibling runs on one trajectory are filtered out of exhaustive drain after only the addressed run is upgraded"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "Final review found one remaining lifecycle escape: cancellation drains only active runs, while a passivated run on the trajectory can later transition back to pending through UpdateRun without checking terminal trajectory authority. Atomic batch, keyset cardinality, owner path, and process-local transaction findings otherwise remain accepted."
-  next_action: "Commit this review checkpoint before repair. Then serialize inactive-to-active UpdateRun transitions with trajectory terminal state, reject reactivation on settled or cancelled trajectories, add a passivated-run cancellation/reactivation contract, and re-run frozen review."
+  blocker_or_risk: "Final reviews found two remaining lifecycle compatibility escapes: a passivated run can reactivate through UpdateRun after terminal cancellation, and multiple active legacy runs carrying trajectory_id only in metadata are not all drained because decoded records with an empty TrajectoryID are filtered out. Atomic batch, keyset cardinality, owner path/auth/status, and current-schema admission findings otherwise remain accepted."
+  next_action: "Commit this second review checkpoint before repair. Then serialize inactive-to-active UpdateRun transitions with terminal state; normalize every decoded metadata-only run before trajectory filtering; add passivated-reactivation and multi-legacy-sibling contracts; re-run all focused suites and frozen review."
 
 receipts:
   - id: predecessor-B0-authority
