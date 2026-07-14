@@ -151,29 +151,30 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: reconciled
+    status: owner_boundary_frozen
     protected_surfaces: [candidate_package_intake, computer_source_lineage, adoption_boundary, promotion_switch_evidence, publication_draft]
     admissible_evidence: "Exact owner/caller/store/state-transition map; source-lineage CAS and owner-isolation contracts; blocked-transition preservation; scoped runtime ratchet; independent transition and authority review; green CI, staging identity, and authenticated product-path acceptance."
     rollback_ref: fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
-    conjecture_delta: "Candidate-package intake is a distinct pre-adoption review authority, not a second promotion service. It can leave runtime only after mapping every state transition and choosing an owner that calls promotion for promotion-owned effects without absorbing or bypassing promotion authority."
+    conjecture_delta: "Candidate-package intake is a distinct pre-adoption review authority, not a second promotion service. A dedicated internal/candidatepackage.Service should own its intake and adoption-review state machine, delegate only source-lineage initialization to promotion.Service, and leave deployed app promotion authority unchanged."
     heresy_delta:
-      discovered: "Runtime still owns candidate-package intake records, reviews, adoption-boundary decisions, publication-draft gating, and promotion-switch evidence after direct app promotion moved to internal/promotion.Service."
+      discovered: "Runtime still owns one 1,698-line candidate-package intake state machine: create/review/adoption-boundary/publication-draft transitions, adoption-review creation and decision, source-lineage-only switch/rollback/roll-forward evidence, acceptance synthesis, and review surfaces. Its routes and vmctl worker mirror call Runtime methods directly; its writes span candidate_package_intakes, app_change_packages, app_adoptions, computer_source_lineages, and events. internal/promotion.Service is the existing owner for source-lineage initialization and deployed app promotion, but is not a replacement for this deliberately blocked pre-adoption authority."
       introduced: none
       repaired: "The preceding promotion-owner slice and its run-acceptance reducer repair are deployed and accepted at promotion level."
   candidate:
     id: R1-candidate-package-owner-cutover-12
-    state: mapping_required
+    state: owner_boundary_frozen_ready_to_implement
     ref: refs/heads/autoputer-definition-v2@fc0e3a0f
     owner: orchestrator
     base: refs/heads/main@fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df
-    digest: pending_exact_owner_caller_store_transition_map
+    digest: "internal/candidatepackage.Service owns the complete intake/adoption-review state machine and direct store/event writes; runtime retains transport and worker-mirror orchestration only; promotion.Service remains the sole source-lineage initializer and deployed promotion owner. Preserve transition ordering, error strings, JSON envelopes, blocked publication/deployed-route/vm-lifecycle semantics, and owner isolation exactly."
     scope: [candidate_package_intake, owner_review, source_lineage, adoption_boundary, publication_draft, promotion_switch_evidence]
   evidence_refs:
     - "promotion-landing-ci:PASS https://github.com/choir-hip/go-choir/actions/runs/29342824267"
     - "promotion-deploy:job 87119847487; activation target fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df"
     - "promotion-run-acceptance:runacc-9704ea95ef27a1b1c0f4 promotion-level ACCEPTED; deployment_commit and health_commit fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df; checkpoint_causal_order passed"
-  blocker_or_risk: "No execution blocker. Ownership is deliberately unsettled until the exact candidate-package state machine, callers, store methods, shared promotion dependencies, and any existing replacement owner are mapped. Implementing before that map risks creating a second promotion authority."
-  next_action: "Map every candidate-package production symbol, route/tool caller, store transition, source-lineage dependency, promotion call, test contract, and generated inventory effect; then freeze an owner recommendation for independent review before implementation."
+    - "candidate-package-map: internal/runtime/candidate_package_intake.go methods and helpers; internal/runtime/api_candidate_package_intake.go route callers; internal/runtime/tools_vmctl.go worker mirror; internal/store/candidate_package_intake.go and app_promotion.go persistence; internal/types/app_promotion.go records/statuses"
+  blocker_or_risk: "No execution blocker. The clean cutover must not absorb deployed app promotion or candidate-computer lifecycle authority, widen the intentionally blocked publication/deployed-route/vm-lifecycle transitions, or change the existing record-first/source-lineage-second write order without a separately documented atomicity repair."
+  next_action: "Checkpoint this owner decision before repair. Then move the complete state machine behind internal/candidatepackage.Service, inject promotion.Service only for source-lineage initialization, migrate API and worker-mirror callers, delete Runtime candidate-package methods/helpers, regenerate the inventory, and prove focused transitions plus the scoped ratchet before frozen independent review."
 
 receipts:
   - id: predecessor-B0-authority
