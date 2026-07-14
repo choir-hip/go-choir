@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/candidatepackage"
 	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
@@ -87,7 +88,8 @@ type Runtime struct {
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 
-	promotion *promotion.Service
+	promotion         *promotion.Service
+	candidatePackages *candidatepackage.Service
 }
 
 type textureWakeTimer interface {
@@ -123,6 +125,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 			AppPromotionUIArtifactPath:      cfg.AppPromotionUIArtifactPath,
 		}),
 	}
+	rt.candidatePackages = candidatepackage.NewService(s, rt.promotion)
 	for _, opt := range opts {
 		opt(rt)
 	}

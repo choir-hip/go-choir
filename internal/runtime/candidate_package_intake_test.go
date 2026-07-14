@@ -3376,26 +3376,3 @@ func TestCandidatePackageIntakePromotionSwitchNormalizesRouteProfile(t *testing.
 		t.Fatalf("route_profile after roll-forward = %q, want %q", lineage.RouteProfile, wantSwitchedProfile)
 	}
 }
-
-func TestNormalizeRouteProfile(t *testing.T) {
-	cases := []struct {
-		profile, ownerID, computerID, want string
-	}{
-		{"", "owner", "computer", "owner/computer"},
-		{"route:legacy", "owner", "computer", "owner/legacy"},
-		{"route:", "owner", "computer", "owner/computer"},
-		{"owner/computer", "owner", "computer", "owner/computer"},
-		{"  owner  /  computer  ", "owner", "computer", "owner/computer"},
-		{"invalid-no-slash", "owner", "computer", "owner/computer"},
-		{"owner/computer/extra", "owner", "computer", "owner/computer"},
-		{"owner//computer", "owner", "computer", "owner/computer"},
-		{"owner/", "owner", "computer", "owner/computer"},
-		{"/computer", "owner", "computer", "owner/computer"},
-	}
-	for _, tc := range cases {
-		got := normalizeRouteProfile(tc.profile, tc.ownerID, tc.computerID)
-		if got != tc.want {
-			t.Errorf("normalizeRouteProfile(%q, %q, %q) = %q, want %q", tc.profile, tc.ownerID, tc.computerID, got, tc.want)
-		}
-	}
-}

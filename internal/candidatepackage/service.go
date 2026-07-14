@@ -1,19 +1,32 @@
-package runtime
+package candidatepackage
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-type candidatePackageIntakeCreateInput struct {
+type Service struct {
+	store     *store.Store
+	promotion *promotion.Service
+}
+
+func NewService(s *store.Store, p *promotion.Service) *Service {
+	return &Service{store: s, promotion: p}
+}
+
+type CreateInput struct {
 	IntakeID                       string          `json:"intake_id,omitempty"`
 	OwnerID                        string          `json:"owner_id,omitempty"`
 	CandidatePackageID             string          `json:"candidate_package_id"`
@@ -34,25 +47,25 @@ type candidatePackageIntakeCreateInput struct {
 	TraceID                        string          `json:"trace_id,omitempty"`
 }
 
-type candidatePackageIntakeReviewInput struct {
+type ReviewInput struct {
 	Decision          string `json:"decision"`
 	ReviewEvidenceRef string `json:"review_evidence_ref,omitempty"`
 }
 
-type candidatePackageIntakeAdoptionBoundaryInput struct {
+type AdoptionBoundaryInput struct {
 	AdoptionContractRef string `json:"adoption_contract_ref"`
 	RollbackContractRef string `json:"rollback_contract_ref"`
 	BoundaryEvidenceRef string `json:"boundary_evidence_ref,omitempty"`
 }
 
-type candidatePackageIntakePublicationDraftInput struct {
+type PublicationDraftInput struct {
 	PackageID              string `json:"package_id,omitempty"`
 	AppID                  string `json:"app_id,omitempty"`
 	PublicationContractRef string `json:"publication_contract_ref"`
 	DraftEvidenceRef       string `json:"draft_evidence_ref,omitempty"`
 }
 
-type candidatePackageIntakeAdoptionReviewCreateInput struct {
+type AdoptionReviewCreateInput struct {
 	AdoptionID                string `json:"adoption_id,omitempty"`
 	TargetComputerID          string `json:"target_computer_id"`
 	TargetComputerKind        string `json:"target_computer_kind,omitempty"`
@@ -63,24 +76,24 @@ type candidatePackageIntakeAdoptionReviewCreateInput struct {
 	ReviewEvidenceRef         string `json:"review_evidence_ref,omitempty"`
 }
 
-type candidatePackageIntakeAdoptionReviewDecisionInput struct {
+type AdoptionReviewDecisionInput struct {
 	Decision          string `json:"decision"`
 	ReviewEvidenceRef string `json:"review_evidence_ref,omitempty"`
 }
 
-type candidatePackageIntakePromotionSwitchInput struct {
+type PromotionSwitchInput struct {
 	SwitchEvidenceRef string `json:"switch_evidence_ref,omitempty"`
 }
 
-type candidatePackageIntakePromotionSwitchRollbackInput struct {
+type PromotionSwitchRollbackInput struct {
 	RollbackEvidenceRef string `json:"rollback_evidence_ref,omitempty"`
 }
 
-type candidatePackageIntakePromotionSwitchRollForwardInput struct {
+type PromotionSwitchRollForwardInput struct {
 	RollForwardEvidenceRef string `json:"roll_forward_evidence_ref,omitempty"`
 }
 
-type candidatePackagePromotionAcceptanceEvidence struct {
+type PromotionAcceptanceEvidence struct {
 	ArtifactKind                   string                                             `json:"artifact_kind"`
 	AcceptanceID                   string                                             `json:"acceptance_id"`
 	AcceptanceLevel                string                                             `json:"acceptance_level"`
@@ -120,7 +133,7 @@ type candidatePackagePromotionAcceptanceEvidence struct {
 	VerifierContractState          []candidatePackagePromotionAcceptanceContractState `json:"verifier_contract_state,omitempty"`
 }
 
-type candidatePackageActivationDecisionBoundary struct {
+type ActivationDecisionBoundary struct {
 	State                 string   `json:"state"`
 	OwnerControlled       bool     `json:"owner_controlled"`
 	RequiresAuthenticated bool     `json:"requires_authenticated_owner"`
@@ -132,46 +145,46 @@ type candidatePackageActivationDecisionBoundary struct {
 	RequiredContracts     []string `json:"required_contracts"`
 }
 
-type candidatePackagePromotionReviewSurface struct {
-	ArtifactKind                   string                                      `json:"artifact_kind"`
-	State                          string                                      `json:"state"`
-	SurfaceScope                   string                                      `json:"surface_scope"`
-	DeploymentState                string                                      `json:"deployment_state"`
-	ProductVisible                 bool                                        `json:"product_visible"`
-	ReadOnly                       bool                                        `json:"read_only"`
-	ReviewScope                    string                                      `json:"review_scope"`
-	IntakeID                       string                                      `json:"intake_id"`
-	AdoptionID                     string                                      `json:"adoption_id"`
-	PackageID                      string                                      `json:"package_id"`
-	AppID                          string                                      `json:"app_id,omitempty"`
-	CandidatePackageID             string                                      `json:"candidate_package_id"`
-	CandidatePackageManifestSHA256 string                                      `json:"candidate_package_manifest_sha256"`
-	SourceComputerID               string                                      `json:"source_computer_id"`
-	SourceCandidateID              string                                      `json:"source_candidate_id"`
-	TargetComputerID               string                                      `json:"target_computer_id"`
-	TargetCandidateID              string                                      `json:"target_candidate_id,omitempty"`
-	TargetActiveSourceRefAtCutover string                                      `json:"target_active_source_ref_at_cutover"`
-	CandidateSourceRef             string                                      `json:"candidate_source_ref"`
-	CurrentAdoptionStatus          string                                      `json:"current_adoption_status"`
-	LocalAcceptanceID              string                                      `json:"local_acceptance_id"`
-	LocalAcceptanceLevel           string                                      `json:"local_acceptance_level"`
-	LocalAcceptanceState           string                                      `json:"local_acceptance_state"`
-	PackagePublication             string                                      `json:"package_publication"`
-	DeployedPromotion              string                                      `json:"deployed_promotion"`
-	DeployedRouteMutation          string                                      `json:"deployed_route_mutation"`
-	PromotionLevel                 string                                      `json:"promotion_level"`
-	AuthSession                    string                                      `json:"auth_session"`
-	Staging                        string                                      `json:"staging"`
-	VMLifecycle                    string                                      `json:"vm_lifecycle"`
-	RunAcceptanceRecord            string                                      `json:"run_acceptance_record"`
-	AppChangePackageMutation       string                                      `json:"app_change_package_mutation"`
-	AppAdoptionMutation            string                                      `json:"app_adoption_mutation"`
-	AllowedActions                 []string                                    `json:"allowed_actions"`
-	BlockedActions                 []string                                    `json:"blocked_actions"`
-	ActivationDecisionBoundary     candidatePackageActivationDecisionBoundary  `json:"activation_decision_boundary"`
-	AcceptanceEvidence             candidatePackagePromotionAcceptanceEvidence `json:"acceptance_evidence"`
-	BoundaryAssertions             map[string]string                           `json:"boundary_assertions"`
-	ResidualRisks                  []string                                    `json:"residual_risks"`
+type PromotionReviewSurface struct {
+	ArtifactKind                   string                      `json:"artifact_kind"`
+	State                          string                      `json:"state"`
+	SurfaceScope                   string                      `json:"surface_scope"`
+	DeploymentState                string                      `json:"deployment_state"`
+	ProductVisible                 bool                        `json:"product_visible"`
+	ReadOnly                       bool                        `json:"read_only"`
+	ReviewScope                    string                      `json:"review_scope"`
+	IntakeID                       string                      `json:"intake_id"`
+	AdoptionID                     string                      `json:"adoption_id"`
+	PackageID                      string                      `json:"package_id"`
+	AppID                          string                      `json:"app_id,omitempty"`
+	CandidatePackageID             string                      `json:"candidate_package_id"`
+	CandidatePackageManifestSHA256 string                      `json:"candidate_package_manifest_sha256"`
+	SourceComputerID               string                      `json:"source_computer_id"`
+	SourceCandidateID              string                      `json:"source_candidate_id"`
+	TargetComputerID               string                      `json:"target_computer_id"`
+	TargetCandidateID              string                      `json:"target_candidate_id,omitempty"`
+	TargetActiveSourceRefAtCutover string                      `json:"target_active_source_ref_at_cutover"`
+	CandidateSourceRef             string                      `json:"candidate_source_ref"`
+	CurrentAdoptionStatus          string                      `json:"current_adoption_status"`
+	LocalAcceptanceID              string                      `json:"local_acceptance_id"`
+	LocalAcceptanceLevel           string                      `json:"local_acceptance_level"`
+	LocalAcceptanceState           string                      `json:"local_acceptance_state"`
+	PackagePublication             string                      `json:"package_publication"`
+	DeployedPromotion              string                      `json:"deployed_promotion"`
+	DeployedRouteMutation          string                      `json:"deployed_route_mutation"`
+	PromotionLevel                 string                      `json:"promotion_level"`
+	AuthSession                    string                      `json:"auth_session"`
+	Staging                        string                      `json:"staging"`
+	VMLifecycle                    string                      `json:"vm_lifecycle"`
+	RunAcceptanceRecord            string                      `json:"run_acceptance_record"`
+	AppChangePackageMutation       string                      `json:"app_change_package_mutation"`
+	AppAdoptionMutation            string                      `json:"app_adoption_mutation"`
+	AllowedActions                 []string                    `json:"allowed_actions"`
+	BlockedActions                 []string                    `json:"blocked_actions"`
+	ActivationDecisionBoundary     ActivationDecisionBoundary  `json:"activation_decision_boundary"`
+	AcceptanceEvidence             PromotionAcceptanceEvidence `json:"acceptance_evidence"`
+	BoundaryAssertions             map[string]string           `json:"boundary_assertions"`
+	ResidualRisks                  []string                    `json:"residual_risks"`
 }
 type candidatePackagePromotionAcceptanceCheckpoint struct {
 	Kind  string `json:"kind"`
@@ -183,8 +196,8 @@ type candidatePackagePromotionAcceptanceContractState struct {
 	State string `json:"state"`
 }
 
-func (rt *Runtime) CreateCandidatePackageIntake(ctx context.Context, ownerID string, in candidatePackageIntakeCreateInput) (types.CandidatePackageIntakeRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) CreateCandidatePackageIntake(ctx context.Context, ownerID string, in CreateInput) (types.CandidatePackageIntakeRecord, error) {
+	if s == nil || s.store == nil {
 		return types.CandidatePackageIntakeRecord{}, fmt.Errorf("candidate package intake: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -223,11 +236,11 @@ func (rt *Runtime) CreateCandidatePackageIntake(ctx context.Context, ownerID str
 	if rec.OwnerReviewState == "" {
 		rec.OwnerReviewState = types.CandidatePackageOwnerReviewRequired
 	}
-	return rt.store.UpsertCandidatePackageIntake(ctx, rec)
+	return s.store.UpsertCandidatePackageIntake(ctx, rec)
 }
 
-func (rt *Runtime) ReviewCandidatePackageIntake(ctx context.Context, ownerID, intakeID string, in candidatePackageIntakeReviewInput) (types.CandidatePackageIntakeRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) ReviewCandidatePackageIntake(ctx context.Context, ownerID, intakeID string, in ReviewInput) (types.CandidatePackageIntakeRecord, error) {
+	if s == nil || s.store == nil {
 		return types.CandidatePackageIntakeRecord{}, fmt.Errorf("candidate package intake review: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -242,7 +255,7 @@ func (rt *Runtime) ReviewCandidatePackageIntake(ctx context.Context, ownerID, in
 	if decision != "approve" && decision != "reject" {
 		return types.CandidatePackageIntakeRecord{}, fmt.Errorf("candidate package intake review: decision must be approve or reject")
 	}
-	rec, err := rt.store.GetCandidatePackageIntake(ctx, ownerID, intakeID)
+	rec, err := s.store.GetCandidatePackageIntake(ctx, ownerID, intakeID)
 	if err != nil {
 		return types.CandidatePackageIntakeRecord{}, err
 	}
@@ -278,11 +291,11 @@ func (rt *Runtime) ReviewCandidatePackageIntake(ctx context.Context, ownerID, in
 		evidenceRefs = append(evidenceRefs, ref)
 	}
 	rec.EvidenceRefsJSON = candidatePackageIntakeStringArrayJSON(evidenceRefs)
-	return rt.store.UpdateCandidatePackageIntakeIfCurrent(ctx, rec, previousUpdatedAt)
+	return s.store.UpdateCandidatePackageIntakeIfCurrent(ctx, rec, previousUpdatedAt)
 }
 
-func (rt *Runtime) BindCandidatePackageIntakeAdoptionBoundary(ctx context.Context, ownerID, intakeID string, in candidatePackageIntakeAdoptionBoundaryInput) (types.CandidatePackageIntakeRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) BindCandidatePackageIntakeAdoptionBoundary(ctx context.Context, ownerID, intakeID string, in AdoptionBoundaryInput) (types.CandidatePackageIntakeRecord, error) {
+	if s == nil || s.store == nil {
 		return types.CandidatePackageIntakeRecord{}, fmt.Errorf("candidate package intake adoption boundary: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -301,7 +314,7 @@ func (rt *Runtime) BindCandidatePackageIntakeAdoptionBoundary(ctx context.Contex
 	if rollbackContractRef == "" {
 		return types.CandidatePackageIntakeRecord{}, fmt.Errorf("candidate package intake adoption boundary: rollback_contract_ref is required")
 	}
-	rec, err := rt.store.GetCandidatePackageIntake(ctx, ownerID, intakeID)
+	rec, err := s.store.GetCandidatePackageIntake(ctx, ownerID, intakeID)
 	if err != nil {
 		return types.CandidatePackageIntakeRecord{}, err
 	}
@@ -334,11 +347,11 @@ func (rt *Runtime) BindCandidatePackageIntakeAdoptionBoundary(ctx context.Contex
 		evidenceRefs = append(evidenceRefs, ref)
 	}
 	rec.EvidenceRefsJSON = candidatePackageIntakeStringArrayJSON(evidenceRefs)
-	return rt.store.UpdateCandidatePackageIntakeIfCurrent(ctx, rec, previousUpdatedAt)
+	return s.store.UpdateCandidatePackageIntakeIfCurrent(ctx, rec, previousUpdatedAt)
 }
 
-func (rt *Runtime) CreateCandidatePackageIntakePublicationDraft(ctx context.Context, ownerID, intakeID string, in candidatePackageIntakePublicationDraftInput) (types.AppChangePackageRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) CreateCandidatePackageIntakePublicationDraft(ctx context.Context, ownerID, intakeID string, in PublicationDraftInput) (types.AppChangePackageRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppChangePackageRecord{}, fmt.Errorf("candidate package intake publication draft: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -353,7 +366,7 @@ func (rt *Runtime) CreateCandidatePackageIntakePublicationDraft(ctx context.Cont
 	if publicationContractRef == "" {
 		return types.AppChangePackageRecord{}, fmt.Errorf("candidate package intake publication draft: publication_contract_ref is required")
 	}
-	intake, err := rt.store.GetCandidatePackageIntake(ctx, ownerID, intakeID)
+	intake, err := s.store.GetCandidatePackageIntake(ctx, ownerID, intakeID)
 	if err != nil {
 		return types.AppChangePackageRecord{}, err
 	}
@@ -381,7 +394,7 @@ func (rt *Runtime) CreateCandidatePackageIntakePublicationDraft(ctx context.Cont
 	if packageID == "" {
 		return types.AppChangePackageRecord{}, fmt.Errorf("candidate package intake publication draft: package_id is required")
 	}
-	existing, err := rt.store.GetAppChangePackage(ctx, packageID)
+	existing, err := s.store.GetAppChangePackage(ctx, packageID)
 	if err == nil {
 		if existing.OwnerID == ownerID && candidatePackageDraftMatchesIntake(existing, intake.IntakeID) {
 			return existing, nil
@@ -446,11 +459,11 @@ func (rt *Runtime) CreateCandidatePackageIntakePublicationDraft(ctx context.Cont
 		ProvenanceRefsJSON:    provenanceRefs,
 		TraceID:               intake.TraceID,
 	}
-	return rt.store.UpsertAppChangePackage(ctx, rec)
+	return s.store.UpsertAppChangePackage(ctx, rec)
 }
 
-func (rt *Runtime) CreateCandidatePackageIntakeAdoptionReview(ctx context.Context, ownerID, intakeID string, in candidatePackageIntakeAdoptionReviewCreateInput) (types.AppAdoptionRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) CreateCandidatePackageIntakeAdoptionReview(ctx context.Context, ownerID, intakeID string, in AdoptionReviewCreateInput) (types.AppAdoptionRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake adoption review: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -469,11 +482,11 @@ func (rt *Runtime) CreateCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	if targetComputerID == "" {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake adoption review: target_computer_id is required")
 	}
-	intake, pkg, adoptionContractRef, rollbackContractRef, err := rt.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, in.PackageID)
+	intake, pkg, adoptionContractRef, rollbackContractRef, err := s.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, in.PackageID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	if existing, err := rt.candidatePackageAdoptionReviewForPackage(ctx, ownerID, pkg.PackageID); err == nil {
+	if existing, err := s.candidatePackageAdoptionReviewForPackage(ctx, ownerID, pkg.PackageID); err == nil {
 		return existing, fmt.Errorf("candidate package intake adoption review: package %q already has an adoption review", pkg.PackageID)
 	} else if err != store.ErrNotFound {
 		return types.AppAdoptionRecord{}, err
@@ -482,7 +495,7 @@ func (rt *Runtime) CreateCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	if targetKind == "" {
 		targetKind = computerKindForID(targetComputerID)
 	}
-	lineage, err := rt.promotion.EnsureComputerSourceLineage(ctx, ownerID, targetComputerID, targetKind, "")
+	lineage, err := s.promotion.EnsureComputerSourceLineage(ctx, ownerID, targetComputerID, targetKind, "")
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -512,11 +525,11 @@ func (rt *Runtime) CreateCandidatePackageIntakeAdoptionReview(ctx context.Contex
 		DefaultBaseProfile:                    lineage.DefaultBaseProfile,
 		TraceID:                               firstNonEmptyPromotion(intake.TraceID, pkg.TraceID),
 	}
-	rec, err = rt.store.UpsertAppAdoption(ctx, rec)
+	rec, err = s.store.UpsertAppAdoption(ctx, rec)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionProposed, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, s.store, ownerID, rec.TraceID, types.EventAppAdoptionProposed, "adoption", map[string]any{
 		"adoption_id":                  rec.AdoptionID,
 		"package_id":                   rec.PackageID,
 		"candidate_package_intake_id":  intake.IntakeID,
@@ -531,8 +544,8 @@ func (rt *Runtime) CreateCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	return rec, nil
 }
 
-func (rt *Runtime) ReviewCandidatePackageIntakeAdoption(ctx context.Context, ownerID, intakeID, adoptionID string, in candidatePackageIntakeAdoptionReviewDecisionInput) (types.AppAdoptionRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) ReviewCandidatePackageIntakeAdoption(ctx context.Context, ownerID, intakeID, adoptionID string, in AdoptionReviewDecisionInput) (types.AppAdoptionRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake adoption review: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -551,12 +564,12 @@ func (rt *Runtime) ReviewCandidatePackageIntakeAdoption(ctx context.Context, own
 	if decision != "approve" && decision != "reject" {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake adoption review: decision must be approve or reject")
 	}
-	rec, err := rt.store.GetAppAdoption(ctx, ownerID, adoptionID)
+	rec, err := s.store.GetAppAdoption(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	previousUpdatedAt := rec.UpdatedAt
-	intake, pkg, _, _, err := rt.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
+	intake, pkg, _, _, err := s.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -575,11 +588,11 @@ func (rt *Runtime) ReviewCandidatePackageIntakeAdoption(ctx context.Context, own
 		rec.Error = "owner rejected candidate-package adoption review"
 	}
 	rec.VerifierResultsJSON = candidatePackageAppendAdoptionReviewDecisionJSON(rec.VerifierResultsJSON, decision, strings.TrimSpace(in.ReviewEvidenceRef))
-	rec, err = rt.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
+	rec, err = s.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionOwnerReviewResolved, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, s.store, ownerID, rec.TraceID, types.EventAppAdoptionOwnerReviewResolved, "adoption", map[string]any{
 		"adoption_id":                 rec.AdoptionID,
 		"package_id":                  rec.PackageID,
 		"candidate_package_intake_id": intake.IntakeID,
@@ -593,8 +606,8 @@ func (rt *Runtime) ReviewCandidatePackageIntakeAdoption(ctx context.Context, own
 	return rec, nil
 }
 
-func (rt *Runtime) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Context, ownerID, intakeID, adoptionID string, in candidatePackageIntakePromotionSwitchInput) (types.AppAdoptionRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Context, ownerID, intakeID, adoptionID string, in PromotionSwitchInput) (types.AppAdoptionRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake promotion switch: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -609,12 +622,12 @@ func (rt *Runtime) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	if adoptionID == "" {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake promotion switch: adoption_id is required")
 	}
-	rec, err := rt.store.GetAppAdoption(ctx, ownerID, adoptionID)
+	rec, err := s.store.GetAppAdoption(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	previousUpdatedAt := rec.UpdatedAt
-	intake, pkg, adoptionContractRef, rollbackContractRef, err := rt.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
+	intake, pkg, adoptionContractRef, rollbackContractRef, err := s.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -630,7 +643,7 @@ func (rt *Runtime) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	if strings.TrimSpace(rec.CandidateSourceRef) == "" || !strings.Contains(rec.CandidateSourceRef, "/candidates/") {
 		return rec, fmt.Errorf("candidate package intake promotion switch: candidate_source_ref must be a candidate ref")
 	}
-	lineage, err := rt.store.GetComputerSourceLineage(ctx, ownerID, rec.TargetComputerID)
+	lineage, err := s.store.GetComputerSourceLineage(ctx, ownerID, rec.TargetComputerID)
 	if err != nil {
 		return rec, err
 	}
@@ -645,7 +658,7 @@ func (rt *Runtime) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	rec.Error = ""
 	rec.VerifierResultsJSON = candidatePackageAppendPromotionSwitchJSON(rec.VerifierResultsJSON, strings.TrimSpace(in.SwitchEvidenceRef))
 	rec.RollbackProfileJSON = candidatePackageAdoptionReviewSwitchRollbackProfileJSON(rec.RollbackProfileJSON, rec.CandidateSourceRef, strings.TrimSpace(in.SwitchEvidenceRef), lineage.RouteProfile)
-	rec, err = rt.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
+	rec, err = s.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -656,10 +669,10 @@ func (rt *Runtime) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	lineage.LastPackageID = pkg.PackageID
 	lineage.LastCandidateRef = rec.CandidateSourceRef
 	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+	if _, err := s.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionSourceLineageSwitched, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, s.store, ownerID, rec.TraceID, types.EventAppAdoptionSourceLineageSwitched, "adoption", map[string]any{
 		"adoption_id":                 rec.AdoptionID,
 		"package_id":                  rec.PackageID,
 		"candidate_package_intake_id": intake.IntakeID,
@@ -676,8 +689,8 @@ func (rt *Runtime) SwitchCandidatePackageIntakeAdoptionReview(ctx context.Contex
 	return rec, nil
 }
 
-func (rt *Runtime) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Context, ownerID, intakeID, adoptionID string, in candidatePackageIntakePromotionSwitchRollbackInput) (types.AppAdoptionRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Context, ownerID, intakeID, adoptionID string, in PromotionSwitchRollbackInput) (types.AppAdoptionRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake promotion switch rollback: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -692,12 +705,12 @@ func (rt *Runtime) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Cont
 	if adoptionID == "" {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake promotion switch rollback: adoption_id is required")
 	}
-	rec, err := rt.store.GetAppAdoption(ctx, ownerID, adoptionID)
+	rec, err := s.store.GetAppAdoption(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	previousUpdatedAt := rec.UpdatedAt
-	intake, pkg, adoptionContractRef, rollbackContractRef, err := rt.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
+	intake, pkg, adoptionContractRef, rollbackContractRef, err := s.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -716,7 +729,7 @@ func (rt *Runtime) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Cont
 	if strings.TrimSpace(rec.TargetActiveSourceRefAtCutover) == "" {
 		return rec, fmt.Errorf("candidate package intake promotion switch rollback: target_active_source_ref_at_cutover is required")
 	}
-	lineage, err := rt.store.GetComputerSourceLineage(ctx, ownerID, rec.TargetComputerID)
+	lineage, err := s.store.GetComputerSourceLineage(ctx, ownerID, rec.TargetComputerID)
 	if err != nil {
 		return rec, err
 	}
@@ -731,7 +744,7 @@ func (rt *Runtime) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Cont
 	rec.Error = ""
 	rec.VerifierResultsJSON = candidatePackageAppendPromotionSwitchRollbackJSON(rec.VerifierResultsJSON, strings.TrimSpace(in.RollbackEvidenceRef))
 	rec.RollbackProfileJSON = candidatePackageAdoptionReviewSwitchRolledBackProfileJSON(rec.RollbackProfileJSON, rec.TargetActiveSourceRefAtCutover, strings.TrimSpace(in.RollbackEvidenceRef))
-	rec, err = rt.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
+	rec, err = s.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -742,10 +755,10 @@ func (rt *Runtime) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Cont
 	lineage.LastPackageID = pkg.PackageID
 	lineage.LastCandidateRef = ""
 	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+	if _, err := s.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionRolledBack, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, s.store, ownerID, rec.TraceID, types.EventAppAdoptionRolledBack, "adoption", map[string]any{
 		"adoption_id":                 rec.AdoptionID,
 		"package_id":                  rec.PackageID,
 		"candidate_package_intake_id": intake.IntakeID,
@@ -761,8 +774,8 @@ func (rt *Runtime) RollbackCandidatePackageIntakeAdoptionReview(ctx context.Cont
 	return rec, nil
 }
 
-func (rt *Runtime) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.Context, ownerID, intakeID, adoptionID string, in candidatePackageIntakePromotionSwitchRollForwardInput) (types.AppAdoptionRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.Context, ownerID, intakeID, adoptionID string, in PromotionSwitchRollForwardInput) (types.AppAdoptionRecord, error) {
+	if s == nil || s.store == nil {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake promotion switch roll-forward: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
@@ -777,12 +790,12 @@ func (rt *Runtime) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.C
 	if adoptionID == "" {
 		return types.AppAdoptionRecord{}, fmt.Errorf("candidate package intake promotion switch roll-forward: adoption_id is required")
 	}
-	rec, err := rt.store.GetAppAdoption(ctx, ownerID, adoptionID)
+	rec, err := s.store.GetAppAdoption(ctx, ownerID, adoptionID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
 	previousUpdatedAt := rec.UpdatedAt
-	intake, pkg, adoptionContractRef, rollbackContractRef, err := rt.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
+	intake, pkg, adoptionContractRef, rollbackContractRef, err := s.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -798,7 +811,7 @@ func (rt *Runtime) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.C
 	if strings.TrimSpace(rec.TargetActiveSourceRefAtCutover) == "" {
 		return rec, fmt.Errorf("candidate package intake promotion switch roll-forward: target_active_source_ref_at_cutover is required")
 	}
-	lineage, err := rt.store.GetComputerSourceLineage(ctx, ownerID, rec.TargetComputerID)
+	lineage, err := s.store.GetComputerSourceLineage(ctx, ownerID, rec.TargetComputerID)
 	if err != nil {
 		return rec, err
 	}
@@ -812,7 +825,7 @@ func (rt *Runtime) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.C
 	rec.Error = ""
 	rec.VerifierResultsJSON = candidatePackageAppendPromotionSwitchRollForwardJSON(rec.VerifierResultsJSON, strings.TrimSpace(in.RollForwardEvidenceRef))
 	rec.RollbackProfileJSON = candidatePackageAdoptionReviewSwitchRolledForwardProfileJSON(rec.RollbackProfileJSON, rec.CandidateSourceRef, strings.TrimSpace(in.RollForwardEvidenceRef))
-	rec, err = rt.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
+	rec, err = s.store.UpdateAppAdoptionIfCurrent(ctx, rec, previousUpdatedAt)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -823,10 +836,10 @@ func (rt *Runtime) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.C
 	lineage.LastPackageID = pkg.PackageID
 	lineage.LastCandidateRef = rec.CandidateSourceRef
 	lineage.UpdatedAt = time.Now().UTC()
-	if _, err := rt.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
+	if _, err := s.store.UpsertComputerSourceLineage(ctx, lineage); err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
-	emitCandidatePackagePromotionEvent(ctx, rt.store, ownerID, rec.TraceID, types.EventAppAdoptionSourceLineageSwitched, "adoption", map[string]any{
+	emitCandidatePackagePromotionEvent(ctx, s.store, ownerID, rec.TraceID, types.EventAppAdoptionSourceLineageSwitched, "adoption", map[string]any{
 		"adoption_id":                 rec.AdoptionID,
 		"package_id":                  rec.PackageID,
 		"candidate_package_intake_id": intake.IntakeID,
@@ -843,39 +856,39 @@ func (rt *Runtime) RollForwardCandidatePackageIntakeAdoptionReview(ctx context.C
 	return rec, nil
 }
 
-func (rt *Runtime) CandidatePackagePromotionAcceptanceEvidence(ctx context.Context, ownerID, intakeID, adoptionID string) (candidatePackagePromotionAcceptanceEvidence, error) {
-	if rt == nil || rt.store == nil {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: runtime store is unavailable")
+func (s *Service) CandidatePackagePromotionAcceptanceEvidence(ctx context.Context, ownerID, intakeID, adoptionID string) (PromotionAcceptanceEvidence, error) {
+	if s == nil || s.store == nil {
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
 	intakeID = strings.TrimSpace(intakeID)
 	adoptionID = strings.TrimSpace(adoptionID)
 	if ownerID == "" {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: owner_id is required")
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: owner_id is required")
 	}
 	if intakeID == "" {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: intake_id is required")
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: intake_id is required")
 	}
 	if adoptionID == "" {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: adoption_id is required")
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: adoption_id is required")
 	}
-	rec, err := rt.store.GetAppAdoption(ctx, ownerID, adoptionID)
+	rec, err := s.store.GetAppAdoption(ctx, ownerID, adoptionID)
 	if err != nil {
-		return candidatePackagePromotionAcceptanceEvidence{}, err
+		return PromotionAcceptanceEvidence{}, err
 	}
-	intake, pkg, adoptionContractRef, rollbackContractRef, err := rt.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
+	intake, pkg, adoptionContractRef, rollbackContractRef, err := s.loadCandidatePackagePublicationDraftForAdoptionReview(ctx, ownerID, intakeID, rec.PackageID)
 	if err != nil {
-		return candidatePackagePromotionAcceptanceEvidence{}, err
+		return PromotionAcceptanceEvidence{}, err
 	}
 	if rec.PackageID != pkg.PackageID {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: adoption %s is not bound to intake %s", rec.AdoptionID, intake.IntakeID)
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: adoption %s is not bound to intake %s", rec.AdoptionID, intake.IntakeID)
 	}
 	if strings.TrimSpace(rec.CandidateSourceRef) == "" || strings.TrimSpace(rec.TargetActiveSourceRefAtCutover) == "" {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: source-lineage switch refs are incomplete")
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: source-lineage switch refs are incomplete")
 	}
-	lineage, err := rt.store.GetComputerSourceLineage(ctx, ownerID, rec.TargetComputerID)
+	lineage, err := s.store.GetComputerSourceLineage(ctx, ownerID, rec.TargetComputerID)
 	if err != nil {
-		return candidatePackagePromotionAcceptanceEvidence{}, err
+		return PromotionAcceptanceEvidence{}, err
 	}
 	rawProfile := rawJSONOrFallback(rec.RollbackProfileJSON, "{}")
 	var profile map[string]any
@@ -900,21 +913,21 @@ func (rt *Runtime) CandidatePackagePromotionAcceptanceEvidence(ctx context.Conte
 		profile = acceptanceProfile
 	}
 	if rec.Status != types.AppAdoptionSourceLineageSwitched {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: adoption status %q is not source_lineage_switched", rec.Status)
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: adoption status %q is not source_lineage_switched", rec.Status)
 	}
 	if strings.TrimSpace(lineage.ActiveSourceRef) != strings.TrimSpace(rec.CandidateSourceRef) {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: active lineage %q does not equal candidate source ref %q", lineage.ActiveSourceRef, rec.CandidateSourceRef)
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: active lineage %q does not equal candidate source ref %q", lineage.ActiveSourceRef, rec.CandidateSourceRef)
 	}
 	if profileErr != nil {
-		return candidatePackagePromotionAcceptanceEvidence{}, profileErr
+		return PromotionAcceptanceEvidence{}, profileErr
 	}
 	if !ownerReviewApproved || !sourceLineageSwitched || !sourceLineageRolledBack || !sourceLineageRollForwarded {
-		return candidatePackagePromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: owner-review, switch, rollback, and roll-forward checkpoints are required")
+		return PromotionAcceptanceEvidence{}, fmt.Errorf("candidate package promotion acceptance evidence: owner-review, switch, rollback, and roll-forward checkpoints are required")
 	}
 	reviewEvidenceRefs := candidatePackagePromotionAcceptanceReviewEvidenceRefs(rec.VerifierResultsJSON)
 	evidenceRefs := candidatePackagePromotionAcceptanceStringSet(reviewEvidenceRefs...)
 	evidenceRefs = candidatePackagePromotionAcceptanceAppendUnique(evidenceRefs, switchEvidenceRef, rollbackEvidenceRef, rollForwardEvidenceRef)
-	return candidatePackagePromotionAcceptanceEvidence{
+	return PromotionAcceptanceEvidence{
 		ArtifactKind:                   "candidate_package_promotion_switch_acceptance_evidence",
 		AcceptanceID:                   "candidate-package-local-acceptance-" + rec.AdoptionID,
 		AcceptanceLevel:                "local-source-lineage-evidence",
@@ -970,12 +983,12 @@ func (rt *Runtime) CandidatePackagePromotionAcceptanceEvidence(ctx context.Conte
 	}, nil
 }
 
-func (rt *Runtime) CandidatePackagePromotionReviewSurface(ctx context.Context, ownerID, intakeID, adoptionID string) (candidatePackagePromotionReviewSurface, error) {
-	acceptance, err := rt.CandidatePackagePromotionAcceptanceEvidence(ctx, ownerID, intakeID, adoptionID)
+func (s *Service) CandidatePackagePromotionReviewSurface(ctx context.Context, ownerID, intakeID, adoptionID string) (PromotionReviewSurface, error) {
+	acceptance, err := s.CandidatePackagePromotionAcceptanceEvidence(ctx, ownerID, intakeID, adoptionID)
 	if err != nil {
-		return candidatePackagePromotionReviewSurface{}, err
+		return PromotionReviewSurface{}, err
 	}
-	return candidatePackagePromotionReviewSurface{
+	return PromotionReviewSurface{
 		ArtifactKind:                   "candidate_package_adoption_promotion_review_surface",
 		State:                          "reviewable",
 		SurfaceScope:                   "product_visible_non_deployed",
@@ -1024,7 +1037,7 @@ func (rt *Runtime) CandidatePackagePromotionReviewSurface(ctx context.Context, o
 			"claim_staging_acceptance",
 			"call_app_adoption_promote",
 		},
-		ActivationDecisionBoundary: candidatePackageActivationDecisionBoundary{
+		ActivationDecisionBoundary: ActivationDecisionBoundary{
 			State:                 "owner_decision_preparable",
 			OwnerControlled:       true,
 			RequiresAuthenticated: true,
@@ -1081,8 +1094,8 @@ func (rt *Runtime) CandidatePackagePromotionReviewSurface(ctx context.Context, o
 	}, nil
 }
 
-func (rt *Runtime) loadCandidatePackagePublicationDraftForAdoptionReview(ctx context.Context, ownerID, intakeID, packageID string) (types.CandidatePackageIntakeRecord, types.AppChangePackageRecord, string, string, error) {
-	intake, err := rt.store.GetCandidatePackageIntake(ctx, ownerID, strings.TrimSpace(intakeID))
+func (s *Service) loadCandidatePackagePublicationDraftForAdoptionReview(ctx context.Context, ownerID, intakeID, packageID string) (types.CandidatePackageIntakeRecord, types.AppChangePackageRecord, string, string, error) {
+	intake, err := s.store.GetCandidatePackageIntake(ctx, ownerID, strings.TrimSpace(intakeID))
 	if err != nil {
 		return types.CandidatePackageIntakeRecord{}, types.AppChangePackageRecord{}, "", "", err
 	}
@@ -1107,7 +1120,7 @@ func (rt *Runtime) loadCandidatePackagePublicationDraftForAdoptionReview(ctx con
 	if packageID == "" {
 		packageID = strings.TrimSpace(intake.CandidatePackageID)
 	}
-	pkg, err := rt.store.GetAppChangePackageForViewer(ctx, ownerID, packageID)
+	pkg, err := s.store.GetAppChangePackageForViewer(ctx, ownerID, packageID)
 	if err != nil {
 		return intake, types.AppChangePackageRecord{}, "", "", fmt.Errorf("candidate package intake adoption review: publication draft not found")
 	}
@@ -1117,8 +1130,8 @@ func (rt *Runtime) loadCandidatePackagePublicationDraftForAdoptionReview(ctx con
 	return intake, pkg, adoptionContractRef, rollbackContractRef, nil
 }
 
-func (rt *Runtime) candidatePackageAdoptionReviewForPackage(ctx context.Context, ownerID, packageID string) (types.AppAdoptionRecord, error) {
-	adoptions, err := rt.store.ListAppAdoptions(ctx, ownerID, 500)
+func (s *Service) candidatePackageAdoptionReviewForPackage(ctx context.Context, ownerID, packageID string) (types.AppAdoptionRecord, error) {
+	adoptions, err := s.store.ListAppAdoptions(ctx, ownerID, 500)
 	if err != nil {
 		return types.AppAdoptionRecord{}, err
 	}
@@ -1682,16 +1695,127 @@ func candidatePackageIntakeRemoveBlockers(values []string, remove ...string) []s
 	return out
 }
 
-func (rt *Runtime) GetCandidatePackageIntake(ctx context.Context, ownerID, intakeID string) (types.CandidatePackageIntakeRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) GetCandidatePackageIntake(ctx context.Context, ownerID, intakeID string) (types.CandidatePackageIntakeRecord, error) {
+	if s == nil || s.store == nil {
 		return types.CandidatePackageIntakeRecord{}, fmt.Errorf("candidate package intake: runtime store is unavailable")
 	}
-	return rt.store.GetCandidatePackageIntake(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(intakeID))
+	return s.store.GetCandidatePackageIntake(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(intakeID))
 }
 
-func (rt *Runtime) ListCandidatePackageIntakes(ctx context.Context, ownerID string, limit int) ([]types.CandidatePackageIntakeRecord, error) {
-	if rt == nil || rt.store == nil {
+func (s *Service) ListCandidatePackageIntakes(ctx context.Context, ownerID string, limit int) ([]types.CandidatePackageIntakeRecord, error) {
+	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("candidate package intake: runtime store is unavailable")
 	}
-	return rt.store.ListCandidatePackageIntakes(ctx, strings.TrimSpace(ownerID), limit)
+	return s.store.ListCandidatePackageIntakes(ctx, strings.TrimSpace(ownerID), limit)
+}
+
+func rawJSONOrFallback(raw json.RawMessage, fallback string) json.RawMessage {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return json.RawMessage(fallback)
+	}
+	return raw
+}
+
+func sha256Hex(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
+}
+
+func computerKindForID(computerID string) string {
+	if strings.Contains(strings.ToLower(computerID), "platform") {
+		return "platform"
+	}
+	return "user"
+}
+
+func candidateSourceRefForComputer(computerID, kind, candidateID string) string {
+	part := safeRefPart(computerID)
+	candidatePart := safeRefPart(candidateID)
+	if kind == "platform" {
+		return "refs/platform-computers/" + part + "/candidates/" + candidatePart
+	}
+	return "refs/computers/" + part + "/candidates/" + candidatePart
+}
+
+func safeRefPart(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "" {
+		return "default"
+	}
+	var b strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte('-')
+	}
+	return strings.Trim(b.String(), "-.")
+}
+
+func normalizeRouteProfile(profile, ownerID, computerID string) string {
+	profile = strings.TrimSpace(profile)
+	if profile == "" {
+		return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
+	}
+	if strings.HasPrefix(profile, "route:") {
+		legacyID := strings.TrimSpace(strings.TrimPrefix(profile, "route:"))
+		if legacyID != "" {
+			return safeRefPart(ownerID) + "/" + safeRefPart(legacyID)
+		}
+		return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
+	}
+	parts := strings.Split(profile, "/")
+	if len(parts) == 2 {
+		ownerPart := strings.TrimSpace(parts[0])
+		computerPart := strings.TrimSpace(parts[1])
+		if ownerPart != "" && computerPart != "" {
+			return ownerPart + "/" + computerPart
+		}
+	}
+	return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
+}
+
+func firstNonEmptyPromotion(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func stringFromMap(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	value, _ := m[key].(string)
+	return strings.TrimSpace(value)
+}
+
+func emitCandidatePackagePromotionEvent(ctx context.Context, s *store.Store, ownerID, traceID string, kind types.EventKind, phase string, payload map[string]any) {
+	if s == nil {
+		return
+	}
+	traceID = strings.TrimSpace(traceID)
+	if traceID == "" {
+		return
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("runtime: marshal app promotion event: %v", err)
+		return
+	}
+	evRec := &types.EventRecord{
+		EventID:      uuid.NewString(),
+		OwnerID:      ownerID,
+		TrajectoryID: traceID,
+		Timestamp:    time.Now().UTC(),
+		Kind:         kind,
+		Phase:        phase,
+		Payload:      data,
+	}
+	if err := s.AppendEvent(ctx, evRec); err != nil {
+		log.Printf("runtime: persist app promotion event %s: %v", evRec.EventID, err)
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/yusefmosiah/go-choir/internal/candidatepackage"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -66,7 +67,7 @@ func (h *APIHandler) HandleCandidatePackageIntakesRoot(w http.ResponseWriter, r 
 	}
 	switch r.Method {
 	case http.MethodGet:
-		intakes, err := h.rt.ListCandidatePackageIntakes(r.Context(), ownerID, apiLimit(r, 100))
+		intakes, err := h.rt.candidatePackages.ListCandidatePackageIntakes(r.Context(), ownerID, apiLimit(r, 100))
 		if err != nil {
 			log.Printf("runtime api: list candidate package intakes: %v", err)
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to list candidate package intakes"})
@@ -74,14 +75,14 @@ func (h *APIHandler) HandleCandidatePackageIntakesRoot(w http.ResponseWriter, r 
 		}
 		writeAPIJSON(w, http.StatusOK, candidatePackageIntakeListResponse{Intakes: intakes})
 	case http.MethodPost:
-		var req candidatePackageIntakeCreateInput
+		var req candidatepackage.CreateInput
 		decoder := json.NewDecoder(r.Body)
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&req); err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake request"})
 			return
 		}
-		rec, err := h.rt.CreateCandidatePackageIntake(r.Context(), ownerID, req)
+		rec, err := h.rt.candidatePackages.CreateCandidatePackageIntake(r.Context(), ownerID, req)
 		if err != nil {
 			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: err.Error()})
 			return
@@ -150,7 +151,7 @@ func (h *APIHandler) HandleCandidatePackageIntakeDetail(w http.ResponseWriter, r
 		return
 	}
 	intakeID := strings.TrimSpace(parts[0])
-	rec, err := h.rt.GetCandidatePackageIntake(r.Context(), ownerID, intakeID)
+	rec, err := h.rt.candidatePackages.GetCandidatePackageIntake(r.Context(), ownerID, intakeID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
@@ -172,14 +173,14 @@ func (h *APIHandler) handleCandidatePackageIntakeReview(w http.ResponseWriter, r
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
 		return
 	}
-	var req candidatePackageIntakeReviewInput
+	var req candidatepackage.ReviewInput
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake review request"})
 		return
 	}
-	rec, err := h.rt.ReviewCandidatePackageIntake(r.Context(), ownerID, intakeID, req)
+	rec, err := h.rt.candidatePackages.ReviewCandidatePackageIntake(r.Context(), ownerID, intakeID, req)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
@@ -200,14 +201,14 @@ func (h *APIHandler) handleCandidatePackageIntakeAdoptionBoundary(w http.Respons
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
 		return
 	}
-	var req candidatePackageIntakeAdoptionBoundaryInput
+	var req candidatepackage.AdoptionBoundaryInput
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake adoption boundary request"})
 		return
 	}
-	rec, err := h.rt.BindCandidatePackageIntakeAdoptionBoundary(r.Context(), ownerID, intakeID, req)
+	rec, err := h.rt.candidatePackages.BindCandidatePackageIntakeAdoptionBoundary(r.Context(), ownerID, intakeID, req)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
@@ -228,14 +229,14 @@ func (h *APIHandler) handleCandidatePackageIntakePublicationDraft(w http.Respons
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
 		return
 	}
-	var req candidatePackageIntakePublicationDraftInput
+	var req candidatepackage.PublicationDraftInput
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake publication draft request"})
 		return
 	}
-	rec, err := h.rt.CreateCandidatePackageIntakePublicationDraft(r.Context(), ownerID, intakeID, req)
+	rec, err := h.rt.candidatePackages.CreateCandidatePackageIntakePublicationDraft(r.Context(), ownerID, intakeID, req)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
@@ -256,14 +257,14 @@ func (h *APIHandler) handleCandidatePackageIntakeAdoptionReviewCreate(w http.Res
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
 		return
 	}
-	var req candidatePackageIntakeAdoptionReviewCreateInput
+	var req candidatepackage.AdoptionReviewCreateInput
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake adoption review request"})
 		return
 	}
-	rec, err := h.rt.CreateCandidatePackageIntakeAdoptionReview(r.Context(), ownerID, intakeID, req)
+	rec, err := h.rt.candidatePackages.CreateCandidatePackageIntakeAdoptionReview(r.Context(), ownerID, intakeID, req)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake not found"})
@@ -284,14 +285,14 @@ func (h *APIHandler) handleCandidatePackageIntakeAdoptionReviewDecision(w http.R
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake adoption review not found"})
 		return
 	}
-	var req candidatePackageIntakeAdoptionReviewDecisionInput
+	var req candidatepackage.AdoptionReviewDecisionInput
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake adoption review decision request"})
 		return
 	}
-	rec, err := h.rt.ReviewCandidatePackageIntakeAdoption(r.Context(), ownerID, intakeID, adoptionID, req)
+	rec, err := h.rt.candidatePackages.ReviewCandidatePackageIntakeAdoption(r.Context(), ownerID, intakeID, adoptionID, req)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake adoption review not found"})
@@ -312,14 +313,14 @@ func (h *APIHandler) handleCandidatePackageIntakePromotionSwitch(w http.Response
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake promotion switch not found"})
 		return
 	}
-	var req candidatePackageIntakePromotionSwitchInput
+	var req candidatepackage.PromotionSwitchInput
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake promotion switch request"})
 		return
 	}
-	rec, err := h.rt.SwitchCandidatePackageIntakeAdoptionReview(r.Context(), ownerID, intakeID, adoptionID, req)
+	rec, err := h.rt.candidatePackages.SwitchCandidatePackageIntakeAdoptionReview(r.Context(), ownerID, intakeID, adoptionID, req)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake promotion switch not found"})
@@ -340,14 +341,14 @@ func (h *APIHandler) handleCandidatePackageIntakePromotionSwitchRollback(w http.
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake promotion switch rollback not found"})
 		return
 	}
-	var req candidatePackageIntakePromotionSwitchRollbackInput
+	var req candidatepackage.PromotionSwitchRollbackInput
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake promotion switch rollback request"})
 		return
 	}
-	rec, err := h.rt.RollbackCandidatePackageIntakeAdoptionReview(r.Context(), ownerID, intakeID, adoptionID, req)
+	rec, err := h.rt.candidatePackages.RollbackCandidatePackageIntakeAdoptionReview(r.Context(), ownerID, intakeID, adoptionID, req)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake promotion switch rollback not found"})
@@ -368,14 +369,14 @@ func (h *APIHandler) handleCandidatePackageIntakePromotionSwitchRollForward(w ht
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake promotion switch roll-forward not found"})
 		return
 	}
-	var req candidatePackageIntakePromotionSwitchRollForwardInput
+	var req candidatepackage.PromotionSwitchRollForwardInput
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&req); err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid candidate package intake promotion switch roll-forward request"})
 		return
 	}
-	rec, err := h.rt.RollForwardCandidatePackageIntakeAdoptionReview(r.Context(), ownerID, intakeID, adoptionID, req)
+	rec, err := h.rt.candidatePackages.RollForwardCandidatePackageIntakeAdoptionReview(r.Context(), ownerID, intakeID, adoptionID, req)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package intake promotion switch roll-forward not found"})
@@ -396,7 +397,7 @@ func (h *APIHandler) handleCandidatePackageIntakePromotionAcceptance(w http.Resp
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package promotion acceptance evidence not found"})
 		return
 	}
-	rec, err := h.rt.CandidatePackagePromotionAcceptanceEvidence(r.Context(), ownerID, intakeID, adoptionID)
+	rec, err := h.rt.candidatePackages.CandidatePackagePromotionAcceptanceEvidence(r.Context(), ownerID, intakeID, adoptionID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package promotion acceptance evidence not found"})
@@ -417,7 +418,7 @@ func (h *APIHandler) handleCandidatePackageIntakePromotionReviewSurface(w http.R
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package promotion review surface not found"})
 		return
 	}
-	rec, err := h.rt.CandidatePackagePromotionReviewSurface(r.Context(), ownerID, intakeID, adoptionID)
+	rec, err := h.rt.candidatePackages.CandidatePackagePromotionReviewSurface(r.Context(), ownerID, intakeID, adoptionID)
 	if err != nil {
 		if err == store.ErrNotFound {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "candidate package promotion review surface not found"})

@@ -3,22 +3,22 @@ canonical_parent: db1ea597cf862b77f5ccb288f8eb76a08309b64d
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 128
-    production_files: 67
+    go_files: 126
+    production_files: 65
     test_files: 61
-    production_loc: 41719
-    test_loc: 49981
-    exports: 919
-    export_caller_edges: 280
+    production_loc: 39985
+    test_loc: 49958
+    exports: 905
+    export_caller_edges: 265
     initial_unused_export_debt: 14
     routes: 2
     tools: 48
     production_importers: 4
     wrappers: 4
     compatibility_markers: 6
-    store_calls: 422
+    store_calls: 391
     interface_candidates: 4
-    citers: 1346
+    citers: 1347
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -31,7 +31,7 @@ files:
       loc: 859
     - id: internal/runtime/api_candidate_package_intake.go [production]
       disposition: candidate_package
-      loc: 430
+      loc: 431
     - id: internal/runtime/api_test.go [test]
       disposition: api
       loc: 3187
@@ -53,15 +53,9 @@ files:
     - id: internal/runtime/browser_live_test.go [test]
       disposition: browser
       loc: 151
-    - id: internal/runtime/candidate_package_events.go [production]
-      disposition: candidate_package
-      loc: 41
-    - id: internal/runtime/candidate_package_intake.go [production]
-      disposition: candidate_package
-      loc: 1697
     - id: internal/runtime/candidate_package_intake_test.go [test]
       disposition: candidate_package
-      loc: 3401
+      loc: 3378
     - id: internal/runtime/channel_store.go [production]
       disposition: lifecycle
       loc: 76
@@ -181,7 +175,7 @@ files:
       loc: 443
     - id: internal/runtime/runtime.go [production]
       disposition: lifecycle
-      loc: 3666
+      loc: 3669
     - id: internal/runtime/runtime_persistence.go [production]
       disposition: lifecycle
       loc: 106
@@ -846,59 +840,6 @@ exports:
       disposition: browser
     - id: internal/runtime/browser_live_test.go:func:TestRuntimeReusesObscuraCDPSessionLive
       disposition: browser
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):BindCandidatePackageIntakeAdoptionBoundary
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CandidatePackagePromotionAcceptanceEvidence
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-        - internal/runtime/candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CandidatePackagePromotionReviewSurface
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntake
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntakeAdoptionReview
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):CreateCandidatePackageIntakePublicationDraft
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):GetCandidatePackageIntake
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ListCandidatePackageIntakes
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ReviewCandidatePackageIntake
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):ReviewCandidatePackageIntakeAdoption
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):RollForwardCandidatePackageIntakeAdoptionReview
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):RollbackCandidatePackageIntakeAdoptionReview
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
-    - id: internal/runtime/candidate_package_intake.go:method(*Runtime):SwitchCandidatePackageIntakeAdoptionReview
-      disposition: candidate_package
-      production_callers:
-        - internal/runtime/api_candidate_package_intake.go
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionBoundaryRouteBindsApprovedIntakeWithoutPromotionSideEffects
       disposition: candidate_package
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeAdoptionBoundaryRouteRejectsUnsafeTransitions
@@ -940,8 +881,6 @@ exports:
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeReviewRouteRejectsUnsafeTransitions
       disposition: candidate_package
     - id: internal/runtime/candidate_package_intake_test.go:func:TestCandidatePackageIntakeRoutesRejectUnauthenticatedAndUnsafeRequests
-      disposition: candidate_package
-    - id: internal/runtime/candidate_package_intake_test.go:func:TestNormalizeRouteProfile
       disposition: candidate_package
     - id: internal/runtime/candidate_package_intake_test.go:func:TestRegisterCandidatePackageIntakeRoutesPanicsWhenDeployedEnvSet
       disposition: candidate_package
@@ -1551,7 +1490,6 @@ exports:
         - internal/runtime/api.go
         - internal/runtime/api_app_promotion.go
         - internal/runtime/browser.go
-        - internal/runtime/candidate_package_intake.go
         - internal/runtime/channel_store.go
         - internal/runtime/content.go
         - internal/runtime/delegate_worker_update_fallback.go
@@ -2840,9 +2778,9 @@ wrappers:
     - id: internal/apihandler/routes.go:field:runtime.APIHandler
       disposition: delete
 compatibility_markers:
-    - id: internal/runtime/runtime.go:1974:This is the legacy execution path used when no tool registry is configured
+    - id: internal/runtime/runtime.go:1977:This is the legacy execution path used when no tool registry is configured
       disposition: delete
-    - id: internal/runtime/runtime.go:97:New creates a new Runtime with the given config, store, event bus, and
+    - id: internal/runtime/runtime.go:99:New creates a new Runtime with the given config, store, event bus, and
       disposition: delete
     - id: internal/runtime/tools_capsule.go:297:This preserves backward compatibility with existing callers.
       disposition: delete
@@ -2913,68 +2851,6 @@ store_calls:
       disposition: read
     - id: internal/runtime/browser.go:emitBrowserSessionEvent:internal/store.method:Store.AppendEvent
       disposition: lifecycle
-    - id: internal/runtime/candidate_package_events.go:emitCandidatePackagePromotionEvent:internal/store.method:Store.AppendEvent
-      disposition: lifecycle
-    - id: internal/runtime/candidate_package_intake.go:BindCandidatePackageIntakeAdoptionBoundary:internal/store.method:Store.GetCandidatePackageIntake
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:BindCandidatePackageIntakeAdoptionBoundary:internal/store.method:Store.UpdateCandidatePackageIntakeIfCurrent
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:CandidatePackagePromotionAcceptanceEvidence:internal/store.method:Store.GetAppAdoption
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:CandidatePackagePromotionAcceptanceEvidence:internal/store.method:Store.GetComputerSourceLineage
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntake:internal/store.method:Store.UpsertCandidatePackageIntake
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertAppAdoption
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakePublicationDraft:internal/store.method:Store.GetAppChangePackage
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakePublicationDraft:internal/store.method:Store.GetCandidatePackageIntake
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:CreateCandidatePackageIntakePublicationDraft:internal/store.method:Store.UpsertAppChangePackage
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:GetCandidatePackageIntake:internal/store.method:Store.GetCandidatePackageIntake
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:ListCandidatePackageIntakes:internal/store.method:Store.ListCandidatePackageIntakes
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntake:internal/store.method:Store.GetCandidatePackageIntake
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntake:internal/store.method:Store.UpdateCandidatePackageIntakeIfCurrent
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntakeAdoption:internal/store.method:Store.GetAppAdoption
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:ReviewCandidatePackageIntakeAdoption:internal/store.method:Store.UpdateAppAdoptionIfCurrent
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:RollForwardCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetAppAdoption
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:RollForwardCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetComputerSourceLineage
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:RollForwardCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpdateAppAdoptionIfCurrent
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:RollForwardCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertComputerSourceLineage
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:RollbackCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetAppAdoption
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:RollbackCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetComputerSourceLineage
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:RollbackCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpdateAppAdoptionIfCurrent
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:RollbackCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertComputerSourceLineage
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetAppAdoption
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.GetComputerSourceLineage
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpdateAppAdoptionIfCurrent
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:SwitchCandidatePackageIntakeAdoptionReview:internal/store.method:Store.UpsertComputerSourceLineage
-      disposition: promotion
-    - id: internal/runtime/candidate_package_intake.go:candidatePackageAdoptionReviewForPackage:internal/store.method:Store.ListAppAdoptions
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:loadCandidatePackagePublicationDraftForAdoptionReview:internal/store.method:Store.GetAppChangePackageForViewer
-      disposition: read
-    - id: internal/runtime/candidate_package_intake.go:loadCandidatePackagePublicationDraftForAdoptionReview:internal/store.method:Store.GetCandidatePackageIntake
-      disposition: read
     - id: internal/runtime/channel_store.go:ChannelCast:internal/store.method:Store.AppendChannelMessage
       disposition: lifecycle
     - id: internal/runtime/channel_store.go:ChannelCast:internal/store.method:Store.GetRun
@@ -6056,6 +5932,8 @@ citers:
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive cross-cutting boundary already owned elsewhere. internal/runtime/tools.go contains one type alias and four forwarding helpers, while toolResultJSON i… [sha256:f985a6366d0e84100397a2d2815a94162681c8d58a79533f7e9f83a7fbc48f9c]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive production-used research boundary. internal/runtime/search_gateway.go is already classified for deletion, and its only production constructor caller … [sha256:46acc30961dbacb964c02bb43a927ebdce54c6be5e07602cb6e6269b2ac45eb7]'
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "candidate-package-map: internal/runtime/candidate_package_intake.go methods and helpers; internal/runtime/api_candidate_package_intake.go route callers; internal/runtime/tools_vmctl.go worker mirro… [sha256:e420f453187df4b0190b86476c023517563e67b4bdc722179e62df6116210739]'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "internal/runtime, a compatibility facade, or dual ownership remains"
       disposition: block
