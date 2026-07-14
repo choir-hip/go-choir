@@ -141,9 +141,9 @@ now:
   slice: "land and accept model and research owner cutover"
   question: "Does the direct modelpolicy/researchtools owner cutover preserve all model-selection, verification, source/search/content tool, and researcher checkpoint contracts without Runtime wrappers?"
   reconciliation:
-    observed_at: 2026-07-14T18:17:08Z
-    source_ref: refs/heads/autoputer-definition-v2@60bb2f9
-    deploy_identity: "Predecessor 0f905ffcfeba3db85f0958382d9beb68f013a498 is deployed; current model/research candidate is locally accepted and not yet pushed."
+    observed_at: 2026-07-14T18:24:00Z
+    source_ref: refs/heads/autoputer-definition-v2@d90aca75
+    deploy_identity: "Predecessor 0f905ffcfeba3db85f0958382d9beb68f013a498 is deployed; frozen candidate d90aca75 is not pushed."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -151,19 +151,19 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: accepted_local_ready_for_independent_review
+    status: independent_review_repair_required
     protected_surfaces: [model_policy, provider_routing, verifier_calls, researcher_tools, search_gateway, source_artifacts, content_service, evidence_state, user_isolation, texture_authority]
     admissible_evidence: "Exact caller/provider/store/tool map; policy parsing/cache/overlay and model verification contracts; research tool schemas/results/content/source behavior; direct registry composition; no runtime wrappers; modelpolicy/researchtools tests; all four runtime shards; owner composition packages; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed model-policy/research acceptance."
     rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
     conjecture_delta: "Confirmed: model selection is a computer-owned modelpolicy service and generic research tooling is a direct-dependency researchtools service. Runtime now composes both owners without callbacks or compatibility wrappers; prompt enrichment and researcher settlement remain deliberately local to later core/Texture slices."
     heresy_delta:
-      discovered: "The frozen map was accurate. Three source-client methods listed as initial unused-export debt disappeared with the generic research owner extraction; the ratchet generator still named the preceding browser/content implementation parent and required a mechanically exact parent advance."
-      introduced: none
-      repaired: "internal/modelpolicy now solely owns policy defaults, file loading/parsing, overlays, last-valid cache, metadata enrichment, and model verification tool construction. internal/researchtools now solely owns nine generic research tools with explicit Store/content/search/source/HTTP dependencies. Runtime directly composes both owners; old model_policy.go, tools_model_verify.go, and tools_research.go are deleted; all runtime callers use exported owner contracts; initial unused-export debt fell 14 to 11."
+      discovered: "Both frozen independent reviews found the same P1 integration-fixture defect: modelpolicy.Manager correctly snapshots the computer policy path at construction, but two retained comprehensive API fixtures mutate rt.cfg.ModelPolicyPath afterward, leaving the sole owner unsynchronized and causing overlay/API resolution failure. The comprehensive build also exposed stale pre-cutover prompt/Texture test references that no default shard compiled. Three source-client methods listed as initial unused-export debt disappeared with the generic research owner extraction."
+      introduced: "d90aca75 migrated policy ownership without migrating the two test-only post-construction config mutations; no production configuration mutation path was found."
+      repaired: "Pending. The owner extraction itself remains direct and both reviewers found no duplicated authority, wrapper, tool schema/result, provider/source failure, or ratchet-baseline defect."
   candidate:
     id: R1-model-research-owner-cutover-15
-    state: accepted_local_ready_for_independent_review
-    ref: refs/heads/autoputer-definition-v2@60bb2f9
+    state: independent_review_repair_required
+    ref: refs/heads/autoputer-definition-v2@d90aca75
     owner: orchestrator
     base: refs/remotes/origin/main@0f905ffcfeba3db85f0958382d9beb68f013a498
     digest: "Create internal/modelpolicy Manager as sole policy file/default/parser/overlay/cache/metadata owner and move model verification tool construction beside it. Create internal/researchtools as sole generic research tool registration/implementation owner with explicit Store/content/search/source/HTTP dependencies. Runtime composes and calls these owners directly; delete model_policy.go, tools_model_verify.go, and tools_research.go after every caller migrates. Retain prompts.go, tools_researcher.go, and researcher_checkpoint_fallback.go for later core/Texture settlement cutovers; do not add callbacks or wrappers."
@@ -173,8 +173,8 @@ now:
     - "research-map: internal/runtime/tools_research.go nine tools; direct dependencies content Service, Store, search.Client, source client, HTTP; registration in tool_profiles.go"
     - "replacement-check: internal/modelcatalog is static capability metadata only; promptstore already owns prompt persistence; search/source/content own substrates; no model-policy or research-tool owner package exists"
     - "deferred-settlement: tools_researcher.go and researcher_checkpoint_fallback.go retain lifecycle/evidence/channel/Texture wake authority for later cutover"
-  blocker_or_risk: "No local execution blocker. The candidate passes modelpolicy/researchtools tests, direct owner composition packages, all four runtime shards, focused integration contracts, and the regenerated ratchet. Remaining gates are frozen independent review, canonical CI/deploy identity, and authenticated staging model-policy/research acceptance."
-  next_action: "Commit the frozen candidate, obtain independent review of model/research authority and behavior preservation, repair any findings, then push origin/main and execute CI/deploy/staging acceptance."
+  blocker_or_risk: "P1 before landing: comprehensive overlay/API fixtures configure ModelPolicyPath after Manager construction, so they do not exercise the configured owner. Comprehensive prompt/Texture tests also retain deleted test-only symbols and client-controlled revision authority fields. Production config is constructed before Runtime.New, but the frozen acceptance claim is invalid until the comprehensive contracts compile and pass."
+  next_action: "Migrate the two fixtures to construct modelpolicy.Manager from the final test config, remove stale comprehensive-only prompt/Texture references without restoring deleted authority, rerun comprehensive owner contracts and the ratchet, then obtain frozen re-review."
 
 receipts:
   - id: predecessor-B0-authority
