@@ -394,9 +394,9 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T05:25:59Z
+  updated_at: 2026-07-14T05:40:13Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@d3a352e1
+  expected_parent_or_authority_ref: refs/heads/main@origin@2948410f
   status: working
   current_subgoal: R1-toolregistry-facade-extinction-07
   active_phase: R1-runtime-dissolution
@@ -1156,6 +1156,7 @@ state_capsule:
         - Runtime baseline before this Define is go_files 132, production_files 69, test_files 63, production_loc 43047, test_loc 49769, exports 955, export_caller_edges 308, initial_unused_export_debt 15, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 333.
         - This Define mechanically raises documentation citers from 333 to exactly 391 while every source-category count remains unchanged. Implementation must rebaseline that reviewed documentation-only rise, then reduce runtime production files, production LOC, test LOC, and wrappers without increasing any other source category.
         - Problem documented before scope correction: implementation preflight proved internal/toolregistry/toolregistry_test.go does not exist; the package's existing behavior test owner is internal/toolregistry/toolloop_test.go. The reviewed lock therefore names an impossible owner-test path and cannot execute until a separate authority commit replaces only that path and independently verifies the repaired scope.
+        - Problem documented before detector correction: the first implementation ratchet measured tools 48 to 0 even though all 48 registrations remain, because cmd/runtime-ratchet/inventory.go recognizes only unqualified Tool composite literals and not the required direct toolregistry.Tool owner type. Rebaselining zero would corrupt the semantic inventory. The lock cannot complete until a separate authority commit adds the detector and its focused test to exact scope and requires the tool count and identities to remain 48.
       heresy_delta:
         discovered:
           - runtime declares a Tool alias plus schema, prompt-catalog, projection, and result-encoding facades over the existing toolregistry owner
