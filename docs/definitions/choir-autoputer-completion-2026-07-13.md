@@ -394,14 +394,14 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T04:51:11Z
+  updated_at: 2026-07-14T05:21:47Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@e9a1d11d441567ff43ff794d90b2e9f1ba630641
+  expected_parent_or_authority_ref: refs/heads/main@origin@d6014fa7
   status: working
-  current_subgoal: R1-search-gateway-owner-cutover-06
+  current_subgoal: R1-toolregistry-facade-extinction-07
   active_phase: R1-runtime-dissolution
   active_frontier:
-    - R1-search-gateway-owner-cutover-06
+    - R1-toolregistry-facade-extinction-07
   locks:
     - id: R1-prompt-store-package-cutover-03
       status: complete
@@ -812,7 +812,7 @@ state_capsule:
         repaired:
           - deterministic durable work-item identity split between a standalone runtime objective helper file and four private wire-publication helpers
     - id: R1-search-gateway-owner-cutover-06
-      status: verified_local
+      status: complete
       mutation_class: red
       classification_rationale: Web-search provider routing is protected. The cutover changes only Go source ownership, but it moves the gateway transport contract and deletes an unused direct-provider implementation, so exact routing, authentication, outage semantics, tool exposure, and deployed provider behavior require red ceremony.
       conjecture: The gateway-backed web-search client, response contract, and structured outage semantics can move atomically from internal/runtime into the existing dependency-leaf internal/search owner while its unused direct-provider implementation is deleted, with no request, response, provider-routing, tool-policy, evidence, or agent-visible behavior delta.
@@ -958,6 +958,12 @@ state_capsule:
             - opencode/hy3-free: PASS
           adjudication: Both independent reviewers matched the frozen nine-path candidate digest and exact authority parent; verified deletion of the unused direct-provider implementation, both runtime gateway files, private runtime client/response contracts, and direct provider credentials; recomputed the complete constructor, Client, and Response caller graph; matched request, response, outage, trimming, error, tool-policy, Trace, and role behavior; validated focused tests and the exact ratchet reductions with four unrelated interface candidates flat; parsed the unique-key capsule; and found no wrapper, alias, fallback, dual route, authority seam, or unclaimed E5 evidence.
           no_rerun_rationale: Appending this immutable-candidate review receipt changes only non-authoritative assurance provenance; it does not change implementation, tests, inventory, reviewed authority, evidence floor, or stopping condition.
+        staging_review_result:
+          reviewers:
+            - opencode/hy3-free: PASS
+            - google-antigravity/gemini-3.5-flash: PASS
+          adjudication: Both independent verifiers read the lock literally and accepted the durable authenticated researcher result as the product-path Trace artifact. Diagnostic trajectory 4ba004d6-ac56-4a2a-9c49-284c15376b82 and researcher run 6eeedde6-7e44-40c0-91d5-55c7c2f491c4 returned the exact gateway-aggregated seven-provider health map and empty attempts after one web_search; that content proves the deployed gateway structured outage reached the researcher projection. They found that demanding the raw internal event endpoint would contradict the approved public-edge isolation and no-SSH product path, and required no repair.
+          no_rerun_rationale: Appending this product-path review receipt changes only non-authoritative assurance provenance; it does not change the landed implementation, provider state, lock semantics, or exact acceptance identities.
       local_evidence:
         - class: E0
           observation: repository import search finds no caller of internal/search, while LSP resolves the deployed gateway constructor only from runtime tool-profile installation and the runtime response contract only through research registration, execution, projection, and two projection tests
@@ -979,19 +985,175 @@ state_capsule:
         - class: E2
           observation: gopls reported no diagnostics in the owner, research tool, or profile registry wiring; LSP resolved the constructor to one production caller plus direct owner tests, Client to three runtime boundaries, and Response to runtime projection plus two projection tests
         - class: E5
-          observation: Canonical CI run 29306556937 and deploy job 87001461766 succeeded for landed commit 59f514efae75bd00a07743c4944a7018d23a49d8; the activation receipt bound both sandbox and gateway to that commit. Authenticated staging trajectory e3cd4fcf-5b3e-4ded-bfc2-6414871b0688 created researcher run 195f57c8-56fb-4689-814d-3a59f4f0d011, whose durable result reports that its single web_search returned structured search_outage with no results. The public edge correctly rejects direct access to the internal run-events Trace endpoint with HTTP 403, so the raw tool Trace has not yet been independently observed and this lock remains open.
+          observation: >-
+            Canonical CI run 29306556937 and deploy job 87001461766 succeeded for landed commit 59f514efae75bd00a07743c4944a7018d23a49d8; the activation receipt bound both sandbox and gateway to that commit. Authenticated diagnostic trajectory 4ba004d6-ac56-4a2a-9c49-284c15376b82 created researcher run 6eeedde6-7e44-40c0-91d5-55c7c2f491c4, whose single web_search durably returned exact JSON with attempts empty and gateway provider_health for all seven configured providers: Brave cooling down after HTTP 422 because count exceeded twenty; Exa, Parallel, Serper, and Tavily quota-limited; SerpAPI rate-limited with no searches remaining; and SearXNG cooling down after repeated empty success. The expected public-edge HTTP 403 on the internal events route preserved product isolation. Two independent verifiers accepted this durable authenticated result as the lock's product-path Trace artifact proving an honest structured gateway outage.
       validation_notes:
         - Runtime baseline before this Define is go_files 134, production_files 70, test_files 64, production_loc 43230, test_loc 49847, exports 957, export_caller_edges 308, initial_unused_export_debt 16, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 307.
         - This Define mechanically raises documentation citers from 307 to exactly 333 before implementation; all source-category counts remain unchanged. The implementation must rebaseline that authorized documentation-only rise, then reduce runtime production files, test files, production LOC, and test LOC without increasing any other source category; interface candidates must remain flat at four.
         - 'Problem documented before ratchet correction: the first implementation measurement showed interface_candidates remained four, not lower. That category enumerates four pre-existing runtime-to-store interface call boundaries and does not count the private webSearchClient declaration being moved. Requiring a decrease would force unrelated scope or a false reclassification. Correcting the lock to require the category remain flat preserves debt authority and changes no source behavior.'
         - Local and ratchet proof covers exact transport, response, outage, projection, role wiring, and source authority. Provider routing and agent-visible search remain protected and require canonical CI/deploy plus staging product-path proof before completion.
         - 'Problem documented before any further probe or fix: the first authenticated deployed coagent web_search after commit 59f514efae75bd00a07743c4944a7018d23a49d8 returned structured search_outage and no results. This is a search-provider/gateway substrate failure observation, not evidence that the ownership cutover caused it. An honest structured outage is admissible E5 only when Trace proves it; the durable researcher result alone is indirect, and the public edge correctly forbids the internal events route. Do not label the lock complete until an admissible product-path artifact independently proves the structured gateway response or a later deployed coagent search returns gateway-backed results.'
+      completion_adjudication: Complete at E6. Canonical CI and deploy bound sandbox and gateway to the landed implementation; the authenticated staging coagent transition exercised the relocated client and returned the exact structured outage projection with gateway-only aggregate health for all seven providers; two independent verifiers accepted the durable run result as admissible product-path Trace and required no raw internal-route bypass. The observed provider cooldown and quota exhaustion predate and remain outside this ownership-only cutover; no provider policy, credential, route, model, cadence, or fallback was changed. The exact caller graph, golden transport/response vectors, ratchet delta, immutable-candidate review, and staging evidence leave no authority seam or residual obligation in this lock.
       heresy_delta:
         discovered:
           - gateway-backed search transport and response authority are nested in runtime beside an unwired internal/search package that directly selects providers and reads provider credentials
+          - the configured forty-result web_search floor exceeds Brave's maximum count of twenty, causing HTTP 422 and provider cooldown while the other configured providers are quota-limited, rate-limited, or repeatedly empty
         introduced: []
         repaired:
           - gateway-backed search transport and response authority nested in runtime beside an unwired direct-provider search package
+    - id: R1-toolregistry-facade-extinction-07
+      status: defined
+      mutation_class: orange
+      classification_rationale: Tool construction, schema rendering, system-prompt catalogs, projection envelopes, and result JSON are direct runtime behavior. The cutover removes only runtime aliases and forwarding helpers while preserving exact bytes and tool contracts; it does not change provider routing, tool authorization, tool implementations, Trace persistence, state authority, or any red protected mutation.
+      conjecture: The runtime Tool alias and five toolregistry forwarding/encoding helpers can be deleted atomically by extending the existing internal/toolregistry owner with the two missing pure encoders and prompt-catalog composition, then migrating every caller directly, without changing any tool definition, schema, catalog bytes, result bytes, projection envelope, execution behavior, role exposure, or Trace evidence.
+      conjecture_delta: Tool types, schemas, prompt catalogs, and result envelopes become direct toolregistry authority rather than runtime aliases and facades. Runtime retains domain-specific tool implementations only; no registry, schema, encoding, or prompt-composition policy remains duplicated there.
+      object: runtime toolregistry alias and facade extinction
+      selection_rationale: This is the smallest cohesive cross-cutting boundary already owned elsewhere. internal/runtime/tools.go contains one type alias and four forwarding helpers, while toolResultJSON is a fifth pure encoder in tool_profiles.go; all delegate to or semantically belong to internal/toolregistry. Direct caller migration deletes the wrapper file, removes an unrelated encoder from profile installation, shrinks duplicate registry tests, and reduces wrapper debt without introducing an interface, accessor, callback, compatibility name, or new package.
+      exact_source_scope:
+        - internal/toolregistry/toolregistry.go
+        - internal/toolregistry/toolregistry_test.go
+        - internal/toolregistry/toolloop.go
+        - internal/runtime/tools.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/runtime.go
+        - internal/runtime/prompts.go
+        - internal/runtime/tools_capsule.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_coding.go
+        - internal/runtime/tools_email.go
+        - internal/runtime/tools_evidence.go
+        - internal/runtime/tools_model_verify.go
+        - internal/runtime/tools_research.go
+        - internal/runtime/tools_shipper.go
+        - internal/runtime/tools_texture.go
+        - internal/runtime/tools_vmctl.go
+        - internal/runtime/tools_wire_processor.go
+        - internal/runtime/tools_worker_update.go
+        - internal/runtime/tools_test.go
+        - internal/runtime/run_memory_integration_test.go
+        - docs/runtime-dissolution-inventory.yaml
+        - docs/definitions/choir-autoputer-completion-2026-07-13.md
+      owner_contract:
+        existing:
+          - toolregistry.Tool
+          - toolregistry.JSONSchemaObject
+          - toolregistry.CloneSchemaMap
+          - toolregistry.ToolRegistry.Catalog
+        add:
+          - toolregistry.BuildSystemPrompt
+          - toolregistry.ResultJSON
+          - toolregistry.ProjectionResultJSON
+        behavior:
+          - BuildSystemPrompt returns the base prompt byte-for-byte when the registry is nil or empty; otherwise it returns base plus two newlines plus the existing deterministic registry catalog.
+          - ResultJSON applies encoding/json Marshal once to the supplied value and returns the identical compact JSON string or marshal error previously returned by runtime toolResultJSON.
+          - ProjectionResultJSON normalizes nil metadata to an empty object and calls ResultJSON on the identical envelope keys and values: __choir_tool_projection true, model_output, durable_output, and projection.
+      owner_duplicate_deletions:
+        - internal/toolregistry/toolloop.go:buildSystemPromptWithTools
+      runtime_deletions:
+        - internal/runtime/tools.go
+        - internal/runtime.Tool alias
+        - internal/runtime.jsonSchemaObject
+        - internal/runtime.cloneSchemaMap
+        - internal/runtime.buildSystemPromptWithTools
+        - internal/runtime.toolProjectionResultJSON
+        - internal/runtime.toolResultJSON
+        - duplicate runtime registry/schema/prompt/projection tests whose authority moves to internal/toolregistry
+      exact_caller_graph:
+        type_and_schema:
+          production:
+            - internal/runtime/tools_capsule.go
+            - internal/runtime/tools_coagent.go
+            - internal/runtime/tools_coding.go
+            - internal/runtime/tools_email.go
+            - internal/runtime/tools_evidence.go
+            - internal/runtime/tools_model_verify.go
+            - internal/runtime/tools_research.go
+            - internal/runtime/tools_shipper.go
+            - internal/runtime/tools_texture.go
+            - internal/runtime/tools_vmctl.go
+            - internal/runtime/tools_wire_processor.go
+            - internal/runtime/tools_worker_update.go
+          tests:
+            - internal/runtime/tools_test.go
+            - internal/runtime/run_memory_integration_test.go
+        prompt_catalog:
+          production:
+            - internal/runtime/runtime.go
+            - internal/runtime/prompts.go
+            - internal/toolregistry/toolloop.go
+          tests:
+            - internal/runtime/tools_test.go
+        result_json:
+          production:
+            - internal/runtime/tools_capsule.go
+            - internal/runtime/tools_coagent.go
+            - internal/runtime/tools_coding.go
+            - internal/runtime/tools_email.go
+            - internal/runtime/tools_evidence.go
+            - internal/runtime/tools_model_verify.go
+            - internal/runtime/tools_research.go
+            - internal/runtime/tools_shipper.go
+            - internal/runtime/tools_texture.go
+            - internal/runtime/tools_vmctl.go
+            - internal/runtime/tools_wire_processor.go
+            - internal/runtime/tools_worker_update.go
+          tests:
+            - internal/runtime/tools_test.go
+        projection_json:
+          production:
+            - internal/runtime/tools_research.go
+          tests:
+            - internal/runtime/tools_test.go
+      invariants:
+        - Every runtime tool constructor and collection uses toolregistry.Tool directly; the runtime package declares no Tool alias.
+        - Every schema caller uses toolregistry.JSONSchemaObject directly and prompt descriptor cloning uses toolregistry.CloneSchemaMap directly.
+        - Tool names, descriptions, JSON Schemas, required arrays, additionalProperties flags, functions, registration order, sorted catalog order, eighty-byte description truncation, default empty schemas, and role/profile exposure are byte-for-byte unchanged.
+        - BuildSystemPrompt preserves nil, empty, and populated registry output exactly, including the two-newline separator and catalog trailing newline.
+        - ResultJSON preserves encoding/json compact output, HTML escaping, map handling, nil behavior, and errors exactly; no custom encoder, indentation, newline, buffering, or alternate serialization is introduced.
+        - ProjectionResultJSON preserves the exact four-key envelope, nil metadata normalization, model-versus-durable split, and projection metadata used by Trace and research checkpoints.
+        - Tool execution, parallelism, event kinds and payloads, durable full output, model projection, errors, checkpoints, authorization, provider calls, state mutation, and Trace persistence are unchanged.
+        - Runtime retains no alias, wrapper, forwarding function, deprecated name, fallback, or duplicate implementation for the moved authority.
+      exact_tests:
+        - owner tests for Tool validation, registry duplicate/default/sorted behavior, schema creation and deep cloning
+        - owner golden tests for nil/empty/populated BuildSystemPrompt bytes
+        - owner golden tests for ResultJSON compact bytes, HTML escaping, nil values, and unsupported-value errors
+        - owner golden tests for ProjectionResultJSON normal and nil-metadata envelope bytes plus unsupported-value errors
+        - focused runtime tool profile, prompt catalog, representative schema, result, projection, research outage, work-item update, and run-memory tool-loop behavior
+      forbidden_targets:
+        - any tool name, description, parameter schema, handler, registration order, result field, projection field, prompt text, catalog format, role exposure, or execution semantics
+        - provider/model/search routing, gateway behavior, Trace storage, event contracts, work-item identity, Texture, stores, routes, promotion, vmctl behavior, or persisted state
+        - changes outside exact_source_scope
+        - compatibility aliases, deprecated wrappers, facades, callback seams, interfaces, re-exports, or dual encoders
+      protected_surfaces:
+        - none mutated; Trace and tool authorization are observed invariants
+      admissible_evidence:
+        - E0 frozen parent, exact diff digest, complete LSP caller graph for all six runtime symbols, and pre-change golden vectors
+        - E1 runtime alias/wrapper extinction, direct owner imports, no duplicate encoder or prompt composer, runtime file/LOC and wrapper reductions, and no unrelated ratchet increase
+        - E2 owner golden tests plus focused runtime registry, schema, prompt, projection, research, update, and tool-loop tests
+        - E5 canonical CI/deploy identity plus an authenticated staging coagent transition whose durable tool result and downstream update/Texture artifact prove unchanged schema, execution, JSON result, projection, and prompt-catalog behavior
+        - E6 independent immutable-candidate verification bound to exact diff, caller graph, golden bytes, ratchet delta, focused tests, and staging transition
+      rollback_ref: d6014fa7
+      close_condition: Runtime tools.go is absent; runtime declares none of Tool, jsonSchemaObject, cloneSchemaMap, buildSystemPromptWithTools, toolProjectionResultJSON, or toolResultJSON; internal/toolregistry is the sole owner; all callers use it directly; exact schemas, prompt catalogs, result and projection bytes, execution, role exposure, and Trace behavior are unchanged; duplicate runtime owner tests are removed; the ratchet passes with production file/LOC, test LOC, and wrapper reductions and no unrelated category increase; independent review finds no alias, facade, behavior delta, or evidence gap; and canonical CI/deploy plus authenticated staging product-path proof bind the landed commit.
+      assurance:
+        independent_verifier: required
+        panel: compact
+        review_binding: frozen parent, exact diff digest, complete six-symbol caller graph, golden byte vectors, ratchet delta, focused tests, and staged coagent result/update/Texture transition
+        define_review_result:
+          initial_candidate_diff_sha256: bb2b3ecb0113e298d3a43b32a9b20291c2583cbf86f06944d76eb514ae7c1d4b
+          repaired_candidate_diff_sha256: 05cd8832cc4f96644b3f8e789f79477e6e5b05243719a24b737928881c8a02e0
+          reviewers:
+            - google-antigravity/gemini-3.5-flash: PASS
+            - opencode/hy3-free: PASS after bounded repair
+          adjudication: Both reviewers recomputed the six-symbol runtime caller graph, exact owner contract, 333-to-391 documentation-only citer rise, ratchet and evidence floor, and prior search-lock closure. Gemini's first pass exposed the pre-existing private prompt composer in internal/toolregistry/toolloop.go; the lock was repaired to include that file in scope and caller graph. Opencode then required the duplicate's explicit deletion target; the final candidate names internal/toolregistry/toolloop.go:buildSystemPromptWithTools in owner_duplicate_deletions. A final immutable Gemini check independently verified the exact repaired hash, valid YAML, all three scope/caller/deletion repairs, one exported BuildSystemPrompt owner, unchanged citer endpoint, and no prior-lock regression with no remaining blocker.
+          no_rerun_rationale: Appending this review receipt changes only non-authoritative assurance provenance; it does not change the reviewed lock, caller graph, behavior invariants, evidence floor, or stopping condition.
+      validation_notes:
+        - Runtime baseline before this Define is go_files 132, production_files 69, test_files 63, production_loc 43047, test_loc 49769, exports 955, export_caller_edges 308, initial_unused_export_debt 15, routes 2, tools 48, production_importers 4, wrappers 4, compatibility_markers 8, store_calls 443, interface_candidates 4, legacy_state_writers 0, legacy_store_reads 0, citers 333.
+        - This Define mechanically raises documentation citers from 333 to exactly 391 while every source-category count remains unchanged. Implementation must rebaseline that reviewed documentation-only rise, then reduce runtime production files, production LOC, test LOC, and wrappers without increasing any other source category.
+      heresy_delta:
+        discovered:
+          - runtime declares a Tool alias plus schema, prompt-catalog, projection, and result-encoding facades over the existing toolregistry owner
+        introduced: []
+        repaired: []
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin
