@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 6
     store_calls: 422
     interface_candidates: 4
-    citers: 1351
+    citers: 1352
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -6056,6 +6056,8 @@ citers:
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive cross-cutting boundary already owned elsewhere. internal/runtime/tools.go contains one type alias and four forwarding helpers, while toolResultJSON i… [sha256:f985a6366d0e84100397a2d2815a94162681c8d58a79533f7e9f83a7fbc48f9c]'
       disposition: block
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive production-used research boundary. internal/runtime/search_gateway.go is already classified for deletion, and its only production constructor caller … [sha256:46acc30961dbacb964c02bb43a927ebdce54c6be5e07602cb6e6269b2ac45eb7]'
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "acceptance-regression:go test ./internal/runtime -run 'TestAppPromotionCheckpoints|TestAcceptanceServingCommit' PASS; prior reducer reproduced stale pending and causal-order failure"
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "direct-callers:internal/runtime/api_app_promotion.go, candidate_package_intake.go, and tools_shipper.go"
       disposition: block

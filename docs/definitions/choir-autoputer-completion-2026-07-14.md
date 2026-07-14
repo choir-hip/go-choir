@@ -159,14 +159,14 @@ now:
     heresy_delta:
       discovered: "Operational direct app-adoption authority lived on Runtime even though computerversion already owned inert evidence schemas and the Dolt adapter. Candidate-package intake also depends on shared ref/profile semantics but remains a separate blocked review owner pending its named extraction slice. Deployed acceptance runacc-9704ea95ef27a1b1c0f4 blocks a completed publish/build/verify/promote/rollback/roll-forward trajectory because its superseded verification_started checkpoint remains pending and checkpoint_causal_order rejects the repeated promoted observation despite its own contract saying superseded async probes and repeated observations are tolerated."
       introduced: none
-      repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, event, and non-candidate package import now enters internal/promotion.Service; API, worker mirror, candidate-intake lineage setup, and shipper callers are direct; the dead Runtime adapter option and all Runtime promotion methods are deleted."
+      repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, event, and non-candidate package import now enters internal/promotion.Service; API, worker mirror, candidate-intake lineage setup, and shipper callers are direct; the dead Runtime adapter option and all Runtime promotion methods are deleted. Run acceptance now correlates verification starts and terminals by authoritative adoption ID with unique legacy package/target fallback, preserves concurrent same-target adoptions, removes only superseded pending probes, and anchors promoted/rollback checkpoints at the first promotion boundary."
   candidate:
     id: R1-promotion-owner-cutover-11
-    state: deployed_acceptance_state_machine_blocker_documented
-    ref: refs/heads/autoputer-definition-v2@0dc665f2
+    state: accepted_local_ready_to_land
+    ref: refs/heads/autoputer-definition-v2@d4d5c429
     owner: orchestrator
     base: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
-    digest: "internal/promotion owns service.go and build.go; deleted runtime app_promotion.go/app_promotion_build.go and WithPromotionAdapter; direct callers api_app_promotion.go, candidate_package_intake.go, tools_shipper.go, and worker mirror; inventory 128 Go files, 67 production files, 61 test files, 41609 production LOC, 917 exports, 14 initial unused exports, 422 classified store calls, 1349 citers"
+    digest: "internal/promotion owns service.go and build.go; deleted runtime app_promotion.go/app_promotion_build.go and WithPromotionAdapter; direct callers api_app_promotion.go, candidate_package_intake.go, tools_shipper.go, and worker mirror; acceptance reducer uses set-valued adoption/package-target correlation; inventory 128 Go files, 67 production files, 61 test files, 41719 production LOC, 919 exports, 14 initial unused exports, 422 classified store calls, 1352 citers"
     scope: [promotion_service, recipient_build_verification, source_lineage_cas, dolt_fork_promote_rollback, direct_api_and_tool_callers]
   decision:
     selected: "Move the complete source-level adoption state machine and build materializer into internal/promotion.Service with an explicit promotion.Config and direct store ownership. Runtime constructs the service; API transport and shipper tool call it directly; delete every promotion method on Runtime. Preserve computerversion as evidence/Dolt substrate and leave vmctl product activation for the later explicit product-completion boundary."
@@ -200,8 +200,14 @@ now:
     - "staging-adoption:74e7ccba-e929-445c-822b-37f33cd9e72b; actual recipient build PASS; runtime sha256:72a8818b1947af1ac83dde7f12f0b1d8175657b69ae72048fc32017d82312b31; UI sha256:9e96baefded5987db7dd566f3123fb9ed2defb35c8590785c393451d35822146"
     - "staging-lifecycle:owner_approved -> adopted -> rolled_back -> adopted; final source lineage refs/computers/acceptance-target-20260714140154206/candidates/candidate-target-20260714140154206"
     - "staging-run-acceptance:runacc-9704ea95ef27a1b1c0f4 promotion-level BLOCKED; package/verified/promoted/rollback checkpoints pass, but superseded verifying stays pending and checkpoint_causal_order blocks repeated promoted evidence"
-  blocker_or_risk: "The promotion product path itself is deployed and passes package persistence, actual recipient rebuild, owner approval, promotion, rollback, roll-forward, and final lineage checks. Run acceptance is not accepted: runacc-9704ea95ef27a1b1c0f4 remains blocked by an acceptance-state-machine contradiction—superseded verification_started stays pending and repeated promotion after rollback trips causal order even though the invariant contract says both are tolerated. This problem is documented before repair."
-  next_action: "Commit and push this deployed problem receipt before code repair. Then trace the run-acceptance checkpoint reducer and causal-order invariant, add a focused regression for this exact event sequence, repair the single state authority, and repeat CI/deploy/authenticated acceptance."
+    - "acceptance-problem-first:f76529bb committed and pushed before repair; deployed blocker and exact event sequence recorded"
+    - "acceptance-regression:go test ./internal/runtime -run 'TestAppPromotionCheckpoints|TestAcceptanceServingCommit' PASS; prior reducer reproduced stale pending and causal-order failure"
+    - "acceptance-runtime-shard:70/280 selected top-level tests PASS in shard 0/4 after reducer repair"
+    - "acceptance-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41719 production LOC, 919 exports, 14 initial unused exports, 422 classified store calls, 1352 citers"
+    - "acceptance-reducer-review:ACCEPT d4d5c429; exact IDs authoritative, unique unclaimed legacy fallback, ambiguous ID-less terminals retained, concurrent same-target adoptions preserved"
+    - "acceptance-evidence-review:ACCEPT d4d5c429; regressions pin stale-probe removal, first-promotion checkpoint boundaries, mixed legacy IDs, retry correlation, concurrent adoption isolation, unknown terminal isolation, and invariant existence"
+  blocker_or_risk: "No local blocker. The frozen red repair d4d5c429 passes focused acceptance contracts, runtime shard 0/4, the exact runtime ratchet, and two independent reviews. Residual acceptance risk is deployment-only: staging still serves fe6f0844 and runacc-9704ea95ef27a1b1c0f4 remains the expected blocked pre-repair record until the repair lands and a new authenticated acceptance is synthesized."
+  next_action: "Commit this coherent Definition receipt, push the accepted candidate to origin/main, monitor CI and staging identity, then repeat the authenticated promotion run-acceptance synthesis and require promotion-level accepted state."
 
 receipts:
   - id: predecessor-B0-authority
