@@ -18,7 +18,7 @@ counts:
     compatibility_markers: 8
     store_calls: 443
     interface_candidates: 4
-    citers: 269
+    citers: 292
 files:
     - id: internal/runtime/agent_tools_test.go [test]
       disposition: tools
@@ -4061,6 +4061,10 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md:`/internal/runtime/runs`). Every attempt executing that definition therefore
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/api.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/delegate_worker_update_fallback.go
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_defaults
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompt_defaults#2
@@ -4079,21 +4083,63 @@ citers:
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompts.go#2
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/prompts.go#3
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime.go#2
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime.go#3
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/runtime_test.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/skill_context.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/super_controller.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/test_helpers_test.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/test_helpers_test.go#2
       disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/texture_handoff.go
+      disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go#2
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go:func:canDelegateTo
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go:func:canonicalAgentProfile
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go:func:isTextureProfileValue
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go:func:roleSpec
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tool_profiles.go:type:AgentRoleSpec
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_coagent.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_email.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_researcher.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_texture.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_vmctl.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_wire_processor.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/tools_worker_update.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/trajectory.go
+      disposition: block
+    - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:- internal/runtime/wire_metadata.go
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:1. dissolve `internal/runtime` into cohesive owners and delete it;
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-13.md:`internal/runtime` and make the ratchet extinction target pass.
+      disposition: block
+    - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:conjecture: The two duplicate canonical profile alias tables plus the complete role capability/delegation policy can move atomically from internal/runtime/tool_profiles.go and internal/toolregistry/ba… [sha256:8167fe428b2fc373a130f46e0485a268a38d86e6862c03ac97b7625cc004479e]'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block

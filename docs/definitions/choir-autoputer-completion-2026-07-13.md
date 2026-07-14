@@ -394,17 +394,17 @@ registries land atomically. Checkpoints never imply completion.
 ```yaml
 state_capsule:
   schema_version: 1
-  updated_at: 2026-07-14T01:13:55Z
+  updated_at: 2026-07-14T01:37:20Z
   kernel_digest: sha256:cc4c4a96427ea132bb73c79e8a579247fec44dc553c8779245c0096936918e73
-  expected_parent_or_authority_ref: refs/heads/main@origin@caa714e1f1070a1b12d076210588d547c0bc9315
+  expected_parent_or_authority_ref: refs/heads/main@origin@fb97e4b36ec32df9b6edb6b3eaf69e812e722b4e
   status: working
-  current_subgoal: R1-prompt-store-package-cutover-03
+  current_subgoal: R1-agent-profile-policy-cutover-04
   active_phase: R1-runtime-dissolution
   active_frontier:
-    - R1-prompt-store-package-cutover-03
+    - R1-agent-profile-policy-cutover-04
   locks:
     - id: R1-prompt-store-package-cutover-03
-      status: verified_local
+      status: complete
       mutation_class: orange
       classification_rationale: Prompt persistence and default-loading ownership are runtime behavior, so their package cutover is orange even when prompt bytes, filesystem state, and API behavior remain unchanged; no red protected surface is touched.
       conjecture: The prompt store, its direct tests, and all seeded default assets can move atomically to a top-level internal/promptstore owner with a clean Store/Descriptor/New API, without changing prompt bytes, override/reset semantics, persistent paths, role policy, routes, tools, state authority, provider routing, or model selection.
@@ -491,12 +491,122 @@ state_capsule:
           artifact_ref: artifact://204
         - class: E2
           observation: gopls reported no diagnostics in promptstore, runtime construction/API edges, or cmd/doccheck after workspace refresh
+      landed_evidence:
+        artifact_ref: fb97e4b36ec32df9b6edb6b3eaf69e812e722b4e
+        ci:
+          run_id: 29298475787
+          run_url: https://github.com/choir-hip/go-choir/actions/runs/29298475787
+          status: success
+          artifact_ref: artifact://226
+        deploy:
+          job_id: 86977543375
+          status: success
+          activated_at: 2026-07-14T01:31:55Z
+          target_commit: fb97e4b36ec32df9b6edb6b3eaf69e812e722b4e
+          active_artifacts: [ordinary_guest, sandbox, active_computers, gateway]
+          artifact_ref: artifact://229
+        acceptance:
+          level: E5
+          computer_status: active primary computer, epoch 1871, observed 2026-07-14T01:33:25Z
+          submission_id: 98ae4573-13cd-4a42-b14a-ccdecca65d9a
+          document_id: 0824ee56-9bfe-4f24-95ec-c119d3cbb989
+          revision_id: 8fec021e-4f7f-4464-ba65-6602200740aa
+          assertion: authenticated deployed prompt parsing created a Texture artifact whose sole body sentence was "promptstore package cutover accepted after deployed prompt parsing."
+          receipt_ref: artifact://240
+          artifact_ref: artifact://242
       heresy_delta:
         discovered:
           - This Define authority replaces the prior lock and mechanically raises documentation citers from 268 to 270 before implementation; source counts remain unchanged.
         introduced: []
         repaired:
           - nested runtime ownership of prompt persistence and seeded defaults
+    - id: R1-agent-profile-policy-cutover-04
+      status: defined
+      mutation_class: red
+      classification_rationale: Agent-profile normalization, per-profile tool capability grants, and delegation allowlists are authorization authority. This is a source-ownership-only cutover with no intended policy delta, but moving that authority is red and requires protected-surface acceptance.
+      conjecture: The two duplicate canonical profile alias tables plus the complete role capability/delegation policy can move atomically from internal/runtime/tool_profiles.go and internal/toolregistry/batch_executor.go into the existing dependency-leaf internal/agentprofile owner, with all 68 normalization callers and every policy caller cut directly to one concrete API and no change to profile aliases, default/unknown handling, batch spawn classification, tool grants, delegation targets, tool registration, runtime identity, provider/model selection, routes, or persisted state.
+      conjecture_delta: Source authority coalesces from duplicate runtime and toolregistry normalization tables plus runtime policy into the existing agentprofile dependency leaf; product semantics, batch classification, capability grants, and delegation authority remain unchanged.
+      object: canonical agent-profile vocabulary and role capability/delegation policy
+      selection_rationale: internal/agentprofile already owns every canonical profile identifier and is imported by both runtime and toolregistry policy consumers. Moving both normalization copies and policy resolution there deletes a pre-existing duplicate table and removes a high-fanout semantic authority from runtime without adding a dependency, interface, callback, wrapper, or new package.
+      exact_source_scope:
+        - internal/agentprofile/agentprofile.go
+        - internal/agentprofile/agentprofile_test.go
+        - internal/runtime/tool_profiles.go
+        - internal/runtime/prompts.go
+        - internal/runtime/api.go
+        - internal/runtime/runtime.go
+        - internal/runtime/skill_context.go
+        - internal/runtime/super_controller.go
+        - internal/runtime/texture_handoff.go
+        - internal/runtime/tools_coagent.go
+        - internal/runtime/tools_email.go
+        - internal/runtime/tools_vmctl.go
+        - internal/runtime/tools_wire_processor.go
+        - internal/toolregistry/batch_executor.go
+        - internal/toolregistry/batch_executor_test.go
+        - internal/runtime/tools_worker_update.go
+        - internal/runtime/trajectory.go
+        - internal/runtime/wire_metadata.go
+        - internal/runtime/delegate_worker_update_fallback.go
+        - internal/runtime/tools_researcher.go
+        - internal/runtime/tools_texture.go
+        - docs/runtime-dissolution-inventory.yaml
+        - docs/definitions/choir-autoputer-completion-2026-07-13.md
+      exact_symbols:
+        - internal/runtime/tool_profiles.go:type:AgentRoleSpec
+        - internal/runtime/tool_profiles.go:func:roleSpec
+        - internal/runtime/tool_profiles.go:func:canonicalAgentProfile
+        - internal/runtime/tool_profiles.go:func:isTextureProfileValue
+        - internal/runtime/tool_profiles.go:func:canDelegateTo
+        - internal/toolregistry/batch_executor.go:func:canonicalAgentProfile
+        - internal/agentprofile/agentprofile.go:type:Policy
+        - internal/agentprofile/agentprofile.go:func:PolicyFor
+        - internal/agentprofile/agentprofile.go:func:Canonical
+        - internal/agentprofile/agentprofile.go:func:IsTexture
+        - internal/agentprofile/agentprofile.go:func:CanDelegate
+      caller_graph:
+        canonical_profile: "68 production call sites across 14 files: the 62 runtime call sites in api.go, runtime.go, skill_context.go, super_controller.go, texture_handoff.go, tool_profiles.go, tools_coagent.go, tools_email.go, tools_vmctl.go, tools_wire_processor.go, tools_worker_update.go, trajectory.go, and wire_metadata.go, plus six batch_executor.go call sites"
+        role_policy: "11 current production resolution call sites across prompts.go and tool_profiles.go; CanDelegate moves one resolution inside the owner, leaving ten direct runtime PolicyFor call sites; four concrete Policy type edges span prompts.go, tool_profiles.go, and tools_coagent.go"
+        delegation_policy: one production caller in tools_coagent.go
+        texture_profile_predicate: three production callers across delegate_worker_update_fallback.go, tools_researcher.go, and tools_texture.go
+      invariants:
+        - Preserve the complete profile alias table, trimming, underscore-to-hyphen normalization, lowercase behavior, unknown-profile behavior, and empty-profile behavior byte-for-byte at every caller.
+        - Preserve every Policy field and exact grant/deny value for conductor, researcher, Texture, processor, reconciler, Email, co-super, v-super, super, and unknown profiles, including the exact ordered AllowedDelegateTargets slices.
+        - Preserve every delegation decision and every tool registry assembled for each profile; do not add, remove, rename, or reorder a registered tool.
+        - Cut all callers directly to agentprofile.Policy, PolicyFor, Canonical, IsTexture, and CanDelegate. Delete AgentRoleSpec, roleSpec, both canonicalAgentProfile definitions, isTextureProfileValue, and canDelegateTo; add no alias, forwarding symbol, wrapper, accessor, callback, interface, duplicate table, or compatibility path.
+        - Keep runtime run-metadata extraction, Texture actor-ID helpers, prompt assembly, provider/model policy, routes, state authority, and persistent data unchanged.
+        - Add direct table-driven owner tests for canonical aliases, unknown/empty normalization, every profile policy, exact delegate targets, allowed and denied delegation, and the Texture predicate; retain focused runtime tool-policy, prompt-policy, coagent delegation, worker-update, Email, vmctl, Texture behavior, and toolregistry batch-spawn classification tests.
+        - Regenerate the runtime inventory without weakening debt authority. This Define mechanically raises documentation citers from the landed 269 to exactly 292 before implementation; runtime Go/test/production file counts, test LOC, initial unused-export debt, routes, tools, production importers, wrappers, compatibility markers, store calls, interface candidates, legacy state writers, and legacy store reads may not increase, while runtime production LOC, exports, and export caller edges must decrease.
+      protected_surfaces:
+        - per-profile tool capability grants
+        - coagent delegation allowlists
+        - contained co-super and v-super authority
+        - toolregistry batch spawn classification
+      admissible_evidence:
+        - E0 clean canonical source identity and exact pre-mutation policy manifest
+        - E1 complete LSP caller migration, absent old runtime symbols, direct concrete owner API, unchanged tool/route/store ratchets, and decreased runtime production LOC/exports/caller edges
+        - E2 direct agentprofile policy tests plus focused runtime prompt policy, registry assembly, coagent authorization, worker update, Email handoff, vmctl delegate, and Texture routing tests, and toolregistry batch-executor tests
+        - E5 canonical CI/deploy identity and authenticated staging observations of role policy/tool exposure plus a product-path prompt artifact
+        - E6 independent immutable-candidate verification bound to exact diff and pre/post policy manifests
+      rollback_ref: fb97e4b36ec32df9b6edb6b3eaf69e812e722b4e
+      close_condition: Runtime and toolregistry contain none of the six superseded policy symbols; agentprofile is the sole concrete normalization/policy authority with direct exhaustive tests; every caller and registry uses it directly; policy manifests, batch spawn classification, tool exposure, delegation decisions, routes, persistence, and provider/model behavior are unchanged; the ratchet passes with only the authorized Define citer rebaseline and required runtime reductions; independent review finds no authority delta or seam; and canonical CI/deploy plus authenticated staging policy and prompt-artifact receipts bind the landed commit.
+      assurance:
+        independent_verifier: required
+        panel: compact
+        review_binding: frozen base, exact diff digest, complete LSP caller graph, pre/post policy manifests, ratchet delta, focused authorization tests, and staging role-policy/tool observations
+        define_review_result:
+          candidate_diff_sha256: f44c5f01180cc9f1118226e1f3f8f4645bd668ac0243174a9c9c00abda676d86
+          reviewers:
+            - opencode/hy3-free: PASS after repair
+            - google-antigravity/gemini-3.5-flash: PASS
+          adjudication: The first panel exposed the pre-existing duplicate canonicalization table and six omitted toolregistry callers. The repaired lock now deletes both copies, binds all 68 callers across 14 files, includes batch classification tests, states the exact 11-to-10 role-policy transition and four type edges, reconciles the prior 270 Define-only peak with the landed 269 baseline, and leaves discovered heresy unrepaired until implementation. Both reviewers independently recomputed the repaired graph and found no remaining blocker.
+          no_rerun_rationale: Appending this review receipt and the mechanically verified 269-to-292 documentation-citer baseline changes only non-authoritative assurance provenance and ratchet data; it does not change the reviewed lock, graph, evidence floor, or stopping condition.
+      heresy_delta:
+        discovered:
+          - This Define authority mechanically raises documentation citers from 269 to 292 before implementation; all source-category counts remain unchanged. The prior lock's Define-only 268-to-270 rise closed at 269 because implementation redirected one current old-path citer.
+          - toolregistry/batch_executor.go contains a second pre-existing canonical profile alias table; a source-authority clean cutover must delete both copies and move all 68 callers, not only the runtime copy.
+        introduced: []
+        repaired: []
   authority_transition:
     transition_id: autoputer-successor-authority-2026-07-13-01
     canonical_ref: refs/heads/main@origin
