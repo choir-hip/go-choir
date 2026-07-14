@@ -138,11 +138,11 @@ measures:
 
 now:
   status: working
-  slice: "extract candidate-package intake ownership boundary from internal/runtime"
-  question: "Which canonical owner can contain candidate-package intake review, source-lineage validation, adoption-boundary approval, publication-draft gating, and promotion-switch evidence without duplicating promotion authority or leaving runtime writes?"
+  slice: "extract browser and desktop ownership from internal/runtime"
+  question: "Can dedicated browser-control and desktop-state handlers own their complete HTTP, persistence, event, bounded-input, CDP-process, and shared-session contracts while Runtime loses all browser/desktop state and shutdown authority?"
   reconciliation:
-    observed_at: 2026-07-14T15:40:00Z
-    source_ref: refs/remotes/origin/main@cb0e36ba9cb9568f838e470935a90345446e69eb
+    observed_at: 2026-07-14T15:43:00Z
+    source_ref: refs/remotes/origin/main@0bf6a442
     deploy_identity: "CI 29345667840 PASS; deploy job 87129761444; activation receipt target cb0e36ba9cb9568f838e470935a90345446e69eb at 2026-07-14T15:38:14Z"
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -151,38 +151,29 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:db1ea597cf862b77f5ccb288f8eb76a08309b64d
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: accepted_deployed_slice_complete
-    protected_surfaces: [candidate_package_intake, computer_source_lineage, adoption_boundary, promotion_switch_evidence, publication_draft]
-    admissible_evidence: "Exact owner/caller/store/state-transition map; source-lineage CAS and owner-isolation contracts; blocked-transition preservation; scoped runtime ratchet; independent transition and authority review; green CI, staging identity, and authenticated product-path acceptance."
-    rollback_ref: 2f6215ab4256eb1ad4acead67a788d1825a6c0af
-    conjecture_delta: "Confirmed: candidate-package intake is a distinct pre-adoption review authority, not a second promotion service. internal/candidatepackage.Service now owns its intake and adoption-review state machine, delegates only source-lineage initialization to promotion.Service, and leaves deployed app promotion authority unchanged."
+    status: owner_boundary_frozen
+    protected_surfaces: [browser_sessions, bounded_browser_input, cdp_process_lifecycle, browser_screenshots, browser_events, desktop_state, desktop_driver_session, user_isolation]
+    admissible_evidence: "Exact route/state/store/event/process map; byte-equivalent API contracts; owner/session isolation and passive-session conflict tests; focused browser/desktop tests including live CDP when available; scoped runtime ratchet; independent transition and authority review; green CI, staging identity, and authenticated deployed browser/desktop acceptance."
+    rollback_ref: cb0e36ba9cb9568f838e470935a90345446e69eb
+    conjecture_delta: "Browser and desktop are product-facing stateful control planes, not runtime orchestration. Their complete handlers can leave Runtime as dedicated owners if route composition injects them directly, browser shutdown fate-shares with sandbox service lifetime, and no wrapper/facade remains."
     heresy_delta:
-      discovered: "Runtime owned one 1,698-line candidate-package intake state machine: create/review/adoption-boundary/publication-draft transitions, adoption-review creation and decision, source-lineage-only switch/rollback/roll-forward evidence, acceptance synthesis, and review surfaces. Its API routes called Runtime methods directly; its writes spanned candidate_package_intakes, app_change_packages, app_adoptions, computer_source_lineages, and events. internal/promotion.Service was the existing owner for source-lineage initialization and deployed app promotion, but was not a replacement for this deliberately blocked pre-adoption authority. The vmctl worker mirror contains app-package transport but no candidate-intake method caller."
+      discovered: "internal/runtime/browser.go owns 1,508 lines of browser HTTP, session persistence, event publication, capability detection, per-session locks, bounded fill/click control, snapshot extraction, CDP process/session lifecycle, and screenshots; Runtime also carries four browser lock/session fields and closes CDP sessions from Start/Stop. internal/runtime/desktop.go owns 248 lines of authenticated shared desktop-state HTTP, sanitization, driver/passive-session semantics, and store transitions. internal/desktop exists, but it is a Base API sync client rather than a replacement server-state owner; no existing browser owner exists."
       introduced: none
-      repaired: "Candidate-package intake methods, helpers, and event persistence moved to internal/candidatepackage.Service; Runtime retains only service construction and HTTP transport. promotion.Service is called only for EnsureComputerSourceLineage. The intentionally blocked publication/deployed-route/vm-lifecycle semantics, owner isolation, transition order, errors, JSON, and events are preserved."
+      repaired: "The preceding candidate-package owner cutover is deployed and accepted; no browser/desktop repair has begun."
   candidate:
-    id: R1-candidate-package-owner-cutover-12
-    state: complete
-    ref: refs/remotes/origin/main@cb0e36ba9cb9568f838e470935a90345446e69eb
+    id: R1-browser-desktop-owner-cutover-13
+    state: owner_boundary_frozen_ready_to_implement
+    ref: refs/heads/autoputer-definition-v2@0bf6a442
     owner: orchestrator
-    base: refs/heads/main@2f6215ab4256eb1ad4acead67a788d1825a6c0af
-    digest: "internal/candidatepackage.Service owns the complete intake/adoption-review state machine and direct store/event writes; runtime retains construction and HTTP transport only; promotion.Service remains the sole source-lineage initializer and deployed promotion owner. Runtime dissolution inventory: 126 Go files, 65 production files, 61 test files, 39985 production LOC, 49958 test LOC, 905 exports, 265 export caller edges, 14 initial unused exports, 2 routes, 48 tools, 4 production importers, 4 wrappers, 6 compatibility markers, 391 store calls, 4 interface candidates, 1347 citers."
-    scope: [candidate_package_intake, owner_review, source_lineage, adoption_boundary, publication_draft, promotion_switch_evidence]
+    base: refs/remotes/origin/main@0bf6a442
+    digest: "Create internal/browsercontrol.Handler as the sole browser HTTP/session/event/CDP owner and internal/desktopstate.Handler as the sole desktop HTTP/state owner. Register both directly in internal/apihandler routes; construct them in sandbox with store/config/event bus; close browsercontrol with sandbox lifetime; delete Runtime browser/desktop fields, shutdown calls, methods, helpers, and files. Move focused tests to the owning packages without changing routes, JSON, status codes, errors, state order, event payloads, bounded-input limits, desktop CAS/session rules, or owner isolation."
+    scope: [browser_api, browser_session_state, browser_events, browser_capabilities, snapshots, bounded_control, cdp_lifecycle, desktop_api, desktop_state, desktop_session_convergence]
   evidence_refs:
-    - "promotion-landing-ci:PASS https://github.com/choir-hip/go-choir/actions/runs/29342824267"
-    - "promotion-deploy:job 87119847487; activation target fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df"
-    - "promotion-run-acceptance:runacc-9704ea95ef27a1b1c0f4 promotion-level ACCEPTED; deployment_commit and health_commit fc0e3a0f90e4db30c512c03ee7a07fdf0523b3df; checkpoint_causal_order passed"
-    - "candidate-package-map: internal/runtime/candidate_package_intake.go methods and helpers; internal/runtime/api_candidate_package_intake.go route callers; internal/store/candidate_package_intake.go and app_promotion.go persistence; internal/types/app_promotion.go records/statuses; internal/runtime/tools_vmctl.go confirmed to have no candidate-intake method caller"
-    - "candidate-package-focused: go test ./internal/runtime -run TestCandidatePackageIntake PASS"
-    - "candidate-package-runtime-shard: scripts/go-test-runtime-shards 0/4 PASS; 70/280 tests including candidate intake owner isolation, blocked transitions, publication draft, switch acceptance, and read-only review surface"
-    - "candidate-package-ratchet: go test ./cmd/runtime-ratchet PASS; go run ./cmd/runtime-ratchet -root . PASS at candidate digest counts"
-    - "candidate-transition-review: ACCEPT d1bd22c0; transition/store/event/API parity; confidence 0.98"
-    - "candidate-authority-review: ACCEPT d1bd22c0; sole owner, one-way promotion dependency, owner scoping, deployed read-only route, and protected blocks preserved; confidence 0.98"
-    - "candidate-package-landing-ci:PASS https://github.com/choir-hip/go-choir/actions/runs/29345667840"
-    - "candidate-package-deploy:job 87129761444; activation target cb0e36ba9cb9568f838e470935a90345446e69eb at 2026-07-14T15:38:14Z"
-    - "candidate-package-deployed-boundary: authenticated read-only review surface owner-scoped miss HTTP-404; unauthenticated HTTP-401; review write HTTP-405; full intake root read absent HTTP-404 and write HTTP-405"
-  blocker_or_risk: "No slice blocker. Deployed acceptance proves the intended product boundary: only the authenticated owner-scoped review surface is mounted; review writes and the full intake mutation surface remain unavailable in cloud. Switch/rollback/roll-forward transition parity is proved locally because exposing those writes in staging would violate this slice's protected deployment contract."
-  next_action: "Advance to the browser/desktop ownership extraction slice. Reconcile current origin/main and staging identity, map runtime-owned browser/CDP/desktop state and callers, identify any existing dedicated owner, and checkpoint the problem/owner boundary before behavior-changing code."
+    - "browser-map: internal/runtime/browser.go; internal/store/browser.go; internal/types/browser.go; Runtime browserOpMu/browserOps/browserCDPMu/browserCDP; Runtime Start/Stop closeAllBrowserCDPSessions; internal/apihandler/routes.go browser routes"
+    - "desktop-map: internal/runtime/desktop.go; internal/runtime/desktop_test.go; internal/store/desktop_live.go; internal/types/desktop.go; internal/apihandler/routes.go desktop route"
+    - "replacement-check: internal/desktop is a Base API client/sync boundary, not a server desktop-state owner; no internal browser service package exists"
+  blocker_or_risk: "No execution blocker. The cutover must preserve CDP child-process cleanup on sandbox shutdown and context cancellation, prevent bounded input from widening, retain owner-scoped session/store access, keep passive desktop sessions unable to replace shared state, and avoid leaving route wrappers or Runtime lifecycle hooks."
+  next_action: "Checkpoint this problem/owner boundary before repair. Then move browser and desktop handlers plus tests to dedicated packages, update route/sandbox composition, delete Runtime browser/desktop fields and shutdown calls, regenerate the inventory, and prove focused contracts before frozen independent review."
 
 receipts:
   - id: predecessor-B0-authority
