@@ -162,11 +162,11 @@ now:
       repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; the exact 1345-citer baseline passes."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: verified_local
+    state: review_repair_required
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
-    base: refs/heads/main@9aa0b39c7d1f6bf6c18bb7da761711b4b6ed90a0
-    digest: sha256:3f19dafcac7f9be66a3a1432d7a6100d9b2aa8a290eab5e65c644058c2beea87
+    base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
+    digest: sha256:3f19dafcac7f9be66a3a1432d7a6100d9b2aa8a290eab5e65c644058c2beea87; frozen_commit:1bd90936c69f7ed599c367fc9ff57ae9eb77e5d7
     scope: [trajectory_cancellation_authority, wire_publication_failure_terminalization, owner_trajectory_cancel_api]
   decision:
     selected: "Extract the trajectory/work-item state transition behind existing run-based cancellation into one shared authority. Explicit owner cancellation also stops active runs; in-process publication failure uses the same authority transition without cancelling its currently executing activation. Expose owner-scoped POST cancellation and a Choir CLI command."
@@ -185,11 +185,13 @@ now:
     - "focused-cli:trajectory cancel and detail contracts PASS"
     - "runtime-shards:275/275 PASS"
     - "cli-and-ratchet:PASS; inventory 1345 citers and 8 compatibility markers"
+    - "independent-authority-review:REPAIR; atomicity, detached activation drain, durable cleanup recovery, and truthful settled response required"
+    - "independent-owner-security-review:REPAIR; escaped path parsing, truthful response, terminal admission, and candidate-base correction required"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "The verified candidate has not been frozen, independently reviewed, pushed, deployed, or exercised against the observed stuck staging trajectory."
-  next_action: "Commit the verified red candidate, run independent review against that frozen identity, repair any blocker, then push and execute authenticated staging trajectory cancellation."
+  blocker_or_risk: "Frozen review found that cancellation is a multi-write non-atomic transition, settlement and new work can race it, request cancellation can strand activations after durable cancellation, failed publication cleanup has no durable recovery, slash-bearing CLI ids do not round-trip through the handler, and an already-settled trajectory is falsely reported as cancelled."
+  next_action: "Commit this review checkpoint before repair. Then move cancellation into an atomic store transition with terminal admission and settlement guards, detach bounded activation draining, make an open publication claim its own boot-recovery marker, parse one escaped id segment, and return the actual terminal status."
 
 receipts:
   - id: predecessor-B0-authority
