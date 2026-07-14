@@ -162,8 +162,8 @@ now:
       repaired: "Every direct app-promotion state transition, build step, lineage CAS, adapter call, event, and non-candidate package import now enters internal/promotion.Service; API, worker mirror, candidate-intake lineage setup, and shipper callers are direct; the dead Runtime adapter option and all Runtime promotion methods are deleted."
   candidate:
     id: R1-promotion-owner-cutover-11
-    state: owner_review_repaired_ready_for_atomic_review
-    ref: /Users/wiz/go-choir-autoputer-v2
+    state: accepted_local_ready_to_land
+    ref: refs/heads/autoputer-definition-v2@0dc665f2
     owner: orchestrator
     base: refs/heads/main@4f8032d52b9d3bef90b9e81d1bb832e272550b75
     digest: "internal/promotion owns service.go and build.go; deleted runtime app_promotion.go/app_promotion_build.go and WithPromotionAdapter; direct callers api_app_promotion.go, candidate_package_intake.go, tools_shipper.go, and worker mirror; inventory 128 Go files, 67 production files, 61 test files, 41609 production LOC, 917 exports, 14 initial unused exports, 422 classified store calls, 1349 citers"
@@ -191,8 +191,10 @@ now:
     - "owner-repair-focused:internal promotion/API/worker mirror contracts PASS"
     - "owner-repair-full:go test ./internal/runtime PASS"
     - "owner-repair-ratchet:PASS; 128 Go files, 67 production files, 61 test files, 41609 production LOC, 917 exports, 14 initial unused exports, 422 classified store calls, 1349 citers"
-  blocker_or_risk: "The exact clean-cutover blockers from independent owner review are repaired and locally verified. Remaining acceptance requires atomic independent re-review of the repaired frozen commit, CI, staging identity, and authenticated deployed promotion artifacts. Candidate-package source-lineage-only review remains explicitly deferred."
-  next_action: "Commit the coherent owner repair, freeze the resulting commit, obtain atomic independent transition/owner re-review, then land only if both accept."
+    - "atomic-transition-review:ACCEPT 0dc665f2; all eight config fields, subprocesses, CAS, adapter ordering, async lifetime, events, rollback/roll-forward, imports, and candidate-intake boundary preserved"
+    - "atomic-owner-security-review:ACCEPT 0dc665f2; one private promotion.Service owner, no Runtime facade/adapter seam/write bypass, owner/auth isolation intact"
+  blocker_or_risk: "No local blocker. Atomic transition and owner/security reviews accept the repaired frozen commit. Remaining acceptance requires CI, staging identity, and authenticated deployed promotion artifacts. Candidate-package source-lineage-only review remains explicitly deferred."
+  next_action: "Commit this acceptance receipt, push the candidate to origin/main, monitor CI and staging identity, then execute authenticated deployed promotion acceptance."
 
 receipts:
   - id: predecessor-B0-authority
