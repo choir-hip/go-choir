@@ -137,13 +137,13 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: reviewing
-  slice: "review and land Texture owner cutover with internal/runtime extinct"
-  question: "Does the frozen candidate preserve every Texture and generic agentcore contract while leaving one-way textureowner -> agentcore ownership, no retired package, and no dual tool or route authority?"
+  status: blocked_review
+  slice: "repair invalid coagent profile fallback before landing Texture owner cutover"
+  question: "Does explicit invalid spawn_agent profile input fail closed instead of silently falling back to role after the owner extraction?"
   reconciliation:
-    observed_at: 2026-07-14T21:45:54Z
-    source_ref: staged-implementation-excluding-now-card@sha256:9252e57d61ac7bfa966ec5ee56c80714abfb74c97e980dbdf772a6f89d6f99db
-    deploy_identity: pending_candidate_review_and_landing
+    observed_at: 2026-07-14T21:59:05Z
+    source_ref: commit:c791a0aeffc8afeab6aebe30536cf754753c4a60
+    deploy_identity: blocked_before_landing
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
@@ -154,7 +154,7 @@ now:
     status: candidate_implemented_local
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact type/API/store/tool/caller map; settled authority conformance; deletion-first owner boundary; no internal/runtime imports or files; focused Texture and agentcore contracts; all four former runtime shards; runtime ratchet; frozen independent reviews; CI, staging identity, and deployed Texture product-path acceptance."
-    rollback_ref: 3d2d2f2fb9356edbc1c56bb9adebe5f754b1b910
+    rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
     conjecture_delta: "Confirmed by implementation and tests: a one-way textureowner -> agentcore dependency preserves the canonical Texture API, revisions, sources, prompts, tools, actor wake, and user isolation while apihandler and sandbox compose the owners directly. internal/runtime is absent, no Go import names it, and the structural ratchet reports production_importers=0 and wrappers=0."
     heresy_delta:
       discovered: "The prior lifecycle/core boundary receipt left the package named internal/runtime and actorruntime still importing it; ownership was named but package extinction was not complete. Deployed acceptance also showed a researcher result completed without a subsequent Texture incorporation run during a three-minute observation window; this is inside the already-deferred Texture wake boundary."
@@ -162,8 +162,8 @@ now:
       repaired: "Retired the internal/runtime package/import path; moved canonical Texture behavior and tests to internal/textureowner; renamed the generic lifecycle core to internal/agentcore; removed the duplicate core request_email_draft tool constructor; rewired routes, actor adapter, sandbox composition, test shards, and active source guidance."
   candidate:
     id: R1-texture-owner-cutover-16
-    state: implemented_local_review_pending
-    ref: staged-implementation-excluding-now-card@sha256:9252e57d61ac7bfa966ec5ee56c80714abfb74c97e980dbdf772a6f89d6f99db
+    state: review_blocked_repair_required
+    ref: commit:c791a0aeffc8afeab6aebe30536cf754753c4a60
     owner: orchestrator
     base: refs/remotes/origin/main@3d2d2f2fb9356edbc1c56bb9adebe5f754b1b910
     digest: sha256:9252e57d61ac7bfa966ec5ee56c80714abfb74c97e980dbdf772a6f89d6f99db
@@ -173,8 +173,9 @@ now:
     - "test-proof: go test ./... with live search-provider keys disabled passed 75 packages (19 without tests); scripts/go-test-runtime-shards passed all four agentcore shards plus textureowner; go build ./... and git diff --check passed."
     - "ratchet-proof: runtime dissolution inventory PASS with production_importers=0, wrappers=0, 37 tools, 10 canonical initial unused-export debt entries, 34,394 production LOC, and 46,079 test LOC in declared scope."
     - "deferred-problem: staging trajectory e6283f92-7167-4426-a21a-a13d64b9b04b completed researcher run 1af42058-a64d-45b3-a7a3-863265d401a0 without a later Texture incorporation run during the prior acceptance window; this candidate does not claim that separate wake behavior repaired."
-  blocker_or_risk: "No local execution blocker. Remaining gates are frozen independent review, canonical commit/push, CI/deploy identity, and deployed Texture product-path acceptance. The previously observed researcher-to-Texture wake gap remains a separate disclosed risk."
-  next_action: "Commit the frozen candidate, bind independent review to that commit, adjudicate any blocking finding, then land and run CI, staging identity, and deployed Texture acceptance."
+    - "independent-review:blocking P2 at internal/coagentowner/spawn_tool.go:73-76; an explicit nonempty invalid or out-of-policy profile normalizes to empty and silently defaults to role, while ToolRegistry execution does not enforce the JSON Schema enum."
+  blocker_or_risk: "Frozen review found one behavior regression: explicit invalid spawn_agent profile input fails open to the valid role instead of preserving the prior CanDelegate rejection. This can spawn a different allowed child than requested. The implementation commit is not eligible to land until the finding is repaired and focused regression proof plus frozen re-review pass."
+  next_action: "Commit this problem receipt before repair, then reject nonempty invalid profiles before defaulting omitted profile to role; add focused contract coverage, re-run scoped verification, and bind independent re-review to the repair commit."
 
 receipts:
   - id: predecessor-B0-authority
