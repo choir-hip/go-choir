@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -749,6 +750,49 @@ func TestCreateRunRejectsActiveAdmissionToTerminalTrajectory(t *testing.T) {
 	}
 }
 
+func TestUpdateRunRejectsReactivationOnTerminalTrajectory(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+
+	for _, trajectoryStatus := range []types.TrajectoryStatus{types.TrajectorySettled, types.TrajectoryCancelled} {
+		trajectoryID := "traj-reactivate-" + string(trajectoryStatus)
+		runID := "passivated-" + string(trajectoryStatus)
+		if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
+			TrajectoryID: trajectoryID,
+			OwnerID:      "user-alice",
+			Kind:         types.TrajectoryKindTask,
+		}); err != nil {
+			t.Fatalf("create %s trajectory: %v", trajectoryStatus, err)
+		}
+		if err := s.CreateRun(ctx, types.RunRecord{
+			RunID:        runID,
+			OwnerID:      "user-alice",
+			TrajectoryID: trajectoryID,
+			State:        types.RunPassivated,
+		}); err != nil {
+			t.Fatalf("create passivated run: %v", err)
+		}
+		if _, err := s.UpdateTrajectoryStatus(ctx, "user-alice", trajectoryID, trajectoryStatus); err != nil {
+			t.Fatalf("make trajectory %s: %v", trajectoryStatus, err)
+		}
+		rec, err := s.GetRun(ctx, runID)
+		if err != nil {
+			t.Fatalf("get passivated run: %v", err)
+		}
+		rec.State = types.RunPending
+		if err := s.UpdateRun(ctx, rec); !errors.Is(err, ErrConcurrentStateChange) {
+			t.Fatalf("reactivate run on %s trajectory error = %v, want ErrConcurrentStateChange", trajectoryStatus, err)
+		}
+		stored, err := s.GetRun(ctx, runID)
+		if err != nil {
+			t.Fatalf("get rejected reactivation: %v", err)
+		}
+		if stored.State != types.RunPassivated {
+			t.Fatalf("rejected reactivation state = %s, want passivated", stored.State)
+		}
+	}
+}
+
 func TestCreateRunAllowsHistoricalAndMissingTrajectoryAuthority(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -833,5 +877,43 @@ func TestListActiveRunsByTrajectoryExhaustsPagesBeforeResultLimit(t *testing.T) 
 		if rec.OwnerID != "user-alice" || !rec.State.Active() {
 			t.Fatalf("limited result contains ineligible run: %+v", rec)
 		}
+	}
+}
+
+func TestListActiveRunsByTrajectoryNormalizesLegacyBodyIdentity(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	const trajectoryID = "traj-legacy-body"
+
+	rec := types.RunRecord{
+		RunID:        "run-legacy-body",
+		OwnerID:      "user-alice",
+		TrajectoryID: trajectoryID,
+		State:        types.RunPending,
+		Metadata:     map[string]any{"trajectory_id": trajectoryID},
+	}
+	if err := s.CreateRunOG(ctx, rec); err != nil {
+		t.Fatalf("create indexed legacy run: %v", err)
+	}
+	obj, err := s.ogGetByKey(ctx, ogKindRun, "run_id", rec.RunID)
+	if err != nil {
+		t.Fatalf("get indexed legacy object: %v", err)
+	}
+	rec.TrajectoryID = ""
+	body, err := json.Marshal(rec)
+	if err != nil {
+		t.Fatalf("marshal legacy run body: %v", err)
+	}
+	obj.Body = body
+	if err := s.ogStore.PutObject(ctx, obj); err != nil {
+		t.Fatalf("persist legacy run body: %v", err)
+	}
+
+	active, err := s.ListActiveRunsByTrajectory(ctx, rec.OwnerID, trajectoryID, 0)
+	if err != nil {
+		t.Fatalf("list legacy trajectory runs: %v", err)
+	}
+	if len(active) != 1 || active[0].RunID != rec.RunID || active[0].TrajectoryID != trajectoryID {
+		t.Fatalf("legacy trajectory runs = %+v, want normalized %s", active, rec.RunID)
 	}
 }

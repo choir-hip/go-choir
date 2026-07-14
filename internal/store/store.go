@@ -901,21 +901,40 @@ func (s *Store) GetAgent(ctx context.Context, agentID string) (types.AgentRecord
 	return s.GetAgentOG(ctx, agentID)
 }
 
+func runTrajectoryID(rec types.RunRecord) string {
+	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
+	if trajectoryID != "" {
+		return trajectoryID
+	}
+	legacyTrajectoryID, _ := rec.Metadata["trajectory_id"].(string)
+	return strings.TrimSpace(legacyTrajectoryID)
+}
+
+func (s *Store) rejectActiveRunOnTerminalTrajectory(ctx context.Context, rec types.RunRecord, operation string) error {
+	trajectoryID := runTrajectoryID(rec)
+	if !rec.State.Active() || trajectoryID == "" {
+		return nil
+	}
+	trajectory, err := s.GetTrajectoryOG(ctx, rec.OwnerID, trajectoryID)
+	if err == nil {
+		if trajectory.Status == types.TrajectorySettled || trajectory.Status == types.TrajectoryCancelled {
+			return fmt.Errorf("%s run on terminal trajectory: %w", operation, ErrConcurrentStateChange)
+		}
+		return nil
+	}
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
 // CreateRun inserts a new run record.
 func (s *Store) CreateRun(ctx context.Context, rec types.RunRecord) error {
 	s.trajectoryMu.Lock()
 	defer s.trajectoryMu.Unlock()
 
-	trajectoryID := strings.TrimSpace(rec.TrajectoryID)
-	if rec.State.Active() && trajectoryID != "" {
-		trajectory, err := s.GetTrajectoryOG(ctx, rec.OwnerID, trajectoryID)
-		if err == nil {
-			if trajectory.Status == types.TrajectorySettled || trajectory.Status == types.TrajectoryCancelled {
-				return fmt.Errorf("create run on terminal trajectory: %w", ErrConcurrentStateChange)
-			}
-		} else if !errors.Is(err, ErrNotFound) {
-			return err
-		}
+	if err := s.rejectActiveRunOnTerminalTrajectory(ctx, rec, "create"); err != nil {
+		return err
 	}
 	return s.CreateRunOG(ctx, rec)
 }
@@ -927,6 +946,21 @@ func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, erro
 
 // UpdateRun updates an existing run record.
 func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
+	if !rec.State.Active() {
+		return s.UpdateRunOG(ctx, rec)
+	}
+	s.trajectoryMu.Lock()
+	defer s.trajectoryMu.Unlock()
+
+	existing, err := s.GetRunOG(ctx, rec.RunID)
+	if err != nil {
+		return err
+	}
+	if !existing.State.Active() {
+		if err := s.rejectActiveRunOnTerminalTrajectory(ctx, rec, "reactivate"); err != nil {
+			return err
+		}
+	}
 	return s.UpdateRunOG(ctx, rec)
 }
 
@@ -1107,6 +1141,9 @@ func (s *Store) ListActiveRunsByTrajectory(ctx context.Context, ownerID, traject
 		var rec types.RunRecord
 		if err := ogDecode(obj, &rec); err != nil {
 			return nil, err
+		}
+		if rec.TrajectoryID == "" {
+			rec.TrajectoryID = runTrajectoryID(rec)
 		}
 		if rec.OwnerID != ownerID || rec.TrajectoryID != trajectoryID || !rec.State.Active() {
 			continue

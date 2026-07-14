@@ -235,16 +235,30 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 			runMetadataTrajectoryID: trajectoryID,
 		},
 	}
-	if err := s.CreateRun(ctx, run); err != nil {
-		t.Fatalf("create legacy run: %v", err)
+	sibling := run
+	sibling.RunID = "run-legacy-metadata-sibling"
+	sibling.AgentID = "agent-legacy-sibling"
+	sibling.TrajectoryID = trajectoryID
+	sibling.Prompt = "current-schema sibling on legacy-addressed trajectory"
+	for _, rec := range []types.RunRecord{run, sibling} {
+		if err := s.CreateRun(ctx, rec); err != nil {
+			t.Fatalf("create legacy run %s: %v", rec.RunID, err)
+		}
 	}
 
 	cancelled, err := rt.CancelRunTrajectory(ctx, run.RunID, run.OwnerID)
 	if err != nil {
 		t.Fatalf("cancel trajectory: %v", err)
 	}
-	if len(cancelled) != 1 || cancelled[0] != run.RunID {
-		t.Fatalf("cancelled = %+v, want only %s", cancelled, run.RunID)
+	if len(cancelled) != 2 {
+		t.Fatalf("cancelled = %+v, want both legacy trajectory runs", cancelled)
+	}
+	cancelledSet := map[string]bool{}
+	for _, runID := range cancelled {
+		cancelledSet[runID] = true
+	}
+	if !cancelledSet[run.RunID] || !cancelledSet[sibling.RunID] {
+		t.Fatalf("cancelled = %+v, want %s and %s", cancelled, run.RunID, sibling.RunID)
 	}
 	stored, err := s.GetRun(ctx, run.RunID)
 	if err != nil {
@@ -255,6 +269,13 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 	}
 	if stored.State != types.RunCancelled {
 		t.Fatalf("state = %s, want cancelled", stored.State)
+	}
+	storedSibling, err := s.GetRun(ctx, sibling.RunID)
+	if err != nil {
+		t.Fatalf("get cancelled legacy sibling: %v", err)
+	}
+	if storedSibling.TrajectoryID != trajectoryID || storedSibling.State != types.RunCancelled {
+		t.Fatalf("legacy sibling after cancel = %+v, want trajectory %s and cancelled", storedSibling, trajectoryID)
 	}
 	trajectory, err := s.GetTrajectory(ctx, run.OwnerID, trajectoryID)
 	if err != nil {

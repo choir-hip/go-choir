@@ -7,7 +7,7 @@ counts:
     production_files: 68
     test_files: 63
     production_loc: 43034
-    test_loc: 50233
+    test_loc: 50254
     exports: 945
     export_caller_edges: 296
     initial_unused_export_debt: 15
@@ -376,7 +376,7 @@ files:
       loc: 143
     - id: internal/runtime/trajectory_test.go [test]
       disposition: core
-      loc: 901
+      loc: 922
     - id: internal/runtime/universal_wire.go [production]
       disposition: wire
       loc: 30

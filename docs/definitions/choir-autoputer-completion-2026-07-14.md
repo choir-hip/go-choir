@@ -159,14 +159,14 @@ now:
     heresy_delta:
       discovered: "A publication side effect can open a durable work item, fail, and return without a terminal state; the document cancel route refuses to act once its pending mutation is gone."
       introduced: none
-      repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; trajectory cancellation and terminal admission now share one authority lock; work-item, active-run, and boot-recovery reads exhaust canonical-ID keyset pages instead of trusting fixed prefixes."
+      repaired: "Archive citations are classified as historical evidence while active Definition citations remain blockers; trajectory cancellation, CreateRun, and inactive-to-active UpdateRun admission share one authority lock; work-item, active-run, and boot-recovery reads exhaust canonical-ID keyset pages; decoded legacy run identity is normalized before owner/state filtering."
   candidate:
     id: R1-wire-publication-terminalization-09
-    state: passivated_reactivation_repair_required
+    state: verified_lifecycle_compatibility_repair_local
     ref: /Users/wiz/go-choir-autoputer-v2
     owner: orchestrator
     base: refs/heads/main@bfefa64f1f1d9df9a58a38f78e21f6a8fc5aedf9
-    digest: frozen_commit:1bd90936c69f7ed599c367fc9ff57ae9eb77e5d7; atomic_repair_commit:c7827b3e; cardinality_repair_delta_sha256:81bff98917fb349766a2bc6b84da35aa75e2d9cdcf0bbfd846e82470147432f1
+    digest: frozen_commit:1bd90936c69f7ed599c367fc9ff57ae9eb77e5d7; atomic_repair_commit:c7827b3e; cardinality_repair_commit:b90dcf0d; lifecycle_repair_delta_sha256:a807442e633dd06ec5bc72e7684809adfc271f3b3217be6283e9d0f4e92d3ac0
     scope: [trajectory_cancellation_authority, wire_publication_failure_terminalization, owner_trajectory_cancel_api]
   decision:
     selected: "Extract the trajectory/work-item state transition behind existing run-based cancellation into one shared authority. Explicit owner cancellation also stops active runs; in-process publication failure uses the same authority transition without cancelling its currently executing activation. Expose owner-scoped POST cancellation and a Choir CLI command."
@@ -197,11 +197,14 @@ now:
     - "cardinality-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
     - "final-atomic-cardinality-review:REPAIR; passivated trajectory runs are absent from active drain and can reactivate after terminal cancellation because UpdateRun lacks terminal admission"
     - "final-owner-security-review:REPAIR; multiple active legacy metadata-only sibling runs on one trajectory are filtered out of exhaustive drain after only the addressed run is upgraded"
+    - "lifecycle-compatibility-repair:full store PASS; terminal passivated reactivation rejected; indexed legacy body identity normalized; legacy-addressed sibling activation drain PASS"
+    - "lifecycle-runtime:280/280 shard tests PASS; 205-run drain remains within detached retry contract"
+    - "lifecycle-ratchet:CLI and detector packages PASS; inventory 1345 citers, 8 compatibility markers, 442 classified store calls"
     - "staging-trajectory:a57593ae-3ab1-4dd6-b4d3-88f1d851ef31"
     - "stuck-work-item:c9812e4a-79a7-462e-a04d-faba6dd77908"
     - "texture-revision:b2cb901b-b1a4-4dd6-98a8-06935303c8b3"
-  blocker_or_risk: "Final reviews found two remaining lifecycle compatibility escapes: a passivated run can reactivate through UpdateRun after terminal cancellation, and multiple active legacy runs carrying trajectory_id only in metadata are not all drained because decoded records with an empty TrajectoryID are filtered out. Atomic batch, keyset cardinality, owner path/auth/status, and current-schema admission findings otherwise remain accepted."
-  next_action: "Commit this second review checkpoint before repair. Then serialize inactive-to-active UpdateRun transitions with terminal state; normalize every decoded metadata-only run before trajectory filtering; add passivated-reactivation and multi-legacy-sibling contracts; re-run all focused suites and frozen review."
+  blocker_or_risk: "Both lifecycle compatibility escapes are repaired and locally verified: inactive-to-active UpdateRun admission rejects terminal authority under trajectoryMu, and indexed legacy run bodies are normalized before exhaustive drain filtering. Residual risks remain process-local locking, retry-dependent 30-second drain, and log-and-retry orphan recovery."
+  next_action: "Commit the lifecycle compatibility repair and re-run both independent reviewers against the frozen candidate. Push and execute the landing loop only after both return ACCEPT."
 
 receipts:
   - id: predecessor-B0-authority
