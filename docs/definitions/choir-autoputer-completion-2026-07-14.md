@@ -137,46 +137,62 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: blocked_product_acceptance
-  slice: "finish source cutover review and diagnose recipient candidate build termination"
-  question: "Will the frozen clean-cutover repair pass independent review, and why did the deployed recipient build kill the sandbox compilation before producing target artifacts?"
+  status: complete
+  slice: "terminal acceptance and authority closure"
+  question: "Did the landed runtime-free cutover prove the persistent-computer product path on staging and leave every candidate, protected worktree, and successor authority explicit?"
   reconciliation:
-    observed_at: 2026-07-15T01:07:21Z
-    source_ref: refs/remotes/origin/main@232dd36d521acfb103e8a87148f1e51b92360520
-    deploy_identity: "CI 29378501285 PASS; deploy job 87237465845; activation receipt 232dd36d521acfb103e8a87148f1e51b92360520@2026-07-15T00:23:23Z."
+    observed_at: 2026-07-15T02:11:16Z
+    source_ref: refs/remotes/origin/main@e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13
+    deploy_identity: "CI 29382447010 PASS; deploy job 87249292258 PASS; activation receipt e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13@2026-07-15T01:53:14Z for sandbox, active computers, ordinary guest, playwright guest, and gateway."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-      - docs/runtime-dissolution-inventory.yaml@canonical_parent:232dd36d521acfb103e8a87148f1e51b92360520
+      - "docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498; generated-and-passed at source e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13"
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: source_repair_reviewing_product_candidate_blocked
+    status: accepted
+    acceptance_level: persistent_computer_product_path
     protected_surfaces: [tool_registry, runtime_extinction_ratchet, external_agent_tool_contract, deployment_identity, candidate_promotion, persistent_computer_state]
-    admissible_evidence: "Exact registered-tool inventory; no retired runtime imports in any production package; focused registry and ratchet tests; regenerated inventory; independent frozen review; canonical CI/deploy identity; deployed no-SSH, restart, promotion/rollback, and containment receipts."
+    admissible_evidence: "Canonical source and activation identity; exact ratchet; focused tests; independent source and terminal reviews; scoped staging operation and artifact fetch; restart continuation; recipient build and verifier contracts; promotion, rollback, containment, and authority receipts."
     rollback_ref: 232dd36d521acfb103e8a87148f1e51b92360520
-    conjecture_delta: "The frozen source repair now removes the deprecated alias, inventories 50 qualified Tool declarations across all production packages, rejects dynamic names, and passes focused owner/registry/ratchet tests. Product acceptance remains blocked independently: candidate adoption autoputer-acceptance-232dd36d failed because the recipient sandbox build was killed after 14m54s before producing runtime/UI artifact digests."
+    conjecture_delta: "The runtime-free clean cutover is not merely structural: a scoped external key operated the deployed prompt-bar-to-Texture path without SSH, the same durable computer survived restart and accepted another scoped operation, a recipient rebuilt distinct runtime/UI artifacts, and promotion then rollback moved and restored the active source lineage."
     heresy_delta:
-      discovered: "Recipient candidate builds can terminate during sandbox compilation without producing target artifact digests; the refusal is durable and correctly prevents promotion."
+      discovered: "The first recipient build exhausted the former 15-minute total build deadline and was correctly refused before promotion."
       introduced: none
-      repaired: "The frozen source repair deletes delegate_worker_vm registration and executable callers, counts Tool literals across production packages, rejects dynamic tool names without misclassifying package-local Tool types, and counts retired runtime imports in owner packages."
+      repaired: "Runtime facade and compatibility registration are absent; all production Tool declarations and retired imports are ratcheted; the cold-build deadline is 30 minutes with override; the retried recipient build, verifier contracts, promotion, and rollback all passed."
   candidate:
     id: R1-runtime-extinction-final-repair-17
-    state: frozen_review_pending
-    ref: worktree@sha256:89cc8c6f9267c559955bc07a0b5163da3c8a139f83387fdc7c825edc13d4d9a5
+    state: landed
+    ref: 8784a085
     owner: orchestrator
-    base: refs/remotes/origin/main@232dd36d521acfb103e8a87148f1e51b92360520
-    digest: "Clean-cutover source repair frozen after focused tests and exact ratchet PASS; independent final review is running."
+    base: 232dd36d521acfb103e8a87148f1e51b92360520
+    digest: "Clean-cutover repair accepted with no P0/P1/P2 findings; canonical deployment includes the repair at e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13."
     scope: [vmctl_tool_registration, runtime_inventory_tool_names, retired_runtime_imports, runtime_ratchet]
+    disposition: complete
+  terminal_dispositions:
+    - id: R1-toolregistry-facade-extinction-07
+      disposition: superseded_by_clean_rebuild
+      recovery: "Leave /Users/wiz/go-choir user WIP in place and read only; no candidate mutation is needed."
+    - id: /Users/wiz/go-choir
+      disposition: protected_user_wip_leave_in_place
+      evidence_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
+    - id: autoputer-acceptance-232dd36d
+      disposition: verified_promoted_and_rolled_back
+      recovery: "Active source lineage restored to refs/computers/primary/active."
   evidence_refs:
-    - "final-independent-review:FinalCompletionReview:REJECT:P1 delegate_worker_vm compatibility alias"
-    - "final-independent-review:FinalCompletionReview:REJECT:P1 dynamically named tools absent from inventory"
-    - "final-independent-review:FinalCompletionReview:P2 ownership-package retired-import exclusion"
-    - "deployed-restart: primary stopped at epoch 1882 and recovered ready at epoch 1884; Texture document 8d91f7c5-6467-4285-a357-0d8ea9fb447c retained revision 21924b19-d183-46e6-a172-617ddc636928"
+    - "source-review:CorrectedRepairReview:ACCEPT:no-findings"
+    - "promotion-timeout-review:PromotionTimeoutReview:ACCEPT:no-findings"
+    - "terminal-review:TerminalCompletionReview:all substantive acceptance satisfied after exact scoped continuation receipt; only this canonical recording remained"
+    - "runtime-ratchet:PASS:production_importers=0,wrappers=0,tools=50"
+    - "scoped-no-SSH: key ak_05eaefcf-2206-4969-8e11-262bcfddaa87 created prompt-bar submission a802a41c-1f4a-48b5-8bbb-5dee5e998534, Texture doc 868d772c-045f-4f5d-b4ab-689c97c20336, and appagent revision 5581ab21-d99b-4189-a4c4-61b6a2a15331; the same key fetched metadata, history, and revision content, then was revoked"
+    - "deployed-restart: primary stopped at epoch 1882 and recovered ready at epoch 1884; Texture document 8d91f7c5-6467-4285-a357-0d8ea9fb447c retained revision 21924b19-d183-46e6-a172-617ddc636928; scoped submission a802a41c-1f4a-48b5-8bbb-5dee5e998534 then continued the product path"
     - "deployed-containment: scoped key ak_c2757ec1-a13c-4ccc-8bcd-8648497125df received HTTP-403 missing required scope write:runtime for computer stop and was revoked"
-    - "candidate-adoption:autoputer-acceptance-232dd36d:blocked; actual-recipient-runtime-ui-build failed: runtime build signal killed after 14m54.181858208s; no-cross-computer-binary-copying refused missing target runtime/UI digests"
-  blocker_or_risk: "Source repair awaits independent review. Product acceptance is blocked by the recipient candidate build termination; no promotion or rollback claim is admissible."
-  next_action: "Obtain exact-diff source review, land the accepted cutover, then diagnose the recipient build termination from the durable verifier receipt before attempting another candidate."
+    - "candidate-verification:autoputer-acceptance-232dd36d:seven contracts passed at 2026-07-15T02:00:17Z; base e4b16ca37; runtime sha256:a17d731bce1b9d8b89c26ed60bb4d9c08a8fc3a896a6d5d363cec48ea25f20e2; UI sha256:9e96baefded5987db7dd566f3123fb9ed2defb35c8590785c393451d35822146"
+    - "candidate-transition: owner_approved -> adopted with active ref refs/computers/primary/candidates/autoputer-acceptance-232dd36d-target -> rolled_back with active ref refs/computers/primary/active at 2026-07-15T02:06:17Z"
+    - "authority: docs/ACTIVE.md keeps only this Definition active; Autopaper remains historical and unauthorized"
+  blocker_or_risk: "No completion blocker. Residual operational risk: 30 minutes is proven sufficient for this 5m35s cold recipient build but remains bounded and overrideable for slower future targets."
+  next_action: "None. Start any Autopaper work only from a separate owner-authorized successor Definition."
 
 receipts:
   - id: predecessor-B0-authority
@@ -291,6 +307,27 @@ receipts:
     commit_or_artifact: 36caa912d9a2855cfa473d88e3393bc39c64c74e
     proof_refs: ["https://github.com/choir-hip/go-choir/actions/runs/29358737663", "deploy-job:87174088250", "activation-receipt:36caa912d9a2855cfa473d88e3393bc39c64c74e@2026-07-14T18:46:29Z", "modelpolicy-tests:PASS", "researchtools-tests:PASS", "runtime-shard-1/4:PASS", "runtime-shard-2/4:PASS", "runtime-shard-3/4:PASS", "runtime-shard-4/4:PASS", "runtime-ratchet:PASS", "model-research-authority-review:ACCEPT", "model-research-behavior-review:ACCEPT", "owner-contract-repair-review:ACCEPT", "final-owner-authority-review:ACCEPT", "staging-model-policy-resolve:HTTP-200:researcher=chatgpt/gpt-5.4-mini/medium", "staging-trajectory:e6283f92-7167-4426-a21a-a13d64b9b04b", "staging-researcher-run:1af42058-a64d-45b3-a7a3-863265d401a0:completed"]
     rollback_ref: 474b9b70214ba6c063e6e3231430ce75474e014c
+    disposition: complete
+
+  - id: R1-runtime-extinction-final-repair-17
+    boundary: implement
+    commit_or_artifact: 8784a085
+    proof_refs: ["source-review:CorrectedRepairReview:ACCEPT", "agentcore-tests:PASS", "toolregistry-tests:PASS", "runtime-ratchet:PASS:production_importers=0,wrappers=0,tools=50"]
+    rollback_ref: 232dd36d521acfb103e8a87148f1e51b92360520
+    disposition: complete
+
+  - id: R1-recipient-build-deadline-18
+    boundary: implement
+    commit_or_artifact: e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13
+    proof_refs: ["promotion-timeout-review:PromotionTimeoutReview:ACCEPT", "https://github.com/choir-hip/go-choir/actions/runs/29382447010", "deploy-job:87249292258", "activation-receipt:e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13@2026-07-15T01:53:14Z", "candidate-verification:autoputer-acceptance-232dd36d:passed"]
+    rollback_ref: 8784a085
+    disposition: complete
+
+  - id: R1-persistent-computer-terminal-acceptance-19
+    boundary: accept
+    commit_or_artifact: autoputer-acceptance-232dd36d
+    proof_refs: ["scoped-submission:a802a41c-1f4a-48b5-8bbb-5dee5e998534", "texture-doc:868d772c-045f-4f5d-b4ab-689c97c20336", "texture-revision:5581ab21-d99b-4189-a4c4-61b6a2a15331", "restart:epoch-1882-to-1884", "containment:ak_c2757ec1-a13c-4ccc-8bcd-8648497125df:HTTP-403", "promotion:refs/computers/primary/candidates/autoputer-acceptance-232dd36d-target", "rollback:refs/computers/primary/active@2026-07-15T02:06:17Z"]
+    rollback_ref: refs/computers/primary/active
     disposition: complete
 
 view:
