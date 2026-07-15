@@ -137,11 +137,11 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: blocked_review
-  slice: "repair final clean-cutover ratchet findings before product acceptance"
-  question: "Will deleting the deprecated delegate_worker_vm alias and closing the ratchet's dynamic-tool and ownership-package import blind spots make the frozen runtime-free source mechanically complete?"
+  status: blocked_product_acceptance
+  slice: "finish source cutover review and diagnose recipient candidate build termination"
+  question: "Will the frozen clean-cutover repair pass independent review, and why did the deployed recipient build kill the sandbox compilation before producing target artifacts?"
   reconciliation:
-    observed_at: 2026-07-15T01:00:53Z
+    observed_at: 2026-07-15T01:07:21Z
     source_ref: refs/remotes/origin/main@232dd36d521acfb103e8a87148f1e51b92360520
     deploy_identity: "CI 29378501285 PASS; deploy job 87237465845; activation receipt 232dd36d521acfb103e8a87148f1e51b92360520@2026-07-15T00:23:23Z."
     authority_identities:
@@ -151,22 +151,22 @@ now:
       - docs/runtime-dissolution-inventory.yaml@canonical_parent:232dd36d521acfb103e8a87148f1e51b92360520
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: final_review_blocked
+    status: source_repair_reviewing_product_candidate_blocked
     protected_surfaces: [tool_registry, runtime_extinction_ratchet, external_agent_tool_contract, deployment_identity, candidate_promotion, persistent_computer_state]
     admissible_evidence: "Exact registered-tool inventory; no retired runtime imports in any production package; focused registry and ratchet tests; regenerated inventory; independent frozen review; canonical CI/deploy identity; deployed no-SSH, restart, promotion/rollback, and containment receipts."
     rollback_ref: 232dd36d521acfb103e8a87148f1e51b92360520
-    conjecture_delta: "The runtime package and production imports are gone, but clean cutover is not yet complete: final independent review found one registered deprecated tool alias and two ratchet blind spots. Deployed acceptance has proved scoped refusal and restart recovery, while candidate verification remains in progress."
+    conjecture_delta: "The frozen source repair now removes the deprecated alias, inventories 50 qualified Tool declarations across all production packages, rejects dynamic names, and passes focused owner/registry/ratchet tests. Product acceptance remains blocked independently: candidate adoption autoputer-acceptance-232dd36d failed because the recipient sandbox build was killed after 14m54s before producing runtime/UI artifact digests."
     heresy_delta:
-      discovered: "Production still registers delegate_worker_vm as a deprecated alias of start_worker_delegation; the ratchet omits dynamically named registered tools and excludes owner-package imports from its zero-import claim."
+      discovered: "Recipient candidate builds can terminate during sandbox compilation without producing target artifact digests; the refusal is durable and correctly prevents promotion."
       introduced: none
-      repaired: none
+      repaired: "The frozen source repair deletes delegate_worker_vm registration and executable callers, counts Tool literals across production packages, rejects dynamic tool names without misclassifying package-local Tool types, and counts retired runtime imports in owner packages."
   candidate:
     id: R1-runtime-extinction-final-repair-17
-    state: review_blocked
-    ref: refs/remotes/origin/main@232dd36d521acfb103e8a87148f1e51b92360520
+    state: frozen_review_pending
+    ref: worktree@sha256:89cc8c6f9267c559955bc07a0b5163da3c8a139f83387fdc7c825edc13d4d9a5
     owner: orchestrator
     base: refs/remotes/origin/main@232dd36d521acfb103e8a87148f1e51b92360520
-    digest: "Delete the deprecated tool alias, make the inventory account for or reject dynamic registered names, count retired imports in every production package, regenerate the ratchet, and freeze the minimal repair."
+    digest: "Clean-cutover source repair frozen after focused tests and exact ratchet PASS; independent final review is running."
     scope: [vmctl_tool_registration, runtime_inventory_tool_names, retired_runtime_imports, runtime_ratchet]
   evidence_refs:
     - "final-independent-review:FinalCompletionReview:REJECT:P1 delegate_worker_vm compatibility alias"
@@ -174,8 +174,9 @@ now:
     - "final-independent-review:FinalCompletionReview:P2 ownership-package retired-import exclusion"
     - "deployed-restart: primary stopped at epoch 1882 and recovered ready at epoch 1884; Texture document 8d91f7c5-6467-4285-a357-0d8ea9fb447c retained revision 21924b19-d183-46e6-a172-617ddc636928"
     - "deployed-containment: scoped key ak_c2757ec1-a13c-4ccc-8bcd-8648497125df received HTTP-403 missing required scope write:runtime for computer stop and was revoked"
-  blocker_or_risk: "P1 source blockers remain. The deployed candidate adoption autoputer-acceptance-232dd36d is still verifying; no promotion or rollback claim is admissible yet."
-  next_action: "Commit this problem receipt before repair code, then delete the alias, close both ratchet blind spots, regenerate the inventory, run focused tests and the ratchet, and obtain independent exact-diff acceptance."
+    - "candidate-adoption:autoputer-acceptance-232dd36d:blocked; actual-recipient-runtime-ui-build failed: runtime build signal killed after 14m54.181858208s; no-cross-computer-binary-copying refused missing target runtime/UI digests"
+  blocker_or_risk: "Source repair awaits independent review. Product acceptance is blocked by the recipient candidate build termination; no promotion or rollback claim is admissible."
+  next_action: "Obtain exact-diff source review, land the accepted cutover, then diagnose the recipient build termination from the durable verifier receipt before attempting another candidate."
 
 receipts:
   - id: predecessor-B0-authority
