@@ -137,55 +137,45 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: working
-  slice: "land the tagged integration ownership repair and re-enter canonical CI"
-  question: "Will canonical CI accept the deletion-first repair and deploy the direct textureowner product path?"
+  status: blocked_review
+  slice: "repair final clean-cutover ratchet findings before product acceptance"
+  question: "Will deleting the deprecated delegate_worker_vm alias and closing the ratchet's dynamic-tool and ownership-package import blind spots make the frozen runtime-free source mechanically complete?"
   reconciliation:
-    observed_at: 2026-07-15T00:04:41Z
-    source_ref: staged-repair@sha256:0b0dd8dc9762b2e26cd789fd94aa2e32cfabacc3eaa3cd7883ce429325970cf7
-    deploy_identity: not_deployed_ci_blocked
+    observed_at: 2026-07-15T01:00:53Z
+    source_ref: refs/remotes/origin/main@232dd36d521acfb103e8a87148f1e51b92360520
+    deploy_identity: "CI 29378501285 PASS; deploy job 87237465845; activation receipt 232dd36d521acfb103e8a87148f1e51b92360520@2026-07-15T00:23:23Z."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-      - docs/runtime-dissolution-inventory.yaml@production_importers:0,wrappers:0,tools:37
+      - docs/runtime-dissolution-inventory.yaml@canonical_parent:232dd36d521acfb103e8a87148f1e51b92360520
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: integration_owner_repair_implemented_local
-    protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
-    admissible_evidence: "Exact owner/caller map; focused production-order restart tests; exact delegation validation tests; exhaustive legal-Go ratchet fixtures; all four agentcore and Texture owner shards; frozen independent review; CI, staging identity, and deployed product-path acceptance."
-    rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    conjecture_delta: "Root-cause clustering now has three symptoms: stale API ownership, stale verifier ownership, and an obsolete implicit-write expectation. The substrate is one superseded integration model. internal/agentcore/texture_real_llm_test.go uses a text-only provider and expects completed model text to become a canonical revision, which the accepted explicit Texture write-tool contract intentionally forbids. internal/agentcore/texture_live_llm_workflow_test.go is the existing replacement: it exercises the current search, worker, artifact, verification, and canonical-write product path. Delete the superseded test; move and wire the replacement directly to textureowner."
+    status: final_review_blocked
+    protected_surfaces: [tool_registry, runtime_extinction_ratchet, external_agent_tool_contract, deployment_identity, candidate_promotion, persistent_computer_state]
+    admissible_evidence: "Exact registered-tool inventory; no retired runtime imports in any production package; focused registry and ratchet tests; regenerated inventory; independent frozen review; canonical CI/deploy identity; deployed no-SSH, restart, promotion/rollback, and containment receipts."
+    rollback_ref: 232dd36d521acfb103e8a87148f1e51b92360520
+    conjecture_delta: "The runtime package and production imports are gone, but clean cutover is not yet complete: final independent review found one registered deprecated tool alias and two ratchet blind spots. Deployed acceptance has proved scoped refusal and restart recovery, while candidate verification remains in progress."
     heresy_delta:
-      discovered: "Three tagged-test symptoms share one substrate: the old agentcore-owned implicit-write integration model survived the production owner/authority cutover. A local credentialed run proved its assertions now fail because no Texture write tool was called; restoring implicit projection would violate the accepted authority contract."
-      introduced: "The superseded tagged model reached origin/main in e278b802 but never deployed because CI blocked staging. One local credentialed diagnostic spent provider calls; it is diagnostic evidence only, not staging acceptance."
-      repaired: "The superseded 960-line implicit-write direct-provider test is deleted. The current live workflow moved from agentcore to textureowner, registers Texture owner tools directly, and invokes owner prompt/verifier methods without a facade. Exact integration smoke, non-tagged owner packages, ratchet, and diff checks pass."
+      discovered: "Production still registers delegate_worker_vm as a deprecated alias of start_worker_delegation; the ratchet omits dynamically named registered tools and excludes owner-package imports from its zero-import claim."
+      introduced: none
+      repaired: none
   candidate:
-    id: R1-texture-owner-cutover-16
-    state: integration_owner_repair_implemented_local
-    ref: staged-repair@sha256:0b0dd8dc9762b2e26cd789fd94aa2e32cfabacc3eaa3cd7883ce429325970cf7
+    id: R1-runtime-extinction-final-repair-17
+    state: review_blocked
+    ref: refs/remotes/origin/main@232dd36d521acfb103e8a87148f1e51b92360520
     owner: orchestrator
-    base: commit:e8055c3b
-    digest: sha256:0b0dd8dc9762b2e26cd789fd94aa2e32cfabacc3eaa3cd7883ce429325970cf7
-    scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
+    base: refs/remotes/origin/main@232dd36d521acfb103e8a87148f1e51b92360520
+    digest: "Delete the deprecated tool alias, make the inventory account for or reject dynamic registered names, count retired imports in every production package, regenerate the ratchet, and freeze the minimal repair."
+    scope: [vmctl_tool_registration, runtime_inventory_tool_names, retired_runtime_imports, runtime_ratchet]
   evidence_refs:
-    - "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."
-    - "test-proof: scripts/go-test-runtime-shards passed all four agentcore shards plus all four Texture owner shards; go build ./... and git diff --check passed; focused actor-wake, owner-restart, lifecycle-event, completion-evidence, publication, spawn, and ratchet tests passed."
-    - "ratchet-proof: runtime dissolution inventory PASS with go_files=128, production_files=70, test_files=58, production_loc=34539, test_loc=46475, exports=824, export_caller_edges=272, initial_unused_export_debt=10, routes=2, tools=37, production_importers=0, wrappers=0, compatibility_markers=6, store_calls=362, interface_candidates=4, citers=1331."
-    - "suite-load-risk: two concurrent full go test ./... runs reached a context deadline in TestCancelRunTrajectoryDrainsMoreThanOneActivePage; the exact test passed standalone and every agentcore/Texture shard passed. Live search-provider tests were disabled for the isolated run."
-    - "independent-review:first-round event/publication projection and canonical Revision completion evidence accepted with confidence 0.93; four second-round blockers were documented in commit ffcf3592 before repair."
-    - "repair-proof: go test ./internal/actorruntime ./internal/coagentowner ./internal/agentcore ./internal/textureowner ./internal/sandbox ./cmd/runtime-ratchet -count=1 passed; focused startup serialization, first-wake identity, adversarial explicit profile, and legal-Go wrapper fixtures passed; go test -race startup serialization passed."
-    - "independent-review:final wake ordering and first-identity recovery accepted with confidence 0.95; full cutover found no additional blocker beyond explicit-profile aliases."
-    - "independent-review:blocking P1 at internal/coagentowner/spawn_tool.go:168-174; exactTarget canonicalizes aliases such as research into an allowed explicit researcher profile."
-    - "alias-repair-proof: TestSpawnAgentRejectsInvalidExplicitProfile and full internal/coagentowner passed; runtime dissolution ratchet PASS with unchanged counts; git diff --check passed."
-    - "independent-review:focused exact diff 6f63fdd7..7782227e accepted with confidence 0.99 and no blockers; explicit aliases/case/token variants reject before StartCoagentRun while fuzzy role and omitted-profile paths remain unchanged."
-    - "ci-failure:https://github.com/choir-hip/go-choir/actions/runs/29376823215 job 87231968694; non-tagged agentcore/textureowner shard passed, then integration-tagged agentcore build failed on deleted HandleTextureCreateDocument, HandleTextureRevisions, HandleTextureAgentRevision, and unexported texture payload types; deploy job skipped."
-    - "local-reproduction: go test -tags=integration ./internal/agentcore ./internal/textureowner -run '^$' compiled the moved real-LLM test under textureowner, then failed agentcore/texture_live_llm_workflow_test.go on deleted HandlePromptBar, VerifyTextureWorkflow, and TextureWorkflowVerificationOptions."
-    - "root-cause-receipt: credentialed local diagnostic ran the moved direct-provider tests; several failed because completed text created no canonical revision without a Texture write tool. This confirms the test is superseded by the explicit-write contract rather than identifying a production regression."
-    - "replacement-proof: scripts/go-test-integration passed locally with ZAI_API_KEY and FIREWORKS_API_KEY explicitly empty after wiring texture_live_llm_workflow_test.go to textureowner; agentcore had no integration tests to run and textureowner compiled the current workflow."
-    - "repair-proof: scripts/go-test-integration PASS with provider/live opt-ins disabled; go test ./internal/agentcore ./internal/textureowner PASS; runtime ratchet PASS at go_files=127, production_files=70, test_files=57, production_loc=34539, test_loc=45519, exports=813, production_importers=0, wrappers=0, tools=37; git diff --check PASS."
-  blocker_or_risk: "No local blocker for the registered CI repair. Canonical CI/deploy and staging acceptance remain outstanding. Optional comprehensive-tagged tests still contain stale retired-surface callers; this disclosed corpus debt is not in the CI integration gate and must be clustered before any later repair."
-  next_action: "Commit and push the deletion-first tagged repair, monitor canonical CI and staging identity, then execute the deployed persistent-computer acceptance path."
+    - "final-independent-review:FinalCompletionReview:REJECT:P1 delegate_worker_vm compatibility alias"
+    - "final-independent-review:FinalCompletionReview:REJECT:P1 dynamically named tools absent from inventory"
+    - "final-independent-review:FinalCompletionReview:P2 ownership-package retired-import exclusion"
+    - "deployed-restart: primary stopped at epoch 1882 and recovered ready at epoch 1884; Texture document 8d91f7c5-6467-4285-a357-0d8ea9fb447c retained revision 21924b19-d183-46e6-a172-617ddc636928"
+    - "deployed-containment: scoped key ak_c2757ec1-a13c-4ccc-8bcd-8648497125df received HTTP-403 missing required scope write:runtime for computer stop and was revoked"
+  blocker_or_risk: "P1 source blockers remain. The deployed candidate adoption autoputer-acceptance-232dd36d is still verifying; no promotion or rollback claim is admissible yet."
+  next_action: "Commit this problem receipt before repair code, then delete the alias, close both ratchet blind spots, regenerate the inventory, run focused tests and the ratchet, and obtain independent exact-diff acceptance."
 
 receipts:
   - id: predecessor-B0-authority
