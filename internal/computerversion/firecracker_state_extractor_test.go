@@ -27,6 +27,14 @@ const (
 // copy, or mutate a VM. It performs read-only filesystem traversal of the
 // persistent directory and computes content hashes for blob-set observations.
 //
+// TEST SCAFFOLDING ONLY. This extractor lives in a _test.go file so it cannot
+// link into production code. Its sole role is the round-trip inverse of the
+// state generator: proving that Generate wrote to the filesystem exactly what
+// the typed tape said. Host-side filesystem extraction is not admissible
+// acceptance evidence — production verification must read state back through
+// the authenticated product path (see the audited-autoputer Definition,
+// not_done_when).
+//
 // The extractor interprets each file in the persistent directory as a
 // file_manifest entry (path, size, content hash) and each unique content hash
 // as a blob_set entry. This produces the same observation structure as the
