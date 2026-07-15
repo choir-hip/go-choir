@@ -138,28 +138,28 @@ measures:
 
 now:
   status: working
-  slice: "A1 root-run amplification repaired and locally verified; canonical CI pending"
-  question: "Does the corrected A1 candidate preserve one authoritative terminal RunRecord and reject root runs before any binding-store read while retaining exact delegated-child delivery and restart repair?"
+  slice: "A1 deployed terminal-outcome product path accepted; A2 atomic trajectory terminalization defined"
+  question: "Can one store-owned mutation settle or cancel each trajectory with every joined authority transition, then fence late work, updates, runs, and actor reactivation at the same terminal boundary?"
   reconciliation:
-    observed_at: 2026-07-15T06:17:23Z
-    source_ref: "refs/remotes/origin/main@1089c3cd + candidate sha256:de391a728c32bbf480e4a9e1362e0b3dab3afcbd68d6f3609362a3c9f1895a3d"
-    deploy_identity: "Repair is not deployed. Canonical staging remains closed behind failed CI 29392822789 until the corrected source is pushed and accepted."
+    observed_at: 2026-07-15T06:34:03Z
+    source_ref: refs/remotes/origin/main@dbb46b1dbbeaff05f16c62e05cbbe6d29328f225
+    deploy_identity: "CI 29393856407 passed; deploy job 87283539331 published sandbox and gateway activation receipt dbb46b1dbbeaff05f16c62e05cbbe6d29328f225@2026-07-15T06:25:57Z."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-    status: repair_verified_local
+    status: a1_accepted_a2_defined
     acceptance_level: blocked_incomplete
     mutation_class: red
     protected_surfaces: [run_record_outcome_authority, coagent_delivery, texture_trajectory_lifecycle, privileged_super_activation, run_acceptance, persistent_computer_state, deployment_identity]
     admissible_evidence: "Focused source contracts plus independent frozen-candidate review; then canonical pushed source, CI and staging identity, no-SSH product-path trajectories, exact authenticated artifact bytes, restart recovery, cohort recomputation, and allowlisted historical-transition receipts."
     rollback_ref: 4ef6170d11350443965c7adf89802136e4bcf133
-    conjecture_delta: "A1 local contracts now support the terminal-outcome conjecture: explicit packets carry producer-run identity before dispatch, terminal persistence binds only the final requester-addressed packet or one deterministic reference envelope, delivery recomputes the RunRecord digest and projects Result/Error without persisting a second copy, and boot exhaustively repairs and wakes every affected target. CI, staging identity, deployed plain-result delivery, and restart proof remain required before A1 is accepted."
+    conjecture_delta: "A1 is accepted on the deployed product path: one tool-free researcher child persisted the exact terminal Result, emitted one deterministic requester-addressed reference packet, woke Texture, and produced one exact canonical revision; stop/start replay preserved both RunRecords, one consumed update identity, two revisions, and zero pending updates. A2 remains necessary because successful document trajectories terminate as cancelled rather than settled and five historical settlement-ready trajectories remain live."
     heresy_delta:
       discovered: "Six document trajectories are live with zero open work and zero pending updates after their children reached terminal states; plain researcher Result text can be dropped; one Super update has two activation triggers; and the prior filesystem proof accepted a Texture revision whose own content said execution evidence was pending."
       introduced: "A1 calls bindTerminalRunOutcome for every cancelled run and reloads the persisted RunRecord before rejecting root runs. The 1,001-run trajectory drain therefore performs 1,001 unnecessary point reads and exhausts the test deadline."
-      repaired: "Candidate-only: terminal-first requester binding, reference-only delivery projection, binding/delivery race serialization, cross-run update-ID separation, keyset-exhaustive boot repair, and an early RequestedByRunID guard that prevents root terminalization from reading binding state. No deployed repair is claimed."
+      repaired: "Deployed A1: terminal-first requester binding, reference-only delivery projection, binding/delivery race serialization, cross-run update-ID separation, keyset-exhaustive boot repair, root-run store guard, one durable Texture wake, and restart-idempotent outcome delivery."
     problems:
       - id: terminal-outcome-delivery-gap
         classification: substrate
@@ -169,7 +169,7 @@ now:
         evidence: "CI 29392822789 failed twice at TestCancelRunTrajectoryDrainsMoreThanOneActivePage with lookup run context deadline exceeded after 37s. The fixture uses 1,001 root CoSuper runs; bindTerminalRunOutcome reloads each run before ensurePersistedTerminalRunOutcome observes RequestedByRunID is empty."
       - id: trajectory-terminalization-gap
         classification: substrate
-        evidence: "The deployed snapshot has six live document trajectories with require_no_open_work_items=true, zero open work, and zero pending updates; the generic settlement evaluator has no atomic mutation consumer."
+        evidence: "After dbb46b1d deployment, successful A1 trajectory 124ff000-da1a-43ce-8708-10a89a736461 reached exact Texture output with zero open work and zero pending updates but status cancelled, not settled. Five older settlement-ready trajectories remain live. A2 must replace this split post-hoc behavior with one atomic store authority."
       - id: privileged-super-double-trigger
         classification: substrate
         evidence: "One update is both actor-woken and synchronously reconciled, matching deployed twin privileged runs from the same requested_by_run_id."
@@ -188,6 +188,11 @@ now:
       - "ci:https://github.com/choir-hip/go-choir/actions/runs/29392822789:FAIL twice:job 87279811257 then 87280533264"
       - "repair-candidate:sha256:de391a728c32bbf480e4a9e1362e0b3dab3afcbd68d6f3609362a3c9f1895a3d"
       - "repair-contracts:artifact://1949:13 root-guard, terminal-binding, restart, race, keyset, and 1,001-run trajectory-drain tests passed"
+      - "ci:https://github.com/choir-hip/go-choir/actions/runs/29393856407:PASS"
+      - "deploy-job:87283539331:activation-receipt dbb46b1dbbeaff05f16c62e05cbbe6d29328f225@2026-07-15T06:25:57Z"
+      - "a1-deployed:submission/trajectory 124ff000-da1a-43ce-8708-10a89a736461; parent run 330b7ba5-03bc-48ac-859f-dde8106d8bca; researcher run ebabcbe1-186f-4514-a023-278caca5b145; work item 87f88e31-fd28-49cb-a26f-b81431fc8010; update terminal-coagent-outcome-7c04ae69f9a9799e142d2018bf0515ac"
+      - "a1-texture:doc 620533f9-372e-4d5f-bfe0-12fef423d3bb; revision e25d9883-341d-4376-af24-3f081c3c7eeb; hash rev2:dc91ea77c34c15e6c1e04a18b48a950b93410d5dd3629e68f97d4fa985305898; exact 105-byte sentence"
+      - "a1-restart:computer stop/start recovery 2026-07-15T06:32:24Z..06:32:33Z; parent and child remained completed; same update consumed once; revision count remained two; pending updates remained zero"
     selected_sequence:
       - "A1: persist terminal RunRecord first; bind one deterministic delivered outcome; repair the persistence/binding crash gap; retain only the actor-owned durable Super wake."
       - "A2: enable one store-owned atomic trajectory terminalization authority and fence work, update, run, and reactivation admission after terminal status."
@@ -223,14 +228,15 @@ now:
       - "candidate-transition:owner_approved -> adopted -> rolled_back"
   candidate:
     id: A1-terminal-outcome-binding-01
-    state: repair_verified_local
+    state: accepted
     owner: orchestrator
     base: 1089c3cd
-    digest: sha256:de391a728c32bbf480e4a9e1362e0b3dab3afcbd68d6f3609362a3c9f1895a3d
+    commit: dbb46b1dbbeaff05f16c62e05cbbe6d29328f225
     scope: [terminal_outcome_binding, requester_identity, reference_only_projection, binding_delivery_serialization, exhaustive_restart_repair, root_run_store_guard]
-    disposition: pending_canonical_ci
-  blocker_or_risk: "The repair is locally proven but not canonical or deployed. CI must show the same 1,001-run shard contract no longer exhausts its deadline. A2 closure and B strict artifact acceptance remain dark."
-  next_action: "Commit and push the two-file A1 repair plus this Definition update, require green CI and staging identity, then run the deployed plain-terminal outcome and restart acceptance before authorizing A2."
+    proof_refs: [ci-29393856407, deploy-87283539331, trajectory-124ff000-da1a-43ce-8708-10a89a736461, researcher-run-ebabcbe1-186f-4514-a023-278caca5b145, texture-revision-e25d9883-341d-4376-af24-3f081c3c7eeb, restart-recovery-2026-07-15T06:32:24Z]
+    disposition: complete
+  blocker_or_risk: "A1 is accepted, but the same proof trajectory ended cancelled instead of settled and five historical settlement-ready trajectories remain live. A2 atomic authority, B strict artifact acceptance, allowlisted repair, and final cohort recomputation remain dark."
+  next_action: "Implement A2 as one store-owned terminalization mutation plus admission fences, prove settlement/cancellation concurrency and boot idempotency locally, then freeze and independently review the candidate before canonical deployment."
 
 receipts:
   - id: predecessor-B0-authority
