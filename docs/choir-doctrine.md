@@ -47,12 +47,11 @@ replaced by executable enforcement. Invariants trend toward TLA+ specs
 model-checked in CI, and heresies trend toward detectors that fail CI on
 regression. This document trends toward thesis + invariants + pointers. The
 mission form for long-running work is now `skills/definition/SKILL.md`
-(`/goal <doc>.md`); the current executable Definition for the OG/Dolt/heresy
-program is
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md).
-The older hard-cutover source was folded into that Definition and removed from
-the working-tree retrieval corpus. A heresy
-entry below without a CI detector is a heresy entry that is not yet done being
+(`/goal <doc>.md`). The sole current executable product Definition is
+[docs/definitions/choir-audited-autoputer-construction-2026-07-15.md](definitions/choir-audited-autoputer-construction-2026-07-15.md).
+OG/Dolt supplies subordinate requirements and evidence only; it owns no
+sequencing, mutation, resumption, completion, or escalation.
+A heresy entry below without a CI detector is a heresy entry that is not yet done being
 written.
 
 ## System Thesis
@@ -1172,9 +1171,8 @@ pattern. The test: if there are no `chan` declarations in
 
 #### H031 - Candidate Computer Modeled as VM Identity
 
-`status:` **active** (gated on Phase D of the current umbrella mission
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md);
-the older hard-cutover source was absorbed and removed from the working tree).
+`status:` **active** (gated by phases B, D, and F of
+[docs/definitions/choir-audited-autoputer-construction-2026-07-15.md](definitions/choir-audited-autoputer-construction-2026-07-15.md)).
 
 `bad pattern:` Implementing the candidate computer concept as physical VM or desktop instances. This includes forking by cloning a VM/image, running speculative mutations inside a candidate VM, and promotion/rollback as VM-route or image operations.
 
@@ -1184,9 +1182,9 @@ the older hard-cutover source was absorbed and removed from the working tree).
 `scripts/check-heresies.sh` (discovery mode); `.github/workflows/ci.yml`
 `Heresy Detector Discovery` job.
 
-`evidence:` [docs/computer-ontology.md](computer-ontology.md) and
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)
-(current executable authority).
+`evidence:` [docs/computer-ontology.md](computer-ontology.md) and the subordinate
+H031 contract in
+[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md).
 
 `why it violates the spec:` A candidate computer is a speculative fork of a platform or user computer — a forked `ComputerVersion = (CodeRef, ArtifactProgramRef)`, materialized on demand, with speculative effects executing in capsules, not a VM instance. Coupling promotion and routing to VM/desktop IDs violates substrate independence.
 

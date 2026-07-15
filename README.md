@@ -290,18 +290,15 @@ package/adoption protocol evidence only; do not cite them as doctrine-level
 ComputerVersion promotion without an observed route/build cutover and rollback
 proof.
 
-Storage direction (owner decision, 2026-07-08): the Dolt substrate is split into
-a world-wire store (`internal/platform/objectgraph_store.go`, moving to
-sql-server now) and a VM-local embedded store per user VM
-(`internal/objectgraph/dolt_store.go`). Promotion (fork/promote/rollback) is
-an operation on the VM-local embedded store, not a property of the world-wire
-store. D-PROMO is settled for pinned `*sql.Conn` single-writer discipline on the
-embedded store; the current `DoltPromotionAdapter` is tag-only interim and must
-not be enabled in production promotion flow until the Phase D branch-adapter
-conformance binding lands. See the current umbrella
-Definition mission
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](docs/definitions/og-dolt-heresy-completion-2026-07-08.md)
-(older hard-cutover and heresy-eradication docs are superseded source material).
+Storage direction (owner decision, 2026-07-08): exactly two product-state Dolt
+stores remain distinct: the corpusd world-wire sql-server store and each
+computer's VM-local embedded app-state store. Narrow route-slot and transition
+receipt tables live on corpusd with vmctl as sole CAS writer; they are route
+control, not a third product-state store. The current `DoltPromotionAdapter`
+remains tag-only and non-conformant. These nonconformant paths remain blocked;
+the active
+[audited-construction Definition](docs/definitions/choir-audited-autoputer-construction-2026-07-15.md)
+exclusively assigns and sequences replacement or deletion.
 
 ## Services
 

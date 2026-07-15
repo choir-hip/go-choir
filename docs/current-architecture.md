@@ -1,11 +1,11 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-14. Every claim is marked **Live**, **Target**, or
+**Last updated:** 2026-07-15. Every claim is marked **Live**, **Target**, or
 **Retired**. Current execution authority is
-[docs/definitions/choir-autoputer-completion-2026-07-14.md](definitions/choir-autoputer-completion-2026-07-14.md);
-the OG/Dolt Definition supplies subordinate detector/deletion/history contracts
-only. Earlier assessments and hard-cutover sources remain absorbed historical
-evidence.
+[docs/definitions/choir-audited-autoputer-construction-2026-07-15.md](definitions/choir-audited-autoputer-construction-2026-07-15.md);
+the OG/Dolt Definition supplies subordinate D-ROUTE, detector, and deletion
+contracts to phases B, D, and F only. Earlier assessments and hard-cutover
+sources remain absorbed historical evidence.
 Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
 conjecture vocabulary; see the Ontology section.)
 
@@ -89,11 +89,9 @@ DB polling (H030 repaired). `internal/runtime` is the live business-logic layer
 (~106K LOC of tool loops, texture state machine, wire synthesis, run memory)
 awaiting *extraction and deletion*, not a zombie awaiting wiring. **Retired
 (residue still in tree):** parent/child run control and RunContinuations are
-named heresies (H001–H008) with deletion scheduled in the current umbrella
-mission [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)
-(Phase B/C; the older hard-cutover mission doc is superseded source material).
-They must receive no new callers. This section states the settled vocabulary so
-new work stops accreting on the retired ontology.
+named heresies (H001–H008). They have no current execution assignment and must
+receive no new callers; any future mutation requires explicit active-Definition
+authority.
 
 | Term | Meaning |
 |---|---|
@@ -690,8 +688,8 @@ This section is the current authority for the public-identity roadmap target.
   The variable and proxy direct-file-open path are obsolete embedded-mode
   relics: embedded Dolt cannot be shared this way with the runtime process.
   Keep `PROXY_RUNTIME_DB_PATH` unset in embedded deployments and do not call
-  the owner/desktop resolver “route-over-ComputerVersion”; Phase D deletes the
-  seam after a real control-store/materializer resolver exists.
+  the owner/desktop resolver “route-over-ComputerVersion.” The active
+  audited-construction Definition exclusively assigns replacement or deletion.
 - **Timeout hardening (I3):** `vmctl.Client` and `DefaultVmctlTimeout` default to
   60s, `internal/server/server.go` sets `ReadTimeout`/`WriteTimeout` defaults to
   120s, and staging `/api/universal-wire/stories` returns a fast 504 within
@@ -796,9 +794,9 @@ Promotion (fork/promote/rollback) operates against this embedded store, not
 against the world-wire store and not a separate promotion workspace. D-PROMO
 is settled for pinned `*sql.Conn` single-writer discipline on the embedded
 store: the `TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` bar
-passes. The current `DoltPromotionAdapter` is tag-only interim and must not be
-enabled in any production promotion flow until the Phase D branch-adapter
-conformance binding lands.
+passes. The current `DoltPromotionAdapter` is tag-only, non-conformant, and
+must remain disabled; the active audited-construction Definition exclusively
+assigns replacement or deletion.
 
 Per-user snapshot filesystem holds workspace and file state:
 

@@ -57,8 +57,7 @@ Definition; no second product mission remains active.
 6. `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` for overlapping
    deletion gates and executable detectors.
 7. Observed repository, CI, staging, and product artifacts.
-8. Historical runtime extraction plan in Git history at
-   `99a995eb^:docs/runtime-deletion-and-extraction-plan-2026-06-27.md` as
+8. Historical runtime extraction plan in the parent tree of `99a995eb` as
    evidence only, not live authority.
 
 A subordinate Definition cannot reorder this suite or widen its own scope. A
@@ -661,7 +660,7 @@ evidence_ledger:
     uncertainty: Must be remeasured at S0 because the worktree may change.
   - claim: Historical runtime reduction target was directory deletion, not a smaller runtime package.
     evidence_class: observed Git history
-    source: 99a995eb^:docs/runtime-deletion-and-extraction-plan-2026-06-27.md
+    source: parent tree of 99a995eb, historical runtime extraction plan
     result: approximately 40K live app lines move, 6K-8K core moves, internal/runtime deleted
     uncertainty: Package boundaries are evidence, not automatically binding current design.
   - claim: Pre-definition consensus supports deploy-unblock, Wire cutover, ratcheted dissolution, then autoputer phases.

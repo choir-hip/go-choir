@@ -202,10 +202,9 @@ This is the strongest hypothesis and the evidence is quantitative:
   CI + deploy + staging observation per probe, ~30–60 min per iteration),
   substrate defects that an autoputer-focused mission would surface in
   minutes with direct instrumentation.
-- The repo already knew this. `specs/autoputer_lifecycle.tla:19` cites
-  `docs/mission-autoputer-before-autopaper-v0.md` — the canonical-sequence
-  doctrine **existed and has been deleted** from `docs/`. The sequence was
-  written down and then shortcut, exactly as the operator suspects.
+- The repo already knew this. `specs/autoputer_lifecycle.tla:19` cites the
+  now-deleted canonical-sequence doctrine. The sequence was written down and
+  then shortcut, exactly as the operator suspects.
 - The self-development loop itself is part of the unmet prerequisite: the
   deploy verifier (C3) failed correct deploys repeatedly, so even the
   *repair* loop was unreliable. An agent cannot converge on a product when

@@ -121,18 +121,12 @@ D-STORES and D-WIRE in
   a property of the world-wire store and not a separate promotion workspace.
 
 Branch isolation on the VM-local embedded store is settled for pinned
-single-writer connections (D-PROMO). The current `DoltPromotionAdapter` remains
-tag-only and non-conformant; it must not be enabled in a production promotion
-flow until the Phase D branch adapter and conformance binding land. Rollback on a shared
-main branch via `DOLT_RESET --hard` is not an admissible production mechanism
-(I4); rollback is a route flip or an isolated-branch operation.
-
-**Do-not-wire warning:** the inert interim adapter's `Rollback` method still
-uses `DOLT_RESET --hard` on main. The former runtime `WithPromotionAdapter`
-forwarding seam has been deleted; the canonical promotion service's adapter
-setter has no production caller. Wiring this adapter would introduce the I4
-violation; it must remain unwired until the Phase D branch-based replacement
-lands.
+single-writer connections (D-PROMO), but the current `DoltPromotionAdapter`
+remains tag-only and non-conformant. Its `Rollback` method still uses forbidden
+`DOLT_RESET --hard` on main, and its setter has no production caller. The
+adapter must remain unwired. The active audited-construction Definition
+exclusively assigns and sequences its replacement or deletion; no historical
+Phase D/E assignment authorizes work.
 
 ## Ledger Split
 

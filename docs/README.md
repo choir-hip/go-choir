@@ -36,7 +36,7 @@ They are the whole default packet; historical material is opt-in.
    — canonical artifact contract.
 10. [`source-external-data-publication.md`](source-external-data-publication.md)
     — source, provenance, and publication contract.
-11. [`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md)
+11. [`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md)
     — the sole active top-level product Definition and mission orchestrator.
 
 The compact registry and views point to the source documents; none can override

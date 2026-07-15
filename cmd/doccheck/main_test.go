@@ -371,6 +371,34 @@ func TestValidateLiveReadPathRejectsInvalidMissionGraphEntrypointCardinality(t *
 	}
 }
 
+func TestValidateLiveReadPathRejectsInvalidMissionGraphEntrypointIdentity(t *testing.T) {
+	tests := []struct {
+		name       string
+		mutate     func(*missionGraphNode)
+		wantDetail string
+	}{
+		{name: "status", mutate: func(node *missionGraphNode) { node.Status = "superseded" }, wantDetail: `status="superseded"`},
+		{name: "kind", mutate: func(node *missionGraphNode) { node.Kind = "product_completion" }, wantDetail: `kind="product_completion"`},
+		{name: "execution mode", mutate: func(node *missionGraphNode) { node.ExecutionMode = "subordinate_only" }, wantDetail: `execution_mode="subordinate_only"`},
+		{name: "path", mutate: func(node *missionGraphNode) { node.Path = "docs/definitions/old.md" }, wantDetail: `path="docs/definitions/old.md"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rep := completeLivePacketReport()
+			tt.mutate(&rep.MissionGraph.Nodes[0])
+
+			failures := validateLiveReadPath(rep)
+			if len(failures) != 1 {
+				t.Fatalf("validateLiveReadPath() failure count = %d, want 1: %#v", len(failures), failures)
+			}
+			if failures[0].Rule != "L5" || !strings.Contains(failures[0].Message, tt.wantDetail) {
+				t.Fatalf("validateLiveReadPath() failure = %#v, want L5 containing %q", failures[0], tt.wantDetail)
+			}
+		})
+	}
+}
+
 func completeLivePacketReport() report {
 	rep := report{}
 	for _, path := range defaultReadPacket {
@@ -381,7 +409,7 @@ func completeLivePacketReport() report {
 			Exists:      true,
 			Annotations: map[string]string{},
 		}
-		if path == "docs/definitions/choir-autoputer-completion-2026-07-14.md" {
+		if path == "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md" {
 			doc.Annotations["doc_role"] = "definition"
 			doc.IsRoot = []string{"authority", "entry"}
 		}
@@ -391,8 +419,15 @@ func completeLivePacketReport() report {
 		}
 	}
 	rep.MissionGraph = graphReport{
-		Path:  defaultGraph,
-		Nodes: []missionGraphNode{{ID: "current", EntryPoint: true}},
+		Path: defaultGraph,
+		Nodes: []missionGraphNode{{
+			ID:            "current",
+			Path:          "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md",
+			EntryPoint:    true,
+			ExecutionMode: "mission_orchestrator",
+			Status:        "working",
+			Kind:          "spine",
+		}},
 	}
 	return rep
 }

@@ -7,7 +7,7 @@ policy in the runtime extraction plan.
 **Class:** red — protected surface (runtime, execution substrate)
 **Worktree:** /Users/wiz/.windsurf/worktrees/go-choir/m8-runtime-refactor
 **Branch:** orchestrator/m8-runtime-refactor
-**Spec:** `docs/runtime-deletion-and-extraction-plan-2026-06-27.md`
+**Spec:** historical runtime-deletion and extraction plan retained in Git history
 
 ## Scope — Phase 1 ONLY
 

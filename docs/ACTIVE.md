@@ -54,27 +54,17 @@ maintenance boundary; its 2026-07-14 owner correction restores
 [`archive/`](archive/README.md) as searchable historical context without making
 it active work or revising the product umbrella's semantics.
 
-## Next Executable Work
+## Invocation
 
-The next and only product invocation is:
+The sole product invocation is:
 
 ```text
 /goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 ```
 
-The same command resumes after interruption. The current red sequence is:
-
-1. contain the failed owner realization and inventory every canonical state
-   authority without mutating the source images;
-2. resolve immutable `CodeRef` and `ArtifactProgramRef` inputs and cut routing
-   from owner/desktop/VM identity to D-ROUTE `ComputerVersion` slots;
-3. wire one production function that constructs a fresh filesystem and
-   Firecracker realization from those refs, boots it, and emits a typed receipt;
-4. independently verify exact files, blobs, embedded-Dolt/object-graph state,
-   provenance, health, and geometry before vmctl-owned route CAS;
-5. destroy all realization state, reconstruct from the same
-   `ComputerVersion`, repeat product-path readback, then cut over the real staging
-   owner with rollback.
+This index owns no current slice, next action, execution order, resumption,
+completion, mutation, rollback sequencing, or escalation authority. Consult
+the active Definition.
 
 Ordinary Choir development in capsules controlled by an outside agent through
 Choir CLI is an unauthorized successor until this Definition is complete.

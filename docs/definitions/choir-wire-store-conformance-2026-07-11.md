@@ -5,7 +5,7 @@
 This document is the settled Wire receipt imported by:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
+/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 ```
 
 Do not invoke it as an independent mission. Its world-wire cutover and deletion
@@ -27,7 +27,7 @@ match the decisions that already exist.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-2026-07-14.md`.
+1. `docs/definitions/choir-audited-autoputer-construction-2026-07-15.md`.
 2. This settled subordinate Definition within D-WIRE scope.
 3. `docs/computer-ontology.md` "Dolt Store Taxonomy" (owner two-store
    directive: world-wire store + VM-local embedded store, nothing else) and

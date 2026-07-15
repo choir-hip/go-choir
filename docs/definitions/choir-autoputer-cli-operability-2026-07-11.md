@@ -40,9 +40,9 @@ step 2 requires.
 
 Twelve autopaper attempts failed by shortcutting this sequence
 (`docs/definitions/choir-autopaper-activation-attempt-report-2026-07-11.md`).
-The deleted `docs/mission-autoputer-before-autopaper-v0.md` is historical
-evidence. The active mission is now the executable successor to that doctrine;
-this document remains its operator-contract specification.
+The deleted canonical-sequence document remains historical evidence in Git.
+The active mission is the executable successor to that doctrine; this document
+remains only its historical operator-contract specification.
 
 ## Source Authority Order
 

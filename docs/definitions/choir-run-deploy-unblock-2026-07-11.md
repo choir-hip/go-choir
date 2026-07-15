@@ -5,7 +5,7 @@
 This document is the settled Deploy receipt imported by:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
+/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 ```
 
 Do not invoke it as an independent mission. Its accepted evidence remains a
@@ -24,7 +24,7 @@ details remain here to define what the settled receipt proved.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-2026-07-14.md`.
+1. `docs/definitions/choir-audited-autoputer-construction-2026-07-15.md`.
 2. This settled subordinate Definition as a predecessor receipt.
 3. This section's historical Deploy failure evidence.
 4. `docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md`

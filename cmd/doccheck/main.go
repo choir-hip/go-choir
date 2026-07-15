@@ -25,25 +25,25 @@ const (
 )
 
 var highRead = map[string]bool{
-	"README.md":                                                 true,
-	"AGENTS.md":                                                 true,
-	"docs/README.md":                                            true,
-	"docs/choir-doctrine.md":                                    true,
-	"docs/semantic-registry.md":                                 true,
-	"docs/NOW.md":                                               true,
-	"docs/ACTIVE.md":                                            true,
-	"docs/current-architecture.md":                              true,
-	"docs/platform-os-app-state.md":                             true,
-	"docs/conjecture-assertion-ledger-2026-06.md":               true,
-	"docs/heresy-detectors.md":                                  true,
-	"docs/agent-product-doctrine.md":                            true,
-	"docs/choir-prompting-invariants.md":                        true,
-	"docs/memo-problem-documentation-first.md":                  true,
-	"docs/computer-ontology.md":                                 true,
-	"docs/runtime-invariants.md":                                true,
-	"docs/texture-agentic-invariants-2026-06-13.md":             true,
-	"docs/source-external-data-publication.md":                  true,
-	"docs/definitions/choir-autoputer-completion-2026-07-14.md": true,
+	"README.md":                                     true,
+	"AGENTS.md":                                     true,
+	"docs/README.md":                                true,
+	"docs/choir-doctrine.md":                        true,
+	"docs/semantic-registry.md":                     true,
+	"docs/NOW.md":                                   true,
+	"docs/ACTIVE.md":                                true,
+	"docs/current-architecture.md":                  true,
+	"docs/platform-os-app-state.md":                 true,
+	"docs/conjecture-assertion-ledger-2026-06.md":   true,
+	"docs/heresy-detectors.md":                      true,
+	"docs/agent-product-doctrine.md":                true,
+	"docs/choir-prompting-invariants.md":            true,
+	"docs/memo-problem-documentation-first.md":      true,
+	"docs/computer-ontology.md":                     true,
+	"docs/runtime-invariants.md":                    true,
+	"docs/texture-agentic-invariants-2026-06-13.md": true,
+	"docs/source-external-data-publication.md":      true,
+	"docs/definitions/choir-audited-autoputer-construction-2026-07-15.md": true,
 }
 
 // defaultReadPacket is intentionally small. It includes the docs router plus
@@ -62,7 +62,7 @@ var defaultReadPacket = []string{
 	"docs/runtime-invariants.md",
 	"docs/texture-agentic-invariants-2026-06-13.md",
 	"docs/source-external-data-publication.md",
-	"docs/definitions/choir-autoputer-completion-2026-07-14.md",
+	"docs/definitions/choir-audited-autoputer-construction-2026-07-15.md",
 }
 
 type manifestFile struct {
@@ -148,16 +148,17 @@ type missionGraphFile struct {
 }
 
 type missionGraphNode struct {
-	ID         string   `yaml:"id" json:"id"`
-	Title      string   `yaml:"title" json:"title"`
-	Path       string   `yaml:"path" json:"path,omitempty"`
-	EntryPoint bool     `yaml:"entrypoint" json:"entrypoint"`
-	Ledger     string   `yaml:"ledger" json:"ledger,omitempty"`
-	Status     string   `yaml:"status" json:"status"`
-	Kind       string   `yaml:"kind" json:"kind"`
-	DependsOn  []string `yaml:"depends_on" json:"depends_on,omitempty"`
-	Enables    []string `yaml:"enables" json:"enables,omitempty"`
-	Sources    []string `yaml:"sources" json:"sources,omitempty"`
+	ID            string   `yaml:"id" json:"id"`
+	Title         string   `yaml:"title" json:"title"`
+	Path          string   `yaml:"path" json:"path,omitempty"`
+	EntryPoint    bool     `yaml:"entrypoint" json:"entrypoint"`
+	ExecutionMode string   `yaml:"execution_mode" json:"execution_mode,omitempty"`
+	Ledger        string   `yaml:"ledger" json:"ledger,omitempty"`
+	Status        string   `yaml:"status" json:"status"`
+	Kind          string   `yaml:"kind" json:"kind"`
+	DependsOn     []string `yaml:"depends_on" json:"depends_on,omitempty"`
+	Enables       []string `yaml:"enables" json:"enables,omitempty"`
+	Sources       []string `yaml:"sources" json:"sources,omitempty"`
 }
 
 type graphReport struct {
@@ -793,6 +794,7 @@ func validateLiveReadPath(rep report) []warning {
 	}
 
 	productDefinitions := 0
+	authorityRootPath := ""
 	for _, doc := range rep.Documents {
 		if doc.Scope != "current" || doc.Annotations["doc_role"] != "definition" {
 			continue
@@ -800,6 +802,7 @@ func validateLiveReadPath(rep report) []warning {
 		for _, root := range doc.IsRoot {
 			if root == "authority" {
 				productDefinitions++
+				authorityRootPath = cleanPath(doc.Path)
 				break
 			}
 		}
@@ -809,13 +812,29 @@ func validateLiveReadPath(rep report) []warning {
 	}
 
 	entrypoints := 0
+	var entrypoint missionGraphNode
 	for _, node := range rep.MissionGraph.Nodes {
 		if node.EntryPoint {
 			entrypoints++
+			entrypoint = node
 		}
 	}
 	if entrypoints != 1 {
 		failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("expected exactly one mission graph entrypoint, found %d", entrypoints)})
+	} else if productDefinitions == 1 &&
+		(entrypoint.Status != "working" ||
+			entrypoint.Kind != "spine" ||
+			entrypoint.ExecutionMode != "mission_orchestrator" ||
+			cleanPath(entrypoint.Path) != authorityRootPath) {
+		failures = append(failures, warning{
+			Rule:     "L5",
+			Severity: "error",
+			Path:     rep.MissionGraph.Path,
+			Message: fmt.Sprintf(
+				"mission graph entrypoint must be working mission_orchestrator spine at authority-root path %q; got status=%q kind=%q execution_mode=%q path=%q",
+				authorityRootPath, entrypoint.Status, entrypoint.Kind, entrypoint.ExecutionMode, cleanPath(entrypoint.Path),
+			),
+		})
 	}
 
 	return failures
@@ -869,7 +888,7 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 	entrypoints := 0
 	ids := map[string]missionGraphNode{}
 	validStatus := map[string]bool{"planned": true, "working": true, "open_handoff": true, "settled": true, "superseded": true, "blocked": true}
-	validKind := map[string]bool{"spine": true, "side": true, "product_completion": true, "docs_truth": true, "evidence": true, "superseded": true}
+	validKind := map[string]bool{"spine": true, "side": true, "subordinate_contract": true, "product_completion": true, "docs_truth": true, "evidence": true, "superseded": true}
 	for _, n := range mf.Nodes {
 		if n.EntryPoint {
 			entrypoints++

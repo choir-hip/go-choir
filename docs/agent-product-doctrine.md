@@ -38,12 +38,13 @@ Foreground/canonical state stays stable. Background/candidate computers mutate. 
   are distinct substrates. Promotion is an operation on the embedded store, not a
   property of the world-wire store (see D-STORES in the umbrella mission).
 - **World Wire (formerly Universal Wire):** the public feed surface for the
-  Community Cloud. Documents still using "Universal Wire" are historical or
-  pending the Phase E rename.
+  Community Cloud. Remaining legacy names are historical or require separate
+  current authority.
 - **D-PROMO interim:** branch isolation on the VM-local embedded store is
   settled for pinned single-writer connections; the current
-  `DoltPromotionAdapter` is tag-only interim and must not be enabled for
-  production promotion until the Phase D branch adapter and conformance binding land.
+  `DoltPromotionAdapter` is tag-only, non-conformant, and must remain disabled.
+  The active audited-construction Definition exclusively assigns and sequences
+  replacement or deletion.
 - **Timeout hardening landed:** `vmctl.Client` defaults to 60 seconds and the
   server has bounded read/write timeouts (120-second defaults). Staging proved
   the induced resolve-failure path returns a bounded 504; re-prove after a

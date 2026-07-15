@@ -72,13 +72,11 @@ Subordinate projections: detector manifest + CI job; timeout-hardened
 request path; per-cluster deletion diffs; inverted tests; corrected docs;
 the evidence ledger in this document.
 
-## Mission Purpose And Non-Purpose
+## Historical Purpose Receipt
 
-**Purpose:** Finish what the og-dolt program and heresy-eradication mission
-started — and retire the accumulated open edges of every prior mission — in an
-order that makes false progress impossible: foundations and detectors first,
-truth-corrections to docs and specs next, then the kill waves and cutovers,
-then promotion-over-ComputerVersion, then deletion and doctrine replacement.
+The retired program sought to finish the OG/Dolt and heresy-eradication work
+without false progress. This purpose record supplies no current execution
+sequence, mutation permission, or completion authority.
 
 **Non-purpose:**
 
@@ -243,7 +241,7 @@ kind: term
 status: superseded_by_active_mission_two_store_topology
 source: orchestrator-settled synthesis, unratified; owner two-store directive governs
 superseded_claim: A distinct third Dolt domain owns ComputerVersion route control.
-superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
+superseded_by: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 term: Dolt store taxonomy
 definition: >-
   The live topology has exactly two product-state Dolt stores: (1) the
@@ -295,7 +293,7 @@ migration_notes:
 settlement:
   settled_by: human
   invalidation_triggers:
-    - hard blocker in migration evidence (escalate, don't silently revert)
+    - hard blocker in migration evidence (report as a requirement risk to the active Definition)
 ```
 
 ### D-PROMO. Conjecture: branch isolation on the embedded store — SETTLED
@@ -344,12 +342,12 @@ falsifier: >-
 adapter_requirements_if_supported:
   - All promotion operations for a candidate MUST run on a pinned sql.Conn or sql.Tx, never through the pool; connections must be closed/returned on success, failure, and panic (leak risk is real).
   - Concurrent capsule writers within the VM serialize through the store's single-writer discipline; CAS-retry at application level.
-execution_effect:
-  - Settled supported: Phase D rewrites the adapter to branch operations on the embedded store; the spec's BranchIsolation scope header names the embedded store; sql-server stays a wire-store-only concern.
-  - The tag-based adapter remains interim and off until the branch rewrite lands; DOLT_RESET rollback stays forbidden (I4) for the tag-based path.
-  - All adapter operations must use pinned connections; the store's single-writer discipline and connection pinning provide isolation.
+requirement_effect:
+  - The active Definition alone assigns any branch-adapter, specification, or implementation work.
+  - The tag-based adapter remains interim and disabled; `DOLT_RESET` rollback stays forbidden.
+  - Any future adapter must use pinned connections and preserve single-writer isolation.
 settlement:
-  rule: Settled by the Phase A pinned-connection experiment; result gates Phase D spec and adapter work.
+  rule: Settled by the pinned-connection experiment; the result is requirement evidence, not phase authority.
   settled_by: evidence
 ```
 
@@ -361,7 +359,7 @@ kind: boundary
 status: settled_cas_semantics / superseded_third_store_persistence / violated_implementation
 source: CAS/receipt semantics retained; orchestrator-settled third-store synthesis was unratified and is demoted by owner two-store authority
 superseded_claim: A distinct Dolt-backed platform-control ledger is required.
-superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
+superseded_by: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 authority_object:
   id: computer-version-route-ledger
   name: ComputerVersion route ledger
@@ -437,31 +435,30 @@ conjecture_delta: >-
   if vmctl durably commits one version-to-version CAS and receipt, ordinary
   routing and all human-visible evidence can be made faithful projections of
   that fact; without the receipt, no activation claim exists.
-construction:
-  next_executable_slice:
-    mutation_class: red
-    objective: >-
-      Install the truth gate before the route writer: define the pure
-      RouteTransitionCommand/Receipt and required executor port; make promotion
-      and rollback fail closed when no executor/receipt exists; gate adoption,
-      lineage, UI, Trace, and run acceptance on a receipt; delete the duplicate
-      roll-forward and candidate-intake mutation paths. With no executor wired,
-      the product truthfully reports promotion unavailable.
-    deletion_targets:
-      - internal/runtime/app_promotion.go: RollForwardAppAdoption; a rolled-back version may be promoted again only by a fresh validated CAS command
-      - internal/runtime/candidate_package_intake.go: SwitchCandidatePackageIntakeAdoptionReview, RollbackCandidatePackageIntakeAdoptionReview, and RollForwardCandidatePackageIntakeAdoptionReview, plus their mutating API routes/callers; retain read-only intake/review evidence
-      - frontend/src/lib/FeaturesApp.svelte: canRollForward and status-only active/rollback affordances
-    verifier: >-
-      Inverted tests prove all deleted routes/callers are absent and prove that
-      nil/error/stale receipt paths leave adoption, lineage, UI-visible state,
-      Trace, and run acceptance unchanged.
-  following_slice:
-    - implement the ComputerVersion route-slot tables on the corpusd sql-server and vmctl-only CAS/read APIs, including restart recovery and idempotent receipt lookup
-    - seed each existing slot through the writer with an explicit bootstrap receipt after materialization preflight
-    - cut proxy routing to route-slot read -> ComputerVersion -> vmctl materializer, then delete lineage/hard-coded routing and PROXY_RUNTIME_DB_PATH
-    - replace the tag-only adapter with D-PROMO branch preparation while keeping route activation exclusively in the ledger
-formalization_effect:
-  - Rewrite specs/promotion_protocol.tla before the Go writer so the only route variable maps a route slot to ComputerVersion plus generation; remove any authoritative computer/desktop route.
+subordinate_contract:
+  consumed_by:
+    - B-resolve-immutable-inputs
+    - D-verify-and-route
+    - F-cutover-owner-and-close
+  requirements:
+    - "Define one pure RouteTransitionCommand/Receipt and vmctl-owned CAS port."
+    - "Fail closed when no matching executor receipt exists; adoption, lineage, UI, Trace, and run acceptance remain unchanged."
+    - "Implement ComputerVersion route-slot and receipt tables on the corpusd sql-server; route lookup is route slot → ComputerVersion → materializer."
+    - "Seed existing slots through the sole writer with explicit bootstrap receipts after materialization preflight."
+    - "Keep D-PROMO branch/tag operations as preparation only; they never activate a route."
+  deletion_targets:
+    - internal/runtime/app_promotion.go: RollForwardAppAdoption; a rolled-back version may be promoted again only by a fresh validated CAS command
+    - internal/runtime/candidate_package_intake.go: SwitchCandidatePackageIntakeAdoptionReview, RollbackCandidatePackageIntakeAdoptionReview, and RollForwardCandidatePackageIntakeAdoptionReview, plus their mutating API routes/callers; retain read-only intake/review evidence
+    - frontend/src/lib/FeaturesApp.svelte: canRollForward and status-only active/rollback affordances
+    - LineageBasedRouteResolver, PROXY_RUNTIME_DB_PATH/RuntimeDBPath, lineage/hard-coded routing, and route uses of ActiveSourceRef or RouteProfile
+  verifier_contract: >-
+    Active phases B/D/F must prove deleted routes and callers absent and prove
+    nil, error, stale-receipt, failed-persistence, and failed-materialization
+    paths leave adoption, lineage, UI, Trace, and run acceptance unchanged.
+    This subordinate document supplies requirements only; it owns no next
+    action, implementation order, phase gate, or completion decision.
+formalization_contract:
+  - Require the specification and Go writer to satisfy the named route-slot, receipt, generation, and ComputerVersion conformance contract; implementation order is owned exclusively by the active Definition.
   - Model receipt append and route change as one CAS action, rollback as the same action in reverse, and require NoReceiptWithoutRouteChange, NoRouteChangeWithoutReceipt, AtMostOneWinnerPerGeneration, and NoProjectionBeforeReceipt.
 protected_surfaces:
   - ComputerVersion route authority
@@ -487,12 +484,12 @@ settlement:
     Open until the contract, formal, and deployed product-path evidence above
     are recorded. Merge/tag, lineage, adoption, or desktop publication alone
     cannot settle it.
-execution_effect: >-
-  Phase D may use D-PROMO's settled branch mechanics, but it cannot claim
-  promotion from merge/tag/adoption alone. Until the implementation settles,
-  active and rollback-available product claims fail closed. The roll-forward
-  and candidate-intake switch state machines are superseded future deletions,
-  not compatibility paths to preserve.
+requirement_effect: >-
+  Active phases B/D/F may consume D-PROMO's settled branch mechanics but cannot
+  claim promotion from merge, tag, adoption, or desktop publication. Until the
+  implementation settles, active and rollback-available product claims fail
+  closed. Duplicate roll-forward and candidate-intake switch paths are deletion
+  targets, not compatibility paths.
 rollback_path:
   documentation: revert this authority-decision hunk; no runtime state changed by this pass
   future_red_rollout:
@@ -521,7 +518,7 @@ kind: term
 status: settled_product_state / superseded_route_store_consequence
 source: owner all-in-on-Dolt authority for product state; orchestrator-added third route-store consequence was unratified
 superseded_claim: Route control requires a distinct Dolt persistence domain.
-superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
+superseded_by: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 definition: >-
   Choir commits to Dolt as the load-bearing persistence substrate for durable
   product state. ComputerVersion route-control rows live as tables on the
@@ -533,11 +530,10 @@ non_definition:
   - every ephemeral cache or materializer fact must be stored in Dolt
   - the vmctl JSON ownership registry is durable enough for route authority
   - ComputerSourceLineage can substitute for the ComputerVersion route ledger
-execution_effect:
-  - Phase B/C history-read work and Phase D promotion work execute against Dolt.
-  - Phase D implements D-ROUTE as route-slot and receipt tables on the corpusd sql-server with vmctl as sole atomic CAS writer; it adds neither a third Dolt domain nor a promotion workspace.
-  - Per-write commit/batching, rollback mechanics, AS OF/DOLT_LOG correctness and latency, throughput, ICU/cgo build friction, and replication/sync are engineering verification axes inside the relevant phases, not decision gates.
-  - If evidence exposes an actual feasibility contradiction, document and escalate it; do not silently degrade or re-open the choice by implication.
+requirement_effect:
+  - Active phases B/D/F consume the Dolt product-state requirement and the corpusd route-slot topology.
+  - Commit boundaries, rollback, history correctness/latency, throughput, build friction, and replication remain verification axes, not sequencing or decision authority.
+  - Any demonstrated feasibility contradiction is a requirement risk reported to the active Definition; only that Definition determines escalation and sequencing.
 settlement:
   rule: Settled by owner authority. Verification tasks may change implementation tactics but not the chosen substrate without a new explicit owner decision.
   settled_by: human
@@ -716,7 +712,9 @@ execution_effect: >-
   rollback remains 73657a8f.
 ```
 
-## Determined State Snapshot (2026-07-08)
+## Historical Determined-State Receipt (2026-07-08)
+
+This receipt cannot sequence, resume, complete, or authorize current work.
 
 ```yaml
 determined_state:
@@ -768,8 +766,8 @@ determined_state:
     - claim: Historical D-ROUTE third-store topology is superseded; retained CAS/receipt semantics assign ordinary served-route authority to corpusd sql-server route-slot tables with vmctl as sole writer.
       source: owner two-store directive, applied by the active mission's two-store-topology node
       superseded_claim: one distinct durable Dolt-backed ComputerVersion route-control domain
-      superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
-      execution_effect: >-
+      superseded_by: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+      active_definition_consumption: >-
         Active phases B-resolve-immutable-inputs, D-verify-and-route, and
         F-cutover-owner-and-close own implementation. Receipt projection,
         fail-closed truth, idempotency, and sole-writer contracts remain
@@ -777,27 +775,28 @@ determined_state:
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
-      execution_effect: Phase B/C/D proceed against Dolt; escalate only on demonstrated feasibility contradiction.
+      requirement_effect: Dolt remains the settled product-state substrate; only the active Definition determines tactics, sequencing, and escalation.
     - claim: Dolt persistence taxonomy — two product-state stores (world-wire sql-server and per-VM embedded stores) plus one narrow vmctl-owned ComputerVersion route-control ledger; promotion preparation is an operation on the embedded store and activation is a CAS in the ledger.
       source: user-stated product-store constraints + orchestrator-settled route-control consequence + observed
-      execution_effect: D-WIRE, D-PROMO, D-STORE, and D-ROUTE authority are settled; promotion is decoupled from the wire store and VM ownership/desktop publication.
-    - claim: Universal→World Wire rename will be executed in Phase E.
+      settled_effect: D-WIRE, D-PROMO, D-STORE, and D-ROUTE requirements are settled; promotion is decoupled from the wire store and VM ownership/desktop publication.
+    - claim: Universal→World Wire rename was historical Phase E work and has no current execution assignment.
       source: user-stated
     - claim: Current wire-store data is junk (the wire loop has never worked end-to-end); the sql-server store stands up fresh with no data migration.
       source: user-stated
-      execution_effect: D-WIRE cutover is code-only and cheap; it need not wait for Phase D if sequencing benefits from doing it earlier. It deletes PROXY_RUNTIME_DB_PATH and restores the world-wire boundary; D-ROUTE, not lineage, supplies honest route resolution.
+      requirement_effect: D-WIRE supplies settled store and deletion constraints; only the active Definition determines sequencing and mutation.
   open: []
 ```
 
-## Value Criterion
+## Historical Value Criterion
 
-Every pass must reduce the mission variant (below) or buy decision evidence
-for implementation conjectures. Prefer, in order: (1) work that makes future claims
-falsifiable (detectors, conformance checks, relabeling), (2) work that
-unblocks staging proof (timeouts), (3) deletions with inverted tests,
-(4) cutover construction.
+The retired program prioritized falsifiable claims, staging unblockers,
+deletions with inverted tests, and finally cutover construction. This ordering
+is evidence only and cannot sequence current work.
 
-## Variant / Progress Measure
+## Historical Variant Receipt
+
+The following closed counts record the retired mission's last observed state.
+They are not a current progress measure or resumption authority.
 
 Baseline 2026-07-08. Productive execution reduces these counts:
 
@@ -819,233 +818,29 @@ variant:
 Bad variants (forbidden): elapsed time, files touched, commit count,
 percentage feelings.
 
-## Execution Phases
+## Historical Execution Receipts
 
-Receding-horizon: phases order pressure, not permission — safe in-bound work
-from a later phase may run early only if it cannot create false progress
-(i.e., detectors and labeling for it already exist). The original program's
-error was the inverse; do not repeat it.
+The former Phase A–E execution program, receding-horizon rules, phase-gate
+protocol, and per-phase exit bars are immutable historical evidence. They own
+no current status, sequencing, next action, mutation permission, resumption, or
+completion decision. Git history is the forensic source for their retired
+topology and wording.
 
-**Phases do not terminate execution.** A phase exit is not a checkpoint, not
-a report-and-stop, not a request for approval. Each phase exit triggers the
-Phase Gate Protocol below; when the gate clears, execution proceeds
-immediately into the next phase within the same run. The run ends only at
-the document's completion semantics or a genuine escalation/blocker per the
-escalation rules.
+Current work may consume only the settled D-ROUTE and H031 requirements named
+in `subordinate_contract` above. All mutations and closure execute through:
 
-## Phase Gate Protocol (agentic consensus between phases)
+- `B-resolve-immutable-inputs`
+- `D-verify-and-route`
+- `F-cutover-owner-and-close`
 
-At each phase exit:
+of
+`docs/definitions/choir-audited-autoputer-construction-2026-07-15.md`.
+A direct `/goal` on this document is forbidden.
+## Retained Evidence Contracts
 
-1. **Run agentic consensus** using `skills/agentic-consensus/` against the
-   phase's claimed exit state: the phase's deliverables, evidence-ledger
-   entries, and the diff/commits landed. Raw output is ephemeral; only the
-   adjudicated conclusion belongs in a current authority document.
-2. **Adjudicate** panel findings as `external second opinion` evidence:
-   confirm each against the repo (the panel is not authority; grep/test/trace
-   verification is). Sort confirmed findings into: (a) phase-exit defects
-   (the phase's own bar not met), (b) new definition nodes (register, don't
-   silently absorb), (c) out-of-scope noise (record and drop). The
-   adjudication table (finding → category → one-line reasoning) MUST be
-   committed to this Definition's evidence ledger before the gate can clear. The executing
-   agent MUST NOT be the sole adjudicator for red-class gates; either the
-   owner signs off on the table, or a non-implementing
-   independent agent (not the consensus runner) verifies the table and the
-   repo state. Unjustified `retired` triage dispositions and unjustified
-   category-(c) reclassifications are themselves category-(a) defects for the
-   next round.
-3. **Iterate**: fix all category-(a) findings, update the definition graph
-   and evidence ledger, then re-run the panel on the delta.
-4. **Clear** means: a panel round produces zero confirmed category-(a)
-   findings. Failed panelists (CLI errors, timeouts) don't block the gate if
-   at least three independent panelists returned; note the failures. Use the
-   same panel configuration across rounds of one phase (panelist churn looks
-   like non-convergence). For red-class gates — determined by the protected
-   surfaces the phase has touched (vmctl lifecycle, proxy request path, public
-   API routes, promotion/rollback, SQL drops), not by phase letter — require at
-   least four returned panelists, retrying failed ones once.
-5. **Proceed** into the next phase in the same run, updating the Run
-   Checkpoint section in passing. For green/yellow gates proceed on clear. For
-   red-class gates proceed only after the adjudication table is approved by the
-   owner or a non-implementing independent agent, the required panel count has
-   returned (four), and any escalation rule has been resolved. Phase A has red
-   work (W2, D-PROMO settlement), so its gate is red-class even though its
-   yellow/green doc work can run in parallel. Do not stop, summarize-and-exit,
-   or await owner input unless an escalation rule fires or a decision node
-   blocks the specific next phase.
+The following proof obligations and ledger entries are subordinate evidence
+consumed only by the active Definition's B/D/F gates.
 
-If three consecutive panel rounds on the same phase fail to converge (new
-category-(a) findings each round), that is evidence of an unsettled
-definition, not reviewer noise: open the definition node and, if it is
-group-level, escalate with the `human_escalation` shape.
-
-### Phase A — Historical foundations and truth receipt
-
-Phase A contains both yellow doc corrections and orange/red runtime work (W2
-proxy/vmctl timeout hardening touches the public request path; D-PROMO settlement
-tests promotion mechanics). The red-class parts of Phase A must follow the
-red-gate adjudication rules in the Phase Gate Protocol, not the default
-yellow/green auto-proceed rule.
-
-- **W1** Detector manifest + CI discovery job: verify the existing
-  `docs/heresy-detectors.md` manifest has correct H030/H031 rows and refine
-  allow-contexts as needed; create `scripts/check-heresies.sh` mapping H001–H031
-  families to discovery-mode patterns, wire a CI job reporting counts without
-  failing, and commit baseline counts as evidence. Bind the existing H031
-  route-over-VM banned pattern and H030 actor-runtime-polling registry row into
-  CI discovery, add a detector for `DOLT_RESET --hard` in production (non-test)
-  paths (I4 guard), and mark the trivial H030 registry closure (repaired
-  2026-06-27) as closed. Promote families to fail-on-regression as their
-  clusters are eliminated.
-- **W2** Timeout hardening: bounded vmctl resolve timeout (30–60s),
-  `http.Server` Read/WriteTimeouts in `internal/server/server.go`, fast 504,
-  reconcile the 10s retry window. Staging proof: `/api/universal-wire/stories`
-  under induced resolve failure returns 504 fast.
-- **W3** Landing-loop evidence for e393eb5c / e5c1d38a: record CI status,
-  deployed identity, whether staging uses lineage resolver or fallback,
-  whether any flow has the promotion adapter configured. Enter results in the
-  evidence ledger.
-- **C1–C7** Doc truth corrections (yellow, one pass):
-  - C1 `current-architecture.md` — verify the capsule/substrate section clearly
-    separates "partially implemented but inert" capsule substrate from any claim that
-    promotion-bearing capsule transactions are proven.
-  - C2 candidate-verb gate — its settled ComputerVersion/capsule semantics are
-    absorbed into `computer-ontology.md`; the superseded design was removed.
-  - C3 `choir-doctrine.md` — verify H031 heresy entry is complete (it already
-    exists) and Banned Patterns list #16 is present; ensure detector refs point
-    to `docs/heresy-detectors.md` H030/H031 rows and W1's CI job. Do not
-    duplicate the heresy entry.
-  - C4 Historical substrate and cross-substrate sources were relabeled
-    `checkpoint_incomplete`, then removed from the live worktree.
-  - C5 (FIRST Phase A commit — now landed in the green docs alignment pass;
-    verify-and-close) — supersession made machine-readable, not just prose:
-    pointer notes in historical source in Git history
-    (plus its post-commit state note: tag adapter is an embedded-mode interim
-    hook; freezes but does not settle H031) and
-    historical source in Git history; `docs/mission-graph.yaml`
-    nodes for both absorbed docs with `status: superseded` pointing at this
-    node; all three documents registered in `docs/doc-authority-manifest.yaml`
-    with correct roles/witnesses.
-  - C6 Docs index / authority manifest — grip checkpoint is narrative layer.
-  - C7 `README.md` — lead with "human-improving, machine-compounding
-    mainframe".
-- **D-PROMO settlement test** (pulled forward from Phase D — cheap): the
-  pinned-connection isolation test with `-count=10` determinism bar, per the
-  D-PROMO node; on pass, correct the adapter comment's 2026-07-07 conclusion.
-- **S1** Spec↔adapter reconciliation: condition `BranchIsolation` (and
-  related invariants) on sql-server mode in `specs/promotion_protocol.tla`
-  with an explicit scope header, or record the decision to hold the spec as
-  target-state with a conformance gap note; **W6** add the conformance
-  binding (test or check) so "spec implemented" cannot be declared without
-  isolation verified against concurrent writers.
-- **P-TRIAGE** Past-mission open-edge triage: for each of the ~25 open edges
-  in the ledger sweep (mission-3c APIHandler extraction, texture hard-cutover
-  C43, transclusion cutover, long-running-agent R1–R7, durable-thread link
-  route, product-loop failure path, coagent source-centric follow-ups,
-  wire-agent-pipeline staging proof, stabilization substrate boot,
-  lifecycle-cutover residues, conductor-URL H029 repair,
-  doc-truth-drift checker review, node-B fail-closed auth,
-  deferred-reliability sandbox→computer rename / SQLite cleanup / node-B
-  retention, news-live landing, orchestrator C15/M9/M10, autoradio verifier
-  review, substrate-hardening MPCal TLC + cmd dedup, cross-substrate
-  extractor, wire-on-settlement, continuation-deletion sequencing): assign
-  each a disposition — `absorbed:<phase>` (it is this mission's work),
-  `retired` (no longer real, with reason), or `external:<successor>` (own
-  mission, with pointer). Record the triage table in this document. No edge
-  may remain untriaged.
-
-#### P-TRIAGE — past-mission open-edge triage table
-
-| Open edge | Disposition | Reason / pointer |
-|---|---|---|
-| actor/runtime business-logic extraction | historical receipt | The superseded 2026-07-14 Definition owns its landed receipts; no current mutation authority follows. |
-| Texture product-loop, transclusion, and durable-thread gaps | external dependency | Requires a fresh Definition unless a concrete gap blocks audited-construction acceptance. |
-| source-system follow-ups | external dependency | Requires a fresh Definition if the active mission does not absorb it. |
-| Wire staging and substrate proof | settled predecessor receipt | D-WIRE conformance is imported without rerunning it. |
-| lifecycle-cutover residues (texture forcing / parent-child) | historical detector evidence | H009-H012 and H001-H005 remain detector history, not active phase authority. |
-| lifecycle-cutover residues (continuations / acceptance) | historical receipt | Resume only under a fresh Definition if current evidence makes it load-bearing. |
-| conductor-URL H029 repair | historical detector evidence | H019-H029 cleanup is not active under this subordinate contract. |
-| docs truth drift | external: documentation authority Definition | Governed by `documentation-authority-reduction-2026-07-09.md`. |
-| node-B fail-closed auth | external dependency | Platform/auth operations are not og-dolt work. |
-| sandbox→computer rename | historical detector evidence | Only H031 route/identity deletion needed by active phases B/F remains in scope. |
-| SQLite/sourcecycled cleanup | external dependency | Object-graph consolidation remains outside og-dolt scope; no live successor Definition owns it. |
-| node-B retention, news, orchestrator, autoradio, and cross-substrate gaps | external dependencies | Their checkpoint chains were removed; any resumed work requires fresh Definitions from current evidence. |
-| wire-on-settlement | external dependency | Route-switch evidence gate is not og-dolt work. |
-| continuation-deletion sequencing | historical receipt | H006-H008 work is not active under this Definition. |
-
-The former Phase A exit bar and gate adjudication remain historical evidence.
-They do not reopen execution or authorize progression into former Phase B.
-
-Active-mission ownership update (2026-07-15): this document remains an active
-subordinate contract only for settled D-ROUTE authority and H031
-detector/deletion requirements consumed by
-`B-resolve-immutable-inputs`, `D-verify-and-route`, and
-`F-cutover-owner-and-close`. Its other Phase B/C/E material is historical and
-cannot authorize mutations. A direct `/goal` on this document is forbidden.
-
-### Phase B — Historical heresy kill wave 1 and Dolt audit receipts
-
-As specified in mission-og-dolt Phase 1 (imported): texture-forcing removal
-(H009–H012, H024a/b, H026; proof gate: honest first revisions, unforced
-delegation — heed the mutually-gated transition: verify agent behavior before
-deleting forcing cues); parent/child deletion (H001–H005, H015–H016, H005
-first; proof gate: all authority trajectory-scoped); Dolt audit read-path
-(`texture history` from `dolt_history_<table>` + `AS OF`) — this is the first
-load-bearing D-STORE verification (history latency, latest-revision cost).
-Detector families for each cluster flip to fail-on-regression as they close.
-
-Phase B exit bar: M3.1 and M3.2 clusters at the `eliminated` bar (deletion
-diff + inverted tests + detector at fail-on-regression, zero live sites for
-H009–H012, H024a/b, H026, H001–H005, H015–H016); both proof gates evidenced;
-`texture history` served from `dolt_history` with latency numbers recorded as
-Dolt implementation evidence.
-
-### Phase C — Historical kill wave 2 and cold-entity cutover contract
-
-Imported from mission-og-dolt Phase 2: acceptance/durable obligations
-(H013–H014, H017–H018); continuation deletion (H006–H008; gate: verified
-zero production callers) before store entities migrate; cold-entity OG
-cutover (runs → trajectories/work items → acceptances → texture →
-run memory) with per-entity dual-write flip and SQL fallback window. The
-batch-commit infrastructure (write-batcher: N mutations or T ms → one
-commit, agent-identity commit messages — mission-og-dolt Phase 0 item) is a
-prerequisite of this phase's cutovers; build it here if Phase A didn't.
-
-The former Phase C exit bar remains a historical contract only; it does not
-authorize current implementation or phase progression.
-
-### Phase D — Historical promotion contract, consumed by active phases B/D/F
-
-Do not execute this phase independently. The active Definition consumes its
-retained fail-closed truth, sole-writer CAS, immutable receipt, idempotency,
-failure, and projection contracts under the owner-settled topology:
-route-slot/receipt tables on the corpusd sql-server with vmctl as sole writer.
-The former distinct Dolt-backed third-ledger implementation is superseded.
-
-Active phases B/D/F delete or hard-refusal-gate duplicate roll-forward and
-candidate switch/rollback mutation paths; rewrite `promotion_protocol.tla`
-around one route-slot → ComputerVersion CAS plus immutable receipt; implement
-vmctl-only read/write APIs; cut proxy routing to route-slot read →
-ComputerVersion → materializer; and prove an old → new → old sequence with
-explicit receipts and generations. Branch merge/tag remains preparation, never
-activation.
-
-The retained exit contract requires concurrency, idempotency, injected-failure,
-restart, failed-writer/materializer negative projection, and zero-caller
-evidence for deleted mutation surfaces. Only the active Definition may claim
-this contract satisfied.
-
-### Phase E — Historical cleanup contract; H031 consumed only by active B/F
-
-Do not execute this phase independently. Only its H031 route/identity detector
-and deletion bars are imported into active phases B/F. H019-H029,
-Universal→World Wire, general sandbox→autoputer vocabulary, and unrelated
-cleanup require separate authority. Compatibility aliases remain forbidden for
-the H031 cutover.
-
-## Dense Feedback Channels
-
-- CI on every push (detector counts visible per family).
 - Staging traces for request-path claims (`api.resolve` latency, 504s).
 - `go test ./...` plus inverted tests per deletion.
 - TLC in CI for spec changes.
@@ -1272,183 +1067,54 @@ Per the definition skill. Specific bindings:
   uncertainty: none
 ```
 
-## Authority Boundaries / Escalation Rules
+## Requirement-Risk Handoff
 
-Escalate to owner only for: a hard blocker in the wire-store sql-server
-migration that would reopen D-WIRE; a D-PROMO answer forcing a group-level
-architecture change; D-STORE contradiction of
-the standing Dolt decision; SQL table drops (irreversible); external contract
-changes (route/API removals beyond registered heresy inventories);
-Universal→World Wire rename execution; any red mutation without an accepted
-rollback path. Everything else resolves through the critical process inside
-the boundaries above. Escalations use the skill's `human_escalation` shape.
+The former escalation rules are retired. D-WIRE contradiction, D-PROMO
+architecture changes, D-STORE contradiction, irreversible SQL drops, external
+route/API removals, vocabulary cutovers, and red mutations without rollback are
+requirement risks supplied to active phases B/D/F. Escalation, mutation
+permission, and sequencing are owned exclusively by the active Definition.
 
-## Forbidden Collapses (mission-specific, atop the skill's list)
+## Retained False-Completion Guards
 
-- seam merged → phase landed.
+These guards constrain active B/D/F evidence; they do not define phases:
+
 - TLC green → implementation isolates.
 - adapter exists → promotion is Dolt-native.
-- adoption or desktop publication exists → a ComputerVersion is active.
-- lineage/status/UI/Trace/acceptance says promoted → a route transition occurred.
-- merge/tag exists → the ComputerVersion route ledger changed.
-- rollback means resetting or rewriting lineage → receipted CAS to the prior ComputerVersion.
-- resolver reads route_profile → route is over ComputerVersion.
-- ledger says complete → mission complete (check remaining_error_field).
-- detector written → detector enforces (discovery mode is not enforcement).
-- triage table row filled → edge closed (absorbed edges must still execute).
-- phase gate cleared → run may stop (the gate authorizes continuation, never exit).
-- panel consensus → truth (panel findings must be repo-verified before acting).
+- adoption, lineage, UI, Trace, or acceptance says promoted → a receipted route transition occurred.
+- merge/tag exists → the ComputerVersion route slot changed.
+- rollback resets lineage → receipted CAS to the prior ComputerVersion.
+- resolver reads `route_profile` → route is over ComputerVersion.
+- detector written → detector enforces.
+- panel consensus → repository-verified truth.
 
-## Completion Semantics
+## Historical Completion And Resumption Receipts
 
-Status: `working | complete | checkpoint_incomplete | blocked_incomplete | superseded`.
+The former completion checklist, rollback/resumption policy, mutable
+`status: working` card, next executable probe, mission report policy, and
+suggested-goal section are retired historical evidence. They own no live
+completion, checkpoint, resumption, phase-gate, or next-action authority.
 
-`complete` requires all of (carrying forward mission-og-dolt lines 211–226,
-plus this mission's additions):
+Retained settled evidence:
 
-1. Heresy detector CI at fail-on-regression for every family; registry
-   entries closed with detector references.
-2. `internal/store` SQL tables dropped; OG the only durable model;
-   `go test ./...` green without dual-path code.
-3. `choir texture history` served from `dolt_history`; at least one promotion
-   executed as an atomic route flip between ComputerVersions with a
-   durable vmctl route-ledger receipt/generation and a demonstrated receipted
-   rollback flip through the same CAS writer, using the D-PROMO-settled
-   preparation mechanism
-   — pinned-connection branches if supported, or the escalated-and-accepted
-   fallback (serialized single writer / separate database per candidate) if
-   D-PROMO falsifies — with the spec↔implementation conformance binding
-   green. Negative deployed proof must show failed route persistence or
-   materialization produces no adoption/lineage/UI/Trace/acceptance success
-   projection. Criterion 3 is satisfiable under EITHER D-PROMO outcome; a
-   falsified D-PROMO changes preparation, not route authority or the criterion.
-4. No route resolves to a VM identity (I1 observables gone); vmctl
-   candidate-desktop lifecycle and the duplicate roll-forward/candidate-intake
-   route-switch paths deleted; ordinary routing reads the receipted
-   ComputerVersion ledger before materialization.
-5. choir-doctrine.md reduced to thesis + invariants + enforcement pointers;
-   no live heresy entries.
-6. `choir` CLI `trajectory`/`texture` verbs read identical shapes before and
-   after, verified against production — evidence artifact: a recorded
-   before/after CLI output diff against production, summarized in this
-   Definition's evidence ledger.
-7. Request path bounded (I3) with staging proof.
-8. All C1–C7 corrections landed; no mission document mislabeled complete.
-9. Past-mission triage table complete with every `absorbed` edge executed
-   and every `retired`/`external` edge annotated.
+- D-HISTORY native Texture history through bounded `AS OF` reads
+  (`b7f512f2`).
+- H011/H012 role-keyword oracle deletion and detector enforcement
+  (`82839687`).
+- H010 post-write email forcing/parser deletion (`fd492b91`).
+- D-PROMO pinned-connection branch-isolation settlement.
+- W1 detector manifest, W2 timeout hardening, W3 seam receipts, C1–C7
+  corrections, and the P-TRIAGE historical table.
 
-Before any non-complete exit, verify no safe executable probe remains in
-bounds. A checkpoint is not completion.
+Retained rollback references:
 
-## Rollback And Resumption Policy
+- `a703bf44` — pre-mission documentation state.
+- `f1e2d7a3` — pre-D-HISTORY behavior.
+- `1870452c` — superseded eager-checkpoint implementation.
+- `d6ce587d` — pre-M3.1a behavior.
+- `73657a8f` — pre-M3.1b behavior.
 
-Every red pass names its rollback ref before mutation. Entity cutovers keep
-SQL fallback for a declared window. Promotion-path work is inert-by-default
-until its gate settles (never enabled speculatively). D-ROUTE rollout seeds
-each old version through the same writer with a bootstrap receipt; after a slot
-becomes ledger-authoritative it has no lineage/desktop/hard-coded fallback, and
-operational rollback is a new receipted CAS to the recorded prior
-ComputerVersion. A code rollback returns promotion to disabled/fail-closed
-operation and may not restore the deleted false-success paths. Doc corrections
-are git-revertable individually. This document's Run Checkpoint section is the
-resumption state; update it every pass.
-
-## Mission Report Policy
-
-Maintain an owner-readable report section (or companion report doc) once
-red passes begin: what shipped, what was proven vs attempted, invariants
-preserved/violated, rollback refs, next probe. Link evidence; do not dump
-logs.
-
-## Run Checkpoint & Resumption State
-
-```yaml
-run_checkpoint_and_resumption_state:
-  status: working
-  last_checkpoint: D-HISTORY, M3.1a, and M3.1b settled on staging
-  current_artifact_state: >-
-    Phase A deliverables committed and exit gate cleared: W1 detector manifest +
-    CI discovery job (including the I4 destructive-rollback guard), W2 proxy/vmctl
-    timeout hardening with staging 504 proof, W3 seam-commit landing-loop
-    evidence, C1–C7 doc truth corrections, D-PROMO pinned-connection
-    branch-isolation settlement, S1 spec↔adapter scope/conformance note, and
-    P-TRIAGE past-mission open-edge table. The Phase A exit panel adjudication is
-    committed. D-STORE, D-PROMO, D-WIRE, and D-ROUTE semantic authority are
-    settled. D-ROUTE implementation remains violated: the source audit found
-    no durable route ledger and multiple status/lineage/desktop/event paths
-    claiming activation. Phase B inspection
-    found that the public Texture history route still walked the application
-    revision chain and that normal object-graph writes created no explicit Dolt
-    commits. The local implementation now checkpoints canonical Texture writes
-    and reads committed snapshots through dolt_history + AS OF. The eager
-    per-write commit tactic caused a CI performance contradiction and was
-    replaced by a dirty-batch history-read barrier. Fresh CI, Node B identity,
-    and authenticated staging create/revise/history proof are green. M3.1a
-    deletes the production H011/H012 substring oracles, preserves structured
-    intent/agentic affordances, and promotes that detector family to deployed
-    zero enforcement. CI, Node B identity, and a real-passkey narrative-word
-    Texture revision are green. M3.1b also removes the post-write email prose
-    parser/direct executor while retaining the typed Email appagent handoff;
-    its full red landing loop and inert-email-prose staging revision are green.
-    This docs-only authority pass originally proposed a distinct Dolt-backed
-    ComputerVersion route ledger. Owner authority superseded that topology:
-    active phases B/D/F use route-slot and receipt tables on the corpusd
-    sql-server with vmctl as sole CAS writer. No runtime repair was claimed.
-  what_shipped:
-    - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
-    - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
-    - W3 seam-commit evidence for e393eb5c/e5c1d38a
-    - C1–C7 doc truth corrections
-    - D-PROMO pinned-connection branch-isolation settlement test
-    - S1 promotion_protocol.tla scope and conformance note
-    - P-TRIAGE past-mission open-edge triage table
-    - D-HISTORY dirty-batch native Texture history (b7f512f2)
-    - M3.1a H011/H012 role-keyword oracle deletion and detector enforcement (82839687)
-    - M3.1b H010 post-write email forcing/parser deletion (fd492b91)
-  what_was_proven:
-    - seam status of the two Red commits (observed, grep-verified)
-    - timeout invariant violation (observed) and fix (staging 504)
-    - lineage resolver not active in staging; promotion adapter not wired in production
-    - embedded Dolt branch isolation on a pinned connection is deterministic (D-PROMO -count=10)
-    - all past-mission open edges triaged (absorbed/external/retired)
-    - native Texture history reads committed dolt_history snapshots through bounded AS OF queries; staging history returned the exact two-revision parent chain in 29.8ms
-    - H011/H012 production branches are absent and zero-enforced; staging Texture loop d562f055-b21a-4678-93f4-79cabcb11796 accepted narrative role words and produced appagent revision 62dc25fd-37d2-4569-924b-a6f004a3a979
-    - Texture writes no longer parse prose or directly create Email drafts; the typed request_email_draft boundary remains green and staging loop 8c6cb802-84b3-4684-9a8f-b0e9ab10c405 produced revision 5c2e7279-b331-47cd-b1fc-ca2d2cf5175b
-  unproven_or_partial_claims:
-    - Dolt engineering verification axes: history latency/correctness,
-      batching/throughput, rollback recovery, build friction, and replication
-    - heresy live-site counts (families still in discovery; fail-on-regression and allowlist enforcement deferred per phase)
-    - D-ROUTE corpusd route-slot/receipt tables, projection gates,
-      duplicate-path deletions, TLA rewrite, proxy cutover, and deployed
-      old-new-old proof
-    - Former Phase B–E kill waves and cleanup are historical, except H031
-      requirements explicitly consumed by the active Definition
-  remaining_error_field: active D-ROUTE implementation and H031 deletion bar
-  highest_impact_remaining_uncertainty: completeness of route writers and owner/desktop fallback callsites
-  next_executable_probe: >-
-    Return control to A-contain-and-extract. Inventory every authoritative
-    ComputerVersion input and preserve the failed realization before mutation.
-  active_definition_consumption: >-
-    Phases B-resolve-immutable-inputs, D-verify-and-route, and
-    F-cutover-owner-and-close consume D-ROUTE's fail-closed truth gate,
-    H031 deletion bar, and sole-writer contract. Adoption, lineage, UI, Trace,
-    and run acceptance cannot advance without durable receipt read-back;
-    duplicate roll-forward/switch/rollback authority must be deleted or refused.
-  suggested_goal_string: "/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md"
-  evidence_artifact_refs:
-    - this Definition's adjudicated evidence ledger
-    - https://github.com/choir-hip/go-choir/actions/runs/29072918594
-    - https://github.com/choir-hip/go-choir/actions/runs/29074494439
-    - https://github.com/choir-hip/go-choir/actions/runs/29075852884
-  rollback_refs:
-    - a703bf44 (pre-mission docs state)
-    - f1e2d7a3 (pre-D-HISTORY behavior state)
-    - 1870452c (superseded eager-checkpoint implementation)
-    - d6ce587d (pre-M3.1a behavior state)
-    - 73657a8f (pre-M3.1b behavior state)
-```
-
-## Suggested Goal String
+The sole current invocation is:
 
 ```text
 /goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
