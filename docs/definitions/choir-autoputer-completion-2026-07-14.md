@@ -150,7 +150,7 @@ now:
       - docs/agent-product-doctrine.md
       - "docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498; generated-and-passed at source e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13"
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
+    worktree_inventory_ref: "start:sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e; terminal:/Users/wiz/go-choir clean@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3"
     status: accepted
     acceptance_level: persistent_computer_product_path
     protected_surfaces: [tool_registry, runtime_extinction_ratchet, external_agent_tool_contract, deployment_identity, candidate_promotion, persistent_computer_state]
@@ -173,10 +173,10 @@ now:
   terminal_dispositions:
     - id: R1-toolregistry-facade-extinction-07
       disposition: superseded_by_clean_rebuild
-      recovery: "Leave /Users/wiz/go-choir user WIP in place and read only; no candidate mutation is needed."
+      recovery: "The clean rebuild landed without mutating this protected path; its formerly dirty candidate is superseded and the path is now clean."
     - id: /Users/wiz/go-choir
-      disposition: protected_user_wip_leave_in_place
-      evidence_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
+      disposition: protected_worktree_untouched_clean
+      evidence_ref: "clean@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3; canonical origin/main is 19 commits ahead and contains no protected-worktree-only commit"
     - id: autoputer-acceptance-232dd36d
       disposition: verified_promoted_and_rolled_back
       recovery: "Active source lineage restored to refs/computers/primary/active."
