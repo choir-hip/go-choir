@@ -118,6 +118,19 @@ func delegateWorkerUpdateTarget(rec *types.RunRecord) (string, string, bool) {
 }
 
 func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.RunRecord, update types.CoagentSourcePacket) (types.CoagentSourcePacket, bool, error) {
+	outcomeDigest := ""
+	if rec != nil && rec.State.Terminal() {
+		persisted, err := rt.store.GetRun(ctx, rec.RunID)
+		if err != nil {
+			return types.CoagentSourcePacket{}, false, fmt.Errorf("reload terminal fallback run %s: %w", rec.RunID, err)
+		}
+		if !persisted.State.Terminal() {
+			return types.CoagentSourcePacket{}, false, fmt.Errorf("terminal fallback run %s is not durable", rec.RunID)
+		}
+		outcomeDigest = types.TerminalRunOutcomeSHA256(persisted.RunID, persisted.State, persisted.Result, persisted.Error)
+		update.SourceRunID = persisted.RunID
+		update.SourceOutcomeSHA256 = outcomeDigest
+	}
 	update.Content = buildWorkerUpdateMessage(update)
 	message := &types.ChannelMessage{
 		ChannelID:    update.ChannelID,
@@ -133,6 +146,12 @@ func (rt *Runtime) dispatchDelegateWorkerUpdate(ctx context.Context, rec *types.
 	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, update, message)
 	if err != nil {
 		return types.CoagentSourcePacket{}, false, err
+	}
+	if outcomeDigest != "" {
+		stored, err = rt.store.BindWorkerUpdateTerminalOutcome(ctx, rec.OwnerID, stored.UpdateID, rec.RunID, outcomeDigest)
+		if err != nil {
+			return types.CoagentSourcePacket{}, false, fmt.Errorf("bind terminal fallback update %s: %w", stored.UpdateID, err)
+		}
 	}
 	if created {
 		message.Seq = stored.MessageSeq

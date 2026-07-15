@@ -633,6 +633,59 @@ func TestUpdateRunAndMarkWorkerUpdatesDelivered(t *testing.T) {
 	}
 }
 
+func TestBindWorkerUpdateTerminalOutcomePreservesDeliveryState(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	update := types.CoagentSourcePacket{
+		UpdateID:      "update-terminal-binding",
+		OwnerID:       "user-alice",
+		AgentID:       "researcher:terminal",
+		TargetAgentID: "texture:terminal",
+		ChannelID:     "doc-terminal",
+		Role:          "researcher",
+		Packet:        testStoreCoagentPacket("evidence_update", "terminal result"),
+		Content:       "terminal result",
+		CreatedAt:     now,
+	}
+	message := types.ChannelMessage{
+		ChannelID:   update.ChannelID,
+		FromAgentID: update.AgentID,
+		FromRunID:   "run-researcher-terminal",
+		ToAgentID:   update.TargetAgentID,
+		Role:        update.Role,
+		Content:     update.Content,
+		Timestamp:   now,
+	}
+	if _, _, err := s.DispatchWorkerUpdate(ctx, update, &message); err != nil {
+		t.Fatalf("dispatch worker update: %v", err)
+	}
+	if err := s.MarkWorkerUpdatesDelivered(ctx, update.OwnerID, update.TargetAgentID, []string{update.UpdateID}, "run-texture-consumer"); err != nil {
+		t.Fatalf("mark worker update delivered: %v", err)
+	}
+
+	bound, err := s.BindWorkerUpdateTerminalOutcome(ctx, update.OwnerID, update.UpdateID, "run-researcher-terminal", "outcome-sha256")
+	if err != nil {
+		t.Fatalf("bind terminal outcome: %v", err)
+	}
+	if bound.SourceRunID != "run-researcher-terminal" || bound.SourceOutcomeSHA256 != "outcome-sha256" {
+		t.Fatalf("terminal binding = run %q digest %q", bound.SourceRunID, bound.SourceOutcomeSHA256)
+	}
+	if bound.DeliveredToRunID != "run-texture-consumer" || bound.DeliveredAt == nil {
+		t.Fatalf("terminal binding dropped delivery state: %+v", bound)
+	}
+	replayed, err := s.BindWorkerUpdateTerminalOutcome(ctx, update.OwnerID, update.UpdateID, "run-researcher-terminal", "outcome-sha256")
+	if err != nil {
+		t.Fatalf("replay terminal binding: %v", err)
+	}
+	if replayed.DeliveredToRunID != bound.DeliveredToRunID || replayed.SourceOutcomeSHA256 != bound.SourceOutcomeSHA256 {
+		t.Fatalf("replayed terminal binding changed state: got %+v want %+v", replayed, bound)
+	}
+	if _, err := s.BindWorkerUpdateTerminalOutcome(ctx, update.OwnerID, update.UpdateID, "other-run", "outcome-sha256"); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("mismatched terminal binding error = %v, want ErrConcurrentStateChange", err)
+	}
+}
+
 func TestCoagentMailboxCursorRequiresContiguousDeliveredUpdates(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()

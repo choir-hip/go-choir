@@ -1079,6 +1079,11 @@ func (s *Store) ListRunsByState(ctx context.Context, state types.RunState, limit
 	return s.ListRunsByStateOG(ctx, state, limit)
 }
 
+// ListAllRunsByState exhausts all keyset pages for the requested state.
+func (s *Store) ListAllRunsByState(ctx context.Context, state types.RunState) ([]types.RunRecord, error) {
+	return s.ListAllRunsByStateOG(ctx, state)
+}
+
 // ListRuns returns recent runs ordered by created_at descending, limited
 // to the given count.
 func (s *Store) ListRuns(ctx context.Context, limit int) ([]types.RunRecord, error) {
@@ -1865,6 +1870,48 @@ func (s *Store) ListChannelMessagesByTrajectory(ctx context.Context, ownerID, tr
 // GetWorkerUpdate returns a previously dispatched structured worker update.
 func (s *Store) GetWorkerUpdate(ctx context.Context, ownerID, updateID string) (types.CoagentSourcePacket, error) {
 	return s.GetWorkerUpdateOG(ctx, ownerID, updateID)
+}
+
+// BindWorkerUpdateTerminalOutcome attaches immutable terminal outcome identity
+// to an existing update without racing delivery marking. RunRecord remains the
+// outcome authority; the digest is only a witness that later consumers must
+// recompute from that record.
+func (s *Store) BindWorkerUpdateTerminalOutcome(ctx context.Context, ownerID, updateID, sourceRunID, outcomeSHA256 string) (types.CoagentSourcePacket, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	updateID = strings.TrimSpace(updateID)
+	sourceRunID = strings.TrimSpace(sourceRunID)
+	outcomeSHA256 = strings.TrimSpace(outcomeSHA256)
+	if ownerID == "" || updateID == "" || sourceRunID == "" || outcomeSHA256 == "" {
+		return types.CoagentSourcePacket{}, fmt.Errorf("bind worker update terminal outcome: owner_id, update_id, source_run_id, and source_outcome_sha256 are required")
+	}
+
+	s.workerUpdateMu.Lock()
+	defer s.workerUpdateMu.Unlock()
+
+	rec, err := s.GetWorkerUpdateOG(ctx, ownerID, updateID)
+	if err != nil {
+		return types.CoagentSourcePacket{}, err
+	}
+	if rec.SourceRunID != "" && rec.SourceRunID != sourceRunID {
+		return types.CoagentSourcePacket{}, fmt.Errorf("bind worker update terminal outcome: source_run_id mismatch: %w", ErrConcurrentStateChange)
+	}
+	if rec.SourceOutcomeSHA256 != "" && rec.SourceOutcomeSHA256 != outcomeSHA256 {
+		return types.CoagentSourcePacket{}, fmt.Errorf("bind worker update terminal outcome: source_outcome_sha256 mismatch: %w", ErrConcurrentStateChange)
+	}
+	if rec.SourceRunID == sourceRunID && rec.SourceOutcomeSHA256 == outcomeSHA256 {
+		return rec, nil
+	}
+	rec.SourceRunID = sourceRunID
+	rec.SourceOutcomeSHA256 = outcomeSHA256
+	if err := s.CreateWorkerUpdateOG(ctx, rec); err != nil {
+		return types.CoagentSourcePacket{}, fmt.Errorf("bind worker update terminal outcome: %w", err)
+	}
+	return rec, nil
+}
+
+// ListWorkerUpdatesBySourceRun exhausts terminal-bound updates for one run.
+func (s *Store) ListWorkerUpdatesBySourceRun(ctx context.Context, ownerID, sourceRunID string) ([]types.CoagentSourcePacket, error) {
+	return s.ListWorkerUpdatesBySourceRunOG(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(sourceRunID))
 }
 
 // ListWorkerUpdatesByTrajectory returns structured worker updates for one

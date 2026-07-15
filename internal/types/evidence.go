@@ -1,7 +1,12 @@
 package types
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
+	"hash"
+	"io"
 	"time"
 )
 
@@ -22,6 +27,28 @@ type EvidenceRecord struct {
 }
 
 const CoagentSourcePacketSchemaV1 = "coagent_source_packet.v1"
+
+const terminalRunOutcomeDigestDomain = "choir.terminal-run-outcome.v1"
+
+// TerminalRunOutcomeSHA256 returns the canonical witness for one authoritative
+// terminal RunRecord outcome. Length-prefixing each field makes the encoding
+// unambiguous without normalizing or copying any outcome text.
+func TerminalRunOutcomeSHA256(sourceRunID string, state RunState, result, runError string) string {
+	digest := sha256.New()
+	writeTerminalRunOutcomeDigestField(digest, terminalRunOutcomeDigestDomain)
+	writeTerminalRunOutcomeDigestField(digest, sourceRunID)
+	writeTerminalRunOutcomeDigestField(digest, string(state))
+	writeTerminalRunOutcomeDigestField(digest, result)
+	writeTerminalRunOutcomeDigestField(digest, runError)
+	return hex.EncodeToString(digest.Sum(nil))
+}
+
+func writeTerminalRunOutcomeDigestField(digest hash.Hash, value string) {
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(value)))
+	_, _ = digest.Write(size[:])
+	_, _ = io.WriteString(digest, value)
+}
 
 // CoagentSourcePacketPayload is the canonical update_coagent payload. It is a
 // source packet, not a chat message: readable prose is a projection of this
@@ -113,17 +140,19 @@ type CoagentPacketActionSafety struct {
 // source packet. The Packet field is the canonical update_coagent payload; the
 // surrounding fields are runtime-owned delivery/idempotency metadata.
 type CoagentSourcePacket struct {
-	UpdateID         string                     `json:"update_id"`
-	OwnerID          string                     `json:"owner_id"`
-	AgentID          string                     `json:"agent_id"`
-	TargetAgentID    string                     `json:"target_agent_id"`
-	ChannelID        string                     `json:"channel_id"`
-	MessageSeq       int64                      `json:"message_seq"`
-	TrajectoryID     string                     `json:"trajectory_id,omitempty"`
-	Role             string                     `json:"role,omitempty"`
-	Packet           CoagentSourcePacketPayload `json:"packet"`
-	Content          string                     `json:"content"`
-	CreatedAt        time.Time                  `json:"created_at"`
-	DeliveredToRunID string                     `json:"delivered_to_loop_id,omitempty"`
-	DeliveredAt      *time.Time                 `json:"delivered_at,omitempty"`
+	UpdateID            string                     `json:"update_id"`
+	OwnerID             string                     `json:"owner_id"`
+	AgentID             string                     `json:"agent_id"`
+	TargetAgentID       string                     `json:"target_agent_id"`
+	ChannelID           string                     `json:"channel_id"`
+	MessageSeq          int64                      `json:"message_seq"`
+	TrajectoryID        string                     `json:"trajectory_id,omitempty"`
+	Role                string                     `json:"role,omitempty"`
+	SourceRunID         string                     `json:"source_run_id,omitempty"`
+	SourceOutcomeSHA256 string                     `json:"source_outcome_sha256,omitempty"`
+	Packet              CoagentSourcePacketPayload `json:"packet"`
+	Content             string                     `json:"content"`
+	CreatedAt           time.Time                  `json:"created_at"`
+	DeliveredToRunID    string                     `json:"delivered_to_loop_id,omitempty"`
+	DeliveredAt         *time.Time                 `json:"delivered_at,omitempty"`
 }

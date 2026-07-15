@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -45,6 +46,46 @@ type coagentUpdatePacketItem struct {
 	MessageSeq      int64                            `json:"message_seq,omitempty"`
 	Packet          types.CoagentSourcePacketPayload `json:"packet"`
 	HumanProjection string                           `json:"human_projection"`
+}
+
+func (rt *Runtime) projectTerminalOutcomeContent(ctx context.Context, updates []types.CoagentSourcePacket) ([]types.CoagentSourcePacket, error) {
+	if rt == nil || rt.store == nil || len(updates) == 0 {
+		return updates, nil
+	}
+	projected := updates
+	copied := false
+	for i, update := range updates {
+		digest := strings.TrimSpace(update.SourceOutcomeSHA256)
+		if digest == "" {
+			continue
+		}
+		sourceRunID := strings.TrimSpace(update.SourceRunID)
+		rec, err := rt.store.GetRun(ctx, sourceRunID)
+		if err != nil {
+			return nil, fmt.Errorf("project terminal outcome %s: load source run %s: %w", update.UpdateID, sourceRunID, err)
+		}
+		if rec.OwnerID != update.OwnerID || !rec.State.Terminal() {
+			return nil, fmt.Errorf("project terminal outcome %s: source run identity is not authoritative", update.UpdateID)
+		}
+		if want := types.TerminalRunOutcomeSHA256(rec.RunID, rec.State, rec.Result, rec.Error); digest != want {
+			return nil, fmt.Errorf("project terminal outcome %s: source outcome digest mismatch", update.UpdateID)
+		}
+		if !copied {
+			projected = append([]types.CoagentSourcePacket(nil), updates...)
+			copied = true
+		}
+		outcomeLabel := "result"
+		outcomeText := rec.Result
+		if rec.State != types.RunCompleted {
+			outcomeLabel = "error"
+			outcomeText = rec.Error
+		}
+		projected[i].Content = strings.TrimSpace(update.Content)
+		if strings.TrimSpace(outcomeText) != "" {
+			projected[i].Content += fmt.Sprintf("\n\nAuthoritative terminal RunRecord %s (source_run_id=%s):\n%s", outcomeLabel, rec.RunID, outcomeText)
+		}
+	}
+	return projected, nil
 }
 
 func buildCoagentUpdateUserMessages(updates []types.CoagentSourcePacket, deliveryPhase string, targetAgentID string, sourceEntities []types.SourceEntity, sourceRejections []coagentSourceRejection) ([]json.RawMessage, []string, error) {

@@ -138,28 +138,28 @@ measures:
 
 now:
   status: working
-  slice: "terminal outcome delivery and atomic trajectory closure -> strict Texture execution-artifact acceptance"
-  question: "Can Choir durably bind every required terminal child outcome to its authoritative RunRecord, close trajectories atomically without post-terminal authority, and prove an exact requested artifact by authenticated readback after restart?"
+  slice: "A1 terminal child outcome binding frozen; canonical push and deployed acceptance pending"
+  question: "Does the frozen A1 candidate preserve one authoritative terminal RunRecord, deliver its exact outcome to the requesting actor without a second result store, and repair every crash-gap row on the same restart?"
   reconciliation:
-    observed_at: 2026-07-15T04:18:34Z
-    source_ref: refs/remotes/origin/main@fc6e65a7b85e2161ce5ed42a341a77149bf9839b
-    deploy_identity: "The deployed-state snapshots were captured from choir.news after the prior e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13 acceptance; deployment identity for this repair source is not yet available."
+    observed_at: 2026-07-15T05:52:39Z
+    source_ref: "refs/heads/autoputer-terminal-outcome-closure@4ef6170d11350443965c7adf89802136e4bcf133 + candidate sha256:764cfa712451c4834ca93e499a0727e711d550cea30ec9cdc84718122bf0b9fd"
+    deploy_identity: "A1 is not deployed. Canonical staging remains on a pre-A1 source identity until the candidate is committed, pushed, and accepted."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-    status: problem_documented
+    status: candidate_frozen
     acceptance_level: blocked_incomplete
     mutation_class: red
     protected_surfaces: [run_record_outcome_authority, coagent_delivery, texture_trajectory_lifecycle, privileged_super_activation, run_acceptance, persistent_computer_state, deployment_identity]
     admissible_evidence: "Focused source contracts plus independent frozen-candidate review; then canonical pushed source, CI and staging identity, no-SSH product-path trajectories, exact authenticated artifact bytes, restart recovery, cohort recomputation, and allowlisted historical-transition receipts."
-    rollback_ref: fc6e65a7b85e2161ce5ed42a341a77149bf9839b
-    conjecture_delta: "The prior runtime-free cutover remains structurally valid, but persistent-computer completion also requires terminal child outcomes to reach their owner exactly once, trajectory closure to consume authoritative run truth atomically, and objective acceptance to fetch exact produced bytes. The deployed cohort and acceptance readback disprove the former completion claim on those independent axes."
+    rollback_ref: 4ef6170d11350443965c7adf89802136e4bcf133
+    conjecture_delta: "A1 local contracts now support the terminal-outcome conjecture: explicit packets carry producer-run identity before dispatch, terminal persistence binds only the final requester-addressed packet or one deterministic reference envelope, delivery recomputes the RunRecord digest and projects Result/Error without persisting a second copy, and boot exhaustively repairs and wakes every affected target. CI, staging identity, deployed plain-result delivery, and restart proof remain required before A1 is accepted."
     heresy_delta:
       discovered: "Six document trajectories are live with zero open work and zero pending updates after their children reached terminal states; plain researcher Result text can be dropped; one Super update has two activation triggers; and the prior filesystem proof accepted a Texture revision whose own content said execution evidence was pending."
       introduced: none
-      repaired: none
+      repaired: "Candidate-only: terminal-first requester binding, reference-only delivery projection, binding/delivery race serialization, cross-run update-ID separation, and keyset-exhaustive boot repair. No deployed repair is claimed."
     problems:
       - id: terminal-outcome-delivery-gap
         classification: substrate
@@ -179,6 +179,9 @@ now:
       - "live-trajectories:5053c721-50ad-4238-9608-7ba694f881c5,d0edf3f8-89a6-4131-871e-e316bbcefbba,4fd0d01e-ee4f-4c8c-ba3f-29e0a8999107,34507da5-24c2-4004-bb10-16bb802a8121,77da11b4-d4ed-488e-846d-9f060d5a9b07,0b192d2e-4a61-4bbc-85fb-79b0a2e595b7"
       - "agentic-consensus:/tmp/agentic-consensus-choir-next-mission-20260715"
       - "decision-synthesis:/tmp/choir-next-mission-converged.md"
+      - "candidate-a1:sha256:764cfa712451c4834ca93e499a0727e711d550cea30ec9cdc84718122bf0b9fd"
+      - "focused-contracts:artifact://1914:10 terminal binding, requester, crash-window, idempotency, race, and keyset tests passed"
+      - "independent-review:A1CorrectedReview:ACCEPT:no-P0-P1-P2"
     selected_sequence:
       - "A1: persist terminal RunRecord first; bind one deterministic delivered outcome; repair the persistence/binding crash gap; retain only the actor-owned durable Super wake."
       - "A2: enable one store-owned atomic trajectory terminalization authority and fence work, update, run, and reactivation admission after terminal status."
@@ -213,14 +216,15 @@ now:
       - "candidate-verification:autoputer-acceptance-232dd36d:seven contracts passed"
       - "candidate-transition:owner_approved -> adopted -> rolled_back"
   candidate:
-    id: terminal-outcome-closure-and-strict-artifact-acceptance
-    state: authorized
+    id: A1-terminal-outcome-binding-01
+    state: frozen
     owner: orchestrator
-    base: fc6e65a7b85e2161ce5ed42a341a77149bf9839b
-    scope: [terminal_outcome_binding, atomic_trajectory_terminalization, terminal_admission_fencing, super_activation_idempotency, strict_artifact_acceptance]
-    disposition: active
-  blocker_or_risk: "No P0/P1 reason rejects the selected A -> B sequence after this correction. Stop before closure if a second writer bypasses the Store boundary, restart replay is not idempotent, historical repair lacks allowlist/dry-run/journal, or the actor-owned Super wake cannot activate without the deleted synchronous trigger."
-  next_action: "Implement A1 from this clean main-derived worktree, keep closure dark until its deployed writer/binder and restart proof pass, then implement A2 and B under this same /goal. Do not authorize Autopaper."
+    base: 4ef6170d11350443965c7adf89802136e4bcf133
+    digest: sha256:764cfa712451c4834ca93e499a0727e711d550cea30ec9cdc84718122bf0b9fd
+    scope: [terminal_outcome_binding, requester_identity, reference_only_projection, binding_delivery_serialization, exhaustive_restart_repair]
+    disposition: pending_canonical_deploy_acceptance
+  blocker_or_risk: "A1 has no frozen-review P0/P1/P2 finding, but remains unaccepted until canonical CI, staging build identity, an authenticated no-SSH plain-terminal researcher trajectory, exact Texture incorporation, and a post-restart replay prove the deployed path. A2 closure and B strict artifact acceptance remain dark."
+  next_action: "Commit only A1 plus this Definition update, preserve the separate Texture A3 files as dirty candidate work, push origin/main, verify CI and staging identity, then run the deployed plain-terminal outcome and restart acceptance before authorizing A2."
 
 receipts:
   - id: predecessor-B0-authority

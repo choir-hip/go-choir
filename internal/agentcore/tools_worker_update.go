@@ -176,11 +176,12 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 			}
 
 			update := types.CoagentSourcePacket{
-				OwnerID:   ownerID,
-				AgentID:   agentID,
-				Role:      nonEmpty(role, configuredAgentProfileForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)),
-				Packet:    packet,
-				CreatedAt: time.Now().UTC(),
+				OwnerID:     ownerID,
+				AgentID:     agentID,
+				Role:        nonEmpty(role, configuredAgentProfileForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)),
+				SourceRunID: runID,
+				Packet:      packet,
+				CreatedAt:   time.Now().UTC(),
 			}
 			targetAgentID, targetChannelID, err := resolveFindingsTarget(ctx, rt, strings.TrimSpace(in.AgentID))
 			if err != nil {
@@ -402,6 +403,14 @@ func appendCoagentSourceSection(b *strings.Builder, sources []types.CoagentPacke
 	}
 }
 
+func strconvQuote(value string) string {
+	encoded, err := json.Marshal(strings.TrimSpace(value))
+	if err != nil {
+		return strings.TrimSpace(value)
+	}
+	return string(encoded)
+}
+
 func appendCoagentActionSection(b *strings.Builder, actions []types.CoagentPacketAction) {
 	if len(actions) == 0 {
 		return
@@ -433,6 +442,7 @@ func deriveWorkerUpdateID(update types.CoagentSourcePacket) string {
 		ChannelID     string                           `json:"channel_id"`
 		TrajectoryID  string                           `json:"trajectory_id,omitempty"`
 		Role          string                           `json:"role,omitempty"`
+		SourceRunID   string                           `json:"source_run_id"`
 		Packet        types.CoagentSourcePacketPayload `json:"packet"`
 	}{
 		OwnerID:       strings.TrimSpace(update.OwnerID),
@@ -441,6 +451,7 @@ func deriveWorkerUpdateID(update types.CoagentSourcePacket) string {
 		ChannelID:     strings.TrimSpace(update.ChannelID),
 		TrajectoryID:  strings.TrimSpace(update.TrajectoryID),
 		Role:          strings.TrimSpace(update.Role),
+		SourceRunID:   strings.TrimSpace(update.SourceRunID),
 		Packet:        normalizeCoagentSourcePacketPayload(update.Packet),
 	}
 	raw, _ := json.Marshal(payload)
@@ -453,6 +464,7 @@ func validateExistingWorkerUpdate(existing, want types.CoagentSourcePacket) erro
 		existing.TargetAgentID != want.TargetAgentID ||
 		existing.ChannelID != want.ChannelID ||
 		existing.Role != want.Role ||
+		existing.SourceRunID != want.SourceRunID ||
 		existing.Content != want.Content ||
 		!reflect.DeepEqual(normalizeCoagentSourcePacketPayload(existing.Packet), normalizeCoagentSourcePacketPayload(want.Packet)) {
 		return fmt.Errorf("update_id %s already exists with different payload", want.UpdateID)

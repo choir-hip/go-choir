@@ -85,16 +85,16 @@ func TestOGCreateAndGetRun(t *testing.T) {
 
 	now := time.Now().UTC()
 	rec := types.RunRecord{
-		RunID:       "run-og-1",
-		AgentID:     "agent-og-1",
-		OwnerID:     "owner-og",
-		SandboxID:   "sandbox-1",
-		State:       types.RunRunning,
-		Prompt:      "test prompt",
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		RunID:        "run-og-1",
+		AgentID:      "agent-og-1",
+		OwnerID:      "owner-og",
+		SandboxID:    "sandbox-1",
+		State:        types.RunRunning,
+		Prompt:       "test prompt",
+		CreatedAt:    now,
+		UpdatedAt:    now,
 		TrajectoryID: "traj-1",
-		Metadata:    map[string]any{"key": "value"},
+		Metadata:     map[string]any{"key": "value"},
 	}
 	if err := s.CreateRunOG(ctx, rec); err != nil {
 		t.Fatalf("create run: %v", err)
@@ -260,6 +260,33 @@ func TestOGListRunsByState(t *testing.T) {
 		if r.State != types.RunRunning {
 			t.Errorf("state: got %q, want %q", r.State, types.RunRunning)
 		}
+	}
+}
+
+func TestListAllRunsByStateOGExhaustsKeysetPages(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for i := range 3 {
+		rec := types.RunRecord{
+			RunID:     "run-og-state-page-" + string(rune('A'+i)),
+			AgentID:   "researcher:page",
+			OwnerID:   "owner-state-page",
+			SandboxID: "sandbox-1",
+			State:     types.RunCompleted,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := s.CreateRunOG(ctx, rec); err != nil {
+			t.Fatalf("create paged terminal run %d: %v", i, err)
+		}
+	}
+	runs, err := s.listAllRunsByStateOG(ctx, types.RunCompleted, 2)
+	if err != nil {
+		t.Fatalf("list all terminal runs across pages: %v", err)
+	}
+	if len(runs) != 3 {
+		t.Fatalf("terminal runs across keyset pages = %d, want 3: %+v", len(runs), runs)
 	}
 }
 
@@ -931,14 +958,14 @@ func TestOGCreateAndGetTextureRevision(t *testing.T) {
 	}
 
 	rec := types.Revision{
-		RevisionID: "rev-og-1",
-		DocID:      "doc-og-rev",
-		OwnerID:    "owner-og",
-		AuthorKind: types.AuthorUser,
-		AuthorLabel: "user",
+		RevisionID:    "rev-og-1",
+		DocID:         "doc-og-rev",
+		OwnerID:       "owner-og",
+		AuthorKind:    types.AuthorUser,
+		AuthorLabel:   "user",
 		VersionNumber: 0,
-		Content:    "test content",
-		CreatedAt:  time.Now().UTC(),
+		Content:       "test content",
+		CreatedAt:     time.Now().UTC(),
 	}
 	if err := s.CreateTextureRevisionOG(ctx, rec); err != nil {
 		t.Fatalf("create revision: %v", err)
@@ -962,14 +989,14 @@ func TestOGListTextureRevisionsByDoc(t *testing.T) {
 
 	for i := range 3 {
 		rec := types.Revision{
-			RevisionID: "rev-og-list-" + string(rune('A'+i)),
-			DocID:      "doc-og-list",
-			OwnerID:    "owner-og",
-			AuthorKind: types.AuthorUser,
-			AuthorLabel: "user",
+			RevisionID:    "rev-og-list-" + string(rune('A'+i)),
+			DocID:         "doc-og-list",
+			OwnerID:       "owner-og",
+			AuthorKind:    types.AuthorUser,
+			AuthorLabel:   "user",
 			VersionNumber: i,
-			Content:    "test",
-			CreatedAt:  time.Now().UTC(),
+			Content:       "test",
+			CreatedAt:     time.Now().UTC(),
 		}
 		if err := s.CreateTextureRevisionOG(ctx, rec); err != nil {
 			t.Fatalf("create revision %d: %v", i, err)

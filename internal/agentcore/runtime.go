@@ -457,8 +457,9 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 func (rt *Runtime) Start(ctx context.Context) {
 	rt.passivateInterruptedActivations(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
+	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
 	rt.sweepPassivatedSpawnedCoagentWork(ctx)
-	rt.sweepPendingUpdateActors(ctx)
+	rt.sweepPendingUpdateActors(ctx, terminalOutcomeTargets)
 	rt.sweepOpenWorkItemActors(ctx)
 	// Best-effort: ensure the production Qdrant collection exists so the
 	// semantic dedup pass on ingestion has a target. Runs asynchronously so
@@ -1152,6 +1153,9 @@ func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason st
 	if cancel != nil {
 		cancel()
 	}
+	if bindErr := rt.bindTerminalRunOutcome(context.Background(), &rec, true); bindErr != nil {
+		log.Printf("runtime: bind cancelled terminal outcome for run %s: %v", rec.RunID, bindErr)
+	}
 	errPayload, _ := json.Marshal(map[string]string{"error": reason})
 	rt.emitEvent(context.Background(), &rec, types.EventRunCancelled, events.CauseTaskLifecycle, errPayload)
 	return nil
@@ -1455,7 +1459,56 @@ func (rt *Runtime) passivateInterruptedActivations(ctx context.Context) {
 	}
 }
 
-func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context) {
+// reconcileTerminalRunOutcomes exhausts terminal runs, repairs their outcome
+// bindings, then wakes each distinct pending repaired target exactly once.
+func (rt *Runtime) reconcileTerminalRunOutcomes(ctx context.Context) map[string]bool {
+	woken := map[string]bool{}
+	if rt == nil || rt.store == nil {
+		return woken
+	}
+	var pending []types.CoagentSourcePacket
+	queued := map[string]bool{}
+	for _, state := range []types.RunState{types.RunCompleted, types.RunFailed, types.RunCancelled} {
+		runs, err := rt.store.ListAllRunsByState(ctx, state)
+		if err != nil {
+			log.Printf("runtime: boot terminal outcome reconciliation: query %s runs: %v", state, err)
+			continue
+		}
+		for i := range runs {
+			rec := &runs[i]
+			if !terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
+				continue
+			}
+			binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, rec)
+			if err != nil {
+				log.Printf("runtime: boot terminal outcome reconciliation for run %s: %v", rec.RunID, err)
+				continue
+			}
+			if !binding.Present || strings.TrimSpace(binding.Update.DeliveredToRunID) != "" {
+				continue
+			}
+			ownerID := strings.TrimSpace(binding.Update.OwnerID)
+			target := strings.TrimSpace(binding.Update.TargetAgentID)
+			if ownerID == "" || target == "" {
+				continue
+			}
+			key := ownerID + "\x00" + target
+			if queued[key] {
+				continue
+			}
+			queued[key] = true
+			pending = append(pending, binding.Update)
+		}
+	}
+	for _, update := range pending {
+		key := strings.TrimSpace(update.OwnerID) + "\x00" + strings.TrimSpace(update.TargetAgentID)
+		rt.wakeUpdatedCoagent(ctx, update)
+		woken[key] = true
+	}
+	return woken
+}
+
+func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context, seen map[string]bool) {
 	if rt == nil || rt.store == nil {
 		return
 	}
@@ -1464,7 +1517,9 @@ func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context) {
 		log.Printf("runtime: boot update sweep: %v", err)
 		return
 	}
-	seen := map[string]bool{}
+	if seen == nil {
+		seen = map[string]bool{}
+	}
 	for _, update := range updates {
 		ownerID := strings.TrimSpace(update.OwnerID)
 		target := strings.TrimSpace(update.TargetAgentID)
@@ -1847,10 +1902,6 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
 
-	if synthErr := rt.synthesizeResearcherUpdateOnCompletion(persistCtx, rec); synthErr != nil {
-		log.Printf("runtime: synthesize researcher completion update for run %s: %v", rec.RunID, synthErr)
-	}
-
 	// Persist the terminal run state BEFORE publishing the completion
 	// event. Otherwise a subscriber that reacts to the event and
 	// immediately fetches run status can observe the run as still
@@ -1863,6 +1914,9 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 	}
 	if !persisted {
 		return
+	}
+	if bindErr := rt.bindTerminalRunOutcome(persistCtx, rec, true); bindErr != nil {
+		log.Printf("runtime: bind completion outcome for run %s: %v", rec.RunID, bindErr)
 	}
 	resultLenPayload, _ := json.Marshal(map[string]any{
 		"result_length": len(text),
@@ -2030,10 +2084,6 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	// completed-run transition or parent notification.
 	persistCtx := context.Background()
 
-	if synthErr := rt.synthesizeResearcherUpdateOnCompletion(persistCtx, rec); synthErr != nil {
-		log.Printf("runtime: synthesize researcher completion update for run %s: %v", rec.RunID, synthErr)
-	}
-
 	// Persist the terminal run state BEFORE publishing the completion
 	// event. Otherwise a subscriber that reacts to the event and
 	// immediately fetches run status can observe the run as still
@@ -2046,6 +2096,9 @@ func (rt *Runtime) executeWithProvider(ctx context.Context, rec *types.RunRecord
 	}
 	if !persisted {
 		return
+	}
+	if bindErr := rt.bindTerminalRunOutcome(persistCtx, rec, true); bindErr != nil {
+		log.Printf("runtime: bind completion outcome for run %s: %v", rec.RunID, bindErr)
 	}
 	resultLenPayload, _ := json.Marshal(map[string]int{"result_length": len(result)})
 	rt.emitEvent(persistCtx, rec, types.EventRunCompleted, events.CauseTaskLifecycle, resultLenPayload)
@@ -2830,7 +2883,6 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	if !persisted {
 		return
 	}
-
 	errPayload, _ := json.Marshal(map[string]string{"error": err.Error()})
 	rt.emitEvent(persistCtx, rec, kind, cause, errPayload)
 	if synthErr := rt.synthesizeDelegateWorkerUpdateOnSuperFailure(persistCtx, rec, err); synthErr != nil {
@@ -2839,8 +2891,8 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	if synthErr := rt.synthesizeSuperFailureUpdate(persistCtx, rec, err); synthErr != nil {
 		log.Printf("runtime: synthesize super failure update for run %s: %v", rec.RunID, synthErr)
 	}
-	if synthErr := rt.synthesizeResearcherUpdateOnFailure(persistCtx, rec, err); synthErr != nil {
-		log.Printf("runtime: synthesize researcher update for run %s: %v", rec.RunID, synthErr)
+	if bindErr := rt.bindTerminalRunOutcome(persistCtx, rec, true); bindErr != nil {
+		log.Printf("runtime: bind terminal outcome for run %s: %v", rec.RunID, bindErr)
 	}
 
 	// If this is a Texture agent revision task, settle the mutation before any

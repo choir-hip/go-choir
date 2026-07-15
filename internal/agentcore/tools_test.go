@@ -405,223 +405,514 @@ func testSourceAPIItem() sourceapi.ItemResult {
 	}
 }
 
-func TestResearcherFailureSynthesizesCheckpointAfterSearch(t *testing.T) {
-	ctx := context.Background()
-	rt, s := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(""); err != nil {
-		t.Fatalf("install tools: %v", err)
-	}
-	ownerID := "owner-research-fallback"
-	docID := "doc-research-fallback"
-	now := time.Now().UTC()
-	if err := s.CreateDocument(ctx, types.Document{
-		DocID:     docID,
-		OwnerID:   ownerID,
-		Title:     "research fallback",
-		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("create document: %v", err)
-	}
-	parent := types.RunRecord{
-		RunID:        "run-texture-parent",
-		AgentID:      "texture:" + docID,
-		ChannelID:    docID,
-		OwnerID:      ownerID,
-		AgentProfile: agentprofile.Texture,
-		AgentRole:    agentprofile.Texture,
-		State:        types.RunCompleted,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Texture,
-			runMetadataAgentRole:    agentprofile.Texture,
-			runMetadataAgentID:      "texture:" + docID,
-			runMetadataChannelID:    docID,
-		},
-	}
-	if err := s.CreateRun(ctx, parent); err != nil {
-		t.Fatalf("create parent run: %v", err)
-	}
-	researcher := &types.RunRecord{
-		RunID:            "run-researcher-failed",
-		AgentID:          "researcher:fallback",
+func terminalResearcherRunFixture(runID, ownerID, docID, result string, state types.RunState, now time.Time) types.RunRecord {
+	finishedAt := now
+	rec := types.RunRecord{
+		RunID:            runID,
+		AgentID:          "researcher:" + runID,
+		RequestedByRunID: "texture-parent:" + runID,
 		ChannelID:        docID,
-		RequestedByRunID: parent.RunID,
 		OwnerID:          ownerID,
 		AgentProfile:     agentprofile.Researcher,
 		AgentRole:        agentprofile.Researcher,
-		State:            types.RunFailed,
+		State:            state,
+		Result:           result,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
 			runMetadataAgentProfile: agentprofile.Researcher,
 			runMetadataAgentRole:    agentprofile.Researcher,
-			runMetadataAgentID:      "researcher:fallback",
+			runMetadataAgentID:      "researcher:" + runID,
 			runMetadataChannelID:    docID,
 			"requested_by_profile":  agentprofile.Texture,
 			"requested_by_agent_id": "texture:" + docID,
 		},
 	}
-	if err := s.CreateRun(ctx, *researcher); err != nil {
-		t.Fatalf("create researcher run: %v", err)
+	if state.Terminal() {
+		rec.FinishedAt = &finishedAt
 	}
-	output := `{"query":"baseball last night","provider":"parallel","result_count":1,"results":[{"title":"Box score","url":"https://example.com/box","snippet":"A score."}]}`
-	payload, _ := json.Marshal(map[string]any{
-		"tool":     "web_search",
-		"call_id":  "call-search",
-		"is_error": false,
-		"output":   output,
-	})
-	if err := s.AppendEvent(ctx, &types.EventRecord{
-		EventID:   "event-web-search",
-		RunID:     researcher.RunID,
-		AgentID:   researcher.AgentID,
-		OwnerID:   ownerID,
-		ChannelID: docID,
-		Timestamp: now,
-		Kind:      types.EventToolResult,
-		Phase:     "tool_call",
-		Payload:   payload,
-	}); err != nil {
-		t.Fatalf("append search event: %v", err)
+	return rec
+}
+
+func TestResearcherPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	rec := terminalResearcherRunFixture(
+		"run-researcher-plain-terminal",
+		"owner-researcher-plain-terminal",
+		"doc-researcher-plain-terminal",
+		"Plain terminal research result without any research-tool event.",
+		types.RunCompleted,
+		now,
+	)
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create terminal researcher run: %v", err)
 	}
 
-	if err := rt.synthesizeResearcherUpdateOnFailure(ctx, researcher, fmt.Errorf("required next tool timed out")); err != nil {
-		t.Fatalf("synthesize update: %v", err)
+	if err := rt.bindTerminalRunOutcome(ctx, &rec, false); err != nil {
+		t.Fatalf("bind terminal researcher outcome: %v", err)
 	}
-	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "texture:"+docID, 10)
+	updates, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
 	if err != nil {
-		t.Fatalf("list deliveries: %v", err)
+		t.Fatalf("list bound terminal outcomes: %v", err)
 	}
-	if len(deliveries) != 1 {
-		t.Fatalf("deliveries len = %d, want 1: %+v", len(deliveries), deliveries)
+	if len(updates) != 1 {
+		t.Fatalf("bound updates = %d, want exactly one: %+v", len(updates), updates)
 	}
-	if !strings.Contains(deliveries[0].Content, "Runtime fallback") || !strings.Contains(deliveries[0].Content, "web_search") {
-		t.Fatalf("delivery content = %q, want runtime web_search fallback", deliveries[0].Content)
+	update := updates[0]
+	if update.SourceRunID != rec.RunID {
+		t.Fatalf("source_run_id = %q, want %q", update.SourceRunID, rec.RunID)
 	}
-	sourceURIs := coagentPacketSourceURIs(deliveries[0].Packet)
-	if len(sourceURIs) == 0 {
-		t.Fatalf("delivery packet sources empty, want at least one URL source: %+v", deliveries[0].Packet)
+	wantDigest := types.TerminalRunOutcomeSHA256(rec.RunID, rec.State, rec.Result, rec.Error)
+	if update.SourceOutcomeSHA256 != wantDigest {
+		t.Fatalf("source_outcome_sha256 = %q, want recomputed %q", update.SourceOutcomeSHA256, wantDigest)
 	}
-	foundBoxURL := false
-	for _, uri := range sourceURIs {
-		if uri == "https://example.com/box" {
-			foundBoxURL = true
-			break
-		}
+	if strings.Contains(update.Content, rec.Result) {
+		t.Fatalf("persisted reference envelope copied authoritative result: %q", update.Content)
 	}
-	if !foundBoxURL {
-		t.Fatalf("delivery source URIs = %+v, want https://example.com/box", sourceURIs)
-	}
-	events, err := s.ListEvents(ctx, researcher.RunID, 20)
+	projected, err := rt.projectTerminalOutcomeContent(ctx, updates)
 	if err != nil {
-		t.Fatalf("list events: %v", err)
+		t.Fatalf("project authoritative terminal result: %v", err)
 	}
-	if !hasSuccessfulToolResult(events, "update_coagent") {
-		t.Fatalf("expected synthetic update_coagent tool result")
+	if len(projected) != 1 || !strings.Contains(projected[0].Content, rec.Result) {
+		t.Fatalf("delivery projection omitted authoritative result: %+v", projected)
+	}
+	tampered := append([]types.CoagentSourcePacket(nil), updates...)
+	tampered[0].SourceOutcomeSHA256 = "tampered"
+	if _, err := rt.projectTerminalOutcomeContent(ctx, tampered); err == nil {
+		t.Fatal("tampered terminal outcome digest projected without error")
+	}
+	persisted, err := s.GetWorkerUpdate(ctx, rec.OwnerID, update.UpdateID)
+	if err != nil {
+		t.Fatalf("reload terminal outcome reference: %v", err)
+	}
+	if strings.Contains(persisted.Content, rec.Result) {
+		t.Fatalf("delivery projection mutated persisted envelope: %q", persisted.Content)
 	}
 }
 
-func TestResearcherCompletionSynthesizesCheckpointAfterSavedEvidence(t *testing.T) {
+func TestResearcherTerminalOutcomeRequiresDurableTerminalRun(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)
-	if err := rt.InstallDefaultAgentTools(""); err != nil {
-		t.Fatalf("install tools: %v", err)
-	}
-	ownerID := "owner-research-completion-fallback"
-	docID := "doc-research-completion-fallback"
 	now := time.Now().UTC()
-	if err := s.CreateDocument(ctx, types.Document{
-		DocID:     docID,
-		OwnerID:   ownerID,
-		Title:     "research completion fallback",
+	stored := terminalResearcherRunFixture(
+		"run-researcher-terminal-order",
+		"owner-researcher-terminal-order",
+		"doc-researcher-terminal-order",
+		"",
+		types.RunRunning,
+		now,
+	)
+	if err := s.CreateRun(ctx, stored); err != nil {
+		t.Fatalf("create running researcher run: %v", err)
+	}
+	inMemoryTerminal := stored
+	inMemoryTerminal.State = types.RunCompleted
+	inMemoryTerminal.Result = "terminal result not durable yet"
+	inMemoryTerminal.UpdatedAt = now.Add(time.Second)
+	inMemoryTerminal.FinishedAt = &inMemoryTerminal.UpdatedAt
+
+	if err := rt.bindTerminalRunOutcome(ctx, &inMemoryTerminal, false); err != nil {
+		t.Fatalf("probe pre-persistence binding: %v", err)
+	}
+	updates, err := s.ListPendingWorkerUpdates(ctx, stored.OwnerID, "texture:"+stored.ChannelID, 10)
+	if err != nil {
+		t.Fatalf("list pre-persistence outcomes: %v", err)
+	}
+	if len(updates) != 0 {
+		t.Fatalf("bound %d outcome(s) before terminal RunRecord persistence: %+v", len(updates), updates)
+	}
+
+	if err := s.UpdateRun(ctx, inMemoryTerminal); err != nil {
+		t.Fatalf("persist terminal researcher run: %v", err)
+	}
+	if err := rt.bindTerminalRunOutcome(ctx, &inMemoryTerminal, false); err != nil {
+		t.Fatalf("bind persisted terminal researcher outcome: %v", err)
+	}
+	updates, err = s.ListPendingWorkerUpdates(ctx, stored.OwnerID, "texture:"+stored.ChannelID, 10)
+	if err != nil {
+		t.Fatalf("list post-persistence outcomes: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("bound outcomes after persistence = %d, want one: %+v", len(updates), updates)
+	}
+}
+
+func TestBootBindsExplicitUpdateAcrossDispatchBeforeToolResultCrashWindow(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	rec := terminalResearcherRunFixture(
+		"run-researcher-explicit-terminal",
+		"owner-researcher-explicit-terminal",
+		"doc-researcher-explicit-terminal",
+		"",
+		types.RunRunning,
+		now,
+	)
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create running researcher run: %v", err)
+	}
+
+	explicit := types.CoagentSourcePacket{
+		OwnerID:       rec.OwnerID,
+		AgentID:       rec.AgentID,
+		TargetAgentID: "texture:" + rec.ChannelID,
+		ChannelID:     rec.ChannelID,
+		Role:          agentprofile.Researcher,
+		SourceRunID:   rec.RunID,
+		Packet: newCoagentPacket(
+			"evidence_update",
+			"Explicit final researcher update.",
+			[]types.CoagentPacketClaim{coagentClaim("Explicit terminal evidence.")},
+			nil,
+			nil,
+			nil,
+			nil,
+		),
 		CreatedAt: now,
-		UpdatedAt: now,
-	}); err != nil {
-		t.Fatalf("create document: %v", err)
 	}
-	contentID := "content-openai-docs"
-	if err := s.CreateEvidence(ctx, types.EvidenceRecord{
-		EvidenceID: "ev-openai-docs",
-		OwnerID:    ownerID,
-		AgentID:    "researcher:completion-fallback",
-		Kind:       "source_excerpt",
-		SourceURI:  "https://developers.openai.com/api/docs/models/gpt-5.5",
-		Title:      "OpenAI GPT-5.5 API docs",
-		Content:    "OpenAI GPT-5.5 API docs excerpt.",
-		Metadata:   json.RawMessage(`{"content_id":"` + contentID + `"}`),
-		CreatedAt:  now,
-	}); err != nil {
-		t.Fatalf("create evidence: %v", err)
+	explicit.UpdateID = deriveWorkerUpdateID(explicit)
+	explicit.Content = buildWorkerUpdateMessage(explicit)
+	message := &types.ChannelMessage{
+		ChannelID:   explicit.ChannelID,
+		From:        rec.RunID,
+		FromAgentID: rec.AgentID,
+		FromRunID:   rec.RunID,
+		ToAgentID:   explicit.TargetAgentID,
+		Role:        explicit.Role,
+		Content:     explicit.Content,
+		Timestamp:   now,
 	}
-	researcher := &types.RunRecord{
-		RunID:            "run-researcher-completed",
-		AgentID:          "researcher:completion-fallback",
-		ChannelID:        docID,
-		RequestedByRunID: "run-texture-parent",
-		OwnerID:          ownerID,
-		AgentProfile:     agentprofile.Researcher,
-		AgentRole:        agentprofile.Researcher,
-		State:            types.RunCompleted,
+	storedExplicit, created, err := s.DispatchWorkerUpdate(ctx, explicit, message)
+	if err != nil {
+		t.Fatalf("dispatch explicit update: %v", err)
+	}
+	if !created {
+		t.Fatal("explicit update unexpectedly already existed")
+	}
+
+	rec.State = types.RunCompleted
+	rec.Result = "The explicit packet already delivered the terminal evidence."
+	rec.UpdatedAt = now.Add(time.Second)
+	rec.FinishedAt = &rec.UpdatedAt
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatalf("persist terminal researcher run: %v", err)
+	}
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+		return nil
+	})
+	rt.reconcileTerminalRunOutcomes(ctx)
+	updates, err := s.ListWorkerUpdatesBySourceRun(ctx, rec.OwnerID, rec.RunID)
+	if err != nil {
+		t.Fatalf("list explicit bound update: %v", err)
+	}
+	if len(updates) != 1 {
+		t.Fatalf("updates = %d, want original explicit update only: %+v", len(updates), updates)
+	}
+	bound := updates[0]
+	if bound.UpdateID != storedExplicit.UpdateID || bound.MessageSeq != storedExplicit.MessageSeq {
+		t.Fatalf("explicit identity changed from %s/%d to %s/%d", storedExplicit.UpdateID, storedExplicit.MessageSeq, bound.UpdateID, bound.MessageSeq)
+	}
+	wantDigest := types.TerminalRunOutcomeSHA256(rec.RunID, rec.State, rec.Result, rec.Error)
+	if bound.SourceRunID != rec.RunID || bound.SourceOutcomeSHA256 != wantDigest {
+		t.Fatalf("explicit update binding = run %q digest %q, want %q/%q", bound.SourceRunID, bound.SourceOutcomeSHA256, rec.RunID, wantDigest)
+	}
+}
+
+func TestDerivedWorkerUpdateIDIncludesSourceRun(t *testing.T) {
+	base := types.CoagentSourcePacket{
+		OwnerID:       "owner-update-id",
+		AgentID:       "researcher:update-id",
+		TargetAgentID: "texture:update-id",
+		ChannelID:     "doc-update-id",
+		Role:          agentprofile.Researcher,
+		Packet:        newCoagentPacket("evidence_update", "Same content.", nil, nil, nil, nil, nil),
+	}
+	first := base
+	first.SourceRunID = "run-update-id-first"
+	second := base
+	second.SourceRunID = "run-update-id-second"
+
+	if firstID, secondID := deriveWorkerUpdateID(first), deriveWorkerUpdateID(second); firstID == secondID {
+		t.Fatalf("different producer runs derived the same update ID %q", firstID)
+	}
+}
+
+func TestSuperExplicitFinalUpdateIsBoundInPlace(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	rec := types.RunRecord{
+		RunID:            "run-super-explicit-terminal",
+		AgentID:          "super:explicit-terminal",
+		RequestedByRunID: "run-super-explicit-parent",
+		ChannelID:        "doc-super-explicit-terminal",
+		OwnerID:          "owner-super-explicit-terminal",
+		AgentProfile:     agentprofile.Super,
+		AgentRole:        agentprofile.Super,
+		State:            types.RunRunning,
 		CreatedAt:        now,
 		UpdatedAt:        now,
 		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.Researcher,
-			runMetadataAgentRole:    agentprofile.Researcher,
-			runMetadataAgentID:      "researcher:completion-fallback",
-			runMetadataChannelID:    docID,
-			"requested_by_profile":  agentprofile.Texture,
-			"requested_by_agent_id": "texture:" + docID,
+			runMetadataAgentProfile: agentprofile.Super,
+			runMetadataAgentRole:    agentprofile.Super,
+			runMetadataAgentID:      "super:explicit-terminal",
+			runMetadataChannelID:    "doc-super-explicit-terminal",
+			runMetadataTrajectoryID: "trajectory-super-explicit-terminal",
+			"requested_by_agent_id": "co-super:explicit-terminal",
 		},
 	}
-	if err := s.CreateRun(ctx, *researcher); err != nil {
-		t.Fatalf("create researcher run: %v", err)
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create running Super run: %v", err)
 	}
-	output := `{"evidence_id":"ev-openai-docs","owner_id":"owner-research-completion-fallback","agent_id":"researcher:completion-fallback","kind":"source_excerpt","source_uri":"https://developers.openai.com/api/docs/models/gpt-5.5","title":"OpenAI GPT-5.5 API docs"}`
-	payload, _ := json.Marshal(map[string]any{
-		"tool":     "save_evidence",
-		"call_id":  "call-save-evidence",
+	update := types.CoagentSourcePacket{
+		OwnerID:       rec.OwnerID,
+		SourceRunID:   rec.RunID,
+		AgentID:       rec.AgentID,
+		TargetAgentID: "co-super:explicit-terminal",
+		ChannelID:     rec.ChannelID,
+		TrajectoryID:  trajectoryIDForRun(&rec),
+		Role:          agentprofile.Super,
+		Packet: newCoagentPacket(
+			"evidence_update",
+			"Explicit final Super update.",
+			[]types.CoagentPacketClaim{coagentClaim("Super terminal evidence.")},
+			nil,
+			nil,
+			nil,
+			nil,
+		),
+		CreatedAt: now,
+	}
+	update.UpdateID = deriveWorkerUpdateID(update)
+	update.Content = buildWorkerUpdateMessage(update)
+	message := &types.ChannelMessage{
+		ChannelID:    update.ChannelID,
+		From:         rec.RunID,
+		FromAgentID:  rec.AgentID,
+		FromRunID:    rec.RunID,
+		ToAgentID:    update.TargetAgentID,
+		TrajectoryID: update.TrajectoryID,
+		Role:         update.Role,
+		Content:      update.Content,
+		Timestamp:    now,
+	}
+	storedUpdate, created, err := s.DispatchWorkerUpdate(ctx, update, message)
+	if err != nil || !created {
+		t.Fatalf("dispatch explicit Super update: created=%t err=%v", created, err)
+	}
+	output, _ := json.Marshal(map[string]any{
+		"update_id":     storedUpdate.UpdateID,
+		"agent_id":      storedUpdate.TargetAgentID,
+		"channel_id":    storedUpdate.ChannelID,
+		"trajectory_id": storedUpdate.TrajectoryID,
+		"status":        "submitted",
+	})
+	eventPayload, _ := json.Marshal(map[string]any{
+		"tool":     "update_coagent",
+		"call_id":  "call-super-explicit-terminal",
 		"is_error": false,
-		"output":   output,
+		"output":   string(output),
 	})
 	if err := s.AppendEvent(ctx, &types.EventRecord{
-		EventID:   "event-save-evidence",
-		RunID:     researcher.RunID,
-		AgentID:   researcher.AgentID,
-		OwnerID:   ownerID,
-		ChannelID: docID,
-		Timestamp: now,
-		Kind:      types.EventToolResult,
-		Phase:     "tool_call",
-		Payload:   payload,
+		EventID:      "event-super-explicit-terminal",
+		RunID:        rec.RunID,
+		AgentID:      rec.AgentID,
+		ChannelID:    rec.ChannelID,
+		OwnerID:      rec.OwnerID,
+		TrajectoryID: rec.TrajectoryID,
+		Timestamp:    now,
+		Kind:         types.EventToolResult,
+		Payload:      eventPayload,
 	}); err != nil {
-		t.Fatalf("append save evidence event: %v", err)
+		t.Fatalf("append explicit Super update event: %v", err)
+	}
+	rec.State = types.RunCompleted
+	rec.Result = "Super completed after its explicit terminal update."
+	rec.UpdatedAt = now.Add(time.Second)
+	rec.FinishedAt = &rec.UpdatedAt
+	if err := s.UpdateRun(ctx, rec); err != nil {
+		t.Fatalf("persist terminal Super run: %v", err)
+	}
+	if err := rt.bindTerminalRunOutcome(ctx, &rec, false); err != nil {
+		t.Fatalf("bind explicit Super terminal update: %v", err)
+	}
+	bound, err := s.GetWorkerUpdate(ctx, rec.OwnerID, update.UpdateID)
+	if err != nil {
+		t.Fatalf("get bound Super update: %v", err)
+	}
+	wantDigest := types.TerminalRunOutcomeSHA256(rec.RunID, rec.State, rec.Result, rec.Error)
+	if bound.SourceRunID != rec.RunID || bound.SourceOutcomeSHA256 != wantDigest || bound.MessageSeq != storedUpdate.MessageSeq {
+		t.Fatalf("bound Super update = %+v, want run %q digest %q seq %d", bound, rec.RunID, wantDigest, storedUpdate.MessageSeq)
+	}
+}
+
+func TestTerminalOutcomeIgnoresExplicitUpdateToNonRequester(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	rec := terminalResearcherRunFixture(
+		"run-terminal-nonrequester",
+		"owner-terminal-nonrequester",
+		"doc-terminal-nonrequester",
+		"Authoritative result owed to the requesting Texture.",
+		types.RunCompleted,
+		now,
+	)
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create terminal child run: %v", err)
+	}
+	unrelated := types.CoagentSourcePacket{
+		OwnerID:       rec.OwnerID,
+		AgentID:       rec.AgentID,
+		TargetAgentID: "co-super:unrelated-recipient",
+		ChannelID:     rec.ChannelID,
+		TrajectoryID:  trajectoryIDForRun(&rec),
+		Role:          agentprofile.Researcher,
+		SourceRunID:   rec.RunID,
+		Packet:        newCoagentPacket("evidence_update", "Update for another actor.", nil, nil, nil, nil, nil),
+		CreatedAt:     now,
+	}
+	unrelated.UpdateID = deriveWorkerUpdateID(unrelated)
+	unrelated.Content = buildWorkerUpdateMessage(unrelated)
+	if _, created, err := s.DispatchWorkerUpdate(ctx, unrelated, &types.ChannelMessage{
+		ChannelID:    unrelated.ChannelID,
+		From:         rec.RunID,
+		FromAgentID:  rec.AgentID,
+		FromRunID:    rec.RunID,
+		ToAgentID:    unrelated.TargetAgentID,
+		TrajectoryID: unrelated.TrajectoryID,
+		Role:         unrelated.Role,
+		Content:      unrelated.Content,
+		Timestamp:    now,
+	}); err != nil || !created {
+		t.Fatalf("dispatch unrelated update: created=%t err=%v", created, err)
 	}
 
-	if err := rt.synthesizeResearcherUpdateOnCompletion(ctx, researcher); err != nil {
-		t.Fatalf("synthesize completion update: %v", err)
+	if err := rt.bindTerminalRunOutcome(ctx, &rec, false); err != nil {
+		t.Fatalf("bind requester terminal outcome: %v", err)
 	}
-	deliveries, err := s.ListPendingWorkerUpdates(ctx, ownerID, "texture:"+docID, 10)
+	requesterUpdates, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
 	if err != nil {
-		t.Fatalf("list deliveries: %v", err)
+		t.Fatalf("list requester terminal outcomes: %v", err)
 	}
-	if len(deliveries) != 1 {
-		t.Fatalf("deliveries len = %d, want 1: %+v", len(deliveries), deliveries)
+	if len(requesterUpdates) != 1 || requesterUpdates[0].TargetAgentID != "texture:"+rec.ChannelID {
+		t.Fatalf("requester outcomes = %+v, want exactly one addressed synthetic outcome", requesterUpdates)
 	}
-	if !strings.Contains(deliveries[0].Content, "Runtime fallback") || !strings.Contains(deliveries[0].Content, "save_evidence") {
-		t.Fatalf("delivery content = %q, want save_evidence fallback", deliveries[0].Content)
+	if requesterUpdates[0].SourceOutcomeSHA256 == "" {
+		t.Fatalf("requester outcome lacks terminal digest: %+v", requesterUpdates[0])
 	}
-	sourceURIs := coagentPacketSourceURIs(deliveries[0].Packet)
-	if len(sourceURIs) != 1 || sourceURIs[0] != "evidence:ev-openai-docs" {
-		t.Fatalf("delivery sources = %+v, want saved evidence source", sourceURIs)
-	}
-	events, err := s.ListEvents(ctx, researcher.RunID, 20)
+	storedUnrelated, err := s.GetWorkerUpdate(ctx, rec.OwnerID, unrelated.UpdateID)
 	if err != nil {
-		t.Fatalf("list events: %v", err)
+		t.Fatalf("reload unrelated update: %v", err)
 	}
-	if !hasSuccessfulToolResult(events, "update_coagent") {
-		t.Fatalf("expected synthetic update_coagent tool result")
+	if storedUnrelated.SourceOutcomeSHA256 != "" {
+		t.Fatalf("non-requester update was bound as terminal outcome: %+v", storedUnrelated)
+	}
+}
+
+func TestBootReconciliationIsIdempotentForTerminalResearcherOutcome(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	rec := terminalResearcherRunFixture(
+		"run-researcher-restart-outcome",
+		"owner-researcher-restart-outcome",
+		"doc-researcher-restart-outcome",
+		"Durable result written before the simulated restart gap.",
+		types.RunCompleted,
+		now,
+	)
+	if err := s.CreateRun(ctx, rec); err != nil {
+		t.Fatalf("create terminal researcher restart fixture: %v", err)
+	}
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+		return nil
+	})
+
+	rt.reconcileTerminalRunOutcomes(ctx)
+	first, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
+	if err != nil {
+		t.Fatalf("list first restart repair: %v", err)
+	}
+	if len(first) != 1 {
+		t.Fatalf("first restart repair updates = %d, want one: %+v", len(first), first)
+	}
+	rt.reconcileTerminalRunOutcomes(ctx)
+	second, err := s.ListPendingWorkerUpdates(ctx, rec.OwnerID, "texture:"+rec.ChannelID, 10)
+	if err != nil {
+		t.Fatalf("list replayed restart repair: %v", err)
+	}
+	if len(second) != 1 {
+		t.Fatalf("replayed restart repair updates = %d, want one: %+v", len(second), second)
+	}
+	if second[0].UpdateID != first[0].UpdateID || second[0].MessageSeq != first[0].MessageSeq {
+		t.Fatalf("restart replay changed update identity from %s/%d to %s/%d", first[0].UpdateID, first[0].MessageSeq, second[0].UpdateID, second[0].MessageSeq)
+	}
+	wantDigest := types.TerminalRunOutcomeSHA256(rec.RunID, rec.State, rec.Result, rec.Error)
+	if second[0].SourceRunID != rec.RunID || second[0].SourceOutcomeSHA256 != wantDigest {
+		t.Fatalf("restart binding = run %q digest %q, want %q/%q", second[0].SourceRunID, second[0].SourceOutcomeSHA256, rec.RunID, wantDigest)
+	}
+}
+
+func TestBootTerminalRepairSynthesizesGenericChildrenAndWakesTargetOnce(t *testing.T) {
+	ctx := context.Background()
+	rt, s := testRuntime(t)
+	now := time.Now().UTC()
+	ownerID := "owner-generic-terminal-repair"
+	targetAgentID := "super:generic-terminal-parent"
+	channelID := "channel-generic-terminal-repair"
+	for i := range 2 {
+		runID := "run-cosuper-generic-terminal-" + string(rune('A'+i))
+		finishedAt := now.Add(time.Duration(i) * time.Second)
+		rec := types.RunRecord{
+			RunID:            runID,
+			AgentID:          "co-super:" + runID,
+			RequestedByRunID: "parent-generic-terminal",
+			ChannelID:        channelID,
+			OwnerID:          ownerID,
+			AgentProfile:     agentprofile.CoSuper,
+			AgentRole:        agentprofile.CoSuper,
+			State:            types.RunCompleted,
+			Result:           "generic delegated child result",
+			CreatedAt:        now,
+			UpdatedAt:        finishedAt,
+			FinishedAt:       &finishedAt,
+			Metadata: map[string]any{
+				runMetadataAgentProfile: agentprofile.CoSuper,
+				runMetadataAgentRole:    agentprofile.CoSuper,
+				runMetadataAgentID:      "co-super:" + runID,
+				runMetadataChannelID:    channelID,
+				runMetadataTrajectoryID: "trajectory-" + runID,
+				"requested_by_agent_id": targetAgentID,
+			},
+		}
+		if err := s.CreateRun(ctx, rec); err != nil {
+			t.Fatalf("create generic terminal child %d: %v", i, err)
+		}
+	}
+	var wakes atomic.Int32
+	rt.SetDispatchActor(func(context.Context, string, string, string, string, string) error {
+		wakes.Add(1)
+		return nil
+	})
+	rt.reconcileTerminalRunOutcomes(ctx)
+	if got := wakes.Load(); got != 1 {
+		t.Fatalf("distinct repaired target wakes = %d, want one", got)
+	}
+	updates, err := s.ListPendingWorkerUpdates(ctx, ownerID, targetAgentID, 10)
+	if err != nil {
+		t.Fatalf("list generic terminal repairs: %v", err)
+	}
+	if len(updates) != 2 {
+		t.Fatalf("generic terminal repairs = %d, want two: %+v", len(updates), updates)
+	}
+	for _, update := range updates {
+		if update.SourceRunID == "" || update.SourceOutcomeSHA256 == "" {
+			t.Fatalf("generic terminal repair lacks outcome binding: %+v", update)
+		}
 	}
 }
 

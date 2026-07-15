@@ -125,6 +125,10 @@ const ogMetadataPageSize = 256
 // equality query. Callers must apply any body-level filters only after every
 // page has been collected.
 func (s *Store) ogListAllByMetadata(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string) ([]objectgraph.Object, error) {
+	return s.ogListAllByMetadataPageSize(ctx, kind, metadataField, value, ogMetadataPageSize)
+}
+
+func (s *Store) ogListAllByMetadataPageSize(ctx context.Context, kind objectgraph.ObjectKind, metadataField, value string, pageSize int) ([]objectgraph.Object, error) {
 	store := s.ogReadStore
 	if store == nil {
 		store = s.ogStore
@@ -132,11 +136,14 @@ func (s *Store) ogListAllByMetadata(ctx context.Context, kind objectgraph.Object
 	if store == nil {
 		return nil, fmt.Errorf("store: object graph not initialized")
 	}
+	if pageSize <= 0 {
+		pageSize = ogMetadataPageSize
+	}
 
 	var objects []objectgraph.Object
 	afterCanonicalID := ""
 	for {
-		page, err := store.ListObjectsByMetadataPage(ctx, string(kind), "$."+metadataField, value, afterCanonicalID, ogMetadataPageSize)
+		page, err := store.ListObjectsByMetadataPage(ctx, string(kind), "$."+metadataField, value, afterCanonicalID, pageSize)
 		if err != nil {
 			return nil, err
 		}
@@ -393,6 +400,27 @@ func (s *Store) ListRunsByStateOG(ctx context.Context, state types.RunState, lim
 		limit = 100
 	}
 	objs, err := s.ogListByMetadata(ctx, ogKindRun, "state", string(state), limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.RunRecord
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		runs = append(runs, rec)
+	}
+	return runs, nil
+}
+
+// ListAllRunsByStateOG exhausts the canonical-ID keyset for one run state.
+func (s *Store) ListAllRunsByStateOG(ctx context.Context, state types.RunState) ([]types.RunRecord, error) {
+	return s.listAllRunsByStateOG(ctx, state, ogMetadataPageSize)
+}
+
+func (s *Store) listAllRunsByStateOG(ctx context.Context, state types.RunState, pageSize int) ([]types.RunRecord, error) {
+	objs, err := s.ogListAllByMetadataPageSize(ctx, ogKindRun, "state", string(state), pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -1024,6 +1052,12 @@ func (s *Store) CreateWorkerUpdateOG(ctx context.Context, rec types.CoagentSourc
 		"role":            rec.Role,
 		"message_seq":     rec.MessageSeq,
 	}
+	if rec.SourceRunID != "" {
+		metadata["source_run_id"] = rec.SourceRunID
+	}
+	if rec.SourceOutcomeSHA256 != "" {
+		metadata["source_outcome_sha256"] = rec.SourceOutcomeSHA256
+	}
 	if rec.DeliveredToRunID != "" {
 		metadata["delivered_to_run_id"] = rec.DeliveredToRunID
 	}
@@ -1051,6 +1085,25 @@ func (s *Store) GetWorkerUpdateOG(ctx context.Context, ownerID, updateID string)
 		return rec, nil
 	}
 	return types.CoagentSourcePacket{}, ErrNotFound
+}
+
+// ListWorkerUpdatesBySourceRunOG exhausts terminal-bound updates for one run.
+func (s *Store) ListWorkerUpdatesBySourceRunOG(ctx context.Context, ownerID, sourceRunID string) ([]types.CoagentSourcePacket, error) {
+	objs, err := s.ogListAllByMetadata(ctx, objectgraph.ObjectKind("choir.worker_update"), "source_run_id", sourceRunID)
+	if err != nil {
+		return nil, err
+	}
+	updates := make([]types.CoagentSourcePacket, 0, len(objs))
+	for _, obj := range objs {
+		var rec types.CoagentSourcePacket
+		if err := ogDecode(obj, &rec); err != nil {
+			return nil, err
+		}
+		if rec.OwnerID == ownerID && rec.SourceRunID == sourceRunID {
+			updates = append(updates, rec)
+		}
+	}
+	return updates, nil
 }
 
 // ListWorkerUpdatesByTrajectoryOG lists worker updates for a trajectory.

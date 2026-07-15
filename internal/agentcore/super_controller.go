@@ -558,7 +558,11 @@ func (rt *Runtime) coagentUpdateTurnInjectorWithInitialPhase(rec *types.RunRecor
 			phase = initialPhase
 			initialPhase = ""
 		}
-		msgs, _, err := buildCoagentUpdateUserMessages(fresh, phase, agentID, nil, nil)
+		projected, err := rt.projectTerminalOutcomeContent(context.Background(), fresh)
+		if err != nil {
+			return nil, err
+		}
+		msgs, _, err := buildCoagentUpdateUserMessages(projected, phase, agentID, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -680,7 +684,11 @@ func (rt *Runtime) prependInitialCoagentUpdatePackets(ctx context.Context, rec *
 		return messages, nil
 	}
 	appendCoagentUpdateIDsForRun(rec, updateIDs)
-	msgs, _, err := buildCoagentUpdateUserMessages(fresh, coagentPacketDeliveryCold, agentID, nil, nil)
+	projected, err := rt.projectTerminalOutcomeContent(ctx, fresh)
+	if err != nil {
+		return messages, err
+	}
+	msgs, _, err := buildCoagentUpdateUserMessages(projected, coagentPacketDeliveryCold, agentID, nil, nil)
 	if err != nil {
 		return messages, err
 	}

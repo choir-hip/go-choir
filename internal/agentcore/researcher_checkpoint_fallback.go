@@ -2,288 +2,266 @@ package agentcore
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/events"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
-func (rt *Runtime) synthesizeResearcherUpdateOnFailure(ctx context.Context, rec *types.RunRecord, runErr error) error {
-	return rt.synthesizeResearcherUpdateIfMissing(ctx, rec, runErr)
+const terminalOutcomeReferenceUpdatePrefix = "terminal-coagent-outcome-"
+
+type terminalOutcomeBinding struct {
+	Update  types.CoagentSourcePacket
+	Present bool
+	Wake    bool
 }
 
-func (rt *Runtime) synthesizeResearcherUpdateOnCompletion(ctx context.Context, rec *types.RunRecord) error {
-	return rt.synthesizeResearcherUpdateIfMissing(ctx, rec, nil)
-}
-
-func (rt *Runtime) synthesizeResearcherUpdateIfMissing(ctx context.Context, rec *types.RunRecord, runErr error) error {
-	if rt == nil || rt.store == nil || rec == nil || agentProfileForRun(rec) != agentprofile.Researcher {
+// bindTerminalRunOutcome binds the final safe update_coagent packet to the
+// authoritative terminal RunRecord. Profiles that cannot emit update_coagent
+// return before any store access.
+func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRecord, activate bool) error {
+	if rt == nil || rt.store == nil || rec == nil || strings.TrimSpace(rec.RunID) == "" || !terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
 		return nil
 	}
-	eventsForRun, err := rt.store.ListEvents(ctx, rec.RunID, 1000)
+	persisted, err := rt.store.GetRun(ctx, rec.RunID)
+	if err != nil {
+		return fmt.Errorf("reload terminal run %s: %w", rec.RunID, err)
+	}
+	binding, err := rt.ensurePersistedTerminalRunOutcome(ctx, &persisted)
 	if err != nil {
 		return err
 	}
-	toolEvent, toolName, output, ok := latestSuccessfulResearchToolResultOutput(eventsForRun)
+	if activate && binding.Wake {
+		rt.wakeUpdatedCoagent(ctx, binding.Update)
+	}
+	return nil
+}
+
+func (rt *Runtime) ensurePersistedTerminalRunOutcome(ctx context.Context, persisted *types.RunRecord) (terminalOutcomeBinding, error) {
+	if rt == nil || rt.store == nil || persisted == nil || !persisted.State.Terminal() || !terminalOutcomeCapableProfile(agentProfileForRun(persisted)) {
+		return terminalOutcomeBinding{}, nil
+	}
+	// Only delegated child runs owe a terminal outcome to a requester. Root
+	// runs have no addressed parent and must never synthesize mailbox traffic.
+	if strings.TrimSpace(persisted.RequestedByRunID) == "" {
+		return terminalOutcomeBinding{}, nil
+	}
+	targetAgentID, channelID, ok, err := rt.terminalOutcomeRequesterTarget(ctx, persisted)
+	if err != nil {
+		return terminalOutcomeBinding{}, err
+	}
 	if !ok {
-		return nil
+		return terminalOutcomeBinding{}, nil
 	}
-	latestSubmit := latestSuccessfulResearchToolSeq(eventsForRun, "update_coagent")
-	if latestSubmit > 0 && latestSubmit >= toolEvent.Seq {
-		return nil
-	}
-	registry := rt.toolRegistryForRun(rec)
-	if registry == nil {
-		return nil
-	}
-	updateArgs, err := researcherFallbackUpdateArgs(rec, runErr, toolEvent, toolName, output)
+	outcomeDigest := types.TerminalRunOutcomeSHA256(persisted.RunID, persisted.State, persisted.Result, persisted.Error)
+	producerUpdates, err := rt.store.ListWorkerUpdatesBySourceRun(ctx, persisted.OwnerID, persisted.RunID)
 	if err != nil {
-		return err
+		return terminalOutcomeBinding{}, fmt.Errorf("list producer updates for terminal run %s: %w", persisted.RunID, err)
 	}
-	rawArgs, err := json.Marshal(updateArgs)
+
+	var bound []types.CoagentSourcePacket
+	var finalExplicit *types.CoagentSourcePacket
+	for i := range producerUpdates {
+		update := producerUpdates[i]
+		if strings.TrimSpace(update.SourceOutcomeSHA256) != "" {
+			bound = append(bound, update)
+			continue
+		}
+		if !terminalOutcomeExplicitProducerIdentityMatches(update, persisted, targetAgentID, channelID) {
+			continue
+		}
+		if finalExplicit == nil || terminalOutcomeUpdateLater(update, *finalExplicit) {
+			candidate := update
+			finalExplicit = &candidate
+		}
+	}
+	if len(bound) > 1 {
+		return terminalOutcomeBinding{}, fmt.Errorf("terminal run %s has %d bound outcomes, want exactly one", persisted.RunID, len(bound))
+	}
+	if len(bound) == 1 {
+		existing := bound[0]
+		if existing.SourceOutcomeSHA256 != outcomeDigest {
+			return terminalOutcomeBinding{}, fmt.Errorf("terminal run %s outcome binding %s has a different digest", persisted.RunID, existing.UpdateID)
+		}
+		if !terminalOutcomeBoundIdentityMatches(existing, persisted, targetAgentID, channelID) {
+			return terminalOutcomeBinding{}, fmt.Errorf("terminal run %s outcome binding %s has mismatched sender identity", persisted.RunID, existing.UpdateID)
+		}
+		if finalExplicit != nil && existing.UpdateID != finalExplicit.UpdateID {
+			return terminalOutcomeBinding{}, fmt.Errorf("terminal run %s outcome binding %s was superseded by final update %s", persisted.RunID, existing.UpdateID, finalExplicit.UpdateID)
+		}
+		return terminalOutcomeBinding{Update: existing, Present: true}, nil
+	}
+	if finalExplicit != nil {
+		boundUpdate, bindErr := rt.store.BindWorkerUpdateTerminalOutcome(ctx, persisted.OwnerID, finalExplicit.UpdateID, persisted.RunID, outcomeDigest)
+		if bindErr != nil {
+			return terminalOutcomeBinding{}, fmt.Errorf("bind final producer update %s: %w", finalExplicit.UpdateID, bindErr)
+		}
+		if !terminalOutcomeExplicitProducerIdentityMatches(boundUpdate, persisted, targetAgentID, channelID) {
+			return terminalOutcomeBinding{}, fmt.Errorf("bound terminal update %s changed producer identity", finalExplicit.UpdateID)
+		}
+		return terminalOutcomeBinding{Update: boundUpdate, Present: true}, nil
+	}
+
+	synthetic := terminalOutcomeReferenceUpdate(persisted, targetAgentID, channelID, outcomeDigest)
+	if existing, getErr := rt.store.GetWorkerUpdate(ctx, persisted.OwnerID, synthetic.UpdateID); getErr == nil {
+		if err := validateTerminalOutcomeReferenceUpdate(existing, synthetic); err != nil {
+			return terminalOutcomeBinding{}, err
+		}
+		return terminalOutcomeBinding{Update: existing, Present: true}, nil
+	} else if !errors.Is(getErr, store.ErrNotFound) {
+		return terminalOutcomeBinding{}, fmt.Errorf("get terminal outcome %s: %w", synthetic.UpdateID, getErr)
+	}
+
+	message := &types.ChannelMessage{
+		ChannelID:    synthetic.ChannelID,
+		From:         persisted.RunID,
+		FromAgentID:  synthetic.AgentID,
+		FromRunID:    persisted.RunID,
+		ToAgentID:    synthetic.TargetAgentID,
+		TrajectoryID: synthetic.TrajectoryID,
+		Role:         synthetic.Role,
+		Content:      synthetic.Content,
+		Timestamp:    synthetic.CreatedAt,
+	}
+	stored, created, err := rt.store.DispatchWorkerUpdate(ctx, synthetic, message)
 	if err != nil {
-		return err
+		return terminalOutcomeBinding{}, fmt.Errorf("dispatch terminal outcome: %w", err)
 	}
-	emit := func(kind types.EventKind, phase string, payload json.RawMessage) {
-		rt.emitEvent(ctx, rec, kind, events.CauseSupervisorRecovery, payload)
+	if !created {
+		if err := validateTerminalOutcomeReferenceUpdate(stored, synthetic); err != nil {
+			return terminalOutcomeBinding{}, err
+		}
+		return terminalOutcomeBinding{Update: stored, Present: true}, nil
 	}
-	results := toolregistry.ExecuteToolBatch(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec)), registry, []types.ToolCall{{
-		ID:        "runtime-fallback-submit-coagent-update",
-		Name:      "update_coagent",
-		Arguments: rawArgs,
-	}}, emit)
-	result := results[0]
-	if result.IsError {
-		return fmt.Errorf("fallback update_coagent: %s", result.Output)
-	}
-	return nil
+	message.Seq = stored.MessageSeq
+	rt.emitChannelMessageEvent(ctx, *message, persisted.OwnerID)
+	return terminalOutcomeBinding{Update: stored, Present: true, Wake: true}, nil
 }
 
-func latestSuccessfulResearchToolSeq(events []types.EventRecord, toolNames ...string) int64 {
-	wanted := make(map[string]bool, len(toolNames))
-	for _, toolName := range toolNames {
-		if strings.TrimSpace(toolName) != "" {
-			wanted[toolName] = true
-		}
-	}
-	var latest int64
-	for _, ev := range events {
-		if ev.Kind != types.EventToolResult {
-			continue
-		}
-		var payload map[string]any
-		if err := json.Unmarshal(ev.Payload, &payload); err != nil {
-			continue
-		}
-		tool, _ := payload["tool"].(string)
-		isError, _ := payload["is_error"].(bool)
-		if wanted[tool] && !isError && ev.Seq > latest {
-			latest = ev.Seq
-		}
-	}
-	return latest
+func terminalOutcomeCapableProfile(profile string) bool {
+	return agentprofile.Canonical(profile) != ""
 }
 
-func latestSuccessfulResearchToolResultOutput(eventsForRun []types.EventRecord) (types.EventRecord, string, map[string]any, bool) {
-	wanted := map[string]bool{
-		"web_search":                 true,
-		"source_search":              true,
-		"fetch_url":                  true,
-		"import_url_content":         true,
-		"import_document_content":    true,
-		"read_content_item":          true,
-		"read_content_item_selector": true,
-		"save_evidence":              true,
+func (rt *Runtime) terminalOutcomeRequesterTarget(ctx context.Context, rec *types.RunRecord) (string, string, bool, error) {
+	if strings.TrimSpace(rec.RequestedByRunID) == "" {
+		return "", "", false, nil
 	}
-	var latest types.EventRecord
-	var latestTool string
-	var latestOutput map[string]any
-	found := false
-	for _, ev := range eventsForRun {
-		if ev.Kind != types.EventToolResult {
-			continue
-		}
-		payload, ok := decodeToolResultPayload(ev)
-		if !ok || payload.IsError || !wanted[payload.Tool] {
-			continue
-		}
-		var output map[string]any
-		if err := json.Unmarshal([]byte(payload.Output), &output); err != nil {
-			output = map[string]any{"raw_output": strings.TrimSpace(payload.Output)}
-		}
-		latest = ev
-		latestTool = payload.Tool
-		latestOutput = output
-		found = true
+	targetAgentID := strings.TrimSpace(metadataStringValue(rec.Metadata, "requested_by_agent_id"))
+	channelID := strings.TrimSpace(metadataStringValue(rec.Metadata, runMetadataChannelID))
+	parent, parentErr := rt.store.GetRun(ctx, rec.RequestedByRunID)
+	if parentErr != nil && !errors.Is(parentErr, store.ErrNotFound) {
+		return "", "", false, fmt.Errorf("resolve terminal outcome requester run %s: %w", rec.RequestedByRunID, parentErr)
 	}
-	return latest, latestTool, latestOutput, found
+	if parentErr == nil {
+		if targetAgentID == "" {
+			targetAgentID = agentIDForRun(&parent)
+		}
+		if strings.TrimSpace(parent.ChannelID) != "" {
+			channelID = strings.TrimSpace(parent.ChannelID)
+		}
+	}
+	if targetAgentID == "" {
+		return "", "", false, nil
+	}
+	if target, err := rt.store.GetAgent(ctx, targetAgentID); err == nil {
+		if strings.TrimSpace(target.ChannelID) != "" {
+			channelID = strings.TrimSpace(target.ChannelID)
+		}
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return "", "", false, fmt.Errorf("resolve terminal outcome requester agent %s: %w", targetAgentID, err)
+	}
+	if channelID == "" {
+		channelID = strings.TrimSpace(rec.ChannelID)
+	}
+	if channelID == "" || targetAgentID == agentIDForRun(rec) {
+		return "", "", false, nil
+	}
+	return targetAgentID, channelID, true, nil
 }
 
-func researcherFallbackUpdateArgs(rec *types.RunRecord, runErr error, toolEvent types.EventRecord, toolName string, output map[string]any) (map[string]any, error) {
-	summary := fmt.Sprintf("Runtime fallback: researcher returned %s evidence but did not submit a coagent checkpoint before the run completed.", toolName)
+func terminalOutcomeReferenceUpdate(rec *types.RunRecord, targetAgentID, channelID, outcomeDigest string) types.CoagentSourcePacket {
+	profile := agentprofile.Canonical(agentProfileForRun(rec))
 	kind := "evidence_update"
-	if runErr != nil {
-		summary = fmt.Sprintf("Runtime fallback: researcher returned %s evidence but did not submit a coagent checkpoint before the run failed.", toolName)
+	summary := fmt.Sprintf("%s run completed with an authoritative terminal result.", profile)
+	if rec.State != types.RunCompleted {
 		kind = "blocker"
+		summary = fmt.Sprintf("%s run reached terminal state %s.", profile, rec.State)
 	}
-	findings := []string{researcherFallbackFinding(toolName, output, runErr != nil)}
-	refs := []string{
-		"trace:event:" + strings.TrimSpace(toolEvent.EventID),
-		"tool:" + strings.TrimSpace(toolName),
+	packet := newCoagentPacket(
+		kind,
+		summary,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]string{"The runtime-owned source_run_id references the authoritative RunRecord; source_outcome_sha256 is only its terminal outcome witness."},
+	)
+	createdAt := rec.UpdatedAt
+	if rec.FinishedAt != nil {
+		createdAt = *rec.FinishedAt
 	}
-	refs = append(refs, researcherFallbackRefs(output)...)
-	notes := []string{"This is a runtime-synthesized checkpoint/update so Texture can wake and honestly revise from available evidence instead of waiting indefinitely."}
-	if runErr != nil && strings.TrimSpace(runErr.Error()) != "" {
-		notes = append(notes, "Run error: "+strings.TrimSpace(runErr.Error()))
+	if createdAt.IsZero() {
+		createdAt = time.Unix(0, 0).UTC()
 	}
-	if rec != nil && strings.TrimSpace(rec.RunID) != "" {
-		notes = append(notes, "Researcher loop: "+strings.TrimSpace(rec.RunID))
+	update := types.CoagentSourcePacket{
+		UpdateID:            terminalOutcomeReferenceUpdatePrefix + outcomeDigest[:32],
+		OwnerID:             rec.OwnerID,
+		AgentID:             agentIDForRun(rec),
+		TargetAgentID:       targetAgentID,
+		ChannelID:           channelID,
+		TrajectoryID:        trajectoryIDForRun(rec),
+		Role:                profile,
+		SourceRunID:         rec.RunID,
+		SourceOutcomeSHA256: outcomeDigest,
+		Packet:              packet,
+		CreatedAt:           createdAt,
 	}
-	sourceRefs := append([]string{}, researcherFallbackEvidenceIDs(output)...)
-	sourceRefs = append(sourceRefs, refs...)
-	sources := coagentSourcesFromTypedEvidenceRefs(sourceRefs)
-	args := map[string]any{
-		"schema_version": types.CoagentSourcePacketSchemaV1,
-		"kind":           kind,
-		"summary":        summary,
-		"claims":         coagentClaimsFromTexts(findings, sources),
-		"sources":        sources,
-		"notes":          trimDedupeNonEmpty(notes),
-	}
-	if rec != nil {
-		if textureAgentID := strings.TrimSpace(metadataStringValue(rec.Metadata, "requested_by_agent_id")); isTextureAgentID(textureAgentID) {
-			args["agent_id"] = textureAgentID
-		} else if channelID := strings.TrimSpace(metadataStringValue(rec.Metadata, runMetadataChannelID)); channelID != "" {
-			args["agent_id"] = currentTextureAgentID(channelID)
-		}
-	}
-	return args, nil
+	update.Content = buildWorkerUpdateMessage(update)
+	return update
 }
 
-func researcherFallbackFinding(toolName string, output map[string]any, failed bool) string {
-	missingCheckpoint := "before completing."
-	if failed {
-		missingCheckpoint = "before the runtime deadline/failure."
-	}
-	switch toolName {
-	case "web_search":
-		query := stringMapValue(output, "query")
-		provider := stringMapValue(output, "provider")
-		resultCount := intMapValue(output, "result_count")
-		if resultCount == 0 {
-			resultCount = len(anySliceMapValue(output, "results"))
-		}
-		parts := []string{"A web_search result returned"}
-		if query != "" {
-			parts = append(parts, "for query "+strconvQuote(query))
-		}
-		if resultCount > 0 {
-			parts = append(parts, fmt.Sprintf("with %d visible result(s)", resultCount))
-		}
-		if provider != "" {
-			parts = append(parts, "via "+provider)
-		}
-		parts = append(parts, "but the researcher did not convert it into a structured checkpoint "+missingCheckpoint)
-		return strings.Join(parts, " ")
-	case "source_search":
-		query := stringMapValue(output, "query")
-		resultCount := intMapValue(output, "result_count")
-		if resultCount == 0 {
-			resultCount = len(anySliceMapValue(output, "results"))
-		}
-		parts := []string{"A source_search result returned"}
-		if query != "" {
-			parts = append(parts, "for query "+strconvQuote(query))
-		}
-		if resultCount > 0 {
-			parts = append(parts, fmt.Sprintf("with %d visible source-service item(s)", resultCount))
-		}
-		parts = append(parts, "but the researcher did not convert it into a structured checkpoint "+missingCheckpoint)
-		return strings.Join(parts, " ")
-	case "fetch_url":
-		url := stringMapValue(output, "url")
-		status := intMapValue(output, "status_code")
-		if url != "" && status > 0 {
-			return fmt.Sprintf("A fetch_url result returned HTTP %d for %s, but the researcher did not convert it into a structured checkpoint %s", status, url, missingCheckpoint)
-		}
-	case "import_url_content":
-		title := stringMapValue(output, "title")
-		source := stringMapValue(output, "source_url")
-		if title != "" || source != "" {
-			return fmt.Sprintf("An import_url_content result returned source material (%s %s), but the researcher did not convert it into a structured checkpoint %s", title, source, missingCheckpoint)
-		}
-	case "import_document_content", "read_content_item", "read_content_item_selector":
-		contentID := stringMapValue(output, "content_id")
-		title := firstNonEmpty(stringMapValue(output, "title"), stringMapValue(output, "selector_id"), contentID)
-		if title != "" || contentID != "" {
-			return fmt.Sprintf("A %s result returned source material (%s %s), but the researcher did not convert it into a structured checkpoint %s", toolName, title, contentID, missingCheckpoint)
-		}
-	case "save_evidence":
-		evidenceID := stringMapValue(output, "evidence_id")
-		title := stringMapValue(output, "title")
-		if evidenceID != "" || title != "" {
-			return fmt.Sprintf("A save_evidence result persisted evidence (%s %s), but the researcher did not deliver its evidence_id through update_coagent %s", title, evidenceID, missingCheckpoint)
-		}
-	}
-	return fmt.Sprintf("A %s result returned, but the researcher did not convert it into a structured checkpoint %s", toolName, missingCheckpoint)
+func terminalOutcomeExplicitProducerIdentityMatches(update types.CoagentSourcePacket, rec *types.RunRecord, targetAgentID, channelID string) bool {
+	return update.UpdateID == deriveWorkerUpdateID(update) &&
+		update.OwnerID == rec.OwnerID &&
+		update.AgentID == agentIDForRun(rec) &&
+		update.TargetAgentID == targetAgentID &&
+		update.ChannelID == channelID &&
+		update.TrajectoryID == trajectoryIDForRun(rec) &&
+		update.SourceRunID == rec.RunID &&
+		agentprofile.Canonical(update.Role) == agentprofile.Canonical(agentProfileForRun(rec))
 }
 
-func researcherFallbackEvidenceIDs(output map[string]any) []string {
-	if evidenceID := stringMapValue(output, "evidence_id"); evidenceID != "" {
-		return []string{"evidence:" + evidenceID}
+func terminalOutcomeUpdateLater(candidate, current types.CoagentSourcePacket) bool {
+	if !candidate.CreatedAt.Equal(current.CreatedAt) {
+		return candidate.CreatedAt.After(current.CreatedAt)
+	}
+	if candidate.MessageSeq != current.MessageSeq {
+		return candidate.MessageSeq > current.MessageSeq
+	}
+	return candidate.UpdateID > current.UpdateID
+}
+
+func terminalOutcomeBoundIdentityMatches(update types.CoagentSourcePacket, rec *types.RunRecord, targetAgentID, channelID string) bool {
+	return update.OwnerID == rec.OwnerID &&
+		update.AgentID == agentIDForRun(rec) &&
+		update.TargetAgentID == targetAgentID &&
+		update.ChannelID == channelID &&
+		update.TrajectoryID == trajectoryIDForRun(rec) &&
+		update.SourceRunID == rec.RunID
+}
+
+func validateTerminalOutcomeReferenceUpdate(existing, want types.CoagentSourcePacket) error {
+	if err := validateExistingWorkerUpdate(existing, want); err != nil {
+		return err
+	}
+	if existing.TrajectoryID != want.TrajectoryID ||
+		existing.SourceRunID != want.SourceRunID ||
+		existing.SourceOutcomeSHA256 != want.SourceOutcomeSHA256 {
+		return fmt.Errorf("terminal coagent outcome %s already exists with different runtime binding metadata", want.UpdateID)
 	}
 	return nil
-}
-
-func researcherFallbackRefs(output map[string]any) []string {
-	var refs []string
-	if contentID := stringMapValue(output, "content_id"); contentID != "" {
-		refs = append(refs, "content_id:"+contentID)
-	}
-	if url := stringMapValue(output, "url"); url != "" {
-		refs = append(refs, url)
-	}
-	if source := stringMapValue(output, "source_url"); source != "" {
-		refs = append(refs, source)
-	}
-	for _, result := range anySliceMapValue(output, "results") {
-		item, _ := result.(map[string]any)
-		if item == nil {
-			continue
-		}
-		if url := stringMapValue(item, "url"); url != "" {
-			refs = append(refs, url)
-		}
-		if itemID := stringMapValue(item, "item_id"); itemID != "" {
-			refs = append(refs, "source_service_item:"+itemID)
-		}
-		if sourceID := stringMapValue(item, "source_id"); sourceID != "" {
-			refs = append(refs, "source:"+sourceID)
-		}
-		if len(refs) >= 5 {
-			break
-		}
-	}
-	return refs
-}
-
-func anySliceMapValue(m map[string]any, key string) []any {
-	switch value := m[key].(type) {
-	case []any:
-		return value
-	default:
-		return nil
-	}
-}
-
-func strconvQuote(value string) string {
-	encoded, err := json.Marshal(strings.TrimSpace(value))
-	if err != nil {
-		return strings.TrimSpace(value)
-	}
-	return string(encoded)
 }
