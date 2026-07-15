@@ -434,6 +434,21 @@ func terminalResearcherRunFixture(runID, ownerID, docID, result string, state ty
 	return rec
 }
 
+func TestRootTerminalRunSkipsOutcomeBindingWithoutStoreLookup(t *testing.T) {
+	rt, _ := testRuntime(t)
+	root := types.RunRecord{
+		RunID:        "unpersisted-root-terminal",
+		AgentID:      "co-super:unpersisted-root-terminal",
+		AgentProfile: agentprofile.CoSuper,
+		AgentRole:    agentprofile.CoSuper,
+		State:        types.RunCompleted,
+		Result:       "Root result has no requester.",
+	}
+	if err := rt.bindTerminalRunOutcome(context.Background(), &root, false); err != nil {
+		t.Fatalf("root terminal run performed a binding store lookup: %v", err)
+	}
+}
+
 func TestResearcherPlainTerminalResultBindsAddressedOutcome(t *testing.T) {
 	ctx := context.Background()
 	rt, s := testRuntime(t)

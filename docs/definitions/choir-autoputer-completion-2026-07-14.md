@@ -138,18 +138,18 @@ measures:
 
 now:
   status: working
-  slice: "A1 canonical CI blocker documented before repair"
-  question: "Does the frozen A1 candidate preserve one authoritative terminal RunRecord, deliver its exact outcome to the requesting actor without a second result store, and repair every crash-gap row on the same restart?"
+  slice: "A1 root-run amplification repaired and locally verified; canonical CI pending"
+  question: "Does the corrected A1 candidate preserve one authoritative terminal RunRecord and reject root runs before any binding-store read while retaining exact delegated-child delivery and restart repair?"
   reconciliation:
-    observed_at: 2026-07-15T06:08:44Z
-    source_ref: refs/remotes/origin/main@d8de1a6ad71ef5dcc8fcf31cc09f5c2c742f911c
-    deploy_identity: "Not deployed: CI 29392822789 failed twice in agentcore/textureowner shard 2, so the staging deploy gate correctly remained closed."
+    observed_at: 2026-07-15T06:17:23Z
+    source_ref: "refs/remotes/origin/main@1089c3cd + candidate sha256:de391a728c32bbf480e4a9e1362e0b3dab3afcbd68d6f3609362a3c9f1895a3d"
+    deploy_identity: "Repair is not deployed. Canonical staging remains closed behind failed CI 29392822789 until the corrected source is pushed and accepted."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
       - docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-    status: canonical_ci_blocked
+    status: repair_verified_local
     acceptance_level: blocked_incomplete
     mutation_class: red
     protected_surfaces: [run_record_outcome_authority, coagent_delivery, texture_trajectory_lifecycle, privileged_super_activation, run_acceptance, persistent_computer_state, deployment_identity]
@@ -159,7 +159,7 @@ now:
     heresy_delta:
       discovered: "Six document trajectories are live with zero open work and zero pending updates after their children reached terminal states; plain researcher Result text can be dropped; one Super update has two activation triggers; and the prior filesystem proof accepted a Texture revision whose own content said execution evidence was pending."
       introduced: "A1 calls bindTerminalRunOutcome for every cancelled run and reloads the persisted RunRecord before rejecting root runs. The 1,001-run trajectory drain therefore performs 1,001 unnecessary point reads and exhausts the test deadline."
-      repaired: "Candidate-only: terminal-first requester binding, reference-only delivery projection, binding/delivery race serialization, cross-run update-ID separation, and keyset-exhaustive boot repair. No deployed repair is claimed."
+      repaired: "Candidate-only: terminal-first requester binding, reference-only delivery projection, binding/delivery race serialization, cross-run update-ID separation, keyset-exhaustive boot repair, and an early RequestedByRunID guard that prevents root terminalization from reading binding state. No deployed repair is claimed."
     problems:
       - id: terminal-outcome-delivery-gap
         classification: substrate
@@ -186,6 +186,8 @@ now:
       - "focused-contracts:artifact://1914:10 terminal binding, requester, crash-window, idempotency, race, and keyset tests passed"
       - "independent-review:A1CorrectedReview:ACCEPT:no-P0-P1-P2"
       - "ci:https://github.com/choir-hip/go-choir/actions/runs/29392822789:FAIL twice:job 87279811257 then 87280533264"
+      - "repair-candidate:sha256:de391a728c32bbf480e4a9e1362e0b3dab3afcbd68d6f3609362a3c9f1895a3d"
+      - "repair-contracts:artifact://1949:13 root-guard, terminal-binding, restart, race, keyset, and 1,001-run trajectory-drain tests passed"
     selected_sequence:
       - "A1: persist terminal RunRecord first; bind one deterministic delivered outcome; repair the persistence/binding crash gap; retain only the actor-owned durable Super wake."
       - "A2: enable one store-owned atomic trajectory terminalization authority and fence work, update, run, and reactivation admission after terminal status."
@@ -221,14 +223,14 @@ now:
       - "candidate-transition:owner_approved -> adopted -> rolled_back"
   candidate:
     id: A1-terminal-outcome-binding-01
-    state: canonical_ci_blocked
+    state: repair_verified_local
     owner: orchestrator
-    base: 4ef6170d11350443965c7adf89802136e4bcf133
-    commit: d8de1a6ad71ef5dcc8fcf31cc09f5c2c742f911c
-    scope: [terminal_outcome_binding, requester_identity, reference_only_projection, binding_delivery_serialization, exhaustive_restart_repair]
-    disposition: repair_root_run_reload_amplification
-  blocker_or_risk: "Canonical A1 is not deployable until root runs are rejected before the binding reload. This is a performance/correctness blocker at trajectory-cancellation cardinality, not evidence against the requester-binding design. A2 closure and B strict artifact acceptance remain dark."
-  next_action: "Land the minimal early RequestedByRunID guard in bindTerminalRunOutcome, add a regression that proves root terminalization performs no binding lookup, rerun the 1,001-run drain plus A1 contracts, then repush and require green CI before staging acceptance."
+    base: 1089c3cd
+    digest: sha256:de391a728c32bbf480e4a9e1362e0b3dab3afcbd68d6f3609362a3c9f1895a3d
+    scope: [terminal_outcome_binding, requester_identity, reference_only_projection, binding_delivery_serialization, exhaustive_restart_repair, root_run_store_guard]
+    disposition: pending_canonical_ci
+  blocker_or_risk: "The repair is locally proven but not canonical or deployed. CI must show the same 1,001-run shard contract no longer exhausts its deadline. A2 closure and B strict artifact acceptance remain dark."
+  next_action: "Commit and push the two-file A1 repair plus this Definition update, require green CI and staging identity, then run the deployed plain-terminal outcome and restart acceptance before authorizing A2."
 
 receipts:
   - id: predecessor-B0-authority

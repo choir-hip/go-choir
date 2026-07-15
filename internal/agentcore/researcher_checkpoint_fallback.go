@@ -20,11 +20,14 @@ type terminalOutcomeBinding struct {
 	Wake    bool
 }
 
-// bindTerminalRunOutcome binds the final safe update_coagent packet to the
-// authoritative terminal RunRecord. Profiles that cannot emit update_coagent
-// return before any store access.
+// bindTerminalRunOutcome binds one delegated child's final safe update_coagent
+// packet to the authoritative terminal RunRecord. Root runs have no requester
+// and return before any store access.
 func (rt *Runtime) bindTerminalRunOutcome(ctx context.Context, rec *types.RunRecord, activate bool) error {
-	if rt == nil || rt.store == nil || rec == nil || strings.TrimSpace(rec.RunID) == "" || !terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
+	if rt == nil || rt.store == nil || rec == nil ||
+		strings.TrimSpace(rec.RunID) == "" ||
+		strings.TrimSpace(rec.RequestedByRunID) == "" ||
+		!terminalOutcomeCapableProfile(agentProfileForRun(rec)) {
 		return nil
 	}
 	persisted, err := rt.store.GetRun(ctx, rec.RunID)
