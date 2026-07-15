@@ -59,6 +59,16 @@ Focused gateway tests must prove request shape, citation parsing, result bounds,
 must return at least one normalized result with a clickable URL through the
 adapter.
 
+## Outcome evidence
+
+- `go test -short ./internal/gateway`: pass.
+- `CHATGPT_AUTH_PATH=~/.codex/auth.json go test ./internal/gateway -run
+  '^TestChatGPTSearchProviderIntegration$' -v`: pass against the live ChatGPT
+  endpoint through Choir's search plane, with one `chatgpt` attempt and 1–3
+  normalized cited results required by the test.
+- The unfocused non-short gateway suite still invokes unrelated paid-provider
+  integration tests; Tavily, Exa, Serper, and SerpAPI reported exhausted quota.
+
 ## Rollback
 
 Revert the adapter, its registry entry, and deployment comments. Existing search

@@ -1,6 +1,6 @@
 // Package gateway implements web search functionality with multi-provider
 // rotation and fallback. Supports SearXNG (self-hosted, free), Tavily, Brave,
-// Parallel, Exa, Serper, and SerpAPI search APIs.
+// Parallel, Exa, Serper, SerpAPI, and ChatGPT/Codex hosted web search.
 //
 // The SearchClient uses round-robin rotation across available providers and
 // queries more than one provider per request by default for result diversity.
@@ -137,6 +137,7 @@ func NewSearchClient() *SearchClient {
 		&SerperProvider{},
 		&SerpAPIProvider{},
 		&KeenableProvider{},
+		NewChatGPTSearchProviderFromEnv(),
 	}
 
 	// Filter to only available providers.
@@ -171,7 +172,7 @@ func (c *SearchClient) Search(ctx context.Context, req SearchRequest) (*SearchRe
 		return nil, fmt.Errorf("query is required")
 	}
 	if len(c.providers) == 0 {
-		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, or KEENABLE_API_KEY)")
+		return nil, fmt.Errorf("no search providers available (set SEARXNG_URL, TAVILY_API_KEY, BRAVE_API_KEY, PARALLEL_API_KEY, EXA_API_KEY, SERPER_API_KEY, SERPAPI_API_KEY, KEENABLE_API_KEY, or CHATGPT_AUTH_PATH)")
 	}
 	return c.searchViaPlane(ctx, req)
 }
@@ -219,6 +220,14 @@ func searchProviderEndpoint(provider string) string {
 		return "https://serpapi.com/search.json"
 	case "keenable":
 		return keenableSearchURL
+	case "chatgpt":
+		if endpoint := strings.TrimSpace(os.Getenv("CHATGPT_SEARCH_BASE_URL")); endpoint != "" {
+			return endpoint
+		}
+		if endpoint := strings.TrimSpace(os.Getenv("CHATGPT_BASE_URL")); endpoint != "" {
+			return endpoint
+		}
+		return defaultChatGPTSearchURL
 	default:
 		return ""
 	}
