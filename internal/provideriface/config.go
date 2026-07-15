@@ -68,7 +68,7 @@ const (
 	DefaultAppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/sandbox"
 	DefaultAppPromotionUIBuildCommand      = "npm --prefix frontend ci --no-audit --no-fund && NODE_OPTIONS=--max-old-space-size=768 npm --prefix frontend run build"
 	DefaultAppPromotionUIArtifactPath      = "frontend/dist"
-	DefaultAppPromotionBuildTimeout        = 15 * time.Minute
+	DefaultAppPromotionBuildTimeout        = 30 * time.Minute
 
 	// DefaultQdrantURL is the node-b Qdrant instance URL.
 	DefaultQdrantURL = "http://127.0.0.1:6333"

@@ -82,6 +82,23 @@ func TestLoadConfigReadsEnableTestAPIs(t *testing.T) {
 	}
 }
 
+func TestLoadConfigPromotionBuildTimeout(t *testing.T) {
+	t.Run("default accommodates a cold recipient build", func(t *testing.T) {
+		t.Setenv("RUNTIME_APP_PROMOTION_BUILD_TIMEOUT", "")
+		cfg := LoadConfig()
+		if cfg.AppPromotionBuildTimeout != 30*time.Minute {
+			t.Fatalf("app promotion build timeout = %s, want 30m", cfg.AppPromotionBuildTimeout)
+		}
+	})
+	t.Run("explicit override wins", func(t *testing.T) {
+		t.Setenv("RUNTIME_APP_PROMOTION_BUILD_TIMEOUT", "45m")
+		cfg := LoadConfig()
+		if cfg.AppPromotionBuildTimeout != 45*time.Minute {
+			t.Fatalf("app promotion build timeout = %s, want 45m", cfg.AppPromotionBuildTimeout)
+		}
+	})
+}
+
 func TestLoadConfigDefaultsPromotionSourceRepoOutsideGitWorktree(t *testing.T) {
 	t.Setenv("RUNTIME_PROMOTION_SOURCE_REPO", "")
 	t.Setenv("RUNTIME_WORKER_REPO_REMOTE", "")
