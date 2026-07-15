@@ -1,6 +1,6 @@
 //go:build integration || comprehensive
 
-package agentcore_test
+package textureowner_test
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
+	textureowner "github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -95,7 +96,10 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	defer cancel()
 	rt.Start(ctx)
 	t.Cleanup(func() { rt.Stop() })
-	h := choirruntime.NewAPIHandler(rt)
+	h := textureowner.NewHandler(rt)
+	if err := textureowner.RegisterTools(rt.ToolRegistryForProfile("texture"), h); err != nil {
+		t.Fatalf("register Texture owner tools: %v", err)
+	}
 
 	conductorResp := postLiveJSON(t, h.HandlePromptBar, http.MethodPost, "/api/prompt-bar", map[string]any{
 		"text": "Research cellular automata as a toy model for biological evolution, then produce a concise working document that can later mention an artifact and verification result.",
@@ -264,7 +268,7 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	if !liveEventsContain(eventsByTrajectory, types.EventTextureAgentRevisionCompleted, "") {
 		t.Fatalf("trace missing Texture revision completion")
 	}
-	if _, err := rt.VerifyTextureWorkflow(context.Background(), choirruntime.TextureWorkflowVerificationOptions{
+	if _, err := h.VerifyTextureWorkflow(context.Background(), textureowner.TextureWorkflowVerificationOptions{
 		OwnerID:                     liveLLMOwnerID,
 		TrajectoryID:                conductorID,
 		PromptSubmissionID:          conductorID,

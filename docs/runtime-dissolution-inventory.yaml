@@ -3,12 +3,12 @@ canonical_parent: 0f905ffcfeba3db85f0958382d9beb68f013a498
 dispatch_nonce: s0-runtime-inventory-ratchet-01-nonce-01
 transition: s0-runtime-inventory-ratchet-dispatch-intent-01
 counts:
-    go_files: 128
+    go_files: 127
     production_files: 70
-    test_files: 58
+    test_files: 57
     production_loc: 34539
-    test_loc: 46475
-    exports: 824
+    test_loc: 45519
+    exports: 813
     export_caller_edges: 272
     initial_unused_export_debt: 10
     routes: 2
@@ -176,15 +176,9 @@ files:
     - id: internal/agentcore/texture_lifecycle_api.go [production]
       disposition: texture
       loc: 185
-    - id: internal/agentcore/texture_live_llm_workflow_test.go [test]
-      disposition: texture
-      loc: 501
     - id: internal/agentcore/texture_model_api.go [production]
       disposition: texture
       loc: 51
-    - id: internal/agentcore/texture_real_llm_test.go [test]
-      disposition: texture
-      loc: 960
     - id: internal/agentcore/texture_tool_api.go [production]
       disposition: texture
       loc: 59
@@ -353,6 +347,9 @@ files:
     - id: internal/textureowner/texture_lineage_structured_test.go [test]
       disposition: texture
       loc: 65
+    - id: internal/textureowner/texture_live_llm_workflow_test.go [test]
+      disposition: texture
+      loc: 505
     - id: internal/textureowner/texture_media_sources.go [production]
       disposition: texture
       loc: 899
@@ -1375,10 +1372,6 @@ exports:
       disposition: texture
       production_callers:
         - internal/agentcore/texture_lifecycle_api.go
-    - id: internal/agentcore/texture_live_llm_workflow_test.go:func:TestLiveLLMProviderInfo
-      disposition: texture
-    - id: internal/agentcore/texture_live_llm_workflow_test.go:func:TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture
-      disposition: texture
     - id: internal/agentcore/texture_model_api.go:method(*Runtime):CompletePromptBarDecision
       disposition: texture
       production_callers:
@@ -1398,28 +1391,6 @@ exports:
         - internal/agentcore/texture_model_api.go
         - internal/textureowner/api_texture_prompt_eval.go
         - internal/textureowner/prompt_bar.go
-    - id: internal/agentcore/texture_real_llm_test.go:func:TestRealLLMProviderInfo
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLM
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLMCodeGeneration
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLMEventsEmitted
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLMFullHistory
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLMMutationIdempotency
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLMProviderMetadata
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:func:TestTextureAgentRevisionRealLLMStreamingDeltas
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:method(*anthropicClient):Execute
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:method(*anthropicClient):ProviderName
-      disposition: texture
-    - id: internal/agentcore/texture_real_llm_test.go:method(*providerError):Error
-      disposition: texture
     - id: internal/agentcore/texture_tool_api.go:method(*Runtime):EmitChannelMessageEvent
       disposition: texture
       production_callers:
@@ -2045,6 +2016,10 @@ exports:
     - id: internal/textureowner/texture_identity_test.go:func:TestTextureAgentRevisionTaskTypeCompatibility
       disposition: texture
     - id: internal/textureowner/texture_lineage_structured_test.go:func:TestMarkdownLineageStructuredRevisionParsesHeadingsListsAndRefs
+      disposition: texture
+    - id: internal/textureowner/texture_live_llm_workflow_test.go:func:TestLiveLLMProviderInfo
+      disposition: texture
+    - id: internal/textureowner/texture_live_llm_workflow_test.go:func:TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture
       disposition: texture
     - id: internal/textureowner/texture_merge.go:method(*Handler):HandleTextureAcceptMerge
       disposition: texture

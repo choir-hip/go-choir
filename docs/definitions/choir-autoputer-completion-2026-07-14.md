@@ -137,12 +137,12 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: blocked_ci
-  slice: "delete the superseded implicit-write live test and connect the current tool-driven product-path contract"
-  question: "Will deleting the obsolete direct-provider Texture test and moving the current live workflow to textureowner restore tagged CI without weakening explicit canonical-write authority?"
+  status: working
+  slice: "land the tagged integration ownership repair and re-enter canonical CI"
+  question: "Will canonical CI accept the deletion-first repair and deploy the direct textureowner product path?"
   reconciliation:
-    observed_at: 2026-07-14T23:58:00Z
-    source_ref: commit:e278b8022e872ea26d503b9c7430e5dad66fae48
+    observed_at: 2026-07-15T00:04:41Z
+    source_ref: staged-repair@sha256:0b0dd8dc9762b2e26cd789fd94aa2e32cfabacc3eaa3cd7883ce429325970cf7
     deploy_identity: not_deployed_ci_blocked
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
@@ -151,7 +151,7 @@ now:
       - docs/runtime-dissolution-inventory.yaml@production_importers:0,wrappers:0,tools:37
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e
-    status: canonical_landed_ci_failed
+    status: integration_owner_repair_implemented_local
     protected_surfaces: [texture_canonical_writes, revisions, structured_edits, proposals, source_graph, document_identity, actor_wake, evidence_state, user_isolation, runtime_extinction]
     admissible_evidence: "Exact owner/caller map; focused production-order restart tests; exact delegation validation tests; exhaustive legal-Go ratchet fixtures; all four agentcore and Texture owner shards; frozen independent review; CI, staging identity, and deployed product-path acceptance."
     rollback_ref: 3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
@@ -159,14 +159,14 @@ now:
     heresy_delta:
       discovered: "Three tagged-test symptoms share one substrate: the old agentcore-owned implicit-write integration model survived the production owner/authority cutover. A local credentialed run proved its assertions now fail because no Texture write tool was called; restoring implicit projection would violate the accepted authority contract."
       introduced: "The superseded tagged model reached origin/main in e278b802 but never deployed because CI blocked staging. One local credentialed diagnostic spent provider calls; it is diagnostic evidence only, not staging acceptance."
-      repaired: "The eleven reviewed candidate findings remain repaired. The current live workflow is wired locally to textureowner and the exact CI smoke passes with live credentials disabled; the obsolete direct-provider test is identified for deletion."
+      repaired: "The superseded 960-line implicit-write direct-provider test is deleted. The current live workflow moved from agentcore to textureowner, registers Texture owner tools directly, and invokes owner prompt/verifier methods without a facade. Exact integration smoke, non-tagged owner packages, ratchet, and diff checks pass."
   candidate:
     id: R1-texture-owner-cutover-16
-    state: canonical_landed_ci_failed_integration_owner
-    ref: commit:e278b8022e872ea26d503b9c7430e5dad66fae48
+    state: integration_owner_repair_implemented_local
+    ref: staged-repair@sha256:0b0dd8dc9762b2e26cd789fd94aa2e32cfabacc3eaa3cd7883ce429325970cf7
     owner: orchestrator
-    base: refs/remotes/origin/main@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3
-    digest: commit:e278b8022e872ea26d503b9c7430e5dad66fae48
+    base: commit:e8055c3b
+    digest: sha256:0b0dd8dc9762b2e26cd789fd94aa2e32cfabacc3eaa3cd7883ce429325970cf7
     scope: [texture_api, texture_types, structured_revisions, semantic_merge, proposals, sources, tools, identity, actor_wake, agentcore_package_identity, runtime_extinction]
   evidence_refs:
     - "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."
@@ -183,8 +183,9 @@ now:
     - "local-reproduction: go test -tags=integration ./internal/agentcore ./internal/textureowner -run '^$' compiled the moved real-LLM test under textureowner, then failed agentcore/texture_live_llm_workflow_test.go on deleted HandlePromptBar, VerifyTextureWorkflow, and TextureWorkflowVerificationOptions."
     - "root-cause-receipt: credentialed local diagnostic ran the moved direct-provider tests; several failed because completed text created no canonical revision without a Texture write tool. This confirms the test is superseded by the explicit-write contract rather than identifying a production regression."
     - "replacement-proof: scripts/go-test-integration passed locally with ZAI_API_KEY and FIREWORKS_API_KEY explicitly empty after wiring texture_live_llm_workflow_test.go to textureowner; agentcore had no integration tests to run and textureowner compiled the current workflow."
-  blocker_or_risk: "Canonical CI is red and staging was not deployed. The repair must delete the superseded implicit-write test rather than revive an agentcore facade or automatic canonical projection. The optional comprehensive corpus still contains older retired-surface callers and remains a disclosed substrate debt outside the registered integration smoke gate."
-  next_action: "Commit this root-cause assessment without staging source, delete the obsolete direct-provider test, keep only the current live workflow moved to textureowner, run exact CI integration smoke plus non-tagged owner tests and ratchet, then push."
+    - "repair-proof: scripts/go-test-integration PASS with provider/live opt-ins disabled; go test ./internal/agentcore ./internal/textureowner PASS; runtime ratchet PASS at go_files=127, production_files=70, test_files=57, production_loc=34539, test_loc=45519, exports=813, production_importers=0, wrappers=0, tools=37; git diff --check PASS."
+  blocker_or_risk: "No local blocker for the registered CI repair. Canonical CI/deploy and staging acceptance remain outstanding. Optional comprehensive-tagged tests still contain stale retired-surface callers; this disclosed corpus debt is not in the CI integration gate and must be clustered before any later repair."
+  next_action: "Commit and push the deletion-first tagged repair, monitor canonical CI and staging identity, then execute the deployed persistent-computer acceptance path."
 
 receipts:
   - id: predecessor-B0-authority
