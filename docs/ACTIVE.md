@@ -7,11 +7,11 @@ corpus and does not make an unverified graph status into a live work claim.
 
 [`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md)
 is the one active top-level product Definition and the only `/goal` entrypoint
-for current product work. It reconciles the predecessor's completed Deploy,
-Wire, and already-landed runtime-extraction receipts, then continues through
-dependency-ordered runtime dissolution, audited-computer proof, external
-operator truth, run truth, self-development, containment, Choir-in-Choir, and
-vocabulary cutover.
+for current product work. Its previous completion receipt was invalidated by
+deployed lifecycle and artifact-readback evidence. It is working on one
+dependency-ordered sequence: durable terminal child outcomes, atomic trajectory
+closure and admission fencing, privileged Super activation idempotency, then
+strict execution-artifact acceptance. Autopaper remains unauthorized.
 
 The superseded
 [`definitions/choir-autoputer-completion-2026-07-13.md`](definitions/choir-autoputer-completion-2026-07-13.md)
@@ -62,17 +62,18 @@ The next and only product invocation is:
 /goal docs/definitions/choir-autoputer-completion-2026-07-14.md
 ```
 
-The same command resumes after interruption. The mission reconciles one
-canonical state capsule, preserves settled predecessor receipts, and executes:
+The same command resumes after interruption. The current red sequence is:
 
-1. keep `internal/runtime` extinct after its direct `agentcore` and
-   `textureowner` ownership cutover, then continue the remaining product proofs;
-2. prove audited-computer construction and CLI-visible operator truth;
-3. establish durable run truth and artifact-verified completion;
-4. prove candidate self-development, receipted promotion, and rollback;
-5. prove containment and open Choir-in-Choir only after acceptance;
-6. perform the alias-free vocabulary cutover and define an Autopaper successor
-   only if it is still wanted.
+1. persist terminal `RunRecord` truth before binding one deterministic child
+   outcome; repair the persistence/binding restart gap;
+2. retain only the actor-owned durable wake for each Super update;
+3. atomically terminalize qualifying trajectories and reject post-terminal
+   work, update, run, and reactivation admission;
+4. prove exact requested artifact bytes through the existing run-acceptance
+   API and CLI, authenticated file readback, and post-restart re-fetch;
+5. adjudicate only the six allowlisted historical trajectories, recompute the
+   deployed cohort, and close the root only after both lifecycle and
+   objective-fulfillment evidence pass.
 
 Member Definitions are subordinate specifications. They are not separate
 `/goal` runs and cannot reorder the active Definition. Autopaper editorial work

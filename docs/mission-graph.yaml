@@ -154,8 +154,9 @@ nodes:
     depends_on: []
     enables: []
     note: >-
-      Sole executable product mission. One compact Definition owns resumption,
-      phase order, evidence pointers, and the dependency-ordered runtime frontier.
+      Sole executable product mission. Its invalidated completion receipt is
+      preserved while the working A terminal-outcome/closure slice precedes
+      strict execution-artifact acceptance and final deployed cohort closure.
     sources:
       - docs/ACTIVE.md
       - docs/standing-questions.md

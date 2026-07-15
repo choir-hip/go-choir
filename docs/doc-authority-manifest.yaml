@@ -245,7 +245,7 @@ documents:
     claim_scope: current
     is_root: [authority, entry]
     is_evidence: false
-    annotations: {doc_role: definition, authority: mission, lifecycle: active}
+    annotations: {doc_role: definition, authority: mission, lifecycle: active, active_slice: terminal_outcome_then_strict_artifact_acceptance}
     supersedes: [docs/definitions/choir-autoputer-completion-2026-07-13.md]
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/definitions/choir-autoputer-completion-suite-2026-07-11.md, docs/definitions/choir-autoputer-cli-operability-2026-07-11.md, docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md, docs/definitions/choir-vocabulary-cutover-2026-07-11.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md]
     refresh_triggers: [mission_state_change, mission_graph_change, runtime_boundary_change, staging_deploy, autoputer_acceptance]

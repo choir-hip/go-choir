@@ -41,14 +41,14 @@ finish:
   deliver: "An external agent can use Choir as one persistent user computer: inspect and operate it without SSH, change it through a candidate, verify and promote or roll back that candidate, and continue with the same durable computer after restart."
   artifact: "A runtime-free clean cutover supporting the persistent-computer product path, with fetched staging artifacts for scoped operation, restart durability, candidate promotion and rollback, and containment."
   acceptance:
-    - action: "On staging, use the authenticated product API or Choir CLI under a scoped key to construct or select the computer, inspect it, operate it, and fetch the resulting durable artifact without SSH."
-      proves: "An external agent can operate the persistent user computer through the supported product path."
+    - action: "On staging, use the authenticated product API or Choir CLI under a scoped key to construct or select the computer, request an exact artifact path and bytes, operate the computer without SSH, and accept only after authenticated readback returns those exact bytes from the producing trajectory."
+      proves: "An external agent can operate the persistent user computer through the supported product path and objective fulfillment is artifact-verified rather than inferred from narrative or Texture metadata."
       evidence_class: deployed_product_path
     - action: "Recompute the runtime ownership map, run focused owner/caller tests, and apply the scoped runtime ratchet after each clean-cutover slice."
       proves: "The tested slice moved callers to its canonical owner without a compatibility facade and stayed inside its structural boundary."
       evidence_class: source_and_focused_test_support
-    - action: "Restart the accepted staging computer or its serving lifecycle, then fetch the same durable state and continue a product-path operation."
-      proves: "Accepted computer state and operability survive restart."
+    - action: "Restart the accepted staging computer or its serving lifecycle, then re-fetch the same exact artifact bytes and continue a product-path operation."
+      proves: "Accepted computer state, exact artifact content, and operability survive restart."
       evidence_class: deployed_restart_proof
     - action: "Create an isolated candidate change, verify it, promote it through the product path, observe the promoted artifact, then exercise rollback or an explicit safe refusal and re-fetch the prior accepted state."
       proves: "Candidate promotion and rollback are real, scoped, and recoverable product capabilities."
@@ -73,7 +73,7 @@ finish:
 
 boundaries:
   mutation_class: red
-  reclassification_rule: "The active model/research ownership slice is red because it moves computer-owned model policy, provider/model selection, verification calls, source/search tools, content/evidence reads, and researcher checkpoint pressure. Implementation rollback is 474b9b70214ba6c063e6e3231430ce75474e014c."
+  reclassification_rule: "The active terminal-outcome, trajectory-closure, privileged Super activation, and strict execution-artifact acceptance slices are red because they change RunRecord-bound delivery, Texture/trajectory lifecycle, post-terminal admission, privileged execution idempotency, and run acceptance. Implementation rollback begins at fc6e65a7b85e2161ce5ed42a341a77149bf9839b; closure remains disabled until the additive writer/binder and restart repair are deployed and proved."
   authority_sources:
     - "owner direction recorded for this 2026-07-14 reconciliation"
     - AGENTS.md
@@ -92,7 +92,7 @@ boundaries:
     - "Staging product artifacts, not local narration or structural counts, prove persistent-computer behavior."
     - "One lead integrates and verifies, parallelizes disjoint read-only mapping and independent review, serializes overlapping mutations and shared authority, and continues until complete, blocked_incomplete, or superseded."
   excluded:
-    - runtime behavior changes in this yellow migration
+    - runtime behavior outside terminal-outcome delivery, atomic trajectory closure and admission fencing, privileged Super activation idempotency, and strict execution-artifact acceptance
     - automatic Autopaper authorization
     - a third Dolt store or shadow current-state projection
     - hard documentation-to-code ratios
@@ -137,62 +137,90 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: complete
-  slice: "terminal acceptance and authority closure"
-  question: "Did the landed runtime-free cutover prove the persistent-computer product path on staging and leave every candidate, protected worktree, and successor authority explicit?"
+  status: working
+  slice: "terminal outcome delivery and atomic trajectory closure -> strict Texture execution-artifact acceptance"
+  question: "Can Choir durably bind every required terminal child outcome to its authoritative RunRecord, close trajectories atomically without post-terminal authority, and prove an exact requested artifact by authenticated readback after restart?"
   reconciliation:
-    observed_at: 2026-07-15T02:11:16Z
-    source_ref: refs/remotes/origin/main@e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13
-    deploy_identity: "CI 29382447010 PASS; deploy job 87249292258 PASS; activation receipt e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13@2026-07-15T01:53:14Z for sandbox, active computers, ordinary guest, playwright guest, and gateway."
+    observed_at: 2026-07-15T04:18:34Z
+    source_ref: refs/remotes/origin/main@fc6e65a7b85e2161ce5ed42a341a77149bf9839b
+    deploy_identity: "The deployed-state snapshots were captured from choir.news after the prior e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13 acceptance; deployment identity for this repair source is not yet available."
     authority_identities:
       - "owner-autoputer-reconciliation@2026-07-14"
+      - docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
-      - "docs/runtime-dissolution-inventory.yaml@canonical_parent:0f905ffcfeba3db85f0958382d9beb68f013a498; generated-and-passed at source e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13"
-    policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "start:sha256:7a331cd12905062861b504a41001990e46a55d762315b3942f32edf263b7bb9e; terminal:/Users/wiz/go-choir clean@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3"
-    status: accepted
-    acceptance_level: persistent_computer_product_path
-    protected_surfaces: [tool_registry, runtime_extinction_ratchet, external_agent_tool_contract, deployment_identity, candidate_promotion, persistent_computer_state]
-    admissible_evidence: "Canonical source and activation identity; exact ratchet; focused tests; independent source and terminal reviews; scoped staging operation and artifact fetch; restart continuation; recipient build and verifier contracts; promotion, rollback, containment, and authority receipts."
-    rollback_ref: 232dd36d521acfb103e8a87148f1e51b92360520
-    conjecture_delta: "The runtime-free clean cutover is not merely structural: a scoped external key operated the deployed prompt-bar-to-Texture path without SSH, the same durable computer survived restart and accepted another scoped operation, a recipient rebuilt distinct runtime/UI artifacts, and promotion then rollback moved and restored the active source lineage."
+    status: problem_documented
+    acceptance_level: blocked_incomplete
+    mutation_class: red
+    protected_surfaces: [run_record_outcome_authority, coagent_delivery, texture_trajectory_lifecycle, privileged_super_activation, run_acceptance, persistent_computer_state, deployment_identity]
+    admissible_evidence: "Focused source contracts plus independent frozen-candidate review; then canonical pushed source, CI and staging identity, no-SSH product-path trajectories, exact authenticated artifact bytes, restart recovery, cohort recomputation, and allowlisted historical-transition receipts."
+    rollback_ref: fc6e65a7b85e2161ce5ed42a341a77149bf9839b
+    conjecture_delta: "The prior runtime-free cutover remains structurally valid, but persistent-computer completion also requires terminal child outcomes to reach their owner exactly once, trajectory closure to consume authoritative run truth atomically, and objective acceptance to fetch exact produced bytes. The deployed cohort and acceptance readback disprove the former completion claim on those independent axes."
     heresy_delta:
-      discovered: "The first recipient build exhausted the former 15-minute total build deadline and was correctly refused before promotion."
+      discovered: "Six document trajectories are live with zero open work and zero pending updates after their children reached terminal states; plain researcher Result text can be dropped; one Super update has two activation triggers; and the prior filesystem proof accepted a Texture revision whose own content said execution evidence was pending."
       introduced: none
-      repaired: "Runtime facade and compatibility registration are absent; all production Tool declarations and retired imports are ratcheted; the cold-build deadline is 30 minutes with override; the retried recipient build, verifier contracts, promotion, and rollback all passed."
+      repaired: none
+    problems:
+      - id: terminal-outcome-delivery-gap
+        classification: substrate
+        evidence: "RunRecord.Result/Error is durable authority, but the researcher fallback only emits from selected research-tool events and successful fallback runs before terminal persistence."
+      - id: trajectory-terminalization-gap
+        classification: substrate
+        evidence: "The deployed snapshot has six live document trajectories with require_no_open_work_items=true, zero open work, and zero pending updates; the generic settlement evaluator has no atomic mutation consumer."
+      - id: privileged-super-double-trigger
+        classification: substrate
+        evidence: "One update is both actor-woken and synchronously reconciled, matching deployed twin privileged runs from the same requested_by_run_id."
+      - id: narrative-artifact-acceptance
+        classification: acceptance
+        evidence: "The prior scoped-no-SSH receipt accepted Texture revision 5581ab21-d99b-4189-a4c4-61b6a2a15331 without fetching the requested filesystem bytes; the revision narrative reported that execution evidence was pending."
+    evidence_refs:
+      - "sha256:dcd942baa53f501c8a53dc098095da941ca4d3603af6986b6c8f180452c4f6c2:/tmp/choir-texture-state-analysis-20260715.json"
+      - "sha256:c702d4e5b6fff39903275b4a6d16fd415daf79a32a9990af02cd771c951ce711:/tmp/choir-run-inventory-20260715.json"
+      - "live-trajectories:5053c721-50ad-4238-9608-7ba694f881c5,d0edf3f8-89a6-4131-871e-e316bbcefbba,4fd0d01e-ee4f-4c8c-ba3f-29e0a8999107,34507da5-24c2-4004-bb10-16bb802a8121,77da11b4-d4ed-488e-846d-9f060d5a9b07,0b192d2e-4a61-4bbc-85fb-79b0a2e595b7"
+      - "agentic-consensus:/tmp/agentic-consensus-choir-next-mission-20260715"
+      - "decision-synthesis:/tmp/choir-next-mission-converged.md"
+    selected_sequence:
+      - "A1: persist terminal RunRecord first; bind one deterministic delivered outcome; repair the persistence/binding crash gap; retain only the actor-owned durable Super wake."
+      - "A2: enable one store-owned atomic trajectory terminalization authority and fence work, update, run, and reactivation admission after terminal status."
+      - "B: require exact expected path and bytes or digest in the existing run-acceptance API and CLI; join Trace causality to authenticated file readback; re-fetch after restart."
+      - "Adjudicate the six allowlisted historical trajectories, recompute the deployed cohort, and only then return this root to complete."
+    terminal_outcome_contract:
+      authority: "RunRecord.State, Result, and Error remain the sole terminal outcome authority."
+      envelope_fields: [source_run_id, source_outcome_sha256]
+      binding: "source_outcome_sha256 is a domain-separated digest over source_run_id, terminal state, Result, and Error. It is an immutable identity/tamper witness, not copied result or state authority. Closure reloads RunRecord and recomputes it."
+      delivery: "After terminal persistence, bind a matching explicit update in place or create one deterministic reference-only envelope. Never copy Result or Error bodies into envelope metadata."
+    repair_gates:
+      - "This code-free problem receipt lands before repair code."
+      - "Deploy the additive terminal writer/binder, restart repair, and allowlist dry-run with closure disabled."
+      - "Enable closure only after terminal-first ordering, idempotent delivery, restart repair, and sole-writer/transaction assumptions are proved."
+      - "Candidate A may establish lifecycle truth but cannot close the root; Candidate B must independently prove exact artifact fulfillment."
+    historical_repair: "Owner-scoped and limited to the six named trajectories. Produce a dry-run receipt and changed-ID journal. Settle only after authoritative terminal success, verified binding, delivery/consumption, required refs, and zero open authority. Cancel durable required failure with evidence. Leave ambiguity live with a precise waiting reason. Delete no user document and rewrite no RunRecord result."
+  invalidated_completion_receipt:
+    prior_status: complete
+    observed_at: 2026-07-15T02:11:16Z
+    source_ref: refs/remotes/origin/main@e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13
+    deploy_identity: "CI 29382447010 PASS; deploy job 87249292258 PASS; activation receipt e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13@2026-07-15T01:53:14Z."
+    prior_acceptance_level: persistent_computer_product_path
+    invalidated_by_deployed_evidence: "Six live settlement-ready trajectories and absent exact filesystem-byte readback make the terminal lifecycle and objective-fulfillment claims inadmissible. The prior receipt remains valid evidence for runtime extinction, scoped routing, restart, candidate promotion/rollback, and containment."
+    rollback_ref: 232dd36d521acfb103e8a87148f1e51b92360520
+    preserved_evidence_refs:
+      - "source-review:CorrectedRepairReview:ACCEPT:no-findings"
+      - "promotion-timeout-review:PromotionTimeoutReview:ACCEPT:no-findings"
+      - "runtime-ratchet:PASS:production_importers=0,wrappers=0,tools=50"
+      - "scoped-no-SSH:submission a802a41c-1f4a-48b5-8bbb-5dee5e998534; Texture doc 868d772c-045f-4f5d-b4ab-689c97c20336; revision 5581ab21-d99b-4189-a4c4-61b6a2a15331"
+      - "deployed-restart:primary epoch 1882 -> 1884; Texture document 8d91f7c5-6467-4285-a357-0d8ea9fb447c retained revision 21924b19-d183-46e6-a172-617ddc636928"
+      - "deployed-containment:scoped key received HTTP 403 for missing write:runtime and was revoked"
+      - "candidate-verification:autoputer-acceptance-232dd36d:seven contracts passed"
+      - "candidate-transition:owner_approved -> adopted -> rolled_back"
   candidate:
-    id: R1-runtime-extinction-final-repair-17
-    state: landed
-    ref: 8784a085
+    id: terminal-outcome-closure-and-strict-artifact-acceptance
+    state: authorized
     owner: orchestrator
-    base: 232dd36d521acfb103e8a87148f1e51b92360520
-    digest: "Clean-cutover repair accepted with no P0/P1/P2 findings; canonical deployment includes the repair at e4b16ca37b3595c6821bdd8e2c2d6f7cde445a13."
-    scope: [vmctl_tool_registration, runtime_inventory_tool_names, retired_runtime_imports, runtime_ratchet]
-    disposition: complete
-  terminal_dispositions:
-    - id: R1-toolregistry-facade-extinction-07
-      disposition: superseded_by_clean_rebuild
-      recovery: "The clean rebuild landed without mutating this protected path; its formerly dirty candidate is superseded and the path is now clean."
-    - id: /Users/wiz/go-choir
-      disposition: protected_worktree_untouched_clean
-      evidence_ref: "clean@3d2d2f2f057e711cd214cc9d1e3df484d00efbc3; canonical origin/main is 19 commits ahead and contains no protected-worktree-only commit"
-    - id: autoputer-acceptance-232dd36d
-      disposition: verified_promoted_and_rolled_back
-      recovery: "Active source lineage restored to refs/computers/primary/active."
-  evidence_refs:
-    - "source-review:CorrectedRepairReview:ACCEPT:no-findings"
-    - "promotion-timeout-review:PromotionTimeoutReview:ACCEPT:no-findings"
-    - "terminal-review:TerminalCompletionReview:all substantive acceptance satisfied after exact scoped continuation receipt; only this canonical recording remained"
-    - "runtime-ratchet:PASS:production_importers=0,wrappers=0,tools=50"
-    - "scoped-no-SSH: key ak_05eaefcf-2206-4969-8e11-262bcfddaa87 created prompt-bar submission a802a41c-1f4a-48b5-8bbb-5dee5e998534, Texture doc 868d772c-045f-4f5d-b4ab-689c97c20336, and appagent revision 5581ab21-d99b-4189-a4c4-61b6a2a15331; the same key fetched metadata, history, and revision content, then was revoked"
-    - "deployed-restart: primary stopped at epoch 1882 and recovered ready at epoch 1884; Texture document 8d91f7c5-6467-4285-a357-0d8ea9fb447c retained revision 21924b19-d183-46e6-a172-617ddc636928; scoped submission a802a41c-1f4a-48b5-8bbb-5dee5e998534 then continued the product path"
-    - "deployed-containment: scoped key ak_c2757ec1-a13c-4ccc-8bcd-8648497125df received HTTP-403 missing required scope write:runtime for computer stop and was revoked"
-    - "candidate-verification:autoputer-acceptance-232dd36d:seven contracts passed at 2026-07-15T02:00:17Z; base e4b16ca37; runtime sha256:a17d731bce1b9d8b89c26ed60bb4d9c08a8fc3a896a6d5d363cec48ea25f20e2; UI sha256:9e96baefded5987db7dd566f3123fb9ed2defb35c8590785c393451d35822146"
-    - "candidate-transition: owner_approved -> adopted with active ref refs/computers/primary/candidates/autoputer-acceptance-232dd36d-target -> rolled_back with active ref refs/computers/primary/active at 2026-07-15T02:06:17Z"
-    - "authority: docs/ACTIVE.md keeps only this Definition active; Autopaper remains historical and unauthorized"
-  blocker_or_risk: "No completion blocker. Residual operational risk: 30 minutes is proven sufficient for this 5m35s cold recipient build but remains bounded and overrideable for slower future targets."
-  next_action: "None. Start any Autopaper work only from a separate owner-authorized successor Definition."
+    base: fc6e65a7b85e2161ce5ed42a341a77149bf9839b
+    scope: [terminal_outcome_binding, atomic_trajectory_terminalization, terminal_admission_fencing, super_activation_idempotency, strict_artifact_acceptance]
+    disposition: active
+  blocker_or_risk: "No P0/P1 reason rejects the selected A -> B sequence after this correction. Stop before closure if a second writer bypasses the Store boundary, restart replay is not idempotent, historical repair lacks allowlist/dry-run/journal, or the actor-owned Super wake cannot activate without the deleted synchronous trigger."
+  next_action: "Implement A1 from this clean main-derived worktree, keep closure dark until its deployed writer/binder and restart proof pass, then implement A2 and B under this same /goal. Do not authorize Autopaper."
 
 receipts:
   - id: predecessor-B0-authority
