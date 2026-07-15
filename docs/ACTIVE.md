@@ -5,13 +5,17 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definitions
 
+[`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md)
+is the one active top-level product Definition and the only `/goal` entrypoint.
+It makes the production Autoputer real by constructing and booting a disposable
+realization from immutable `ComputerVersion = (CodeRef, ArtifactProgramRef)`,
+then proving exact typed state, destruction/reconstruction, route promotion and
+rollback, and no-SSH inspection on staging.
+The superseded
 [`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md)
-is the one active top-level product Definition and the only `/goal` entrypoint
-for current product work. Its previous completion receipt was invalidated by
-deployed lifecycle and artifact-readback evidence. It is working on one
-dependency-ordered sequence: durable terminal child outcomes, atomic trajectory
-closure and admission fencing, privileged Super activation idempotency, then
-strict execution-artifact acceptance. Autopaper remains unauthorized.
+remains historical evidence. Its runtime and lifecycle receipts remain citable,
+but its completion framing was falsified by the deployed opaque-disk outage. Do
+not execute it.
 
 The superseded
 [`definitions/choir-autoputer-completion-2026-07-13.md`](definitions/choir-autoputer-completion-2026-07-13.md)
@@ -20,9 +24,9 @@ remains discoverable as historical evidence, including its references to the
 Do not execute it.
 
 [`definitions/og-dolt-heresy-completion-2026-07-08.md`](definitions/og-dolt-heresy-completion-2026-07-08.md)
-remains load-bearing for storage, promotion, and heresy detector/deletion
-contracts, but overlapping mutations execute only as R1/R4/R5/R7 work under
-the active Definition, never through a competing `/goal`.
+remains load-bearing only for settled storage/D-ROUTE authority and H031
+detector/deletion contracts consumed by phases B, D, and F of the active
+Definition. It is not a competing `/goal`.
 
 ## Supporting Maintenance
 
@@ -37,7 +41,7 @@ is **superseded in topology** (2026-07-11): the post-mortem
 showed its Real Artifact contradicted the settled D-WIRE decision. Its
 evidence ledger remains valid history; do not execute its topology sections.
 Successor authority:
-[`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md).
+[`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md).
 The former
 [`definitions/choir-autoputer-completion-suite-2026-07-11.md`](definitions/choir-autoputer-completion-suite-2026-07-11.md)
 and
@@ -52,38 +56,35 @@ it active work or revising the product umbrella's semantics.
 
 ## Next Executable Work
 
-The seam-repair Definition is **settled** after staging acceptance at `944d4d94`
-proved per-service `/health` identity and RouteProfile promotion/rollback on
-`choir.news`.
-
 The next and only product invocation is:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
+/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 ```
 
 The same command resumes after interruption. The current red sequence is:
 
-1. persist terminal `RunRecord` truth before binding one deterministic child
-   outcome; repair the persistence/binding restart gap;
-2. retain only the actor-owned durable wake for each Super update;
-3. atomically terminalize qualifying trajectories and reject post-terminal
-   work, update, run, and reactivation admission;
-4. prove exact requested artifact bytes through the existing run-acceptance
-   API and CLI, authenticated file readback, and post-restart re-fetch;
-5. adjudicate only the six allowlisted historical trajectories, recompute the
-   deployed cohort, and close the root only after both lifecycle and
-   objective-fulfillment evidence pass.
+1. contain the failed owner realization and inventory every canonical state
+   authority without mutating the source images;
+2. resolve immutable `CodeRef` and `ArtifactProgramRef` inputs and cut routing
+   from owner/desktop/VM identity to D-ROUTE `ComputerVersion` slots;
+3. wire one production function that constructs a fresh filesystem and
+   Firecracker realization from those refs, boots it, and emits a typed receipt;
+4. independently verify exact files, blobs, embedded-Dolt/object-graph state,
+   provenance, health, and geometry before vmctl-owned route CAS;
+5. destroy all realization state, reconstruct from the same
+   `ComputerVersion`, repeat product-path readback, then cut over the real staging
+   owner with rollback.
 
-Member Definitions are subordinate specifications. They are not separate
-`/goal` runs and cannot reorder the active Definition. Autopaper editorial work
-remains blocked until this mission reports `complete`.
+Ordinary Choir development in capsules controlled by an outside agent through
+Choir CLI is an unauthorized successor until this Definition is complete.
+Autopaper remains unauthorized.
 
-The OG/Dolt/heresy contract supplies Texture semantic-forcing detectors,
-history/audit evidence, promotion CAS/receipt semantics, and deletion gates to
-R1/R4/R5/R7. It does not own execution order or storage topology. The
-owner-settled topology has two non-conflated Dolt stores plus corpusd route-slot
-tables with vmctl as sole CAS writer; route control is never a third store.
+The OG/Dolt/heresy contract supplies D-ROUTE's corpusd/vmctl CAS semantics,
+receipt projection gates, H031 detection, and deletion bars to active phases B,
+D, and F. It does not own execution order or storage topology. The owner-settled
+topology has two non-conflated Dolt stores plus corpusd route-slot tables with
+vmctl as sole CAS writer; route control is never a third store.
 
 D-STORE is settled by owner authority: Choir is all-in on Dolt. Storage
 questions about history latency, commit batching, rollback mechanics, ICU/build
@@ -92,9 +93,9 @@ database-choice gate.
 
 ## Unowned External Work
 
-Runtime dissolution and actor/runtime extraction are owned by R1. Broader
-source-system/Wire follow-ups outside R1/R4/R5/R7 and outside a future
-explicitly authorized Autopaper successor have no active Definition.
+Runtime dissolution, actor/runtime extraction, broader source-system/Wire work,
+and external-agent capsule development have no active Definition unless they
+are strictly required by this mission's audited-construction acceptance.
 Do not resume deleted plans; any new program must be grounded in current code
 and staging evidence.
 
@@ -106,13 +107,12 @@ authority.
 
 ## Settled Deploy Receipt
 
-The former `running_runs: 1` hot-refresh blockage is repaired and imported as
-the active 2026-07-14 capsule's `predecessor-S1-deploy` receipt at
-`9dff369044c2147140782958de3e91971caed6bc`. Evidence:
+The former `running_runs: 1` hot-refresh blockage remains a settled historical
+receipt at `9dff369044c2147140782958de3e91971caed6bc`; evidence:
 `docs/evidence/s1-deploy-unblock-dispatch-2026-07-12.md`.
 
-Do not rerun the former S1 topology. A reproduced deadline/cancel/deploy
-regression is a new active-mission finding: document it in a code-free Define
-boundary, preserve the accepted receipt, and repair or roll back through R4.
+Do not rerun its topology. A reproduced deadline/cancel/deploy regression must
+be documented as a new problem and may enter this mission only if it blocks the
+audited constructor's acceptance path; otherwise it requires separate authority.
 The earlier `skills/*` deploy-classifier fix remains CI hygiene, not
 run-lifecycle authority.

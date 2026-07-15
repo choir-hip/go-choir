@@ -39,8 +39,8 @@ nodes:
     status: working
     kind: subordinate_contract
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-14
-    suite_phases: [R1, R4, R5, R7]
+    member_of: choir-audited-autoputer-construction-2026-07-15
+    suite_phases: [B-resolve-immutable-inputs, D-verify-and-route, F-cutover-owner-and-close]
     execution_mode: subordinate_only
     depends_on: []
     enables: []
@@ -144,8 +144,27 @@ nodes:
       - docs/definitions/choir-autoputer-completion-2026-07-14.md
       - docs/ACTIVE.md
   - id: choir-autoputer-completion-2026-07-14
-    title: Choir Autoputer Completion — Reconciled v2
+    title: Choir Autoputer Completion — superseded evidence
     path: docs/definitions/choir-autoputer-completion-2026-07-14.md
+    ledger: ''
+    status: superseded
+    kind: spine
+    entrypoint: false
+    execution_mode: subordinate_only
+    depends_on:
+      - choir-audited-autoputer-construction-2026-07-15
+    enables: []
+    note: >-
+      Superseded after deployed evidence showed that production still treats
+      durable_legacy_opaque data.img as the computer. Historical runtime,
+      lifecycle, and product-path receipts remain citable; do not execute.
+    sources:
+      - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+      - docs/ACTIVE.md
+      - AGENTS.md
+  - id: choir-audited-autoputer-construction-2026-07-15
+    title: Make the Autoputer Real — Audited Computer Construction
+    path: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
     ledger: ''
     status: working
     kind: spine
@@ -154,9 +173,9 @@ nodes:
     depends_on: []
     enables: []
     note: >-
-      Sole executable product mission. Its invalidated completion receipt is
-      preserved while the working A terminal-outcome/closure slice precedes
-      strict execution-artifact acceptance and final deployed cohort closure.
+      Sole executable product mission. Construct and boot fresh realizations
+      from immutable ComputerVersion inputs, prove typed equivalence after
+      destruction/reconstruction, and cut routing to D-ROUTE.
     sources:
       - docs/ACTIVE.md
       - docs/standing-questions.md
@@ -187,9 +206,6 @@ nodes:
     status: settled
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-14
-    suite_phases: [predecessor-receipt]
-    execution_mode: subordinate_only
     depends_on: []
     enables: []
     sources:
@@ -205,21 +221,20 @@ nodes:
     status: settled
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-14
-    suite_phases: [predecessor-receipt]
-    execution_mode: subordinate_only
     depends_on: []
     enables: []
   - id: choir-autoputer-cli-operability-2026-07-11
     title: Autoputer External-CLI Operability Before Choir-in-Choir
     path: docs/definitions/choir-autoputer-cli-operability-2026-07-11.md
     ledger: ''
-    status: working
+    status: superseded
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-14
-    suite_phases: [R2, R3, R5, R6]
     execution_mode: subordinate_only
+    note: >-
+      Historical external-CLI contract. Its self-development/capsule topology is
+      unauthorized until the audited-construction Definition completes and an
+      owner-authorized successor exists.
     depends_on: []
     enables: []
     sources:
@@ -239,12 +254,13 @@ nodes:
     title: Choir Run Lifecycle and Completion Authority
     path: docs/definitions/choir-run-lifecycle-and-completion-authority-2026-07-11.md
     ledger: ''
-    status: working
+    status: superseded
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-14
-    suite_phases: [R4]
     execution_mode: subordinate_only
+    note: >-
+      Historical lifecycle contract and receipts imported by the superseded
+      2026-07-14 Definition. It has no independent execution authority.
     depends_on: []
     enables: []
     sources:
@@ -261,12 +277,13 @@ nodes:
     title: Choir Vocabulary Cutover
     path: docs/definitions/choir-vocabulary-cutover-2026-07-11.md
     ledger: ''
-    status: working
+    status: superseded
     kind: product_completion
     entrypoint: false
-    member_of: choir-autoputer-completion-2026-07-14
-    suite_phases: [R7]
     execution_mode: subordinate_only
+    note: >-
+      Historical vocabulary contract. Current ontology is owned by doctrine and
+      the active audited-construction Definition.
     depends_on: []
     enables: []
     sources:

@@ -6,13 +6,14 @@ This document supplies storage, promotion, heresy-detector, and deletion
 contracts to:
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
+/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 ```
 
-Do not invoke it independently while the active mission is `working`. Runtime,
-Wire, lifecycle, acceptance, promotion, and vocabulary mutations execute only
-through R1/R4/R5/R7. Historical conclusions and evidence remain load-bearing;
-they do not create a second orchestrator or state capsule.
+Do not invoke it independently while the active mission is `working`.
+Construction, routing, promotion, recovery, and deletion mutations execute only
+through the active Definition. Historical conclusions and detector/deletion
+contracts remain load-bearing; they do not create a second orchestrator or state
+capsule.
 
 This document previously superseded the deleted 2026-07-07 program and heresy
 paradocs. Their conclusions remain absorbed here as historical evidence. The
@@ -20,7 +21,7 @@ active mission now supersedes this document's independent execution authority.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-autoputer-completion-2026-07-14.md` for
+1. `docs/definitions/choir-audited-autoputer-construction-2026-07-15.md` for
    active execution order, evidence, checkpoints, and resumption.
 2. This document's detector, deletion, and historical evidence contracts.
 3. Owner statements 2026-07-07/08: object graph becomes canonical by hard
@@ -81,10 +82,10 @@ then promotion-over-ComputerVersion, then deletion and doctrine replacement.
 
 **Non-purpose:**
 
-- Runtime business-logic extraction is now owned by
-  `docs/definitions/choir-autoputer-completion-2026-07-14.md` R1. This
-  Definition supplies subordinate detector/deletion contracts; it is not a
-  competing `/goal` spine.
+- Runtime business-logic extraction receipts remain historical evidence under
+  `docs/definitions/choir-autoputer-completion-2026-07-14.md`. This Definition
+  now supplies subordinate D-ROUTE, detector, and deletion contracts to the
+  audited-construction mission; it is not a competing `/goal` spine.
 - Not the grip/RL research program; that retired narrative remains in Git
   history and its research forks are out of scope.
 - Not new product surface (headless CLI Phase 1.5 verbs, MCP, reader UX
@@ -769,8 +770,10 @@ determined_state:
       superseded_claim: one distinct durable Dolt-backed ComputerVersion route-control domain
       superseded_by: docs/definitions/choir-autoputer-completion-2026-07-13.md#two-store-topology
       execution_effect: >-
-        R5 owns implementation. Receipt projection, fail-closed truth,
-        idempotency, and sole-writer contracts remain subordinate inputs.
+        Active phases B-resolve-immutable-inputs, D-verify-and-route, and
+        F-cutover-owner-and-close own implementation. Receipt projection,
+        fail-closed truth, idempotency, and sole-writer contracts remain
+        subordinate inputs.
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
@@ -876,7 +879,7 @@ category-(a) findings each round), that is evidence of an unsettled
 definition, not reviewer noise: open the definition node and, if it is
 group-level, escalate with the `human_escalation` shape.
 
-### Phase A — Foundations and truth (execute first, parallel-safe for green/yellow work)
+### Phase A — Historical foundations and truth receipt
 
 Phase A contains both yellow doc corrections and orange/red runtime work (W2
 proxy/vmctl timeout hardening touches the public request path; D-PROMO settlement
@@ -955,33 +958,32 @@ yellow/green auto-proceed rule.
 
 | Open edge | Disposition | Reason / pointer |
 |---|---|---|
-| actor/runtime business-logic extraction | absorbed: R1 | `choir-autoputer-completion-2026-07-14.md` owns live caller cutovers, ratchets, and final directory extinction. |
-| Texture product-loop, transclusion, and durable-thread gaps | subordinate evidence for R1/R4 | Resume only through the active mission from current code and staging evidence. |
+| actor/runtime business-logic extraction | historical receipt | The superseded 2026-07-14 Definition owns its landed receipts; no current mutation authority follows. |
+| Texture product-loop, transclusion, and durable-thread gaps | external dependency | Requires a fresh Definition unless a concrete gap blocks audited-construction acceptance. |
 | source-system follow-ups | external dependency | Requires a fresh Definition if the active mission does not absorb it. |
 | Wire staging and substrate proof | settled predecessor receipt | D-WIRE conformance is imported without rerunning it. |
-| lifecycle-cutover residues (texture forcing / parent-child) | absorbed: R1 | This Definition's H009-H012 and H001-H005 detector contracts remain the deletion bar. |
-| lifecycle-cutover residues (continuations / acceptance) | split: R1/R4 | R1 deletes continuation/parent-child residue; R4 establishes the surviving acceptance authority. |
-| conductor-URL H029 repair | absorbed: Phase E | og-dolt Phase E surface cleanup (H019-H029). |
+| lifecycle-cutover residues (texture forcing / parent-child) | historical detector evidence | H009-H012 and H001-H005 remain detector history, not active phase authority. |
+| lifecycle-cutover residues (continuations / acceptance) | historical receipt | Resume only under a fresh Definition if current evidence makes it load-bearing. |
+| conductor-URL H029 repair | historical detector evidence | H019-H029 cleanup is not active under this subordinate contract. |
 | docs truth drift | external: documentation authority Definition | Governed by `documentation-authority-reduction-2026-07-09.md`. |
 | node-B fail-closed auth | external dependency | Platform/auth operations are not og-dolt work. |
-| sandbox→computer rename | absorbed: Phase E | og-dolt Phase E supplies detectors; active mission R7 owns the cutover. |
+| sandbox→computer rename | historical detector evidence | Only H031 route/identity deletion needed by active phases B/F remains in scope. |
 | SQLite/sourcecycled cleanup | external dependency | Object-graph consolidation remains outside og-dolt scope; no live successor Definition owns it. |
 | node-B retention, news, orchestrator, autoradio, and cross-substrate gaps | external dependencies | Their checkpoint chains were removed; any resumed work requires fresh Definitions from current evidence. |
 | wire-on-settlement | external dependency | Route-switch evidence gate is not og-dolt work. |
-| continuation-deletion sequencing | absorbed: R1 | H006-H008 deletion executes inside runtime dissolution after zero production callers are verified. |
+| continuation-deletion sequencing | historical receipt | H006-H008 work is not active under this Definition. |
 
-Phase A exit bar (what the gate panel reviews): detectors reporting in CI;
-timeouts proven in staging; all corrections committed; S1 settled or
-explicitly scoped; triage table full. Then the Phase Gate Protocol runs and,
-on clear, execution continues directly into Phase B.
+The former Phase A exit bar and gate adjudication remain historical evidence.
+They do not reopen execution or authorize progression into former Phase B.
 
-Active-mission ownership update (2026-07-13): Phases B/C/E remain authoritative
-detector and deletion specifications, but overlapping runtime, continuation,
-parent-child, acceptance, promotion, and vocabulary mutations execute only as
-R1/R4/R5/R7 work. A direct `/goal` on this document must not race or duplicate
-those cutovers.
+Active-mission ownership update (2026-07-15): this document remains an active
+subordinate contract only for settled D-ROUTE authority and H031
+detector/deletion requirements consumed by
+`B-resolve-immutable-inputs`, `D-verify-and-route`, and
+`F-cutover-owner-and-close`. Its other Phase B/C/E material is historical and
+cannot authorize mutations. A direct `/goal` on this document is forbidden.
 
-### Phase B — Heresy kill wave 1 (M3.1, M3.2) + Dolt audit reads
+### Phase B — Historical heresy kill wave 1 and Dolt audit receipts
 
 As specified in mission-og-dolt Phase 1 (imported): texture-forcing removal
 (H009–H012, H024a/b, H026; proof gate: honest first revisions, unforced
@@ -998,7 +1000,7 @@ H009–H012, H024a/b, H026, H001–H005, H015–H016); both proof gates evidence
 `texture history` served from `dolt_history` with latency numbers recorded as
 Dolt implementation evidence.
 
-### Phase C — Kill wave 2 + cold-entity cutover
+### Phase C — Historical kill wave 2 and cold-entity cutover contract
 
 Imported from mission-og-dolt Phase 2: acceptance/durable obligations
 (H013–H014, H017–H018); continuation deletion (H006–H008; gate: verified
@@ -1009,38 +1011,37 @@ batch-commit infrastructure (write-batcher: N mutations or T ms → one
 commit, agent-identity commit messages — mission-og-dolt Phase 0 item) is a
 prerequisite of this phase's cutovers; build it here if Phase A didn't.
 
-Phase C exit bar: H013–H014, H017–H018 and H006–H008 at the `eliminated`
-bar; continuations code and routes deleted with zero production callers
-verified; every cold entity reading from OG by default in production with
-SQL fallback exercised; detector families for these clusters enforcing.
+The former Phase C exit bar remains a historical contract only; it does not
+authorize current implementation or phase progression.
 
-### Phase D — Historical promotion contract, consumed only by R5
+### Phase D — Historical promotion contract, consumed by active phases B/D/F
 
-Do not execute this phase independently. R5 consumes its retained fail-closed
-truth, sole-writer CAS, immutable receipt, idempotency, failure, and projection
-contracts under the owner-settled topology: route-slot/receipt tables on the
-corpusd sql-server with vmctl as sole writer. The former distinct Dolt-backed
-third-ledger implementation is superseded.
+Do not execute this phase independently. The active Definition consumes its
+retained fail-closed truth, sole-writer CAS, immutable receipt, idempotency,
+failure, and projection contracts under the owner-settled topology:
+route-slot/receipt tables on the corpusd sql-server with vmctl as sole writer.
+The former distinct Dolt-backed third-ledger implementation is superseded.
 
-R5 deletes duplicate roll-forward and candidate switch/rollback mutation paths
-with their callers; rewrites `promotion_protocol.tla` around one route-slot →
-ComputerVersion CAS plus immutable receipt; implements vmctl-only read/write
-APIs; cuts proxy routing to route-slot read → ComputerVersion → materializer;
-and proves an old → new → old sequence with explicit receipts and generations.
-Branch merge/tag remains preparation, never activation.
+Active phases B/D/F delete or hard-refusal-gate duplicate roll-forward and
+candidate switch/rollback mutation paths; rewrite `promotion_protocol.tla`
+around one route-slot → ComputerVersion CAS plus immutable receipt; implement
+vmctl-only read/write APIs; cut proxy routing to route-slot read →
+ComputerVersion → materializer; and prove an old → new → old sequence with
+explicit receipts and generations. Branch merge/tag remains preparation, never
+activation.
 
 The retained exit contract requires concurrency, idempotency, injected-failure,
 restart, failed-writer/materializer negative projection, and zero-caller
-evidence for deleted mutation surfaces. Only the active mission capsule may
-record R5 complete.
+evidence for deleted mutation surfaces. Only the active Definition may claim
+this contract satisfied.
 
-### Phase E — Historical cleanup contract, consumed only by R7
+### Phase E — Historical cleanup contract; H031 consumed only by active B/F
 
-Do not execute this phase independently. R7 consumes its detector and
-surface-deletion contracts for H019-H029, Universal→World Wire, and
-sandbox→autoputer vocabulary. Any non-rename deletion still owned by R1 must
-already be complete. R7 owns atomic iteration ordering, staging proof,
-independent review, and completion state; compatibility aliases are forbidden.
+Do not execute this phase independently. Only its H031 route/identity detector
+and deletion bars are imported into active phases B/F. H019-H029,
+Universal→World Wire, general sandbox→autoputer vocabulary, and unrelated
+cleanup require separate authority. Compatibility aliases remain forbidden for
+the H031 cutover.
 
 ## Dense Feedback Channels
 
@@ -1389,10 +1390,10 @@ run_checkpoint_and_resumption_state:
     Texture revision are green. M3.1b also removes the post-write email prose
     parser/direct executor while retaining the typed Email appagent handoff;
     its full red landing loop and inert-email-prose staging revision are green.
-    This docs-only authority pass assigns a distinct Dolt-backed
-    ComputerVersion route ledger to vmctl's sole CAS writer and makes every
-    adoption/lineage/UI/Trace/acceptance claim a receipt projection; it changes
-    no runtime behavior and claims no implementation repair.
+    This docs-only authority pass originally proposed a distinct Dolt-backed
+    ComputerVersion route ledger. Owner authority superseded that topology:
+    active phases B/D/F use route-slot and receipt tables on the corpusd
+    sql-server with vmctl as sole CAS writer. No runtime repair was claimed.
   what_shipped:
     - W1 detector manifest + CI discovery job (scripts/check-heresies.sh, docs/heresy-detectors.md H030/H031/I4 refs, CI heresy-detector job)
     - W2 proxy/vmctl timeout hardening (60s default, fast 504 staging proof)
@@ -1417,19 +1418,23 @@ run_checkpoint_and_resumption_state:
     - Dolt engineering verification axes: history latency/correctness,
       batching/throughput, rollback recovery, build friction, and replication
     - heresy live-site counts (families still in discovery; fail-on-regression and allowlist enforcement deferred per phase)
-    - D-ROUTE ledger, receipt projection gates, duplicate-path deletions, TLA rewrite, proxy cutover, and deployed old-new-old proof
-    - Phase B–E kill waves, cutovers, and deletion not yet executed
-  remaining_error_field: see Variant below
-  highest_impact_remaining_uncertainty: remaining H009/H010 forcing sites + M3.2 authority residues
+    - D-ROUTE corpusd route-slot/receipt tables, projection gates,
+      duplicate-path deletions, TLA rewrite, proxy cutover, and deployed
+      old-new-old proof
+    - Former Phase B–E kill waves and cleanup are historical, except H031
+      requirements explicitly consumed by the active Definition
+  remaining_error_field: active D-ROUTE implementation and H031 deletion bar
+  highest_impact_remaining_uncertainty: completeness of route writers and owner/desktop fallback callsites
   next_executable_probe: >-
-    Return control to R1. Reconcile remaining H009/H010 and M3.2 detector hits
-    against current production callers before any deletion.
-  queued_phase_d_executable_slice: >-
-    R5 consumes D-ROUTE's fail-closed truth gate and sole-writer contract.
-    It must prevent adoption, lineage, UI, Trace, and run acceptance from
-    advancing without durable receipt read-back and must delete duplicate
-    roll-forward/switch/rollback mutators atomically.
-  suggested_goal_string: "/goal docs/definitions/choir-autoputer-completion-2026-07-14.md"
+    Return control to A-contain-and-extract. Inventory every authoritative
+    ComputerVersion input and preserve the failed realization before mutation.
+  active_definition_consumption: >-
+    Phases B-resolve-immutable-inputs, D-verify-and-route, and
+    F-cutover-owner-and-close consume D-ROUTE's fail-closed truth gate,
+    H031 deletion bar, and sole-writer contract. Adoption, lineage, UI, Trace,
+    and run acceptance cannot advance without durable receipt read-back;
+    duplicate roll-forward/switch/rollback authority must be deleted or refused.
+  suggested_goal_string: "/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md"
   evidence_artifact_refs:
     - this Definition's adjudicated evidence ledger
     - https://github.com/choir-hip/go-choir/actions/runs/29072918594
@@ -1446,5 +1451,5 @@ run_checkpoint_and_resumption_state:
 ## Suggested Goal String
 
 ```text
-/goal docs/definitions/choir-autoputer-completion-2026-07-14.md
+/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 ```

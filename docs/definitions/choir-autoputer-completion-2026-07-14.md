@@ -137,8 +137,9 @@ measures:
     cannot_prove: "Runtime behavior, staging operation, restart durability, promotion/rollback, containment, or the persistent-computer product outcome."
 
 now:
-  status: working
-  slice: "A1 deployed terminal-outcome product path accepted; A2 atomic trajectory terminalization defined"
+  status: superseded
+  superseded_by: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+  supersession_reason: "Owner evidence on 2026-07-15 showed the production computer still depends on durable_legacy_opaque data.img and is not constructed from ComputerVersion. Retain all receipts as historical evidence; do not resume this Definition."
   question: "Can one store-owned mutation settle or cancel each trajectory with every joined authority transition, then fence late work, updates, runs, and actor reactivation at the same terminal boundary?"
   reconciliation:
     observed_at: 2026-07-15T06:34:03Z
