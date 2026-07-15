@@ -279,7 +279,7 @@ func testPromptRuntime(t *testing.T) *Runtime {
 
 func executeWorkerDelegationUntilSettled(t *testing.T, registry *toolregistry.ToolRegistry, ctx context.Context, raw json.RawMessage) (string, error) {
 	t.Helper()
-	startRaw, err := registry.Execute(ctx, "delegate_worker_vm", raw)
+	startRaw, err := registry.Execute(ctx, "start_worker_delegation", raw)
 	if err != nil {
 		return "", err
 	}

@@ -6,23 +6,23 @@ counts:
     go_files: 127
     production_files: 70
     test_files: 57
-    production_loc: 34539
-    test_loc: 45519
-    exports: 813
+    production_loc: 34520
+    test_loc: 45484
+    exports: 812
     export_caller_edges: 272
     initial_unused_export_debt: 10
     routes: 2
-    tools: 37
+    tools: 50
     production_importers: 0
     wrappers: 0
     compatibility_markers: 6
     store_calls: 362
     interface_candidates: 4
-    citers: 1331
+    citers: 1330
 files:
     - id: internal/agentcore/agent_tools_test.go [test]
       disposition: tools
-      loc: 6826
+      loc: 6829
     - id: internal/agentcore/api.go [production]
       disposition: api
       loc: 1057
@@ -214,10 +214,10 @@ files:
       loc: 362
     - id: internal/agentcore/tools_test.go [test]
       disposition: tools
-      loc: 1299
+      loc: 1261
     - id: internal/agentcore/tools_vmctl.go [production]
       disposition: tools
-      loc: 2506
+      loc: 2487
     - id: internal/agentcore/tools_wire_processor.go [production]
       disposition: wire
       loc: 98
@@ -1537,8 +1537,6 @@ exports:
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteToolsSkipsDuplicateTextureResearcherSpawnInSameTurn
       disposition: tools
-    - id: internal/agentcore/tools_test.go:func:TestExecuteToolsSuperSkipsDuplicateDelegateWorkerVM
-      disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation
       disposition: tools
     - id: internal/agentcore/tools_test.go:func:TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects
@@ -2546,10 +2544,36 @@ tools:
       disposition: tools
     - id: internal/agentcore/tools_vmctl.go:Tool:request_worker_vm
       disposition: tools
+    - id: internal/agentcore/tools_vmctl.go:Tool:start_worker_delegation
+      disposition: tools
     - id: internal/agentcore/tools_wire_processor.go:Tool:record_wire_processor_decision
       disposition: wire
     - id: internal/agentcore/tools_worker_update.go:Tool:update_coagent
       disposition: tools
+    - id: internal/apihandler/product_api_tool.go:Tool:product_api_request
+      disposition: tools
+    - id: internal/coagentowner/spawn_tool.go:Tool:spawn_agent
+      disposition: tools
+    - id: internal/modelpolicy/tools_model_verify.go:Tool:verify_model_capability
+      disposition: model
+    - id: internal/researchtools/researchtools.go:Tool:fetch_url
+      disposition: research
+    - id: internal/researchtools/researchtools.go:Tool:import_document_content
+      disposition: research
+    - id: internal/researchtools/researchtools.go:Tool:import_url_content
+      disposition: research
+    - id: internal/researchtools/researchtools.go:Tool:list_content_item_selectors
+      disposition: research
+    - id: internal/researchtools/researchtools.go:Tool:read_content_item
+      disposition: research
+    - id: internal/researchtools/researchtools.go:Tool:read_content_item_selector
+      disposition: research
+    - id: internal/researchtools/researchtools.go:Tool:search_wire_corpus
+      disposition: research
+    - id: internal/researchtools/researchtools.go:Tool:source_search
+      disposition: research
+    - id: internal/researchtools/researchtools.go:Tool:web_search
+      disposition: research
     - id: internal/textureowner/tools_texture.go:Tool:patch_texture
       disposition: texture
     - id: internal/textureowner/tools_texture.go:Tool:record_texture_decision
@@ -5631,8 +5655,6 @@ citers:
     - id: 'docs/definitions/choir-autoputer-completion-2026-07-13.md:selection_rationale: This is the smallest cohesive production-used research boundary. internal/runtime/search_gateway.go is already classified for deletion, and its only production constructor caller … [sha256:46acc30961dbacb964c02bb43a927ebdce54c6be5e07602cb6e6269b2ac45eb7]'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-2026-07-14.md:- "internal/runtime, a compatibility facade, or dual ownership remains"
-      disposition: block
-    - id: 'docs/definitions/choir-autoputer-completion-2026-07-14.md:- "source-proof: internal/runtime is absent; repository Go imports contain no production import of the retired package; direct composition is agentcore + textureowner + coagentowner."'
       disposition: block
     - id: docs/definitions/choir-autoputer-completion-suite-2026-07-11.md:- **No wrapper:** destination packages import no `internal/runtime` and do not
       disposition: block

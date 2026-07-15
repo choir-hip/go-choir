@@ -30,6 +30,7 @@ const (
 	retiredRuntimeImport = "github.com/yusefmosiah/go-choir/internal/runtime"
 	agentCoreImport      = "github.com/yusefmosiah/go-choir/internal/agentcore"
 	textureOwnerImport   = "github.com/yusefmosiah/go-choir/internal/textureowner"
+	toolRegistryImport   = "github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
 func isDissolutionImport(path string) bool {
@@ -181,6 +182,11 @@ func scanGo(root string, files []string, citerOrdinals map[string]int, typePacka
 			return fmt.Errorf("parse %s: %w", rel, err)
 		}
 		isTest := strings.HasSuffix(rel, "_test.go")
+		if !isTest {
+			if err := scanProductionTools(rel, file, inv); err != nil {
+				return err
+			}
+		}
 		inOwnershipPackage := rel == "internal/agentcore" || strings.HasPrefix(rel, "internal/agentcore/") ||
 			rel == "internal/textureowner" || strings.HasPrefix(rel, "internal/textureowner/")
 		if inOwnershipPackage {
@@ -190,13 +196,15 @@ func scanGo(root string, files []string, citerOrdinals map[string]int, typePacka
 				kind = "test"
 			}
 			inv.Files = append(inv.Files, Entry{ID: rel + " [" + kind + "]", Disposition: domainDisposition(rel), LOC: loc})
-			scanRuntimeAST(rel, file, fset, isTest, inv)
+			if err := scanRuntimeAST(rel, file, fset, isTest, inv); err != nil {
+				return err
+			}
 		}
 		if !isTest {
 			typePackages[filepath.Dir(rel)] = true
 		}
 		retiredImports := retiredRuntimeImports(file)
-		if !inOwnershipPackage && !isTest && len(retiredImports) > 0 {
+		if !isTest && len(retiredImports) > 0 {
 			inv.ProductionImporters = append(inv.ProductionImporters, Entry{ID: rel, Disposition: "delete"})
 		}
 		if !isTest {
@@ -207,7 +215,7 @@ func scanGo(root string, files []string, citerOrdinals map[string]int, typePacka
 	return nil
 }
 
-func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool, inv *Inventory) {
+func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool, inv *Inventory) error {
 	for _, decl := range file.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
@@ -236,17 +244,10 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 		}
 	}
 	if isTest {
-		return
+		return nil
 	}
 	ordinals := map[string]int{}
 	ast.Inspect(file, func(n ast.Node) bool {
-		if lit, ok := n.(*ast.CompositeLit); ok && isToolCompositeType(lit.Type) {
-			if name, ok := toolName(lit); ok {
-				id := rel + ":Tool:" + name
-				inv.Tools = append(inv.Tools, Entry{ID: uniqueID(id, ordinals), Disposition: domainDisposition(rel)})
-			}
-		}
-
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
@@ -261,8 +262,6 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 				inv.Routes = append(inv.Routes, Entry{ID: uniqueID(id, ordinals), Disposition: domainDisposition(rel)})
 			}
 		}
-		// Direct Tool literals are inventoried above. Register calls that receive
-		// constructor results are represented by the returned Tool declaration.
 		return true
 	})
 	for _, cg := range file.Comments {
@@ -274,12 +273,58 @@ func scanRuntimeAST(rel string, file *ast.File, fset *token.FileSet, isTest bool
 			}
 		}
 	}
+	return nil
 }
 
-func isToolCompositeType(expr ast.Expr) bool {
-	switch exprString(expr) {
-	case "Tool", "toolregistry.Tool":
+func scanProductionTools(rel string, file *ast.File, inv *Inventory) error {
+	aliases := toolRegistryAliases(file)
+	if len(aliases) == 0 {
+		return nil
+	}
+	ordinals := map[string]int{}
+	var scanErr error
+	ast.Inspect(file, func(n ast.Node) bool {
+		lit, ok := n.(*ast.CompositeLit)
+		if !ok || !isToolRegistryCompositeType(lit.Type, aliases) {
+			return true
+		}
+		name, ok := toolName(lit)
+		if !ok {
+			scanErr = fmt.Errorf("%s: toolregistry.Tool Name must be a string literal or file-local string constant", rel)
+			return false
+		}
+		id := rel + ":Tool:" + name
+		inv.Tools = append(inv.Tools, Entry{ID: uniqueID(id, ordinals), Disposition: domainDisposition(rel)})
 		return true
+	})
+	return scanErr
+}
+
+func toolRegistryAliases(file *ast.File) map[string]bool {
+	aliases := map[string]bool{}
+	for _, imp := range file.Imports {
+		path, err := strconv.Unquote(imp.Path.Value)
+		if err != nil || path != toolRegistryImport {
+			continue
+		}
+		name := filepath.Base(path)
+		if imp.Name != nil {
+			name = imp.Name.Name
+		}
+		if name != "_" {
+			aliases[name] = true
+		}
+	}
+	return aliases
+}
+
+func isToolRegistryCompositeType(expr ast.Expr, aliases map[string]bool) bool {
+	switch x := expr.(type) {
+	case *ast.SelectorExpr:
+		id, ok := x.X.(*ast.Ident)
+		return ok && aliases[id.Name] && x.Sel.Name == "Tool"
+	case *ast.Ident:
+		return aliases["."] && x.Name == "Tool" && x.Obj == nil
 	default:
 		return false
 	}
@@ -329,9 +374,7 @@ func retiredRuntimeImports(file *ast.File) map[string]string {
 		if imp.Name != nil {
 			name = imp.Name.Name
 		}
-		if name != "_" && name != "." {
-			imports[name] = path
-		}
+		imports[name] = path
 	}
 	return imports
 }
@@ -762,9 +805,27 @@ func toolName(expr ast.Expr) (string, bool) {
 			continue
 		}
 		key, ok := kv.Key.(*ast.Ident)
-		if ok && key.Name == "Name" {
-			return stringLiteral(kv.Value)
+		if !ok || key.Name != "Name" {
+			continue
 		}
+		if value, ok := stringLiteral(kv.Value); ok {
+			return value, true
+		}
+		id, ok := kv.Value.(*ast.Ident)
+		if !ok || id.Obj == nil || id.Obj.Kind != ast.Con {
+			return "", false
+		}
+		spec, ok := id.Obj.Decl.(*ast.ValueSpec)
+		if !ok {
+			return "", false
+		}
+		for i, name := range spec.Names {
+			if name.Obj != id.Obj || i >= len(spec.Values) {
+				continue
+			}
+			return stringLiteral(spec.Values[i])
+		}
+		return "", false
 	}
 	return "", false
 }

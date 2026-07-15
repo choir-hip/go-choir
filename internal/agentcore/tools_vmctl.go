@@ -38,7 +38,6 @@ func RegisterVMControlTools(registry *toolregistry.ToolRegistry, rt *Runtime, cw
 		newObserveWorkerDelegationTool(rt),
 		newFinishWorkerDelegationTool(rt),
 		newCancelWorkerDelegationTool(rt),
-		newDelegateWorkerVMTool(rt, cwd),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -327,7 +326,7 @@ func (rt *Runtime) findExistingWorkerVMRequest(ctx context.Context, runID, machi
 			Output  string `json:"output"`
 		}
 		if err := json.Unmarshal(ev.Payload, &payload); err != nil || payload.IsError || payload.Tool != "request_worker_vm" {
-			if err == nil && !payload.IsError && payload.Tool == "delegate_worker_vm" {
+			if err == nil && !payload.IsError && (payload.Tool == "start_worker_delegation" || payload.Tool == "delegate_worker_vm") {
 				if output, ok := decodeWorkerToolOutput(payload.Output); ok && shouldInvalidateWorkerVMRequestFromDelegateResult(output) {
 					key := workerVMLeaseKeyFromDelegateOutput(output)
 					if key.Valid() {
@@ -617,27 +616,9 @@ func normalizeRuntimeWorkerMachineClass(raw string) string {
 }
 
 func newStartWorkerDelegationTool(rt *Runtime, cwd string) toolregistry.Tool {
-	return newStartWorkerDelegationToolNamed(
-		"start_worker_delegation",
-		"Start a vsuper, co-super, or researcher run inside a leased worker VM and return immediately with an async worker run handle. Use observe_worker_delegation for checkpoints and finish_worker_delegation for terminal evidence.",
-		rt,
-		cwd,
-	)
-}
-
-func newDelegateWorkerVMTool(rt *Runtime, cwd string) toolregistry.Tool {
-	return newStartWorkerDelegationToolNamed(
-		"delegate_worker_vm",
-		"Deprecated compatibility alias for start_worker_delegation. It no longer waits for terminal completion; it starts the worker run and returns immediately.",
-		rt,
-		cwd,
-	)
-}
-
-func newStartWorkerDelegationToolNamed(name, description string, rt *Runtime, cwd string) toolregistry.Tool {
 	return toolregistry.Tool{
-		Name:        name,
-		Description: description,
+		Name:        "start_worker_delegation",
+		Description: "Start a vsuper, co-super, or researcher run inside a leased worker VM and return immediately with an async worker run handle. Use observe_worker_delegation for checkpoints and finish_worker_delegation for terminal evidence.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
 			"worker_sandbox_url": map[string]any{"type": "string"},
 			"worker_id":          map[string]any{"type": "string"},

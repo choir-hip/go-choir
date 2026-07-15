@@ -119,7 +119,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "request_worker_vm", "product_api_request", "delegate_worker_vm", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "publish_app_change_package", "update_coagent", "save_evidence":
+	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "request_worker_vm", "product_api_request", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "publish_app_change_package", "update_coagent", "save_evidence":
 		return true
 	default:
 		return false
@@ -247,7 +247,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				continue
 			}
 			seenCoagentUpdate[key] = i
-		case "delegate_worker_vm", "start_worker_delegation":
+		case "start_worker_delegation":
 			if profile != agentprofile.Super {
 				continue
 			}

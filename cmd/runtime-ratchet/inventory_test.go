@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -100,14 +101,23 @@ type Tool struct { Name string }
 
 import "github.com/yusefmosiah/go-choir/internal/toolregistry"
 
-func register(s interface{ HandleFunc(string, any) }, r interface{ Register(any) error }) {
+func register(s interface{ HandleFunc(string, any) }, r interface{ Register(any) error }, localName string) {
 	s.HandleFunc("/api/example", handler)
-	_ = r.Register(Tool{Name: "example_tool"})
-	_ = r.Register(toolregistry.Tool{Name: "qualified_tool"})
+	_ = r.Register(Tool{Name: localName})
+	const qualifiedToolName = "qualified_tool"
+	_ = r.Register(toolregistry.Tool{Name: qualifiedToolName})
 }
 
 var handler any
 type Tool struct { Name string }
+`)
+	writeFixture(t, root, "internal/apihandler/product_tool.go", `package apihandler
+
+import registry "github.com/yusefmosiah/go-choir/internal/toolregistry"
+
+const productToolName = "product_api_request"
+
+var productTool = registry.Tool{Name: productToolName}
 `)
 	writeFixture(t, root, "cmd/string-only/main.go", `package main
 
@@ -117,11 +127,46 @@ const notAnImport = "github.com/yusefmosiah/go-choir/internal/runtime"
 	if len(inv.Routes) != 1 || !strings.Contains(inv.Routes[0].ID, "/api/example") {
 		t.Fatalf("routes = %+v, want syntax-derived /api/example registration", inv.Routes)
 	}
-	if len(inv.Tools) != 2 || !strings.Contains(inv.Tools[0].ID, "example_tool") || !strings.Contains(inv.Tools[1].ID, "qualified_tool") {
-		t.Fatalf("tools = %+v, want identical unqualified and qualified syntax-derived registrations", inv.Tools)
+	if tools := fmt.Sprint(inv.Tools); len(inv.Tools) != 2 || !strings.Contains(tools, "qualified_tool") || !strings.Contains(tools, "product_api_request") {
+		t.Fatalf("tools = %+v, want qualified literals across all production packages and no package-local Tool false positive", inv.Tools)
 	}
 	if len(inv.ProductionImporters) != 0 {
 		t.Fatalf("production importers = %+v, string literal must not count as import", inv.ProductionImporters)
+	}
+}
+
+func TestInventoryRejectsDynamicToolNames(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/toolregistry/toolregistry.go", `package toolregistry
+
+type Tool struct { Name string }
+`)
+	writeFixture(t, root, "internal/apihandler/dynamic_tool.go", `package apihandler
+
+import "github.com/yusefmosiah/go-choir/internal/toolregistry"
+
+const name = "incorrect_static_name"
+
+func dynamicTool(name string) toolregistry.Tool {
+	return toolregistry.Tool{Name: name}
+}
+`)
+
+	_, err := scanRepository(root)
+	assertDiagnostic(t, err, "toolregistry.Tool Name must be a string literal")
+}
+
+func TestInventoryCountsRetiredRuntimeImportsInsideOwnerPackages(t *testing.T) {
+	root := fixtureRepository(t)
+	writeFixture(t, root, "internal/runtime/runtime.go", "package runtime\n")
+	writeFixture(t, root, "internal/agentcore/retired_import.go", `package runtime
+
+import _ "github.com/yusefmosiah/go-choir/internal/runtime"
+`)
+
+	inv := mustScan(t, root)
+	if len(inv.ProductionImporters) != 1 || inv.ProductionImporters[0].ID != "internal/agentcore/retired_import.go" {
+		t.Fatalf("production importers = %+v, want owner-package retired runtime import", inv.ProductionImporters)
 	}
 }
 

@@ -86,10 +86,13 @@ func TestInstallDefaultAgentToolsProfiles(t *testing.T) {
 	processor := rt.ToolRegistryForProfile(agentprofile.Processor)
 	reconciler := rt.ToolRegistryForProfile(agentprofile.Reconciler)
 
-	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "delegate_worker_vm"} {
+	for _, name := range []string{"bash", "read_file", "web_search", "source_search", "spawn_agent", "update_coagent", "save_evidence", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation"} {
 		if _, ok := super.Lookup(name); !ok {
 			t.Fatalf("super missing tool %q", name)
 		}
+	}
+	if _, ok := super.Lookup("delegate_worker_vm"); ok {
+		t.Fatalf("super should not have retired delegate_worker_vm alias")
 	}
 	if _, ok := super.Lookup("product_api_request"); ok {
 		t.Fatalf("runtime default tools should not install server-bound product_api_request")
@@ -1681,13 +1684,13 @@ func TestSuperRequestWorkerVMReplacesUnreachableLeaseAfterDelegateFailure(t *tes
 		"timeout_seconds": 1
 	}`, firstSandboxURL, firstWorkerID, firstVMID)))
 	if err != nil {
-		t.Fatalf("delegate_worker_vm should return structured unreachable-worker evidence, got error: %v", err)
+		t.Fatalf("start_worker_delegation should return structured unreachable-worker evidence, got error: %v", err)
 	}
 	var delegateResult map[string]any
 	if err := json.Unmarshal([]byte(delegateRaw), &delegateResult); err != nil {
-		t.Fatalf("decode delegate_worker_vm: %v\n%s", err, delegateRaw)
+		t.Fatalf("decode start_worker_delegation: %v\n%s", err, delegateRaw)
 	}
-	appendRuntimeToolResult(t, s, *superTask, "delegate_worker_vm", delegateResult)
+	appendRuntimeToolResult(t, s, *superTask, "start_worker_delegation", delegateResult)
 	if stringMapValue(delegateResult, "status") != "worker_run_submit_failed" {
 		t.Fatalf("delegate status = %q, want worker_run_submit_failed\nraw=%s", stringMapValue(delegateResult, "status"), delegateRaw)
 	}
@@ -1749,7 +1752,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 	appendRuntimeToolResult(t, s, *superTask, "delegate_worker_vm", existing)
 
 	registry := rt.ToolRegistryForProfile(agentprofile.Super)
-	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "delegate_worker_vm", json.RawMessage(`{
+	raw, err := registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superTask)), "start_worker_delegation", json.RawMessage(`{
 		"worker_sandbox_url": "http://worker-duplicate.test",
 		"worker_id": "worker-duplicate",
 		"vm_id": "vm-duplicate",
@@ -1758,7 +1761,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 		"timeout_seconds": 1
 	}`))
 	if err != nil {
-		t.Fatalf("delegate_worker_vm dedupe: %v", err)
+		t.Fatalf("start_worker_delegation dedupe: %v", err)
 	}
 	var got struct {
 		Deduped      bool             `json:"deduped"`
@@ -1768,7 +1771,7 @@ func TestSuperDelegateWorkerVMDedupesSameWorkerInRun(t *testing.T) {
 		Packages     []map[string]any `json:"app_change_packages"`
 	}
 	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("decode delegate_worker_vm dedupe: %v\n%s", err, raw)
+		t.Fatalf("decode start_worker_delegation dedupe: %v\n%s", err, raw)
 	}
 	if !got.Deduped || got.DedupeReason != "super_run_already_started_worker_delegation" {
 		t.Fatalf("dedupe fields = %+v, raw=%s", got, raw)
@@ -6112,7 +6115,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 	}
 	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
 	toolCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun))
-	startRaw, err := registry.Execute(toolCtx, "delegate_worker_vm", json.RawMessage(fmt.Sprintf(`{
+	startRaw, err := registry.Execute(toolCtx, "start_worker_delegation", json.RawMessage(fmt.Sprintf(`{
 		"worker_sandbox_url": %q,
 		"worker_id": "worker-timeout",
 		"vm_id": "vm-worker-timeout",
@@ -6121,7 +6124,7 @@ func TestDelegateWorkerVMReturnsTimeoutRunEvidence(t *testing.T) {
 		"timeout_seconds": 1
 	}`, srv.URL)))
 	if err != nil {
-		t.Fatalf("delegate_worker_vm start: %v", err)
+		t.Fatalf("start_worker_delegation start: %v", err)
 	}
 	var start map[string]any
 	if err := json.Unmarshal([]byte(startRaw), &start); err != nil {
@@ -6541,7 +6544,7 @@ func TestDelegateWorkerVMRefusesSameRuntimeWithoutIsolation(t *testing.T) {
 		t.Fatalf("start active super run: %v", err)
 	}
 	registry := activeRT.ToolRegistryForProfile(agentprofile.Super)
-	_, err = registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "delegate_worker_vm", json.RawMessage(`{
+	_, err = registry.Execute(toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(superRun)), "start_worker_delegation", json.RawMessage(`{
 		"worker_sandbox_url": "http://127.0.0.1:8085",
 		"worker_id": "worker-local",
 		"vm_id": "vm-local",
@@ -6550,7 +6553,7 @@ func TestDelegateWorkerVMRefusesSameRuntimeWithoutIsolation(t *testing.T) {
 		"timeout_seconds": 1
 	}`))
 	if err == nil || !strings.Contains(err.Error(), "refused same-runtime worker delegation without isolation") {
-		t.Fatalf("delegate_worker_vm error = %v, want same-runtime isolation refusal", err)
+		t.Fatalf("start_worker_delegation error = %v, want same-runtime isolation refusal", err)
 	}
 }
 

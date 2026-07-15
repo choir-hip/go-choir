@@ -177,7 +177,7 @@ async function waitForDocumentContentWithPackage(page, docId, trajectoryId, mark
   while (Date.now() < deadline) {
     const state = await loadTextureState(page, docId);
     const content = state.head?.content || '';
-    const delegated = await loadToolResults(page, trajectoryId, 'delegate_worker_vm');
+    const delegated = await loadToolResults(page, trajectoryId, 'start_worker_delegation');
     const appChangePackages = appChangePackagesFromResults(delegated.results);
     const matchedPackage = appChangePackages.find((item) => contentIncludesPackage(content, item));
     if (
@@ -242,7 +242,7 @@ test('prompt bar can route coding work through a background worker VM AppChangeP
     output?.handle?.sandbox_url
   );
 
-  const delegated = await waitForToolResult(page, submitted.submission_id, 'delegate_worker_vm', (output) =>
+  const delegated = await waitForToolResult(page, submitted.submission_id, 'start_worker_delegation', (output) =>
     output?.status === 'worker_run_completed' &&
     output?.worker_vm_id &&
     Array.isArray(output?.app_change_packages) &&
