@@ -304,7 +304,12 @@
   </div>
 
   <button class="voice-button" data-agent-audio-button type="button" aria-label="Agent audio input">
-    <span aria-hidden="true">▥</span>
+    <svg class="voice-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="9" y="2.5" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
+      <line x1="12" y1="17.5" x2="12" y2="21" />
+      <line x1="8.5" y1="21" x2="15.5" y2="21" />
+    </svg>
   </button>
   <span class:online class="online-indicator" data-online-indicator data-live-status={$desktopLiveStatus} aria-label={onlineLabel} title={onlineLabel}></span>
 </div>
@@ -351,17 +356,25 @@
   }
 
   .desk-mark-button :global(svg),
-  .voice-button span {
+  .voice-glyph {
     display: block;
     width: 1.42rem;
     height: 1.42rem;
     line-height: 1;
   }
 
-  .voice-button span {
-    display: grid;
-    place-items: center;
-    font-size: 1.03rem;
+  .voice-glyph {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .voice-button:hover,
+  .voice-button:focus-visible {
+    box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
+    outline: none;
   }
 
   .desk-mark-button:hover,
