@@ -55,8 +55,8 @@ start:
       evidence_ref: ".github/workflows/ci.yml jobs check, sbom, and deploy-staging at 0e5f5c7e"
     - claim: "CI-only .github/** changes are ignored by deploy-impact and should skip Node B deployment."
       evidence_ref: ".github/scripts/deploy-impact-classify and its contract test at 0e5f5c7e"
-    - claim: "The workflow concurrency group ci-${github.ref} cancels an in-flight run on the same ref, so concurrent mission execution is scope-disjoint but main landing is a shared serialized resource."
-      evidence_ref: ".github/workflows/ci.yml concurrency at 0e5f5c7e"
+    - claim: "The parent workflow concurrency group ci-${github.ref} and reusable/scheduled Race group race-${github.ref} each cancel an in-flight run on the same ref, so concurrent mission execution is scope-disjoint but main CI and main Race observations are shared serialized resources."
+      evidence_ref: ".github/workflows/ci.yml and .github/workflows/race.yml concurrency at 0e5f5c7e"
   unknowns:
     - "No authorized billing or metrics authority is available; actual billed minutes are unknown."
     - "Whether cache reuse across prior runs, serialized priming, or same-run artifact transfer is the best compile-cost candidate; they are separate experiments."
@@ -64,7 +64,7 @@ start:
 
 finish:
   deliver: "Restore the paused race and differential-SBOM safety signals without changing application/platform behavior or weakening CI, deploy, or publishing protection, then admit only optimizations proved to reduce GitHub Actions duration on matched runs."
-  artifact: "A frozen, reviewed CI-only candidate and landed GitHub Actions workflow in which classifier selection invokes the complete reusable race workflow, the already-wired host-side SBOM job runs after successful check on selected main pushes, deploy-impact still skips CI-only changes, and every optimization has a separate evidence-backed admission receipt."
+  artifact: "A frozen, reviewed CI-only candidate and landed GitHub Actions workflow in which classifier selection invokes the complete reusable race workflow, the already-wired host-side SBOM job runs after successful check on selected main pushes, and deploy-impact still skips CI-only changes. Hosted proof is split by actual stimulus: PR parsing, CI-only main SBOM/deploy-skip behavior, and a separately selected post-land race run."
   acceptance:
     - action: "Fetch GitHub run 29295978398 and current paused run 29468123745 job timelines."
       proves: "The baseline topology, durations, full five-job race fan-out, successful host-side SBOM, and present paused state are observed rather than inferred."
@@ -75,23 +75,27 @@ finish:
     - action: "Freeze the candidate by base, commit, scoped paths, and digest; obtain independent review before treating it as ready."
       proves: "Review addresses an immutable candidate and can reject scope, protection, evidence, or rollback defects."
       evidence_class: frozen_candidate_review
-    - action: "Run the candidate in GitHub Actions on its PR and record all job conclusions and durations, including the classifier-selected race disposition and expected staging-deploy skip."
-      proves: "The candidate parses and executes on the hosted platform without app/platform deployment."
-      evidence_class: github_actions_candidate_run
-    - action: "After an explicitly owner-authorized, serialized main landing, observe a selected main run where all five race jobs and the host-side SBOM job succeed; fetch the SBOM artifact manifest and verify complete checksummed output and differential counts."
-      proves: "Both restored signals work on the canonical path; SBOM remains post-check non-blocking audit evidence unless separately changed under red ceremony."
-      evidence_class: canonical_github_actions_acceptance
-  rollback: "Revert the bounded CI commit to restore the two literal pause conditions. Never change main, dispatch a deploy, or alter gate/deploy/publish relationships without separate owner authority."
+    - action: "Run the candidate on a pull request and record hosted parsing plus every job conclusion. For this .github-only PR stimulus, record go=false, high_risk_race=false, race unselected, SBOM skipped because the event is not a main push, and deploy-impact skipped because it is not a main event."
+      proves: "The candidate parses and executes on the hosted platform; it does not prove live SBOM, deploy-impact output, or race selection."
+      evidence_class: github_actions_candidate_parse
+    - action: "After an explicitly owner-authorized, serialized CI-only main landing, observe check success, SBOM success, fetch and verify the complete checksummed SBOM artifact and differential counts, observe deploy-impact report deploy_needed=false, and observe deploy-staging skipped. Record race as selected or unselected from the actual landing SHA without requiring it for this receipt."
+      proves: "The canonical CI-only stimulus restores host-side SBOM and preserves the Node B skip and post-check non-blocking relationship; it does not by itself prove race selection."
+      evidence_class: canonical_ci_only_sbom_acceptance
+    - action: "Separately observe the first post-land main push that the unchanged classifier actually selects via high_risk_race=true or push+go=true+sampled_race=true; require all five reusable race jobs and the parent check gate to succeed. Do not manufacture an app/platform change. A scheduled or separately owner-authorized direct race.yml run may prove the five-job workflow but cannot substitute for parent ci.yml selector/check proof."
+      proves: "The restored parent classifier route selects the complete reusable race workflow and binds its result into check."
+      evidence_class: post_land_race_selector_acceptance
+  rollback: "Revert the bounded CI commit to restore the two literal pause conditions. Never change main, dispatch a workflow, or alter gate/deploy/publish relationships without separate owner authority."
   landing:
     required: true
     environment: github_actions
-    required_receipts: [pushed_candidate_commit, frozen_candidate_review, github_actions_candidate_run, owner_authorized_serialized_main_landing, canonical_github_actions_acceptance]
+    required_receipts: [pushed_candidate_commit, frozen_candidate_review, github_actions_candidate_parse, owner_authorized_serialized_main_landing, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance]
   not_done_when:
     - "Only local checks, a draft, or a reviewer narrative exists."
     - "A sampled condition is described as one shard even though it invokes the full reusable workflow."
     - "A duration or rounded runner-minute estimate is called actual billing."
     - "SBOM is described as gating check or deploy without a separately authorized red relationship change."
-    - "A main push or workflow-dispatch deploy occurs without explicit owner authority and collision coordination."
+    - "One .github-only landing is claimed to prove both SBOM and race even though that stimulus sets go=false and high_risk_race=false and race depends on the landing SHA's sample bucket."
+    - "A main push or workflow dispatch occurs without explicit owner authority and both relevant cancellation groups coordinated."
 
 boundaries:
   mutation_class: red
@@ -102,7 +106,7 @@ boundaries:
     introduced: []
     repaired: ["The live Definition corrects those claims before workflow mutation and the SBOM problem record now names c96c7b49 plus its successful run."]
   authority_sources:
-    - "Owner delegation in Codex task 019f6933-ea56-7403-b535-da4eafa4d1f7 on 2026-07-16: promote and run this independent CI-only mission concurrently; no app/platform changes; serialize shared main landing; no main merge or workflow-dispatch deploy without explicit authority."
+    - "Owner delegation and supervision in Codex task 019f6933-ea56-7403-b535-da4eafa4d1f7 on 2026-07-16: promote and run this independent CI-only mission concurrently; no app/platform changes; serialize shared main CI and Race observations; no main merge or workflow dispatch without explicit authority."
     - docs/choir-doctrine.md
     - AGENTS.md
     - docs/standing-questions.md
@@ -115,10 +119,10 @@ boundaries:
     - "check, deploy-impact, deploy-staging, FlakeHub, docs-only routing, and supply-chain artifact integrity are not weakened."
     - "Deploy classifier/contract tests remain in deploy-impact unless equivalent coverage on every non-doc main push is designed and proved."
     - "Ripgrep setup is measured as conditional; no claim says it is fetched every run."
-    - "Main landing is serialized against ci-${github.ref}; no force-push, main merge, or workflow-dispatch deploy is authorized."
-  excluded: [app_source, platform_source, Node_B_mutation, main_merge, workflow_dispatch_deploy, force_push, new_runner_provider, billing_claim_without_authority]
-  protected_surfaces: [ci_check_gate, race_lane, sbom_audit_and_publishing, deploy_impact_classifier, deploy_staging, flakehub_publish, docs_only_fast_path, main_ci_concurrency]
-  completion_evidence_floor: [github_actions_timeline, deterministic_local_contracts, frozen_candidate_review, github_actions_candidate_run, canonical_github_actions_acceptance]
+    - "Main landing and separate main Race observation are coordinated against ci-${github.ref} and race-${github.ref}; no force-push, main merge, or workflow dispatch is authorized."
+  excluded: [app_source, platform_source, Node_B_mutation, main_merge, workflow_dispatch, force_push, new_runner_provider, billing_claim_without_authority]
+  protected_surfaces: [ci_check_gate, race_lane, sbom_audit_and_publishing, deploy_impact_classifier, deploy_staging, flakehub_publish, docs_only_fast_path, main_ci_concurrency, main_race_concurrency]
+  completion_evidence_floor: [github_actions_timeline, deterministic_local_contracts, frozen_candidate_review, github_actions_candidate_parse, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance]
 
 measures:
   - name: hosted critical path
@@ -141,42 +145,42 @@ measures:
     cannot_prove: "Absence of all CI defects."
 
 now:
-  status: working
-  slice: "green Define boundary and baseline reconciliation before CI repair"
-  question: "What smallest re-enable candidate preserves every protected relationship and earns hosted evidence?"
+  status: checkpoint_incomplete
+  slice: "P1 acceptance repair and current-main reconciliation for frozen CI candidate"
+  question: "When may the reconciled child branch be pushed for hosted PR parsing without authorizing main landing?"
   reconciliation:
-    observed_at: 2026-07-16T04:43:23Z
-    source_ref: 0e5f5c7eb531dd880378996ebd280fe69bb4cf09
+    observed_at: 2026-07-16T04:56:00Z
+    source_ref: "candidate 8e4aa074f970b69ce59cffa07b280f164ca1c161 reviewed against origin/main a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36"
     deploy_identity: not_applicable_ci_only
-    authority_identities: [owner-delegation-019f6933-2026-07-16, choir-doctrine@0e5f5c7e, AGENTS@0e5f5c7e, definition-skill@0e5f5c7e]
+    authority_identities: [owner-delegation-019f6933-2026-07-16, choir-doctrine@a1d2f88c, AGENTS@a1d2f88c, definition-skill@a1d2f88c]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "start.worktrees plus git status/worktree inventory 2026-07-16T04:43:23Z"
+    worktree_inventory_ref: "child candidate 8e4aa074 plus docs-only checkpoint WIP; protected parent inventory unchanged; origin/main advanced to a1d2f88c with no CI-scope delta but overlapping mission registries requiring explicit reconciliation"
     status: reconciled
   candidate:
     id: ci-reenable-candidate-1
-    state: rehearsing
-    ref: branch:codex/ci-optimization-mission-2026-07-16
+    state: reviewed
+    ref: commit:8e4aa074f970b69ce59cffa07b280f164ca1c161
     owner: ci-mission
-    base: 0e5f5c7eb531dd880378996ebd280fe69bb4cf09
-    digest: none
+    base: 27f03875702f503d8ef551035733eb5f40e27a1c
+    digest: "candidate ci.yml sha256 f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25; pre-candidate ci.yml sha256 69b5de792e84446eb5802ae4f60839bbf8bfb2026e64749c3e9dac6e0f93b14c"
     scope: [.github/workflows/ci.yml]
   decision:
-    selected: "Run one independent CI-maintenance goal concurrently with Autoputer, but serialize any main landing; restore existing full-race and host-side-SBOM topology without changing gate/deploy relationships."
-    kind: authority
+    selected: "Keep frozen workflow candidate 8e4aa074 unchanged, repair the P1 conflated acceptance contract, and split PR parsing, CI-only main SBOM/deploy-skip, and classifier-selected post-land race proof."
+    kind: operational
     status: settled
-    source: owner
-    evidence_ref: owner-delegation-019f6933-2026-07-16
+    source: observed
+    evidence_ref: "docs/evidence/ci-reenable-candidate-review-2026-07-16.md P1/P2 adjudication plus origin/main a1d2f88 reconciliation"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-16T04:43:23Z
-    consequence: "Green Definition/registry mutation and bounded CI-only candidate work are authorized; main merge and workflow-dispatch deploy are not."
-  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, pre-pause-1b28520-parent]
-  blocker_or_risk: "A same-ref main push cancels an in-flight main run; canonical acceptance requires later explicit owner authority and serialization."
-  next_action: "Commit this code-free green Define boundary, then prepare and locally rehearse the smallest CI-only re-enable candidate."
+    recorded_at: 2026-07-16T04:56:00Z
+    consequence: "No single landing may satisfy both restored signals. The candidate may proceed only after current-main registry reconciliation is durably recorded and child-branch push is explicitly authorized; main merge and all dispatch remain forbidden."
+  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, origin-main-a1d2f88c]
+  blocker_or_risk: "Hosted parsing is unproved because actionlint is unavailable and push is prohibited. CI-only main landing cannot deterministically select race, so terminal race proof must await a naturally selected post-land main push or separately owner-authorized stimulus. Parent ci-${github.ref} and Race race-${github.ref} cancellation groups both require coordination."
+  next_action: "After explicit supervisor authorization, reconcile current shared registries with origin/main a1d2f88c while preserving the candidate workflow blob, rebind the immutable identity, push only the child branch, and obtain hosted PR parsing; do not merge main or dispatch."
 
 receipts:
   - id: corrected-problem-and-baseline-define
     boundary: define
-    commit_or_artifact: pending_green_define_commit
+    commit_or_artifact: 27f03875702f503d8ef551035733eb5f40e27a1c
     proof_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md]
     rollback_ref: 0e5f5c7eb531dd880378996ebd280fe69bb4cf09
     disposition: "Corrected review findings and admitted only a bounded re-enable candidate; no workflow mutation in this boundary."
@@ -184,12 +188,28 @@ receipts:
     authorization_ref: owner-delegation-019f6933-2026-07-16
     candidate_or_evidence_refs: [run-29295978398, run-29468123745, commit-c96c7b49, pre-pause-1b28520-parent]
     landing:
-      source_commit: not_applicable_docs_define_boundary
+      source_commit: 27f03875702f503d8ef551035733eb5f40e27a1c
       ci_ref: not_applicable_until_push
       deploy_ref: not_applicable_ci_only
       environment_identity: github_actions
       deployed_acceptance: not_applicable_until_candidate
-    registry_conformance_ref: pending_same_commit_registry_checks
+    registry_conformance_ref: "27f03875: YAML/frontmatter parse, doccheck, dangling-reference check, and stale draft-path search passed"
+  - id: ci-reenable-candidate-implement
+    boundary: implement
+    commit_or_artifact: 8e4aa074f970b69ce59cffa07b280f164ca1c161
+    proof_refs: [docs/evidence/ci-reenable-candidate-review-2026-07-16.md, local-ci-contract-suite, pre-pause-1b28520-parent]
+    rollback_ref: 27f03875702f503d8ef551035733eb5f40e27a1c
+    disposition: "Workflow patch remains accepted, but P1/P2 review repaired its conflated acceptance and concurrency contracts; hosted parsing and two distinct canonical proof stimuli remain."
+    problem_ref: docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md
+    authorization_ref: owner-delegation-019f6933-2026-07-16
+    candidate_or_evidence_refs: [candidate-8e4aa074, pre-candidate-ci-yml-sha256-69b5de792e84446e, frozen-candidate-ci-yml-sha256-f60b63fe5e1613a9, classifier-go-false-high-risk-false-sampled-false-bucket-12, docs/evidence/ci-reenable-candidate-review-2026-07-16.md]
+    landing:
+      source_commit: 8e4aa074f970b69ce59cffa07b280f164ca1c161
+      ci_ref: pending_current_main_registry_reconciliation_and_push_authority
+      deploy_ref: not_applicable_ci_only_expected_skip
+      environment_identity: github_actions_pending
+      deployed_acceptance: pending_hosted_parse_plus_separate_sbom_and_race_receipts
+    registry_conformance_ref: not_applicable
 
 view:
   path: none
@@ -202,4 +222,3 @@ This is an owner-authorized CI-maintenance `/goal`, concurrent only because its
 source and effect scope is disjoint from the Autoputer product mission. It does
 not compete for product authority. Main-branch CI remains a shared resource and
 must be serialized before any owner-authorized landing.
-

@@ -223,7 +223,13 @@ nodes:
       competing with, the sole Autoputer product mission. It may touch admitted
       CI and mission paths only. It restores the complete reusable race workflow
       and already-wired host-side SBOM audit job without changing check/deploy
-      relationships. Main landing remains owner-authorized and serialized.
+      relationships. Frozen candidate 8e4aa074 is reviewed and checkpointed;
+      its P1/P2 acceptance contract now separates PR parsing, CI-only main SBOM
+      and deploy-skip proof, and a classifier-selected post-land race proof,
+      coordinating both CI and Race cancellation groups. The workflow has no
+      implementation overlap with origin/main a1d2f88c, but shared registries
+      require reconciliation. Child-branch push is not yet authorized; main
+      landing remains separately owner-authorized and serialized.
     sources:
       - .github/workflows/ci.yml
       - .github/workflows/race.yml

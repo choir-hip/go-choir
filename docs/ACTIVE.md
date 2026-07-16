@@ -52,7 +52,9 @@ re-enables the already-wired host-side SBOM topology as post-`check`, non-blocki
 audit evidence. GitHub Actions is its acceptance environment; CI-only changes
 must prove the expected deploy-impact/Node B skip. Any main landing must be
 explicitly owner-authorized and serialized because same-ref CI cancels an
-in-flight run.
+in-flight run. Separate main Race observation must also coordinate the
+`race-${github.ref}` cancellation group; this checkpoint authorizes no push,
+merge, or workflow dispatch.
 
 ## Supporting Maintenance
 
