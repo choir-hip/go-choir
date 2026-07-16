@@ -169,3 +169,15 @@ Conjecture delta: C2 and C3 remain unproven; the preflight adds concrete falsifi
 - Classification: lifecycle/persistence/backend substrate defects, not semantic projection symptoms.
 - Route/promotion state: no D-ROUTE CAS, promotion, or production mutation executed.
 - Rollback: prior `origin/main` plus the frozen patch identities above; subsequent repair remains an unpublished candidate until a new G2 frozen review accepts it.
+
+### Phase C lifecycle root-cause cluster
+
+- Captured: `2026-07-16T10:10:23Z`
+- Trigger: the terminal repair review `/tmp/choir-g2-consensus-terminal-repair/` accepted the prior six repairs in four successful verdicts but produced one reproducible minority `repair` verdict. This is the third lifecycle-cleanup review iteration; incremental cleanup patches stop here.
+- Shared substrate cause: construction spans four separately authoritative moments—disk instantiation, VM-manager launch, vmctl ownership persistence, and post-boot evidence commit—but the durable lifecycle record begins only after VM launch. `BootVM` can also return an error after creating manager/process state while the launcher reports no boot identity. The gap makes both error returns and process crashes capable of producing a VM with no durable construction intent.
+- Dependency graph: `ProductionMaterializer` owns the typed disk and cleanup decision -> `VMConstructionLauncher` sequences lifecycle -> `vmmanager.BootVM` may create process/manager state -> `OwnershipRegistry` currently persists only after boot -> final `Commit` seals observed disk evidence. D-ROUTE and restart recovery consume only `OwnershipRegistry`.
+- Substrate classification: lifecycle transaction boundary, not a disk-reclaim or route symptom. No replacement implementation exists to wire in.
+- Structural repair selected under the Phase C authority: persist an uncommitted construction intent before `BootVM`; update that same record with host/epoch only after boot; retain it as failed on any uncertain cleanup; remove it only after confirmed stop/state destruction; always return the realization identity when `BootVM` may have created state. Post-boot `Commit` remains the sole finalized transition.
+- Admissible proof: focused crash/error-order tests must show pre-boot durability, no identity-free BootVM error, no disk reclaim while VM cleanup is uncertain, and fail-closed restart/legacy replacement behavior; then a newly frozen independent G2 review.
+- Rollback: source remains unpublished; prior checkpoint `28a07e59` and frozen patch `3b5e51728becc0b3aabb1f8975285b78dd31ba3a20b847230863be6ddf1eb949` identify the pre-structural candidate.
+- Route/promotion state: no D-ROUTE CAS, promotion, or production mutation executed.
