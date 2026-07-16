@@ -160,24 +160,24 @@ measures:
 
 now:
   status: working
-  slice: "standalone doccheck topology repair (PR 1), then frozen workflow restoration (PR 2)"
-  question: "Can PR 1 validate the scope-disjoint entrypoint without blurring the frozen workflow stimulus, and can its FlakeHub publication side effect receive explicit authority before any main merge?"
+  slice: "frozen workflow restoration (PR 2) and split canonical acceptance"
+  question: "Will the digest-preserved workflow restoration parse on its .github-plus-Definition pull-request stimulus, then produce the complete checksummed SBOM artifact and Node B skip on main while Race waits for a natural selected stimulus?"
   reconciliation:
-    observed_at: 2026-07-16T07:08:06Z
-    source_ref: "draft PR 55 at 2467f450880ee5feb7d80acb62aec9f5e0d9004b against origin/main a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36; frozen workflow candidate 8e4aa074 remains isolated"
-    deploy_identity: not_applicable_ci_only
-    authority_identities: [owner-delegation-019f6933-2026-07-16, choir-doctrine@a1d2f88c, AGENTS@a1d2f88c, definition-skill@a1d2f88c]
+    observed_at: 2026-07-16T20:03:43Z
+    source_ref: "PR 1 merged as e02bd0ad9e04a149466f9c3fec436395c2ec9da9; PR 2 candidate 20d487470d037e9985ee4305d948b5b1f692bd42 is a clean cherry-pick of frozen 8e4aa074 onto that fresh main"
+    deploy_identity: "PR 1 main run 29530010061: deploy_needed=false and Node B skipped"
+    authority_identities: [owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority, choir-doctrine@e02bd0ad, AGENTS@e02bd0ad, definition-skill@e02bd0ad]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean PR 1 worktree /private/tmp/go-choir-ci-doccheck-pr1 at 2467f450; clean integration worktree /private/tmp/go-choir-ci-integration-owner at a1d2f88c; protected parent Autoputer inventory unchanged"
-    status: pr1_hosted_parse_accepted
+    worktree_inventory_ref: "clean integration worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-workflow-restoration-2026-07-16 at 20d48747; protected parent Autoputer inventory unchanged; PR 1 worktree preserved clean"
+    status: pr2_identity_rebound
   candidate:
     id: ci-reenable-candidate-1
-    state: reviewed
-    ref: commit:8e4aa074f970b69ce59cffa07b280f164ca1c161
+    state: rebound_from_frozen_reviewed_candidate
+    ref: commit:20d487470d037e9985ee4305d948b5b1f692bd42
     owner: ci-mission
-    base: 27f03875702f503d8ef551035733eb5f40e27a1c
-    digest: "candidate ci.yml sha256 f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25; pre-candidate ci.yml sha256 69b5de792e84446eb5802ae4f60839bbf8bfb2026e64749c3e9dac6e0f93b14c"
-    scope: [.github/workflows/ci.yml]
+    base: e02bd0ad9e04a149466f9c3fec436395c2ec9da9
+    digest: "ci.yml sha256 f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25, unchanged from reviewed candidate 8e4aa074f970b69ce59cffa07b280f164ca1c161"
+    scope: [.github/workflows/ci.yml, docs/definitions/choir-ci-optimization-2026-07-16.md]
   scope_amendment:
     id: doccheck-scoped-maintenance-entrypoint-contract
     mutation_class: yellow
@@ -194,9 +194,9 @@ now:
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-16T19:50:40Z
     consequence: "PR 55 may merge and publish the rolling FlakeHub package after serialization checks. Node B must still skip. PR 2 remains a separate fresh-main branch with the frozen ci.yml digest and its own hosted and main acceptance."
-  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, origin-main-a1d2f88c, pr-55, run-29478611966, run-29478958889-attempt-2, owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority]
-  blocker_or_risk: "PR 55 hosted CI is green at run 29478958889 attempt 2 after one unrelated TestCancelRunTrajectoryDrainsMoreThanOneActivePage timeout on attempt 1. FlakeHub publication and PR-mediated merge are owner-authorized. Immediately before merge, parent ci-${github.ref} and Race race-${github.ref} cancellation groups must be idle and origin/main must remain reconciled. Node B must skip. Terminal race proof still requires a naturally selected post-land main push."
-  next_action: "Fresh-fetch origin/main, confirm PR 55 remains mergeable and no active main CI or Race run can be cancelled, then merge only through PR 55. Verify its main CI, rolling FlakeHub publication, deploy_needed=false, and Node B skip before recreating frozen PR 2."
+  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, pr-55, merge-e02bd0ad, run-29530010061, job-87728809190, job-87727840418, job-87728809862, candidate-20d48747]
+  blocker_or_risk: "PR 1 canonical acceptance passed: run 29530010061 succeeded, rolling FlakeHub job 87728809190 succeeded, deploy-impact job 87727840418 reported deploy_needed=false, and Node B job 87728809862 skipped. PR 2 must preserve the frozen ci.yml digest and remain .github-plus-Definition only. Its main landing must serialize the shared CI/Race groups, verify the complete SBOM artifact, and leave terminal Race proof pending until a natural selected main stimulus."
+  next_action: "Verify the rebound candidate's exact ci.yml digest and deterministic local contracts, commit only this concise identity-rebind receipt, push the fresh branch, and create a separate draft PR. Accept pull-request parsing only with go=false, high_risk_race=false, flakehub=false, Race/SBOM/deploy skipped."
 
 receipts:
   - id: corrected-problem-and-baseline-define
@@ -273,12 +273,28 @@ receipts:
     authorization_ref: owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority
     candidate_or_evidence_refs: [pr-55, run-29478958889-attempt-2, origin-main-a1d2f88c]
     landing:
-      source_commit: pending_authority_receipt_commit
-      ci_ref: run-29478958889-attempt-2
-      deploy_ref: main_event_pending; Node_B_skip_required
+      source_commit: e02bd0ad9e04a149466f9c3fec436395c2ec9da9
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29530010061
+      deploy_ref: deploy_needed=false; Node_B_job_87728809862_skipped
       environment_identity: github_actions
-      deployed_acceptance: pending_serialized_pr_merge
-    registry_conformance_ref: "Docs Truth Check passed in run 29478958889 attempt 2"
+      deployed_acceptance: "PR 1 canonical acceptance passed; rolling FlakeHub job 87728809190 succeeded"
+    registry_conformance_ref: "Docs Truth Check passed in run 29530010061"
+  - id: pr2-frozen-identity-rebind
+    boundary: define
+    commit_or_artifact: 20d487470d037e9985ee4305d948b5b1f692bd42
+    proof_refs: [candidate-8e4aa074, candidate-20d48747, merge-e02bd0ad, run-29530010061]
+    rollback_ref: "Close PR 2 without merge, or revert only its workflow merge commit through a pull request."
+    disposition: "Cherry-picked only frozen candidate 8e4aa074 onto fresh main e02bd0ad. The workflow candidate is rebound to 20d48747 with its reviewed ci.yml digest unchanged; PR 1 canonical acceptance is closed."
+    problem_ref: docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md
+    authorization_ref: owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority
+    candidate_or_evidence_refs: [frozen-ci-yml-sha256-f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25, candidate-8e4aa074, candidate-20d48747, origin-main-e02bd0ad]
+    landing:
+      source_commit: 20d487470d037e9985ee4305d948b5b1f692bd42
+      ci_ref: pending_pr2
+      deploy_ref: ci_only_Node_B_skip_required
+      environment_identity: github_actions_pending
+      deployed_acceptance: pending_pr_parse_and_main_sbom_receipts
+    registry_conformance_ref: pending_pr2_hosted_doccheck
 
 view:
   path: none

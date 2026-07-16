@@ -194,11 +194,9 @@ jobs:
         shell: bash
         run: scripts/go-test-integration
 
-  # Temporarily paused by owner direction on 2026-07-14. Re-enable by restoring
-  # the classifier-based condition and the matching check-gate selection below.
   race:
     needs: plan
-    if: ${{ false }}
+    if: needs.plan.outputs.high_risk_race == 'true' || (github.event_name == 'push' && needs.plan.outputs.go == 'true' && needs.plan.outputs.sampled_race == 'true')
     uses: ./.github/workflows/race.yml
 
   doccheck:
@@ -300,19 +298,20 @@ jobs:
           require_success "${{ needs.plan.outputs.go }}" go-test-runtime "${{ needs.go-test-runtime.result }}"
           require_success "${{ needs.plan.outputs.specs }}" tla-model-check "${{ needs.tla-model-check.result }}"
           require_success "${{ needs.plan.outputs.non_docs }}" heresy-detector "${{ needs.heresy-detector.result }}"
-          # Race is temporarily paused; keep the skipped reusable job in the
-          # dependency graph so re-enabling remains a two-line condition change.
-          require_success "false" race "${{ needs.race.result }}"
+          race_selected=false
+          if [[ "${{ needs.plan.outputs.high_risk_race }}" == "true" ]] || \
+             [[ "${{ github.event_name }}" == "push" && "${{ needs.plan.outputs.go }}" == "true" && "${{ needs.plan.outputs.sampled_race }}" == "true" ]]; then
+            race_selected=true
+          fi
+          require_success "$race_selected" race "${{ needs.race.result }}"
           require_if_run build-frontend "${{ needs.build-frontend.result }}"
           echo "All selected CI gates passed"
 
-  # Temporarily paused by owner direction on 2026-07-14. Re-enable by restoring
-  # the plan/check condition below; the differential builder remains intact.
   sbom:
     name: Generate Differential SBOMs
     runs-on: ubuntu-latest
     needs: [plan, check]
-    if: ${{ false }}
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.plan.outputs.sbom == 'true' && needs.check.result == 'success'
     permissions:
       contents: read
       id-token: write
