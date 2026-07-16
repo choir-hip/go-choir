@@ -39,6 +39,20 @@ timing is inadmissible. Reconcile and revise the draft from the completed
 predecessor's deployed baseline, set owner-ratified numerical SLOs, and promote
 it through all registries before execution.
 
+[`definitions/choir-ci-optimization-draft-2026-07-16.md`](definitions/choir-ci-optimization-draft-2026-07-16.md)
+is an owner-authorized **draft** for re-enabling the paused CI Race Detector and
+differential SBOM lanes while reducing PR feedback time and billed minutes as
+strict Pareto moves. It is blocked, is not a `/goal` entrypoint, and authorizes
+no edit to `.github/workflows/**`, `.github/scripts/**`, or `scripts/go-test-*`.
+Race returns through the existing `high_risk_race`/`sampled_race` classifier plus
+the weekly full sweep; SBOM returns on the documented host-side sbomnix topology
+(see [`problems/ci-sbom-nested-nix-sandbox-2026-07-09.md`](problems/ci-sbom-nested-nix-sandbox-2026-07-09.md))
+gated to post-merge main. Every speed claim requires a GitHub-run before/after
+receipt, and the `check` gate, deploy routing, staging acceptance, and
+supply-chain publishing must not be weakened to win a time number. Confirm owner
+re-enablement policy and the 2026-07-14 pause reason, capture a pinned baseline,
+and promote a revised successor through all registries before execution.
+
 ## Supporting Maintenance
 
 [`definitions/choir-seam-repair-2026-07-10.md`](definitions/choir-seam-repair-2026-07-10.md)
