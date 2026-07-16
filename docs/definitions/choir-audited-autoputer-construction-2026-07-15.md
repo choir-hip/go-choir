@@ -349,8 +349,8 @@ now:
   question: "Does origin/main deploy the G3-accepted sealed constructor/verifier/promotion route implementation on Node B, after which one owner-authorized frozen candidate can exercise the first bounded D-ROUTE CAS and rollback?"
   reconciliation:
     observed_at: 2026-07-16T17:05:00Z
-    source_ref: refs/heads/main@6e399d30_ahead_of_refs/remotes/origin/main@0dc3fea3_pending_push
-    deploy_identity: "pending landing of G3-accepted source commit 6e399d30; current staging still reports pre-candidate deployed commit 0dc3fea35269aa03178cacc62740e536293426e5"
+    source_ref: refs/heads/main@c0b1c61c_ahead_of_refs/remotes/origin/main@5cda0550_after_clean_rebase
+    deploy_identity: "pending landing of G3-accepted source commit ab89a200; current staging identity must be re-read after the concurrent CI-maintenance landing"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -358,7 +358,7 @@ now:
       - mission_graph:docs/mission-graph.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
       - authority_manifest:docs/doc-authority-manifest.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-07-16T17:05:00Z source candidate committed as 6e399d30 after accepted G3; only this Definition and its Phase-D evidence receipt are intentional documentation WIP"
+    worktree_inventory_ref: "2026-07-16T17:05:00Z source candidate committed as ab89a200 after accepted G3; only this Definition and its Phase-D evidence receipt are intentional documentation WIP"
     status: reconciled
   candidate:
     id: none
@@ -397,8 +397,8 @@ now:
     - "focused affected Go suites and go vet: pass; Node B Nix vmctl environment evaluation: pass"
     - "/tmp/choir-g3-sealed-writer.patch SHA-256 8754f601425e0e10f0759d32a9502fb51d079469abdcbef2d0c6ea2a583253f3"
     - "/tmp/choir-g3-consensus-sealed-writer-final: Codex, OpenCode, GPT-5.5, Gemini 3.5, and GLM 5.2 accept with no reproducible blocker; Devin and Cursor timed out without a verdict"
-    - "commit 6e399d30: G3-accepted sealed SQL writer, independent verifier, typed disk receipt, fresh materializer/launcher joins, signed frozen bootstrap/promote/rollback envelopes; no route CAS executed"
-  blocker_or_risk: "G3 accepted the sealed source candidate, but protected claims remain local-only until commit 6e399d30 is pushed, CI and Node B deployment succeed, staging reports that identity, and the deployed constructor/verifier path produces a real frozen candidate. The promotion authority public key is not currently configured on staging; no route CAS is authorized until a durable owner-controlled signing key/public-key provisioning path exists and signs the exact G3-accepted execution plans."
+    - "commit ab89a200: G3-accepted sealed SQL writer, independent verifier, typed disk receipt, fresh materializer/launcher joins, signed frozen bootstrap/promote/rollback envelopes; no route CAS executed"
+  blocker_or_risk: "G3 accepted the sealed source candidate, but protected claims remain local-only until commit ab89a200 is pushed, CI and Node B deployment succeed, staging reports that identity, and the deployed constructor/verifier path produces a real frozen candidate. The promotion authority public key is not currently configured on staging; no route CAS is authorized until a durable owner-controlled signing key/public-key provisioning path exists and signs the exact G3-accepted execution plans."
   next_action: "Commit this compact G3 receipt, push canonical main, monitor CI and Node B deployment, verify staging commit identity, and run deployed read-only constructor/verifier probes. Then provision the durable owner-controlled promotion authority without committing private material, freeze one disposable control candidate, obtain exact signed owner approval and G3 acceptance, rehearse rollback, and only then execute the first vmctl-owned bounded route CAS."
 
 successor:
