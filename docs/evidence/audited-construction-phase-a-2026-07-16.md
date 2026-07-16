@@ -153,3 +153,19 @@ Before committing constructor code, focused implementation and adversarial revie
 These are substrate failures at the construction boundary, not isolated guest symptoms. The existing `StateGenerator`, typed `ComputerVersion`, VM manager, and immutable artifact catalog remain the replacement substrate; the repair must connect them through one materializer rather than patch the old reboot path.
 
 Conjecture delta: C2 and C3 remain unproven; the preflight adds concrete falsifiers for unsafe immutable archive structure and symlink-following readback. Heresy delta: `discovered` — two unsafe boundary behaviors and one missing typed launch seam; `introduced` — none in the landed system because this candidate is not committed or deployed; `repaired` — none until the candidate is independently reviewed and exercised on staging. Admissible evidence remains focused deterministic checks, frozen G2 independent review, then deployed Firecracker construction/readback receipts.
+
+### Phase C terminal G2 repair checkpoint
+
+- Captured: `2026-07-16T09:59:28Z`
+- Frozen candidate before this repair: base `0856b898`; patch `/tmp/choir-g2-construction-repaired.patch`; SHA-256 `0eb94f757631289b1271cab6374ea22600a6a4d616ff317f85c54ec42e55ba51`; 25 staged paths.
+- Independent packet: `/tmp/choir-g2-consensus-terminal/` (5 successful reviewers, 2 unavailable). Verdicts included one accept and four reproducible `repair` findings; minority blockers govern.
+- Newly documented blockers before repair commit:
+  1. Ext4 reclaim removed `data.img` but retained its realization directory, preventing deterministic retry with the same realization identity.
+  2. A failed constructed ownership could enter the ordinary failed-to-fresh legacy `BootVM` branch without immutable device or CodeRef bindings.
+  3. vmctl restart reattachment did not project the durable construction device and CodeRef into manager metadata.
+  4. Registration/stop/destruction failures did not fate-share with disk reclaim, permitting a live or uncertain VM to lose its backing path.
+  5. Persisted constructed ownership accepted absent/corrupt or pre-commit bindings, and D-ROUTE exact comparison skipped a missing version.
+  6. The production launcher imposed an untyped `<StateDir>/<VMID>/data.img` convention that defeated conforming backend substitution.
+- Classification: lifecycle/persistence/backend substrate defects, not semantic projection symptoms.
+- Route/promotion state: no D-ROUTE CAS, promotion, or production mutation executed.
+- Rollback: prior `origin/main` plus the frozen patch identities above; subsequent repair remains an unpublished candidate until a new G2 frozen review accepts it.
