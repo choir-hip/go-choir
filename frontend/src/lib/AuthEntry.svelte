@@ -167,8 +167,15 @@
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
             {#if ceremonyInProgress}
+              <span class="spinner" aria-hidden="true"></span>
               Waiting for your device…
             {:else}
+              <svg class="passkey-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.4" />
+                <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+                <circle cx="12" cy="14.6" r="1.5" />
+                <path d="M12 16.1v1.8" />
+              </svg>
               Create Account with Passkey
             {/if}
           </button>
@@ -209,8 +216,15 @@
           />
           <button type="submit" class="primary-action" disabled={ceremonyInProgress} data-auth-submit>
             {#if ceremonyInProgress}
+              <span class="spinner" aria-hidden="true"></span>
               Waiting for your device…
             {:else}
+              <svg class="passkey-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="4.5" y="10.5" width="15" height="9.5" rx="2.4" />
+                <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+                <circle cx="12" cy="14.6" r="1.5" />
+                <path d="M12 16.1v1.8" />
+              </svg>
               Continue with Passkey
             {/if}
           </button>
@@ -244,7 +258,7 @@
     background:
       linear-gradient(145deg, color-mix(in srgb, var(--choir-accent) 8%, transparent), transparent 42%),
       var(--choir-sheet-bg, var(--choir-state-selected));
-    border: 0;
+    border: 1px solid color-mix(in srgb, var(--choir-border-strong) 55%, transparent);
     border-radius: var(--choir-radius-panel, 22px);
     padding: 1.55rem;
     width: 100%;
@@ -389,6 +403,10 @@
   }
 
   .primary-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
     min-height: 3.1rem;
     margin-top: 0.35rem;
     padding: 0.85rem 1rem;
@@ -401,6 +419,35 @@
     cursor: pointer;
     box-shadow: var(--choir-control-shadow);
     transition: filter 0.2s, transform 0.2s;
+  }
+
+  .passkey-glyph {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .spinner {
+    width: 1.05rem;
+    height: 1.05rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--choir-text-on-accent, var(--choir-text-primary)) 35%, transparent);
+    border-top-color: var(--choir-text-on-accent, var(--choir-text-primary));
+    animation: auth-spin 0.7s linear infinite;
+  }
+
+  @keyframes auth-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation-duration: 1.6s; }
   }
 
   .primary-action:hover:enabled {
