@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "D-verify-and-route"
-  question: "Can an independent verifier recompute the complete ComputerVersion/input/output/observation and disk-policy/backend/device/allocation/geometry joins, issue an immutable promotion certificate, and freeze a vmctl-only atomic D-ROUTE CAS candidate with tested rollback without executing the CAS?"
+  slice: "D-verify-and-route-landing"
+  question: "Does origin/main deploy the G3-accepted sealed constructor/verifier/promotion route implementation on Node B, after which one owner-authorized frozen candidate can exercise the first bounded D-ROUTE CAS and rollback?"
   reconciliation:
-    observed_at: 2026-07-16T07:50:08Z
-    source_ref: refs/heads/main@7d310551c01dd5c63be3dcbb641dd752a201d8d6_equals_refs/remotes/origin/main_and_remote_origin_main
-    deploy_identity: "staging activation receipt and uncached proxy health report 7d310551c01dd5c63be3dcbb641dd752a201d8d6; CI run 29480269240 attempt 2 and Node B deploy job 87564091427 succeeded"
+    observed_at: 2026-07-16T17:05:00Z
+    source_ref: refs/heads/main@6e399d30_ahead_of_refs/remotes/origin/main@0dc3fea3_pending_push
+    deploy_identity: "pending landing of G3-accepted source commit 6e399d30; current staging still reports pre-candidate deployed commit 0dc3fea35269aa03178cacc62740e536293426e5"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -358,7 +358,7 @@ now:
       - mission_graph:docs/mission-graph.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
       - authority_manifest:docs/doc-authority-manifest.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-07-16T04:45:19Z intentional Phase-A WIP: this Definition plus docs/evidence/audited-construction-phase-a-2026-07-16.md; no unrelated paths"
+    worktree_inventory_ref: "2026-07-16T17:05:00Z source candidate committed as 6e399d30 after accepted G3; only this Definition and its Phase-D evidence receipt are intentional documentation WIP"
     status: reconciled
   candidate:
     id: none
@@ -395,8 +395,11 @@ now:
     - "/tmp/choir-g2-consensus-churn-proven: Codex, Cursor, GPT-5.5, and OpenCode accept; no blocking findings; Gemini unavailable"
     - "nix shell nixpkgs#e2fsprogs -c go test ./internal/diskinstantiation: pass including real ext4 churn/reclaim/same-ID reconstruction"
     - "focused affected Go suites and go vet: pass; Node B Nix vmctl environment evaluation: pass"
-  blocker_or_risk: "G1 is accepted and landed. The existing VMManagerScopedMaterializer intentionally stops before VM launch; production has no typed disk-instantiation contract, policy resolver, independently verifiable backend receipt, fresh-realization constructor, joined construction receipt store, or boot/geometry acceptance. Existing data.img creation and reboot paths remain superseded substrate that Phase C must replace rather than patch."
-  next_action: "Implement C-construct-and-boot from landed commit 7d310551: map existing VM creation/materializer interfaces, define the typed substrate-independent disk plan/backend/device/receipt contract and policy resolver, connect one production ComputerVersion materializer that resolves inputs, creates a fresh optimized device without any source VM/image, materializes and verifies typed state, boots Firecracker, and records joined immutable construction evidence. Prove arbitrary-valid-tape round trip plus coherent capacity/allocation/geometry, freeze the G2 candidate, and do not implement promotion or execute any route CAS before G2 accepts."
+    - "/tmp/choir-g3-sealed-writer.patch SHA-256 8754f601425e0e10f0759d32a9502fb51d079469abdcbef2d0c6ea2a583253f3"
+    - "/tmp/choir-g3-consensus-sealed-writer-final: Codex, OpenCode, GPT-5.5, Gemini 3.5, and GLM 5.2 accept with no reproducible blocker; Devin and Cursor timed out without a verdict"
+    - "commit 6e399d30: G3-accepted sealed SQL writer, independent verifier, typed disk receipt, fresh materializer/launcher joins, signed frozen bootstrap/promote/rollback envelopes; no route CAS executed"
+  blocker_or_risk: "G3 accepted the sealed source candidate, but protected claims remain local-only until commit 6e399d30 is pushed, CI and Node B deployment succeed, staging reports that identity, and the deployed constructor/verifier path produces a real frozen candidate. The promotion authority public key is not currently configured on staging; no route CAS is authorized until a durable owner-controlled signing key/public-key provisioning path exists and signs the exact G3-accepted execution plans."
+  next_action: "Commit this compact G3 receipt, push canonical main, monitor CI and Node B deployment, verify staging commit identity, and run deployed read-only constructor/verifier probes. Then provision the durable owner-controlled promotion authority without committing private material, freeze one disposable control candidate, obtain exact signed owner approval and G3 acceptance, rehearse rollback, and only then execute the first vmctl-owned bounded route CAS."
 
 successor:
   status: unauthorized_until_this_definition_complete

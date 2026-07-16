@@ -110,3 +110,16 @@
 - Conjecture delta: a safe vmctl facade is insufficient while its storage package exports a weaker writer over the same DSN; sole-writer authority must hold at the lowest exported mutation boundary.
 - Heresy delta: discovered `1`; introduced `0`; repaired `0` at this checkpoint.
 - Rollback: retain problem/root-cause checkpoints and discard the rejected source patch if the storage boundary cannot be sealed.
+
+## Terminal G3 acceptance — sealed storage writer
+
+- Frozen candidate: base `3520b3de`; patch `/tmp/choir-g3-sealed-writer.patch`; SHA-256 `8754f601425e0e10f0759d32a9502fb51d079469abdcbef2d0c6ea2a583253f3`; twenty-one staged paths, `+2315/-145`, no unstaged or untracked paths.
+- Deterministic checks: focused `go test` across `internal/computerversion`, `internal/diskinstantiation`, `internal/routeledger`, `internal/vmctl`, `internal/vmmanager`, `internal/sandbox`, and `cmd/vmctl`; matching `go vet`; Node B vmctl Nix environment evaluation; and `git diff --check` all passed.
+- Review packet: `/tmp/choir-g3-consensus-sealed-writer-final`. Codex, OpenCode, OMP GPT-5.5, OMP Gemini 3.5, and OMP GLM 5.2 returned `accept`/no reproducible blocker. Devin and Cursor timed out without a verdict. No reproducible minority blocker exists in the completed panel.
+- Governing repair: `SQLLedger` exports no raw `Transition` or caller-supplied validator. Its sole route mutation API validates a complete content-addressed execution envelope with exact G3-signed plan hashes, independently self-hashed verification receipt, signed owner approval, candidate certificate, and a DB-pinned promotion public key inside the same serializable evidence/CAS transaction. Key replacement and post-G3 plan substitution are focused-test refusals with unchanged route state.
+- Adjudication: `accept`. G3 authorizes landing and deployed preparation/rehearsal of the first bounded route candidate; it does not itself authorize an unsigned CAS or any fleet cutover.
+- Source receipt: accepted candidate committed as `6e399d30`; no route CAS, evidence publication, promotion, rollback, or production mutation occurred before acceptance.
+- Protected surfaces: independent verification, promotion certificate, signed owner/G3 authority, trusted key pin, D-ROUTE evidence/CAS/receipt, production fresh-realization construction. `ComputerVersion` remains exactly `(CodeRef, ArtifactProgramRef)`; disk/backend/device/realization evidence remains subordinate.
+- Heresy delta: discovered `3` across rejected G3 iterations (caller-supplied verifier, split route/evidence authority, exported raw SQL writer); introduced `0`; repaired `3` in the accepted candidate.
+- Conjecture delta: vmctl-only route ownership is enforceable only when the lowest exported SQL mutation boundary itself verifies the signed post-G3 execution envelope and persisted trusted key; a safe facade over an exported weaker writer is not sole authority.
+- Rollback: before any route CAS, revert source commit `6e399d30`. After a bounded accepted CAS, retain the prior accepted route receipt/ComputerVersion and execute only the pre-signed rollback plan; never recover by booting or mutating the failed owner image.
