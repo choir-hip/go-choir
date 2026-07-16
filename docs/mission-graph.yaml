@@ -13,8 +13,8 @@ rules:
     text: The graph inherits docs/choir-doctrine.md and AGENTS.md.
   - id: no-historical-corpus
     text: Superseded Definitions may remain only as minimal discovery tombstones; ledgers, evidence, and retired topology do not return to this graph.
-  - id: sole-mission-entrypoint
-    text: Exactly one current mission node may set entrypoint true.
+  - id: scoped-entrypoints
+    text: Exactly one working product spine with mission_orchestrator execution may set entrypoint true; a working owner-authorized ci_maintenance scope_disjoint_maintenance mission may also be executable only when its source, effect, landing, and concurrency boundaries are explicit.
   - id: phase-order-owned-by-definition
     text: Dependency and enables edges are discovery hints only; the active Definition owns phase order.
 node_fields:
@@ -23,11 +23,11 @@ node_fields:
   path: active Definition path
   ledger: always empty; raw mission ledgers are not retained
   status: working | blocked | settled | superseded; Definition blocked_incomplete maps to graph blocked
-  kind: spine | subordinate_contract | product_completion | docs_truth
+  kind: spine | subordinate_contract | product_completion | docs_truth | ci_maintenance
   entrypoint: whether the node accepts direct /goal execution
   member_of: containing mission id for subordinate contracts
   suite_phases: active Definition phases that consume this contract
-  execution_mode: mission_orchestrator | subordinate_only | draft_non_executable
+  execution_mode: mission_orchestrator | subordinate_only | draft_non_executable | scope_disjoint_maintenance
   depends_on: discovery prerequisite hints only; never suite containment or phase authority
   enables: discovery successor hints only; never execution authority
   sources: current authority sources only
@@ -207,6 +207,41 @@ nodes:
       - docs/agent-product-doctrine.md
       - docs/standing-questions.md
       - docs/ACTIVE.md
+      - AGENTS.md
+  - id: choir-ci-optimization-2026-07-16
+    title: CI Re-Enablement and Evidence-Bounded Optimization
+    path: docs/definitions/choir-ci-optimization-2026-07-16.md
+    ledger: ''
+    status: working
+    kind: ci_maintenance
+    entrypoint: true
+    execution_mode: scope_disjoint_maintenance
+    depends_on: []
+    enables: []
+    note: >-
+      Owner-authorized CI-only maintenance entrypoint concurrent with, but not
+      competing with, the sole Autoputer product mission. It may touch admitted
+      CI and mission paths only. It restores the complete reusable race workflow
+      and already-wired host-side SBOM audit job without changing check/deploy
+      relationships. Frozen candidate 8e4aa074 is reviewed and checkpointed;
+      its P1/P2 acceptance contract now separates PR parsing, CI-only main SBOM
+      and deploy-skip proof, and a classifier-selected post-land race proof,
+      coordinating both CI and Race cancellation groups. The workflow has no
+      implementation overlap with origin/main a1d2f88c, but shared registries
+      require reconciliation. The owner authorizes PR creation and PR-mediated
+      main merge after hosted evidence. Normal CI-only landing must prove Node B
+      skip; generic dispatch/direct Node B mutation remain excluded unless a
+      later concrete deploy slice is admitted. Both cancellation groups remain
+      serialized.
+    sources:
+      - .github/workflows/ci.yml
+      - .github/workflows/race.yml
+      - .github/scripts/build-sboms-differential
+      - docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md
+      - docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md
+      - docs/evidence/ci-optimization-baseline-2026-07-16.md
+      - docs/standing-questions.md
+      - docs/agent-product-doctrine.md
       - AGENTS.md
   - id: choir-run-truth-suite-2026-07-11
     title: Choir Run-Truth Suite (superseded foliation record)

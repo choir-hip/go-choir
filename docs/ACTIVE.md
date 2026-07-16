@@ -6,7 +6,8 @@ corpus and does not make an unverified graph status into a live work claim.
 ## Active Definitions
 
 [`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md)
-is the one active top-level product Definition and the only `/goal` entrypoint.
+is the one active top-level product Definition and the sole product `/goal`
+entrypoint.
 It makes the production Autoputer real by constructing and booting a disposable
 realization from immutable `ComputerVersion = (CodeRef, ArtifactProgramRef)`,
 then proving exact typed state, destruction/reconstruction, route promotion and
@@ -38,6 +39,24 @@ benchmark claim. Its Firecracker benchmarks must run on Node B; local macOS
 timing is inadmissible. Reconcile and revise the draft from the completed
 predecessor's deployed baseline, set owner-ratified numerical SLOs, and promote
 it through all registries before execution.
+
+## Independent CI Maintenance — Executable
+
+[`definitions/choir-ci-optimization-2026-07-16.md`](definitions/choir-ci-optimization-2026-07-16.md)
+is an owner-authorized, scope-disjoint CI-maintenance `/goal` entrypoint. It may
+run concurrently with Autoputer because it cannot change app/platform source,
+product authority, or product state. This does not create a second product
+mission: Autoputer remains the sole product `/goal`. The CI mission restores the
+full reusable race workflow for either classifier selection and re-enables the
+already-wired host-side SBOM topology as post-`check`, non-blocking audit
+evidence. GitHub Actions is its acceptance environment; its normal CI-only
+landing must prove deploy-impact/Node B skip. The owner authorizes a draft PR
+and PR-mediated merge after hosted evidence, plus a Node B deployment only if a
+later concrete CI deploy slice says the accepted landing path requires it.
+Generic workflow dispatch and direct Node B mutation remain excluded. Any main
+landing must be serialized because same-ref CI cancels an in-flight run.
+Separate main Race observation must also coordinate the `race-${github.ref}`
+cancellation group.
 
 ## Supporting Maintenance
 
@@ -71,6 +90,12 @@ The sole product invocation is:
 
 ```text
 /goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+```
+
+The independent CI-maintenance invocation is:
+
+```text
+/goal docs/definitions/choir-ci-optimization-2026-07-16.md
 ```
 
 This index owns no current slice, next action, execution order, resumption,
