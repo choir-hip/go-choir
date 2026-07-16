@@ -186,17 +186,17 @@ now:
     acceptance: "Exactly one working product spine remains the authority-root /goal; at most one working scope-disjoint ci_maintenance entrypoint is admitted only when its manifest identity is current, entry-only, and non-authority-root."
     excluded: [workflow_semantics, app_source, platform_source, node_b_deployment]
   decision:
-    selected: "Use two PRs: land the doccheck/registry repair first so it cannot change the frozen workflow candidate's classifier stimulus, then recreate the frozen workflow candidate from fresh main with its digest unchanged."
+    selected: "Merge PR 55 through the pull request after a fresh-main and idle-cancellation-group check; its automatic rolling FlakeHub publication is explicitly authorized. Continue the remaining CI mission PR landings within the existing Definition boundaries."
     kind: authority
     status: settled
     source: owner
-    evidence_ref: "owner-message-019f6933-2026-07-16-main-merge-node-b-authority"
+    evidence_ref: "owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-16T06:00:00Z
-    consequence: "PR 1 may be validated as a draft, but cmd/doccheck/main.go classifies flakehub=true, so its main merge awaits narrow owner authority for the automatic publication despite expected Node B skip. After PR 1, recreate PR 2 from fresh main and preserve the ci.yml digest; it remains .github-plus-docs, flakehub=false, and expected Node B skip."
-  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, origin-main-a1d2f88c, pr-55, run-29478611966]
-  blocker_or_risk: "PR 55 hosted CI passed at run 29478611966 with go=true, sbom=true, flakehub=true, high_risk_race=false, sampled_race=false, Race/SBOM/FlakeHub/deploy-impact/Node B skipped for the pull_request event. Main merge still needs narrow owner authority for the automatic rolling FlakeHub publication. CI-only workflow landing cannot deterministically select race, so terminal race proof must await a naturally selected post-land main push or separately owner-authorized stimulus. Parent ci-${github.ref} and Race race-${github.ref} cancellation groups both require coordination."
-  next_action: "Obtain explicit owner authority for PR 55's automatic rolling FlakeHub publication. Immediately before an authorized merge, fresh-fetch main and verify no active main CI or Race run; merge only through PR 55. Then verify its main CI receipt and Node B skip before recreating frozen PR 2."
+    recorded_at: 2026-07-16T19:50:40Z
+    consequence: "PR 55 may merge and publish the rolling FlakeHub package after serialization checks. Node B must still skip. PR 2 remains a separate fresh-main branch with the frozen ci.yml digest and its own hosted and main acceptance."
+  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, origin-main-a1d2f88c, pr-55, run-29478611966, run-29478958889-attempt-2, owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority]
+  blocker_or_risk: "PR 55 hosted CI is green at run 29478958889 attempt 2 after one unrelated TestCancelRunTrajectoryDrainsMoreThanOneActivePage timeout on attempt 1. FlakeHub publication and PR-mediated merge are owner-authorized. Immediately before merge, parent ci-${github.ref} and Race race-${github.ref} cancellation groups must be idle and origin/main must remain reconciled. Node B must skip. Terminal race proof still requires a naturally selected post-land main push."
+  next_action: "Fresh-fetch origin/main, confirm PR 55 remains mergeable and no active main CI or Race run can be cancelled, then merge only through PR 55. Verify its main CI, rolling FlakeHub publication, deploy_needed=false, and Node B skip before recreating frozen PR 2."
 
 receipts:
   - id: corrected-problem-and-baseline-define
@@ -263,6 +263,22 @@ receipts:
       environment_identity: github_actions
       deployed_acceptance: hosted_parse_accepted; canonical_main_effects_pending
     registry_conformance_ref: "Docs Truth Check passed in run 29478611966"
+  - id: owner-flakehub-and-ci-merge-authority
+    boundary: define
+    commit_or_artifact: owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority
+    proof_refs: [owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority, pr-55, run-29478958889-attempt-2]
+    rollback_ref: "Close PR 55 before merge, or revert its merge commit through a pull request if canonical acceptance fails."
+    disposition: "Owner explicitly authorized PR 55's rolling FlakeHub publication and merge, and authorized the remaining CI mission PR merges within the existing Definition boundaries."
+    problem_ref: docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md
+    authorization_ref: owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority
+    candidate_or_evidence_refs: [pr-55, run-29478958889-attempt-2, origin-main-a1d2f88c]
+    landing:
+      source_commit: pending_authority_receipt_commit
+      ci_ref: run-29478958889-attempt-2
+      deploy_ref: main_event_pending; Node_B_skip_required
+      environment_identity: github_actions
+      deployed_acceptance: pending_serialized_pr_merge
+    registry_conformance_ref: "Docs Truth Check passed in run 29478958889 attempt 2"
 
 view:
   path: none
