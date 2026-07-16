@@ -97,3 +97,16 @@
 - Decision required: whether the route receipt must directly bind post-G3 execution authorization (recommended, structural envelope) or owner approval with out-of-band G3 evidence (smaller change, weaker join).
 - Stopping condition: per Dead-End Escalation, do not attempt another incremental route-authority patch without explicit owner direction. Preserve the rejected source candidate and all frozen packets for recovery.
 - Rollback: reset the rejected source patch and retain `origin/main@0dc3fea3` plus documentation checkpoints; no route or production state changed.
+
+## G3 direct SQL-writer rejection checkpoint
+
+- Frozen candidate: base `a231abb0`; patch `/tmp/choir-g3-concrete-authority.patch`; SHA-256 `80703d42fdf0a660de1637267020deb4bac75d3f57814a9dc4d3939ee25a2861`; twenty staged paths.
+- Gate packet: `/tmp/choir-g3-consensus-concrete-final`; six reviewers accepted or found no code blocker; Codex returned a reproducible `repair`; the minority blocker governs.
+- Evidence: external-package routeledger tests can construct arbitrary unsigned authorization/certificate JSON, pin it through exported `SQLLedger.PinAuthorizationEvidence`, and invoke exported `SQLLedger.Transition`. Any in-process caller with the production DSN can therefore bypass vmctl's frozen candidate, signed owner approval, G3 acceptance, and execution-envelope validation.
+- Reproduction: `go test ./internal/routeledger -run TestSQLLedgerPersistsSlotAndReceiptAcrossRestart -count=1` exercises the raw exported writer successfully.
+- Consequence: concrete `NewRouteAuthority(*SQLLedger, ...)` closes split configuration but does not make vmctl the sole route writer. G3 remains rejected and pre-CAS.
+- Required structural repair: remove exported raw SQL route mutation and caller-supplied transition validation; move the signed post-G3 execution-authorization verification to the routeledger mutation boundary; persist/pin the trusted promotion key so a caller cannot instantiate a weaker writer with a substitute validator/key; expose only readback plus cryptographically authorized atomic publication.
+- Protected surfaces: D-ROUTE writer authority, trusted promotion key, signed owner/G3 evidence, atomic evidence/CAS, transition receipts. No production mutation occurred.
+- Conjecture delta: a safe vmctl facade is insufficient while its storage package exports a weaker writer over the same DSN; sole-writer authority must hold at the lowest exported mutation boundary.
+- Heresy delta: discovered `1`; introduced `0`; repaired `0` at this checkpoint.
+- Rollback: retain problem/root-cause checkpoints and discard the rejected source patch if the storage boundary cannot be sealed.
