@@ -502,6 +502,7 @@ in
         "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "VMCTL_ARTIFACTS_ROOT=${platformArtifactsDir}"
         "VMCTL_BASE_BLOB_ROOT=${platformArtifactsDir}/computer-inputs/blobs"
+        "VMCTL_PROMOTION_AUTHORITY_PUBLIC_KEY=oEdoKFfUCLiOsxNX5J8bT3PQDrjqjVeuU8usTLHSYZ4="
         # Guest images are a stable boot substrate. At boot, guest sandboxes
         # fetch the current sandbox service package from this host-side pointer
         # and execute it from their writable data disk, so ordinary runtime code

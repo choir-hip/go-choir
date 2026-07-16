@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "D-verify-and-route-landing"
-  question: "Does origin/main deploy the G3-accepted sealed constructor/verifier/promotion route implementation on Node B, after which one owner-authorized frozen candidate can exercise the first bounded D-ROUTE CAS and rollback?"
+  slice: "D-route-bootstrap-preparation"
+  question: "Can the deployed sealed constructor produce one disposable frozen bootstrap candidate whose exact owner approval, G3 acceptance, route CAS, and rollback are independently auditable?"
   reconciliation:
-    observed_at: 2026-07-16T17:05:00Z
-    source_ref: refs/heads/main@c0b1c61c_ahead_of_refs/remotes/origin/main@5cda0550_after_clean_rebase
-    deploy_identity: "pending landing of G3-accepted source commit ab89a200; current staging identity must be re-read after the concurrent CI-maintenance landing"
+    observed_at: 2026-07-16T21:57:57Z
+    source_ref: refs/heads/main@514c540203695ca5511524016b3242568f858473_equals_refs/remotes/origin/main@514c540203695ca5511524016b3242568f858473
+    deploy_identity: "Node B activation receipt target 514c540203695ca5511524016b3242568f858473 at 2026-07-16T21:42:03Z; vmctl active at that commit; public proxy /health build metadata remains independently stale at 9d9945e6"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -358,7 +358,7 @@ now:
       - mission_graph:docs/mission-graph.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
       - authority_manifest:docs/doc-authority-manifest.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-07-16T17:05:00Z source candidate committed as ab89a200 after accepted G3; only this Definition and its Phase-D evidence receipt are intentional documentation WIP"
+    worktree_inventory_ref: "canonical main and origin/main equal at 514c5402 before staging promotion-key configuration; only the intentional Node B public-key and Definition state update are dirty"
     status: reconciled
   candidate:
     id: none
@@ -398,8 +398,10 @@ now:
     - "/tmp/choir-g3-sealed-writer.patch SHA-256 8754f601425e0e10f0759d32a9502fb51d079469abdcbef2d0c6ea2a583253f3"
     - "/tmp/choir-g3-consensus-sealed-writer-final: Codex, OpenCode, GPT-5.5, Gemini 3.5, and GLM 5.2 accept with no reproducible blocker; Devin and Cursor timed out without a verdict"
     - "commit ab89a200: G3-accepted sealed SQL writer, independent verifier, typed disk receipt, fresh materializer/launcher joins, signed frozen bootstrap/promote/rollback envelopes; no route CAS executed"
-  blocker_or_risk: "G3 accepted the sealed source candidate, but protected claims remain local-only until commit ab89a200 is pushed, CI and Node B deployment succeed, staging reports that identity, and the deployed constructor/verifier path produces a real frozen candidate. The promotion authority public key is not currently configured on staging; no route CAS is authorized until a durable owner-controlled signing key/public-key provisioning path exists and signs the exact G3-accepted execution plans."
-  next_action: "Commit this compact G3 receipt, push canonical main, monitor CI and Node B deployment, verify staging commit identity, and run deployed read-only constructor/verifier probes. Then provision the durable owner-controlled promotion authority without committing private material, freeze one disposable control candidate, obtain exact signed owner approval and G3 acceptance, rehearse rollback, and only then execute the first vmctl-owned bounded route CAS."
+    - "GitHub Actions CI run 29536138235: success; Node B activation receipt 514c540203695ca5511524016b3242568f858473 at 2026-07-16T21:42:03Z with vmctl active"
+    - "owner-controlled Ed25519 private key stored outside the repository at ~/.config/choir/promotion-authority-ed25519.pem; staged Node B configuration contains only public key oEdoKFfUCLiOsxNX5J8bT3PQDrjqjVeuU8usTLHSYZ4="
+  blocker_or_risk: "CI and Node B deployment now prove the sealed source identity, and an owner-controlled Ed25519 private key exists outside the repository with only its public key staged for vmctl configuration. No route CAS is authorized until that public key is deployed and pinned, the deployed constructor/verifier produces a real frozen candidate, independent G3 review accepts the exact candidate, and the owner explicitly authorizes its signed bootstrap and bounded rollback."
+  next_action: "Deploy and verify the pinned public promotion key, then use the internal product control path to pin immutable inputs, construct and independently verify one disposable candidate, and freeze its bootstrap plan without applying it. Present that exact frozen candidate and rollback/disposal plan for independent G3 review and explicit owner authorization before any route CAS."
 
 successor:
   status: unauthorized_until_this_definition_complete
