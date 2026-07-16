@@ -345,21 +345,21 @@ orchestration:
 
 now:
   status: working
-  slice: "base-reconciliation"
-  question: "Does the owner's clean canonical main equal origin/main, do the registries identify this sole executable goal, and is the staging Node B deploy identity known so construction can begin from one unambiguous base?"
+  slice: "B-resolve-immutable-inputs"
+  question: "Can every served route resolve exactly one immutable ComputerVersion whose CodeRef and ArtifactProgramRef are independently pinned, while every competing lineage, owner/desktop, VM, and hard-coded route writer or fallback is removed?"
   reconciliation:
-    observed_at: 2026-07-16T02:26:31Z
-    source_ref: pending_owner_pre_run_commit_and_push
-    deploy_identity: pending_matching_staging_node_b_deploy
+    observed_at: 2026-07-16T04:36:01Z
+    source_ref: refs/heads/main@d87bdc446ecc28585c3bc08d4d469b9f94d3c246_equals_refs/remotes/origin/main_and_remote_origin_main
+    deploy_identity: "staging proxy 9d9945e65f5b54069e1a86a530cb0960d96b3474; source-to-deploy delta through d87bdc446ecc28585c3bc08d4d469b9f94d3c246 classified deploy_needed=false because it contains only docs, definition/dashboard/doccheck tooling, and tests; CI 29468123745 passed"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
-      - doctrine:docs/choir-doctrine.md@pending_source_reconciliation
-      - doctrine:docs/agent-product-doctrine.md@pending_source_reconciliation
-      - mission_graph:docs/mission-graph.yaml@pending_source_reconciliation
-      - authority_manifest:docs/doc-authority-manifest.yaml@pending_source_reconciliation
+      - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
+      - doctrine:docs/agent-product-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
+      - mission_graph:docs/mission-graph.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
+      - authority_manifest:docs/doc-authority-manifest.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: pending_clean_post_push_inventory
-    status: reconciling
+    worktree_inventory_ref: "2026-07-16T04:45:19Z intentional Phase-A WIP: this Definition plus docs/evidence/audited-construction-phase-a-2026-07-16.md; no unrelated paths"
+    status: reconciled
   candidate:
     id: none
     state: none
@@ -382,8 +382,12 @@ now:
     - docs/ACTIVE.md
     - docs/mission-graph.yaml
     - docs/doc-authority-manifest.yaml
-  blocker_or_risk: "The invocation source and staging deploy identities remain pending until the owner commits and pushes this Definition/registry set and confirms canonical main is clean; no implementation is authorized before reconciliation. Any unexpected dirty path blocks execution for classification/preservation. Afterward, the old owner image may be partially corrupt, and the architectural risks remain acknowledged state existing only in data.img, disk-backend leakage, eager/full allocation, unreclaimed cache churn, and hidden clone/resize/full-image-I/O paths."
-  next_action: "After the owner commits and pushes, verify clean canonical main equals origin/main, registries are coherent, and the staging Node B deploy identity is known; classify and preserve any unexpected dirtiness rather than proceeding. Then inventory constructor inputs, durability writes, and disk lifecycle callers; record the bounded owner extraction manifest; and freeze the typed disk-instantiation contract and optimized production backend."
+    - "GitHub Actions CI run 29468123745: success; deploy-impact deploy_needed=false"
+    - "https://choir.news/health at 2026-07-16T04:36:01Z: proxy/vmctl ok, deployed commit 9d9945e65f5b54069e1a86a530cb0960d96b3474"
+    - docs/evidence/audited-construction-phase-a-2026-07-16.md
+    - "/tmp/choir-audited-construction-contained/node-b-storage-report.json: protected snapshots verified, no deletion authorized"
+  blocker_or_risk: "Phase A completed without source-image mutation. The bounded owner extraction recovered independently importable legacy payloads but found their application tables only in mutable Dolt working sets, so the SQL hashes are recovery payload identities rather than ArtifactProgramRefs. Production has no CodeRef resolver, ArtifactProgramRef resolver, D-ROUTE tables/CAS port, durable construction receipt store, or disk-policy backend; StateGenerator is caller-trusting and test-only. These are Phase B/C blockers, not permission to invent a third store or reuse data.img."
+  next_action: "Execute B-resolve-immutable-inputs: define and wire durable immutable CodeRef and ArtifactProgramRef resolvers against existing authorities; implement route lookup as D-ROUTE slot to ComputerVersion with vmctl as sole writer; delete lineage, ActiveSourceRef, RouteProfile, PROXY_RUNTIME_DB_PATH, hard-coded owner/desktop, VM, and static fallbacks from served routing; remove or demote competing promotion/candidate-package route writers to evidence-only; run deterministic authority/refusal/concurrency checks and freeze the G1 packet. Do not implement the constructor or disk backend before G1 accepts."
 
 successor:
   status: unauthorized_until_this_definition_complete
