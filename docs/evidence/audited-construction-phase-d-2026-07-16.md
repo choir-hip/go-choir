@@ -54,3 +54,24 @@
 - Conjecture delta: cryptographic authorization preserves exactly what it signs; a missing typed identity join remains a signed cross-object substitution.
 - Heresy delta: discovered `1`; introduced `0`; repaired `0` at this checkpoint.
 - Rollback: retain the accepted problem checkpoints and discard the rejected Phase D source patch if the exact identity join cannot be proved.
+
+## G3 route-command substitution checkpoint and root-cause cluster
+
+- Frozen candidate: base `80245305`; patch `/tmp/choir-g3-identity-repaired.patch`; SHA-256 `c6a0d9d38b451cda6caec6037626fa188e21e342eb5becd6008816c26f00a422`; sixteen staged paths.
+- Gate packet: `/tmp/choir-g3-consensus-identity-final`; Codex, Cursor, Gemini, and GLM found no blocker. GPT-5.5 returned a reproducible `repair`; the minority blocker governs.
+- Evidence: `FrozenRoutePromotionCandidate.Validate` does not require promote/rollback command `RouteSlotID` and `Kind` to equal the frozen current route and intended transition kinds. A candidate with recomputed ID and valid G3 signature can substitute `Promote.RouteSlotID=computer:owner:other`; apply pins gate evidence for that route before the later CAS/evidence check refuses mutation.
+- Consequence: no CAS bypass was observed, but malformed frozen authority can cause durable evidence side effects before refusal. G3 requires the entire executable plan to validate before any evidence pin.
+- Required source repair: make promotion candidate validation a closed typed-command invariant: exact route slot on both commands, exact promote/rollback kinds, and all existing generation/old/new/rollback-receipt joins before apply side effects; add a deterministic substitution test proving validation fails and no evidence is pinned.
+- Protected surfaces: frozen promotion authority, authorization evidence, promotion/rollback CAS. No production route mutation occurred.
+- Conjecture delta: a self-hashed candidate prevents undetected mutation only if validation exhaustively interprets every execution-controlling field.
+- Heresy delta: discovered `1`; introduced `0`; repaired `0` at this checkpoint.
+
+### Root-cause clustering assessment
+
+- Classification: route-authorization substrate, not three independent endpoint symptoms.
+- Cluster: raw generic CAS acceptance, apply-time approval/certificate under-validation, cross-desktop identity substitution, and route-command substitution all share one cause: execution authority was distributed across envelopes, candidate fields, and later ledger checks without one complete pre-side-effect typed invariant.
+- Existing-fix connection: the frozen candidate `Validate` methods and private vmctl apply boundary are the intended replacement substrate; they are wired, but their closed-world validation is incomplete. No alternative route writer or third store is needed.
+- Deletion-first decision: retain the already enforced rejection of the generic transition path; do not add another compensating evidence layer. Complete the existing candidate invariant and keep all pin/CAS operations behind it.
+- Substrate action: every field that selects route, transition kind, generation, old/new version, approval, certificate, verifier, or rollback target must be joined in candidate validation before the first durable write. Later ledger refusal is defense in depth, not candidate validation.
+- Stopping condition: rerun the exact overlay attack plus independent frozen review; any further candidate-validation bypass requires structural reassessment rather than another endpoint patch.
+- Rollback: retain all problem checkpoints and discard the rejected Phase D source patch if the closed candidate invariant cannot be independently accepted.
