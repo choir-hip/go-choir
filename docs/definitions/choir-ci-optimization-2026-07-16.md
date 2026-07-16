@@ -78,35 +78,39 @@ finish:
     - action: "Run the candidate on a pull request and record hosted parsing plus every job conclusion. For this .github-only PR stimulus, record go=false, high_risk_race=false, race unselected, SBOM skipped because the event is not a main push, and deploy-impact skipped because it is not a main event."
       proves: "The candidate parses and executes on the hosted platform; it does not prove live SBOM, deploy-impact output, or race selection."
       evidence_class: github_actions_candidate_parse
+    - action: "Immediately before the PR merge, query GitHub Actions for active main CI and Race runs. Record either no active run or an owner-coordinated window, record the expected merge SHA/event, and wait for that main CI receipt before another CI or Race observation on main."
+      proves: "Same-ref cancellation cannot silently supersede unrelated main CI or Race evidence during this landing."
+      evidence_class: github_actions_serialization
     - action: "After an explicitly owner-authorized, serialized CI-only main landing, observe check success, SBOM success, fetch and verify the complete checksummed SBOM artifact and differential counts, observe deploy-impact report deploy_needed=false, and observe deploy-staging skipped. Record race as selected or unselected from the actual landing SHA without requiring it for this receipt."
       proves: "The canonical CI-only stimulus restores host-side SBOM and preserves the Node B skip and post-check non-blocking relationship; it does not by itself prove race selection."
       evidence_class: canonical_ci_only_sbom_acceptance
     - action: "Separately observe the first post-land main push that the unchanged classifier actually selects via high_risk_race=true or push+go=true+sampled_race=true; require all five reusable race jobs and the parent check gate to succeed. Do not manufacture an app/platform change. A scheduled or separately owner-authorized direct race.yml run may prove the five-job workflow but cannot substitute for parent ci.yml selector/check proof."
       proves: "The restored parent classifier route selects the complete reusable race workflow and binds its result into check."
       evidence_class: post_land_race_selector_acceptance
-  rollback: "Revert the bounded CI commit to restore the two literal pause conditions. Never change main, dispatch a workflow, or alter gate/deploy/publish relationships without separate owner authority."
+  rollback: "Revert the bounded CI commit to restore the two literal pause conditions. The owner authorizes PR creation and PR-mediated main merge; a Node B deployment is admissible only through a later recorded, concrete CI deploy slice if the accepted path requires it. Retain protected relationships and coordinate both cancellation groups; generic workflow dispatch and direct Node B mutation remain excluded."
   landing:
     required: true
     environment: github_actions
-    required_receipts: [pushed_candidate_commit, frozen_candidate_review, github_actions_candidate_parse, owner_authorized_serialized_main_landing, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance]
+    required_receipts: [pushed_candidate_commit, frozen_candidate_review, github_actions_candidate_parse, main_concurrency_window, owner_authorized_serialized_main_landing, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance]
   not_done_when:
     - "Only local checks, a draft, or a reviewer narrative exists."
     - "A sampled condition is described as one shard even though it invokes the full reusable workflow."
     - "A duration or rounded runner-minute estimate is called actual billing."
     - "SBOM is described as gating check or deploy without a separately authorized red relationship change."
     - "One .github-only landing is claimed to prove both SBOM and race even though that stimulus sets go=false and high_risk_race=false and race depends on the landing SHA's sample bucket."
-    - "A main push or workflow dispatch occurs without explicit owner authority and both relevant cancellation groups coordinated."
+    - "A direct main push, generic workflow dispatch, direct Race dispatch, or direct Node B mutation occurs outside this Definition's recorded route and both relevant cancellation groups are not coordinated."
 
 boundaries:
   mutation_class: red
-  class_rationale: "The Definition/registry boundary is green. Re-enabling race and SBOM changes protected CI assurance and supply-chain publishing conditions, so implementation uses red ceremony even though it changes no app/platform runtime."
+  class_rationale: "The Definition/registry boundary is green. Re-enabling race and SBOM changes protected CI assurance and supply-chain publishing conditions, so implementation uses red ceremony even though it changes no app/platform runtime. The bounded doccheck cardinality repair below is yellow documentation-truth tooling, sequenced only after its observed problem record."
   conjecture_delta: "The pauses are reversible conditions over already-wired, previously successful lanes; restoration should reuse that topology. Optimization candidates must be separated by mechanism and admitted only by matched critical-path evidence."
   heresy_delta:
-    discovered: ["The draft falsely treated sampled_race as partial-matrix execution, described the repaired SBOM topology as unwired, conflated cache reuse with same-run compilation sharing, implied SBOM gated deployment, and used public duration as billing proof."]
+    discovered: ["The draft falsely treated sampled_race as partial-matrix execution, described the repaired SBOM topology as unwired, conflated cache reuse with same-run compilation sharing, implied SBOM gated deployment, and used public duration as billing proof.", "The mission graph permits one scope-disjoint CI maintenance entrypoint alongside the product spine, but doccheck still hard-codes one total graph entrypoint and rejects the live registry."]
     introduced: []
     repaired: ["The live Definition corrects those claims before workflow mutation and the SBOM problem record now names c96c7b49 plus its successful run."]
   authority_sources:
-    - "Owner delegation and supervision in Codex task 019f6933-ea56-7403-b535-da4eafa4d1f7 on 2026-07-16: promote and run this independent CI-only mission concurrently; no app/platform changes; serialize shared main CI and Race observations; no main merge or workflow dispatch without explicit authority."
+    - "Owner delegation and supervision in Codex task 019f6933-ea56-7403-b535-da4eafa4d1f7 on 2026-07-16: promote and run this independent CI-only mission concurrently; no app/platform changes; serialize shared main CI and Race observations."
+    - "Owner authority in Codex task 019f6933-ea56-7403-b535-da4eafa4d1f7 on 2026-07-16: create PRs, merge this CI-only change to main, and deploy Node B when the accepted landing path requires it."
     - docs/choir-doctrine.md
     - AGENTS.md
     - docs/standing-questions.md
@@ -119,10 +123,20 @@ boundaries:
     - "check, deploy-impact, deploy-staging, FlakeHub, docs-only routing, and supply-chain artifact integrity are not weakened."
     - "Deploy classifier/contract tests remain in deploy-impact unless equivalent coverage on every non-doc main push is designed and proved."
     - "Ripgrep setup is measured as conditional; no claim says it is fetched every run."
-    - "Main landing and separate main Race observation are coordinated against ci-${github.ref} and race-${github.ref}; no force-push, main merge, or workflow dispatch is authorized."
-  excluded: [app_source, platform_source, Node_B_mutation, main_merge, workflow_dispatch, force_push, new_runner_provider, billing_claim_without_authority]
+    - "The landing route is draft PR, hosted evidence, a recorded main concurrency window, and PR-mediated merge. Direct push to main remains outside this Definition even though the owner authorized main landing."
+    - "Normal CI-only landing must prove deploy_needed=false and Node B skipped. The owner has authorized a Node B deployment only if a later Define slice names the exact accepted CI deploy path, event, verification, and rollback; generic workflow dispatch and direct Node B mutation remain excluded now."
+    - "Main landing and separate main Race observation are coordinated against ci-${github.ref} and race-${github.ref}; force-push remains forbidden."
+  excluded: [app_source, platform_source, direct_main_push, direct_node_b_mutation, workflow_dispatch, direct_race_dispatch, force_push, new_runner_provider, billing_claim_without_authority]
   protected_surfaces: [ci_check_gate, race_lane, sbom_audit_and_publishing, deploy_impact_classifier, deploy_staging, flakehub_publish, docs_only_fast_path, main_ci_concurrency, main_race_concurrency]
-  completion_evidence_floor: [github_actions_timeline, deterministic_local_contracts, frozen_candidate_review, github_actions_candidate_parse, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance]
+  completion_evidence_floor: [github_actions_timeline, deterministic_local_contracts, frozen_candidate_review, github_actions_candidate_parse, github_actions_serialization, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance]
+  scoped_yellow_repair:
+    reason: "The live mission graph and manifest deliberately admit the scope-disjoint CI /goal, but strict doccheck still rejects that documented topology."
+    mutation_class: yellow
+    admitted_paths: [cmd/doccheck/main.go, cmd/doccheck/main_test.go]
+    problem_ref: docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md
+    sequencing: "Commit this problem/documentation boundary before changing the checker; then require focused Go tests and a live doccheck pass."
+    rollback: "Revert only the checker/test change, restoring the prior single-entrypoint contract, if it admits an invalid product or maintenance shape."
+    excluded_effects: [product_authority_change, app_or_platform_behavior, generic_workflow_dispatch, node_b_deployment]
 
 measures:
   - name: hosted critical path
@@ -145,17 +159,17 @@ measures:
     cannot_prove: "Absence of all CI defects."
 
 now:
-  status: checkpoint_incomplete
-  slice: "P1 acceptance repair and current-main reconciliation for frozen CI candidate"
-  question: "When may the reconciled child branch be pushed for hosted PR parsing without authorizing main landing?"
+  status: working
+  slice: "owner-authorized PR-mediated landing preparation and doccheck topology repair for frozen CI candidate"
+  question: "Can the doccheck contract recognize the already-authorized scope-disjoint CI entrypoint, then can a fresh current-main rebase preserve the reviewed workflow blob before hosted PR evidence?"
   reconciliation:
-    observed_at: 2026-07-16T04:56:00Z
-    source_ref: "candidate 8e4aa074f970b69ce59cffa07b280f164ca1c161 reviewed against origin/main a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36"
+    observed_at: 2026-07-16T06:00:00Z
+    source_ref: "candidate 8e4aa074f970b69ce59cffa07b280f164ca1c161 reviewed against origin/main a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36; fresh fetch is required immediately before rebase"
     deploy_identity: not_applicable_ci_only
     authority_identities: [owner-delegation-019f6933-2026-07-16, choir-doctrine@a1d2f88c, AGENTS@a1d2f88c, definition-skill@a1d2f88c]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "child candidate 8e4aa074 plus docs-only checkpoint WIP; protected parent inventory unchanged; origin/main advanced to a1d2f88c with no CI-scope delta but overlapping mission registries requiring explicit reconciliation"
-    status: reconciled
+    worktree_inventory_ref: "isolated /private/tmp/go-choir-ci-goal at 6b935c58; protected parent Autoputer inventory unchanged; origin/main a1d2f88c has no CI-scope delta but overlapping mission registries requiring explicit reconciliation"
+    status: fresh_fetch_required
   candidate:
     id: ci-reenable-candidate-1
     state: reviewed
@@ -164,18 +178,25 @@ now:
     base: 27f03875702f503d8ef551035733eb5f40e27a1c
     digest: "candidate ci.yml sha256 f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25; pre-candidate ci.yml sha256 69b5de792e84446eb5802ae4f60839bbf8bfb2026e64749c3e9dac6e0f93b14c"
     scope: [.github/workflows/ci.yml]
+  scope_amendment:
+    id: doccheck-scoped-maintenance-entrypoint-contract
+    mutation_class: yellow
+    admitted_paths: [cmd/doccheck/main.go, cmd/doccheck/main_test.go]
+    problem_ref: docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md
+    acceptance: "Exactly one working product spine remains the authority-root /goal; working scope-disjoint ci_maintenance entrypoints are admitted only when their manifest identity is current, entry-only, and non-authority-root."
+    excluded: [workflow_semantics, app_source, platform_source, node_b_deployment]
   decision:
-    selected: "Keep frozen workflow candidate 8e4aa074 unchanged, repair the P1 conflated acceptance contract, and split PR parsing, CI-only main SBOM/deploy-skip, and classifier-selected post-land race proof."
-    kind: operational
+    selected: "Document and repair the doccheck entrypoint-cardinality contradiction, then reconcile and publish the frozen CI candidate through a draft PR and PR-mediated main merge after hosted evidence; preserve split SBOM and race proof obligations."
+    kind: authority
     status: settled
-    source: observed
-    evidence_ref: "docs/evidence/ci-reenable-candidate-review-2026-07-16.md P1/P2 adjudication plus origin/main a1d2f88 reconciliation"
+    source: owner
+    evidence_ref: "owner-message-019f6933-2026-07-16-main-merge-node-b-authority"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-16T04:56:00Z
-    consequence: "No single landing may satisfy both restored signals. The candidate may proceed only after current-main registry reconciliation is durably recorded and child-branch push is explicitly authorized; main merge and all dispatch remain forbidden."
-  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, origin-main-a1d2f88c]
-  blocker_or_risk: "Hosted parsing is unproved because actionlint is unavailable and push is prohibited. CI-only main landing cannot deterministically select race, so terminal race proof must await a naturally selected post-land main push or separately owner-authorized stimulus. Parent ci-${github.ref} and Race race-${github.ref} cancellation groups both require coordination."
-  next_action: "After explicit supervisor authorization, reconcile current shared registries with origin/main a1d2f88c while preserving the candidate workflow blob, rebind the immutable identity, push only the child branch, and obtain hosted PR parsing; do not merge main or dispatch."
+    recorded_at: 2026-07-16T06:00:00Z
+    consequence: "No single landing may satisfy both restored signals. The candidate may be rebased, pushed, reviewed in a draft PR, and PR-merged to main after hosted evidence and a recorded concurrency window. A generic dispatch or direct Node B mutation is not admitted; any required Node B deployment first needs a concrete Define slice."
+  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, origin-main-a1d2f88c]
+  blocker_or_risk: "Strict doccheck currently rejects the deliberate scope-disjoint entrypoint; its repair must not admit a second product authority. CI-only main landing also cannot deterministically select race, so terminal race proof must await a naturally selected post-land main push or separately owner-authorized stimulus. Parent ci-${github.ref} and Race race-${github.ref} cancellation groups both require coordination."
+  next_action: "Commit this authority and problem-documentation boundary, fresh-fetch origin/main immediately before rebase, repair the bounded yellow doccheck contract with focused tests, rebase while preserving the reviewed workflow blob, rebind identities, push the child branch, and open a draft PR for hosted evidence."
 
 receipts:
   - id: corrected-problem-and-baseline-define
@@ -210,6 +231,22 @@ receipts:
       environment_identity: github_actions_pending
       deployed_acceptance: pending_hosted_parse_plus_separate_sbom_and_race_receipts
     registry_conformance_ref: not_applicable
+  - id: owner-main-landing-authority
+    boundary: define
+    commit_or_artifact: owner-message-019f6933-2026-07-16-main-merge-node-b-authority
+    proof_refs: [owner-message-019f6933-2026-07-16-main-merge-node-b-authority]
+    rollback_ref: "Revert the CI candidate to 27f03875702f503d8ef551035733eb5f40e27a1c if hosted evidence fails."
+    disposition: "Owner expanded authority from child-branch parsing to PR creation and PR-mediated main merge. Node B deployment is authorized only when a later recorded CI deploy slice names the exact accepted path; app/platform source and direct node mutation remain excluded."
+    problem_ref: docs/evidence/ci-reenable-candidate-review-2026-07-16.md
+    authorization_ref: owner-message-019f6933-2026-07-16-main-merge-node-b-authority
+    candidate_or_evidence_refs: [candidate-8e4aa074, origin-main-a1d2f88c]
+    landing:
+      source_commit: pending_rebase
+      ci_ref: pending_pr
+      deploy_ref: normal_ci_only_deploy_skip_expected; later_concrete_deploy_slice_required_if_selected
+      environment_identity: github_actions; Node_B_only_if_later_slice_admitted
+      deployed_acceptance: pending
+    registry_conformance_ref: pending_same_boundary_registry_validation
 
 view:
   path: none

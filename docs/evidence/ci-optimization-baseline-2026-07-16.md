@@ -61,4 +61,3 @@ Run and job metadata were fetched from GitHub's public Actions REST resources
 on 2026-07-16. The job receipts expose start/end times and conclusions. No
 billing export, organization metrics authority, or private billing API receipt
 was available, so this document makes no actual billed-minute claim.
-
