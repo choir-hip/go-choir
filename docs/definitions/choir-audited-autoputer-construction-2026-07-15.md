@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "B-resolve-immutable-inputs"
-  question: "Can every served route resolve exactly one immutable ComputerVersion whose CodeRef and ArtifactProgramRef are independently pinned, while every competing lineage, owner/desktop, VM, and hard-coded route writer or fallback is removed?"
+  slice: "C-construct-and-boot"
+  question: "Can one production function resolve a ComputerVersion, instantiate a fresh thin Firecracker-compatible disk through a typed backend contract, materialize and verify its ArtifactProgram, boot it, and emit joined construction and geometry receipts without reading or cloning any prior realization?"
   reconciliation:
-    observed_at: 2026-07-16T04:36:01Z
-    source_ref: refs/heads/main@d87bdc446ecc28585c3bc08d4d469b9f94d3c246_equals_refs/remotes/origin/main_and_remote_origin_main
-    deploy_identity: "staging proxy 9d9945e65f5b54069e1a86a530cb0960d96b3474; source-to-deploy delta through d87bdc446ecc28585c3bc08d4d469b9f94d3c246 classified deploy_needed=false because it contains only docs, definition/dashboard/doccheck tooling, and tests; CI 29468123745 passed"
+    observed_at: 2026-07-16T07:50:08Z
+    source_ref: refs/heads/main@7d310551c01dd5c63be3dcbb641dd752a201d8d6_equals_refs/remotes/origin/main_and_remote_origin_main
+    deploy_identity: "staging activation receipt and uncached proxy health report 7d310551c01dd5c63be3dcbb641dd752a201d8d6; CI run 29480269240 attempt 2 and Node B deploy job 87564091427 succeeded"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -361,13 +361,13 @@ now:
     worktree_inventory_ref: "2026-07-16T04:45:19Z intentional Phase-A WIP: this Definition plus docs/evidence/audited-construction-phase-a-2026-07-16.md; no unrelated paths"
     status: reconciled
   candidate:
-    id: G1-immutable-input-state-authority
-    state: accepted_pending_landing
-    ref: /tmp/choir-g1-immutable-authority.patch
-    owner: OMP
-    base: a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36
-    digest: sha256:22a2ba443f14642b561249eff473a5e7696df6b460a562262c01fa6f014798eb
-    scope: [38 frozen patch paths]
+    id: none
+    state: none
+    ref: none
+    owner: none
+    base: none
+    digest: none
+    scope: []
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -388,8 +388,11 @@ now:
     - "/tmp/choir-audited-construction-contained/node-b-storage-report.json: protected snapshots verified, no deletion authorized"
     - "/tmp/choir-g1-consensus-final-22a2/omp-gemini35.out: accept, no blockers, high confidence"
     - "/tmp/choir-g1-consensus-final-alternates/omp-gpt55.out: accept, no blockers, high confidence"
-  blocker_or_risk: "G1 is independently accepted over frozen patch sha256:22a2ba443f14642b561249eff473a5e7696df6b460a562262c01fa6f014798eb. Entry to constructor mutation remains blocked until this red change is committed, pushed, passes CI/deploy, staging Node B reports the pushed identity, and the deployed route authority refuses an unresolved route without any static/lineage fallback. The production constructor, disk-instantiation policy/backend, and durable construction receipt remain Phase C work."
-  next_action: "Land accepted G1 through canonical main: commit the frozen implementation plus this adjudication receipt, push origin/main, monitor CI and Node B deploy, verify matching staging identity, and run the deployed D-ROUTE refusal/health smoke path. Then checkpoint entry to C-construct-and-boot; do not execute any route CAS."
+    - "GitHub Actions CI 29480269240 attempt 2: success; Node B deploy job 87564091427: success"
+    - "https://choir.news/health?g1=7d310551: matching commit and proxy/vmctl healthy"
+    - "Node B missing D-ROUTE probe: HTTP 404 route ledger slot not found"
+  blocker_or_risk: "G1 is accepted and landed. The existing VMManagerScopedMaterializer intentionally stops before VM launch; production has no typed disk-instantiation contract, policy resolver, independently verifiable backend receipt, fresh-realization constructor, joined construction receipt store, or boot/geometry acceptance. Existing data.img creation and reboot paths remain superseded substrate that Phase C must replace rather than patch."
+  next_action: "Implement C-construct-and-boot from landed commit 7d310551: map existing VM creation/materializer interfaces, define the typed substrate-independent disk plan/backend/device/receipt contract and policy resolver, connect one production ComputerVersion materializer that resolves inputs, creates a fresh optimized device without any source VM/image, materializes and verifies typed state, boots Firecracker, and records joined immutable construction evidence. Prove arbitrary-valid-tape round trip plus coherent capacity/allocation/geometry, freeze the G2 candidate, and do not implement promotion or execute any route CAS before G2 accepts."
 
 successor:
   status: unauthorized_until_this_definition_complete

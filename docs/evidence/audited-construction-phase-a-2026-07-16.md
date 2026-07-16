@@ -123,3 +123,16 @@ Independent frozen review:
 Adjudication: **G1 accepted**. The immutable-input/state-authority boundary is admitted. Phase C mutation remains gated on landing this red change through origin/main, successful CI/deploy, matching Node B identity, and a deployed route-authority smoke receipt.
 
 Heresy delta for G1: `repaired` — competing static/lineage served-route authority and unguarded VM lifecycle activation are removed from the frozen candidate; `introduced` — none observed; `discovered` — production SQL least-privilege grants and mutable runtime-package construction remain realism axes for later phases, not G1 authority blockers.
+
+
+### G1 landing receipt
+
+- Pushed commit: `7d310551c01dd5c63be3dcbb641dd752a201d8d6`.
+- CI: GitHub Actions run `29480269240`, attempt 2, success. Attempt 1 exposed the existing unrelated `TestCancelRunTrajectoryDrainsMoreThanOneActivePage` Dolt deadline flake; the failed shard passed unchanged on rerun.
+- Deploy: Node B job `87564091427`, success; activation receipt published at `2026-07-16T07:50:08Z` for commit `7d310551c01dd5c63be3dcbb641dd752a201d8d6`.
+- Staging identity: uncached `https://choir.news/health?g1=7d310551` reports proxy/vmctl healthy and build/deployed commit `7d310551c01dd5c63be3dcbb641dd752a201d8d6`.
+- Deployed route refusal: Node B loopback GET of `/internal/vmctl/computer-version-routes/resolve?route_slot_id=computer:g1-missing:primary` with the internal caller header returned `HTTP 404` and `route ledger: slot not found`. Route authority is initialized and absence is refusal, not fallback.
+- Deployed inventory at activation: `0` active VMs, `149` ownerships (`147` hibernated, `1` stopped, `1` failed). No D-ROUTE CAS was executed.
+- Rollback ref: prior origin/main and deployment `a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36`; deployment activation receipt preserves the previous artifact set.
+
+G1 is landed. Phase C may now mutate constructor and disk-instantiation code. G2 remains mandatory before verifier/promotion work.
