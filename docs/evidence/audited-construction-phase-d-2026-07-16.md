@@ -123,3 +123,17 @@
 - Heresy delta: discovered `3` across rejected G3 iterations (caller-supplied verifier, split route/evidence authority, exported raw SQL writer); introduced `0`; repaired `3` in the accepted candidate.
 - Conjecture delta: vmctl-only route ownership is enforceable only when the lowest exported SQL mutation boundary itself verifies the signed post-G3 execution envelope and persisted trusted key; a safe facade over an exported weaker writer is not sole authority.
 - Rollback: before any route CAS, revert source commit `ab89a200`. After a bounded accepted CAS, retain the prior accepted route receipt/ComputerVersion and execute only the pre-signed rollback plan; never recover by booting or mutating the failed owner image.
+
+## Post-landing CI checkpoint: provisional ext4 receipt rejected
+
+- Mutation class: red.
+- Substrate classification: disk-instantiation verification substrate.
+- Trigger: required `main` CI run `29535188855` for accepted G3 landing `5520fc03`.
+- Evidence: non-runtime shard 2 and non-runtime race both failed `TestExt4BackendFreshSparseGeometryAndReconstruction` and `TestExt4BackendChurnReclaimReconstructionBound` with `refuse unverified inspect receipt: disk instantiation: geometry is incomplete`.
+- Cause: `Ext4Backend.Instantiate` asks the public `Inspect` boundary to obtain geometry before `Geometry` and the final receipt digest exist, while the strengthened public boundary correctly requires `VerifyReceiptIntegrity`. The constructor therefore made finalization depend on an already-finalized receipt.
+- Existing-fix connection: retain finalized-receipt verification for every external `Inspect` call and reuse the already-authorized identity/path geometry reader internally for the constructor-owned provisional receipt; do not weaken or bypass public receipt verification.
+- Consequence: G3 source is landed but CI/deploy acceptance is blocked; no staging deploy, route CAS, evidence publication, promotion, rollback, or production mutation occurred.
+- Protected surfaces: disk receipt integrity, device-path authorization, construction geometry, G3 deploy gate.
+- Conjecture delta: path authorization and content-addressed receipt integrity are separate phases during construction; external inspection must require both, while constructor finalization must perform authorized geometry acquisition before the digest can exist.
+- Heresy delta: discovered `1`; introduced `0`; repaired `0` at this checkpoint.
+- Rollback: revert the subsequent narrow constructor/internal-inspection repair; accepted G3 source remains pre-deploy and pre-CAS.
