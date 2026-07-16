@@ -811,33 +811,95 @@ func validateLiveReadPath(rep report) []warning {
 		failures = append(failures, warning{Rule: "L4", Severity: "error", Path: "docs/doc-authority-manifest.yaml", Message: fmt.Sprintf("expected exactly one current authority-root product Definition, found %d", productDefinitions)})
 	}
 
-	entrypoints := 0
-	var entrypoint missionGraphNode
+	var productEntrypoints []missionGraphNode
+	var maintenanceEntrypoints []missionGraphNode
 	for _, node := range rep.MissionGraph.Nodes {
-		if node.EntryPoint {
-			entrypoints++
-			entrypoint = node
+		if !node.EntryPoint {
+			continue
+		}
+		switch classifyMissionEntrypoint(node) {
+		case productMissionEntrypoint:
+			productEntrypoints = append(productEntrypoints, node)
+		case scopeDisjointMaintenanceEntrypoint:
+			maintenanceEntrypoints = append(maintenanceEntrypoints, node)
+		default:
+			failures = append(failures, warning{
+				Rule:     "L5",
+				Severity: "error",
+				Path:     rep.MissionGraph.Path,
+				Message:  fmt.Sprintf("mission graph entrypoint %q has invalid shape; expected a product spine/mission_orchestrator or ci_maintenance/scope_disjoint_maintenance entrypoint, got kind=%q execution_mode=%q", node.ID, node.Kind, node.ExecutionMode),
+			})
 		}
 	}
-	if entrypoints != 1 {
-		failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("expected exactly one mission graph entrypoint, found %d", entrypoints)})
+	if len(productEntrypoints) != 1 {
+		failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("expected exactly one product mission graph entrypoint, found %d", len(productEntrypoints))})
 	} else if productDefinitions == 1 &&
-		(entrypoint.Status != "working" ||
-			entrypoint.Kind != "spine" ||
-			entrypoint.ExecutionMode != "mission_orchestrator" ||
-			cleanPath(entrypoint.Path) != authorityRootPath) {
+		(productEntrypoints[0].Status != "working" ||
+			cleanPath(productEntrypoints[0].Path) != authorityRootPath) {
 		failures = append(failures, warning{
 			Rule:     "L5",
 			Severity: "error",
 			Path:     rep.MissionGraph.Path,
 			Message: fmt.Sprintf(
-				"mission graph entrypoint must be working mission_orchestrator spine at authority-root path %q; got status=%q kind=%q execution_mode=%q path=%q",
-				authorityRootPath, entrypoint.Status, entrypoint.Kind, entrypoint.ExecutionMode, cleanPath(entrypoint.Path),
+				"product mission graph entrypoint must be working mission_orchestrator spine at authority-root path %q; got status=%q kind=%q execution_mode=%q path=%q",
+				authorityRootPath, productEntrypoints[0].Status, productEntrypoints[0].Kind, productEntrypoints[0].ExecutionMode, cleanPath(productEntrypoints[0].Path),
 			),
 		})
 	}
+	if len(maintenanceEntrypoints) > 1 {
+		failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("expected at most one scope-disjoint CI maintenance entrypoint, found %d", len(maintenanceEntrypoints))})
+	}
+	documentsByPath := map[string]docInfo{}
+	for _, doc := range rep.Documents {
+		documentsByPath[cleanPath(doc.Path)] = doc
+	}
+	for _, entrypoint := range maintenanceEntrypoints {
+		if entrypoint.Status != "working" {
+			failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("scope-disjoint CI maintenance entrypoint %q must be working, got status=%q", entrypoint.ID, entrypoint.Status)})
+		}
+		doc, ok := documentsByPath[cleanPath(entrypoint.Path)]
+		if !ok {
+			failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("scope-disjoint CI maintenance entrypoint %q must reference a manifested current entry-only Definition at %q", entrypoint.ID, cleanPath(entrypoint.Path))})
+			continue
+		}
+		if !isScopeDisjointMaintenanceDefinition(doc) {
+			failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("scope-disjoint CI maintenance entrypoint %q must reference a current manifested entry-only scope_disjoint_ci_maintenance Definition; got scope=%q manifested=%t exists=%t doc_role=%q authority=%q roots=%v", entrypoint.ID, doc.Scope, doc.Manifested, doc.Exists, doc.Annotations["doc_role"], doc.Annotations["authority"], doc.IsRoot)})
+		}
+	}
 
 	return failures
+}
+
+type missionEntrypointClass string
+
+const (
+	invalidMissionEntrypoint           missionEntrypointClass = "invalid"
+	productMissionEntrypoint           missionEntrypointClass = "product"
+	scopeDisjointMaintenanceEntrypoint missionEntrypointClass = "scope_disjoint_maintenance"
+)
+
+func classifyMissionEntrypoint(node missionGraphNode) missionEntrypointClass {
+	switch {
+	case node.Kind == "spine" && node.ExecutionMode == "mission_orchestrator":
+		return productMissionEntrypoint
+	case node.Kind == "ci_maintenance" && node.ExecutionMode == "scope_disjoint_maintenance":
+		return scopeDisjointMaintenanceEntrypoint
+	default:
+		return invalidMissionEntrypoint
+	}
+}
+
+func hasOnlyRootKind(roots []string, want string) bool {
+	return len(roots) == 1 && roots[0] == want
+}
+
+func isScopeDisjointMaintenanceDefinition(doc docInfo) bool {
+	return doc.Scope == "current" &&
+		doc.Manifested &&
+		doc.Exists &&
+		doc.Annotations["doc_role"] == "definition" &&
+		doc.Annotations["authority"] == "scope_disjoint_ci_maintenance" &&
+		hasOnlyRootKind(doc.IsRoot, "entry")
 }
 
 func witnessMatches(pattern string) ([]string, error) {
@@ -885,13 +947,24 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 	rep.Nodes = mf.Nodes
 	rep.StatusCounts = map[string]int{}
 	rep.KindCounts = map[string]int{}
-	entrypoints := 0
+	productEntrypoints := 0
+	maintenanceEntrypoints := 0
 	ids := map[string]missionGraphNode{}
 	validStatus := map[string]bool{"planned": true, "working": true, "open_handoff": true, "settled": true, "superseded": true, "blocked": true}
-	validKind := map[string]bool{"spine": true, "side": true, "subordinate_contract": true, "product_completion": true, "docs_truth": true, "evidence": true, "superseded": true}
+	validKind := map[string]bool{"spine": true, "side": true, "subordinate_contract": true, "product_completion": true, "docs_truth": true, "ci_maintenance": true, "evidence": true, "superseded": true}
 	for _, n := range mf.Nodes {
 		if n.EntryPoint {
-			entrypoints++
+			switch classifyMissionEntrypoint(n) {
+			case productMissionEntrypoint:
+				productEntrypoints++
+			case scopeDisjointMaintenanceEntrypoint:
+				maintenanceEntrypoints++
+			default:
+				warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("mission graph entrypoint %q has invalid shape; expected a product spine/mission_orchestrator or ci_maintenance/scope_disjoint_maintenance entrypoint, got kind=%q execution_mode=%q", n.ID, n.Kind, n.ExecutionMode)})
+			}
+			if n.Status != "working" {
+				warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("mission graph entrypoint %q must be working, got status=%q", n.ID, n.Status)})
+			}
 		}
 		if n.ID == "" {
 			warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: "mission graph node has no id"})
@@ -932,8 +1005,11 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 			}
 		}
 	}
-	if entrypoints != 1 {
-		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("expected exactly one mission graph entrypoint, found %d", entrypoints)})
+	if productEntrypoints != 1 {
+		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("expected exactly one product mission graph entrypoint, found %d", productEntrypoints)})
+	}
+	if maintenanceEntrypoints > 1 {
+		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("expected at most one scope-disjoint CI maintenance entrypoint, found %d", maintenanceEntrypoints)})
 	}
 	for _, n := range mf.Nodes {
 		for _, dep := range n.DependsOn {

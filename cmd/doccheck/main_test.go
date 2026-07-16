@@ -54,10 +54,10 @@ nodes:
 
 func TestValidateMissionGraphEntrypointCardinality(t *testing.T) {
 	tests := []struct {
-		name        string
-		nodes       string
-		wantWarning bool
-		wantCount   string
+		name         string
+		nodes        string
+		wantWarnings []string
+		noWarnings   []string
 	}{
 		{
 			name: "zero rejected",
@@ -66,33 +66,105 @@ func TestValidateMissionGraphEntrypointCardinality(t *testing.T) {
     status: working
     kind: spine
 `,
-			wantWarning: true,
-			wantCount:   "found 0",
+			wantWarnings: []string{"expected exactly one product mission graph entrypoint, found 0"},
 		},
 		{
-			name: "exactly one accepted",
+			name: "one product accepted",
 			nodes: `  - id: a
     title: A
     entrypoint: true
+    execution_mode: mission_orchestrator
     status: working
     kind: spine
 `,
+			noWarnings: []string{"entrypoint", "invalid kind"},
 		},
 		{
-			name: "duplicate rejected",
+			name: "product plus maintenance accepted",
 			nodes: `  - id: a
     title: A
     entrypoint: true
+    execution_mode: mission_orchestrator
     status: working
     kind: spine
   - id: b
     title: B
     entrypoint: true
-    status: planned
-    kind: spine
+    execution_mode: scope_disjoint_maintenance
+    status: working
+    kind: ci_maintenance
 `,
-			wantWarning: true,
-			wantCount:   "found 2",
+			noWarnings: []string{"entrypoint", "invalid kind"},
+		},
+		{
+			name: "second product rejected",
+			nodes: "  - id: a\n" +
+				"    title: A\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: mission_orchestrator\n" +
+				"    status: working\n" +
+				"    kind: spine\n" +
+				"  - id: b\n" +
+				"    title: B\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: mission_orchestrator\n" +
+				"    status: working\n" +
+				"    kind: spine\n",
+			wantWarnings: []string{"expected exactly one product mission graph entrypoint, found 2"},
+		},
+		{
+			name: "stale maintenance rejected",
+			nodes: "  - id: a\n" +
+				"    title: A\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: mission_orchestrator\n" +
+				"    status: working\n" +
+				"    kind: spine\n" +
+				"  - id: maintenance\n" +
+				"    title: Maintenance\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: scope_disjoint_maintenance\n" +
+				"    status: settled\n" +
+				"    kind: ci_maintenance\n",
+			wantWarnings: []string{`mission graph entrypoint "maintenance" must be working`},
+		},
+		{
+			name: "arbitrary extra entrypoint rejected",
+			nodes: "  - id: a\n" +
+				"    title: A\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: mission_orchestrator\n" +
+				"    status: working\n" +
+				"    kind: spine\n" +
+				"  - id: legacy\n" +
+				"    title: Legacy\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: subordinate_only\n" +
+				"    status: working\n" +
+				"    kind: side\n",
+			wantWarnings: []string{`mission graph entrypoint "legacy" has invalid shape`},
+		},
+		{
+			name: "second maintenance rejected",
+			nodes: "  - id: a\n" +
+				"    title: A\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: mission_orchestrator\n" +
+				"    status: working\n" +
+				"    kind: spine\n" +
+				"  - id: maintenance-a\n" +
+				"    title: Maintenance A\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: scope_disjoint_maintenance\n" +
+				"    status: working\n" +
+				"    kind: ci_maintenance\n" +
+				"  - id: maintenance-b\n" +
+				"    title: Maintenance B\n" +
+				"    entrypoint: true\n" +
+				"    execution_mode: scope_disjoint_maintenance\n" +
+				"    status: planned\n" +
+				"    kind: ci_maintenance\n",
+			wantWarnings: []string{"expected at most one scope-disjoint CI maintenance entrypoint, found 2", `mission graph entrypoint "maintenance-b" must be working`},
 		},
 	}
 
@@ -105,12 +177,15 @@ func TestValidateMissionGraphEntrypointCardinality(t *testing.T) {
 			}
 
 			_, warnings := validateMissionGraph(path, nil)
-			gotWarning := hasWarningMessage(warnings, "expected exactly one mission graph entrypoint")
-			if gotWarning != tt.wantWarning {
-				t.Fatalf("entrypoint cardinality warning = %v, want %v: %#v", gotWarning, tt.wantWarning, warnings)
+			for _, expected := range tt.wantWarnings {
+				if !hasWarningMessage(warnings, expected) {
+					t.Fatalf("expected warning %q: %#v", expected, warnings)
+				}
 			}
-			if tt.wantCount != "" && !hasWarningMessage(warnings, tt.wantCount) {
-				t.Fatalf("expected entrypoint count %q in warnings: %#v", tt.wantCount, warnings)
+			for _, forbidden := range tt.noWarnings {
+				if hasWarningMessage(warnings, forbidden) {
+					t.Fatalf("unexpected warning %q: %#v", forbidden, warnings)
+				}
 			}
 		})
 	}
@@ -346,10 +421,10 @@ func TestValidateLiveReadPathRejectsInvalidMissionGraphEntrypointCardinality(t *
 	}{
 		{name: "zero", wantCount: "found 0"},
 		{
-			name: "duplicate",
+			name: "second product",
 			nodes: []missionGraphNode{
-				{ID: "old", EntryPoint: true},
-				{ID: "current", EntryPoint: true},
+				{ID: "old", EntryPoint: true, ExecutionMode: "mission_orchestrator", Status: "working", Kind: "spine"},
+				{ID: "current", EntryPoint: true, ExecutionMode: "mission_orchestrator", Status: "working", Kind: "spine"},
 			},
 			wantCount: "found 2",
 		},
@@ -361,11 +436,8 @@ func TestValidateLiveReadPathRejectsInvalidMissionGraphEntrypointCardinality(t *
 			rep.MissionGraph.Nodes = tt.nodes
 
 			failures := validateLiveReadPath(rep)
-			if len(failures) != 1 {
-				t.Fatalf("validateLiveReadPath() failure count = %d, want 1: %#v", len(failures), failures)
-			}
-			if failures[0].Rule != "L5" || !strings.Contains(failures[0].Message, tt.wantCount) {
-				t.Fatalf("validateLiveReadPath() failure = %#v, want L5 containing %q", failures[0], tt.wantCount)
+			if !hasWarningMessage(failures, tt.wantCount) {
+				t.Fatalf("validateLiveReadPath() failures = %#v, want L5 containing %q", failures, tt.wantCount)
 			}
 		})
 	}
@@ -389,11 +461,68 @@ func TestValidateLiveReadPathRejectsInvalidMissionGraphEntrypointIdentity(t *tes
 			tt.mutate(&rep.MissionGraph.Nodes[0])
 
 			failures := validateLiveReadPath(rep)
-			if len(failures) != 1 {
-				t.Fatalf("validateLiveReadPath() failure count = %d, want 1: %#v", len(failures), failures)
+			if !hasWarningMessage(failures, tt.wantDetail) {
+				t.Fatalf("validateLiveReadPath() failures = %#v, want L5 containing %q", failures, tt.wantDetail)
 			}
-			if failures[0].Rule != "L5" || !strings.Contains(failures[0].Message, tt.wantDetail) {
-				t.Fatalf("validateLiveReadPath() failure = %#v, want L5 containing %q", failures[0], tt.wantDetail)
+		})
+	}
+}
+
+func TestValidateLiveReadPathAcceptsScopeDisjointMaintenanceEntrypoint(t *testing.T) {
+	rep := completeLivePacketReport()
+	rep.Documents = append(rep.Documents, scopeDisjointMaintenanceDoc([]string{"entry"}))
+	rep.MissionGraph.Nodes = append(rep.MissionGraph.Nodes, scopeDisjointMaintenanceNode())
+
+	if failures := validateLiveReadPath(rep); len(failures) != 0 {
+		t.Fatalf("validateLiveReadPath() failures = %#v, want none", failures)
+	}
+}
+
+func TestValidateLiveReadPathRejectsInvalidScopeDisjointMaintenanceEntrypoint(t *testing.T) {
+	tests := []struct {
+		name       string
+		mutateNode func(*missionGraphNode)
+		mutateDoc  func(*docInfo)
+		wantDetail string
+	}{
+		{
+			name:       "stale maintenance",
+			mutateNode: func(node *missionGraphNode) { node.Status = "settled" },
+			wantDetail: `must be working, got status="settled"`,
+		},
+		{
+			name:       "maintenance authority root",
+			mutateDoc:  func(doc *docInfo) { doc.IsRoot = []string{"entry", "authority"} },
+			wantDetail: "entry-only scope_disjoint_ci_maintenance Definition",
+		},
+		{
+			name:       "maintenance arbitrary extra root",
+			mutateDoc:  func(doc *docInfo) { doc.IsRoot = []string{"entry", "other"} },
+			wantDetail: "entry-only scope_disjoint_ci_maintenance Definition",
+		},
+		{
+			name:       "maintenance missing manifest identity",
+			mutateDoc:  func(doc *docInfo) { doc.Annotations["authority"] = "mission" },
+			wantDetail: "entry-only scope_disjoint_ci_maintenance Definition",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rep := completeLivePacketReport()
+			doc := scopeDisjointMaintenanceDoc([]string{"entry"})
+			node := scopeDisjointMaintenanceNode()
+			if tt.mutateDoc != nil {
+				tt.mutateDoc(&doc)
+			}
+			if tt.mutateNode != nil {
+				tt.mutateNode(&node)
+			}
+			rep.Documents = append(rep.Documents, doc)
+			rep.MissionGraph.Nodes = append(rep.MissionGraph.Nodes, node)
+
+			if failures := validateLiveReadPath(rep); !hasWarningMessage(failures, tt.wantDetail) {
+				t.Fatalf("validateLiveReadPath() failures = %#v, want L5 containing %q", failures, tt.wantDetail)
 			}
 		})
 	}
@@ -430,6 +559,31 @@ func completeLivePacketReport() report {
 		}},
 	}
 	return rep
+}
+
+func scopeDisjointMaintenanceDoc(roots []string) docInfo {
+	return docInfo{
+		Path:       "docs/definitions/choir-ci-optimization-2026-07-16.md",
+		Scope:      "current",
+		IsRoot:     roots,
+		Manifested: true,
+		Exists:     true,
+		Annotations: map[string]string{
+			"doc_role":  "definition",
+			"authority": "scope_disjoint_ci_maintenance",
+		},
+	}
+}
+
+func scopeDisjointMaintenanceNode() missionGraphNode {
+	return missionGraphNode{
+		ID:            "ci-maintenance",
+		Path:          "docs/definitions/choir-ci-optimization-2026-07-16.md",
+		EntryPoint:    true,
+		ExecutionMode: "scope_disjoint_maintenance",
+		Status:        "working",
+		Kind:          "ci_maintenance",
+	}
 }
 
 func TestScanBrokenCurrentDocLinksFindsMissingTarget(t *testing.T) {
