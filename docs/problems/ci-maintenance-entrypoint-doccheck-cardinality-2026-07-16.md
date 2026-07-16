@@ -1,7 +1,7 @@
 # Scope-Disjoint CI Entrypoint Is Rejected by the Doc Truth Checker
 
 **Date:** 2026-07-16
-**Status:** observed; bounded repair admitted
+**Status:** observed; bounded repair admitted; main landing blocked pending publication authority
 **Classification:** substrate — documentation-governance validation contract
 **Mutation class of the exposing change:** green Definition/registry activation
 **Mutation class of the planned repair:** yellow documentation-truth tooling
@@ -60,6 +60,30 @@ The yellow repair may touch only `cmd/doccheck/main.go` and
 4. leave application behavior, workflow semantics, Node B, and product
    authority unchanged.
 
+## 2026-07-16 Landing Side Effect
+
+The bounded source repair is not a docs-only change. Running the unchanged CI
+classifier with `cmd/doccheck/main.go` as the changed path yields:
+
+```text
+docs_only=false
+go=true
+sbom=true
+flakehub=true
+high_risk_race=false
+ci=false
+```
+
+The normal main workflow therefore skips Node B deployment but may run the
+rolling FlakeHub publication after `check` succeeds. The owner's authorization
+to merge the CI mission and deploy Node B if needed does not clearly authorize
+this separate public publication side effect. The repair may be validated and
+opened as a draft PR, but its merge is blocked until the owner either grants
+narrow FlakeHub-publication authority or changes the requested landing route.
+
+This is an authority boundary, not a reason to weaken the classifier or remove
+the existing FlakeHub relationship from CI.
+
 ## Belief State
 
 - Supported: the live registry has one product authority root and one
@@ -73,7 +97,9 @@ The yellow repair may touch only `cmd/doccheck/main.go` and
 
 Until the checker is repaired, a strict live doccheck fails. The CI candidate
 must not be pushed or PR-landed as fully validated until the yellow repair has
-focused tests and a live doccheck receipt.
+focused tests and a live doccheck receipt. After that, PR 1's main merge still
+requires specific authority for the classifier-selected FlakeHub publication;
+Node B remains expected to skip.
 
 ## Rollback
 

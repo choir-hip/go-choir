@@ -160,8 +160,8 @@ measures:
 
 now:
   status: working
-  slice: "owner-authorized PR-mediated landing preparation and doccheck topology repair for frozen CI candidate"
-  question: "Can the doccheck contract recognize the already-authorized scope-disjoint CI entrypoint, then can a fresh current-main rebase preserve the reviewed workflow blob before hosted PR evidence?"
+  slice: "standalone doccheck topology repair (PR 1), then frozen workflow restoration (PR 2)"
+  question: "Can PR 1 validate the scope-disjoint entrypoint without blurring the frozen workflow stimulus, and can its FlakeHub publication side effect receive explicit authority before any main merge?"
   reconciliation:
     observed_at: 2026-07-16T06:00:00Z
     source_ref: "candidate 8e4aa074f970b69ce59cffa07b280f164ca1c161 reviewed against origin/main a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36; fresh fetch is required immediately before rebase"
@@ -183,20 +183,20 @@ now:
     mutation_class: yellow
     admitted_paths: [cmd/doccheck/main.go, cmd/doccheck/main_test.go]
     problem_ref: docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md
-    acceptance: "Exactly one working product spine remains the authority-root /goal; working scope-disjoint ci_maintenance entrypoints are admitted only when their manifest identity is current, entry-only, and non-authority-root."
+    acceptance: "Exactly one working product spine remains the authority-root /goal; at most one working scope-disjoint ci_maintenance entrypoint is admitted only when its manifest identity is current, entry-only, and non-authority-root."
     excluded: [workflow_semantics, app_source, platform_source, node_b_deployment]
   decision:
-    selected: "Document and repair the doccheck entrypoint-cardinality contradiction, then reconcile and publish the frozen CI candidate through a draft PR and PR-mediated main merge after hosted evidence; preserve split SBOM and race proof obligations."
+    selected: "Use two PRs: land the doccheck/registry repair first so it cannot change the frozen workflow candidate's classifier stimulus, then recreate the frozen workflow candidate from fresh main with its digest unchanged."
     kind: authority
     status: settled
     source: owner
     evidence_ref: "owner-message-019f6933-2026-07-16-main-merge-node-b-authority"
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-16T06:00:00Z
-    consequence: "No single landing may satisfy both restored signals. The candidate may be rebased, pushed, reviewed in a draft PR, and PR-merged to main after hosted evidence and a recorded concurrency window. A generic dispatch or direct Node B mutation is not admitted; any required Node B deployment first needs a concrete Define slice."
+    consequence: "PR 1 may be validated as a draft, but cmd/doccheck/main.go classifies flakehub=true, so its main merge awaits narrow owner authority for the automatic publication despite expected Node B skip. After PR 1, recreate PR 2 from fresh main and preserve the ci.yml digest; it remains .github-plus-docs, flakehub=false, and expected Node B skip."
   evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, origin-main-a1d2f88c]
-  blocker_or_risk: "Strict doccheck currently rejects the deliberate scope-disjoint entrypoint; its repair must not admit a second product authority. CI-only main landing also cannot deterministically select race, so terminal race proof must await a naturally selected post-land main push or separately owner-authorized stimulus. Parent ci-${github.ref} and Race race-${github.ref} cancellation groups both require coordination."
-  next_action: "Commit this authority and problem-documentation boundary, fresh-fetch origin/main immediately before rebase, repair the bounded yellow doccheck contract with focused tests, rebase while preserving the reviewed workflow blob, rebind identities, push the child branch, and open a draft PR for hosted evidence."
+  blocker_or_risk: "Strict doccheck currently rejects the deliberate scope-disjoint entrypoint; its repair must not admit a second product authority. Its cmd/doccheck path also classifies flakehub=true, so main merge needs narrow publication authority even though deploy-impact skips Node B. CI-only workflow landing cannot deterministically select race, so terminal race proof must await a naturally selected post-land main push or separately owner-authorized stimulus. Parent ci-${github.ref} and Race race-${github.ref} cancellation groups both require coordination."
+  next_action: "Commit this publication-side-effect checkpoint, implement and validate the bounded yellow doccheck contract, create PR 1 from fresh main, and obtain hosted evidence. Do not merge PR 1 until the owner grants narrow FlakeHub publication authority. Then recreate the frozen workflow candidate as PR 2 from fresh main with its ci.yml digest unchanged."
 
 receipts:
   - id: corrected-problem-and-baseline-define
