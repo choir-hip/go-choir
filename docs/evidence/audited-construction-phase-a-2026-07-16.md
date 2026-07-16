@@ -136,3 +136,20 @@ Heresy delta for G1: `repaired` — competing static/lineage served-route author
 - Rollback ref: prior origin/main and deployment `a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36`; deployment activation receipt preserves the previous artifact set.
 
 G1 is landed. Phase C may now mutate constructor and disk-instantiation code. G2 remains mandatory before verifier/promotion work.
+
+
+### Phase C constructor preflight problem checkpoint
+
+Captured: 2026-07-16T08:39:29Z
+
+Mutation class: **red**. Protected surfaces: production Firecracker construction and vmctl immutable-input delivery. Rollback remains commit-level restoration to landed G1 (`7d310551c01dd5c63be3dcbb641dd752a201d8d6`); no route CAS or existing realization mutation is authorized in Phase C.
+
+Before committing constructor code, focused implementation and adversarial review identified the following failures in the proposed Phase C path:
+
+1. The immutable runtime-package endpoint digest-verified bytes but streamed an unvalidated tar archive into a guest `tar -xf` boot path. A content-addressed but structurally unsafe archive could traverse or link outside the intended runtime directory.
+2. Product-path construction readback followed filesystem symlinks. A substituted manifest path or parent component could make equivalence inspect bytes outside the constructed `/files` projection rather than refuse.
+3. The legacy VM launch contract named only an opaque store-disk path. It lacked a constructor-owned, attach-only device path and immutable CodeRef binding, so a backend-created device could not be joined to guest boot without reintroducing raw-image semantics into the materializer.
+
+These are substrate failures at the construction boundary, not isolated guest symptoms. The existing `StateGenerator`, typed `ComputerVersion`, VM manager, and immutable artifact catalog remain the replacement substrate; the repair must connect them through one materializer rather than patch the old reboot path.
+
+Conjecture delta: C2 and C3 remain unproven; the preflight adds concrete falsifiers for unsafe immutable archive structure and symlink-following readback. Heresy delta: `discovered` — two unsafe boundary behaviors and one missing typed launch seam; `introduced` — none in the landed system because this candidate is not committed or deployed; `repaired` — none until the candidate is independently reviewed and exercised on staging. Admissible evidence remains focused deterministic checks, frozen G2 independent review, then deployed Firecracker construction/readback receipts.
