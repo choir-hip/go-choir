@@ -283,8 +283,18 @@ and the open question; mission phase path; decision gates; proof readiness; and
 the protected start. Follow with secondary context such as reconciliation,
 durable decisions, candidate, evidence, dissent, visibly labelled weak
 measures, and successor. Keep every gate obligation visible under
-plain-language headings. Never hide content behind disclosure, accordion,
-menu, tab, or other expand interactions, including `details` and `summary`.
+plain-language headings. Never hide mission authority, obligations, evidence,
+or state behind disclosure, accordion, menu, tab, or other expand interactions.
+The sole exception is the live repository metadata strip: its uncommitted-file
+inventory may use one native `details`/`summary`. Open it by default. Keep the
+triangle on the same line as the file-count label and totals so collapsing never
+moves that summary. Under it, show a compact separator-free inventory of each
+path, worktree state, and per-file +/- LOC.
+
+In the footer, keep a quiet session-only log: the newest few dashboard events
+stay visible; earlier events and dirty-file first-seen / last-modified times sit
+behind one collapsed disclosure. The log is ephemeral process state, not mission
+authority, and must not imply acceptance or completion.
 
 Include source identity/digest, generator version, and generation time. The
 Markdown/YAML goal remains authoritative; the dashboard is a non-editable
@@ -292,6 +302,9 @@ projection and must not infer completion. Under `--watch`, live updates retain
 the server-sent-event lifecycle: a current render becomes explicitly
 unavailable when its source is invalidated and becomes current again only
 after a successful regeneration; stale content is never reported as current.
+`--watch` also hot-reloads `dashboard-view.mjs` and `dashboard-git.mjs` into the
+running server. Changes to `dashboard.mjs` itself still require a process
+restart.
 Generated snapshots are optional explicit `--output <path>` results and belong
 outside the repository unless the Definition names one as an artifact. Refresh
 the live view only as part of the relevant Define or Implement boundary, never

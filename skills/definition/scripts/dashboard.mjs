@@ -12,11 +12,42 @@ import {
 } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { isIP } from 'node:net';
-import { basename, dirname, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { TextDecoder } from 'node:util';
 
 import { renderDashboard } from './dashboard-view.mjs';
+import { collectRepositoryMetadata } from './dashboard-git.mjs';
+import { createSessionLog } from './dashboard-session.mjs';
+
+const SCRIPT_DIRECTORY = dirname(fileURLToPath(import.meta.url));
+const RELOADABLE_SCRIPT_NAMES = new Set(['dashboard-view.mjs', 'dashboard-git.mjs']);
+const GENERATOR_SCRIPT_NAME = 'dashboard.mjs';
+
+export function isReloadableDashboardScript(filename) {
+  if (filename === null || filename === undefined) return { kind: 'unknown' };
+  const name = basename(String(filename));
+  if (name === GENERATOR_SCRIPT_NAME) return { kind: 'generator', name };
+  if (RELOADABLE_SCRIPT_NAMES.has(name)) return { kind: 'module', name };
+  return { kind: 'ignored', name };
+}
+
+export async function loadDashboardScriptModules(scriptDirectory = SCRIPT_DIRECTORY) {
+  const stamp = Date.now();
+  const viewUrl = `${pathToFileURL(join(scriptDirectory, 'dashboard-view.mjs')).href}?t=${stamp}`;
+  const gitUrl = `${pathToFileURL(join(scriptDirectory, 'dashboard-git.mjs')).href}?t=${stamp}`;
+  const [view, git] = await Promise.all([import(viewUrl), import(gitUrl)]);
+  if (typeof view.renderDashboard !== 'function') {
+    throw new TypeError('dashboard-view.mjs must export renderDashboard');
+  }
+  if (typeof git.collectRepositoryMetadata !== 'function') {
+    throw new TypeError('dashboard-git.mjs must export collectRepositoryMetadata');
+  }
+  return {
+    renderer: view.renderDashboard,
+    repositoryMetadataLoader: git.collectRepositoryMetadata,
+  };
+}
 
 export const GENERATOR_VERSION = 'definition-dashboard-js/v1';
 export const MAX_SOURCE_BYTES = 4 * 1024 * 1024;
@@ -492,10 +523,25 @@ function safeDisplayPath(sourcePath) {
 function mapOrEmpty(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
+function normalizeRepositoryMetadata(value) {
+  const metadata = mapOrEmpty(value);
+  if (typeof metadata.fingerprint === 'string' && metadata.fingerprint !== '') return metadata;
+  return {
+    ...metadata,
+    fingerprint: createHash('sha256').update(JSON.stringify(metadata)).digest('hex'),
+  };
+}
+
 
 export function buildDashboardModel(
   parsed,
-  { sourcePath = 'definition.md', digest, generatedAt = new Date().toISOString() } = {},
+  {
+    sourcePath = 'definition.md',
+    digest,
+    generatedAt = new Date().toISOString(),
+    repositoryMetadata = { available: false, reason: 'Repository metadata was not collected.' },
+    session = null,
+  } = {},
 ) {
   const finish = mapOrEmpty(parsed.finish);
   const now = mapOrEmpty(parsed.now);
@@ -513,6 +559,8 @@ export function buildDashboardModel(
     finish,
     start: mapOrEmpty(parsed.start),
     now,
+    repository: normalizeRepositoryMetadata(repositoryMetadata),
+    session: session && typeof session === 'object' ? session : null,
     weakMeasures: [
       ...measures.filter((measure) => mapOrEmpty(measure).kind === 'weak_signal'),
       ...(Array.isArray(parsed.weak_measures) ? parsed.weak_measures : []),
@@ -553,6 +601,8 @@ export async function renderDefinitionSource(
     sourcePath = 'definition.md',
     generatedAt = new Date().toISOString(),
     renderer = renderDashboard,
+    repositoryMetadata = { available: false, reason: 'Repository metadata was not collected.' },
+    session = null,
   } = {},
 ) {
   const buffer = Buffer.isBuffer(source) ? source : Buffer.from(source, 'utf8');
@@ -565,7 +615,7 @@ export async function renderDefinitionSource(
     throw new DefinitionParseError('Definition source must be valid UTF-8');
   }
   const parsed = parseDefinitionSource(decoded);
-  const model = buildDashboardModel(parsed, { sourcePath, digest, generatedAt });
+  const model = buildDashboardModel(parsed, { sourcePath, digest, generatedAt, repositoryMetadata, session });
   const html = await renderer(model);
   if (typeof html !== 'string') throw new TypeError('renderDashboard must return an HTML string');
   if (Buffer.byteLength(html, 'utf8') > MAX_RENDER_BYTES) {
@@ -576,10 +626,36 @@ export async function renderDefinitionSource(
 
 export async function generateDashboard(
   sourcePath,
-  { generatedAt = new Date().toISOString(), renderer = renderDashboard } = {},
+  {
+    generatedAt = new Date().toISOString(),
+    renderer = renderDashboard,
+    repositoryMetadataLoader = collectRepositoryMetadata,
+    sessionLog = null,
+  } = {},
 ) {
-  const source = await readBoundedSource(sourcePath);
-  return renderDefinitionSource(source, { sourcePath, generatedAt, renderer });
+  const [source, loadedRepositoryMetadata] = await Promise.all([
+    readBoundedSource(sourcePath),
+    repositoryMetadataLoader(sourcePath).catch(() => ({
+      available: false,
+      reason: 'Repository metadata could not be read.',
+    })),
+  ]);
+  let repositoryMetadata = normalizeRepositoryMetadata(loadedRepositoryMetadata);
+  if (sessionLog && typeof sessionLog.observeRepository === 'function') {
+    const fingerprint = repositoryMetadata.fingerprint;
+    repositoryMetadata = {
+      ...normalizeRepositoryMetadata(sessionLog.observeRepository(repositoryMetadata, generatedAt)),
+      fingerprint,
+    };
+  }
+  const session = sessionLog && typeof sessionLog.snapshot === 'function' ? sessionLog.snapshot() : null;
+  return renderDefinitionSource(source, {
+    sourcePath,
+    generatedAt,
+    renderer,
+    repositoryMetadata,
+    session,
+  });
 }
 
 export function isLoopbackHost(host) {
@@ -678,6 +754,14 @@ export async function createDashboardServer({
   outputPath,
   renderer = renderDashboard,
   watcherFactory = watchFileSystem,
+  repositoryMetadataLoader = collectRepositoryMetadata,
+  repositoryPollInterval = 1000,
+  reloadScripts = false,
+  scriptDirectory = SCRIPT_DIRECTORY,
+  scriptWatcherFactory = watchFileSystem,
+  loadScripts = loadDashboardScriptModules,
+  scriptReloadDebounceMs = 120,
+  onGeneratorScriptChange = null,
 } = {}) {
   if (!sourcePath) throw new Error('sourcePath is required');
   if (!isLoopbackHost(host)) {
@@ -686,14 +770,32 @@ export async function createDashboardServer({
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error('listen port must be between 0 and 65535');
   }
+  if (!Number.isInteger(repositoryPollInterval) || repositoryPollInterval < 0) {
+    throw new Error('repository poll interval must be a non-negative integer');
+  }
+  if (!Number.isInteger(scriptReloadDebounceMs) || scriptReloadDebounceMs < 0) {
+    throw new Error('script reload debounce must be a non-negative integer');
+  }
 
   const clients = new Set();
   const state = { current: null, error: 'Dashboard has not been generated.' };
+  const runtime = {
+    renderer,
+    repositoryMetadataLoader,
+  };
+  const sessionLog = createSessionLog();
+  sessionLog.record({ kind: 'started', summary: 'Dashboard session started' });
   let watcher = null;
+  let scriptWatcher = null;
   let closed = false;
+  let repositoryPoller = null;
+  let repositoryPollRunning = false;
   let watchFailed = false;
+  let scriptReloadTimer = null;
+  let scriptReloadChain = Promise.resolve();
   let refreshChain = Promise.resolve(false);
   let sourceRevision = 0;
+  let pendingRefreshCause = 'start';
 
   function sendEvent(response, event, data) {
     if (response.destroyed || response.writableEnded) return false;
@@ -724,42 +826,90 @@ export async function createDashboardServer({
 
   async function loadCurrent(revision) {
     if (closed || revision !== sourceRevision) return false;
+    const cause = pendingRefreshCause;
     let generated;
     try {
-      generated = await generateDashboard(sourcePath, { renderer });
+      generated = await generateDashboard(sourcePath, {
+        renderer: (...args) => runtime.renderer(...args),
+        repositoryMetadataLoader: (...args) => runtime.repositoryMetadataLoader(...args),
+        sessionLog,
+      });
     } catch (error) {
       if (revision === sourceRevision) {
         invalidate(publicFailure(error instanceof DefinitionParseError ? 'parse' : 'read', error));
+        sessionLog.record({
+          kind: 'failed',
+          summary: cause === 'start' ? 'Initial render failed' : `Refresh failed · ${cause}`,
+        });
       }
       return false;
     }
     if (closed || revision !== sourceRevision) return false;
+
+    const summary =
+      cause === 'start'
+        ? 'Became current · initial render'
+        : `Became current · ${cause}`;
+    sessionLog.record({
+      kind: 'current',
+      summary,
+      detail: generated.digest ? `SHA-256 ${generated.digest.slice(0, 12)}` : null,
+    });
+    const session = sessionLog.snapshot();
+    const model = { ...generated.model, session };
+    let html;
+    try {
+      html = await runtime.renderer(model);
+      if (typeof html !== 'string') throw new TypeError('renderDashboard must return an HTML string');
+      if (Buffer.byteLength(html, 'utf8') > MAX_RENDER_BYTES) {
+        throw new Error('rendered dashboard exceeds size limit');
+      }
+    } catch (error) {
+      if (revision === sourceRevision) {
+        invalidate(publicFailure('read', error instanceof Error ? error : new Error('render failed')));
+        sessionLog.record({ kind: 'failed', summary: `Render failed · ${cause}` });
+      }
+      return false;
+    }
+    if (closed || revision !== sourceRevision) return false;
+
     if (outputPath) {
       try {
-        await writeSnapshotAtomically(outputPath, generated.html);
+        await writeSnapshotAtomically(outputPath, html);
       } catch (error) {
-        if (revision === sourceRevision) invalidate(publicFailure('output', error));
+        if (revision === sourceRevision) {
+          invalidate(publicFailure('output', error));
+          sessionLog.record({ kind: 'failed', summary: `Snapshot write failed · ${cause}` });
+        }
         return false;
       }
     }
     if (closed || revision !== sourceRevision) return false;
-    const shouldReload = state.current === null || state.current.digest !== generated.digest;
-    state.current = { html: generated.html, digest: generated.digest, model: generated.model };
+
+    const repositoryChanged =
+      state.current?.model?.repository?.fingerprint !== model.repository?.fingerprint;
+    const shouldReload =
+      state.current === null ||
+      state.current.digest !== generated.digest ||
+      repositoryChanged ||
+      state.current?.model?.session?.eventCount !== session.eventCount;
+    state.current = { html, digest: generated.digest, model };
     state.error = null;
     if (shouldReload) broadcast('reload', generated.digest);
     return true;
   }
 
-  function refresh() {
+  function refresh(cause = 'refresh') {
     if (closed || watchFailed) return Promise.resolve(false);
+    pendingRefreshCause = typeof cause === 'string' && cause !== '' ? cause : 'refresh';
     const revision = ++sourceRevision;
-    invalidate('Dashboard is regenerating from the Definition source.');
+    invalidate('Dashboard is regenerating from the Definition source and repository state.');
     const next = refreshChain.then(() => loadCurrent(revision), () => loadCurrent(revision));
     refreshChain = next;
     return next;
   }
 
-  await refresh();
+  await refresh('start');
 
   const server = createServer((request, response) => {
     let pathname;
@@ -837,7 +987,7 @@ export async function createDashboardServer({
       const sourceAbsolute = resolve(sourcePath);
       watcher = watcherFactory(dirname(sourceAbsolute), (eventType, filename) => {
         if (filename === null || basename(String(filename)) === basename(sourceAbsolute)) {
-          void refresh();
+          void refresh('definition');
         }
       });
       watcher.on('error', () => {
@@ -846,14 +996,101 @@ export async function createDashboardServer({
         try {
           watcher?.close();
         } catch {}
+        try {
+          scriptWatcher?.close();
+        } catch {}
+        clearTimeout(scriptReloadTimer);
         invalidate('Definition source watch failed.');
       });
-      await refresh();
+
+      if (reloadScripts) {
+        const queueScriptReload = (kind) => {
+          if (closed || watchFailed) return;
+          clearTimeout(scriptReloadTimer);
+          scriptReloadTimer = setTimeout(() => {
+            scriptReloadChain = scriptReloadChain
+              .catch(() => {})
+              .then(async () => {
+                if (closed || watchFailed) return;
+                if (kind === 'generator') {
+                  if (typeof onGeneratorScriptChange === 'function') {
+                    await onGeneratorScriptChange();
+                  } else {
+                    process.stderr.write(
+                      'dashboard: dashboard.mjs changed; restart the process to load server changes\n',
+                    );
+                  }
+                  return;
+                }
+                const loaded = await loadScripts(scriptDirectory);
+                if (closed || watchFailed) return;
+                runtime.renderer = loaded.renderer;
+                runtime.repositoryMetadataLoader = loaded.repositoryMetadataLoader;
+                process.stdout.write('dashboard: reloaded renderer scripts\n');
+                sessionLog.record({ kind: 'scripts', summary: 'Reloaded renderer scripts' });
+                await refresh('scripts');
+              })
+              .catch((error) => {
+                if (closed || watchFailed) return;
+                invalidate(
+                  publicFailure(
+                    'read',
+                    error instanceof Error ? error : new Error('Dashboard scripts could not be reloaded.'),
+                  ),
+                );
+              });
+          }, scriptReloadDebounceMs);
+          scriptReloadTimer.unref?.();
+        };
+
+        scriptWatcher = scriptWatcherFactory(scriptDirectory, (eventType, filename) => {
+          const classified = isReloadableDashboardScript(filename);
+          if (classified.kind === 'module' || classified.kind === 'generator') {
+            queueScriptReload(classified.kind);
+          }
+        });
+        scriptWatcher.on('error', () => {
+          watchFailed = true;
+          sourceRevision += 1;
+          try {
+            watcher?.close();
+          } catch {}
+          try {
+            scriptWatcher?.close();
+          } catch {}
+          clearTimeout(scriptReloadTimer);
+          invalidate('Dashboard script watch failed.');
+        });
+      }
+
+      await refresh('watch');
+      if (repositoryPollInterval > 0) {
+        repositoryPoller = setInterval(async () => {
+          if (closed || watchFailed || repositoryPollRunning || state.current === null) return;
+          repositoryPollRunning = true;
+          try {
+            const latest = normalizeRepositoryMetadata(await runtime.repositoryMetadataLoader(sourcePath).catch(() => ({
+              available: false,
+              reason: 'Repository metadata could not be read.',
+            })));
+            const currentFingerprint = state.current?.model?.repository?.fingerprint;
+            if (latest.fingerprint !== currentFingerprint) void refresh('repository');
+          } finally {
+            repositoryPollRunning = false;
+          }
+        }, repositoryPollInterval);
+        repositoryPoller.unref?.();
+      }
     } catch (error) {
       try {
         watcher?.close();
       } catch {}
+      try {
+        scriptWatcher?.close();
+      } catch {}
+      clearTimeout(scriptReloadTimer);
       watcher = null;
+      scriptWatcher = null;
       if (server.listening) {
         try {
           await new Promise((fulfill, reject) => {
@@ -882,11 +1119,15 @@ export async function createDashboardServer({
     },
     async close() {
       if (closed) return;
+      clearInterval(repositoryPoller);
+      clearTimeout(scriptReloadTimer);
       closed = true;
       watcher?.close();
+      scriptWatcher?.close();
       for (const response of clients) response.end();
       clients.clear();
       await refreshChain.catch(() => {});
+      await scriptReloadChain.catch(() => {});
       if (!server.listening) return;
       await new Promise((fulfill, reject) => {
         server.close((error) => (error ? reject(error) : fulfill()));
@@ -896,7 +1137,7 @@ export async function createDashboardServer({
 }
 
 function usage() {
-  return `Usage: node skills/definition/scripts/dashboard.mjs <definition.md> [--serve HOST:PORT] [--watch] [--output PATH]\n\nThe Markdown/YAML Definition remains authoritative. --output writes only an explicitly requested snapshot.\n`;
+  return `Usage: node skills/definition/scripts/dashboard.mjs <definition.md> [--serve HOST:PORT] [--watch] [--output PATH]\n\nThe Markdown/YAML Definition remains authoritative. --watch also hot-reloads dashboard-view.mjs and dashboard-git.mjs. --output writes only an explicitly requested snapshot.\n`;
 }
 
 export function parseCliArguments(argumentsList) {
@@ -961,6 +1202,7 @@ export async function runCli(argumentsList = process.argv.slice(2)) {
       port: listen.port,
       watch: options.watch,
       outputPath: options.outputPath,
+      reloadScripts: options.watch,
     });
     process.stdout.write(
       `Definition dashboard: ${dashboard.url}/\nAuthority: ${safeDisplayPath(options.sourcePath)} (dashboard is non-authoritative and not completion evidence)\n`,

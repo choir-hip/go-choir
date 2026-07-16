@@ -32,9 +32,35 @@ start:
     - "Which typed artifact-program records currently suffice to reconstruct every required owner-visible state class."
     - "Exact deployed CodeRef and ArtifactProgramRef resolver/storage schemas; they must be discovered from canonical authorities, not invented as a third state store."
 
+  corrections:
+    - corrected_at: 2026-07-15
+      preserves_original_observation: true
+      clarification: "The affected staging owner computer is the existing yusefnathanson@me.com account, owner ID 5bd6de97-3b58-408c-bf89-c42c81b083de. The failure is account-specific: other accounts boot, so execution must not diagnose it as a platform-wide boot outage."
+      initial_control_account: "The owner reports a@b.com is a nearly new account available for early constructor and boot comparison. Reconcile its current identity and health before use; success there is supporting control evidence and cannot substitute for reconstruction and acceptance on yusefnathanson@me.com."
+      evidence_ref: "Owner clarification in this 2026-07-15 conversation."
+    - corrected_at: 2026-07-15
+      preserves_original_observation: true
+      clarification: "Owner-settled completion scope is fleet-wide, not an account-specific repair: every Choir computer must have ComputerVersion as its durable identity, and every served computer must run in a Firecracker realization produced and accepted through the production ComputerVersion materializer. yusefnathanson@me.com is the required failed-state recovery proof; a@b.com is an initial near-new control."
+      evidence_ref: "Owner clarification in this 2026-07-15 conversation."
+    - corrected_at: 2026-07-15
+      preserves_original_observation: true
+      clarification: "Owner-settled data scope: preserving recoverable legacy data from yusefnathanson@me.com is desirable and warrants a bounded read-only extractor attempt, but it is not an acceptance prerequisite; no other legacy account data requires migration. Mandatory completion is that data.img and the entire Firecracker realization are disposable. data.img may remain a writable materialization and cache, but no acknowledged durable state may depend on its survival."
+      evidence_ref: "Owner clarification in this 2026-07-15 conversation."
+    - corrected_at: 2026-07-15
+      preserves_original_observation: true
+      clarification: "Owner-settled scope expansion: intelligent disk-image instantiation is part of this mission. ComputerVersion and its semantic materializer remain substrate-independent; a subordinate disk-instantiation backend turns a typed capacity/allocation/reclamation policy into a fresh Firecracker-compatible block device and receipt. Backend format, path, sparsity mechanism, and compaction strategy never enter ComputerVersion identity."
+      evidence_ref: "Owner clarification in this 2026-07-15 conversation."
+    - corrected_at: 2026-07-15
+      preserves_original_observation: true
+      clarification: "Owner-settled execution environment: Firecracker, vmctl lifecycle, disk allocation/geometry, corruption/deletion recovery, route CAS, and fleet acceptance are proven only by the origin/main deployment on staging Node B. Local macOS may compile and run pure/focused contract tests but cannot supply VM acceptance. Canonical main is the serialized integration and landing surface; linked worktrees are optional isolation for genuinely disjoint or risky candidates, never an alternative runtime or acceptance environment."
+      evidence_ref: "Owner clarification in this 2026-07-15 conversation."
+    - corrected_at: 2026-07-15
+      preserves_original_observation: true
+      clarification: "Owner-settled invocation precondition: /goal starts only after the owner commits and pushes all intended mission/registry changes and canonical main is clean. Startup verifies that clean main equals origin/main; unexpected dirtiness is a reconciliation blocker to classify and preserve, not normal mission input."
+      evidence_ref: "Owner clarification in this 2026-07-15 conversation."
 finish:
-  deliver: "A production function constructs and boots a disposable Choir realization from one immutable ComputerVersion = (CodeRef, ArtifactProgramRef), proves the requested typed state after boot, and makes that accepted realization routable with bounded rollback. The function does not read or clone a prior mutable data.img."
-  artifact: "The staging owner computer is served by a fresh Firecracker realization produced by the production ComputerVersion materializer, with a durable construction receipt, observation set, promotion certificate, route transition, and rollback reference."
+  deliver: "Make ComputerVersion the durable identity and substrate-independent production construction boundary for every Choir computer. Every served computer runs in a disposable Firecracker realization constructed, booted, verified, and accepted from one immutable ComputerVersion = (CodeRef, ArtifactProgramRef). A subordinate typed disk-instantiation backend—not ComputerVersion logic—selects and optimizes the Firecracker-compatible block-device realization. Initial creation and recovery use the same materializer, and no served realization reads or clones a prior mutable data.img."
+  artifact: "Every existing Choir computer is inventoried and bound to an immutable ComputerVersion; every routable staging computer, including yusefnathanson@me.com (owner ID 5bd6de97-3b58-408c-bf89-c42c81b083de), is served by a Firecracker realization produced by the production ComputerVersion materializer through an independently testable disk-instantiation contract, with durable construction, disk-allocation, acceptance, observation, promotion, route-transition, and per-route rollback receipts. Newly created and recovered computers use that same path."
   acceptance:
     - action: "Create a new test ComputerVersion whose immutable CodeRef and ArtifactProgramRef contain unique verifier-known markers; delete or prove absence of any target realization; call the same production construction-and-boot function used by lifecycle recovery."
       proves: "The computer is generated from identified code and typed durable state, not selected from, cloned from, or repaired inside an opaque VM image."
@@ -45,26 +71,44 @@ finish:
     - action: "Boot the generated realization, obtain guest health and readiness, then fetch exact marker bytes, the expected embedded-Dolt head/object-graph facts, blob hashes, and provenance answers through authenticated supported product paths."
       proves: "The function produced a live Choir computer whose observable state matches the requested ComputerVersion."
       evidence_class: deployed_boot_and_product_readback
+    - action: "For every constructed realization, compare the configured capacity, backing data.img apparent and allocated size, Firecracker block-device size, partition geometry if present, ext4 block count and block size, and guest statfs capacity/headroom. Refuse acceptance unless the filesystem spans the intended device capacity minus only explicitly bounded partition/filesystem metadata and configured reserve; a 32 GiB data.img exposing only a 16 GiB filesystem is a hard failure."
+      proves: "The constructor creates coherent usable storage geometry and cannot repeat the current oversized-image/undersized-filesystem failure."
+      evidence_class: deployed_storage_geometry_acceptance
+    - action: "Resolve one typed disk-instantiation policy independently of ComputerVersion identity, then have the production materializer request a fresh Firecracker-compatible block device only through the disk backend contract. Verify the request and receipt bind logical capacity, filesystem, allocation strategy, reclaim/rebuild policy, cache budget, headroom thresholds, backend/version, generated device identity, apparent and allocated bytes, and geometry. Prove changing backend implementation or allocation policy for the same ComputerVersion changes only realization evidence, not ComputerVersion identity or required semantic observations."
+      proves: "ComputerVersion construction is abstracted over disk-image instantiation; raw sparse files, host paths, mkfs commands, and backend-specific optimization do not leak into durable computer identity or semantic equivalence."
+      evidence_class: disk_instantiation_contract_acceptance
+    - action: "Using a 32 GiB logical-capacity fixture with at most 1 GiB of selected materialized state, construct a fresh realization and prove host allocated bytes remain at or below 2 GiB while the guest sees the full configured capacity. Drive cache write/delete churn, then invoke the backend's supported reclaim or disposable-reconstruction optimization and prove allocated bytes return to the same bound without changing ComputerVersion or required observations. Verify capacity pressure selects a receipted larger fresh realization rather than in-place mutation of the current disk, and no operation scans, copies, or allocates the full logical image merely because of its apparent size."
+      proves: "Disk virtualization is intelligently thin, measurable, reclaimable by trim/hole-punch or clean reconstruction, and independent of logical capacity; a mostly empty 32 GiB computer does not consume 32 GiB of host storage."
+      evidence_class: deployed_disk_allocation_optimization
     - action: "After first acceptance, record the realization ID, state root, data-image path and inode/device or equivalent content identity, boot epoch, generated image hashes, and construction receipt. Stop it; delete or quarantine its entire state root and embedded-Dolt workspace; reclaim its TAP, firewall, port, and lease resources; and prove the old paths are absent or unreadable. Reinvoke the same production construction-and-boot function for the same ComputerVersion in a fresh state root."
       proves: "The second receipt has a distinct realization identity and fresh generated state root, records no source image or first-realization path access, and produces identical required typed observations. Reconstruction therefore depends only on immutable ComputerVersion inputs and named external authorities—not reboot, refresh, hardlink, sparse clone, snapshot, or source-VM copy."
       evidence_class: deployed_zero_realization_reconstruction
     - action: "Promote the accepted ComputerVersion through D-ROUTE with one vmctl-owned compare-and-swap route transition; prove the served route identity is that immutable ComputerVersion, proxy reads it only through vmctl's route-ledger contract, and traffic reaches only its accepted realization; then roll back to the prior accepted ComputerVersion and verify prior state."
       proves: "Routes are over ComputerVersion; lineage owner/desktop routing and hard-coded platform fallback are absent; realization identity is subordinate; promotion and rollback are atomic and bounded."
       evidence_class: deployed_route_promotion_rollback
-    - action: "Repeat the production constructor, boot, exact typed readback, route CAS, rollback, and no-SSH inspection path for the staging owner ComputerVersion that will actually serve choir.news."
-      proves: "The mission did not stop at a synthetic fixture; the deployed owner route is served by the audited constructor."
+    - action: "For yusefnathanson@me.com, run a bounded read-only extractor against a preserved clone and include any independently verified recoverable typed state in its ArtifactProgramRef; record omissions and corruption honestly. Whether extraction fully, partly, or not at all succeeds, construct and boot that account through the production materializer, perform exact readback of the selected ComputerVersion, route CAS, rollback, and no-SSH inspection. The nearly new a@b.com account may be the first control but cannot substitute for serving the owner account through the constructor."
+      proves: "The deployed owner route is served by the audited constructor and no longer depends on the failed image; recovered legacy owner data is a best-effort migration result, not a hidden completion gate or constructor input."
       evidence_class: deployed_owner_cutover_acceptance
+    - action: "Inventory every existing Choir computer and route in staging, including active, stopped, hibernated, failed, and unrouted records. Prove each computer's durable identity resolves one immutable ComputerVersion; for every served route, join the route to an accepted Firecracker realization and its production-materializer construction receipt. Exercise creation of a new computer and recovery of an existing disposable computer through the same materializer, then prove no legacy constructor or route-over-VM fallback can serve traffic."
+      proves: "Fleet completion is universal: yusefnathanson@me.com is not a one-account exception, every served computer is materialized from ComputerVersion, and future creation and recovery cannot bypass that boundary."
+      evidence_class: deployed_fleet_cutover_acceptance
     - action: "Inject full-disk, failed-GC, corrupted-local-journal, missing-blob, bad-hash, and unavailable-CodeRef cases into disposable candidates; verify refusal/quarantine and construction of a clean replacement where the typed roots remain valid."
       proves: "Local realization failure cannot be reported as active health or force in-place mutation of canonical state."
       evidence_class: adversarial_failure_acceptance
+    - action: "On a routed disposable staging computer whose ComputerVersion contains verifier-known durable markers, record the active realization and route receipt, stop it through the supported lifecycle path, deliberately corrupt its data.img through the scoped fault-injection path, and request normal lifecycle recovery. Verify vmctl detects and quarantines the damaged realization without repair, clone, resize, or source-image reads; invokes the production ComputerVersion constructor into a distinct fresh state root; independently accepts it; atomically routes traffic to it; and returns the exact marker observations through authenticated product reads. Perform diagnosis and recovery without SSH or manual host repair and record the bounded interruption."
+      proves: "Intentional destruction of realization-local disk state triggers seamless product-path reconstruction from ComputerVersion rather than in-place recovery, with no loss of state promised by that ComputerVersion."
+      evidence_class: deployed_corrupted_data_img_recovery
+    - action: "For the pushed origin/main SHA, verify staging Node B reports that deployed identity, then invoke the production Firecracker constructor, lifecycle recovery, disk-backend geometry/allocation probes, route CAS/rollback, and authenticated readback on Node B. Treat local macOS builds and tests as supporting evidence only."
+      proves: "The mission works on the only current Firecracker acceptance host and did not substitute local contracts, host-process fallback, an isolated worktree, or an undeployed commit for production behavior."
+      evidence_class: node_b_firecracker_acceptance
     - action: "From an external client with a scoped Choir key and no SSH, using only supported public/product APIs or Choir CLI commands backed by those APIs—not /internal/*, host files, journalctl, systemctl, or direct database reads—inspect the active ComputerVersion, construction/acceptance receipt, exact artifact bytes, current health, and scoped mutation refusal."
       proves: "The audited computer and its route identity are externally inspectable through supported authority boundaries."
       evidence_class: deployed_no_ssh_product_path
-  rollback: "Keep the previous accepted ComputerVersion and realization routable for a bounded TTL. On constructor, verifier, deploy, or product-path failure, refuse promotion or CAS the route back to that version; quarantine the failed realization and preserve typed receipts. Never roll back by booting or modifying the failed owner data.img."
+  rollback: "Retain each prior accepted ComputerVersion and realization for a bounded per-route TTL while fleet cutover proceeds serially. On constructor, verifier, deploy, or product-path failure, refuse that route's promotion or CAS it back to its prior accepted ComputerVersion; stop further fleet transitions, quarantine the failed realization, and preserve typed receipts. Never roll back by booting or modifying the failed owner data.img."
   landing:
     required: true
-    environment: staging
-    required_receipts: [pushed_commit, ci, deploy, environment_identity, deployed_constructor_receipt, independent_verifier, boot_readback, zero_realization_reconstruction, promotion_rollback, no_ssh_acceptance]
+    environment: staging_node_b
+    required_receipts: [pushed_origin_main_commit, ci, deploy, node_b_environment_identity, node_b_firecracker_acceptance, deployed_constructor_receipt, disk_instantiation_contract_acceptance, deployed_disk_allocation_optimization, independent_verifier, boot_readback, deployed_storage_geometry_acceptance, zero_realization_reconstruction, deployed_corrupted_data_img_recovery, promotion_rollback, fleet_inventory, deployed_fleet_cutover_acceptance, no_ssh_acceptance]
     registry_hygiene:
       required: true
       must_update: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
@@ -78,12 +122,18 @@ finish:
     - "The VM boots but exact typed state and provenance are not read back through the authenticated product path."
     - "Reboot/restart succeeds only because the first realization disk survived."
     - "The current failed owner computer is made reachable by in-place repair without the production constructor becoming the load-bearing lifecycle path."
+    - "Any existing computer lacks an immutable ComputerVersion identity, any served route lacks an accepted production-materializer construction receipt, or any initial-creation or recovery path can serve a realization constructed outside that boundary."
+    - "Any constructed data.img, Firecracker block device, partition, ext4 filesystem, or guest statfs view disagrees with the configured capacity beyond explicitly bounded metadata/reserve, including any recurrence of a 32 GiB image exposing only a 16 GiB filesystem."
+    - "Corrupting a disposable routed test computer's data.img requires SSH/manual host repair, mutates or reuses the damaged image, loses state promised by its ComputerVersion, or fails to produce and route an independently accepted fresh realization through the normal lifecycle path."
+    - "ComputerVersion, artifact-program resolution, semantic observation, route identity, or promotion logic depends on a raw-image format, host path, truncate/mkfs/resize command, sparse-file mechanism, or concrete disk backend."
+    - "A fresh 32 GiB logical-capacity fixture with at most 1 GiB selected materialized state allocates more than 2 GiB on the host; cache churn cannot be reclaimed through a supported optimization or disposable reconstruction; growth mutates the current disk in place; or any path scans/copies/allocates the full logical image solely because of apparent size."
+    - "A Firecracker, vmctl lifecycle, disk allocation/geometry, corruption/deletion recovery, route, or fleet claim is supported only by local macOS, host-process fallback, an unpushed worktree/commit, or any environment other than the matching origin/main deployment on staging Node B."
 
 boundaries:
   mutation_class: red
   conjecture_delta: "Replace 'the mutable VM disk is the computer' with 'ComputerVersion is the durable computer; a production function deterministically resolves, constructs, boots, verifies, and realizes it.'"
-  protected_surfaces: [ComputerVersion, artifact_program, embedded_Dolt, blobs, actor_recovery, vmctl, Firecracker, owner_route, promotion_rollback, auth_session, staging_deploy]
-  admissible_evidence_class: "Deployed constructor invocation plus independent typed-join verification, zero-realization reconstruction, authenticated exact readback, and route rollback. Local tests and opaque image health are supporting evidence only."
+  protected_surfaces: [ComputerVersion, artifact_program, embedded_Dolt, blobs, actor_recovery, disk_instantiation_backend, disk_capacity_policy, vmctl, Firecracker, all_computer_routes, promotion_rollback, auth_session, staging_deploy]
+  admissible_evidence_class: "Deployed constructor invocation through the typed disk-instantiation boundary, disk allocation/geometry/reclaim receipts, independent typed-join verification, zero-realization and corrupted-disk reconstruction, authenticated exact readback, and route rollback. Local tests and opaque image health are supporting evidence only."
   rollback_path: "Prior accepted ComputerVersion route; constructor candidates remain isolated until acceptance; failed realizations are quarantined, not repaired into acceptance."
   heresy_delta:
     discovered: ["H031 remains load-bearing", "durable_legacy_opaque data.img is production authority", "in-place reboot masquerades as recovery", "StateGenerator trusts an unenforced ArtifactProgramRef binding"]
@@ -104,9 +154,14 @@ boundaries:
     - "CodeRef identifies an immutable executable closure; ArtifactProgramRef identifies an immutable, ordered, tamper-evident typed program. Mutable aliases may resolve only through durable receipts that pin immutable outputs before construction."
     - "Actor recovery uses its narrow recovery log only; it must not become competing app, trajectory, or promotion truth."
     - "Construction receipts, observation sets, verifier joins, and promotion certificates are immutable evidence/provenance keyed by ComputerVersion and realization ID. They cannot override ArtifactProgramRef, embedded-Dolt app state, actor recovery, or the vmctl route slot and are not a third current-state store."
-    - "The failed owner image and the pre-e2fsck/rollback images remain read-only evidence until semantic recovery is settled."
+    - "data.img is realization-local writable machine state: it may contain the generated filesystem, embedded-Dolt materialization, package/build caches, temporary files, logs, and other recomputable acceleration state. It is never a ComputerVersion input, route identity, rollback authority, or sole copy of acknowledged durable state."
+    - "Legacy pre-cutover data recovery is optional under the owner's explicit authority. After cutover, any user-visible mutation reported as durable must be captured in the settled typed authority and pinned by a new immutable ArtifactProgramRef/ComputerVersion before its persistence is acknowledged; data.img-only writes are disposable and must not be represented as durable."
+    - "ComputerVersion and semantic materialization are independent of disk representation. The disk backend receives a typed realization-local plan and returns a Firecracker-compatible device plus immutable receipt; backend choice and policy revision are realization evidence, not CodeRef, ArtifactProgramRef, route identity, or semantic state."
+    - "Disk optimization is policy-driven and observable: logical capacity, physical allocation, geometry, cache budget, headroom, reclaim capability, and rebuild/grow decisions are receipted. Prefer discard/reclaim when verified and cheaper; otherwise destroy and reconstruct. Never copy or resize an accepted realization into the next one."
+    - "The failed owner image and the pre-e2fsck/rollback images remain read-only evidence through one bounded extractor attempt and explicit disposition. Failure to recover legacy owner data does not block constructor or fleet acceptance."
     - "A constructed realization is not routable until an independent verifier recomputes all required observations and the promotion certificate."
     - "Problem-documentation-first is satisfied by this Definition commit; implementation commits must reference this recorded substrate failure."
+    - "Canonical main is the one integration authority and origin/main is the deployed source of truth. Local worktrees may isolate bounded candidates and pure checks, but no worktree identity or local result substitutes for the pushed SHA, CI, Node B deployment identity, or Node B product-path evidence."
   excluded:
     - "Making ordinary Choir development run in capsules from an external Choir CLI agent; that is a successor mission, not hidden scope here."
     - "Autopaper activation."
@@ -118,22 +173,22 @@ boundaries:
     owner: "Choir product owner settles product identity, destructive recovery, and acceptance-scope decisions."
     orchestrator: "May implement and order work within this Definition; architecture proposals that conflict with owner-settled doctrine remain unratified."
     vmctl: "Owns realization lifecycle and route CAS only; it does not become semantic state authority."
-    materializer: "Resolves immutable inputs, constructs a candidate realization, and emits evidence; it cannot publish a route."
-    verifier: "Independently recomputes observations and acceptance; it cannot construct or promote."
+    materializer: "Resolves immutable inputs, requests realization-local resources through typed subordinate backend contracts, constructs a candidate realization, and emits evidence; it cannot depend on a concrete disk representation or publish a route."
+    disk_instantiation_backend: "Owns only realization-local block-device creation, geometry, allocation, reclaim/rebuild, and its receipt under a resolved policy. It cannot read semantic ComputerVersion state, define identity, clone prior mutable disks, accept a realization, or publish a route."
 
 conjectures:
   - id: C1-resolvable-computer-version
     claim: "Every active route can resolve one immutable CodeRef and one immutable ArtifactProgramRef without reading a VM disk."
-    falsifier: "Any required durable owner-visible state exists only inside data.img or an unreceipted mutable alias."
-    decision: "Inventory that state, assign its canonical typed authority, and add migration/extraction before constructor cutover; do not bless the image as authority."
+    falsifier: "Any state required by the selected ComputerVersion exists only inside data.img or an unreceipted mutable alias."
+    decision: "For post-cutover acknowledged durable state, assign a canonical typed authority and repair the write/pinning path before cutover. For legacy yusefnathanson@me.com data, make one bounded read-only extraction attempt and include only independently verified results; owner-authorized omission or baseline reset is admissible. No other legacy account data requires migration."
   - id: C2-complete-construction
     claim: "The production materializer can create all boot inputs and typed state for a healthy Firecracker guest from those refs."
     falsifier: "Boot or authenticated readback requires an inherited opaque file, secret, database, branch, or host mutation not named by the capability manifest."
     decision: "Make the dependency an immutable typed input with a receipt, or declare the capability unsupported and block acceptance."
   - id: C3-equivalence
     claim: "Independent post-boot observations are sufficient to accept semantic equivalence for the requested scope."
-    falsifier: "A required file, blob, Dolt head, object-graph fact, provenance answer, actor recovery state, or product operation cannot be recomputed."
-    decision: "Narrow no owner-required scope silently; repair the extractor/generator/verifier contract before promotion."
+    falsifier: "A file, blob, Dolt head, object-graph fact, provenance answer, actor recovery state, or product operation required by the selected ComputerVersion cannot be recomputed."
+    decision: "Repair the extractor/generator/verifier contract for state promised by the selected ComputerVersion. Legacy owner data outside that explicitly selected scope may be omitted under the recorded owner authority; never claim omitted state was preserved."
   - id: C4-disposable-realization
     claim: "Deleting one realization cannot delete the durable computer."
     falsifier: "Zero-realization reconstruction loses accepted state or needs bytes from the deleted disk."
@@ -142,43 +197,47 @@ conjectures:
     claim: "vmctl can route atomically between accepted ComputerVersions while realizations remain replaceable."
     falsifier: "Route truth names VM/desktop identity, split-brain is observable, or rollback requires mutable disk repair."
     decision: "Keep the legacy route frozen, repair CAS/acceptance joins, and repeat in a disposable candidate."
+  - id: C6-disk-instantiation-independence
+    claim: "The same ComputerVersion can be realized through any conforming Firecracker-compatible disk backend without changing required semantic observations, while logical capacity remains decoupled from host allocation."
+    falsifier: "ComputerVersion or semantic construction code names data.img paths/formats or filesystem commands; backend choice changes semantic identity; a mostly empty logical disk allocates near full capacity; reclaim requires cloning or mutating an accepted disk; or backend replacement cannot be verified from receipts."
+    decision: "Move representation-specific operations behind the typed disk-instantiation contract, reject the backend/policy, and repeat construction from immutable inputs. Do not add backend fields to ComputerVersion."
 
 execution:
   - phase: A-contain-and-extract
-    outcome: "Freeze in-place recovery of the failed owner realization, preserve all images, produce typed recovery/geometry/Dolt receipts from a stopped clone, and enumerate every state class needed for construction."
-    gate: "No source image mutation; semantic unknowns remain explicit; every required state class has one canonical authority or a named blocker."
+    outcome: "Freeze in-place recovery of the failed yusefnathanson@me.com realization, preserve source images, run one bounded read-only extractor attempt from a stopped clone, record verified recovered state and explicit omissions, confirm the account-specific contrast with booting accounts, reconcile a@b.com as a nearly new initial control, and enumerate every state class required for future ComputerVersion construction."
+    gate: "No source image mutation; extraction results and omissions are explicit; extractor failure does not block baseline reconstruction; every state class promised by a selected ComputerVersion has one canonical authority or a named blocker."
   - phase: B-resolve-immutable-inputs
     outcome: "Wire route lookup to ComputerVersion and implement durable resolvers that pin CodeRef and ArtifactProgramRef to immutable, hash-verified construction inputs."
     gate: "Delete LineageBasedRouteResolver, PROXY_RUNTIME_DB_PATH/RuntimeDBPath, static or hard-coded owner/desktop fallback routing, and every route use of ActiveSourceRef or RouteProfile. Inventory every route and activation writer; app-adoption and candidate-package switch/rollback/roll-forward may remain only as non-route source/build metadata and cannot publish routable state. The active D-ROUTE slot resolves exactly one immutable ComputerVersion; resolver failure is product-visible refusal, never fallback. No caller-trusted journal binding, mutable-ref race, JSON-registry route authority, or third state store remains."
   - phase: C-construct-and-boot
-    outcome: "Implement one production construction-and-boot function that creates a fresh correctly sized filesystem/realization, installs the immutable code closure, verifies the exact replayed journal/root against ArtifactProgramRef, replays typed file/blob/Dolt/app/actor state, boots Firecracker, and emits a construction receipt."
-    gate: "The function rejects missing or mismatched pins and is the lifecycle path for initial construction and failed-realization replacement. It never reads or clones a prior data.img and cannot invoke vmmanager SourceVMID/copySparseFile or existing-image resize/recovery paths. Its receipt classifies every input as immutable CodeRef closure, immutable ArtifactProgramRef tape, platform-owned service dependency, ephemeral realization credential/config, generated state, cache, or unsupported blocker; gateway/network credentials are ephemeral and provider secrets remain platform-owned. A generative round-trip harness proves Generate-then-extract equivalence against journal-derived observations for arbitrary valid tapes, not only hand-picked fixtures; host-side filesystem extraction is test scaffolding only and is not admissible acceptance evidence."
+    outcome: "Implement one production construction-and-boot function whose ComputerVersion semantics are independent of disk representation. It resolves a typed realization-local disk policy, asks a subordinate backend for a fresh optimized Firecracker-compatible block device, verifies the backend receipt and coherent capacity-policy device/partition/ext4/statfs geometry, installs the immutable code closure, verifies the replayed journal/root against ArtifactProgramRef, replays typed state, boots Firecracker, and emits a joined construction receipt."
+    gate: "The production materializer contains no raw-image path/format, truncate, mkfs, resize, sparse-copy, discard, or compaction logic; those operations live behind the typed disk-instantiation contract. The backend rejects missing policy pins, never reads/clones a prior data.img or invokes SourceVMID/copySparseFile, exposes logical capacity without eager physical allocation, receipts apparent/allocated bytes and geometry, supports verified reclaim or disposable reconstruction, and produces a new larger realization rather than resizing an accepted disk. The constructor remains the lifecycle path for creation and replacement, classifies every input, and proves arbitrary-valid-tape Generate-then-extract equivalence; host filesystem extraction remains test-only."
   - phase: D-verify-and-route
     outcome: "Independently extract and compare post-boot observations, implement the promotion certificate and vmctl-owned D-ROUTE transition, and freeze the complete verifier/promotion/route candidate. This phase stops at the frozen candidate and executes no route compare-and-swap."
-    gate: "Exact authenticated readback, health, geometry/headroom, provenance, rollback rehearsal, and all deterministic verifier and route checks pass on the frozen candidate. G3 acceptance is required before every D-ROUTE CAS; the proposed route is the immutable ComputerVersion and VM identity is absent from durable route authority."
+    gate: "Exact authenticated readback, health, capacity-policy geometry and headroom, provenance, rollback rehearsal, and all deterministic verifier and route checks pass on the frozen candidate. A backing-image/device/filesystem mismatch, including 32 GiB versus 16 GiB, is refusal. G3 acceptance is required before every D-ROUTE CAS; the proposed route is the immutable ComputerVersion and VM identity is absent from durable route authority."
   - phase: E-destroy-and-reconstruct
-    outcome: "After accepted G3, the integration authority first executes the reviewed test-route CAS and bounded rollback, then discards the accepted test realization, removes or renders unreadable every backing-state path and reclaims host network resources, and reconstructs equivalent state from the same ComputerVersion in a fresh state root; corruption/full-disk/refusal cases are exercised."
-    gate: "The verifier proves first-realization paths were unavailable, the second receipt names distinct realization/state identities and no source image, and all required observations match. Every injected local failure yields refusal/quarantine or clean typed reconstruction."
-  - phase: F-cutover-owner-and-close
-    outcome: "Execute owner cutover only after accepted G4: recover the affected owner through the audited constructor, perform the staging owner CAS, and collect deployed no-SSH product-path and restart/reconstruction evidence. Then freeze the post-CAS closure packet for G5. Registry updates, the terminal receipt, and status complete are a separate terminal-closure boundary and occur only after accepted G5."
-    gate: "Cutover execution requires accepted G4 and a serialized owner CAS. Terminal closure separately requires accepted G5 over the frozen post-CAS evidence; CI and deploy are green for the pushed SHA, staging reports that SHA, all acceptance actions pass, and protected images and rollback refs have explicit dispositions. Legacy in-place owner recovery, route-over-VM fallback, candidate-as-VM authority, vmctl JSON ownership-registry route writes, and duplicate app-adoption/candidate-package activation writers are deleted or hard-refusal-gated. Adoption, lineage, UI, Trace, and acceptance projections advance only after readback of the matching vmctl D-ROUTE receipt; missing, stale, or failed CAS leaves them unchanged. Generic stop/resume/diagnostic VM lifecycle may remain only subordinate to ComputerVersion construction and unable to publish route authority."
+    outcome: "After accepted G3, execute the reviewed test-route CAS and rollback, then prove deletion, corruption, and allocation-pressure modes. Remove an entire accepted state root and reconstruct it; separately corrupt a routed test data.img and invoke normal recovery; separately drive cache churn and capacity pressure, then reclaim verified holes or reconstruct into a fresh policy-sized device. Every replacement uses the same ComputerVersion through the disk backend contract in a distinct state root."
+    gate: "The verifier proves prior paths were unavailable or quarantined; replacement receipts name distinct realization/device identities, pinned disk policy/backend revisions, coherent geometry, and bounded physical allocation; required observations match; reclaim/rebuild returns the 32 GiB logical fixture with at most 1 GiB selected state to at most 2 GiB host allocation; growth creates a fresh realization; and no case uses SSH, manual repair, in-place mutation, clone, full-image scan/copy, or eager full allocation."
+  - phase: F-cutover-fleet-and-close
+    outcome: "Execute fleet cutover only after accepted G4: inventory every Choir computer, serialize per-route transitions to accepted ComputerVersions and materialized Firecracker realizations, reconstruct yusefnathanson@me.com through the audited constructor with whatever legacy state the bounded extractor independently verified, and collect deployed no-SSH product-path and restart/reconstruction evidence. a@b.com may be the first near-new control, but completion requires every served computer and the initial-creation and recovery paths. Then freeze the post-cutover closure packet for G5; registry updates, the terminal receipt, and status complete remain a separate boundary after accepted G5."
+    gate: "Cutover execution requires accepted G4 and serialized per-route fleet CAS transitions with bounded rollback. Terminal closure separately requires accepted G5 over the frozen post-cutover evidence; CI and deploy are green for the pushed SHA, staging reports that SHA, every existing computer resolves one immutable ComputerVersion, every served route joins an accepted production-materializer realization, initial creation and recovery cannot bypass the materializer, all acceptance actions pass, and protected images and rollback refs have explicit dispositions. Legacy in-place owner recovery, route-over-VM fallback, candidate-as-VM authority, vmctl JSON ownership-registry route writes, and duplicate app-adoption/candidate-package activation writers are deleted or hard-refusal-gated. Adoption, lineage, UI, Trace, and acceptance projections advance only after readback of the matching vmctl D-ROUTE receipt; missing, stale, or failed CAS leaves them unchanged. Generic stop/resume/diagnostic VM lifecycle may remain only subordinate to ComputerVersion construction and unable to publish route authority."
 
 orchestration:
   orchestrator: OMP
-  integration_authority: "One OMP integration authority owns protected mutations, adjudication, promotion, rollback, landing, and updates to this Definition."
+  integration_authority: "One OMP integration authority owns the reconciled canonical main worktree, protected integration, coherent commits, push to origin/main, adjudication, Node B deployment evidence, promotion, rollback, landing, and updates to this Definition."
   topology:
     - order: 1
       stage: base-reconciliation
       mode: serialized_read_only
-      rule: "Reconcile canonical/origin refs, deploy identity, dirty work, registries, protected images, and candidate ownership before dispatch or mutation."
+      rule: "Verify canonical main is clean and equals origin/main, registries name this sole executable goal, and staging Node B has a known deploy identity before dispatch or mutation. Unexpected dirtiness or identity mismatch blocks implementation until classified and preserved; the mission does not begin by absorbing WIP."
     - order: 2
       stage: mapping-and-candidates
       mode: parallel_bounded
-      rule: "Fan out read-only mapping and isolated candidates only when their worktrees, path scopes, state roots, external effects, and evidence outputs are disjoint and pinned to the reconciled base."
+      rule: "Default to the serialized canonical-main integration path. Fan out read-only mapping or use isolated linked-worktree candidates only when work is genuinely disjoint or a risky/frozen candidate needs isolation; pin each to the reconciled base. Worktrees run pure/focused checks only and never claim Firecracker or staging acceptance."
     - order: 3
       stage: protected-integration
       mode: serialized
-      rule: "The integration authority serializes shared-path and protected-surface mutation, promotion, rollback, owner cutover, Definition/registry updates, and landing. The first disposable test-route D-ROUTE CAS and entry to E require accepted G3; the staging-owner D-ROUTE CAS and entry to F require accepted G4; no other D-ROUTE CAS is authorized by this Definition; registry terminal closure requires accepted G5."
+      rule: "The integration authority applies accepted candidate changes to canonical main, commits coherent boundaries, pushes origin/main, and requires CI plus matching staging Node B deployment before protected acceptance. It serializes shared-path mutation, promotion, rollback, fleet cutover, Definition/registry updates, and landing. The first test-route CAS and entry to E require accepted G3; fleet transitions and entry to F require accepted G4, proceed one route at a time with rollback, and include the affected owner route. Terminal closure requires G5."
   phase_topology:
     - phase: A-contain-and-extract
       depends_on: [base-reconciliation]
@@ -198,11 +257,11 @@ orchestration:
       depends_on: [G3-frozen-verifier-promotion-route-candidate]
       dependency_condition: "G3 adjudication is accept; any other outcome prevents every D-ROUTE CAS and prevents entry to E."
       fan_out: "yes: after the reviewed test-route CAS, disposable disjoint failure scenarios may fan out; accepted-state destruction, rollback, and shared host-resource mutation are serialized"
-    - phase: F-cutover-owner-and-close
+    - phase: F-cutover-fleet-and-close
       depends_on: [G4-frozen-deployed-cutover-packet]
-      cutover_execution: "Accepted G4 precedes the serialized staging owner CAS; deployed product-path probes may fan out only after readback of that CAS."
-      terminal_closure: "After owner CAS and deployed product-path evidence, freeze the G5 packet. Registry updates, the terminal receipt, and now.status complete require G5 adjudication accept."
-      fan_out: "yes: read-only deployed acceptance probes may fan out after owner CAS; owner CAS, rollback, registry updates, terminal closure, and landing are serialized"
+      cutover_execution: "Accepted G4 precedes serialized per-route fleet CAS transitions. a@b.com may transition first as the near-new control; yusefnathanson@me.com must be served through the constructor after the bounded legacy-data extraction attempt, but full legacy recovery is not required; deployed product-path probes may fan out only for routes whose CAS receipt has been read back."
+      terminal_closure: "After every computer is bound to ComputerVersion, every served route joins an accepted materialized realization, the owner account is served independently of its old image, data.img disposability is proven, and initial-creation and recovery bypasses are absent, freeze the G5 packet. Registry updates, the terminal receipt, and now.status complete require G5 adjudication accept."
+      fan_out: "yes: read-only deployed acceptance probes may fan out after each serialized route CAS; route transitions, rollback, registry updates, terminal closure, and landing are serialized"
   review_policy:
     mechanism: agentic-consensus
     role_independence: "Builder, falsifier, and verifier are distinct agents with distinct obligations; none may self-approve its own output."
@@ -232,10 +291,10 @@ orchestration:
       after: C-construct-and-boot
       before: D-verify-and-route
       frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, evidence_refs]
-      deterministic_first: "Build, focused contract tests, generative Generate-then-extract equivalence, source-access refusal, and receipt-join gates run before panel review."
-      builder_obligation: "Present the production construction-and-boot candidate, capability/input classification, receipts, and arbitrary-valid-tape round-trip evidence."
-      falsifier_obligation: "Attack hidden source-image access, mutable-ref races, unbound journals, incomplete state replay, geometry/headroom, and fixture-only equivalence."
-      verifier_obligation: "Independently run the deterministic gates and recompute input/output, receipt, observation, and no-prior-realization joins from the frozen candidate."
+      deterministic_first: "Build, focused contract tests, generative Generate-then-extract equivalence, source-access refusal, disk-backend substitution conformance, capacity-policy image/block-device/partition/ext4/statfs geometry joins, fresh sparse-allocation bound, churn reclaim/reconstruction bound, no-full-image-scan/copy checks, and receipt joins run before panel review."
+      builder_obligation: "Present the substrate-independent production materializer, typed disk-instantiation contract, production optimized backend, policy resolver, joined receipts, backend-substitution evidence, arbitrary-valid-tape round-trip evidence, coherent geometry, and bounded physical allocation/reclaim proof."
+      falsifier_obligation: "Attack backend details leaking into ComputerVersion or semantic construction, hidden source-image access, mutable policy/ref races, unbound journals, incomplete replay, 32 GiB/16 GiB geometry mismatch, sparse allocation accounting, eager/full-image I/O, unreclaimed deleted cache blocks, in-place growth, and fixture-only equivalence."
+      verifier_obligation: "Independently substitute a conforming backend, rerun deterministic gates, and recompute ComputerVersion/input/output/observation joins separately from disk-policy/backend/device/allocation/geometry receipts, proving backend changes affect realization evidence only."
       adjudication: [accept, repair, reject, escalate]
       minority_rule: "A reproducible minority blocker overrides an unsupported majority pass."
       durable_evidence_ref: "required:G2 frozen review packet, independence telemetry, and adjudication receipt"
@@ -254,27 +313,27 @@ orchestration:
       durable_evidence_ref: "required:G3 frozen review packet, independence telemetry, and adjudication receipt"
     - id: G4-frozen-deployed-cutover-packet
       review_kind: agentic-consensus
-      changes_decision: "Whether frozen deployed reconstruction evidence authorizes the staging owner route CAS and cutover execution."
+      changes_decision: "Whether frozen deployed reconstruction evidence and the complete computer/route inventory authorize serialized fleet cutover."
       after: E-destroy-and-reconstruct
-      before: [F-cutover-owner-and-close, staging-owner-D-ROUTE-CAS]
+      before: [F-cutover-fleet-and-close, any-fleet-D-ROUTE-CAS]
       frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, evidence_refs]
-      deterministic_first: "Pushed-SHA, CI, deploy identity, constructor/readback, zero-realization reconstruction, adversarial refusal, prior-route rollback, CAS-precondition, and no-SSH product-path readiness gates run before panel review."
-      builder_obligation: "Present one immutable owner-cutover candidate joining the deployed SHA and environment to constructor, verification, reconstruction, proposed owner route transition, rollback, and product-path readiness evidence."
-      falsifier_obligation: "Seek stale or missing identities, unsupported readiness claims, unsafe destruction, split-brain owner CAS, unbounded rollback, legacy route writers, and evidence that depends on SSH or dashboard state."
-      verifier_obligation: "Independently recompute the packet joins, confirm deployed reconstruction and prior-route rollback, and prove the still-unexecuted owner CAS uses vmctl's frozen D-ROUTE authority."
+      deterministic_first: "Pushed-SHA, CI, deploy identity, constructor/readback, disk-backend abstraction and substitution, coherent storage geometry, bounded sparse allocation and churn reclamation/reconstruction, no-full-image-I/O, zero-realization reconstruction, corrupted-data.img recovery, adversarial refusal, complete computer/route inventory, per-route rollback, creation/recovery checks, bounded owner extractor receipt, and no-SSH readiness run before review."
+      builder_obligation: "Present one immutable fleet-cutover candidate joining deployment and inventory to the substrate-independent constructor, disk policy/backend/device/allocation receipts, deletion/corruption/pressure reconstruction, serialized transitions, rollback, bounded owner extraction, owner baseline reconstruction, and product-path readiness."
+      falsifier_obligation: "Seek backend coupling in ComputerVersion/semantics, omitted computers, missing materializer or disk receipts, eager/full allocation, unreclaimed cache churn, geometry mismatches, corruption recovery that reuses the disk or needs SSH, acknowledged data whose sole copy is data.img, hidden image reads/copies, lifecycle bypasses, stale identities, split brain, unbounded rollback, and dashboard-derived claims."
+      verifier_obligation: "Independently recompute inventory and semantic joins separately from disk policy/backend/allocation/geometry joins; verify backend substitution, bounded allocation after creation/churn, deletion/corruption/pressure replacement identities and observations, owner extraction disposition, deployed rollback, and every proposed vmctl-owned serialized fleet CAS."
       adjudication: [accept, repair, reject, escalate]
       minority_rule: "A reproducible minority blocker overrides an unsupported majority pass."
       durable_evidence_ref: "required:G4 frozen review packet, independence telemetry, and adjudication receipt"
     - id: G5-frozen-post-cutover-closure
       review_kind: agentic-consensus
-      changes_decision: "Whether the completed owner CAS and deployed product-path evidence authorize registry terminal closure, the terminal receipt, and status complete."
-      after: [staging-owner-D-ROUTE-CAS, deployed-no-SSH-product-path-evidence]
+      changes_decision: "Whether completed fleet cutover, owner-account construction independent of its old image, proven data.img disposability, and deployed product-path evidence authorize registry terminal closure, the terminal receipt, and status complete."
+      after: [fleet-D-ROUTE-cutover, owner-account-materializer-cutover, deployed-no-SSH-product-path-evidence]
       before: [registry-terminal-closure, terminal-receipt, status-complete]
       frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, evidence_refs]
-      deterministic_first: "Owner CAS and route-receipt readback, exact served ComputerVersion identity, deployed no-SSH acceptance, restart and zero-realization reconstruction, rollback availability, pushed-SHA/CI/deploy identity joins, candidate disposition, and registry-hygiene preflight checks run before panel review."
-      builder_obligation: "Present a frozen post-cutover closure packet joining the executed owner CAS to served identity, deployed product-path results, restart/reconstruction durability, rollback, candidate disposition, and proposed registry and terminal receipts."
-      falsifier_obligation: "Seek stale routes or deployments, product evidence from unsupported paths, hidden SSH dependence, missing acceptance classes, unsafe image/candidate disposition, registry divergence, rollback loss, or any claim inferred from dashboard health."
-      verifier_obligation: "Independently recompute all source/deploy/route/product-path/rollback/registry joins and confirm terminal closure changes are absent and status remains non-complete until this adjudication accepts."
+      deterministic_first: "Complete inventory and route receipts, exact ComputerVersion and materializer joins, disk-backend abstraction/substitution, pinned policy/backend/device receipts, coherent geometry, bounded sparse allocation and churn optimization, no-full-image-I/O, deletion/corruption/pressure recovery, bounded owner extraction and independent owner boot, new-computer creation/recovery, no-SSH acceptance, restart reconstruction, rollback, source/CI/deploy identity, candidate disposition, and registry checks run before review."
+      builder_obligation: "Present a frozen closure packet joining every computer and route to ComputerVersion and accepted realizations, with substrate-independent materializer and disk-backend evidence, bounded physical allocation/reclaim, coherent geometry, deletion/corruption/pressure recovery, owner cutover, deployed product paths, lifecycle enforcement, rollback, candidate disposition, and proposed terminal receipts."
+      falsifier_obligation: "Seek backend details in durable identity or semantic code, omitted routes, missing receipts, full-capacity host allocation for sparse fixtures, unreclaimed churn, full-image scans/copies, in-place growth, geometry mismatch, damaged-disk reuse/manual repair, lifecycle bypasses, unsupported product evidence, SSH dependence, unsafe disposition, registry divergence, rollback loss, or dashboard-derived claims."
+      verifier_obligation: "Independently recompute computer/ComputerVersion/route/materializer semantic joins separately from disk-policy/backend/device/allocation/geometry and destroyed/corrupted/pressure replacement receipts, plus source/deploy/product/rollback/registry joins; terminal closure remains absent until acceptance."
       adjudication: [accept, repair, reject, escalate]
       minority_rule: "A reproducible minority blocker overrides an unsupported majority pass."
       durable_evidence_ref: "required:G5 frozen review packet, independence telemetry, and adjudication receipt"
@@ -286,21 +345,21 @@ orchestration:
 
 now:
   status: working
-  slice: "A-contain-and-extract"
-  question: "Can the affected owner computer be reconstructed from settled typed authorities without reading its failed mutable realization as canonical state?"
+  slice: "base-reconciliation"
+  question: "Does the owner's clean canonical main equal origin/main, do the registries identify this sole executable goal, and is the staging Node B deploy identity known so construction can begin from one unambiguous base?"
   reconciliation:
-    observed_at: 2026-07-16T01:22:00Z
-    source_ref: main/origin@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
-    deploy_identity: staging@9d9945e65f5b54069e1a86a530cb0960d96b3474
+    observed_at: 2026-07-16T02:26:31Z
+    source_ref: pending_owner_pre_run_commit_and_push
+    deploy_identity: pending_matching_staging_node_b_deploy
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
-      - doctrine:docs/choir-doctrine.md@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
-      - doctrine:docs/agent-product-doctrine.md@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
-      - mission_graph:docs/mission-graph.yaml@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
-      - authority_manifest:docs/doc-authority-manifest.yaml@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
+      - doctrine:docs/choir-doctrine.md@pending_source_reconciliation
+      - doctrine:docs/agent-product-doctrine.md@pending_source_reconciliation
+      - mission_graph:docs/mission-graph.yaml@pending_source_reconciliation
+      - authority_manifest:docs/doc-authority-manifest.yaml@pending_source_reconciliation
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: start.worktree_inventory
-    status: reconciled
+    worktree_inventory_ref: pending_clean_post_push_inventory
+    status: reconciling
   candidate:
     id: none
     state: none
@@ -310,21 +369,21 @@ now:
     digest: none
     scope: []
   decision:
-    selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor-round-trip, G3 pre-route-CAS, G4 pre-owner-CAS, and G5 pre-terminal-closure consensus gates."
-    kind: operational
+    selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
+    kind: architectural
     status: settled
     source: owner
-    evidence_ref: "Owner choice in this 2026-07-15 conversation, incorporated into this Definition."
+    evidence_ref: "Owner choices covering fleet scope, disposable data.img, legacy-data scope, corruption recovery, geometry, disk-instantiation abstraction/optimization, canonical-main integration, and Node B-only Firecracker acceptance in this 2026-07-15 conversation."
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-15T22:36:30Z
-    consequence: "OMP may execute this Definition while optionally serving the skill-owned live dashboard as a non-authoritative projection, but no D-ROUTE CAS, owner CAS, registry terminal closure, terminal receipt, or status complete may cross its named preceding accepted frozen gate."
+    consequence: "ComputerVersion and semantic materialization cannot depend on disk representation. Invocation requires clean canonical main equal to origin/main. Every served realization must join an accepted materializer receipt to a pinned disk-policy/backend/device receipt; deletion, corruption, cache churn, and capacity pressure reconstruct through that boundary without losing promised state. Implementation lands through origin/main and protected claims require the matching staging Node B deployment. Worktrees are optional isolation, not acceptance. No fleet CAS or terminal closure may cross its preceding accepted gate."
   evidence_refs:
     - start.observed_artifact
     - docs/ACTIVE.md
     - docs/mission-graph.yaml
     - docs/doc-authority-manifest.yaml
-  blocker_or_risk: "The failed owner image may contain the only copy of some accepted state, and its Dolt semantic integrity is unknown. Preserve it; do not confuse forensic extraction with the permanent constructor input model."
-  next_action: "Before code mutation, inventory constructor inputs and resolvers from the reconciled source, record the stopped-clone recovery manifest without mutating source images, and freeze one minimal production constructor contract."
+  blocker_or_risk: "The invocation source and staging deploy identities remain pending until the owner commits and pushes this Definition/registry set and confirms canonical main is clean; no implementation is authorized before reconciliation. Any unexpected dirty path blocks execution for classification/preservation. Afterward, the old owner image may be partially corrupt, and the architectural risks remain acknowledged state existing only in data.img, disk-backend leakage, eager/full allocation, unreclaimed cache churn, and hidden clone/resize/full-image-I/O paths."
+  next_action: "After the owner commits and pushes, verify clean canonical main equals origin/main, registries are coherent, and the staging Node B deploy identity is known; classify and preserve any unexpected dirtiness rather than proceeding. Then inventory constructor inputs, durability writes, and disk lifecycle callers; record the bounded owner extraction manifest; and freeze the typed disk-instantiation contract and optimized production backend."
 
 successor:
   status: unauthorized_until_this_definition_complete
@@ -339,18 +398,31 @@ view:
   generator_version: "definition-dashboard-js/v1"
   authority: "The skill-owned live dashboard is a human-readable, non-editable projection only; this Markdown/YAML Definition is the sole execution and completion authority. Localhost is transport for owner inspection, not an authority source."
   lifecycle: "The dashboard process is an in-memory OMP session process, not a system LaunchAgent, so it does not survive a host reboot and must be restarted manually with the generator command above. A Tailscale serve tcp forward on tailnet port 8788 maps this loopback endpoint to the owner's iPhone; that forward survives reboot because Tailscale itself runs as a LaunchAgent, but nothing listens on 8788 until the dashboard process is restarted. Port 8788 is used because 8787 is occupied by HermesWebUI on this host."
-  refresh: "The skill-owned server renders the owner view in memory rather than dumping YAML or creating a repository artifact; while served, server-sent events move the view from current to explicitly unavailable on source invalidation and back to current only after successful regeneration, without serving stale content as current or inferring state."
+  refresh: "The skill-owned server renders the owner view in memory rather than dumping YAML or creating a repository artifact; while served, server-sent events move the view from current to explicitly unavailable on Definition or repository-state invalidation and back to current only after successful regeneration. Every successful regeneration recomputes repository metadata from the dashboard process's worktree without fetching or mutating Git state. Under --watch, changes to dashboard-view.mjs and dashboard-git.mjs hot-reload into the running server; dashboard.mjs server changes still require a process restart. It never serves stale content as current or infers state."
   projection_contract:
-    mode: "Responsive prose-first editorial layout with the most important information first; neither card-grid composition nor a narrow single-column desktop reader, and no disclosure/expand interactions."
+    mode: "Responsive prose-first editorial layout with the most important information first; neither card-grid composition nor a narrow single-column desktop reader. Mission authority and evidence have no disclosure/expand interactions; the repository metadata strip alone may collapse its uncommitted-file inventory."
+    repository_metadata:
+      position: "A compact status strip directly below the title and before the finish."
+      source: "Observed read-only from the Git worktree in which the dashboard process runs; never copied from start.worktree_inventory or treated as mission authority."
+      identity: "Show the checked-out branch, or detached HEAD explicitly, the abbreviated HEAD commit, the worktree path, and whether it is the primary or a linked worktree."
+      upstream: "Show the configured upstream ref and HEAD's commit counts ahead and behind that locally available tracking ref. Do not fetch. Show no-upstream or unknown explicitly, and include the observed tracking-ref identity so cached remotes are not presented as current network truth."
+      changes: "Place branch/HEAD and worktree/upstream on one meta row, then a full-width disclosure beneath them. Keep the native triangle on the same line as the file-count label and total +/- LOC so collapsing never moves that summary; open by default. Its compact, separator-free inventory lists every staged, unstaged, conflicted, and untracked non-ignored path with its state and individual +/- LOC; identify binary files separately because they have no meaningful LOC count. Compute deltas relative to HEAD across staged, unstaged, and untracked files. Never report an unreadable or unsupported state as clean or zero."
+      refresh: "Recompute on initial render and every successful live refresh; repository-state changes must invalidate and refresh the strip independently of Definition content changes."
+      authority: "This strip is situational metadata only. It cannot update start, now.reconciliation, candidate identity, acceptance, or completion."
+    session_log:
+      position: "Compact footer strip below the projection-only note."
+      scope: "Ephemeral process events for this dashboard session only: start, successful refresh cause, script reload, and failure. Also track each currently dirty path's first-seen-dirty time in this session and filesystem last-modified time. No Git fetch; no durable mission authority."
+      presentation: "Show the newest five events inline. Collapse earlier events and the dirty-file timestamp inventory behind one closed disclosure so the page stays calm."
+      authority: "Session-only projection aid. It cannot update start, now, acceptance, or completion, and it disappears when the process exits."
     responsive_layout:
       desktop: "At 1280–1440px, use the available width for a dense, legible editorial composition with aligned information regions; structural phase and gate sections are allowed where they improve scanning."
       mobile: "At 480px and below, preserve the same semantic reading order in one clean column with zero horizontal overflow."
     hierarchy: "Use font family, scale, weight, bold, italics, and restrained semantic color as the primary hierarchy; borders and containers remain secondary."
     content_shape:
       scalar_and_map_fields: "Render as prose or compact definition groups, never decorative bullet lists."
-      lists_only_for_source_lists: [finish.acceptance, finish.not_done_when, now.evidence_refs, start.worktree_inventory, execution]
+      lists_only_for_source_lists: [finish.acceptance, finish.not_done_when, now.evidence_refs, start.worktree_inventory, execution, view.projection_contract.repository_metadata.changes]
       structural_sections_allowed: [execution, orchestration.decision_gates]
-    header: [title, provenance, non_authority_note]
+    header: [title, repository_metadata, provenance, non_authority_note]
     top_order: [finish, current_next, blocker_question, path, gates, proof, start, secondary_context]
     current_next: [now.status, now.slice, now.next_action]
     blocker_question: [now.blocker_or_risk, now.question]

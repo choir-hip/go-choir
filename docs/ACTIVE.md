@@ -28,6 +28,17 @@ remains load-bearing only for settled storage/D-ROUTE authority and H031
 detector/deletion contracts consumed by phases B, D, and F of the active
 Definition. It is not a competing `/goal`.
 
+## Draft Successor Definitions — Not Executable
+
+[`definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md`](definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md)
+is an owner-authorized **draft** successor for empirically optimizing
+ComputerVersion realization performance after audited construction completes.
+It is blocked, is not a `/goal` entrypoint, and authorizes no implementation or
+benchmark claim. Its Firecracker benchmarks must run on Node B; local macOS
+timing is inadmissible. Reconcile and revise the draft from the completed
+predecessor's deployed baseline, set owner-ratified numerical SLOs, and promote
+it through all registries before execution.
+
 ## Supporting Maintenance
 
 [`definitions/choir-seam-repair-2026-07-10.md`](definitions/choir-seam-repair-2026-07-10.md)

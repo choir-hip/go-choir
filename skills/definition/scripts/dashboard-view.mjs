@@ -254,6 +254,102 @@ function sourceMeta(source) {
   const parts = [source.path, source.digest ? `SHA-256 ${source.digest}` : "", source.generatedAt, source.generatorVersion ? `Generator ${source.generatorVersion}` : ""].filter(isMeaningful);
   return parts.join(" · ") || "Source provenance unavailable";
 }
+function fileLineDelta(file) {
+  if (file?.binary) return `<span class="repo-change-delta"><span class="repo-delta muted">binary</span></span>`;
+  if (file?.addedLines === null || file?.deletedLines === null || file?.addedLines === undefined || file?.deletedLines === undefined) {
+    return `<span class="repo-change-delta"><span class="repo-delta muted">?</span></span>`;
+  }
+  const added = Number(file.addedLines);
+  const deleted = Number(file.deletedLines);
+  if (added === 0 && deleted === 0) {
+    return `<span class="repo-change-delta"><span class="repo-delta muted">0</span></span>`;
+  }
+  return `<span class="repo-change-delta">${added ? `<span class="repo-delta add">+${added}</span>` : ""}${deleted ? `<span class="repo-delta del">−${deleted}</span>` : ""}</span>`;
+}
+
+
+function formatSessionTime(value) {
+  if (!isMeaningful(value)) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function renderSessionEvent(event) {
+  const record = isRecord(event) ? event : {};
+  const detail = isMeaningful(record.detail) ? `<span class="session-detail">${escapeHTML(record.detail)}</span>` : "";
+  return `<li><time datetime="${escapeHTML(text(record.at, ""))}">${escapeHTML(formatSessionTime(record.at))}</time><span class="session-summary">${escapeHTML(text(record.summary, "Event"))}</span>${detail}</li>`;
+}
+
+function renderSessionLog(session) {
+  if (!isRecord(session) || !Array.isArray(session.events) || session.events.length === 0) return "";
+  const recent = values(session.recentEvents).filter(isMeaningful);
+  const earlier = values(session.earlierEvents).filter(isMeaningful);
+  const dirtyFiles = values(session.dirtyFiles).filter((file) => isRecord(file) && isMeaningful(file.path));
+  const recentMarkup = recent.length
+    ? `<ol class="session-recent">${recent.map(renderSessionEvent).join("")}</ol>`
+    : "";
+  const earlierMarkup = earlier.length
+    ? `<ol class="session-earlier">${earlier.map(renderSessionEvent).join("")}</ol>`
+    : "";
+  const dirtyMarkup = dirtyFiles.length
+    ? `<ul class="session-files">${dirtyFiles.map((file) => {
+        const first = formatSessionTime(file.firstSeenAt);
+        const last = formatSessionTime(file.lastModifiedAt);
+        return `<li><code>${escapeHTML(file.path)}</code><span class="session-file-state">${escapeHTML(humanize(file.state ?? "changed"))}</span><span class="session-file-times">seen ${escapeHTML(first)} · mtime ${escapeHTML(last)}</span></li>`;
+      }).join("")}</ul>`
+    : `<p class="session-empty">No dirty files in this session.</p>`;
+  const moreLabel = earlier.length
+    ? `${earlier.length} earlier events · ${dirtyFiles.length} dirty-file timestamps`
+    : `${dirtyFiles.length} dirty-file timestamps`;
+  return `<section class="session-log" aria-label="Dashboard session log">
+    <p class="session-kicker"><strong>Session only.</strong> Ephemeral process log — not mission authority. Started ${escapeHTML(formatSessionTime(session.startedAt))}.</p>
+    ${recentMarkup}
+    <details class="session-more">
+      <summary>${escapeHTML(moreLabel)}</summary>
+      ${earlierMarkup}
+      <h3 class="session-files-title">Dirty files</h3>
+      ${dirtyMarkup}
+    </details>
+  </section>`;
+}
+
+function renderRepositoryMetadata(repository) {
+  if (!isRecord(repository) || repository.available !== true) {
+    return `<section class="repo-status unavailable" aria-label="Repository status"><p><strong>Git status unavailable</strong><span>${escapeHTML(text(repository?.reason, "Repository metadata was not collected."))}</span></p></section>`;
+  }
+  const identity = repository.branch
+    ? `Branch ${repository.branch}`
+    : repository.detached
+      ? "Detached HEAD"
+      : "Branch unavailable";
+  const head = repository.head ? `HEAD ${repository.head}` : "HEAD unavailable";
+  const worktree = `${humanize(repository.worktreeKind || "unknown")} worktree · ${text(repository.worktreePath, "Path unavailable")}`;
+  const upstream = repository.upstream
+    ? `${repository.upstream}${repository.upstreamHead ? ` @ ${repository.upstreamHead}` : ""} · ${repository.ahead ?? "?"} ahead · ${repository.behind ?? "?"} behind`
+    : "No configured upstream";
+  const totals = repository.addedLines === null || repository.deletedLines === null
+    ? `LOC unavailable · ${repository.unreadableFiles ?? "?"} unreadable`
+    : `+${repository.addedLines ?? 0} −${repository.deletedLines ?? 0}`;
+  const binary = repository.binaryFiles ? ` · ${repository.binaryFiles} binary` : "";
+  const changedFiles = values(repository.changedFiles).filter((file) => isRecord(file) && isMeaningful(file.path));
+  const fileList = changedFiles.length
+    ? `<ul class="repo-change-list">${changedFiles.map((file) => `<li><code>${escapeHTML(file.path)}</code><span class="repo-change-state">${escapeHTML(humanize(file.state ?? "changed"))}</span>${fileLineDelta(file)}</li>`).join("")}</ul>`
+    : Number(repository.dirtyFiles ?? 0) > 0
+      ? `<p class="repo-change-empty muted">File inventory unavailable.</p>`
+      : `<p class="repo-change-empty">Working tree clean.</p>`;
+  return `<section class="repo-status" aria-label="Repository status">
+    <div class="repo-meta">
+      <p><strong>${escapeHTML(identity)}</strong><span>${escapeHTML(head)}</span></p>
+      <p><strong>${escapeHTML(worktree)}</strong><span>${escapeHTML(upstream)}</span></p>
+    </div>
+    <details class="repo-changes" open>
+      <summary><span class="repo-summary-line"><strong>${escapeHTML(`${repository.dirtyFiles ?? "?"} uncommitted files`)}</strong><span>${escapeHTML(`${totals}${binary}`)}</span></span></summary>
+      ${fileList}
+    </details>
+  </section>`;
+}
+
 
 export function renderDashboard(model) {
   const safeModel = isRecord(model) ? model : {};
@@ -353,6 +449,76 @@ export function renderDashboard(model) {
     .provenance { margin-bottom: var(--space-3); color: var(--muted); font-family: var(--font-label); font-size: var(--text-sm); overflow-wrap: anywhere; }
     .authority-note { margin: 0; padding-left: var(--space-4); border-left: var(--rule-emphasis) solid var(--accent); color: var(--muted); }
     .authority-note strong { color: var(--ink); }
+    .repo-status {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin-top: var(--space-4);
+      padding-top: var(--space-3);
+      border-top: 1px solid var(--line);
+      font-family: var(--font-label);
+      font-size: var(--text-sm);
+    }
+    .repo-meta {
+      display: grid;
+      grid-template-columns: minmax(12rem, 0.85fr) minmax(0, 1.15fr);
+      gap: var(--space-4) var(--space-6);
+    }
+    .repo-status p { min-width: 0; margin: 0; }
+    .repo-status .repo-meta strong, .repo-status .repo-meta span { display: block; overflow-wrap: anywhere; }
+    .repo-status .repo-meta strong { color: var(--ink); }
+    .repo-status .repo-meta span { margin-top: var(--space-1); color: var(--muted); }
+    .repo-status.unavailable { display: block; }
+    .repo-changes { min-width: 0; }
+    .repo-changes > summary {
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .repo-summary-line {
+      display: inline-flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.15rem 0.75rem;
+    }
+    .repo-summary-line strong { font-weight: 700; }
+    .repo-summary-line span { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .repo-change-list {
+      display: grid;
+      gap: 0.15rem;
+      margin: 0.4rem 0 0 1.15rem;
+      padding: 0;
+      list-style: none;
+    }
+    .repo-change-list li {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      column-gap: 0.9rem;
+      align-items: baseline;
+      line-height: 1.35;
+    }
+    .repo-change-list code {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: var(--ink);
+      font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    .repo-change-state {
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .repo-change-delta {
+      display: inline-flex;
+      gap: 0.35rem;
+      justify-content: end;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .repo-delta.add { color: var(--positive); }
+    .repo-delta.del { color: var(--critical); }
+    .repo-delta.muted { color: var(--muted); }
+    .repo-change-empty { margin: 0.4rem 0 0 1.15rem; color: var(--positive); }
+    .repo-change-empty.muted { color: var(--muted); }
     main { padding-block: var(--space-6) var(--space-8); }
     .briefing { padding-bottom: var(--space-6); border-bottom: 1px solid var(--line-strong); }
     .briefing-grid {
@@ -459,8 +625,32 @@ export function renderDashboard(model) {
     .body-copy { overflow-wrap: anywhere; }
     footer { padding-block: var(--space-5); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--text-sm); }
     footer strong { color: var(--ink); }
+    .session-log { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--line); font-family: var(--font-label); }
+    .session-kicker { margin: 0 0 var(--space-3); }
+    .session-recent, .session-earlier, .session-files { margin: 0; padding: 0; list-style: none; }
+    .session-recent { display: grid; gap: 0.2rem; }
+    .session-recent li, .session-earlier li, .session-files li {
+      display: grid;
+      grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+      gap: 0.55rem 0.85rem;
+      align-items: baseline;
+      line-height: 1.35;
+    }
+    .session-recent time, .session-earlier time { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .session-summary { color: var(--ink); }
+    .session-detail { color: var(--muted); white-space: nowrap; }
+    .session-more { margin-top: var(--space-3); }
+    .session-more > summary { cursor: pointer; color: var(--ink); }
+    .session-earlier { margin-top: var(--space-3); display: grid; gap: 0.2rem; }
+    .session-files-title { margin: var(--space-4) 0 var(--space-2); font-size: var(--text-sm); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+    .session-files { display: grid; gap: 0.2rem; }
+    .session-files code { min-width: 0; overflow-wrap: anywhere; color: var(--ink); font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.92em; }
+    .session-file-state { color: var(--muted); white-space: nowrap; }
+    .session-file-times { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .session-empty { margin: var(--space-2) 0 0; color: var(--muted); font-style: italic; }
     @media (max-width: 64rem) {
       .masthead-grid, .briefing-grid { grid-template-columns: 1fr; gap: var(--space-5); }
+      .repo-meta { grid-template-columns: 1fr; }
       .finish-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .phase-list { grid-auto-flow: row; grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .phase { border-top: 1px solid var(--line); }
@@ -470,6 +660,9 @@ export function renderDashboard(model) {
       .masthead, main { padding-top: var(--space-5); }
       .section { margin-top: var(--space-5); padding-top: var(--space-5); }
       .finish-details, .gate-list, .proof-list, .start-grid, .start-support-grid, .worktree-list, .secondary-grid { grid-template-columns: 1fr; }
+      .repo-meta { grid-template-columns: 1fr; }
+      .session-recent li, .session-earlier li, .session-files li { grid-template-columns: 4.75rem minmax(0, 1fr); }
+      .session-detail, .session-file-times { grid-column: 2; }
       .gate:nth-child(2) { padding-top: var(--space-5); border-top: 1px solid var(--line-strong); }
       .phase-list { grid-template-columns: 1fr; }
       .phase { padding: var(--space-3) 0; border-left: 0; }
@@ -496,7 +689,8 @@ export function renderDashboard(model) {
 </head>
 <body>
   <header class="masthead">
-    <div class="shell masthead-grid">
+    <div class="shell">
+      <div class="masthead-grid">
       <div>
         <p class="kicker">Live Definition projection</p>
         <h1>${escapeHTML(text(title))}</h1>
@@ -506,6 +700,8 @@ export function renderDashboard(model) {
         <p class="provenance">${escapeHTML(sourceMeta(safeModel.source))}</p>
         <p class="authority-note"><strong>Read-only owner view.</strong> This current projection is non-authoritative. It does not approve a gate, authorize work, or prove completion; the source Definition remains the sole authority.</p>
       </div>
+      </div>
+      ${renderRepositoryMetadata(safeModel.repository)}
     </div>
   </header>
 
@@ -608,7 +804,7 @@ export function renderDashboard(model) {
     </div>
   </main>
 
-  <footer><div class="shell"><strong>Projection only.</strong> Dashboard health means the renderer is current; it is not an acceptance receipt, gate decision, mutation authority, or completion signal.</div></footer>
+  <footer><div class="shell"><p><strong>Projection only.</strong> Dashboard health means the renderer is current; it is not an acceptance receipt, gate decision, mutation authority, or completion signal.</p>${renderSessionLog(safeModel.session)}</div></footer>
   <script>${eventScript}</script>
 </body>
 </html>`;

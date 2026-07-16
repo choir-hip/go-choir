@@ -260,6 +260,14 @@ documents:
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md]
     refresh_triggers: [mission_state_change, mission_graph_change, computer_version_change, vmctl_change, staging_deploy, audited_constructor_acceptance]
 
+  - path: docs/definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: blocked, entrypoint: false}
+    witnesses: [docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md]
+    refresh_triggers: [audited_constructor_acceptance, predecessor_completion, node_b_baseline, owner_slo_ratification, registry_promotion]
+
   - path: docs/definitions/choir-wire-store-conformance-2026-07-11.md
     claim_scope: current
     is_root: []
