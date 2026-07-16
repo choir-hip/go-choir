@@ -361,13 +361,13 @@ now:
     worktree_inventory_ref: "canonical main and origin/main equal at 514c5402 before staging promotion-key configuration; only the intentional Node B public-key and Definition state update are dirty"
     status: reconciled
   candidate:
-    id: none
-    state: none
-    ref: none
-    owner: none
-    base: none
-    digest: none
-    scope: []
+    id: candidate-control-20260716-d
+    state: constructed_unfrozen_awaiting_owner_approval
+    ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
+    owner: autoputer-control
+    base: refs/heads/main@7122f2799be4458f4b925be11990321c7e70ffc4
+    digest: "00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984"
+    scope: [disposable-control-construction, pre-bootstrap-freeze, no-route-cas]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -400,8 +400,11 @@ now:
     - "commit ab89a200: G3-accepted sealed SQL writer, independent verifier, typed disk receipt, fresh materializer/launcher joins, signed frozen bootstrap/promote/rollback envelopes; no route CAS executed"
     - "GitHub Actions CI run 29536138235: success; Node B activation receipt 514c540203695ca5511524016b3242568f858473 at 2026-07-16T21:42:03Z with vmctl active"
     - "owner-controlled Ed25519 private key stored outside the repository at ~/.config/choir/promotion-authority-ed25519.pem; staged Node B configuration contains only public key oEdoKFfUCLiOsxNX5J8bT3PQDrjqjVeuU8usTLHSYZ4="
-  blocker_or_risk: "CI and Node B deployment now prove the sealed source identity, and an owner-controlled Ed25519 private key exists outside the repository with only its public key staged for vmctl configuration. No route CAS is authorized until that public key is deployed and pinned, the deployed constructor/verifier produces a real frozen candidate, independent G3 review accepts the exact candidate, and the owner explicitly authorizes its signed bootstrap and bounded rollback."
-  next_action: "Deploy and verify the pinned public promotion key, then use the internal product control path to pin immutable inputs, construct and independently verify one disposable candidate, and freeze its bootstrap plan without applying it. Present that exact frozen candidate and rollback/disposal plan for independent G3 review and explicit owner authorization before any route CAS."
+    - "Node B activation receipt 7122f2799be4458f4b925be11990321c7e70ffc4; vmctl signed promotion authority and production constructor active"
+    - "construction candidate-control-20260716-d: SHA-256 00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984; disk receipt c96eded7; healthy epoch 1; equivalent"
+    - docs/evidence/audited-construction-phase-d-2026-07-16.md
+  blocker_or_risk: "The public promotion key is deployed and pinned and the product path constructed one healthy equivalent disposable realization. Freezing its bootstrap requires a cryptographically signed owner approval over route computer:autoputer-control:control-20260716, the exact ComputerVersion, and construction digest 00802b80. The orchestrator cannot infer that owner authorization. No route/evidence CAS is authorized until the owner explicitly approves that payload, the exact frozen candidate passes independent G3 review, and the owner separately authorizes apply plus disposal/rollback."
+  next_action: "Present the exact constructed ComputerVersion, construction digest, disposable route, and disposal boundary for explicit owner approval. If approved, sign only that approval, call deployed prepare-bootstrap to recompute independent verification and freeze a non-executed candidate, then run deterministic checks and G3 review before requesting separate apply authorization."
 
 successor:
   status: unauthorized_until_this_definition_complete

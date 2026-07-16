@@ -137,3 +137,16 @@
 - Conjecture delta: path authorization and content-addressed receipt integrity are separate phases during construction; external inspection must require both, while constructor finalization must perform authorized geometry acquisition before the digest can exist.
 - Heresy delta: discovered `1`; introduced `0`; repaired `0` at this checkpoint.
 - Rollback: revert the subsequent narrow constructor/internal-inspection repair; accepted G3 source remains pre-deploy and pre-CAS.
+
+## Deployed disposable construction receipt — pre-bootstrap
+
+- Mutation class: red.
+- Deployed identity: Node B activation receipt `7122f2799be4458f4b925be11990321c7e70ffc4`, CI run `29537931945`; vmctl logged `signed promotion authority configured` and `production ComputerVersion constructor configured` at 2026-07-16T22:06:31Z.
+- Immutable code input: `code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380`, source commit `7122f2799be4458f4b925be11990321c7e70ffc4`, runtime package SHA-256 `88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485` served through the immutable `code_ref` runtime-package path.
+- Immutable state input: `artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d`; one verified Base journal entry materializes `audit.txt` from blob `sha256:966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac`.
+- Construction identity: realization `candidate-control-20260716-d`, owner `autoputer-control`, desktop/candidate `control-20260716`, kind `candidate`.
+- Receipt: construction SHA-256 `00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984`; disk receipt `disk-instantiation:sha256:c96eded70f4c7cffe5d700744b18fc3c6ee96d6d59e43393b138716b51da2666`; boot epoch `1`, healthy at `http://10.200.0.2:8085`; equivalence status `equivalent`.
+- Product-path proof: the guest booted with the content-addressed CodeRef kernel parameter, fetched the digest-verified runtime tar through vmctl, mounted the newly instantiated ext4 receipt, and returned typed construction observations through `/internal/computer-version/observations` before commit.
+- Candidate state: constructed and committed as an unpublished disposable candidate; no route candidate has been frozen, no owner approval or G3 acceptance has been signed, and no route/evidence CAS has occurred.
+- Registry hygiene: three refused input-shaping attempts left immutable catalog/artifact records for empty, missing-parent, and invalid-version journals; their disk instantiations were reclaimed and no ownership was committed. Classify these immutable records during candidate disposal rather than deleting evidence before closure.
+- Rollback/disposal: destroy `candidate-control-20260716-d` and its realization-local device through vmctl's constructed-candidate lifecycle; retain immutable input and construction receipts as evidence. No owner route currently exists for `computer:autoputer-control:control-20260716`.
