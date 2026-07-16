@@ -253,14 +253,49 @@ commit and push, CI, deploy/staging identity, then deployed acceptance. Record
 those identities and results in the terminal receipt; do not call a local test
 or a deployment SHA the final proof.
 
-For broad or long-running work, render a local owner-readable HTML view from
-the goal source. Put the promised finish at the top, then show the start
-receipt, protected dirty paths, current candidate, proof obtained and missing,
-weak measures (visibly labelled), dissent, and next action. Include source
-identity/digest, generator version, and generation time. The Markdown/YAML goal
-remains authoritative; HTML is a generated, non-editable view that may be
-served on localhost. Refresh it only as part of the relevant Define or
-Implement boundary, never as a dashboard-only commit.
+For broad or long-running work, launch the skill-owned local dashboard from the
+goal source:
+
+```text
+node skills/definition/scripts/dashboard.mjs <goal.md> --serve 127.0.0.1:8787 --watch
+```
+
+The dependency-free renderer and server remain skill-owned JavaScript. They
+serve a polished, human-readable view in memory on localhost only; the view is
+not a YAML dump and serving it does not create a repository artifact.
+
+Present it as a responsive, prose-first editorial briefing with the most
+important information first. It must be neither a card grid nor a narrow
+single-column desktop reader. At 1280–1440px, use the available width for a
+dense, legible editorial composition with aligned regions and structural
+phase or gate sections where they improve scanning. At 480px and below, resolve
+the same reading order into one clean column with no horizontal overflow.
+Typography is the primary hierarchy: use font family, size, weight, bold,
+italics, and restrained semantic color before borders or containers. Render
+scalar and map content as prose or compact definition groups, not decorative
+bullet lists. Use `ul` or `ol` only when the source is genuinely list-structured,
+such as acceptance items, non-completion conditions, evidence references,
+worktrees, and phases.
+
+After a compact mission identity, provenance, and non-authority note, show the
+promised finish; current phase and status with the next action; blocker or risk
+and the open question; mission phase path; decision gates; proof readiness; and
+the protected start. Follow with secondary context such as reconciliation,
+durable decisions, candidate, evidence, dissent, visibly labelled weak
+measures, and successor. Keep every gate obligation visible under
+plain-language headings. Never hide content behind disclosure, accordion,
+menu, tab, or other expand interactions, including `details` and `summary`.
+
+Include source identity/digest, generator version, and generation time. The
+Markdown/YAML goal remains authoritative; the dashboard is a non-editable
+projection and must not infer completion. Under `--watch`, live updates retain
+the server-sent-event lifecycle: a current render becomes explicitly
+unavailable when its source is invalidated and becomes current again only
+after a successful regeneration; stale content is never reported as current.
+Generated snapshots are optional explicit `--output <path>` results and belong
+outside the repository unless the Definition names one as an artifact. Refresh
+the live view only as part of the relevant Define or Implement boundary, never
+as a dashboard-only commit.
 
 ## Resume, Exit, And Escalate
 

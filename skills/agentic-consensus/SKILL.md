@@ -223,6 +223,14 @@ Notes:
 
 ## Runner Usage
 
+Consensus panels are finite but usually slow. In OMP, launch the bundled runner
+as a finite background command, or use the equivalent supervised background
+facility in another harness. If no supervised facility exists, run the
+documented runner command in the foreground rather than skipping a required
+panel. Continue independent implementation, documentation, or verification
+while it runs. Wait or poll only when its adjudication blocks the next decision,
+and always wait before making that gate-dependent decision.
+
 Basic default panel:
 
 ```bash

@@ -154,32 +154,177 @@ execution:
     outcome: "Implement one production construction-and-boot function that creates a fresh correctly sized filesystem/realization, installs the immutable code closure, verifies the exact replayed journal/root against ArtifactProgramRef, replays typed file/blob/Dolt/app/actor state, boots Firecracker, and emits a construction receipt."
     gate: "The function rejects missing or mismatched pins and is the lifecycle path for initial construction and failed-realization replacement. It never reads or clones a prior data.img and cannot invoke vmmanager SourceVMID/copySparseFile or existing-image resize/recovery paths. Its receipt classifies every input as immutable CodeRef closure, immutable ArtifactProgramRef tape, platform-owned service dependency, ephemeral realization credential/config, generated state, cache, or unsupported blocker; gateway/network credentials are ephemeral and provider secrets remain platform-owned. A generative round-trip harness proves Generate-then-extract equivalence against journal-derived observations for arbitrary valid tapes, not only hand-picked fixtures; host-side filesystem extraction is test scaffolding only and is not admissible acceptance evidence."
   - phase: D-verify-and-route
-    outcome: "Independently extract and compare post-boot observations, issue a promotion certificate, and commit D-ROUTE's corpusd route-slot and transition receipt with vmctl-owned CAS only after acceptance."
-    gate: "Exact authenticated readback, health, geometry/headroom, provenance, and rollback all pass; the served route is the immutable ComputerVersion and VM identity is absent from durable route authority."
+    outcome: "Independently extract and compare post-boot observations, implement the promotion certificate and vmctl-owned D-ROUTE transition, and freeze the complete verifier/promotion/route candidate. This phase stops at the frozen candidate and executes no route compare-and-swap."
+    gate: "Exact authenticated readback, health, geometry/headroom, provenance, rollback rehearsal, and all deterministic verifier and route checks pass on the frozen candidate. G3 acceptance is required before every D-ROUTE CAS; the proposed route is the immutable ComputerVersion and VM identity is absent from durable route authority."
   - phase: E-destroy-and-reconstruct
-    outcome: "Discard the accepted test realization, remove or render unreadable every backing-state path and reclaim host network resources, then reconstruct equivalent state from the same ComputerVersion in a fresh state root; exercise corruption/full-disk/refusal cases."
+    outcome: "After accepted G3, the integration authority first executes the reviewed test-route CAS and bounded rollback, then discards the accepted test realization, removes or renders unreadable every backing-state path and reclaims host network resources, and reconstructs equivalent state from the same ComputerVersion in a fresh state root; corruption/full-disk/refusal cases are exercised."
     gate: "The verifier proves first-realization paths were unavailable, the second receipt names distinct realization/state identities and no source image, and all required observations match. Every injected local failure yields refusal/quarantine or clean typed reconstruction."
   - phase: F-cutover-owner-and-close
-    outcome: "Recover the affected owner through the audited constructor, cut over staging, verify no-SSH operation and restart/reconstruction durability, delete obsolete in-place recovery/candidate-as-VM authority paths, and record terminal receipts."
-    gate: "CI and deploy are green for the pushed SHA; staging reports that SHA; all acceptance actions pass; protected images and rollback refs have explicit dispositions. Legacy in-place owner recovery, route-over-VM fallback, candidate-as-VM authority, vmctl JSON ownership-registry route writes, and duplicate app-adoption/candidate-package activation writers are deleted or hard-refusal-gated. Adoption, lineage, UI, Trace, and acceptance projections advance only after readback of the matching vmctl D-ROUTE receipt; missing, stale, or failed CAS leaves them unchanged. Generic stop/resume/diagnostic VM lifecycle may remain only subordinate to ComputerVersion construction and unable to publish route authority."
+    outcome: "Execute owner cutover only after accepted G4: recover the affected owner through the audited constructor, perform the staging owner CAS, and collect deployed no-SSH product-path and restart/reconstruction evidence. Then freeze the post-CAS closure packet for G5. Registry updates, the terminal receipt, and status complete are a separate terminal-closure boundary and occur only after accepted G5."
+    gate: "Cutover execution requires accepted G4 and a serialized owner CAS. Terminal closure separately requires accepted G5 over the frozen post-CAS evidence; CI and deploy are green for the pushed SHA, staging reports that SHA, all acceptance actions pass, and protected images and rollback refs have explicit dispositions. Legacy in-place owner recovery, route-over-VM fallback, candidate-as-VM authority, vmctl JSON ownership-registry route writes, and duplicate app-adoption/candidate-package activation writers are deleted or hard-refusal-gated. Adoption, lineage, UI, Trace, and acceptance projections advance only after readback of the matching vmctl D-ROUTE receipt; missing, stale, or failed CAS leaves them unchanged. Generic stop/resume/diagnostic VM lifecycle may remain only subordinate to ComputerVersion construction and unable to publish route authority."
+
+orchestration:
+  orchestrator: OMP
+  integration_authority: "One OMP integration authority owns protected mutations, adjudication, promotion, rollback, landing, and updates to this Definition."
+  topology:
+    - order: 1
+      stage: base-reconciliation
+      mode: serialized_read_only
+      rule: "Reconcile canonical/origin refs, deploy identity, dirty work, registries, protected images, and candidate ownership before dispatch or mutation."
+    - order: 2
+      stage: mapping-and-candidates
+      mode: parallel_bounded
+      rule: "Fan out read-only mapping and isolated candidates only when their worktrees, path scopes, state roots, external effects, and evidence outputs are disjoint and pinned to the reconciled base."
+    - order: 3
+      stage: protected-integration
+      mode: serialized
+      rule: "The integration authority serializes shared-path and protected-surface mutation, promotion, rollback, owner cutover, Definition/registry updates, and landing. The first disposable test-route D-ROUTE CAS and entry to E require accepted G3; the staging-owner D-ROUTE CAS and entry to F require accepted G4; no other D-ROUTE CAS is authorized by this Definition; registry terminal closure requires accepted G5."
+  phase_topology:
+    - phase: A-contain-and-extract
+      depends_on: [base-reconciliation]
+      fan_out: "yes: read-only authority/state mapping and stopped-clone evidence collection may fan out; source-image mutation may not"
+    - phase: B-resolve-immutable-inputs
+      depends_on: [A-contain-and-extract]
+      fan_out: "yes: read-only writer/resolver mapping and isolated disjoint candidates may fan out; protected integration is serialized"
+    - phase: C-construct-and-boot
+      depends_on: [G1-immutable-input-state-authority]
+      dependency_condition: "G1 adjudication is accept; any other outcome prevents constructor mutation and prevents entry to C."
+      fan_out: "yes: isolated disjoint constructor and round-trip candidates may fan out; production-path mutation is serialized"
+    - phase: D-verify-and-route
+      depends_on: [G2-frozen-constructor-round-trip]
+      dependency_condition: "G2 adjudication is accept; any other outcome prevents promotion work and prevents entry to D."
+      fan_out: "yes: independent read-only verification may fan out; integration only freezes the verifier/promotion/D-ROUTE candidate, and no route CAS is allowed before accepted G3"
+    - phase: E-destroy-and-reconstruct
+      depends_on: [G3-frozen-verifier-promotion-route-candidate]
+      dependency_condition: "G3 adjudication is accept; any other outcome prevents every D-ROUTE CAS and prevents entry to E."
+      fan_out: "yes: after the reviewed test-route CAS, disposable disjoint failure scenarios may fan out; accepted-state destruction, rollback, and shared host-resource mutation are serialized"
+    - phase: F-cutover-owner-and-close
+      depends_on: [G4-frozen-deployed-cutover-packet]
+      cutover_execution: "Accepted G4 precedes the serialized staging owner CAS; deployed product-path probes may fan out only after readback of that CAS."
+      terminal_closure: "After owner CAS and deployed product-path evidence, freeze the G5 packet. Registry updates, the terminal receipt, and now.status complete require G5 adjudication accept."
+      fan_out: "yes: read-only deployed acceptance probes may fan out after owner CAS; owner CAS, rollback, registry updates, terminal closure, and landing are serialized"
+  review_policy:
+    mechanism: agentic-consensus
+    role_independence: "Builder, falsifier, and verifier are distinct agents with distinct obligations; none may self-approve its own output."
+    independence_telemetry: "Every durable review receipt records distinct agent identity, model family and version, context-or-memory lineage, tool/search source, obligation, failures, latency, cost, and unique finding yield for each participant. Missing or conflated independence fields fail the review packet; telemetry never proves acceptance."
+    deterministic_gates_first: true
+    panel_scope: "Only the five frozen decision gates below; no per-slice consensus, moving-target review, or dashboard-only commit is authorized."
+    acceptance_limit: "A panel supplies challenge evidence and an adjudicated decision receipt; panel agreement does not prove product acceptance or completion."
+    adjudication: [accept, repair, reject, escalate]
+    blocker_precedence: "Any reproducible minority blocker overrides an unsupported majority pass and prevents advancement until repaired, rejected with evidence, or escalated to the named authority."
+  decision_gates:
+    - id: G1-immutable-input-state-authority
+      review_kind: agentic-consensus
+      changes_decision: "Whether the immutable-input and canonical-state boundary is sufficient to authorize constructor implementation."
+      after: B-resolve-immutable-inputs
+      before: C-construct-and-boot
+      frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, evidence_refs]
+      deterministic_first: "Resolver, writer-inventory, immutable-binding, authority-domain, and no-third-store gates run before panel review."
+      builder_obligation: "Present the minimal constructor boundary and a complete typed map from each required state/input class to its settled immutable authority."
+      falsifier_obligation: "Seek state available only from mutable aliases, prior data.img, hidden host dependencies, competing route writers, or a third semantic store."
+      verifier_obligation: "Independently resolve the pinned CodeRef and ArtifactProgramRef and check every authority join and refusal against canonical contracts."
+      adjudication: [accept, repair, reject, escalate]
+      minority_rule: "A reproducible minority blocker overrides an unsupported majority pass."
+      durable_evidence_ref: "required:G1 frozen review packet, independence telemetry, and adjudication receipt"
+    - id: G2-frozen-constructor-round-trip
+      review_kind: agentic-consensus
+      changes_decision: "Whether the frozen constructor and generative round-trip candidate is fit to begin promotion work."
+      after: C-construct-and-boot
+      before: D-verify-and-route
+      frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, evidence_refs]
+      deterministic_first: "Build, focused contract tests, generative Generate-then-extract equivalence, source-access refusal, and receipt-join gates run before panel review."
+      builder_obligation: "Present the production construction-and-boot candidate, capability/input classification, receipts, and arbitrary-valid-tape round-trip evidence."
+      falsifier_obligation: "Attack hidden source-image access, mutable-ref races, unbound journals, incomplete state replay, geometry/headroom, and fixture-only equivalence."
+      verifier_obligation: "Independently run the deterministic gates and recompute input/output, receipt, observation, and no-prior-realization joins from the frozen candidate."
+      adjudication: [accept, repair, reject, escalate]
+      minority_rule: "A reproducible minority blocker overrides an unsupported majority pass."
+      durable_evidence_ref: "required:G2 frozen review packet, independence telemetry, and adjudication receipt"
+    - id: G3-frozen-verifier-promotion-route-candidate
+      review_kind: agentic-consensus
+      changes_decision: "Whether the implemented verifier, promotion certificate, and vmctl D-ROUTE candidate authorizes the first route CAS and entry to E."
+      after: D-verify-and-route
+      before: [any-D-ROUTE-CAS, E-destroy-and-reconstruct]
+      frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, evidence_refs]
+      deterministic_first: "Focused verifier and promotion contract checks, exact typed joins, route-writer inventory, vmctl-only CAS checks, stale-base and split-brain refusal, rollback rehearsal, and immutable ComputerVersion route checks run before panel review."
+      builder_obligation: "Present the implemented verifier/promotion/D-ROUTE candidate, immutable promotion and transition receipts, bounded CAS/rollback plan, and deterministic evidence without executing a route CAS."
+      falsifier_obligation: "Attack forged or stale verifier joins, mutable aliases, competing route writers, VM-identity route leakage, split-brain transitions, missing CAS preconditions, and rollback that depends on mutable disk repair."
+      verifier_obligation: "Independently rerun deterministic checks, recompute ComputerVersion/realization/promotion/route joins from the frozen candidate, and prove the proposed first CAS is vmctl-owned, atomic, bounded, and still unexecuted."
+      adjudication: [accept, repair, reject, escalate]
+      minority_rule: "A reproducible minority blocker overrides an unsupported majority pass."
+      durable_evidence_ref: "required:G3 frozen review packet, independence telemetry, and adjudication receipt"
+    - id: G4-frozen-deployed-cutover-packet
+      review_kind: agentic-consensus
+      changes_decision: "Whether frozen deployed reconstruction evidence authorizes the staging owner route CAS and cutover execution."
+      after: E-destroy-and-reconstruct
+      before: [F-cutover-owner-and-close, staging-owner-D-ROUTE-CAS]
+      frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, evidence_refs]
+      deterministic_first: "Pushed-SHA, CI, deploy identity, constructor/readback, zero-realization reconstruction, adversarial refusal, prior-route rollback, CAS-precondition, and no-SSH product-path readiness gates run before panel review."
+      builder_obligation: "Present one immutable owner-cutover candidate joining the deployed SHA and environment to constructor, verification, reconstruction, proposed owner route transition, rollback, and product-path readiness evidence."
+      falsifier_obligation: "Seek stale or missing identities, unsupported readiness claims, unsafe destruction, split-brain owner CAS, unbounded rollback, legacy route writers, and evidence that depends on SSH or dashboard state."
+      verifier_obligation: "Independently recompute the packet joins, confirm deployed reconstruction and prior-route rollback, and prove the still-unexecuted owner CAS uses vmctl's frozen D-ROUTE authority."
+      adjudication: [accept, repair, reject, escalate]
+      minority_rule: "A reproducible minority blocker overrides an unsupported majority pass."
+      durable_evidence_ref: "required:G4 frozen review packet, independence telemetry, and adjudication receipt"
+    - id: G5-frozen-post-cutover-closure
+      review_kind: agentic-consensus
+      changes_decision: "Whether the completed owner CAS and deployed product-path evidence authorize registry terminal closure, the terminal receipt, and status complete."
+      after: [staging-owner-D-ROUTE-CAS, deployed-no-SSH-product-path-evidence]
+      before: [registry-terminal-closure, terminal-receipt, status-complete]
+      frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, evidence_refs]
+      deterministic_first: "Owner CAS and route-receipt readback, exact served ComputerVersion identity, deployed no-SSH acceptance, restart and zero-realization reconstruction, rollback availability, pushed-SHA/CI/deploy identity joins, candidate disposition, and registry-hygiene preflight checks run before panel review."
+      builder_obligation: "Present a frozen post-cutover closure packet joining the executed owner CAS to served identity, deployed product-path results, restart/reconstruction durability, rollback, candidate disposition, and proposed registry and terminal receipts."
+      falsifier_obligation: "Seek stale routes or deployments, product evidence from unsupported paths, hidden SSH dependence, missing acceptance classes, unsafe image/candidate disposition, registry divergence, rollback loss, or any claim inferred from dashboard health."
+      verifier_obligation: "Independently recompute all source/deploy/route/product-path/rollback/registry joins and confirm terminal closure changes are absent and status remains non-complete until this adjudication accepts."
+      adjudication: [accept, repair, reject, escalate]
+      minority_rule: "A reproducible minority blocker overrides an unsupported majority pass."
+      durable_evidence_ref: "required:G5 frozen review packet, independence telemetry, and adjudication receipt"
+  prohibitions:
+    - "No per-slice consensus or model vote authorizes mutation, acceptance, or completion."
+    - "No dashboard-only change or generated-view refresh earns a standalone commit."
+    - "Parallel workers cannot publish routes, promote, roll back, land, or mutate this Definition's current state."
+
 
 now:
   status: working
   slice: "A-contain-and-extract"
   question: "Can the affected owner computer be reconstructed from settled typed authorities without reading its failed mutable realization as canonical state?"
-  next_action: "Before code mutation, reconcile canonical main, origin, staging deploy identity, dirty work, and registry state; then inventory constructor inputs and resolvers, record the stopped-clone recovery manifest, and freeze one minimal production constructor contract."
-  blocker_or_risk: "The failed owner image may contain the only copy of some accepted state, and its Dolt semantic integrity is unknown. Preserve it; do not confuse forensic extraction with the permanent constructor input model."
   reconciliation:
-    base_ref: refs/heads/main@9d9945e65f5b54069e1a86a530cb0960d96b3474
-    origin_ref: refs/remotes/origin/main@9d9945e65f5b54069e1a86a530cb0960d96b3474
-    deploy_identity: unknown
-    wip_inventory_ref: start.worktree_inventory
-  candidate_disposition: "No active candidate; stale candidates are excluded and preserved."
+    observed_at: 2026-07-15T22:36:30Z
+    source_ref: main/origin@2ca45c1a6823f23978c9ca1b415abd9789f97152
+    deploy_identity: staging@9d9945e65f5b54069e1a86a530cb0960d96b3474
+    authority_identities:
+      - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
+      - doctrine:docs/choir-doctrine.md@2ca45c1a6823f23978c9ca1b415abd9789f97152
+      - doctrine:docs/agent-product-doctrine.md@2ca45c1a6823f23978c9ca1b415abd9789f97152
+      - mission_graph:docs/mission-graph.yaml@2ca45c1a6823f23978c9ca1b415abd9789f97152
+      - authority_manifest:docs/doc-authority-manifest.yaml@2ca45c1a6823f23978c9ca1b415abd9789f97152
+    policy_resolution_ref: not_applicable
+    worktree_inventory_ref: start.worktree_inventory
+    status: reconciled
+  candidate:
+    id: none
+    state: none
+    ref: none
+    owner: none
+    base: none
+    digest: none
+    scope: []
+  decision:
+    selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor-round-trip, G3 pre-route-CAS, G4 pre-owner-CAS, and G5 pre-terminal-closure consensus gates."
+    kind: operational
+    status: settled
+    source: owner
+    evidence_ref: "Owner choice in this 2026-07-15 conversation, incorporated into this Definition."
+    owner_ratification_ref: not_applicable
+    recorded_at: 2026-07-15T22:36:30Z
+    consequence: "OMP may execute this Definition while optionally serving the skill-owned live dashboard as a non-authoritative projection, but no D-ROUTE CAS, owner CAS, registry terminal closure, terminal receipt, or status complete may cross its named preceding accepted frozen gate."
   evidence_refs:
     - start.observed_artifact
     - docs/ACTIVE.md
     - docs/mission-graph.yaml
     - docs/doc-authority-manifest.yaml
+  blocker_or_risk: "The failed owner image may contain the only copy of some accepted state, and its Dolt semantic integrity is unknown. Preserve it; do not confuse forensic extraction with the permanent constructor input model."
+  next_action: "Before code mutation, inventory constructor inputs and resolvers from the reconciled source, record the stopped-clone recovery manifest without mutating source images, and freeze one minimal production constructor contract."
 
 successor:
   status: unauthorized_until_this_definition_complete
@@ -189,7 +334,42 @@ successor:
 
 view:
   path: none
-  generator: none
+  endpoint: "http://127.0.0.1:8787"
+  generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-audited-autoputer-construction-2026-07-15.md --serve 127.0.0.1:8787 --watch"
+  generator_version: "definition-dashboard-js/v1"
+  authority: "The skill-owned live dashboard is a human-readable, non-editable projection only; this Markdown/YAML Definition is the sole execution and completion authority. Localhost is transport for owner inspection, not an authority source."
+  refresh: "The skill-owned server renders the owner view in memory rather than dumping YAML or creating a repository artifact; while served, server-sent events move the view from current to explicitly unavailable on source invalidation and back to current only after successful regeneration, without serving stale content as current or inferring state."
+  projection_contract:
+    mode: "Responsive prose-first editorial layout with the most important information first; neither card-grid composition nor a narrow single-column desktop reader, and no disclosure/expand interactions."
+    responsive_layout:
+      desktop: "At 1280–1440px, use the available width for a dense, legible editorial composition with aligned information regions; structural phase and gate sections are allowed where they improve scanning."
+      mobile: "At 480px and below, preserve the same semantic reading order in one clean column with zero horizontal overflow."
+    hierarchy: "Use font family, scale, weight, bold, italics, and restrained semantic color as the primary hierarchy; borders and containers remain secondary."
+    content_shape:
+      scalar_and_map_fields: "Render as prose or compact definition groups, never decorative bullet lists."
+      lists_only_for_source_lists: [finish.acceptance, finish.not_done_when, now.evidence_refs, start.worktree_inventory, execution]
+      structural_sections_allowed: [execution, orchestration.decision_gates]
+    header: [title, provenance, non_authority_note]
+    top_order: [finish, current_next, blocker_question, path, gates, proof, start, secondary_context]
+    current_next: [now.status, now.slice, now.next_action]
+    blocker_question: [now.blocker_or_risk, now.question]
+    path: execution
+    gates:
+      source: orchestration.decision_gates
+      obligations_always_visible_under_plain_language_headings: true
+      dissent_evidence_from: [orchestration.decision_gates.durable_evidence_ref, now.evidence_refs]
+    proof:
+      required_from: finish.acceptance
+      referenced_from: now.evidence_refs
+      completion_inference: forbidden
+    start: [start.source, start.worktree_inventory]
+    secondary_context:
+      sources: [now.reconciliation, now.decision, now.candidate, now.evidence_refs, successor]
+      dissent_from: orchestration.decision_gates
+      weak_measures_from: measures
+    candidate_none_explicit: true
+    provenance: [source_sha256, generator_version, generated_at]
+    second_authority: forbidden
 ---
 
 # Make the Autoputer Real — Audited Computer Construction
