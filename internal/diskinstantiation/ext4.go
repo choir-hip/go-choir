@@ -105,7 +105,7 @@ func (b Ext4Backend) Instantiate(ctx context.Context, plan Plan, populate Popula
 		DevicePath:    devicePath,
 		CreatedAt:     now().UTC(),
 	}
-	geometry, err := b.Inspect(ctx, receipt)
+	geometry, err := b.inspectVerifiedPath(ctx, receipt)
 	if err != nil {
 		return Receipt{}, err
 	}
@@ -128,6 +128,13 @@ func (b Ext4Backend) Inspect(ctx context.Context, receipt Receipt) (GeometryRece
 	if err := VerifyReceiptIntegrity(receipt); err != nil {
 		return GeometryReceipt{}, fmt.Errorf("disk instantiation: refuse unverified inspect receipt: %w", err)
 	}
+	return b.inspectVerifiedPath(ctx, receipt)
+}
+
+// inspectVerifiedPath reads geometry only after the caller has established the
+// receipt identity. Instantiate owns its provisional receipt; Inspect verifies
+// a finalized receipt before reaching this helper.
+func (b Ext4Backend) inspectVerifiedPath(ctx context.Context, receipt Receipt) (GeometryReceipt, error) {
 	if receipt.Backend != "" && receipt.Backend != Ext4BackendName {
 		return GeometryReceipt{}, fmt.Errorf("disk instantiation: receipt backend mismatch")
 	}
