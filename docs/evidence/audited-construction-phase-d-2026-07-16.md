@@ -28,3 +28,16 @@
 - Conjecture delta: server-side verifier execution closes receipt forgery but not caller-supplied realization splicing; vmctl-only CAS ownership does not itself enforce G3 acceptance.
 - Heresy delta: discovered `3`; introduced `0`; repaired `0` at this checkpoint.
 - Rollback: retain `origin/main@0dc3fea3` and discard the rejected Phase D worktree patch if repair cannot close all minority blockers.
+
+## Terminal G3 rejection checkpoint: apply provenance and bootstrap certificate semantics
+
+- Frozen candidate: base `df69a7b2`; patch `/tmp/choir-g3-bootstrap-repaired.patch`; SHA-256 `069ee8113f6b0e745e4a0cb46bc8a7091c8f091b3850d36c82c1cc971b7db4c1`; sixteen staged paths.
+- Gate packet: `/tmp/choir-g3-consensus-bootstrap-final`; six reviewers completed. Cursor, Gemini, GLM, and GPT-5.5 accepted. Codex returned `repair`; its reproducible minority blockers govern.
+- Apply-provenance evidence: `applyFrozenBootstrap` and `applyFrozenPromotion` validate the self-hashed approval evidence envelope but do not decode and reverify the embedded `OwnerPromotionApproval`. The HTTP apply endpoints accept a serialized candidate, so a valid G3 acceptance can substitute for the separately required signed owner approval. The bootstrap and promotion success fixtures reproduce this with `{"signed":"owner"}` payloads.
+- Bootstrap-certificate evidence: `FrozenRouteBootstrapCandidate.Validate` joins the certificate envelope reference but does not reconstruct its canonical typed payload. A recomputed candidate containing arbitrary certificate JSON can therefore pass candidate validation if the G3 signer signs the recomputed ID.
+- Consequence: the candidate remains rejected and pre-CAS. A G3 signature is necessary but cannot replace owner authorization or typed certificate semantics.
+- Required source repair: decode and cryptographically reverify the exact owner approval at every frozen apply boundary; bind approval evidence time/route/version to the signed payload; reconstruct and compare the canonical bootstrap certificate payload; prove unsigned approval and substituted certificate refusal, including the HTTP apply path.
+- Protected surfaces: owner approval, G3 acceptance, bootstrap/promotion evidence, first-route and existing-route CAS. No route CAS or production mutation occurred.
+- Conjecture delta: freezing and signing a candidate prevents mutation after adjudication, but every independently required authorization inside the candidate must still be reverified where execution begins.
+- Heresy delta: discovered `2`; introduced `0`; repaired `0` at this checkpoint.
+- Rollback: retain `origin/main@0dc3fea3` plus problem checkpoints and discard the rejected Phase D patch if repair cannot close both blockers.
