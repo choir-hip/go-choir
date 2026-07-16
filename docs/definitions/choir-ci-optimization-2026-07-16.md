@@ -159,24 +159,24 @@ measures:
     cannot_prove: "Absence of all CI defects."
 
 now:
-  status: working
-  slice: "frozen workflow restoration (PR 2) and split canonical acceptance"
-  question: "Will the digest-preserved workflow restoration parse on its .github-plus-Definition pull-request stimulus, then produce the complete checksummed SBOM artifact and Node B skip on main while Race waits for a natural selected stimulus?"
+  status: checkpoint_incomplete
+  slice: "post-land natural Race selector acceptance"
+  question: "Which first later main Go, high-risk, or sampled stimulus selects the restored complete reusable Race workflow and passes all five jobs plus the parent check gate?"
   reconciliation:
-    observed_at: 2026-07-16T20:03:43Z
-    source_ref: "PR 1 merged as e02bd0ad9e04a149466f9c3fec436395c2ec9da9; PR 2 candidate 20d487470d037e9985ee4305d948b5b1f692bd42 is a clean cherry-pick of frozen 8e4aa074 onto that fresh main"
-    deploy_identity: "PR 1 main run 29530010061: deploy_needed=false and Node B skipped"
-    authority_identities: [owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority, choir-doctrine@e02bd0ad, AGENTS@e02bd0ad, definition-skill@e02bd0ad]
+    observed_at: 2026-07-16T20:29:37Z
+    source_ref: "origin/main 71f07f7b3c1418d9e1b8e6426f8fbbd6c37d51bb, PR 56 merged; no later main push exists yet"
+    deploy_identity: "main run 29530740469: deploy_needed=false, Node B job 87730340741 skipped"
+    authority_identities: [owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority, choir-doctrine@71f07f7b, AGENTS@71f07f7b, definition-skill@71f07f7b]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean integration worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-workflow-restoration-2026-07-16 at 20d48747; protected parent Autoputer inventory unchanged; PR 1 worktree preserved clean"
-    status: pr2_identity_rebound
+    worktree_inventory_ref: "clean checkpoint worktree /private/tmp/go-choir-ci-integration-owner at origin/main 71f07f7b; protected parent Autoputer inventory unchanged; PR 1 and PR 2 branches preserved and pushed"
+    status: canonical_sbom_accepted_race_stimulus_pending
   candidate:
     id: ci-reenable-candidate-1
-    state: rebound_from_frozen_reviewed_candidate
-    ref: commit:20d487470d037e9985ee4305d948b5b1f692bd42
+    state: landed_canonical_sbom_accepted
+    ref: merge:71f07f7b3c1418d9e1b8e6426f8fbbd6c37d51bb
     owner: ci-mission
     base: e02bd0ad9e04a149466f9c3fec436395c2ec9da9
-    digest: "ci.yml sha256 f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25, unchanged from reviewed candidate 8e4aa074f970b69ce59cffa07b280f164ca1c161"
+    digest: "landed ci.yml sha256 f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25, unchanged from reviewed candidate 8e4aa074f970b69ce59cffa07b280f164ca1c161"
     scope: [.github/workflows/ci.yml, docs/definitions/choir-ci-optimization-2026-07-16.md]
   scope_amendment:
     id: doccheck-scoped-maintenance-entrypoint-contract
@@ -194,9 +194,9 @@ now:
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-16T19:50:40Z
     consequence: "PR 55 may merge and publish the rolling FlakeHub package after serialization checks. Node B must still skip. PR 2 remains a separate fresh-main branch with the frozen ci.yml digest and its own hosted and main acceptance."
-  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, pr-55, merge-e02bd0ad, run-29530010061, job-87728809190, job-87727840418, job-87728809862, candidate-20d48747]
-  blocker_or_risk: "PR 1 canonical acceptance passed: run 29530010061 succeeded, rolling FlakeHub job 87728809190 succeeded, deploy-impact job 87727840418 reported deploy_needed=false, and Node B job 87728809862 skipped. PR 2 must preserve the frozen ci.yml digest and remain .github-plus-Definition only. Its main landing must serialize the shared CI/Race groups, verify the complete SBOM artifact, and leave terminal Race proof pending until a natural selected main stimulus."
-  next_action: "Verify the rebound candidate's exact ci.yml digest and deterministic local contracts, commit only this concise identity-rebind receipt, push the fresh branch, and create a separate draft PR. Accept pull-request parsing only with go=false, high_risk_race=false, flakehub=false, Race/SBOM/deploy skipped."
+  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, pr-55, merge-e02bd0ad, run-29530010061, pr-56, run-29530622886, merge-71f07f7b, run-29530740469, job-87730340035, artifact-8389010915, job-87730211197, job-87730340741]
+  blocker_or_risk: "Canonical SBOM acceptance passed on main run 29530740469: artifact 8389010915 contains 12 manifest records, 11 SBOM files whose manifest SHA-256 values all match, 10 built packages, 1 reused package, 1 unchanged optional failure skipped, 0 failures, and a differential over 11 packages with 3 added and 0 removed components. Deploy-impact reported deploy_needed=false and Node B skipped. Race was correctly unselected for the .github-plus-Definition stimulus. Completion is blocked only on the first natural later main stimulus selected by high_risk_race=true or push+go=true+sampled_race=true; no such post-land push exists yet."
+  next_action: "Observe later main CI runs without manufacturing a change or dispatching Race. On the first classifier-selected run, require all four runtime Race shards, the non-runtime Race job, and the parent check gate to succeed; then record terminal closure."
 
 receipts:
   - id: corrected-problem-and-baseline-define
@@ -225,11 +225,11 @@ receipts:
     authorization_ref: owner-delegation-019f6933-2026-07-16
     candidate_or_evidence_refs: [candidate-8e4aa074, pre-candidate-ci-yml-sha256-69b5de792e84446e, frozen-candidate-ci-yml-sha256-f60b63fe5e1613a9, classifier-go-false-high-risk-false-sampled-false-bucket-12, docs/evidence/ci-reenable-candidate-review-2026-07-16.md]
     landing:
-      source_commit: 8e4aa074f970b69ce59cffa07b280f164ca1c161
-      ci_ref: pending_current_main_registry_reconciliation_and_push_authority
-      deploy_ref: not_applicable_ci_only_expected_skip
-      environment_identity: github_actions_pending
-      deployed_acceptance: pending_hosted_parse_plus_separate_sbom_and_race_receipts
+      source_commit: 71f07f7b3c1418d9e1b8e6426f8fbbd6c37d51bb
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29530740469
+      deploy_ref: deploy_needed=false; Node_B_job_87730340741_skipped
+      environment_identity: github_actions
+      deployed_acceptance: canonical_ci_only_sbom_accepted; post_land_race_selector_pending
     registry_conformance_ref: not_applicable
   - id: owner-main-landing-authority
     boundary: define
@@ -289,12 +289,28 @@ receipts:
     authorization_ref: owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority
     candidate_or_evidence_refs: [frozen-ci-yml-sha256-f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25, candidate-8e4aa074, candidate-20d48747, origin-main-e02bd0ad]
     landing:
-      source_commit: 20d487470d037e9985ee4305d948b5b1f692bd42
-      ci_ref: pending_pr2
-      deploy_ref: ci_only_Node_B_skip_required
-      environment_identity: github_actions_pending
-      deployed_acceptance: pending_pr_parse_and_main_sbom_receipts
-    registry_conformance_ref: pending_pr2_hosted_doccheck
+      source_commit: 71f07f7b3c1418d9e1b8e6426f8fbbd6c37d51bb
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29530740469
+      deploy_ref: deploy_needed=false; Node_B_job_87730340741_skipped
+      environment_identity: github_actions
+      deployed_acceptance: canonical_ci_only_sbom_accepted; post_land_race_selector_pending
+    registry_conformance_ref: "Docs Truth Check passed in PR run 29530622886 and main run 29530740469"
+  - id: pr2-canonical-sbom-acceptance
+    boundary: external_evidence
+    commit_or_artifact: 71f07f7b3c1418d9e1b8e6426f8fbbd6c37d51bb
+    proof_refs: [pr-56, run-29530622886, run-29530740469, job-87730340035, artifact-8389010915, job-87730211197, job-87730340741]
+    rollback_ref: "Revert merge 71f07f7b through a pull request to restore the two literal pause conditions."
+    disposition: "PR parsing passed with go=false, high_risk_race=false, flakehub=false and protected lanes skipped. Main host-side SBOM succeeded; all 11 delivered SBOM checksums matched the 12-record manifest, differential counts were 10 built, 1 reused, 1 optional skip, 0 failed, 3 added components, and 0 removed components. deploy_needed=false and Node B skipped. Race remains correctly pending a natural selected stimulus."
+    problem_ref: docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md
+    authorization_ref: owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority
+    candidate_or_evidence_refs: [frozen-ci-yml-sha256-f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25, artifact-upload-sha256-ff1b123f140a2c5ca12430557680ca1e92d5f199e27518b328585acbe46887ff, artifact-id-8389010915]
+    landing:
+      source_commit: 71f07f7b3c1418d9e1b8e6426f8fbbd6c37d51bb
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29530740469
+      deploy_ref: deploy_needed=false; Node_B_job_87730340741_skipped
+      environment_identity: github_actions
+      deployed_acceptance: canonical_ci_only_sbom_accepted
+    registry_conformance_ref: "Docs Truth Check passed in run 29530740469"
 
 view:
   path: none
