@@ -289,15 +289,15 @@ now:
   slice: "A-contain-and-extract"
   question: "Can the affected owner computer be reconstructed from settled typed authorities without reading its failed mutable realization as canonical state?"
   reconciliation:
-    observed_at: 2026-07-15T22:36:30Z
-    source_ref: main/origin@2ca45c1a6823f23978c9ca1b415abd9789f97152
+    observed_at: 2026-07-16T01:22:00Z
+    source_ref: main/origin@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
     deploy_identity: staging@9d9945e65f5b54069e1a86a530cb0960d96b3474
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
-      - doctrine:docs/choir-doctrine.md@2ca45c1a6823f23978c9ca1b415abd9789f97152
-      - doctrine:docs/agent-product-doctrine.md@2ca45c1a6823f23978c9ca1b415abd9789f97152
-      - mission_graph:docs/mission-graph.yaml@2ca45c1a6823f23978c9ca1b415abd9789f97152
-      - authority_manifest:docs/doc-authority-manifest.yaml@2ca45c1a6823f23978c9ca1b415abd9789f97152
+      - doctrine:docs/choir-doctrine.md@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
+      - doctrine:docs/agent-product-doctrine.md@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
+      - mission_graph:docs/mission-graph.yaml@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
+      - authority_manifest:docs/doc-authority-manifest.yaml@aaf6f96d91dffb51d8323c3efddc67afe2c472fd
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: start.worktree_inventory
     status: reconciled
@@ -334,10 +334,11 @@ successor:
 
 view:
   path: none
-  endpoint: "http://127.0.0.1:8787"
-  generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-audited-autoputer-construction-2026-07-15.md --serve 127.0.0.1:8787 --watch"
+  endpoint: "http://127.0.0.1:8788"
+  generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-audited-autoputer-construction-2026-07-15.md --serve 127.0.0.1:8788 --watch"
   generator_version: "definition-dashboard-js/v1"
   authority: "The skill-owned live dashboard is a human-readable, non-editable projection only; this Markdown/YAML Definition is the sole execution and completion authority. Localhost is transport for owner inspection, not an authority source."
+  lifecycle: "The dashboard process is an in-memory OMP session process, not a system LaunchAgent, so it does not survive a host reboot and must be restarted manually with the generator command above. A Tailscale serve tcp forward on tailnet port 8788 maps this loopback endpoint to the owner's iPhone; that forward survives reboot because Tailscale itself runs as a LaunchAgent, but nothing listens on 8788 until the dashboard process is restarted. Port 8788 is used because 8787 is occupied by HermesWebUI on this host."
   refresh: "The skill-owned server renders the owner view in memory rather than dumping YAML or creating a repository artifact; while served, server-sent events move the view from current to explicitly unavailable on source invalidation and back to current only after successful regeneration, without serving stale content as current or inferring state."
   projection_contract:
     mode: "Responsive prose-first editorial layout with the most important information first; neither card-grid composition nor a narrow single-column desktop reader, and no disclosure/expand interactions."
