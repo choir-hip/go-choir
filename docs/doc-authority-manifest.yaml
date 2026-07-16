@@ -268,13 +268,13 @@ documents:
     witnesses: [docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md]
     refresh_triggers: [audited_constructor_acceptance, predecessor_completion, node_b_baseline, owner_slo_ratification, registry_promotion]
 
-  - path: docs/definitions/choir-ci-optimization-draft-2026-07-16.md
+  - path: docs/definitions/choir-ci-optimization-2026-07-16.md
     claim_scope: current
-    is_root: []
+    is_root: [entry]
     is_evidence: false
-    annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: blocked, entrypoint: false}
-    witnesses: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/agent-product-doctrine.md]
-    refresh_triggers: [ci_baseline_capture, race_sbom_pause_reconciliation, owner_reenable_policy, ci_lane_change, registry_promotion]
+    annotations: {doc_role: definition, authority: scope_disjoint_ci_maintenance, lifecycle: active, entrypoint: true}
+    witnesses: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, .github/scripts/build-sboms-differential, docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md, docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md]
+    refresh_triggers: [ci_baseline_capture, ci_lane_change, candidate_freeze, github_actions_acceptance, mission_state_change]
 
   - path: docs/definitions/choir-wire-store-conformance-2026-07-11.md
     claim_scope: current

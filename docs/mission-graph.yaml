@@ -13,8 +13,8 @@ rules:
     text: The graph inherits docs/choir-doctrine.md and AGENTS.md.
   - id: no-historical-corpus
     text: Superseded Definitions may remain only as minimal discovery tombstones; ledgers, evidence, and retired topology do not return to this graph.
-  - id: sole-mission-entrypoint
-    text: Exactly one current mission node may set entrypoint true.
+  - id: scoped-entrypoints
+    text: Exactly one current product mission may set entrypoint true; an owner-authorized scope-disjoint maintenance mission may also be executable when its source, effect, landing, and concurrency boundaries are explicit.
   - id: phase-order-owned-by-definition
     text: Dependency and enables edges are discovery hints only; the active Definition owns phase order.
 node_fields:
@@ -23,11 +23,11 @@ node_fields:
   path: active Definition path
   ledger: always empty; raw mission ledgers are not retained
   status: working | blocked | settled | superseded; Definition blocked_incomplete maps to graph blocked
-  kind: spine | subordinate_contract | product_completion | docs_truth
+  kind: spine | subordinate_contract | product_completion | docs_truth | ci_maintenance
   entrypoint: whether the node accepts direct /goal execution
   member_of: containing mission id for subordinate contracts
   suite_phases: active Definition phases that consume this contract
-  execution_mode: mission_orchestrator | subordinate_only | draft_non_executable
+  execution_mode: mission_orchestrator | subordinate_only | draft_non_executable | scope_disjoint_maintenance
   depends_on: discovery prerequisite hints only; never suite containment or phase authority
   enables: discovery successor hints only; never execution authority
   sources: current authority sources only
@@ -208,30 +208,28 @@ nodes:
       - docs/standing-questions.md
       - docs/ACTIVE.md
       - AGENTS.md
-  - id: choir-ci-optimization-draft-2026-07-16
-    title: DRAFT — CI Re-Enablement and Pareto Optimization
-    path: docs/definitions/choir-ci-optimization-draft-2026-07-16.md
+  - id: choir-ci-optimization-2026-07-16
+    title: CI Re-Enablement and Evidence-Bounded Optimization
+    path: docs/definitions/choir-ci-optimization-2026-07-16.md
     ledger: ''
-    status: blocked
-    kind: docs_truth
-    entrypoint: false
-    execution_mode: draft_non_executable
+    status: working
+    kind: ci_maintenance
+    entrypoint: true
+    execution_mode: scope_disjoint_maintenance
     depends_on: []
     enables: []
     note: >-
-      Non-executable CI-optimization draft. Re-enable the paused race and
-      differential SBOM lanes and reduce feedback time and billed minutes as
-      Pareto moves proved by GitHub-run before/after receipts. Race returns via
-      the existing high_risk_race/sampled_race classifier plus the weekly full
-      sweep; SBOM returns on the documented host-side sbomnix topology gated to
-      post-merge main. Never weaken the check gate, deploy routing, staging
-      acceptance, or supply-chain publishing to win a time number. Capture a
-      pinned baseline, confirm owner policy and the 2026-07-14 pause reason, and
-      promote a revised successor through all registries before /goal execution.
+      Owner-authorized CI-only maintenance entrypoint concurrent with, but not
+      competing with, the sole Autoputer product mission. It may touch admitted
+      CI and mission paths only. It restores the complete reusable race workflow
+      and already-wired host-side SBOM audit job without changing check/deploy
+      relationships. Main landing remains owner-authorized and serialized.
     sources:
       - .github/workflows/ci.yml
       - .github/workflows/race.yml
+      - .github/scripts/build-sboms-differential
       - docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md
+      - docs/evidence/ci-optimization-baseline-2026-07-16.md
       - docs/standing-questions.md
       - docs/agent-product-doctrine.md
       - AGENTS.md

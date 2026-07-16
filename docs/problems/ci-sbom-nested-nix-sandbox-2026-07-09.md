@@ -1,7 +1,7 @@
 # CI SBOM Nested-Nix Sandbox Failure
 
 **Date:** 2026-07-09
-**Status:** observed, repair not yet applied
+**Status:** repaired by `c96c7b49`; successful host-side run observed; lane later paused
 **Classification:** substrate
 **Mutation class of the exposing change:** orange CI/publishing orchestration
 
@@ -51,6 +51,22 @@ The repair should reconnect that host-side generation path while retaining the
 new derivation-identity manifest, checksum verification, complete-bundle cache,
 and component diff.
 
+## 2026-07-16 Status Correction
+
+The replacement opportunity was implemented by commit
+`c96c7b490e5efb9999ae6ab8ee6c8b790387eee3`. The current differential builder
+builds each package on the GitHub runner, builds pinned sbomnix from the
+repository's `flake.lock`, and invokes sbomnix outside the package's Nix build
+sandbox. Main workflow run
+[29295978398](https://github.com/choir-hip/go-choir/actions/runs/29295978398),
+job `86971008658`, succeeded on that topology in 13m15s on 2026-07-14.
+
+The SBOM job was subsequently paused by `1b28520` through its workflow
+condition. Re-enablement therefore means restoring the existing job condition
+and proving the already-wired topology again; it does not mean reconnecting or
+reimplementing the host-side replacement. SBOM currently runs after `check`
+and does not gate `deploy-staging` or FlakeHub publication.
+
 ## Belief State
 
 - Supported: derivation identity is still a valid differential key.
@@ -61,12 +77,11 @@ and component diff.
 
 ## Remaining Error Field
 
-- No successful complete SBOM baseline exists yet.
-- The repair must pin sbomnix to the repository's `flake.lock` revision rather
-  than fetch an unpinned latest revision.
-- The next successful baseline will necessarily build all package SBOMs once.
-- A following CI-only commit must prove the differential path with `0 built`,
-  `12 reused`, and checksum-valid complete artifacts.
+- A successful host-side SBOM run exists, but the lane is currently paused.
+- Re-enablement must preserve the `flake.lock` pin and complete-bundle checksum
+  contract.
+- A fresh selected main run must fetch and verify the complete artifact and
+  record built/reused counts; duration alone is not artifact proof.
 
 ## Rollback
 
@@ -79,4 +94,5 @@ mutated by this failed run.
 - `discovered`: nested Nix runtime-SBOM generation was treated as cacheable but
   is not executable in the build sandbox.
 - `introduced`: none by this evidence record.
-- `repaired`: none yet.
+- `repaired`: host-side generation replaced the nested-sandbox topology in
+  `c96c7b49` and succeeded in run `29295978398`.

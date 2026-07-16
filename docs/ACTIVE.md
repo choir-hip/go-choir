@@ -6,7 +6,8 @@ corpus and does not make an unverified graph status into a live work claim.
 ## Active Definitions
 
 [`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md)
-is the one active top-level product Definition and the only `/goal` entrypoint.
+is the one active top-level product Definition and the sole product `/goal`
+entrypoint.
 It makes the production Autoputer real by constructing and booting a disposable
 realization from immutable `ComputerVersion = (CodeRef, ArtifactProgramRef)`,
 then proving exact typed state, destruction/reconstruction, route promotion and
@@ -39,19 +40,19 @@ timing is inadmissible. Reconcile and revise the draft from the completed
 predecessor's deployed baseline, set owner-ratified numerical SLOs, and promote
 it through all registries before execution.
 
-[`definitions/choir-ci-optimization-draft-2026-07-16.md`](definitions/choir-ci-optimization-draft-2026-07-16.md)
-is an owner-authorized **draft** for re-enabling the paused CI Race Detector and
-differential SBOM lanes while reducing PR feedback time and billed minutes as
-strict Pareto moves. It is blocked, is not a `/goal` entrypoint, and authorizes
-no edit to `.github/workflows/**`, `.github/scripts/**`, or `scripts/go-test-*`.
-Race returns through the existing `high_risk_race`/`sampled_race` classifier plus
-the weekly full sweep; SBOM returns on the documented host-side sbomnix topology
-(see [`problems/ci-sbom-nested-nix-sandbox-2026-07-09.md`](problems/ci-sbom-nested-nix-sandbox-2026-07-09.md))
-gated to post-merge main. Every speed claim requires a GitHub-run before/after
-receipt, and the `check` gate, deploy routing, staging acceptance, and
-supply-chain publishing must not be weakened to win a time number. Confirm owner
-re-enablement policy and the 2026-07-14 pause reason, capture a pinned baseline,
-and promote a revised successor through all registries before execution.
+## Independent CI Maintenance — Executable
+
+[`definitions/choir-ci-optimization-2026-07-16.md`](definitions/choir-ci-optimization-2026-07-16.md)
+is an owner-authorized, scope-disjoint CI-maintenance `/goal` entrypoint. It may
+run concurrently with Autoputer because it cannot change app/platform source,
+product authority, Node B, or product state. This does not create a second
+product mission: Autoputer remains the sole product `/goal`. The CI mission
+restores the full reusable race workflow for either classifier selection and
+re-enables the already-wired host-side SBOM topology as post-`check`, non-blocking
+audit evidence. GitHub Actions is its acceptance environment; CI-only changes
+must prove the expected deploy-impact/Node B skip. Any main landing must be
+explicitly owner-authorized and serialized because same-ref CI cancels an
+in-flight run.
 
 ## Supporting Maintenance
 
@@ -85,6 +86,12 @@ The sole product invocation is:
 
 ```text
 /goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+```
+
+The independent CI-maintenance invocation is:
+
+```text
+/goal docs/definitions/choir-ci-optimization-2026-07-16.md
 ```
 
 This index owns no current slice, next action, execution order, resumption,
