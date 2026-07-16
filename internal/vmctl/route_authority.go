@@ -2,11 +2,13 @@ package vmctl
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
@@ -20,17 +22,42 @@ type RouteResolution struct {
 	ArtifactProgram   computerversion.ArtifactProgram `json:"artifact_program"`
 }
 
-type RouteAuthority struct {
-	ledger   routeledger.Ledger
-	inputs   computerversion.ImmutableInputResolver
-	evidence routeledger.TransitionEvidenceResolver
+type routeAuthorityReader interface {
+	Resolve(context.Context, string) (routeledger.Slot, routeledger.TransitionReceipt, error)
+	PinAuthorizationEvidence(context.Context, routeledger.AuthorizationEvidence) (routeledger.AuthorizationEvidence, error)
+	VerifyTransitionEvidence(context.Context, routeledger.TransitionCommand) error
 }
 
-func NewRouteAuthority(ledger routeledger.Ledger, inputs computerversion.ImmutableInputResolver, evidence routeledger.TransitionEvidenceResolver) (*RouteAuthority, error) {
-	if ledger == nil || inputs == nil || evidence == nil {
-		return nil, fmt.Errorf("vmctl route authority: ledger, immutable input resolver, and transition evidence resolver are required")
+type RouteAuthority struct {
+	ledger       routeAuthorityReader
+	sqlLedger    *routeledger.SQLLedger
+	memoryLedger *routeledger.MemoryLedger
+	inputs       computerversion.ImmutableInputResolver
+	promotionKey ed25519.PublicKey
+}
+
+// NewRouteAuthority accepts the one concrete durable ledger implementation so
+// production callers cannot hide split route/evidence stores behind an interface.
+func NewRouteAuthority(ledger *routeledger.SQLLedger, inputs computerversion.ImmutableInputResolver) (*RouteAuthority, error) {
+	if ledger == nil || inputs == nil {
+		return nil, fmt.Errorf("vmctl route authority: durable SQL route/evidence ledger and immutable input resolver are required")
 	}
-	return &RouteAuthority{ledger: ledger, inputs: inputs, evidence: evidence}, nil
+	return &RouteAuthority{ledger: ledger, sqlLedger: ledger, inputs: inputs}, nil
+}
+
+func newMemoryRouteAuthority(ledger *routeledger.MemoryLedger, inputs computerversion.ImmutableInputResolver) (*RouteAuthority, error) {
+	if ledger == nil || inputs == nil {
+		return nil, fmt.Errorf("vmctl route authority: memory route/evidence ledger and immutable input resolver are required")
+	}
+	return &RouteAuthority{ledger: ledger, memoryLedger: ledger, inputs: inputs}, nil
+}
+
+func (a *RouteAuthority) SetPromotionAuthorityPublicKey(publicKey ed25519.PublicKey) error {
+	if len(publicKey) != ed25519.PublicKeySize {
+		return fmt.Errorf("vmctl promotion authority: Ed25519 public key is required")
+	}
+	a.promotionKey = append(ed25519.PublicKey(nil), publicKey...)
+	return nil
 }
 
 func (a *RouteAuthority) Resolve(ctx context.Context, slotID string) (RouteResolution, error) {
@@ -72,20 +99,91 @@ func (a *RouteAuthority) resolveVersionInputs(ctx context.Context, version compu
 	return closure, program, nil
 }
 
+func (a *RouteAuthority) prepareBootstrap(slotID string, verification computerversion.RealizationVerificationReceipt, approval OwnerPromotionApproval, preparedAt time.Time) (FrozenRouteBootstrapCandidate, error) {
+	if err := approval.verify(a.promotionKey, slotID, verification); err != nil {
+		return FrozenRouteBootstrapCandidate{}, err
+	}
+	ownerID, _, err := routeledger.ParseRouteSlotID(slotID)
+	if err != nil || approval.RouteSlotID != slotID || approval.OwnerID != ownerID {
+		return FrozenRouteBootstrapCandidate{}, fmt.Errorf("vmctl promotion authority: approval does not bind bootstrap route owner")
+	}
+	payload, err := json.Marshal(approval)
+	if err != nil {
+		return FrozenRouteBootstrapCandidate{}, err
+	}
+	evidence, err := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, slotID, verification.Version, payload, approval.ApprovedAt)
+	if err != nil {
+		return FrozenRouteBootstrapCandidate{}, err
+	}
+	return buildFrozenRouteBootstrapCandidate(slotID, verification, evidence, preparedAt)
+}
+
+func (a *RouteAuthority) preparePromotion(ctx context.Context, slotID string, verification computerversion.RealizationVerificationReceipt, approval OwnerPromotionApproval, preparedAt time.Time) (FrozenRoutePromotionCandidate, error) {
+	if err := approval.verify(a.promotionKey, slotID, verification); err != nil {
+		return FrozenRoutePromotionCandidate{}, err
+	}
+	ownerID, _, err := routeledger.ParseRouteSlotID(slotID)
+	if err != nil || approval.RouteSlotID != slotID || approval.OwnerID != ownerID {
+		return FrozenRoutePromotionCandidate{}, fmt.Errorf("vmctl promotion authority: approval does not bind route owner")
+	}
+	payload, err := json.Marshal(approval)
+	if err != nil {
+		return FrozenRoutePromotionCandidate{}, err
+	}
+	approvalEvidence, err := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, slotID, verification.Version, payload, approval.ApprovedAt)
+	if err != nil {
+		return FrozenRoutePromotionCandidate{}, err
+	}
+	current, err := a.Resolve(ctx, slotID)
+	if err != nil {
+		return FrozenRoutePromotionCandidate{}, fmt.Errorf("vmctl promotion: resolve current route: %w", err)
+	}
+	return buildFrozenRoutePromotionCandidate(current, verification, approvalEvidence, preparedAt)
+}
+
+func decodeOwnerApproval(evidence routeledger.AuthorizationEvidence) (OwnerPromotionApproval, error) {
+	var approval OwnerPromotionApproval
+	if err := json.Unmarshal(evidence.Payload, &approval); err != nil {
+		return OwnerPromotionApproval{}, fmt.Errorf("vmctl route authority: decode owner approval: %w", err)
+	}
+	return approval, nil
+}
+
+func (a *RouteAuthority) verifyFrozenOwnerApproval(slotID string, verification computerversion.RealizationVerificationReceipt, evidence routeledger.AuthorizationEvidence) error {
+	var approval OwnerPromotionApproval
+	if err := json.Unmarshal(evidence.Payload, &approval); err != nil {
+		return fmt.Errorf("vmctl route authority: decode owner approval: %w", err)
+	}
+	if err := approval.verify(a.promotionKey, slotID, verification); err != nil {
+		return err
+	}
+	if evidence.Kind != routeledger.AuthorizationEvidenceApproval || evidence.RouteSlotID != slotID || evidence.ComputerVersion != verification.Version || !evidence.CreatedAt.Equal(approval.ApprovedAt) {
+		return fmt.Errorf("vmctl route authority: owner approval evidence bindings are invalid")
+	}
+	return nil
+}
+
 func (a *RouteAuthority) Transition(ctx context.Context, command routeledger.TransitionCommand) (RouteResolution, error) {
-	if a == nil || a.ledger == nil || a.inputs == nil || a.evidence == nil {
+	return RouteResolution{}, fmt.Errorf("vmctl route authority: every route CAS requires a signed frozen candidate")
+}
+
+func (a *RouteAuthority) transitionAuthorized(ctx context.Context, command routeledger.TransitionCommand) (RouteResolution, error) {
+	if a == nil || a.ledger == nil || a.inputs == nil {
 		return RouteResolution{}, fmt.Errorf("vmctl route authority: not configured")
 	}
 	if err := command.Validate(); err != nil {
 		return RouteResolution{}, err
 	}
-	if err := a.evidence.VerifyTransitionEvidence(ctx, command); err != nil {
+	if err := a.ledger.VerifyTransitionEvidence(ctx, command); err != nil {
 		return RouteResolution{}, fmt.Errorf("vmctl route authority: transition evidence is not pinned: %w", err)
 	}
 	if _, _, err := a.resolveVersionInputs(ctx, command.New); err != nil {
 		return RouteResolution{}, fmt.Errorf("vmctl route authority: new ComputerVersion inputs are not pinned: %w", err)
 	}
-	_, receipt, err := a.ledger.Transition(ctx, command)
+	if a.memoryLedger == nil {
+		return RouteResolution{}, fmt.Errorf("vmctl route authority: raw transition is unavailable on the durable authority")
+	}
+	_, receipt, err := a.memoryLedger.Transition(ctx, command)
 	if err != nil {
 		return RouteResolution{}, err
 	}
@@ -95,6 +193,124 @@ func (a *RouteAuthority) Transition(ctx context.Context, command routeledger.Tra
 	}
 	resolution.TransitionReceipt = &receipt
 	return resolution, nil
+}
+
+func (a *RouteAuthority) transitionAuthorizedWithEvidence(ctx context.Context, command routeledger.TransitionCommand, evidence []routeledger.AuthorizationEvidence) (RouteResolution, error) {
+	if a == nil || a.ledger == nil || a.inputs == nil {
+		return RouteResolution{}, fmt.Errorf("vmctl route authority: not configured")
+	}
+	if err := command.Validate(); err != nil {
+		return RouteResolution{}, err
+	}
+	if _, _, err := a.resolveVersionInputs(ctx, command.New); err != nil {
+		return RouteResolution{}, fmt.Errorf("vmctl route authority: new ComputerVersion inputs are not pinned: %w", err)
+	}
+	var slot routeledger.Slot
+	var receipt routeledger.TransitionReceipt
+	var err error
+	if a.sqlLedger != nil {
+		slot, receipt, err = a.sqlLedger.ApplySignedTransition(ctx, command, evidence)
+	} else if a.memoryLedger != nil {
+		slot, receipt, err = a.memoryLedger.TransitionWithEvidence(ctx, command, evidence)
+	} else {
+		err = fmt.Errorf("vmctl route authority: no route mutation ledger is configured")
+	}
+	if err != nil {
+		return RouteResolution{}, err
+	}
+	resolution, err := a.Resolve(ctx, command.RouteSlotID)
+	if err != nil {
+		return RouteResolution{}, fmt.Errorf("vmctl route authority: resolve committed route: %w", err)
+	}
+	if resolution.Slot != slot {
+		return RouteResolution{}, fmt.Errorf("vmctl route authority: committed slot does not match atomic transition result")
+	}
+	resolution.TransitionReceipt = &receipt
+	return resolution, nil
+}
+
+func (a *RouteAuthority) applyFrozenBootstrap(ctx context.Context, candidate FrozenRouteBootstrapCandidate, acceptance G3PromotionAcceptance) (RouteResolution, error) {
+	if err := candidate.Validate(); err != nil {
+		return RouteResolution{}, err
+	}
+	if err := a.verifyFrozenOwnerApproval(candidate.RouteSlotID, candidate.Verification, candidate.ApprovalEvidence); err != nil {
+		return RouteResolution{}, err
+	}
+	if err := acceptance.verifyBootstrap(a.promotionKey, candidate); err != nil {
+		return RouteResolution{}, err
+	}
+	if _, _, err := a.ledger.Resolve(ctx, candidate.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+		if err == nil {
+			return RouteResolution{}, routeledger.ErrStaleTransition
+		}
+		return RouteResolution{}, err
+	}
+	approval, err := decodeOwnerApproval(candidate.ApprovalEvidence)
+	if err != nil {
+		return RouteResolution{}, err
+	}
+	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(routeledger.TransitionBootstrap), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, candidate.Bootstrap)
+	if err != nil {
+		return RouteResolution{}, err
+	}
+	command := execution.command(gate)
+	return a.transitionAuthorizedWithEvidence(ctx, command, []routeledger.AuthorizationEvidence{gate, candidate.ApprovalEvidence, candidate.CertificateEvidence})
+}
+
+func (a *RouteAuthority) applyFrozenPromotion(ctx context.Context, candidate FrozenRoutePromotionCandidate, acceptance G3PromotionAcceptance, rollback bool) (RouteResolution, error) {
+	if err := candidate.Validate(); err != nil {
+		return RouteResolution{}, err
+	}
+	if err := a.verifyFrozenOwnerApproval(candidate.Route.Slot.ID, candidate.Verification, candidate.ApprovalEvidence); err != nil {
+		return RouteResolution{}, err
+	}
+	if err := acceptance.verify(a.promotionKey, candidate); err != nil {
+		return RouteResolution{}, err
+	}
+	current, err := a.Resolve(ctx, candidate.Route.Slot.ID)
+	if err != nil {
+		return RouteResolution{}, err
+	}
+	plan := candidate.Promote
+	if rollback {
+		if err := verifyPromotedSuccessor(current, candidate, acceptance); err != nil {
+			return RouteResolution{}, err
+		}
+		plan = candidate.Rollback
+	} else if current.Slot.Generation != candidate.Route.Slot.Generation || !routeledger.SameVersion(current.Slot.Current, candidate.Route.Slot.Current) || current.Slot.LatestReceiptID != candidate.Route.Slot.LatestReceiptID {
+		return RouteResolution{}, routeledger.ErrStaleTransition
+	}
+	approval, err := decodeOwnerApproval(candidate.ApprovalEvidence)
+	if err != nil {
+		return RouteResolution{}, err
+	}
+	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(plan.Kind), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, plan)
+	if err != nil {
+		return RouteResolution{}, err
+	}
+	command := execution.command(gate)
+	evidence := []routeledger.AuthorizationEvidence{gate, candidate.ApprovalEvidence, candidate.CertificateEvidence}
+	return a.transitionAuthorizedWithEvidence(ctx, command, evidence)
+}
+
+func verifyPromotedSuccessor(current RouteResolution, candidate FrozenRoutePromotionCandidate, acceptance G3PromotionAcceptance) error {
+	approval, err := decodeOwnerApproval(candidate.ApprovalEvidence)
+	if err != nil {
+		return err
+	}
+	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(routeledger.TransitionPromote), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, candidate.Promote)
+	if err != nil {
+		return err
+	}
+	command := execution.command(gate)
+	receipt := current.LatestReceipt
+	if current.TransitionReceipt != nil {
+		receipt = *current.TransitionReceipt
+	}
+	if current.Slot.Generation != candidate.Route.Slot.Generation+1 || !routeledger.SameVersion(current.Slot.Current, candidate.Verification.Version) || current.Slot.LatestReceiptID != receipt.ID || !transitionReceiptMatchesCommand(receipt, command) {
+		return routeledger.ErrStaleTransition
+	}
+	return nil
 }
 
 func (a *RouteAuthority) PinCode(ctx context.Context, closure computerversion.CodeClosure) (computerversion.CodeClosure, error) {
@@ -114,11 +330,7 @@ func (a *RouteAuthority) PinArtifactProgram(ctx context.Context, program compute
 }
 
 func (a *RouteAuthority) PinAuthorizationEvidence(ctx context.Context, evidence routeledger.AuthorizationEvidence) (routeledger.AuthorizationEvidence, error) {
-	catalog, ok := a.evidence.(routeledger.TransitionEvidenceCatalog)
-	if !ok {
-		return routeledger.AuthorizationEvidence{}, fmt.Errorf("vmctl route authority: transition evidence catalog is read-only")
-	}
-	return catalog.PinAuthorizationEvidence(ctx, evidence)
+	return a.ledger.PinAuthorizationEvidence(ctx, evidence)
 }
 
 func (h *Handler) requireComputerVersionRoute(ctx context.Context, userID, desktopID string) error {
@@ -246,6 +458,143 @@ func (h *Handler) HandlePinComputerVersionAuthorizationEvidence(w http.ResponseW
 	writeVMCTLJSON(w, http.StatusOK, pinned)
 }
 
+type prepareRoutePromotionRequest struct {
+	RouteSlotID  string                             `json:"route_slot_id"`
+	Construction computerversion.ConstructionResult `json:"construction"`
+	Approval     OwnerPromotionApproval             `json:"approval"`
+}
+
+func (h *Handler) HandlePrepareComputerVersionRouteBootstrap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil || h.construction == nil {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "signed bootstrap preparation unavailable"})
+		return
+	}
+	defer r.Body.Close()
+	var request prepareRoutePromotionRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid route bootstrap request"})
+		return
+	}
+	ownerID, computerID, err := routeledger.ParseRouteSlotID(request.RouteSlotID)
+	if err != nil || request.Construction.Identity.OwnerID != ownerID || request.Construction.Identity.DesktopID != computerID || request.Construction.Identity.CandidateID != computerID {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "construction identity does not bind route slot"})
+		return
+	}
+	verification, err := h.construction.verify(r.Context(), request.Construction)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	candidate, err := h.routeAuthority.prepareBootstrap(request.RouteSlotID, verification, request.Approval, time.Now().UTC())
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, candidate)
+}
+
+func (h *Handler) HandlePrepareComputerVersionRoutePromotion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
+		return
+	}
+	if h.routeAuthority == nil || h.construction == nil {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "ComputerVersion route authority or verifier unavailable"})
+		return
+	}
+	defer r.Body.Close()
+	var request prepareRoutePromotionRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid route promotion request"})
+		return
+	}
+	ownerID, computerID, err := routeledger.ParseRouteSlotID(request.RouteSlotID)
+	if err != nil || request.Construction.Identity.OwnerID != ownerID || request.Construction.Identity.DesktopID != computerID || request.Construction.Identity.CandidateID != computerID {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "construction identity does not bind route slot"})
+		return
+	}
+	verification, err := h.construction.verify(r.Context(), request.Construction)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	candidate, err := h.routeAuthority.preparePromotion(r.Context(), request.RouteSlotID, verification, request.Approval, time.Now().UTC())
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, candidate)
+}
+
+type applyFrozenPromotionRequest struct {
+	Candidate  FrozenRoutePromotionCandidate `json:"candidate"`
+	Acceptance G3PromotionAcceptance         `json:"acceptance"`
+	Action     string                        `json:"action"`
+}
+
+type applyFrozenBootstrapRequest struct {
+	Candidate  FrozenRouteBootstrapCandidate `json:"candidate"`
+	Acceptance G3PromotionAcceptance         `json:"acceptance"`
+}
+
+func (h *Handler) HandleApplyFrozenComputerVersionBootstrap(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "signed bootstrap unavailable"})
+		return
+	}
+	defer r.Body.Close()
+	var request applyFrozenBootstrapRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid frozen bootstrap request"})
+		return
+	}
+	resolution, err := h.routeAuthority.applyFrozenBootstrap(r.Context(), request.Candidate, request.Acceptance)
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, resolution)
+}
+
+func (h *Handler) HandleApplyFrozenComputerVersionPromotion(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
+		return
+	}
+	if !isInternalCaller(r) {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
+		return
+	}
+	if h.routeAuthority == nil {
+		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "ComputerVersion route authority unavailable"})
+		return
+	}
+	defer r.Body.Close()
+	var request applyFrozenPromotionRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil || (request.Action != "promote" && request.Action != "rollback") {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid frozen promotion request"})
+		return
+	}
+	resolution, err := h.routeAuthority.applyFrozenPromotion(r.Context(), request.Candidate, request.Acceptance, request.Action == "rollback")
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, resolution)
+}
+
 func (h *Handler) HandleResolveComputerVersionRoute(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
@@ -316,6 +665,21 @@ func PinComputerVersionArtifactProgramEndpoint(baseURL string) string {
 
 func PinComputerVersionAuthorizationEvidenceEndpoint(baseURL string) string {
 	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/pin-authorization-evidence"
+}
+
+func PrepareComputerVersionRouteBootstrapEndpoint(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/prepare-bootstrap"
+}
+func ApplyFrozenComputerVersionBootstrapEndpoint(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/apply-bootstrap"
+}
+
+func ApplyFrozenComputerVersionPromotionEndpoint(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/apply-promotion"
+}
+
+func PrepareComputerVersionRoutePromotionEndpoint(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/prepare-promotion"
 }
 
 func ResolveComputerVersionRouteEndpoint(baseURL string) string {

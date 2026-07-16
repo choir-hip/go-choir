@@ -1,11 +1,13 @@
 package vmctl
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
 )
 
 type constructionRequest struct {
@@ -13,13 +15,25 @@ type constructionRequest struct {
 	Identity computerversion.ConstructionIdentity `json:"identity"`
 }
 
+type realizationVerifier interface {
+	Verify(context.Context, diskinstantiation.Plan, computerversion.ConstructionResult) (computerversion.RealizationVerificationReceipt, error)
+}
+
 type constructionService struct {
 	template computerversion.ProductionMaterializer
 	manifest computerversion.CapabilityManifest
+	verifier realizationVerifier
 }
 
 func (h *Handler) SetConstructionService(template computerversion.ProductionMaterializer, manifest computerversion.CapabilityManifest) {
-	h.construction = &constructionService{template: template, manifest: manifest}
+	h.construction = &constructionService{
+		template: template, manifest: manifest,
+		verifier: computerversion.IndependentRealizationVerifier{Inputs: template.Inputs, Artifacts: template.Artifacts, Blobs: template.Blobs, Disk: template.Disk, Launcher: template.Launcher},
+	}
+}
+
+func (s *constructionService) verify(ctx context.Context, construction computerversion.ConstructionResult) (computerversion.RealizationVerificationReceipt, error) {
+	return s.verifier.Verify(ctx, s.template.DiskPlan, construction)
 }
 
 func (h *Handler) HandleConstructComputerVersion(w http.ResponseWriter, r *http.Request) {

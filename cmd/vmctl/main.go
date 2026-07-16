@@ -139,15 +139,30 @@ func main() {
 		if err := inputs.EnsureSchema(pingCtx); err != nil {
 			log.Fatalf("vmctl: initialize immutable input catalog: %v", err)
 		}
-		ledger := routeledger.NewSQLLedger(routeDB, computerversion.VerifySQLInputsInTransition)
+		ledger := routeledger.NewSQLLedger(routeDB)
 		if err := ledger.EnsureSchema(pingCtx); err != nil {
 			log.Fatalf("vmctl: initialize ComputerVersion route ledger: %v", err)
 		}
-		authority, err := vmctl.NewRouteAuthority(ledger, inputs, ledger)
+		authority, err := vmctl.NewRouteAuthority(ledger, inputs)
 		if err != nil {
 			log.Fatalf("vmctl: initialize ComputerVersion route authority: %v", err)
 		}
 		handler.SetRouteAuthority(authority)
+		if encodedKey := strings.TrimSpace(os.Getenv("VMCTL_PROMOTION_AUTHORITY_PUBLIC_KEY")); encodedKey != "" {
+			publicKey, err := vmctl.ParsePromotionAuthorityPublicKey(encodedKey)
+			if err != nil {
+				log.Fatalf("vmctl: configure promotion authority: %v", err)
+			}
+			if err := ledger.ConfigurePromotionAuthority(pingCtx, publicKey); err != nil {
+				log.Fatalf("vmctl: pin promotion authority: %v", err)
+			}
+			if err := authority.SetPromotionAuthorityPublicKey(publicKey); err != nil {
+				log.Fatalf("vmctl: configure promotion authority: %v", err)
+			}
+			log.Printf("vmctl: signed promotion authority configured")
+		} else {
+			log.Printf("vmctl: promotion preparation and CAS unavailable (VMCTL_PROMOTION_AUTHORITY_PUBLIC_KEY is not configured)")
+		}
 		if blobRoot := strings.TrimSpace(os.Getenv("VMCTL_BASE_BLOB_ROOT")); blobRoot != "" {
 			blobs, err := blob.OpenStore(blobRoot)
 			if err != nil {

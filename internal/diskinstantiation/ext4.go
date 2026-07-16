@@ -125,11 +125,26 @@ func (b Ext4Backend) Instantiate(ctx context.Context, plan Plan, populate Popula
 }
 
 func (b Ext4Backend) Inspect(ctx context.Context, receipt Receipt) (GeometryReceipt, error) {
+	if err := VerifyReceiptIntegrity(receipt); err != nil {
+		return GeometryReceipt{}, fmt.Errorf("disk instantiation: refuse unverified inspect receipt: %w", err)
+	}
 	if receipt.Backend != "" && receipt.Backend != Ext4BackendName {
 		return GeometryReceipt{}, fmt.Errorf("disk instantiation: receipt backend mismatch")
 	}
 	if err := b.authorizeDevicePath(receipt.DevicePath); err != nil {
 		return GeometryReceipt{}, err
+	}
+	root, rootErr := filepath.EvalSymlinks(b.WorkRoot)
+	resolved, pathErr := filepath.EvalSymlinks(receipt.DevicePath)
+	if rootErr != nil || pathErr != nil {
+		return GeometryReceipt{}, fmt.Errorf("disk instantiation: inspect device path cannot be resolved")
+	}
+	if rel, err := filepath.Rel(root, resolved); err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return GeometryReceipt{}, fmt.Errorf("disk instantiation: resolved inspect device path escapes work root")
+	}
+	realizationDir := filepath.Dir(receipt.DevicePath)
+	if filepath.Base(realizationDir) != receipt.RealizationID || filepath.Base(receipt.DevicePath) != receipt.DeviceID+".img" {
+		return GeometryReceipt{}, fmt.Errorf("disk instantiation: inspect path does not match receipt identity")
 	}
 	info, err := os.Stat(receipt.DevicePath)
 	if err != nil {

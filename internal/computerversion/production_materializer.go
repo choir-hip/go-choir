@@ -61,7 +61,7 @@ type LiveConstructionObservation struct {
 // product path, not the generator's staging directory or host-side device.
 type ConstructedLauncher interface {
 	Launch(context.Context, ConstructedLaunchRequest) (BootReceipt, error)
-	Observe(context.Context, BootReceipt, ComputerVersion) (LiveConstructionObservation, error)
+	Observe(context.Context, ConstructedLaunchRequest, BootReceipt) (LiveConstructionObservation, error)
 	Commit(context.Context, BootReceipt, ComputerVersion, diskinstantiation.Receipt) error
 	Destroy(context.Context, BootReceipt) error
 }
@@ -72,6 +72,7 @@ type ResolvedConstructionInputs struct {
 }
 
 type ConstructionResult struct {
+	Identity    ConstructionIdentity       `json:"identity"`
 	Realization Realization                `json:"realization"`
 	Inputs      ResolvedConstructionInputs `json:"inputs"`
 	Disk        diskinstantiation.Receipt  `json:"disk_instantiation"`
@@ -119,6 +120,9 @@ func (m *ProductionMaterializer) Construct(ctx context.Context, version Computer
 	if program.Ref != version.ArtifactProgramRef {
 		return ConstructionResult{}, fmt.Errorf("production materializer: resolved artifact program ref mismatch")
 	}
+	if err := code.Verify(); err != nil {
+		return ConstructionResult{}, fmt.Errorf("production materializer: verify immutable CodeRef binding: %w", err)
+	}
 	resolved := ResolvedConstructionInputs{Code: code, Program: program}
 	if len(resolved.Code.Artifacts) != 1 || resolved.Code.Artifacts[0].Name != SandboxRuntimeArtifactName {
 		return ConstructionResult{}, fmt.Errorf("production materializer: CodeRef must resolve exactly one complete sandbox runtime artifact")
@@ -128,7 +132,7 @@ func (m *ProductionMaterializer) Construct(ctx context.Context, version Computer
 			return ConstructionResult{}, fmt.Errorf("production materializer: verify code artifact %q: %w", artifact.Name, err)
 		}
 	}
-	entries, err := m.loadJournalEntries(ctx, resolved.Program, version)
+	entries, err := loadVerifiedJournalEntries(ctx, m.Artifacts, resolved.Program, version)
 	if err != nil {
 		return ConstructionResult{}, err
 	}
@@ -206,7 +210,7 @@ func (m *ProductionMaterializer) Construct(ctx context.Context, version Computer
 		return ConstructionResult{}, fmt.Errorf("production materializer: launcher returned unhealthy or incomplete boot receipt")
 	}
 
-	live, err := m.Launcher.Observe(ctx, boot, version)
+	live, err := m.Launcher.Observe(ctx, launchRequest, boot)
 	if err != nil {
 		return ConstructionResult{}, fmt.Errorf("production materializer: live product readback: %w", err)
 	}
@@ -238,6 +242,7 @@ func (m *ProductionMaterializer) Construct(ctx context.Context, version Computer
 		return ConstructionResult{}, fmt.Errorf("production materializer: commit lifecycle evidence: %w", err)
 	}
 	result = ConstructionResult{
+		Identity: m.Identity,
 		Realization: Realization{
 			ID:           m.Identity.RealizationID,
 			Version:      version,
@@ -273,7 +278,7 @@ func (m *ProductionMaterializer) validate(version ComputerVersion, manifest Capa
 	return nil
 }
 
-func (m *ProductionMaterializer) loadJournalEntries(ctx context.Context, program ArtifactProgram, version ComputerVersion) ([]journal.Entry, error) {
+func loadVerifiedJournalEntries(ctx context.Context, artifacts ArtifactPayloadReader, program ArtifactProgram, version ComputerVersion) ([]journal.Entry, error) {
 	var binding *ArtifactProgramEntry
 	for i := range program.Entries {
 		if program.Entries[i].Kind != ArtifactProgramKindBaseJournal {
@@ -287,7 +292,7 @@ func (m *ProductionMaterializer) loadJournalEntries(ctx context.Context, program
 	if binding == nil {
 		return nil, fmt.Errorf("production materializer: base journal artifact is required")
 	}
-	payload, err := m.Artifacts.ReadArtifact(ctx, binding.ArtifactURI, binding.ContentSHA256)
+	payload, err := artifacts.ReadArtifact(ctx, binding.ArtifactURI, binding.ContentSHA256)
 	if err != nil {
 		return nil, fmt.Errorf("production materializer: read base journal artifact: %w", err)
 	}

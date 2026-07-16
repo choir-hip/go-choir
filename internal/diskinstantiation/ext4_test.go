@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestExt4BackendFreshSparseGeometryAndReconstruction(t *testing.T) {
@@ -133,5 +135,44 @@ func TestExt4BackendChurnReclaimReconstructionBound(t *testing.T) {
 	}
 	if reconstructed.Geometry.AllocatedBytes > plan.Allocation.MaxAllocatedBytes || reconstructed.Geometry.AllocatedBytes >= afterDelete.AllocatedBytes {
 		t.Fatalf("reconstruction did not reset churn allocation within bound: reconstructed=%+v after_delete=%+v", reconstructed.Geometry, afterDelete)
+	}
+}
+
+func TestExt4BackendInspectRejectsReceiptIdentityPathSplice(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "candidate-b"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "candidate-b", "data.img"), []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := FinalizeReceipt(Receipt{Backend: Ext4BackendName, RealizationID: "candidate-a", DeviceID: "data", DevicePath: filepath.Join(root, "candidate-b", "data.img"), CreatedAt: time.Now(), Geometry: GeometryReceipt{FilesystemType: FilesystemExt4, FilesystemLabel: "choir-data", PartitionLayout: PartitionLayoutNone, DeviceLogicalBytes: 32 << 30, FilesystemBytes: 32 << 30, FilesystemBlockSize: 4096, FilesystemBlocks: (32 << 30) / 4096}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Ext4Backend{WorkRoot: root}).Inspect(t.Context(), receipt); err == nil || !strings.Contains(err.Error(), "inspect path does not match receipt identity") {
+		t.Fatalf("identity-spliced inspect error = %v", err)
+	}
+}
+
+func TestExt4BackendInspectRejectsSymlinkedDevice(t *testing.T) {
+	root := t.TempDir()
+	external := filepath.Join(t.TempDir(), "data.img")
+	if err := os.WriteFile(external, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "candidate"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	device := filepath.Join(root, "candidate", "data.img")
+	if err := os.Symlink(external, device); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := FinalizeReceipt(Receipt{Backend: Ext4BackendName, RealizationID: "candidate", DeviceID: "data", DevicePath: device, CreatedAt: time.Now(), Geometry: GeometryReceipt{FilesystemType: FilesystemExt4, FilesystemLabel: "choir-data", PartitionLayout: PartitionLayoutNone, DeviceLogicalBytes: 32 << 30, FilesystemBytes: 32 << 30, FilesystemBlockSize: 4096, FilesystemBlocks: (32 << 30) / 4096}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := (Ext4Backend{WorkRoot: root}).Inspect(t.Context(), receipt); err == nil || !strings.Contains(err.Error(), "resolved inspect device path escapes") {
+		t.Fatalf("symlink inspect error = %v", err)
 	}
 }

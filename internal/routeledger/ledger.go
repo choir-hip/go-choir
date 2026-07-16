@@ -240,6 +240,13 @@ type TransitionEvidenceCatalog interface {
 	PinAuthorizationEvidence(context.Context, AuthorizationEvidence) (AuthorizationEvidence, error)
 }
 
+// AtomicTransitionEvidenceCatalog fate-shares authorization evidence and route
+// mutation in one transaction. Production route publication must use this path.
+type AtomicTransitionEvidenceCatalog interface {
+	TransitionEvidenceCatalog
+	TransitionWithEvidence(context.Context, TransitionCommand, []AuthorizationEvidence) (Slot, TransitionReceipt, error)
+}
+
 func validHashEvidenceRef(value, prefix string) bool {
 	return strings.HasPrefix(value, prefix) && len(value) == len(prefix)+64 && validHexString(value[len(prefix):])
 }
@@ -311,6 +318,7 @@ type MemoryLedger struct {
 	slots    map[string]Slot
 	receipts map[ReceiptID]TransitionReceipt
 	byKey    map[IdempotencyKey]ReceiptID
+	evidence map[string]AuthorizationEvidence
 	now      func() time.Time
 }
 
@@ -319,6 +327,7 @@ func NewMemoryLedger() *MemoryLedger {
 		slots:    make(map[string]Slot),
 		receipts: make(map[ReceiptID]TransitionReceipt),
 		byKey:    make(map[IdempotencyKey]ReceiptID),
+		evidence: make(map[string]AuthorizationEvidence),
 		now:      time.Now,
 	}
 }
@@ -346,6 +355,10 @@ func (l *MemoryLedger) Transition(ctx context.Context, command TransitionCommand
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.transitionLocked(command)
+}
+
+func (l *MemoryLedger) transitionLocked(command TransitionCommand) (Slot, TransitionReceipt, error) {
 	if receiptID, ok := l.byKey[command.IdempotencyKey]; ok {
 		receipt := l.receipts[receiptID]
 		if !receiptMatchesCommand(receipt, command) {
@@ -377,6 +390,96 @@ func (l *MemoryLedger) Transition(ctx context.Context, command TransitionCommand
 	l.byKey[command.IdempotencyKey] = receipt.ID
 	l.slots[slot.ID] = slot
 	return slot, receipt, nil
+}
+
+func (l *MemoryLedger) PinAuthorizationEvidence(ctx context.Context, evidence AuthorizationEvidence) (AuthorizationEvidence, error) {
+	if err := ctx.Err(); err != nil {
+		return AuthorizationEvidence{}, err
+	}
+	if err := evidence.Validate(); err != nil {
+		return AuthorizationEvidence{}, err
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if existing, ok := l.evidence[evidence.Ref]; ok && !authorizationEvidenceEqual(existing, evidence) {
+		return AuthorizationEvidence{}, fmt.Errorf("route ledger: authorization evidence ref collision")
+	}
+	l.evidence[evidence.Ref] = evidence
+	return evidence, nil
+}
+
+func (l *MemoryLedger) ResolveAuthorizationEvidence(ctx context.Context, ref string) (AuthorizationEvidence, error) {
+	if err := ctx.Err(); err != nil {
+		return AuthorizationEvidence{}, err
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	evidence, ok := l.evidence[ref]
+	if !ok {
+		return AuthorizationEvidence{}, fmt.Errorf("authorization evidence not found")
+	}
+	return evidence, nil
+}
+
+func (l *MemoryLedger) VerifyTransitionEvidence(ctx context.Context, command TransitionCommand) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return verifyTransitionEvidenceMap(l.evidence, command)
+}
+
+func (l *MemoryLedger) TransitionWithEvidence(ctx context.Context, command TransitionCommand, evidence []AuthorizationEvidence) (Slot, TransitionReceipt, error) {
+	if err := ctx.Err(); err != nil {
+		return Slot{}, TransitionReceipt{}, err
+	}
+	command = command.normalized()
+	if err := command.Validate(); err != nil {
+		return Slot{}, TransitionReceipt{}, err
+	}
+	if len(evidence) == 0 {
+		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: atomic transition evidence is required")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	combined := make(map[string]AuthorizationEvidence, len(l.evidence)+len(evidence))
+	for ref, item := range l.evidence {
+		combined[ref] = item
+	}
+	for _, item := range evidence {
+		if err := item.Validate(); err != nil {
+			return Slot{}, TransitionReceipt{}, err
+		}
+		if existing, ok := combined[item.Ref]; ok && !authorizationEvidenceEqual(existing, item) {
+			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: authorization evidence ref collision")
+		}
+		combined[item.Ref] = item
+	}
+	if err := verifyTransitionEvidenceMap(combined, command); err != nil {
+		return Slot{}, TransitionReceipt{}, err
+	}
+	slot, receipt, err := l.transitionLocked(command)
+	if err != nil {
+		return Slot{}, TransitionReceipt{}, err
+	}
+	l.evidence = combined
+	return slot, receipt, nil
+}
+
+func verifyTransitionEvidenceMap(evidence map[string]AuthorizationEvidence, command TransitionCommand) error {
+	approval, approvalOK := evidence[string(command.ApprovalRef)]
+	certificate, certificateOK := evidence[string(command.PromotionCertificateRef)]
+	if !approvalOK || !certificateOK || approval.Kind != AuthorizationEvidenceApproval || certificate.Kind != AuthorizationEvidencePromotionCertificate || approval.RouteSlotID != command.RouteSlotID || certificate.RouteSlotID != command.RouteSlotID || !SameVersion(approval.ComputerVersion, command.New) || !SameVersion(certificate.ComputerVersion, command.New) {
+		return fmt.Errorf("route ledger: authorization evidence does not bind the requested route and ComputerVersion")
+	}
+	return nil
+}
+
+func authorizationEvidenceEqual(left, right AuthorizationEvidence) bool {
+	leftJSON, _ := json.Marshal(left)
+	rightJSON, _ := json.Marshal(right)
+	return string(leftJSON) == string(rightJSON)
 }
 
 func newReceipt(command TransitionCommand, generation uint64, committedAt time.Time) TransitionReceipt {

@@ -77,7 +77,16 @@ func TestVMConstructionLauncherBindsDeviceCodeAndProductReadback(t *testing.T) {
 	if cfg.DataDevicePath != request.Disk.DevicePath || cfg.CodeRef != string(version.CodeRef) {
 		t.Fatalf("launch bindings = %+v", cfg)
 	}
-	got, err := launcher.Observe(t.Context(), boot, version)
+	if manager.getVMs == nil {
+		manager.getVMs = make(map[string]*VMInstanceInfo)
+	}
+	manager.getVMs[boot.VMID] = manager.bootResponse
+	redirected := boot
+	redirected.HostURL = "http://forged.internal"
+	if _, err := launcher.Observe(t.Context(), request, redirected); err == nil {
+		t.Fatal("caller-supplied HostURL redirected independent product readback")
+	}
+	got, err := launcher.Observe(t.Context(), request, boot)
 	if err != nil {
 		t.Fatal(err)
 	}

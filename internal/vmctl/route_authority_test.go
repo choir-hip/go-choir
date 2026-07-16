@@ -3,6 +3,8 @@ package vmctl
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 )
 
@@ -54,12 +57,12 @@ const (
 )
 
 func TestRouteAuthorityPinsInputsBeforeTransition(t *testing.T) {
-	authority, version := newRouteAuthorityFixture(t)
+	authority, version, approvalRef, certificateRef := newRouteAuthorityFixture(t)
 	slotID, err := routeledger.RouteSlotID("owner", "primary")
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolution, err := authority.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bootstrap"})
+	resolution, err := authority.transitionAuthorized(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: approvalRef, PromotionCertificateRef: certificateRef, IdempotencyKey: "idempotency:bootstrap"})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -76,12 +79,12 @@ func TestRouteAuthorityPinsInputsBeforeTransition(t *testing.T) {
 }
 
 func TestRouteAuthorityRefusesForgedResolverOutputBeforeCAS(t *testing.T) {
-	authority, version := newRouteAuthorityFixture(t)
+	authority, version, approvalRef, certificateRef := newRouteAuthorityFixture(t)
 	fixture := authority.inputs.(routeInputFixture)
 	fixture.code.SourceCommit = "forged-mutable-source"
 	authority.inputs = fixture
 	slotID, _ := routeledger.RouteSlotID("owner", "primary")
-	_, err := authority.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:forged"})
+	_, err := authority.transitionAuthorized(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: approvalRef, PromotionCertificateRef: certificateRef, IdempotencyKey: "idempotency:forged"})
 	if err == nil {
 		t.Fatal("forged resolver output advanced route")
 	}
@@ -91,10 +94,10 @@ func TestRouteAuthorityRefusesForgedResolverOutputBeforeCAS(t *testing.T) {
 }
 
 func TestRouteAuthorityRefusesUnpinnedVersion(t *testing.T) {
-	authority, _ := newRouteAuthorityFixture(t)
+	authority, _, approvalRef, certificateRef := newRouteAuthorityFixture(t)
 	slotID, _ := routeledger.RouteSlotID("owner", "primary")
-	_, err := authority.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap,
-		New: computerversion.ComputerVersion{CodeRef: "code:missing", ArtifactProgramRef: "program:missing"}, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:missing"})
+	_, err := authority.transitionAuthorized(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap,
+		New: computerversion.ComputerVersion{CodeRef: "code:missing", ArtifactProgramRef: "program:missing"}, ApprovalRef: approvalRef, PromotionCertificateRef: certificateRef, IdempotencyKey: "idempotency:missing"})
 	if err == nil {
 		t.Fatal("unpinned ComputerVersion transition succeeded")
 	}
@@ -104,7 +107,7 @@ func TestRouteAuthorityRefusesUnpinnedVersion(t *testing.T) {
 }
 
 func TestClientPinsInputsAndTransitionsRoute(t *testing.T) {
-	authority, version := newRouteAuthorityFixture(t)
+	authority, version, _, _ := newRouteAuthorityFixture(t)
 	h := NewHandler(NewOwnershipRegistry("http://sandbox"))
 	h.SetRouteAuthority(authority)
 	mux := http.NewServeMux()
@@ -122,19 +125,58 @@ func TestClientPinsInputsAndTransitionsRoute(t *testing.T) {
 		t.Fatalf("pin program: %v", err)
 	}
 	slotID, _ := routeledger.RouteSlotID("owner", "primary")
-	resolution, err := client.TransitionComputerVersionRoute(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:client-control-bootstrap"})
-	if err != nil {
-		t.Fatalf("transition route: %v", err)
+	if _, err := client.TransitionComputerVersionRoute(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:client-control-bootstrap"}); err == nil {
+		t.Fatal("raw HTTP bootstrap bypassed signed frozen candidate")
 	}
-	if resolution.Slot.Current != version || resolution.TransitionReceipt == nil {
-		t.Fatalf("transition response join mismatch: %+v", resolution)
+	if _, _, err := authority.ledger.Resolve(context.Background(), slotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+		t.Fatalf("raw bootstrap mutated route: %v", err)
+	}
+}
+
+func TestPreparePromotionEndpointFreezesCandidateWithoutRouteCAS(t *testing.T) {
+	authority, active, approvalRef, certificateRef := newRouteAuthorityFixture(t)
+	slotID, _ := routeledger.RouteSlotID("owner", "primary")
+	current, err := authority.transitionAuthorized(t.Context(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: active, ApprovalRef: approvalRef, PromotionCertificateRef: certificateRef, IdempotencyKey: "idempotency:prepare-bootstrap"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidateVersion := computerversion.ComputerVersion{CodeRef: "code:candidate", ArtifactProgramRef: "artifact:candidate"}
+	verification := validVerificationReceipt(t, candidateVersion, time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC))
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, ed25519.SeedSize))
+	if err := authority.SetPromotionAuthorityPublicKey(privateKey.Public().(ed25519.PublicKey)); err != nil {
+		t.Fatal(err)
+	}
+	approval := OwnerPromotionApproval{RouteSlotID: slotID, OwnerID: "owner", ComputerVersion: candidateVersion, ConstructionSHA256: verification.ConstructionSHA256, Decision: "approve", KeyID: "owner-test-key", ApprovedAt: verification.VerifiedAt}
+	approvalPayload, err := approval.SigningPayload()
+	if err != nil {
+		t.Fatal(err)
+	}
+	approval.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, approvalPayload))
+	payload, _ := json.Marshal(prepareRoutePromotionRequest{RouteSlotID: slotID, Construction: computerversion.ConstructionResult{Identity: computerversion.ConstructionIdentity{OwnerID: "owner", DesktopID: "primary", CandidateID: "primary"}}, Approval: approval})
+	req := httptest.NewRequest(http.MethodPost, PrepareComputerVersionRoutePromotionEndpoint("http://vmctl"), bytes.NewReader(payload))
+	req.Header.Set("X-Internal-Caller", "true")
+	rec := httptest.NewRecorder()
+	h := NewHandler(NewOwnershipRegistry("http://sandbox"))
+	h.SetRouteAuthority(authority)
+	h.construction = &constructionService{verifier: fixedRealizationVerifier{receipt: verification}}
+	h.HandlePrepareComputerVersionRoutePromotion(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("prepare promotion status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var frozen FrozenRoutePromotionCandidate
+	if err := json.NewDecoder(rec.Body).Decode(&frozen); err != nil || frozen.Validate() != nil {
+		t.Fatalf("invalid frozen response: %+v decode=%v validate=%v", frozen, err, frozen.Validate())
+	}
+	after, err := authority.Resolve(t.Context(), slotID)
+	if err != nil || after.Slot.Generation != current.Slot.Generation || after.Slot.Current != active {
+		t.Fatalf("prepare endpoint mutated route: %+v err=%v", after, err)
 	}
 }
 
 func TestClientResolvesAndVerifiesComputerVersionRoute(t *testing.T) {
-	authority, version := newRouteAuthorityFixture(t)
+	authority, version, approvalRef, certificateRef := newRouteAuthorityFixture(t)
 	slotID, _ := routeledger.RouteSlotID("owner", "primary")
-	if _, err := authority.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:client-bootstrap"}); err != nil {
+	if _, err := authority.transitionAuthorized(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: approvalRef, PromotionCertificateRef: certificateRef, IdempotencyKey: "idempotency:client-bootstrap"}); err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
 	h := NewHandler(NewOwnershipRegistry("http://sandbox"))
@@ -152,7 +194,7 @@ func TestClientResolvesAndVerifiesComputerVersionRoute(t *testing.T) {
 }
 
 func TestResolveRefusesBeforeOwnershipMutationWhenRouteMissing(t *testing.T) {
-	authority, version := newRouteAuthorityFixture(t)
+	authority, version, approvalRef, certificateRef := newRouteAuthorityFixture(t)
 	registry := NewOwnershipRegistry("http://sandbox")
 	h := NewHandler(registry)
 	h.SetRouteAuthority(authority)
@@ -169,7 +211,7 @@ func TestResolveRefusesBeforeOwnershipMutationWhenRouteMissing(t *testing.T) {
 	}
 
 	slotID, _ := routeledger.RouteSlotID("owner", "primary")
-	if _, err := authority.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:resolve-bootstrap"}); err != nil {
+	if _, err := authority.transitionAuthorized(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: version, ApprovalRef: approvalRef, PromotionCertificateRef: certificateRef, IdempotencyKey: "idempotency:resolve-bootstrap"}); err != nil {
 		t.Fatalf("bootstrap route: %v", err)
 	}
 	req = httptest.NewRequest(http.MethodPost, "/internal/vmctl/resolve", bytes.NewReader(payload))
@@ -213,7 +255,7 @@ func TestLookupAndLifecycleRefuseWhenRequiredRouteAuthorityIsUnavailable(t *test
 }
 
 func TestRouteAuthorityPinCodeHandlerVerifiesImmutableInput(t *testing.T) {
-	authority, _ := newRouteAuthorityFixture(t)
+	authority, _, _, _ := newRouteAuthorityFixture(t)
 	h := NewHandler(NewOwnershipRegistry("http://sandbox"))
 	h.SetRouteAuthority(authority)
 	fixture := authority.inputs.(routeInputFixture)
@@ -239,7 +281,7 @@ func TestRouteAuthorityPinCodeHandlerVerifiesImmutableInput(t *testing.T) {
 }
 
 func TestRouteAuthorityHandlersRequireInternalCaller(t *testing.T) {
-	authority, _ := newRouteAuthorityFixture(t)
+	authority, _, _, _ := newRouteAuthorityFixture(t)
 	h := NewHandler(NewOwnershipRegistry("http://sandbox"))
 	h.SetRouteAuthority(authority)
 
@@ -260,7 +302,7 @@ func TestRouteAuthorityHandlersRequireInternalCaller(t *testing.T) {
 }
 
 func TestHibernateWorkerResolvesRouteBeforeOwnershipLookup(t *testing.T) {
-	authority, _ := newRouteAuthorityFixture(t)
+	authority, _, _, _ := newRouteAuthorityFixture(t)
 	registry := NewOwnershipRegistry("http://sandbox")
 	h := NewHandler(registry)
 	h.SetRouteAuthority(authority)
@@ -276,7 +318,16 @@ func TestHibernateWorkerResolvesRouteBeforeOwnershipLookup(t *testing.T) {
 	}
 }
 
-func newRouteAuthorityFixture(t *testing.T) (*RouteAuthority, computerversion.ComputerVersion) {
+type fixedRealizationVerifier struct {
+	receipt computerversion.RealizationVerificationReceipt
+	err     error
+}
+
+func (f fixedRealizationVerifier) Verify(context.Context, diskinstantiation.Plan, computerversion.ConstructionResult) (computerversion.RealizationVerificationReceipt, error) {
+	return f.receipt, f.err
+}
+
+func newRouteAuthorityFixture(t *testing.T) (*RouteAuthority, computerversion.ComputerVersion, routeledger.ApprovalRef, routeledger.PromotionCertificateRef) {
 	t.Helper()
 	now := time.Date(2026, 7, 16, 4, 0, 0, 0, time.UTC)
 	closure, err := computerversion.NewCodeClosure(strings.Repeat("1", 40), []computerversion.CodeArtifact{{
@@ -291,20 +342,27 @@ func newRouteAuthorityFixture(t *testing.T) (*RouteAuthority, computerversion.Co
 	if err != nil {
 		t.Fatal(err)
 	}
-	authority, err := NewRouteAuthority(routeledger.NewMemoryLedger(), routeInputFixture{code: closure, program: program}, routeEvidenceFixture{})
+	ledger := routeledger.NewMemoryLedger()
+	version := computerversion.ComputerVersion{CodeRef: closure.Ref, ArtifactProgramRef: program.Ref}
+	approval, err := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, "computer:owner:primary", version, json.RawMessage(`{"fixture":"approval"}`), now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return authority, computerversion.ComputerVersion{CodeRef: closure.Ref, ArtifactProgramRef: program.Ref}
-}
-
-type routeEvidenceFixture struct{}
-
-func (routeEvidenceFixture) VerifyTransitionEvidence(_ context.Context, command routeledger.TransitionCommand) error {
-	if command.ApprovalRef != testApprovalRef || command.PromotionCertificateRef != testCertificateRef {
-		return errors.New("transition evidence not pinned")
+	certificate, err := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidencePromotionCertificate, "computer:owner:primary", version, json.RawMessage(`{"fixture":"certificate"}`), now)
+	if err != nil {
+		t.Fatal(err)
 	}
-	return nil
+	if _, err := ledger.PinAuthorizationEvidence(t.Context(), approval); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ledger.PinAuthorizationEvidence(t.Context(), certificate); err != nil {
+		t.Fatal(err)
+	}
+	authority, err := newMemoryRouteAuthority(ledger, routeInputFixture{code: closure, program: program})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return authority, version, routeledger.ApprovalRef(approval.Ref), routeledger.PromotionCertificateRef(certificate.Ref)
 }
 
 func repeatedHex(ch byte) string {

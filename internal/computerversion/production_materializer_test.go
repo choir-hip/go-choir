@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
 )
@@ -29,6 +30,17 @@ func (f constructionInputFixture) ResolveArtifactProgram(_ context.Context, ref 
 		return ArtifactProgram{}, ErrInputNotFound
 	}
 	return f.program, nil
+}
+
+func bindTestConstructionCode(t *testing.T, version *ComputerVersion) CodeClosure {
+	t.Helper()
+	digest := strings.Repeat("a", 64)
+	closure, err := NewCodeClosure(strings.Repeat("1", 40), []CodeArtifact{{Name: SandboxRuntimeArtifactName, SHA256: digest, URI: "nix-store+sha256://" + digest + "/nix/store/sandbox-runtime"}}, generatorFixedTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version.CodeRef = closure.Ref
+	return closure
 }
 
 type constructionArtifactFixture struct {
@@ -129,8 +141,11 @@ func (f *constructionLauncherFixture) Launch(_ context.Context, request Construc
 	return boot, nil
 }
 
-func (f *constructionLauncherFixture) Observe(ctx context.Context, _ BootReceipt, version ComputerVersion) (LiveConstructionObservation, error) {
-	observed, err := ObserveConstructionState(ctx, f.disk.stateRoot, filepath.Join(f.disk.stateRoot, "files"), version)
+func (f *constructionLauncherFixture) Observe(ctx context.Context, request ConstructedLaunchRequest, boot BootReceipt) (LiveConstructionObservation, error) {
+	if request.Identity.RealizationID != boot.VMID || request.Disk.RealizationID != boot.VMID || request.Version != (ComputerVersion{CodeRef: request.CodeClosure.Ref, ArtifactProgramRef: request.Version.ArtifactProgramRef}) {
+		return LiveConstructionObservation{}, errors.New("unbound observation request")
+	}
+	observed, err := ObserveConstructionState(ctx, f.disk.stateRoot, filepath.Join(f.disk.stateRoot, "files"), request.Version)
 	if err != nil {
 		return LiveConstructionObservation{}, err
 	}
@@ -161,8 +176,8 @@ func TestProductionMaterializerConstructsAndReadsBackLiveState(t *testing.T) {
 	disk := &constructionDiskFixture{root: t.TempDir(), postBootAllocated: 256 << 20}
 	launcher := &constructionLauncherFixture{disk: disk}
 	materializer := &ProductionMaterializer{
-		Identity:  ConstructionIdentity{RealizationID: "candidate-1", ComputerKind: "candidate", OwnerID: "owner"},
-		Inputs:    constructionInputFixture{code: CodeClosure{Ref: version.CodeRef, Artifacts: []CodeArtifact{{Name: SandboxRuntimeArtifactName}}}, program: program},
+		Identity:  ConstructionIdentity{RealizationID: "candidate-1", ComputerKind: "candidate", OwnerID: "owner", DesktopID: "candidate", CandidateID: "candidate"},
+		Inputs:    constructionInputFixture{code: bindTestConstructionCode(t, &version), program: program},
 		Artifacts: constructionArtifactFixture{payload: payload},
 		Blobs:     blobs,
 		Disk:      disk,
@@ -186,6 +201,43 @@ func TestProductionMaterializerConstructsAndReadsBackLiveState(t *testing.T) {
 	if got := result.Realization.Observations.RequiredKinds(); len(got) != 3 {
 		t.Fatalf("required observation kinds = %v, want file, blob, and VM state", got)
 	}
+	independentDisk := &constructionDiskFixture{actualGeometry: result.Disk.Geometry}
+	verifier := IndependentRealizationVerifier{Inputs: materializer.Inputs, Artifacts: materializer.Artifacts, Blobs: blobs, Disk: independentDisk, Launcher: launcher, Now: func() time.Time { return generatorFixedTime.Add(time.Minute) }}
+	verification, err := verifier.Verify(t.Context(), materializer.DiskPlan, result)
+	if err != nil {
+		t.Fatalf("independent verification: %v", err)
+	}
+	if err := verification.Validate(); err != nil || verification.Version != version || verification.DiskReceiptID != result.Disk.ID || independentDisk.inspectCount != 1 {
+		t.Fatalf("invalid verification receipt: %+v err=%v", verification, err)
+	}
+	forged := result
+	forged.Inputs.Code.Artifacts = nil
+	if _, err := verifier.Verify(t.Context(), materializer.DiskPlan, forged); err == nil {
+		t.Fatal("independent verifier accepted forged construction inputs")
+	}
+}
+
+func TestProductionMaterializerRefusesUnverifiedCodeClosureBeforeDiskMutation(t *testing.T) {
+	jrn, blobs, program, version := buildGeneratorFixture(t)
+	payload, err := json.Marshal(jrn.Entries())
+	if err != nil {
+		t.Fatal(err)
+	}
+	disk := &constructionDiskFixture{root: t.TempDir()}
+	launcher := &constructionLauncherFixture{disk: disk}
+	materializer := &ProductionMaterializer{
+		Identity:  ConstructionIdentity{RealizationID: "candidate-invalid-closure", ComputerKind: "candidate"},
+		Inputs:    constructionInputFixture{code: CodeClosure{Ref: version.CodeRef, Artifacts: []CodeArtifact{{Name: SandboxRuntimeArtifactName}}}, program: program},
+		Artifacts: constructionArtifactFixture{payload: payload}, Blobs: blobs, Disk: disk,
+		DiskPlan: testConstructionDiskPlan(), Launcher: launcher,
+	}
+	manifest := CapabilityManifest{Materializer: ProductionMaterializerName, Substrate: "firecracker/fixture", Supported: []ObservationKind{ObservationFileManifest, ObservationBlobSet, ObservationVMStateManifest}}
+	if _, err := materializer.Construct(t.Context(), version, manifest); err == nil || !strings.Contains(err.Error(), "verify immutable CodeRef binding") {
+		t.Fatalf("invalid CodeClosure error = %v", err)
+	}
+	if disk.stateRoot != "" || disk.inspectCount != 0 || launcher.destroyed {
+		t.Fatalf("invalid CodeClosure reached mutation: disk=%+v launcher=%+v", disk, launcher)
+	}
 }
 
 func TestProductionMaterializerDestroysMismatchedReadback(t *testing.T) {
@@ -195,7 +247,7 @@ func TestProductionMaterializerDestroysMismatchedReadback(t *testing.T) {
 	launcher := &constructionLauncherFixture{disk: disk, mutateLive: true}
 	materializer := &ProductionMaterializer{
 		Identity:  ConstructionIdentity{RealizationID: "candidate-corrupt", ComputerKind: "candidate"},
-		Inputs:    constructionInputFixture{code: CodeClosure{Ref: version.CodeRef, Artifacts: []CodeArtifact{{Name: SandboxRuntimeArtifactName}}}, program: program},
+		Inputs:    constructionInputFixture{code: bindTestConstructionCode(t, &version), program: program},
 		Artifacts: constructionArtifactFixture{payload: payload},
 		Blobs:     blobs,
 		Disk:      disk,
@@ -226,8 +278,7 @@ func TestProductionMaterializerRefusesPartiallyReplayedArtifactProgram(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	materializer := ProductionMaterializer{Artifacts: constructionArtifactFixture{payload: payload}}
-	if _, err := materializer.loadJournalEntries(context.Background(), program, version); err == nil || !strings.Contains(err.Error(), "unsupported artifact program entry") {
+	if _, err := loadVerifiedJournalEntries(context.Background(), constructionArtifactFixture{payload: payload}, program, version); err == nil || !strings.Contains(err.Error(), "unsupported artifact program entry") {
 		t.Fatalf("expected partial replay refusal, got %v", err)
 	}
 }
@@ -246,7 +297,7 @@ func TestProductionMaterializerRefusesUnjoinedDiskGeometry(t *testing.T) {
 	launcher := &constructionLauncherFixture{disk: disk}
 	materializer := &ProductionMaterializer{
 		Identity:  ConstructionIdentity{RealizationID: "candidate-bad-geometry", ComputerKind: "candidate"},
-		Inputs:    constructionInputFixture{code: CodeClosure{Ref: version.CodeRef, Artifacts: []CodeArtifact{{Name: SandboxRuntimeArtifactName}}}, program: program},
+		Inputs:    constructionInputFixture{code: bindTestConstructionCode(t, &version), program: program},
 		Artifacts: constructionArtifactFixture{payload: payload}, Blobs: blobs, Disk: disk,
 		DiskPlan: testConstructionDiskPlan(), Launcher: launcher,
 	}
@@ -317,7 +368,7 @@ func TestProductionMaterializerRetainsDiskWhenVMCleanupIsUncertain(t *testing.T)
 			payload, _ := json.Marshal(jrn.Entries())
 			disk := &constructionDiskFixture{root: t.TempDir()}
 			launcher := &constructionLauncherFixture{disk: disk, launchErr: tc.launchErr, destroyErr: tc.destroyErr, mutateLive: tc.mutateLive}
-			materializer := &ProductionMaterializer{Identity: ConstructionIdentity{RealizationID: "candidate-cleanup", ComputerKind: "candidate"}, Inputs: constructionInputFixture{code: CodeClosure{Ref: version.CodeRef, Artifacts: []CodeArtifact{{Name: SandboxRuntimeArtifactName}}}, program: program}, Artifacts: constructionArtifactFixture{payload: payload}, Blobs: blobs, Disk: disk, DiskPlan: testConstructionDiskPlan(), Launcher: launcher}
+			materializer := &ProductionMaterializer{Identity: ConstructionIdentity{RealizationID: "candidate-cleanup", ComputerKind: "candidate"}, Inputs: constructionInputFixture{code: bindTestConstructionCode(t, &version), program: program}, Artifacts: constructionArtifactFixture{payload: payload}, Blobs: blobs, Disk: disk, DiskPlan: testConstructionDiskPlan(), Launcher: launcher}
 			manifest := CapabilityManifest{Materializer: ProductionMaterializerName, Substrate: "firecracker/fixture", Supported: []ObservationKind{ObservationFileManifest, ObservationBlobSet, ObservationVMStateManifest}}
 			if _, err := materializer.Construct(t.Context(), version, manifest); err == nil {
 				t.Fatal("expected cleanup uncertainty refusal")

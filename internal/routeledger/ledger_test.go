@@ -1,4 +1,4 @@
-package routeledger_test
+package routeledger
 
 import (
 	"context"
@@ -14,37 +14,36 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/store"
 )
 
 const (
-	testApprovalRef    routeledger.ApprovalRef             = "approval:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	testCertificateRef routeledger.PromotionCertificateRef = "certificate:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	testApprovalRef    ApprovalRef             = "approval:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	testCertificateRef PromotionCertificateRef = "certificate:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 )
 
 func TestMemoryLedgerTransitionContract(t *testing.T) {
-	ledger := routeledger.NewMemoryLedger()
+	ledger := NewMemoryLedger()
 	slotID := mustSlotID(t, "owner-a", "primary")
 	v1 := version("code:one", "program:one")
 	v2 := version("code:two", "program:two")
 
-	bootstrap := routeledger.TransitionCommand{RouteSlotID: slotID,
-		Kind: routeledger.TransitionBootstrap,
+	bootstrap := TransitionCommand{RouteSlotID: slotID,
+		Kind: TransitionBootstrap,
 		New:  v1, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bootstrap-a"}
 	slot, first, err := ledger.Transition(context.Background(), bootstrap)
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
-	if slot.Generation != 1 || !routeledger.SameVersion(slot.Current, v1) || slot.LatestReceiptID != first.ID {
+	if slot.Generation != 1 || !SameVersion(slot.Current, v1) || slot.LatestReceiptID != first.ID {
 		t.Fatalf("bootstrap slot/receipt mismatch: slot=%+v receipt=%+v", slot, first)
 	}
-	if !routeledger.ReceiptMatchesCommand(first, bootstrap) {
+	if !ReceiptMatchesCommand(first, bootstrap) {
 		t.Fatal("bootstrap receipt did not match exact command")
 	}
 	forgedCommand := bootstrap
 	forgedCommand.PromotionCertificateRef = "certificate:forged"
-	if routeledger.ReceiptMatchesCommand(first, forgedCommand) {
+	if ReceiptMatchesCommand(first, forgedCommand) {
 		t.Fatal("receipt matched a different promotion certificate")
 	}
 
@@ -56,8 +55,8 @@ func TestMemoryLedgerTransitionContract(t *testing.T) {
 		t.Fatalf("idempotent replay changed result: slot=%+v receipt=%+v", replayedSlot, replayed)
 	}
 
-	promote := routeledger.TransitionCommand{RouteSlotID: slotID,
-		Kind:               routeledger.TransitionPromote,
+	promote := TransitionCommand{RouteSlotID: slotID,
+		Kind:               TransitionPromote,
 		Old:                v1,
 		New:                v2,
 		ExpectedGeneration: 1, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:promote-b"}
@@ -65,7 +64,7 @@ func TestMemoryLedgerTransitionContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("promote: %v", err)
 	}
-	if slot.Generation != 2 || promoted.CommittedGeneration != 2 || !routeledger.SameVersion(slot.Current, v2) {
+	if slot.Generation != 2 || promoted.CommittedGeneration != 2 || !SameVersion(slot.Current, v2) {
 		t.Fatalf("promotion mismatch: slot=%+v receipt=%+v", slot, promoted)
 	}
 
@@ -73,7 +72,7 @@ func TestMemoryLedgerTransitionContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if resolved.Generation != 2 || latest.ID != promoted.ID || !routeledger.SameVersion(latest.New, resolved.Current) {
+	if resolved.Generation != 2 || latest.ID != promoted.ID || !SameVersion(latest.New, resolved.Current) {
 		t.Fatalf("resolve did not join latest receipt: slot=%+v receipt=%+v", resolved, latest)
 	}
 
@@ -85,20 +84,20 @@ func TestMemoryLedgerTransitionContract(t *testing.T) {
 		t.Fatalf("late replay did not preserve current route and original receipt: slot=%+v receipt=%+v", currentAfterReplay, originalReceipt)
 	}
 
-	rolledBack, rollbackReceipt, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionRollback, Old: v2, New: v1, ExpectedGeneration: 2, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, RollbackTargetReceiptID: first.ID, IdempotencyKey: "idempotency:rollback-a"})
+	rolledBack, rollbackReceipt, err := ledger.Transition(context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionRollback, Old: v2, New: v1, ExpectedGeneration: 2, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, RollbackTargetReceiptID: first.ID, IdempotencyKey: "idempotency:rollback-a"})
 	if err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
-	if rolledBack.Generation != 3 || rollbackReceipt.CommittedGeneration != 3 || !routeledger.SameVersion(rolledBack.Current, v1) {
+	if rolledBack.Generation != 3 || rollbackReceipt.CommittedGeneration != 3 || !SameVersion(rolledBack.Current, v1) {
 		t.Fatalf("rollback mismatch: slot=%+v receipt=%+v", rolledBack, rollbackReceipt)
 	}
 }
 
 func TestMemoryLedgerConcurrentCASHasOneWinner(t *testing.T) {
-	ledger := routeledger.NewMemoryLedger()
+	ledger := NewMemoryLedger()
 	slotID := mustSlotID(t, "owner", "primary")
 	base := version("code:base", "program:base")
-	_, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: base, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bootstrap"})
+	_, _, err := ledger.Transition(context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: base, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bootstrap"})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
@@ -111,7 +110,7 @@ func TestMemoryLedgerConcurrentCASHasOneWinner(t *testing.T) {
 		go func(i int, candidate computerversion.ComputerVersion) {
 			defer wg.Done()
 			<-start
-			_, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionPromote, Old: base, New: candidate, ExpectedGeneration: 1, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: routeledger.IdempotencyKey(fmt.Sprintf("idempotency:memory-cas-%d", i))})
+			_, _, err := ledger.Transition(context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionPromote, Old: base, New: candidate, ExpectedGeneration: 1, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: IdempotencyKey(fmt.Sprintf("idempotency:memory-cas-%d", i))})
 			results <- err
 		}(i, candidate)
 	}
@@ -123,7 +122,7 @@ func TestMemoryLedgerConcurrentCASHasOneWinner(t *testing.T) {
 		switch {
 		case err == nil:
 			wins++
-		case errors.Is(err, routeledger.ErrStaleTransition):
+		case errors.Is(err, ErrStaleTransition):
 			stale++
 		default:
 			t.Fatalf("unexpected CAS result: %v", err)
@@ -135,32 +134,40 @@ func TestMemoryLedgerConcurrentCASHasOneWinner(t *testing.T) {
 }
 
 func TestMemoryLedgerRefusesMutationOnInvalidTransitions(t *testing.T) {
-	ledger := routeledger.NewMemoryLedger()
+	ledger := NewMemoryLedger()
 	slotID := mustSlotID(t, "owner", "primary")
 	base := version("code:base", "program:base")
-	_, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: base, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bootstrap"})
+	_, _, err := ledger.Transition(context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: base, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bootstrap"})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
 
-	bad := routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionPromote, Old: version("wrong", "wrong"), New: version("next", "next"), ExpectedGeneration: 1, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bad"}
-	if _, _, err := ledger.Transition(context.Background(), bad); !errors.Is(err, routeledger.ErrStaleTransition) {
+	bad := TransitionCommand{RouteSlotID: slotID, Kind: TransitionPromote, Old: version("wrong", "wrong"), New: version("next", "next"), ExpectedGeneration: 1, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bad"}
+	if _, _, err := ledger.Transition(context.Background(), bad); !errors.Is(err, ErrStaleTransition) {
 		t.Fatalf("stale transition error = %v", err)
 	}
 	resolved, _, err := ledger.Resolve(context.Background(), slotID)
 	if err != nil {
 		t.Fatalf("resolve after refusal: %v", err)
 	}
-	if resolved.Generation != 1 || !routeledger.SameVersion(resolved.Current, base) {
+	if resolved.Generation != 1 || !SameVersion(resolved.Current, base) {
 		t.Fatalf("refused transition mutated slot: %+v", resolved)
 	}
 
 	reused := bad
 	reused.Old = base
 	reused.IdempotencyKey = "idempotency:bootstrap"
-	if _, _, err := ledger.Transition(context.Background(), reused); !errors.Is(err, routeledger.ErrIdempotencyReuse) {
+	if _, _, err := ledger.Transition(context.Background(), reused); !errors.Is(err, ErrIdempotencyReuse) {
 		t.Fatalf("idempotency reuse error = %v", err)
 	}
+}
+
+func transitionSQLForTest(ledger *SQLLedger, ctx context.Context, command TransitionCommand) (Slot, TransitionReceipt, error) {
+	return ledger.transitionValidated(ctx, command, nil, false)
+}
+
+func transitionSQLWithEvidenceForTest(ledger *SQLLedger, ctx context.Context, command TransitionCommand, evidence []AuthorizationEvidence) (Slot, TransitionReceipt, error) {
+	return ledger.transitionValidated(ctx, command, evidence, false)
 }
 
 func TestSQLLedgerConcurrentCASHasOneWinner(t *testing.T) {
@@ -173,7 +180,7 @@ func TestSQLLedgerConcurrentCASHasOneWinner(t *testing.T) {
 	slotID := mustSlotID(t, "owner-sql-cas", "primary")
 	base := pinSQLVersion(t, catalog, "base")
 	baseApproval, baseCertificate := pinSQLTransitionEvidence(t, ledger, slotID, base, "cas-base")
-	if _, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: base, ApprovalRef: baseApproval, PromotionCertificateRef: baseCertificate, IdempotencyKey: "idempotency:sql-cas-bootstrap"}); err != nil {
+	if _, _, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: base, ApprovalRef: baseApproval, PromotionCertificateRef: baseCertificate, IdempotencyKey: "idempotency:sql-cas-bootstrap"}); err != nil {
 		t.Fatal(err)
 	}
 	start := make(chan struct{})
@@ -181,8 +188,8 @@ func TestSQLLedgerConcurrentCASHasOneWinner(t *testing.T) {
 	var wg sync.WaitGroup
 	type candidateTransition struct {
 		version     computerversion.ComputerVersion
-		approval    routeledger.ApprovalRef
-		certificate routeledger.PromotionCertificateRef
+		approval    ApprovalRef
+		certificate PromotionCertificateRef
 	}
 	candidates := make([]candidateTransition, 0, 2)
 	for _, tag := range []string{"candidate-a", "candidate-b"} {
@@ -195,7 +202,7 @@ func TestSQLLedgerConcurrentCASHasOneWinner(t *testing.T) {
 		go func(i int, candidate candidateTransition) {
 			defer wg.Done()
 			<-start
-			_, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionPromote, Old: base, New: candidate.version, ExpectedGeneration: 1, ApprovalRef: candidate.approval, PromotionCertificateRef: candidate.certificate, IdempotencyKey: routeledger.IdempotencyKey(fmt.Sprintf("idempotency:sql-cas-%d", i))})
+			_, _, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionPromote, Old: base, New: candidate.version, ExpectedGeneration: 1, ApprovalRef: candidate.approval, PromotionCertificateRef: candidate.certificate, IdempotencyKey: IdempotencyKey(fmt.Sprintf("idempotency:sql-cas-%d", i))})
 			results <- err
 		}(i, candidate)
 	}
@@ -206,7 +213,7 @@ func TestSQLLedgerConcurrentCASHasOneWinner(t *testing.T) {
 	for err := range results {
 		if err == nil {
 			wins++
-		} else if errors.Is(err, routeledger.ErrStaleTransition) {
+		} else if errors.Is(err, ErrStaleTransition) {
 			stale++
 		} else {
 			t.Fatalf("unexpected SQL CAS result: %v", err)
@@ -227,17 +234,17 @@ func TestSQLLedgerPersistsSlotAndReceiptAcrossRestart(t *testing.T) {
 	slotID := mustSlotID(t, "owner-sql", "primary")
 	want := pinSQLVersion(t, catalog, "immutable-v1")
 	bootstrapApproval, bootstrapCertificate := pinSQLTransitionEvidence(t, ledger, slotID, want, "restart-bootstrap")
-	slot, receipt, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: want, ApprovalRef: bootstrapApproval, PromotionCertificateRef: bootstrapCertificate, IdempotencyKey: "idempotency:sql-bootstrap"})
+	slot, receipt, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: want, ApprovalRef: bootstrapApproval, PromotionCertificateRef: bootstrapCertificate, IdempotencyKey: "idempotency:sql-bootstrap"})
 	if err != nil {
 		t.Fatalf("bootstrap SQL route: %v", err)
 	}
 	v2 := pinSQLVersion(t, catalog, "immutable-v2")
 	promoteApproval, promoteCertificate := pinSQLTransitionEvidence(t, ledger, slotID, v2, "restart-promote")
-	promotedSlot, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionPromote, Old: want, New: v2, ExpectedGeneration: 1, ApprovalRef: promoteApproval, PromotionCertificateRef: promoteCertificate, IdempotencyKey: "idempotency:sql-promote"})
+	promotedSlot, _, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionPromote, Old: want, New: v2, ExpectedGeneration: 1, ApprovalRef: promoteApproval, PromotionCertificateRef: promoteCertificate, IdempotencyKey: "idempotency:sql-promote"})
 	if err != nil {
 		t.Fatalf("promote SQL route: %v", err)
 	}
-	replayedSlot, replayedReceipt, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: want, ApprovalRef: bootstrapApproval, PromotionCertificateRef: bootstrapCertificate, IdempotencyKey: "idempotency:sql-bootstrap"})
+	replayedSlot, replayedReceipt, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: want, ApprovalRef: bootstrapApproval, PromotionCertificateRef: bootstrapCertificate, IdempotencyKey: "idempotency:sql-bootstrap"})
 	if err != nil {
 		t.Fatalf("late SQL replay: %v", err)
 	}
@@ -245,7 +252,7 @@ func TestSQLLedgerPersistsSlotAndReceiptAcrossRestart(t *testing.T) {
 		t.Fatalf("late SQL replay slot=%+v receipt=%+v, want current=%+v original=%q", replayedSlot, replayedReceipt, promotedSlot, receipt.ID)
 	}
 	rollbackApproval, rollbackCertificate := pinSQLTransitionEvidence(t, ledger, slotID, want, "restart-rollback")
-	finalSlot, rollbackReceipt, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{RouteSlotID: slotID, Kind: routeledger.TransitionRollback, Old: v2, New: want, ExpectedGeneration: 2, ApprovalRef: rollbackApproval, PromotionCertificateRef: rollbackCertificate, RollbackTargetReceiptID: receipt.ID, IdempotencyKey: "idempotency:sql-rollback"})
+	finalSlot, rollbackReceipt, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionRollback, Old: v2, New: want, ExpectedGeneration: 2, ApprovalRef: rollbackApproval, PromotionCertificateRef: rollbackCertificate, RollbackTargetReceiptID: receipt.ID, IdempotencyKey: "idempotency:sql-rollback"})
 	if err != nil {
 		t.Fatalf("rollback SQL route: %v", err)
 	}
@@ -258,19 +265,19 @@ func TestSQLLedgerPersistsSlotAndReceiptAcrossRestart(t *testing.T) {
 		t.Fatalf("reopen embedded Dolt: %v", err)
 	}
 	defer func() { _ = restartedStore.Close() }()
-	restarted := routeledger.NewSQLLedger(restartedStore.DB(), computerversion.VerifySQLInputsInTransition)
+	restarted := NewSQLLedger(restartedStore.DB())
 	resolved, latest, err := restarted.Resolve(context.Background(), slotID)
 	if err != nil {
 		t.Fatalf("resolve SQL route after restart: %v", err)
 	}
-	if resolved != finalSlot || latest.ID != rollbackReceipt.ID || !routeledger.SameVersion(latest.New, want) {
+	if resolved != finalSlot || latest.ID != rollbackReceipt.ID || !SameVersion(latest.New, want) {
 		t.Fatalf("persisted join mismatch: initial=%+v got slot=%+v receipt=%+v", slot, resolved, latest)
 	}
 }
 
 func mustSlotID(t *testing.T, ownerID, computerID string) string {
 	t.Helper()
-	id, err := routeledger.RouteSlotID(ownerID, computerID)
+	id, err := RouteSlotID(ownerID, computerID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,18 +298,18 @@ func TestSQLLedgerRefusesUnresolvableInputsAndProtectsRoutedCatalogRows(t *testi
 	base := pinSQLVersion(t, catalog, "integrity-base")
 	candidate := pinSQLVersion(t, catalog, "integrity-candidate")
 	slotID := mustSlotID(t, "owner-integrity", "primary")
-	if _, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{
-		RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: base,
+	if _, _, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{
+		RouteSlotID: slotID, Kind: TransitionBootstrap, New: base,
 		ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:invented-evidence",
 	}); err == nil {
 		t.Fatal("invented authorization evidence advanced route")
 	}
-	if _, _, err := ledger.Resolve(context.Background(), slotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+	if _, _, err := ledger.Resolve(context.Background(), slotID); !errors.Is(err, ErrSlotNotFound) {
 		t.Fatalf("invented evidence mutated route: %v", err)
 	}
 	baseApproval, baseCertificate := pinSQLTransitionEvidence(t, ledger, slotID, base, "integrity-base")
-	if _, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{
-		RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap, New: base,
+	if _, _, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{
+		RouteSlotID: slotID, Kind: TransitionBootstrap, New: base,
 		ApprovalRef: baseApproval, PromotionCertificateRef: baseCertificate, IdempotencyKey: "idempotency:integrity-bootstrap",
 	}); err != nil {
 		t.Fatalf("bootstrap joined route: %v", err)
@@ -314,8 +321,8 @@ func TestSQLLedgerRefusesUnresolvableInputsAndProtectsRoutedCatalogRows(t *testi
 		t.Fatalf("tamper candidate declaration: %v", err)
 	}
 	candidateApproval, candidateCertificate := pinSQLTransitionEvidence(t, ledger, slotID, candidate, "integrity-candidate")
-	if _, _, err := ledger.Transition(context.Background(), routeledger.TransitionCommand{
-		RouteSlotID: slotID, Kind: routeledger.TransitionPromote, Old: base, New: candidate, ExpectedGeneration: 1,
+	if _, _, err := transitionSQLForTest(ledger, context.Background(), TransitionCommand{
+		RouteSlotID: slotID, Kind: TransitionPromote, Old: base, New: candidate, ExpectedGeneration: 1,
 		ApprovalRef: candidateApproval, PromotionCertificateRef: candidateCertificate, IdempotencyKey: "idempotency:integrity-promote",
 	}); err == nil {
 		t.Fatal("route advanced to a tampered input declaration")
@@ -324,15 +331,15 @@ func TestSQLLedgerRefusesUnresolvableInputsAndProtectsRoutedCatalogRows(t *testi
 	if err != nil {
 		t.Fatalf("resolve route after refused transition: %v", err)
 	}
-	if resolved.Generation != 1 || !routeledger.SameVersion(resolved.Current, base) {
+	if resolved.Generation != 1 || !SameVersion(resolved.Current, base) {
 		t.Fatalf("refused input transition mutated route: %+v", resolved)
 	}
 }
 
 func TestReceiptMatchesCommandIncludesIdempotencyEvidence(t *testing.T) {
-	ledger := routeledger.NewMemoryLedger()
-	command := routeledger.TransitionCommand{
-		RouteSlotID: mustSlotID(t, "owner-receipt", "primary"), Kind: routeledger.TransitionBootstrap,
+	ledger := NewMemoryLedger()
+	command := TransitionCommand{
+		RouteSlotID: mustSlotID(t, "owner-receipt", "primary"), Kind: TransitionBootstrap,
 		New: version("code:receipt", "program:receipt"), ApprovalRef: testApprovalRef,
 		PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:receipt-command-a",
 	}
@@ -341,23 +348,23 @@ func TestReceiptMatchesCommandIncludesIdempotencyEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	command.IdempotencyKey = "idempotency:receipt-command-b"
-	if routeledger.ReceiptMatchesCommand(receipt, command) {
+	if ReceiptMatchesCommand(receipt, command) {
 		t.Fatal("receipt matched a command with different idempotency evidence")
 	}
 }
 
 func TestTransitionEvidenceTypesRejectMalformedRefs(t *testing.T) {
-	base := routeledger.TransitionCommand{
-		RouteSlotID: mustSlotID(t, "owner-evidence", "primary"), Kind: routeledger.TransitionBootstrap,
+	base := TransitionCommand{
+		RouteSlotID: mustSlotID(t, "owner-evidence", "primary"), Kind: TransitionBootstrap,
 		New: version("code:evidence", "program:evidence"), ApprovalRef: testApprovalRef,
 		PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:evidence-key",
 	}
-	for name, mutate := range map[string]func(*routeledger.TransitionCommand){
-		"untyped approval":       func(command *routeledger.TransitionCommand) { command.ApprovalRef = "ok" },
-		"untyped certificate":    func(command *routeledger.TransitionCommand) { command.PromotionCertificateRef = "ok" },
-		"whitespace idempotency": func(command *routeledger.TransitionCommand) { command.IdempotencyKey = "not valid" },
-		"approval as idempotency": func(command *routeledger.TransitionCommand) {
-			command.IdempotencyKey = routeledger.IdempotencyKey(command.ApprovalRef)
+	for name, mutate := range map[string]func(*TransitionCommand){
+		"untyped approval":       func(command *TransitionCommand) { command.ApprovalRef = "ok" },
+		"untyped certificate":    func(command *TransitionCommand) { command.PromotionCertificateRef = "ok" },
+		"whitespace idempotency": func(command *TransitionCommand) { command.IdempotencyKey = "not valid" },
+		"approval as idempotency": func(command *TransitionCommand) {
+			command.IdempotencyKey = IdempotencyKey(command.ApprovalRef)
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -374,13 +381,45 @@ type acceptingContentVerifier struct{}
 
 func (acceptingContentVerifier) VerifyArtifact(context.Context, string, string) error { return nil }
 
-func newSQLRouteLedger(t *testing.T, db *sql.DB) (*routeledger.SQLLedger, *computerversion.SQLInputCatalog) {
+func TestSQLLedgerAtomicEvidenceRollsBackOnStaleTransition(t *testing.T) {
+	productStore, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = productStore.Close() }()
+	ledger, catalog := newSQLRouteLedger(t, productStore.DB())
+	slotID := mustSlotID(t, "owner-atomic", "primary")
+	base := pinSQLVersion(t, catalog, "atomic-base")
+	candidate := pinSQLVersion(t, catalog, "atomic-candidate")
+	baseApproval, baseCertificate := pinSQLTransitionEvidence(t, ledger, slotID, base, "atomic-base")
+	if _, _, err := transitionSQLForTest(ledger, t.Context(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: base, ApprovalRef: baseApproval, PromotionCertificateRef: baseCertificate, IdempotencyKey: "idempotency:atomic-bootstrap"}); err != nil {
+		t.Fatal(err)
+	}
+	createdAt := time.Date(2026, 7, 16, 3, 0, 0, 0, time.UTC)
+	approval, err := NewAuthorizationEvidence(AuthorizationEvidenceApproval, slotID, candidate, json.RawMessage(`{"gate":"stale"}`), createdAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificate, err := NewAuthorizationEvidence(AuthorizationEvidencePromotionCertificate, slotID, candidate, json.RawMessage(`{"certificate":"stale"}`), createdAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := TransitionCommand{RouteSlotID: slotID, Kind: TransitionPromote, Old: base, New: candidate, ExpectedGeneration: 99, ApprovalRef: ApprovalRef(approval.Ref), PromotionCertificateRef: PromotionCertificateRef(certificate.Ref), IdempotencyKey: "idempotency:atomic-stale"}
+	if _, _, err := transitionSQLWithEvidenceForTest(ledger, t.Context(), command, []AuthorizationEvidence{approval, certificate}); !errors.Is(err, ErrStaleTransition) {
+		t.Fatalf("atomic stale transition error = %v", err)
+	}
+	if err := ledger.VerifyTransitionEvidence(t.Context(), command); err == nil {
+		t.Fatal("stale atomic transition left authorization evidence committed")
+	}
+}
+
+func newSQLRouteLedger(t *testing.T, db *sql.DB) (*SQLLedger, *computerversion.SQLInputCatalog) {
 	t.Helper()
 	catalog := computerversion.NewSQLInputCatalog(db, acceptingContentVerifier{})
 	if err := catalog.EnsureSchema(context.Background()); err != nil {
 		t.Fatalf("ensure input catalog schema: %v", err)
 	}
-	ledger := routeledger.NewSQLLedger(db, computerversion.VerifySQLInputsInTransition)
+	ledger := NewSQLLedger(db)
 	if err := ledger.EnsureSchema(context.Background()); err != nil {
 		t.Fatalf("ensure route ledger schema: %v", err)
 	}
@@ -412,14 +451,14 @@ func pinSQLVersion(t *testing.T, catalog *computerversion.SQLInputCatalog, tag s
 	return computerversion.ComputerVersion{CodeRef: closure.Ref, ArtifactProgramRef: program.Ref}
 }
 
-func pinSQLTransitionEvidence(t *testing.T, ledger *routeledger.SQLLedger, slotID string, version computerversion.ComputerVersion, tag string) (routeledger.ApprovalRef, routeledger.PromotionCertificateRef) {
+func pinSQLTransitionEvidence(t *testing.T, ledger *SQLLedger, slotID string, version computerversion.ComputerVersion, tag string) (ApprovalRef, PromotionCertificateRef) {
 	t.Helper()
 	createdAt := time.Date(2026, 7, 16, 2, 0, 0, 0, time.UTC)
-	approval, err := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, slotID, version, json.RawMessage(fmt.Sprintf(`{"approval_id":%q}`, tag)), createdAt)
+	approval, err := NewAuthorizationEvidence(AuthorizationEvidenceApproval, slotID, version, json.RawMessage(fmt.Sprintf(`{"approval_id":%q}`, tag)), createdAt)
 	if err != nil {
 		t.Fatalf("new approval evidence %s: %v", tag, err)
 	}
-	certificate, err := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidencePromotionCertificate, slotID, version, json.RawMessage(fmt.Sprintf(`{"certificate_id":%q}`, tag)), createdAt)
+	certificate, err := NewAuthorizationEvidence(AuthorizationEvidencePromotionCertificate, slotID, version, json.RawMessage(fmt.Sprintf(`{"certificate_id":%q}`, tag)), createdAt)
 	if err != nil {
 		t.Fatalf("new certificate evidence %s: %v", tag, err)
 	}
@@ -429,7 +468,7 @@ func pinSQLTransitionEvidence(t *testing.T, ledger *routeledger.SQLLedger, slotI
 	if _, err := ledger.PinAuthorizationEvidence(context.Background(), certificate); err != nil {
 		t.Fatalf("pin certificate evidence %s: %v", tag, err)
 	}
-	return routeledger.ApprovalRef(approval.Ref), routeledger.PromotionCertificateRef(certificate.Ref)
+	return ApprovalRef(approval.Ref), PromotionCertificateRef(certificate.Ref)
 }
 
 func digestString(value string) string {

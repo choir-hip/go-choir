@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"time"
 
@@ -90,14 +91,28 @@ func (l *VMConstructionLauncher) Launch(ctx context.Context, request computerver
 	return boot, nil
 }
 
-func (l *VMConstructionLauncher) Observe(ctx context.Context, boot computerversion.BootReceipt, version computerversion.ComputerVersion) (computerversion.LiveConstructionObservation, error) {
-	endpoint, err := url.Parse(strings.TrimRight(boot.HostURL, "/") + "/internal/computer-version/observations")
+func (l *VMConstructionLauncher) Observe(ctx context.Context, request computerversion.ConstructedLaunchRequest, boot computerversion.BootReceipt) (computerversion.LiveConstructionObservation, error) {
+	if l == nil || l.registry == nil || request.Identity.RealizationID != boot.VMID || request.Disk.RealizationID != boot.VMID || request.Version != (computerversion.ComputerVersion{CodeRef: request.CodeClosure.Ref, ArtifactProgramRef: request.Version.ArtifactProgramRef}) {
+		return computerversion.LiveConstructionObservation{}, fmt.Errorf("construction launcher: observation bindings are incomplete")
+	}
+	l.registry.mu.Lock()
+	manager := l.registry.vmManager
+	own := cloneOwnership(l.registry.vmByID[boot.VMID])
+	l.registry.mu.Unlock()
+	if manager == nil || own == nil || validateConstructedOwnership(own) != nil || own.State != VMStateActive || own.UserID != request.Identity.OwnerID || own.DesktopID != request.Identity.DesktopID || own.DesktopID != request.Identity.CandidateID || *own.ConstructionVersion != request.Version || !reflect.DeepEqual(*own.ConstructionDisk, request.Disk) {
+		return computerversion.LiveConstructionObservation{}, fmt.Errorf("construction launcher: persisted realization binding mismatch")
+	}
+	info := manager.GetVM(boot.VMID)
+	if info == nil || !info.Healthy || info.HostURL == "" || info.HostURL != boot.HostURL || info.Epoch != boot.Epoch {
+		return computerversion.LiveConstructionObservation{}, fmt.Errorf("construction launcher: live VM identity does not match boot receipt")
+	}
+	endpoint, err := url.Parse(strings.TrimRight(info.HostURL, "/") + "/internal/computer-version/observations")
 	if err != nil {
 		return computerversion.LiveConstructionObservation{}, fmt.Errorf("construction launcher: observation URL: %w", err)
 	}
 	query := endpoint.Query()
-	query.Set("code_ref", string(version.CodeRef))
-	query.Set("artifact_program_ref", string(version.ArtifactProgramRef))
+	query.Set("code_ref", string(request.Version.CodeRef))
+	query.Set("artifact_program_ref", string(request.Version.ArtifactProgramRef))
 	endpoint.RawQuery = query.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint.String(), nil)
 	if err != nil {
@@ -118,7 +133,7 @@ func (l *VMConstructionLauncher) Observe(ctx context.Context, boot computerversi
 	if err := decoder.Decode(&observation); err != nil {
 		return computerversion.LiveConstructionObservation{}, fmt.Errorf("construction launcher: decode product readback: %w", err)
 	}
-	if observation.State.Version != version {
+	if observation.State.Version != request.Version {
 		return computerversion.LiveConstructionObservation{}, fmt.Errorf("construction launcher: product readback ComputerVersion mismatch")
 	}
 	return observation, nil
