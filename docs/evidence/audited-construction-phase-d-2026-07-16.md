@@ -75,3 +75,25 @@
 - Substrate action: every field that selects route, transition kind, generation, old/new version, approval, certificate, verifier, or rollback target must be joined in candidate validation before the first durable write. Later ledger refusal is defense in depth, not candidate validation.
 - Stopping condition: rerun the exact overlay attack plus independent frozen review; any further candidate-validation bypass requires structural reassessment rather than another endpoint patch.
 - Rollback: retain all problem checkpoints and discard the rejected Phase D source patch if the closed candidate invariant cannot be independently accepted.
+
+## G3 non-convergence escalation: frozen plan versus accepted execution command
+
+- Frozen candidate: base `d770c2f7`; patch `/tmp/choir-g3-closed-invariant.patch`; SHA-256 `1ea370c7961784bb3520a4b10426d43702aa579dd92d2bb5e392f58420b7e70d`; sixteen staged paths.
+- Gate packet: `/tmp/choir-g3-consensus-closed-final`; Cursor, Gemini, and OpenCode accepted; GPT-5.5 returned a reproducible `repair`; Codex found no code blocker but escalated because its read-only sandbox could not rerun Go. The reproducible GPT-5.5 blockers govern.
+- Command-divergence evidence: candidate validation now proves an exact pre-G3 bootstrap/promote/rollback `TransitionCommand`, but apply subsequently replaces its owner `ApprovalRef` with the newly created G3 acceptance evidence ref. The command executed by the ledger is therefore not the command validated and frozen in the candidate.
+- Stale-rollback evidence: promote apply checks current generation/version before pinning evidence; rollback apply lacks the corresponding post-promote freshness check. A stale rollback request pins durable G3 evidence, then fails at ledger CAS.
+- Consequence: no CAS bypass was observed, but the current representation conflates two different authorities: a pre-G3 bounded plan that can bind owner approval, and a post-G3 executable command that must bind the not-yet-existing signed acceptance evidence. Those cannot be byte-identical without a circular content-addressed reference.
+- Protected surfaces: G3 acceptance evidence, transition receipt approval join, frozen promotion authority, rollback freshness, route CAS. No production route mutation occurred.
+- Heresy delta: discovered `2`; introduced `0`; repaired `0` at this checkpoint.
+
+### Structural assessment required by non-convergence policy
+
+- Dependency graph: owner approval + independent verifier + current route receipt -> pre-G3 candidate; candidate ID -> signed G3 acceptance; signed acceptance payload -> content-addressed gate evidence ref; gate evidence ref -> executable route command; executable command -> transition receipt. The gate ref cannot be part of the candidate whose ID the gate signature signs without a circular hash dependency.
+- Shared substrate cause: `FrozenRoutePromotionCandidate` stores ledger `TransitionCommand` values even though they are only pre-acceptance plans. Apply silently converts those plans into accepted execution commands. Candidate validation and execution therefore disagree by construction, not by one missing field check.
+- Existing replacement opportunity: retain the private vmctl apply boundary and frozen candidate core, but separate `FrozenTransitionPlan` from a post-acceptance `AuthorizedRouteExecution` envelope. The latter should durably contain candidate ID, signed G3 acceptance, exact derived command semantics, owner approval ref, certificate/verifier refs, and a canonical derivation rule; the ledger receipt should join its content-addressed authorization ref.
+- Rollback invariant: before any evidence pin, require the current slot to be exactly the successful promote successor (generation, candidate version, and latest promotion receipt/certificate joins), not merely rely on later stale CAS refusal.
+- Deletion-first implication: delete the misleading pre-G3 `TransitionCommand` claim rather than add another after-validation patch. Keep generic raw transition permanently refusing.
+- Alternative with lower schema cost but weaker auditability: execute the frozen command with owner approval ref and pin G3 evidence out-of-band. This preserves byte identity but the transition receipt no longer directly joins the G3 acceptance, weakening Phase D audit requirements.
+- Decision required: whether the route receipt must directly bind post-G3 execution authorization (recommended, structural envelope) or owner approval with out-of-band G3 evidence (smaller change, weaker join).
+- Stopping condition: per Dead-End Escalation, do not attempt another incremental route-authority patch without explicit owner direction. Preserve the rejected source candidate and all frozen packets for recovery.
+- Rollback: reset the rejected source patch and retain `origin/main@0dc3fea3` plus documentation checkpoints; no route or production state changed.
