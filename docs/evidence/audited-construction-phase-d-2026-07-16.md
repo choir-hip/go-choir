@@ -41,3 +41,16 @@
 - Conjecture delta: freezing and signing a candidate prevents mutation after adjudication, but every independently required authorization inside the candidate must still be reverified where execution begins.
 - Heresy delta: discovered `2`; introduced `0`; repaired `0` at this checkpoint.
 - Rollback: retain `origin/main@0dc3fea3` plus problem checkpoints and discard the rejected Phase D patch if repair cannot close both blockers.
+
+## G3 identity-join rejection checkpoint: cross-desktop promotion
+
+- Frozen candidate: base `76f8bd7d`; patch `/tmp/choir-g3-terminal-repaired.patch`; SHA-256 `6cd5b60411393ed4b54c4dd1ed091d8f15d6560c15c82e1d587e000c4ced71f2`; sixteen staged paths.
+- Gate packet: `/tmp/choir-g3-consensus-terminal`; five reviewers accepted and GPT-5.5 returned a reproducible `repair`; the minority blocker governs.
+- Evidence: `FrozenRoutePromotionCandidate.Validate` joins route, version, approval, certificate, verifier receipt, and bounded commands but does not parse the route slot and require its owner/computer identity to equal `Verification.Identity.OwnerID/DesktopID`. A valid verification for `owner/other`, plus signed approval and G3 acceptance naming route `computer:owner:primary`, can promote the primary route.
+- Reproduction: the reviewer ran an overlay-only focused test constructing the cross-desktop candidate; `applyFrozenPromotion` succeeded and mutated the primary route.
+- Consequence: the candidate remains rejected and pre-CAS. Version equality cannot substitute for route-to-realization identity.
+- Required source repair: enforce the same parsed route owner/computer to verifier owner/desktop join already present for bootstrap, in promotion candidate validation before any apply evidence pin or CAS; add a deterministic cross-desktop refusal test.
+- Protected surfaces: candidate identity, verifier evidence, signed approval/G3 acceptance, promotion CAS. No production route mutation occurred.
+- Conjecture delta: cryptographic authorization preserves exactly what it signs; a missing typed identity join remains a signed cross-object substitution.
+- Heresy delta: discovered `1`; introduced `0`; repaired `0` at this checkpoint.
+- Rollback: retain the accepted problem checkpoints and discard the rejected Phase D source patch if the exact identity join cannot be proved.
