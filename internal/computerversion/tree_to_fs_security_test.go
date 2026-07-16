@@ -488,8 +488,8 @@ func TestTreeToFSContextCancelled(t *testing.T) {
 // --- StateGenerator tests --------------------------------------------------
 
 func TestStateGeneratorNilJournal(t *testing.T) {
-	_, blobs, version := buildGeneratorFixture(t)
-	gen := StateGenerator{Journal: nil, Blobs: blobs}
+	_, blobs, program, version := buildGeneratorFixture(t)
+	gen := StateGenerator{Journal: nil, Blobs: blobs, ArtifactProgram: program}
 	err := gen.Generate(context.Background(), version, freshTarget(t))
 	if err == nil {
 		t.Fatal("expected error for nil journal, got nil")
@@ -500,8 +500,8 @@ func TestStateGeneratorNilJournal(t *testing.T) {
 }
 
 func TestStateGeneratorNilBlobs(t *testing.T) {
-	jrn, _, version := buildGeneratorFixture(t)
-	gen := StateGenerator{Journal: jrn, Blobs: nil}
+	jrn, _, program, version := buildGeneratorFixture(t)
+	gen := StateGenerator{Journal: jrn, Blobs: nil, ArtifactProgram: program}
 	err := gen.Generate(context.Background(), version, freshTarget(t))
 	if err == nil {
 		t.Fatal("expected error for nil blob store, got nil")
@@ -512,9 +512,9 @@ func TestStateGeneratorNilBlobs(t *testing.T) {
 }
 
 func TestStateGeneratorInvalidVersion(t *testing.T) {
-	jrn, blobs, _ := buildGeneratorFixture(t)
+	jrn, blobs, program, _ := buildGeneratorFixture(t)
 	invalid := ComputerVersion{} // empty CodeRef -> invalid
-	gen := StateGenerator{Journal: jrn, Blobs: blobs}
+	gen := StateGenerator{Journal: jrn, Blobs: blobs, ArtifactProgram: program}
 	err := gen.Generate(context.Background(), invalid, freshTarget(t))
 	if err == nil {
 		t.Fatal("expected error for invalid version, got nil")
@@ -525,19 +525,33 @@ func TestStateGeneratorInvalidVersion(t *testing.T) {
 }
 
 func TestGenerateFromEventsTamperedChain(t *testing.T) {
-	jrn, blobs, version := buildGeneratorFixture(t)
+	jrn, blobs, program, version := buildGeneratorFixture(t)
 	entries := jrn.Entries()
 	if len(entries) == 0 {
 		t.Fatal("fixture produced no entries")
 	}
 	// Tamper with the first entry's hash to break the chain.
 	entries[0].Hash = "deadbeef" + strings.Repeat("0", 56)
-	err := GenerateFromEvents(context.Background(), entries, blobs, version, freshTarget(t))
+	err := GenerateFromEvents(context.Background(), entries, blobs, program, version, freshTarget(t))
 	if err == nil {
 		t.Fatal("expected error for tampered chain, got nil")
 	}
 	if !strings.Contains(err.Error(), "verify entries") {
 		t.Errorf("expected 'verify entries' error, got %q", err.Error())
+	}
+}
+
+func TestStateGeneratorRejectsCallerTrustedArtifactProgramBinding(t *testing.T) {
+	jrn, blobs, _, version := buildGeneratorFixture(t)
+	wrongProgram, err := NewJournalArtifactProgram(nil, "fixture/wrong-journal", generatorFixedTime)
+	if err != nil {
+		t.Fatalf("wrong program: %v", err)
+	}
+	version.ArtifactProgramRef = wrongProgram.Ref
+	gen := StateGenerator{Journal: jrn, Blobs: blobs, ArtifactProgram: wrongProgram}
+	err = gen.Generate(context.Background(), version, freshTarget(t))
+	if err == nil || !strings.Contains(err.Error(), "base journal hash mismatch") {
+		t.Fatalf("caller-trusted journal binding error = %v", err)
 	}
 }
 

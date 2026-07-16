@@ -565,33 +565,46 @@ func (r *OwnershipRegistry) saveLocked() {
 func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	r.mu.Lock()
 	r.vmManager = mgr
-	candidates := make([]*VMOwnership, 0)
+	r.mu.Unlock()
+}
+
+// ReattachManagedVMs adopts VM processes that survived vmctl restart only
+// after their owner/computer D-ROUTE has been independently authorized.
+func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard ComputerVersionRouteGuard) int {
+	r.mu.RLock()
+	mgr := r.vmManager
+	candidates := make([]VMOwnership, 0)
 	if mgr != nil {
 		for _, own := range r.ownerships {
 			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.SandboxURL) != "" {
-				candidates = append(candidates, own)
+				candidates = append(candidates, *own)
 			}
 		}
 		for _, own := range r.workerVMs {
 			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.SandboxURL) != "" {
-				candidates = append(candidates, own)
+				candidates = append(candidates, *own)
 			}
 		}
 	}
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
-	reattached := false
+	reattached := 0
 	for _, own := range candidates {
-		vmID := own.VMID
-		hostURL := own.SandboxURL
-		epoch := own.Epoch
-		info, err := mgr.ReattachVM(vmID, hostURL, epoch)
+		if guard == nil {
+			log.Printf("vmctl: reattach refused for VM %s: ComputerVersion route guard is unavailable", own.VMID)
+			continue
+		}
+		if err := guard(ctx, own.UserID, normalizeDesktopID(own.DesktopID)); err != nil {
+			log.Printf("vmctl: reattach refused for VM %s: %v", own.VMID, err)
+			continue
+		}
+		info, err := mgr.ReattachVM(own.VMID, own.SandboxURL, own.Epoch)
 		if err != nil {
-			log.Printf("vmctl: reattach skipped for VM %s: %v", vmID, err)
+			log.Printf("vmctl: reattach skipped for VM %s: %v", own.VMID, err)
 			continue
 		}
 		r.mu.Lock()
-		if cur, ok := r.vmByID[vmID]; ok {
+		if cur, ok := r.vmByID[own.VMID]; ok {
 			cur.State = VMStateActive
 			cur.SandboxURL = info.HostURL
 			cur.Epoch = info.Epoch
@@ -600,13 +613,14 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 			}
 			cur.StoppedBy = ""
 			r.saveLocked()
-			reattached = true
+			reattached++
 		}
 		r.mu.Unlock()
 	}
-	if reattached {
+	if reattached > 0 {
 		go r.ReconcileReadyGatewayCredentials()
 	}
+	return reattached
 }
 
 // SetWorkerImageProfile registers an alternate guest image for a worker
@@ -712,7 +726,20 @@ func (r *OwnershipRegistry) setPressureSamplerForTest(sampler hostPressureSample
 // StartIdleSweeper periodically hibernates idle active VMs. It schedules an
 // immediate background sweep so vmctl can bind its health/control port before
 // potentially slow retention pruning walks old VM state directories.
-func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.Duration) {
+type ComputerVersionRouteGuard func(context.Context, string, string) error
+
+func authorizeLifecycleRoute(ctx context.Context, guard ComputerVersionRouteGuard, userID, desktopID string) bool {
+	if guard == nil || strings.TrimSpace(userID) == "" || strings.TrimSpace(desktopID) == "" {
+		return false
+	}
+	if err := guard(ctx, userID, desktopID); err != nil {
+		log.Printf("vmctl: lifecycle mutation refused without D-ROUTE user=%s desktop=%s: %v", userID, desktopID, err)
+		return false
+	}
+	return true
+}
+
+func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.Duration, guard ComputerVersionRouteGuard) {
 	if interval <= 0 {
 		interval = time.Minute
 	}
@@ -720,10 +747,10 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 	sweep := func() {
 		sweepMu.Lock()
 		defer sweepMu.Unlock()
-		if warmed := r.WarmAlwaysOnDesktops(); warmed > 0 {
+		if warmed := r.WarmAlwaysOnDesktops(ctx, guard); warmed > 0 {
 			log.Printf("vmctl: warmness policy resumed %d always-on desktop VM(s)", warmed)
 		}
-		if warmed := r.WarmUniversalWirePlatformComputer(); warmed > 0 {
+		if warmed := r.WarmUniversalWirePlatformComputer(ctx, guard); warmed > 0 {
 			log.Printf("vmctl: warmness policy resumed %d universal wire platform computer(s)", warmed)
 		}
 		if plan := r.PressureReclaimPlan(); plan.Mode == PressureReclaimModeDryRun {
@@ -732,17 +759,17 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 		} else if plan.Mode == PressureReclaimModeActive {
 			log.Printf("vmctl: pressure reclaim active decision=%s reason=%q active=%d eligible=%d protected=%d pressure=%v",
 				plan.Decision, plan.Reason, plan.Inventory.Active, plan.Inventory.Eligible, plan.Inventory.Protected, plan.Pressure.Pressure)
-			if reclaimed := r.ReclaimPressureVMs(); reclaimed > 0 {
+			if reclaimed := r.ReclaimPressureVMs(ctx, guard); reclaimed > 0 {
 				log.Printf("vmctl: pressure reclaim hibernated %d VM(s)", reclaimed)
 			}
-			if destroyed := r.ReclaimStaleVMState(); destroyed > 0 {
+			if destroyed := r.ReclaimStaleVMState(ctx, guard); destroyed > 0 {
 				log.Printf("vmctl: pressure reclaim destroyed %d stale worker/candidate VM state directories", destroyed)
 			}
 		}
-		if result := r.PruneRetention(); result.Deleted > 0 {
+		if result := r.PruneRetention(ctx, guard); result.Deleted > 0 {
 			log.Printf("vmctl: retention prune deleted %d VM state directorie(s), reclaimed %.1f MiB", result.Deleted, float64(result.BytesDeleted)/(1024*1024))
 		}
-		if stopped := r.StopIdleVMs(); stopped > 0 {
+		if stopped := r.StopIdleVMs(ctx, guard); stopped > 0 {
 			log.Printf("vmctl: idle sweeper hibernated %d VM(s)", stopped)
 		}
 	}
@@ -2126,11 +2153,11 @@ func normalizeStopReason(reason string) string {
 // when active pressure reclaim is enabled and the host is currently under
 // pressure. Candidate selection is bounded by MaxCandidates and excludes
 // protected computers such as premium always-on and critical verifier workers.
-func (r *OwnershipRegistry) ReclaimPressureVMs() int {
+func (r *OwnershipRegistry) ReclaimPressureVMs(ctx context.Context, guard ComputerVersionRouteGuard) int {
 	candidates := r.pressureReclaimActionCandidates()
 	reclaimed := 0
 	for _, candidate := range candidates {
-		if candidate.own == nil || candidate.public.Protected {
+		if candidate.own == nil || candidate.public.Protected || !authorizeLifecycleRoute(ctx, guard, candidate.own.UserID, candidate.own.DesktopID) {
 			continue
 		}
 		var err error
@@ -2151,11 +2178,11 @@ func (r *OwnershipRegistry) ReclaimPressureVMs() int {
 // primary, published, premium, and recent work; package/source evidence must
 // survive outside these disposable producer machines before their VM state is
 // eligible for deletion.
-func (r *OwnershipRegistry) ReclaimStaleVMState() int {
+func (r *OwnershipRegistry) ReclaimStaleVMState(ctx context.Context, guard ComputerVersionRouteGuard) int {
 	candidates := r.staleStateReclaimCandidates()
 	destroyed := 0
 	for _, candidate := range candidates {
-		if candidate == nil {
+		if candidate == nil || !authorizeLifecycleRoute(ctx, guard, candidate.UserID, candidate.DesktopID) {
 			continue
 		}
 		if r.destroyStaleVMState(candidate) {
@@ -2606,11 +2633,11 @@ func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
 
 // StopIdleVMs transitions all idle VMs to hibernated state.
 // Returns the number of VMs that were stopped (VAL-VM-008).
-func (r *OwnershipRegistry) StopIdleVMs() int {
+func (r *OwnershipRegistry) StopIdleVMs(ctx context.Context, guard ComputerVersionRouteGuard) int {
 	idleOwnerships := r.CheckIdleOwnerships()
 	stopped := 0
 	for _, own := range idleOwnerships {
-		if own == nil {
+		if own == nil || !authorizeLifecycleRoute(ctx, guard, own.UserID, own.DesktopID) {
 			continue
 		}
 		var err error
@@ -2630,7 +2657,7 @@ func (r *OwnershipRegistry) StopIdleVMs() int {
 // desktops that already have an ownership record. It intentionally does not
 // create new ownerships for configured users and does not warm candidate
 // desktops or worker VMs.
-func (r *OwnershipRegistry) WarmAlwaysOnDesktops() int {
+func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard ComputerVersionRouteGuard) int {
 	r.mu.RLock()
 	cfg := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
 	if len(cfg.AlwaysOnUserIDs) == 0 {
@@ -2666,6 +2693,14 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops() int {
 
 	warmed := 0
 	for _, target := range targets {
+		if guard == nil {
+			log.Printf("vmctl: warmness policy refused always-on desktop vm=%s: ComputerVersion route guard is unavailable", target.vmID)
+			continue
+		}
+		if err := guard(ctx, target.userID, target.desktopID); err != nil {
+			log.Printf("vmctl: warmness policy refused always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
+			continue
+		}
 		if _, err := r.ResumeVMForDesktop(target.userID, target.desktopID); err != nil {
 			log.Printf("vmctl: warmness policy failed to resume always-on desktop vm=%s user=%s desktop=%s: %v", target.vmID, target.userID, target.desktopID, err)
 			continue

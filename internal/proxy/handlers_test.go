@@ -22,6 +22,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"github.com/yusefmosiah/go-choir/internal/auth"
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"golang.org/x/crypto/ssh"
@@ -125,11 +127,9 @@ func testProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Server)
 	sandboxServer := httptest.NewServer(sandboxMux)
 	t.Cleanup(func() { sandboxServer.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxServer.URL,
-		AuthPublicKeyPath: "/unused/in/test",
-	}
+		AuthPublicKeyPath: "/unused/in/test"}
 
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
@@ -269,11 +269,9 @@ func TestAppChangePackagePullImportsPackageIntoTargetComputer(t *testing.T) {
 	sandbox := httptest.NewServer(sandboxMux)
 	t.Cleanup(func() { sandbox.Close() })
 
-	handler, err := NewHandler(&Config{
-		Port:              "0",
+	handler, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
-		AuthPublicKeyPath: "/unused/in/test",
-	}, pub)
+		AuthPublicKeyPath: "/unused/in/test"}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -337,11 +335,9 @@ func TestAppChangePackageReviewEvidenceFetchesSourceComputerSummary(t *testing.T
 	sandbox := httptest.NewServer(sandboxMux)
 	t.Cleanup(func() { sandbox.Close() })
 
-	handler, err := NewHandler(&Config{
-		Port:              "0",
+	handler, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
-		AuthPublicKeyPath: "/unused/in/test",
-	}, pub)
+		AuthPublicKeyPath: "/unused/in/test"}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -411,11 +407,9 @@ func TestAppChangePackageReviewEvidenceSanitizesStaleSourceHumanProof(t *testing
 	sandbox := httptest.NewServer(sandboxMux)
 	t.Cleanup(func() { sandbox.Close() })
 
-	handler, err := NewHandler(&Config{
-		Port:              "0",
+	handler, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
-		AuthPublicKeyPath: "/unused/in/test",
-	}, pub)
+		AuthPublicKeyPath: "/unused/in/test"}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -606,7 +600,7 @@ func TestBootstrapDeniesWrongSigningKey(t *testing.T) {
 	sandboxServer := httptest.NewServer(http.NewServeMux())
 	defer sandboxServer.Close()
 
-	cfg := &Config{Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, origPub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -769,7 +763,7 @@ func TestBootstrapPreservesUpstreamNon2xx(t *testing.T) {
 	sandboxServer := httptest.NewServer(sandboxMux)
 	defer sandboxServer.Close()
 
-	cfg := &Config{Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -1073,7 +1067,7 @@ func TestValidateAccessJWTWithWrongKey(t *testing.T) {
 		t.Fatalf("generate original key: %v", err)
 	}
 
-	cfg := &Config{Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, origPub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -1667,7 +1661,7 @@ func TestBootstrapStripsAdditionalSpoofedIdentityHeaders(t *testing.T) {
 	sandboxServer := httptest.NewServer(sandboxMux)
 	defer sandboxServer.Close()
 
-	cfg := &Config{Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -1822,7 +1816,7 @@ func TestWSSpoofedIdentityHeadersDoNotReachSandbox(t *testing.T) {
 	sandboxServer := httptest.NewServer(sandboxMux)
 	defer sandboxServer.Close()
 
-	cfg := &Config{Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2068,11 +2062,9 @@ func TestAuthenticatedFutureAPIRouteIsForwarded(t *testing.T) {
 	sandbox := httptest.NewServer(sandboxMux)
 	t.Cleanup(func() { sandbox.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
-		AuthPublicKeyPath: "/unused/in/test",
-	}
+		AuthPublicKeyPath: "/unused/in/test"}
 	h, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2123,11 +2115,9 @@ func TestAuthenticatedTextureRouteIsForwarded(t *testing.T) {
 	sandbox := httptest.NewServer(sandboxMux)
 	t.Cleanup(func() { sandbox.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
-		AuthPublicKeyPath: "/unused/in/test",
-	}
+		AuthPublicKeyPath: "/unused/in/test"}
 	h, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2172,11 +2162,9 @@ func TestAuthenticatedTraceRouteIsForwarded(t *testing.T) {
 	sandbox := httptest.NewServer(sandboxMux)
 	t.Cleanup(func() { sandbox.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
-		AuthPublicKeyPath: "/unused/in/test",
-	}
+		AuthPublicKeyPath: "/unused/in/test"}
 	h, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2221,11 +2209,9 @@ func TestAuthenticatedTestRouteIsForwarded(t *testing.T) {
 	sandbox := httptest.NewServer(sandboxMux)
 	t.Cleanup(func() { sandbox.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
-		AuthPublicKeyPath: "/unused/in/test",
-	}
+		AuthPublicKeyPath: "/unused/in/test"}
 	h, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2353,7 +2339,7 @@ func TestProxyHealthReportsDegradedWhenUpstreamIsUnreachable(t *testing.T) {
 	})
 	sandboxServer := httptest.NewServer(sandboxMux)
 
-	cfg := &Config{Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2410,7 +2396,7 @@ func TestProxyHealthReportsDegradedWithNoUpstreamAtStartup(t *testing.T) {
 	}
 
 	// Point proxy at a non-existent upstream.
-	cfg := &Config{Port: "0", SandboxURL: "http://127.0.0.1:1", AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: "http://127.0.0.1:1", AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2472,7 +2458,7 @@ func TestProxyHealthRecoversAfterUpstreamRestart(t *testing.T) {
 
 	// Start the sandbox, create proxy pointing at it.
 	sandboxServer := httptest.NewServer(sandboxMux)
-	cfg := &Config{Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0", SandboxURL: sandboxServer.URL, AuthPublicKeyPath: "/unused"}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
@@ -2516,11 +2502,9 @@ func TestProxyHealthRecoversAfterUpstreamRestart(t *testing.T) {
 	// Re-create the handler pointing to the new sandbox.
 	newSandboxURL, _ := url.Parse(newSandboxServer.URL)
 	proxy := httputil.NewSingleHostReverseProxy(newSandboxURL)
-	handler2, err := NewHandler(&Config{
-		Port:              "0",
+	handler2, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        newSandboxServer.URL,
-		AuthPublicKeyPath: "/unused",
-	}, pub)
+		AuthPublicKeyPath: "/unused"}, pub)
 	_ = proxy
 	if err != nil {
 		t.Fatalf("NewHandler for restart: %v", err)
@@ -2673,12 +2657,10 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 	t.Cleanup(func() { vmctlServer.Close() })
 
 	// Create proxy config with vmctl routing enabled.
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxServer.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		VmctlURL:          vmctlServer.URL,
-	}
+		VmctlURL:          vmctlServer.URL}
 
 	if !cfg.VmctlRoutingEnabled() {
 		t.Fatal("expected vmctl routing to be enabled")
@@ -2690,6 +2672,100 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 	}
 
 	return handler, priv, sandboxServer, vmctlServer
+}
+
+func TestResolveSandboxURLHasNoProductionStaticFallback(t *testing.T) {
+	var backendCalls atomic.Int64
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		backendCalls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+	h, err := NewHandler(&Config{SandboxURL: backend.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
+	if err != nil {
+		t.Fatalf("new handler: %v", err)
+	}
+	if _, err := h.resolveSandboxURL(context.Background(), "owner", "primary"); err == nil {
+		t.Fatal("production route used static sandbox without vmctl")
+	}
+	if backendCalls.Load() != 0 {
+		t.Fatalf("static sandbox calls = %d, want zero", backendCalls.Load())
+	}
+}
+
+func TestResolveSandboxURLRequiresJoinedComputerVersionRoute(t *testing.T) {
+	createdAt := time.Date(2026, 7, 16, 1, 0, 0, 0, time.UTC)
+	closure, err := computerversion.NewCodeClosure(strings.Repeat("1", 40), []computerversion.CodeArtifact{{
+		Name: "sandbox", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-sandbox",
+	}}, createdAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := computerversion.NewArtifactProgram([]computerversion.ArtifactProgramEntry{{
+		Kind: "test", ContentSHA256: strings.Repeat("b", 64), ArtifactURI: "artifact+sha256://" + strings.Repeat("b", 64) + "/test/state",
+	}}, createdAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := computerversion.ComputerVersion{CodeRef: closure.Ref, ArtifactProgramRef: program.Ref}
+	var routeCalls, resolveCalls atomic.Int64
+	sandbox := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	defer sandbox.Close()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/vmctl/computer-version-routes/resolve", func(w http.ResponseWriter, r *http.Request) {
+		routeCalls.Add(1)
+		slotID := r.URL.Query().Get("route_slot_id")
+		_ = json.NewEncoder(w).Encode(vmctl.RouteResolution{
+			Slot:            routeledger.Slot{ID: slotID, Current: version, Generation: 1, LatestReceiptID: "receipt-1"},
+			LatestReceipt:   routeledger.TransitionReceipt{ID: "receipt-1", RouteSlotID: slotID, New: version, CommittedGeneration: 1},
+			CodeClosure:     closure,
+			ArtifactProgram: program,
+		})
+	})
+	mux.HandleFunc("/internal/vmctl/resolve", func(w http.ResponseWriter, _ *http.Request) {
+		resolveCalls.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"vm_id": "vm-joined", "user_id": "owner", "desktop_id": "primary",
+			"published": true, "sandbox_url": sandbox.URL, "state": "active",
+		})
+	})
+	vmctlServer := httptest.NewServer(mux)
+	defer vmctlServer.Close()
+	h, err := NewHandler(&Config{SandboxURL: sandbox.URL, VmctlURL: vmctlServer.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
+	if err != nil {
+		t.Fatalf("new handler: %v", err)
+	}
+	got, err := h.resolveSandboxURL(context.Background(), "owner", "primary")
+	if err != nil {
+		t.Fatalf("resolve joined route: %v", err)
+	}
+	if got != sandbox.URL || routeCalls.Load() != 1 || resolveCalls.Load() != 1 {
+		t.Fatalf("joined route result url=%q route_calls=%d resolve_calls=%d", got, routeCalls.Load(), resolveCalls.Load())
+	}
+}
+
+func TestResolveSandboxURLRefusesBeforeVMResolutionWhenRouteMissing(t *testing.T) {
+	var resolveCalls atomic.Int64
+	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/vmctl/computer-version-routes/resolve", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"error":"slot not found"}`, http.StatusNotFound)
+	})
+	mux.HandleFunc("/internal/vmctl/resolve", func(w http.ResponseWriter, _ *http.Request) {
+		resolveCalls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	})
+	vmctlServer := httptest.NewServer(mux)
+	defer vmctlServer.Close()
+	h, err := NewHandler(&Config{SandboxURL: "http://invalid", VmctlURL: vmctlServer.URL}, make(ed25519.PublicKey, ed25519.PublicKeySize))
+	if err != nil {
+		t.Fatalf("new handler: %v", err)
+	}
+	if _, err := h.resolveSandboxURL(context.Background(), "owner", "primary"); err == nil {
+		t.Fatal("missing D-ROUTE reached VM resolution")
+	}
+	if resolveCalls.Load() != 0 {
+		t.Fatalf("VM resolution calls = %d, want zero", resolveCalls.Load())
+	}
 }
 
 // TestVMctlRouting_BootstrapRoutesThroughVM tests that protected bootstrap
@@ -2866,7 +2942,7 @@ func TestResolveSandboxURLRetriesTransientVMctlFailure(t *testing.T) {
 	}))
 	defer vmctlSrv.Close()
 
-	handler := &Handler{vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
+	handler := &Handler{cfg: &Config{AllowDirectSandboxForTests: true}, vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
 	got, err := handler.resolveSandboxURL(context.Background(), "alice", vmctl.PrimaryDesktopID)
 	if err != nil {
 		t.Fatalf("resolveSandboxURL: %v", err)
@@ -2916,7 +2992,7 @@ func TestResolveSandboxURLUsesResolveForUniversalWirePlatformComputer(t *testing
 	}))
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	handler := &Handler{vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
+	handler := &Handler{cfg: &Config{AllowDirectSandboxForTests: true}, vmctlClient: vmctl.NewClient(vmctlSrv.URL)}
 	got, err := handler.resolveSandboxURL(context.Background(), vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID)
 	if err != nil {
 		t.Fatalf("resolveSandboxURL: %v", err)
@@ -3482,12 +3558,10 @@ func TestComputeRecoveryWakeRefreshesUnreachableCurrentComputer(t *testing.T) {
 	vmctlSrv := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		VmctlURL:          vmctlSrv.URL,
-	}
+		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler with vmctl: %v", err)
@@ -3568,12 +3642,10 @@ func TestComputeRecoveryWakeKeepsObservationWhenUnreachableRefreshFails(t *testi
 	vmctlSrv := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		VmctlURL:          vmctlSrv.URL,
-	}
+		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler with vmctl: %v", err)
@@ -3653,12 +3725,10 @@ func TestComputeRecoveryWakeRefreshesCurrentComputerWithoutBlockingResolve(t *te
 		t.Fatalf("precreated ownership lookup = %+v, err=%v", own, err)
 	}
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		VmctlURL:          vmctlSrv.URL,
-	}
+		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler with vmctl: %v", err)
@@ -3748,12 +3818,10 @@ func TestComputeRecoveryWakeRefreshesStoppedCurrentComputerWhenResolveFails(t *t
 	vmctlSrv := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		VmctlURL:          vmctlSrv.URL,
-	}
+		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler with vmctl: %v", err)
@@ -3868,12 +3936,10 @@ func TestComputeRecoveryContinuesAfterClientCancelAndStatusBootstrapObserveReady
 	vmctlSrv := httptest.NewServer(vmctlMux)
 	t.Cleanup(func() { vmctlSrv.Close() })
 
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxSrv.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		VmctlURL:          vmctlSrv.URL,
-	}
+		VmctlURL:          vmctlSrv.URL}
 	handler, err := NewHandler(cfg, pub)
 	if err != nil {
 		t.Fatalf("NewHandler with vmctl: %v", err)
@@ -4058,8 +4124,7 @@ func TestVMctlRouting_GracefulDegradation(t *testing.T) {
 	t.Cleanup(func() { sandboxServer.Close() })
 
 	// Create proxy pointing at an unreachable vmctl.
-	cfg := &Config{
-		Port:              "0",
+	cfg := &Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxServer.URL,
 		AuthPublicKeyPath: "/unused",
 		VmctlURL:          "http://127.0.0.1:1", // unreachable port
@@ -4086,12 +4151,12 @@ func TestVMctlRouting_GracefulDegradation(t *testing.T) {
 
 // TestConfig_VmctlRoutingEnabled tests the vmctl routing config flag.
 func TestConfig_VmctlRoutingEnabled(t *testing.T) {
-	cfg1 := &Config{VmctlURL: "http://localhost:8083"}
+	cfg1 := &Config{AllowDirectSandboxForTests: true, VmctlURL: "http://localhost:8083"}
 	if !cfg1.VmctlRoutingEnabled() {
 		t.Error("expected vmctl routing enabled when URL is set")
 	}
 
-	cfg2 := &Config{VmctlURL: ""}
+	cfg2 := &Config{AllowDirectSandboxForTests: true, VmctlURL: ""}
 	if cfg2.VmctlRoutingEnabled() {
 		t.Error("expected vmctl routing disabled when URL is empty")
 	}

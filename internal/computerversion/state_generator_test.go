@@ -59,7 +59,7 @@ func sha256Hex(b []byte) string {
 //
 // It returns the journal, blob store, and the ComputerVersion that identifies
 // this state.
-func buildGeneratorFixture(t *testing.T) (journal.Journal, *blob.Store, ComputerVersion) {
+func buildGeneratorFixture(t *testing.T) (journal.Journal, *blob.Store, ArtifactProgram, ComputerVersion) {
 	t.Helper()
 
 	jrn := journal.NewMemJournal()
@@ -142,12 +142,16 @@ func buildGeneratorFixture(t *testing.T) (journal.Journal, *blob.Store, Computer
 		t.Fatalf("append settings event: %v", err)
 	}
 
+	program, err := NewJournalArtifactProgram(jrn.Entries(), "fixture/base-journal", generatorFixedTime)
+	if err != nil {
+		t.Fatalf("bind fixture artifact program: %v", err)
+	}
 	version := ComputerVersion{
 		CodeRef:            CodeRef("code-abc-123"),
-		ArtifactProgramRef: ArtifactProgramRef("artifact-xyz-789"),
+		ArtifactProgramRef: program.Ref,
 	}
 
-	return jrn, blobs, version
+	return jrn, blobs, program, version
 }
 
 // TestStateGeneratorRoundTrip proves the generator works: it takes a
@@ -156,14 +160,14 @@ func buildGeneratorFixture(t *testing.T) (journal.Journal, *blob.Store, Computer
 // and produces observations. The test verifies the generated files match the
 // expected content and that the extractor reads them back correctly.
 func TestStateGeneratorRoundTrip(t *testing.T) {
-	jrn, blobs, version := buildGeneratorFixture(t)
+	jrn, blobs, program, version := buildGeneratorFixture(t)
 
 	// Generate state into a target directory (simulating a Firecracker
 	// persistent dir).
 	firecrackerDir := t.TempDir()
 	ctx := context.Background()
 
-	gen := StateGenerator{Journal: jrn, Blobs: blobs}
+	gen := StateGenerator{Journal: jrn, Blobs: blobs, ArtifactProgram: program}
 	if err := gen.Generate(ctx, version, firecrackerDir); err != nil {
 		t.Fatalf("generate state: %v", err)
 	}
@@ -239,14 +243,14 @@ func TestStateGeneratorRoundTrip(t *testing.T) {
 //  4. Equivalence is verified by comparing the extracted observations, not by
 //     assuming the directories are identical.
 func TestCrossSubstrateEquivalenceRealGenerator(t *testing.T) {
-	jrn, blobs, version := buildGeneratorFixture(t)
+	jrn, blobs, program, version := buildGeneratorFixture(t)
 	ctx := context.Background()
 
 	// Generate state into two independent substrate directories.
 	substrateADir := t.TempDir()
 	substrateBDir := t.TempDir()
 
-	gen := StateGenerator{Journal: jrn, Blobs: blobs}
+	gen := StateGenerator{Journal: jrn, Blobs: blobs, ArtifactProgram: program}
 	if err := gen.Generate(ctx, version, substrateADir); err != nil {
 		t.Fatalf("generate to substrate A: %v", err)
 	}
@@ -314,12 +318,12 @@ func TestCrossSubstrateEquivalenceRealGenerator(t *testing.T) {
 // in one substrate causes the equivalence checker to fail, proving the
 // verifier is not ceremonial.
 func TestCrossSubstrateFailureRealGenerator(t *testing.T) {
-	jrn, blobs, version := buildGeneratorFixture(t)
+	jrn, blobs, program, version := buildGeneratorFixture(t)
 	ctx := context.Background()
 
 	// Generate state into substrate A (correct).
 	substrateADir := t.TempDir()
-	gen := StateGenerator{Journal: jrn, Blobs: blobs}
+	gen := StateGenerator{Journal: jrn, Blobs: blobs, ArtifactProgram: program}
 	if err := gen.Generate(ctx, version, substrateADir); err != nil {
 		t.Fatalf("generate to substrate A: %v", err)
 	}

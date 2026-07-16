@@ -5,9 +5,10 @@ import (
 	"time"
 )
 
-// ComputerSourceLineageRecord is the product-visible source/build profile for
-// one computer. It is the control-plane record that active computers expose as
-// a base for candidate work and promotion.
+// ComputerSourceLineageRecord is evidence-only source/build metadata for one
+// computer. ActiveSourceRef and the legacy-named RouteProfile support candidate
+// comparison and adoption receipts; neither authorizes or resolves a served
+// route. The vmctl-owned D-ROUTE slot is the sole routing authority.
 type ComputerSourceLineageRecord struct {
 	OwnerID            string    `json:"owner_id"`
 	ComputerID         string    `json:"computer_id"`

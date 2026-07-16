@@ -92,12 +92,10 @@ func TestHandleInternalWirePlatformPublishPostsToCorpusd(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{
-		Port:              "0",
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		CorpusdURL:      corpusd.URL,
-	}, pub)
+		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -149,7 +147,7 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 		"source":                     "edit_texture",
 		"revision_role":              wirepublish.RevisionRoleCanonical,
 		"ingestion_handoff_cycle_id": "cycle-proxy-fallback",
-		"corpusd_route_path":       "/pub/texture/proxy-fallback",
+		"corpusd_route_path":         "/pub/texture/proxy-fallback",
 	})
 	bodyDoc := json.RawMessage(`{"schema":"choir.texture_doc.v1","doc":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Fallback story "},{"type":"source_ref","attrs":{"source_entity_id":"src-fallback"}}]}]}}`)
 	sourceEntities := json.RawMessage(`[{"source_entity_id":"src-fallback","target":{"kind":"url","uri":"https://example.com/fallback"},"display":{"mode":"numbered_ref","title":"Fallback source"},"evidence":{"state":"available","open_surface":"source"}}]`)
@@ -194,12 +192,10 @@ func TestHandleInternalWirePlatformPublishSyncsSuppliedRevisionWhenSandboxHistor
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{
-		Port:              "0",
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		CorpusdURL:      corpusd.URL,
-	}, pub)
+		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -263,12 +259,10 @@ func TestHandleInternalWirePlatformPublishRejectsSourceEntitiesWithoutBodyDoc(t 
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{
-		Port:              "0",
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		CorpusdURL:      corpusd.URL,
-	}, pub)
+		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}

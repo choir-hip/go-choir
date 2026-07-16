@@ -456,8 +456,8 @@ in
   systemd.services.go-choir-vmctl = {
     description = "go-choir VMCtl Service (Firecracker VM lifecycle)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+    after = [ "network-online.target" "go-choir-platform-dolt.service" ];
+    wants = [ "network-online.target" "go-choir-platform-dolt.service" ];
     serviceConfig = commonServiceHardening // {
       ExecStart = "${serviceExec "vmctl" goChoirPackages.vmctl}";
       Restart = "on-failure";
@@ -497,6 +497,10 @@ in
       EnvironmentFile = "-/var/lib/go-choir/vmctl-priority.env";
       Environment = [
         "VMCTL_PORT=8083"
+        # D-ROUTE and immutable ComputerVersion inputs are tables on the same
+        # corpusd world-wire SQL server. vmctl is the sole route CAS writer.
+        "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
+        "VMCTL_ARTIFACTS_ROOT=${platformArtifactsDir}"
         # Guest images are a stable boot substrate. At boot, guest sandboxes
         # fetch the current sandbox service package from this host-side pointer
         # and execute it from their writable data disk, so ordinary runtime code
@@ -680,9 +684,9 @@ in
   '';
 
   # Host sandbox service deleted in PR 5 of store-consolidation mission.
-  # All runtime work happens in VMs via vmctl. The proxy's SandboxURL
-  # fallback (PROXY_SANDBOX_URL) will fail with a visible connection error
-  # if vmctl is unavailable (I3: no silent failures).
+  # All runtime work happens in VMs via vmctl. Served proxy routes require an
+  # immutable D-ROUTE slot and fail before VM lookup when route authority is
+  # unavailable; PROXY_SANDBOX_URL is not a production fallback.
   #
   # The sandbox binary is still built and packaged (goChoirPackages.sandbox)
   # because it runs inside Firecracker VMs (nix/sandbox-vm.nix). vmctl serves

@@ -30,13 +30,8 @@ const (
 // verified events, and writes the tree's files to a target directory
 // using the blob store for file content.
 //
-// The caller is responsible for binding the ComputerVersion's
-// ArtifactProgramRef to the journal. The generator does NOT resolve the
-// ArtifactProgramRef; it trusts the caller's journal binding. Passing a
-// ComputerVersion whose ArtifactProgramRef does not match the journal will
-// produce state that is inconsistent with the version.
-//
-// TODO: add ArtifactProgramRef resolver to enforce the binding here.
+// ArtifactProgram cryptographically binds the exact journal entry slice used
+// for generation to the ComputerVersion's immutable ArtifactProgramRef.
 //
 // This bridges the gap between the abstract ComputerVersion and concrete
 // substrate state. If the generator is correct, the extractor reads back
@@ -46,6 +41,8 @@ type StateGenerator struct {
 	Journal journal.Journal
 	// Blobs provides file content by blob ref.
 	Blobs *blob.Store
+	// ArtifactProgram is the immutable resolver result for the version.
+	ArtifactProgram ArtifactProgram
 }
 
 // Generate writes the ComputerVersion's durable state to targetDir.
@@ -57,10 +54,6 @@ type StateGenerator struct {
 // verified ordered entries. This avoids a verify/read race where a live
 // journal could change between a separate VerifyChain() call and the
 // Entries() call.
-//
-// The caller owns the binding between the ComputerVersion's
-// ArtifactProgramRef and the journal. This method does not validate that
-// binding.
 func (g StateGenerator) Generate(ctx context.Context, version ComputerVersion, targetDir string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -83,6 +76,9 @@ func (g StateGenerator) Generate(ctx context.Context, version ComputerVersion, t
 	if err != nil {
 		return fmt.Errorf("state generator: verify entries: %w", err)
 	}
+	if err := verifyJournalArtifactProgramWithOrdered(g.ArtifactProgram, version, ordered); err != nil {
+		return fmt.Errorf("state generator: bind ArtifactProgramRef: %w", err)
+	}
 
 	// Derive the tree from the verified, ordered entries.
 	tree := basetree.Derive(journal.Events(ordered))
@@ -99,7 +95,7 @@ func (g StateGenerator) Generate(ctx context.Context, version ComputerVersion, t
 // (no live journal required). This is useful for tests and for replaying
 // from a captured event tape without a database connection. The entries are
 // verified via the same tamper-evident chain check as a live journal.
-func GenerateFromEvents(ctx context.Context, entries []journal.Entry, blobs *blob.Store, version ComputerVersion, targetDir string) error {
+func GenerateFromEvents(ctx context.Context, entries []journal.Entry, blobs *blob.Store, program ArtifactProgram, version ComputerVersion, targetDir string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -113,6 +109,9 @@ func GenerateFromEvents(ctx context.Context, entries []journal.Entry, blobs *blo
 	ordered, err := verifyBaseJournalEntries(entries)
 	if err != nil {
 		return fmt.Errorf("state generator: verify entries: %w", err)
+	}
+	if err := verifyJournalArtifactProgramWithOrdered(program, version, ordered); err != nil {
+		return fmt.Errorf("state generator: bind ArtifactProgramRef: %w", err)
 	}
 	tree := basetree.Derive(journal.Events(ordered))
 

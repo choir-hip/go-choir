@@ -430,8 +430,8 @@ func (c *Client) RemoveDesktop(userID, desktopID string) error {
 
 // HibernateWorker requests vmctl to hibernate a typed worker VM without
 // touching the parent user desktop.
-func (c *Client) HibernateWorker(workerID string) error {
-	reqBody := workerActionRequest{WorkerID: strings.TrimSpace(workerID)}
+func (c *Client) HibernateWorker(userID, desktopID, workerID string) error {
+	reqBody := workerActionRequest{UserID: strings.TrimSpace(userID), DesktopID: normalizeDesktopID(desktopID), WorkerID: strings.TrimSpace(workerID)}
 	data, err := json.Marshal(reqBody)
 	if err != nil {
 		return fmt.Errorf("vmctl client: marshal hibernate-worker request: %w", err)

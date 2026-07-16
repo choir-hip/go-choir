@@ -361,13 +361,13 @@ now:
     worktree_inventory_ref: "2026-07-16T04:45:19Z intentional Phase-A WIP: this Definition plus docs/evidence/audited-construction-phase-a-2026-07-16.md; no unrelated paths"
     status: reconciled
   candidate:
-    id: none
-    state: none
-    ref: none
-    owner: none
-    base: none
-    digest: none
-    scope: []
+    id: G1-immutable-input-state-authority
+    state: accepted_pending_landing
+    ref: /tmp/choir-g1-immutable-authority.patch
+    owner: OMP
+    base: a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36
+    digest: sha256:22a2ba443f14642b561249eff473a5e7696df6b460a562262c01fa6f014798eb
+    scope: [38 frozen patch paths]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -386,8 +386,10 @@ now:
     - "https://choir.news/health at 2026-07-16T04:36:01Z: proxy/vmctl ok, deployed commit 9d9945e65f5b54069e1a86a530cb0960d96b3474"
     - docs/evidence/audited-construction-phase-a-2026-07-16.md
     - "/tmp/choir-audited-construction-contained/node-b-storage-report.json: protected snapshots verified, no deletion authorized"
-  blocker_or_risk: "Phase A completed without source-image mutation. The bounded owner extraction recovered independently importable legacy payloads but found their application tables only in mutable Dolt working sets, so the SQL hashes are recovery payload identities rather than ArtifactProgramRefs. Production has no CodeRef resolver, ArtifactProgramRef resolver, D-ROUTE tables/CAS port, durable construction receipt store, or disk-policy backend; StateGenerator is caller-trusting and test-only. These are Phase B/C blockers, not permission to invent a third store or reuse data.img."
-  next_action: "Execute B-resolve-immutable-inputs: define and wire durable immutable CodeRef and ArtifactProgramRef resolvers against existing authorities; implement route lookup as D-ROUTE slot to ComputerVersion with vmctl as sole writer; delete lineage, ActiveSourceRef, RouteProfile, PROXY_RUNTIME_DB_PATH, hard-coded owner/desktop, VM, and static fallbacks from served routing; remove or demote competing promotion/candidate-package route writers to evidence-only; run deterministic authority/refusal/concurrency checks and freeze the G1 packet. Do not implement the constructor or disk backend before G1 accepts."
+    - "/tmp/choir-g1-consensus-final-22a2/omp-gemini35.out: accept, no blockers, high confidence"
+    - "/tmp/choir-g1-consensus-final-alternates/omp-gpt55.out: accept, no blockers, high confidence"
+  blocker_or_risk: "G1 is independently accepted over frozen patch sha256:22a2ba443f14642b561249eff473a5e7696df6b460a562262c01fa6f014798eb. Entry to constructor mutation remains blocked until this red change is committed, pushed, passes CI/deploy, staging Node B reports the pushed identity, and the deployed route authority refuses an unresolved route without any static/lineage fallback. The production constructor, disk-instantiation policy/backend, and durable construction receipt remain Phase C work."
+  next_action: "Land accepted G1 through canonical main: commit the frozen implementation plus this adjudication receipt, push origin/main, monitor CI and Node B deploy, verify matching staging identity, and run the deployed D-ROUTE refusal/health smoke path. Then checkpoint entry to C-construct-and-boot; do not execute any route CAS."
 
 successor:
   status: unauthorized_until_this_definition_complete

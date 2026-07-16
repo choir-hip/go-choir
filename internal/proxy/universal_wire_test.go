@@ -53,7 +53,7 @@ func TestUniversalWireStoriesReadsCorpusdWithoutVMLifecycle(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	handler, err := NewHandler(&Config{SandboxURL: sandbox.URL, CorpusdURL: corpusd.URL, VmctlURL: vmctlServer.URL}, pub)
+	handler, err := NewHandler(&Config{AllowDirectSandboxForTests: true, SandboxURL: sandbox.URL, CorpusdURL: corpusd.URL, VmctlURL: vmctlServer.URL}, pub)
 	if err != nil {
 		t.Fatalf("new handler: %v", err)
 	}

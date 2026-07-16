@@ -63,3 +63,63 @@ This is legacy recovery evidence, not product acceptance. It used SSH, host file
 `internal/computerversion` already supplies the sole identity type, typed observations/equivalence, Base journal/tree/blob extraction, `StateGenerator`, VM-manager state classification, and promotion-certificate vocabulary. These are not wired into production: LSP found `StateGenerator.Generate` only in tests and `VMManagerScopedMaterializer.Materialize` only in `cmd/vmrealize` plus tests; that materializer explicitly does not launch a VM. Phase B/C must connect and complete this substrate rather than patching the opaque reboot loop or creating another constructor.
 
 The production route remains the superseded path: `internal/proxy/route_resolver.go` falls back to hard-coded platform owner/desktop constants, `LineageBasedRouteResolver` reads `RouteProfile`, `cmd/proxy/main.go` can open `PROXY_RUNTIME_DB_PATH`, promotion and candidate-package services rewrite `ActiveSourceRef`/`RouteProfile`, and vmctl recovery reboots the same VM ID/data disk. D-ROUTE's settled deletion list governs the clean cutover.
+
+## G1 frozen-candidate review receipt
+
+A frozen candidate at base `a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36`, patch SHA-256 `4028940b4fcd759441159fb8c38e69e2008fd1c79f36ca4a6e4973cd56dc7348`, received two accepts and one high-confidence repair. Under the mission's minority rule, G1 remains **repair**, not accepted. Durable local panel outputs: `/tmp/choir-g1-consensus-repair/{manifest.tsv,codex.out,claude.out,omp-gemini35.out}`.
+
+The reproducible minority blockers are:
+
+1. `CodeClosure` and `ArtifactProgram` validate declaration hashes but accept floating source commits, arbitrary claimed content digests, and mutable/nonexistent artifact URIs. The catalog therefore does not yet prove the referenced construction content immutable.
+2. Production input resolution occurs outside the SQL route transaction. A catalog row can change between resolution and D-ROUTE CAS, leaving a committed route whose inputs no longer resolve.
+3. Approval, promotion-certificate, rollback-receipt, and idempotency fields are separately named strings rather than non-interchangeable validated domain types.
+4. `receiptMatchesCommand` omits the idempotency key from its exact command/receipt join.
+5. `HandleHibernateWorker` inspects ownership before D-ROUTE resolution. Operator observation routes require an explicit non-activation exemption; every mutating lifecycle path must gate before ownership/VM access.
+
+The first background-activation review also found startup reattach and warmness-policy bypasses. Those are repaired in the current working candidate: VM-manager binding no longer reattaches implicitly, reattach and warmers are route-guarded, authority initialization precedes activation, and focused refusal tests pass. No G1 acceptance or construction-phase transition is claimed until the five remaining blockers above are repaired and a newly frozen candidate is independently adjudicated.
+
+
+### G1 second frozen-candidate adjudication
+
+The repaired frozen candidate at the same base, patch SHA-256 `26b5336ab30e3e48c70de33bb7fb88ce625b596f157974b7a53a3fffd84fb9e5`, received an accept from Claude and a high-confidence repair from Codex; additional Devin/Cursor review was launched after the owner reported Claude rate-limit risk. The minority repair remains controlling. Local packet: `/tmp/choir-g1-consensus-final-repair/`.
+
+Two blockers remain:
+
+1. Background and operator-triggered bulk lifecycle mutation (`StartIdleSweeper`, reclaim, stale-state reclaim, retention prune, idle stop, and the corresponding HTTP handlers) enumerates and mutates computers without authorizing each affected owner/computer D-ROUTE first. Observation-only health/list/pulse/plan endpoints are exempt; mutation is not.
+2. Go named string types prevent accidental assignment but current validation still permits evidence-domain substitution and does not resolve approval/certificate evidence. An idempotency key such as `approval:x` passes, and invented `approval:forged` / `certificate:forged` values can authorize a transition. G1 requires disjoint validated domains and durable evidence resolution before CAS.
+
+Non-blocking findings retained for later axes: source-commit syntax alone does not prove Git object existence; catalog byte verification occurs at pin and must be repeated by the constructor before use; direct SQL permissions still need deployed least-privilege proof; late exact idempotent replay returns a historical receipt beside the current slot and needs explicit caller semantics.
+
+
+### G1 third frozen-candidate adjudication — accepted
+
+Frozen identity:
+
+- base: `a1d2f88c6a7135c8a1db916b6fb4f00acf43fb36`
+- patch SHA-256: `22a2ba443f14642b561249eff473a5e7696df6b460a562262c01fa6f014798eb`
+- scope: 38 paths in `/tmp/choir-g1-immutable-authority.patch`
+
+The third candidate repairs every reproducible minority blocker from the first two rounds:
+
+- all bulk/background lifecycle mutation receives a per-computer D-ROUTE guard before mutation; identity-less orphan deletion is refused;
+- approval and promotion-certificate evidence are separate durable records bound to complete hash-verified payload bytes, route slot, and ComputerVersion, preflighted by vmctl and re-resolved under the SQL CAS transaction;
+- invented, cross-domain, wrong-slot, and wrong-ComputerVersion evidence is refused;
+- production artifact pinning still verifies content bytes before catalog insertion; SQL route transitions re-resolve immutable inputs under the same serializable transaction and foreign keys protect routed catalog entries.
+
+Deterministic evidence:
+
+- `git diff --check` passed.
+- `go test ./internal/routeledger ./internal/computerversion ./internal/vmctl ./internal/proxy ./internal/maild ./cmd/vmctl ./cmd/proxy -count=1` passed.
+- `go test ./internal/routeledger -run 'TestSQLLedger(ConcurrentCASHasOneWinner|RefusesUnresolvableInputsAndProtectsRoutedCatalogRows)' -count=5` passed.
+- `scripts/doccheck -mode live` passed.
+- Node B Nix evaluation places `VMCTL_ROUTE_DSN` in the existing `platform` Dolt database; no third store was introduced.
+
+Independent frozen review:
+
+- Gemini 3.5 Flash: **accept**, no blockers, high confidence (`/tmp/choir-g1-consensus-final-22a2/omp-gemini35.out`).
+- OMP GPT-5.5: **accept**, no blockers, high confidence; independently applied the patch to an isolated worktree and reran the focused suite (`/tmp/choir-g1-consensus-final-alternates/omp-gpt55.out`).
+- Codex reached model capacity after inspecting the candidate and emitted no verdict. OpenCode was denied `/tmp` patch access and emitted no verdict. GLM timed out. These are reviewer failures, not votes.
+
+Adjudication: **G1 accepted**. The immutable-input/state-authority boundary is admitted. Phase C mutation remains gated on landing this red change through origin/main, successful CI/deploy, matching Node B identity, and a deployed route-authority smoke receipt.
+
+Heresy delta for G1: `repaired` — competing static/lineage served-route authority and unguarded VM lifecycle activation are removed from the frozen candidate; `introduced` — none observed; `discovered` — production SQL least-privilege grants and mutable runtime-package construction remain realism axes for later phases, not G1 authority blockers.

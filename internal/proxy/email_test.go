@@ -14,13 +14,11 @@ func newEmailTestHandler(t *testing.T, maildURL, sandboxURL string) (*Handler, e
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	h, err := NewHandler(&Config{
-		Port:              "0",
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandboxURL,
 		AuthPublicKeyPath: "/unused",
-		CorpusdURL:      DefaultCorpusdURL,
-		MaildURL:          maildURL,
-	}, pub)
+		CorpusdURL:        DefaultCorpusdURL,
+		MaildURL:          maildURL}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}

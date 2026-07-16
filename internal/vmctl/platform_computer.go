@@ -32,7 +32,7 @@ func (r *OwnershipRegistry) EnsureUniversalWirePlatformComputer(ctx context.Cont
 
 // WarmUniversalWirePlatformComputer resumes a stopped platform computer during
 // the idle sweeper loop. It does not create a new ownership on its own.
-func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer() int {
+func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Context, guard ComputerVersionRouteGuard) int {
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
 	r.mu.RLock()
 	own, ok := r.ownerships[key]
@@ -41,6 +41,14 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer() int {
 		return 0
 	}
 	if own.State == VMStateStopped || own.State == VMStateHibernated {
+		if guard == nil {
+			log.Printf("vmctl: refuse platform computer warm: ComputerVersion route guard is unavailable")
+			return 0
+		}
+		if err := guard(ctx, UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID); err != nil {
+			log.Printf("vmctl: refuse platform computer warm: %v", err)
+			return 0
+		}
 		r.mu.Lock()
 		own, ok = r.ownerships[key]
 		if !ok || own == nil || own.IsReady() {

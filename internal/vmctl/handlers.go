@@ -2,6 +2,7 @@ package vmctl
 
 import (
 	"archive/tar"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -101,7 +102,9 @@ type requestWorkerRequest struct {
 }
 
 type workerActionRequest struct {
-	WorkerID string `json:"worker_id"`
+	UserID    string `json:"user_id"`
+	DesktopID string `json:"desktop_id"`
+	WorkerID  string `json:"worker_id"`
 }
 
 type reclaimResponse struct {
@@ -119,6 +122,8 @@ type reclaimResponse struct {
 type Handler struct {
 	registry                 *OwnershipRegistry
 	sandboxRuntimePackageDir string
+	routeAuthority           *RouteAuthority
+	routeAuthorityRequired   bool
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
@@ -202,6 +207,10 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 	if req.UserID == UniversalWirePlatformOwnerID && req.DesktopID == UniversalWirePlatformDesktopID {
 		if err := h.registry.EnsureUniversalWirePlatformComputer(r.Context()); err != nil {
 			log.Printf("vmctl: resolve platform computer failed: %v", err)
@@ -282,6 +291,14 @@ func (h *Handler) HandleForkDesktop(w http.ResponseWriter, r *http.Request) {
 	}
 	req.SourceDesktopID = normalizeDesktopID(req.SourceDesktopID)
 	req.TargetDesktopID = normalizeDesktopID(req.TargetDesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.SourceDesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.TargetDesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 	if req.TargetDesktopID == PrimaryDesktopID {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "target_desktop_id must not be primary"})
 		return
@@ -334,6 +351,10 @@ func (h *Handler) HandlePublishDesktop(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "primary desktop is already published"})
 		return
 	}
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	own, err := h.registry.PublishDesktop(req.UserID, req.DesktopID)
 	if err != nil {
@@ -373,6 +394,11 @@ func (h *Handler) HandleRequestWorker(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
 		return
 	}
+	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 	own, err := h.registry.RequestWorker(WorkerRequest{
 		UserID:               req.UserID,
 		DesktopID:            req.DesktopID,
@@ -408,9 +434,30 @@ func (h *Handler) HandleHibernateWorker(w http.ResponseWriter, r *http.Request) 
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
 		return
 	}
+	req.UserID = strings.TrimSpace(req.UserID)
+	req.DesktopID = normalizeDesktopID(req.DesktopID)
 	req.WorkerID = strings.TrimSpace(req.WorkerID)
-	if req.WorkerID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "worker_id is required"})
+	if req.UserID == "" || req.WorkerID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id and worker_id are required"})
+		return
+	}
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	var worker *VMOwnership
+	for _, candidate := range h.registry.ListOwnerships() {
+		if candidate.WorkerID == req.WorkerID {
+			worker = candidate
+			break
+		}
+	}
+	if worker == nil {
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "worker ownership not found"})
+		return
+	}
+	if worker.UserID != req.UserID || normalizeDesktopID(worker.DesktopID) != req.DesktopID {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "worker ownership does not match the authorized computer route"})
 		return
 	}
 	if err := h.registry.HibernateWorker(req.WorkerID); err != nil {
@@ -457,6 +504,10 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	desktopID := normalizeDesktopID(r.URL.Query().Get("desktop_id"))
+	if err := h.requireComputerVersionRoute(r.Context(), userID, desktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	own := h.registry.GetOwnershipForDesktop(userID, desktopID)
 	if own == nil {
@@ -523,6 +574,10 @@ func (h *Handler) HandleStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	if err := h.registry.StopVMForDesktop(req.UserID, req.DesktopID); err != nil {
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
@@ -558,6 +613,10 @@ func (h *Handler) HandleRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	_ = h.registry.RemoveOwnershipForDesktop(req.UserID, req.DesktopID)
 	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "removed"})
@@ -590,6 +649,10 @@ func (h *Handler) HandleHibernate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	if err := h.registry.HibernateVMForDesktop(req.UserID, req.DesktopID); err != nil {
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
@@ -633,6 +696,10 @@ func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	own, err := h.registry.ResumeVMForDesktop(req.UserID, req.DesktopID)
 	if err != nil {
@@ -681,6 +748,10 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	own, err := h.registry.RecoverVMForDesktop(req.UserID, req.DesktopID)
 	if err != nil {
@@ -729,6 +800,10 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	own, err := h.registry.RefreshVMForDesktop(req.UserID, req.DesktopID)
 	if err != nil {
@@ -777,17 +852,21 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.DesktopID = normalizeDesktopID(req.DesktopID)
+	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 
 	_ = h.registry.LogoutVMForDesktop(req.UserID, req.DesktopID)
 	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "stopped", "reason": "logout"})
 }
 
-func (h *Handler) runReclaimSweep() reclaimResponse {
+func (h *Handler) runReclaimSweep(ctx context.Context) reclaimResponse {
 	before := h.registry.PressureReclaimPlan()
-	reclaimed := h.registry.ReclaimPressureVMs()
-	staleStateDeleted := h.registry.ReclaimStaleVMState()
-	retention := h.registry.PruneRetention()
-	stopped := h.registry.StopIdleVMs()
+	reclaimed := h.registry.ReclaimPressureVMs(ctx, h.AuthorizeComputerVersionRoute)
+	staleStateDeleted := h.registry.ReclaimStaleVMState(ctx, h.AuthorizeComputerVersionRoute)
+	retention := h.registry.PruneRetention(ctx, h.AuthorizeComputerVersionRoute)
+	stopped := h.registry.StopIdleVMs(ctx, h.AuthorizeComputerVersionRoute)
 	return reclaimResponse{
 		Status:            "ok",
 		VMsReclaimed:      reclaimed,
@@ -817,7 +896,7 @@ func (h *Handler) HandleIdleCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := h.runReclaimSweep()
+	result := h.runReclaimSweep(r.Context())
 	writeVMCTLJSON(w, http.StatusOK, map[string]interface{}{
 		"status":              result.Status,
 		"vms_reclaimed":       result.VMsReclaimed,
@@ -846,7 +925,7 @@ func (h *Handler) HandleReclaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeVMCTLJSON(w, http.StatusOK, h.runReclaimSweep())
+	writeVMCTLJSON(w, http.StatusOK, h.runReclaimSweep(r.Context()))
 }
 
 // HandleRetentionPlan handles GET /internal/vmctl/retention-plan. It returns a
@@ -920,7 +999,7 @@ func (h *Handler) HandlePrune(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeVMCTLJSON(w, http.StatusOK, h.registry.PruneRetention())
+	writeVMCTLJSON(w, http.StatusOK, h.registry.PruneRetention(r.Context(), h.AuthorizeComputerVersionRoute))
 }
 
 // HandleList handles GET /internal/vmctl/list.
@@ -1097,6 +1176,10 @@ func (h *Handler) HandleSandboxProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	desktopID := UniversalWirePlatformDesktopID
+	if err := h.requireComputerVersionRoute(r.Context(), ownerID, desktopID); err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
 	if ownerID == UniversalWirePlatformOwnerID {
 		if err := h.registry.EnsureUniversalWirePlatformComputer(r.Context()); err != nil {
 			log.Printf("vmctl: ensure platform sandbox for %s: %v", ownerID, err)
@@ -1273,6 +1356,11 @@ func isInternalCaller(r *http.Request) bool {
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/vmctl/resolve", h.HandleResolve)
+	s.HandleFunc("/internal/vmctl/computer-version-inputs/pin-code", h.HandlePinComputerVersionCode)
+	s.HandleFunc("/internal/vmctl/computer-version-inputs/pin-artifact-program", h.HandlePinComputerVersionArtifactProgram)
+	s.HandleFunc("/internal/vmctl/computer-version-routes/pin-authorization-evidence", h.HandlePinComputerVersionAuthorizationEvidence)
+	s.HandleFunc("/internal/vmctl/computer-version-routes/resolve", h.HandleResolveComputerVersionRoute)
+	s.HandleFunc("/internal/vmctl/computer-version-routes/transition", h.HandleTransitionComputerVersionRoute)
 	s.HandleFunc("/internal/vmctl/fork-desktop", h.HandleForkDesktop)
 	s.HandleFunc("/internal/vmctl/publish-desktop", h.HandlePublishDesktop)
 	s.HandleFunc("/internal/vmctl/request-worker", h.HandleRequestWorker)

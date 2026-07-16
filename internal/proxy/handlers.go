@@ -22,6 +22,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
@@ -127,17 +128,14 @@ type Handler struct {
 	vmctlClient     *vmctl.Client // optional vmctl client for VM-backed routing
 	lifecycle       *lifecycleRecorder
 	recoveries      *computeRecoveryTracker
-	apiKeyValidator APIKeyValidator       // optional: enables Bearer token (API key) auth
-	authStore       *auth.Store           // optional: owned auth store for API key validation
-	routeResolver   PlatformRouteResolver // optional: route-over-ComputerVersion resolver
+	apiKeyValidator APIKeyValidator // optional: enables Bearer token (API key) auth
+	authStore       *auth.Store     // optional: owned auth store for API key validation
 }
 
 // NewHandler creates a proxy Handler with the given config and auth public key.
-// It initializes the reverse proxy pointing at the configured sandbox URL and
-// the WebSocket upgrader/dialer for live-channel proxying. If vmctl routing
-// is configured (cfg.VmctlURL != ""), the handler resolves user VM ownership
-// through vmctl instead of falling back to the static host sandbox URL
-// (VAL-VM-001, VAL-VM-002).
+// It initializes the reverse-proxy transport and WebSocket dialer. Production
+// request handling resolves an immutable D-ROUTE slot and then its vmctl-owned
+// disposable realization; missing route authority fails closed.
 func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 	if strings.TrimSpace(cfg.CorpusdURL) == "" {
 		cfg.CorpusdURL = DefaultCorpusdURL
@@ -965,15 +963,15 @@ func sandboxWSURLForBase(baseURL, rawQuery string) string {
 	return u.String()
 }
 
-// resolveSandboxURL resolves the sandbox URL for an authenticated user.
-// It consults the vmctl ownership registry to route the user to their
-// assigned VM (VAL-VM-001). When vmctl is not configured, it falls back
-// to the static SandboxURL — but with the host sandbox deleted (PR 5),
-// this fallback will fail with a visible connection error (I3: no silent
-// failures).
+// resolveSandboxURL resolves one immutable D-ROUTE slot before consulting
+// vmctl for its current disposable realization. Missing route authority is a
+// product-visible refusal; there is no static sandbox fallback.
 func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID string) (string, error) {
 	if h.vmctlClient == nil {
-		return h.cfg.SandboxURL, nil
+		if h.cfg != nil && h.cfg.AllowDirectSandboxForTests {
+			return h.cfg.SandboxURL, nil
+		}
+		return "", fmt.Errorf("ComputerVersion route authority is not configured")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -1013,13 +1011,34 @@ func (h *Handler) resolveSandboxURL(ctx context.Context, userID, desktopID strin
 	}
 }
 
+func (h *Handler) ensureComputerVersionRoute(ctx context.Context, userID, desktopID string) error {
+	if h.cfg != nil && h.cfg.AllowDirectSandboxForTests {
+		return nil
+	}
+	if h.vmctlClient == nil {
+		return fmt.Errorf("ComputerVersion route authority is not configured")
+	}
+	routeSlotID, err := routeledger.RouteSlotID(userID, desktopID)
+	if err != nil {
+		return err
+	}
+	if _, err := h.vmctlClient.ResolveComputerVersionRoute(ctx, routeSlotID); err != nil {
+		return fmt.Errorf("resolve immutable ComputerVersion route %s: %w", routeSlotID, err)
+	}
+	return nil
+}
+
 func (h *Handler) resolveSandboxURLOnce(ctx context.Context, userID, desktopID string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	userID = strings.TrimSpace(userID)
 	desktopID = strings.TrimSpace(desktopID)
 	if desktopID == "" {
 		desktopID = vmctl.PrimaryDesktopID
+	}
+	if err := h.ensureComputerVersionRoute(ctx, userID, desktopID); err != nil {
+		return "", err
 	}
 
 	if desktopID == vmctl.PrimaryDesktopID {

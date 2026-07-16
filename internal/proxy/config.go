@@ -1,7 +1,6 @@
-// Package proxy provides the Mission 2 proxy service: validates auth-issued
-// access JWTs, gates protected routes, and forwards authenticated traffic to
-// the hardcoded placeholder sandbox without rewriting the public request path,
-// method, query, or upstream status/body unexpectedly.
+// Package proxy validates auth-issued access JWTs, resolves immutable
+// ComputerVersion routes through vmctl, and forwards authenticated traffic to
+// the current disposable realization without rewriting the public request.
 package proxy
 
 import (
@@ -20,18 +19,17 @@ type Config struct {
 	// Port is the TCP port the proxy service listens on.
 	Port string
 
-	// SandboxURL is the base URL of the sandbox upstream. It is used to
-	// initialize the reverse proxy. When vmctl routing is enabled, per-user
-	// URLs resolved through vmctl override this for actual request routing.
+	// SandboxURL initializes the reverse-proxy transport and supports explicit
+	// package tests. Production served routes must override it with a vmctl
+	// realization reached through an immutable D-ROUTE slot.
 	SandboxURL string
 
 	// AuthPublicKeyPath is the path to the Ed25519 public key used to verify
 	// auth-issued access JWTs.
 	AuthPublicKeyPath string
 
-	// VmctlURL is the base URL of the vmctl service. When set, the proxy
-	// resolves user VM ownership through vmctl instead of using the static
-	// SandboxURL (VAL-VM-001, VAL-VM-002).
+	// VmctlURL is the base URL of the vmctl service. Production routing fails
+	// closed when it is absent; there is no static sandbox fallback.
 	VmctlURL string
 
 	// VmctlTimeout is the proxy -> vmctl request timeout. It is bounded to
@@ -54,12 +52,10 @@ type Config struct {
 	// auth is disabled and only cookie auth is used.
 	AuthDBPath string
 
-	// RuntimeDBPath is the filesystem path to the runtime Dolt workspace.
-	// When set, the proxy opens a read-only lineage reader and can resolve
-	// the platform route through ComputerSourceLineage (route-over-
-	// ComputerVersion). When empty, the proxy uses the hard-coded platform
-	// constants (H031 fallback).
-	RuntimeDBPath string
+	// AllowDirectSandboxForTests permits package tests to exercise proxying
+	// without constructing a vmctl service. Production configuration never sets
+	// this field; served routes otherwise fail closed without D-ROUTE authority.
+	AllowDirectSandboxForTests bool
 }
 
 const (
@@ -99,10 +95,9 @@ func LoadConfig() (*Config, error) {
 		AuthPublicKeyPath: defaultAuthPublicKeyPath(),
 		VmctlURL:          os.Getenv("PROXY_VMCTL_URL"),
 		VmctlTimeout:      durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
-		CorpusdURL:      envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
+		CorpusdURL:        envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
 		MaildURL:          envOr("PROXY_MAILD_URL", DefaultMaildURL),
 		AuthDBPath:        os.Getenv("PROXY_AUTH_DB_PATH"),
-		RuntimeDBPath:     os.Getenv("PROXY_RUNTIME_DB_PATH"),
 	}
 
 	if err := cfg.validate(); err != nil {

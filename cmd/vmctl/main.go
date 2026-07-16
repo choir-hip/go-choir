@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os"
 	"path/filepath"
@@ -9,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/vmmanager"
@@ -114,14 +118,44 @@ func main() {
 		}
 		log.Printf("vmctl: Firecracker not available, using host-process sandbox mode")
 	}
-	if idleSweeperEnabled {
-		registry.StartIdleSweeper(context.Background(), idleSweepInterval)
-		log.Printf("vmctl: idle sweeper interval set to %s", idleSweepInterval)
-	}
-
-	startUniversalWirePlatformComputer(registry)
-
 	handler := vmctl.NewHandler(registry)
+	handler.RequireRouteAuthority()
+	if dsn := strings.TrimSpace(os.Getenv("VMCTL_ROUTE_DSN")); dsn != "" {
+		routeDB, err := sql.Open("mysql", dsn)
+		if err != nil {
+			log.Fatalf("vmctl: open ComputerVersion route database: %v", err)
+		}
+		defer func() { _ = routeDB.Close() }()
+		pingCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := routeDB.PingContext(pingCtx); err != nil {
+			log.Fatalf("vmctl: ping ComputerVersion route database: %v", err)
+		}
+		inputs := computerversion.NewSQLInputCatalog(routeDB, computerversion.NewLocalArtifactContentVerifier(os.Getenv("VMCTL_ARTIFACTS_ROOT")))
+		if err := inputs.EnsureSchema(pingCtx); err != nil {
+			log.Fatalf("vmctl: initialize immutable input catalog: %v", err)
+		}
+		ledger := routeledger.NewSQLLedger(routeDB, computerversion.VerifySQLInputsInTransition)
+		if err := ledger.EnsureSchema(pingCtx); err != nil {
+			log.Fatalf("vmctl: initialize ComputerVersion route ledger: %v", err)
+		}
+		authority, err := vmctl.NewRouteAuthority(ledger, inputs, ledger)
+		if err != nil {
+			log.Fatalf("vmctl: initialize ComputerVersion route authority: %v", err)
+		}
+		handler.SetRouteAuthority(authority)
+		log.Printf("vmctl: ComputerVersion route authority configured on the corpusd world-wire SQL server")
+	} else {
+		log.Printf("vmctl: ComputerVersion route authority unavailable (VMCTL_ROUTE_DSN is not configured)")
+	}
+	if reattached := registry.ReattachManagedVMs(context.Background(), handler.AuthorizeComputerVersionRoute); reattached > 0 {
+		log.Printf("vmctl: route-authorized reattach adopted %d managed VM(s)", reattached)
+	}
+	if idleSweeperEnabled {
+		registry.StartIdleSweeper(context.Background(), idleSweepInterval, handler.AuthorizeComputerVersionRoute)
+		log.Printf("vmctl: route-gated idle sweeper interval set to %s", idleSweepInterval)
+	}
+	startUniversalWirePlatformComputer(registry, handler.AuthorizeComputerVersionRoute)
 	if dir := strings.TrimSpace(os.Getenv("VMCTL_SANDBOX_PACKAGE_DIR")); dir != "" {
 		handler.SetSandboxRuntimePackageDir(dir)
 		log.Printf("vmctl: sandbox runtime package directory configured (%s)", dir)
@@ -473,7 +507,7 @@ func envBool(key string, fallback bool) bool {
 	}
 }
 
-func startUniversalWirePlatformComputer(registry *vmctl.OwnershipRegistry) {
+func startUniversalWirePlatformComputer(registry *vmctl.OwnershipRegistry, guard vmctl.ComputerVersionRouteGuard) {
 	if !envBool("VMCTL_PLATFORM_WIRE_ENABLED", false) {
 		return
 	}
@@ -486,6 +520,14 @@ func startUniversalWirePlatformComputer(registry *vmctl.OwnershipRegistry) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
+		if guard == nil {
+			log.Printf("vmctl: universal wire platform computer refused: ComputerVersion route guard is unavailable")
+			return
+		}
+		if err := guard(ctx, vmctl.UniversalWirePlatformOwnerID, vmctl.UniversalWirePlatformDesktopID); err != nil {
+			log.Printf("vmctl: universal wire platform computer refused: %v", err)
+			return
+		}
 		if err := registry.EnsureUniversalWirePlatformComputer(ctx); err != nil {
 			log.Printf("vmctl: universal wire platform computer: %v", err)
 		}

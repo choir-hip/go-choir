@@ -11,8 +11,34 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
+
+func writeMaildTestRouteResolution(w http.ResponseWriter, r *http.Request) {
+	createdAt := time.Date(2026, 7, 16, 1, 0, 0, 0, time.UTC)
+	closure, err := computerversion.NewCodeClosure(strings.Repeat("1", 40), []computerversion.CodeArtifact{{
+		Name: "sandbox", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-sandbox",
+	}}, createdAt)
+	if err != nil {
+		panic(err)
+	}
+	program, err := computerversion.NewArtifactProgram([]computerversion.ArtifactProgramEntry{{
+		Kind: "test", ContentSHA256: strings.Repeat("b", 64), ArtifactURI: "artifact+sha256://" + strings.Repeat("b", 64) + "/test/state",
+	}}, createdAt)
+	if err != nil {
+		panic(err)
+	}
+	slotID := r.URL.Query().Get("route_slot_id")
+	version := computerversion.ComputerVersion{CodeRef: closure.Ref, ArtifactProgramRef: program.Ref}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"slot":             map[string]any{"route_slot_id": slotID, "current_computer_version": version, "generation": 1, "latest_receipt_id": "receipt-test"},
+		"latest_receipt":   map[string]any{"receipt_id": "receipt-test", "route_slot_id": slotID, "new_computer_version": version, "committed_generation": 1},
+		"code_closure":     closure,
+		"artifact_program": program,
+	})
+}
 
 func TestDraftCreateRequiresOwnedAliasAndDoesNotSend(t *testing.T) {
 	store, cfg := newTestStore(t)
@@ -258,11 +284,18 @@ func TestDraftSendEmitsBoundedEmailAppagentTraceEvents(t *testing.T) {
 
 	// vmctl mock that resolves user-root to the runtime test server.
 	vmctl := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/internal/vmctl/resolve" {
+		switch r.URL.Path {
+		case "/internal/vmctl/computer-version-routes/resolve":
+			writeMaildTestRouteResolution(w, r)
+		case "/internal/vmctl/resolve":
+			if r.Method != http.MethodPost {
+				t.Fatalf("vmctl request = %s %s", r.Method, r.URL.Path)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"sandbox_url":"` + runtime.URL + `","desktop_id":"primary"}`))
+		default:
 			t.Fatalf("vmctl request = %s %s", r.Method, r.URL.Path)
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"sandbox_url":"` + runtime.URL + `","desktop_id":"primary"}`))
 	}))
 	defer vmctl.Close()
 
@@ -359,6 +392,10 @@ func TestDraftSendResolvesOwnerRuntimeThroughVmctlForTraceEvents(t *testing.T) {
 	defer runtime.Close()
 
 	vmctlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/internal/vmctl/computer-version-routes/resolve" {
+			writeMaildTestRouteResolution(w, r)
+			return
+		}
 		if r.Method != http.MethodPost || r.URL.Path != "/internal/vmctl/resolve" {
 			t.Fatalf("vmctl request = %s %s", r.Method, r.URL.Path)
 		}

@@ -1,6 +1,7 @@
 package vmctl
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -451,7 +452,7 @@ func limitRetentionCandidates(candidates []RetentionPruneCandidate, cfg Retentio
 	return limited
 }
 
-func (r *OwnershipRegistry) PruneRetention() RetentionPruneResult {
+func (r *OwnershipRegistry) PruneRetention(ctx context.Context, guard ComputerVersionRouteGuard) RetentionPruneResult {
 	before := r.RetentionPrunePlan()
 	result := RetentionPruneResult{
 		Status:     "disabled",
@@ -466,6 +467,9 @@ func (r *OwnershipRegistry) PruneRetention() RetentionPruneResult {
 	}
 	result.Status = "ok"
 	for _, candidate := range before.Candidates {
+		if !authorizeLifecycleRoute(ctx, guard, candidate.UserID, candidate.DesktopID) {
+			continue
+		}
 		if r.destroyRetentionCandidate(candidate) {
 			result.Deleted++
 			result.BytesDeleted += candidate.SizeBytes

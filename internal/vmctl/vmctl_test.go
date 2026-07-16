@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -1221,7 +1222,11 @@ func TestOwnershipRegistry_ReclaimStaleVMStateDestroysOnlyTerminalWorkersAndUnpu
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 
-	destroyed := reg.ReclaimStaleVMState()
+	denyRoute := func(context.Context, string, string) error { return errors.New("route missing") }
+	if destroyed := reg.ReclaimStaleVMState(context.Background(), denyRoute); destroyed != 0 {
+		t.Fatalf("route-refused stale reclaim destroyed = %d, want 0", destroyed)
+	}
+	destroyed := reg.ReclaimStaleVMState(context.Background(), allowLifecycleRoute)
 	if destroyed != 2 {
 		t.Fatalf("destroyed = %d, want 2 (destroy calls=%v)", destroyed, mgr.destroys)
 	}
@@ -1490,7 +1495,11 @@ func TestOwnershipRegistry_RetentionShadowPlanDoesNotExpandActivePrune(t *testin
 
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
-	result := reg.PruneRetention()
+	denyRoute := func(context.Context, string, string) error { return errors.New("route missing") }
+	if denied := reg.PruneRetention(context.Background(), denyRoute); denied.Deleted != 0 {
+		t.Fatalf("route-refused retention deleted = %d, want 0", denied.Deleted)
+	}
+	result := reg.PruneRetention(context.Background(), allowLifecycleRoute)
 	if result.Deleted != 1 {
 		t.Fatalf("deleted = %d, want 1: %+v", result.Deleted, result)
 	}
@@ -1536,7 +1545,7 @@ func TestOwnershipRegistry_PruneRetentionRemovesEphemeralPrimaryOwnership(t *tes
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 
-	result := reg.PruneRetention()
+	result := reg.PruneRetention(context.Background(), allowLifecycleRoute)
 	if result.Deleted != 1 {
 		t.Fatalf("deleted = %d, want 1: %+v", result.Deleted, result)
 	}
@@ -1647,7 +1656,7 @@ func TestOwnershipRegistry_ReclaimStaleVMStateRequiresStoragePressure(t *testing
 	mgr := &mockVMManager{}
 	reg.SetVMManager(mgr)
 
-	if destroyed := reg.ReclaimStaleVMState(); destroyed != 0 {
+	if destroyed := reg.ReclaimStaleVMState(context.Background(), allowLifecycleRoute); destroyed != 0 {
 		t.Fatalf("destroyed = %d, want 0", destroyed)
 	}
 	if len(mgr.destroys) != 0 {
@@ -1702,7 +1711,11 @@ func TestOwnershipRegistry_PressureReclaimExpiresStaleCriticalWorkerProtection(t
 	if containsString(plan.Candidates[0].ProtectedReasons, "critical_worker_purpose") {
 		t.Fatalf("stale critical worker should not keep critical protection: %+v", plan.Candidates[0])
 	}
-	if got := reg.ReclaimPressureVMs(); got != 1 {
+	denyRoute := func(context.Context, string, string) error { return errors.New("route missing") }
+	if got := reg.ReclaimPressureVMs(context.Background(), denyRoute); got != 0 {
+		t.Fatalf("route-refused pressure reclaim = %d, want 0", got)
+	}
+	if got := reg.ReclaimPressureVMs(context.Background(), allowLifecycleRoute); got != 1 {
 		t.Fatalf("reclaimed = %d, want 1", got)
 	}
 	if workerOwn := reg.GetOwnershipByVMID(worker.VMID); workerOwn == nil || workerOwn.State != VMStateHibernated || workerOwn.StoppedBy != "pressure" {
@@ -1762,7 +1775,7 @@ func TestOwnershipRegistry_ActivePressureReclaimHibernatesBoundedEligibleCandida
 	if plan.Mode != PressureReclaimModeActive || plan.Decision != "reclaim" {
 		t.Fatalf("plan mode/decision = %s/%s, want active/reclaim", plan.Mode, plan.Decision)
 	}
-	if got := reg.ReclaimPressureVMs(); got != 1 {
+	if got := reg.ReclaimPressureVMs(context.Background(), allowLifecycleRoute); got != 1 {
 		t.Fatalf("reclaimed = %d, want 1", got)
 	}
 	if workerOwn := reg.GetOwnershipByVMID(worker.VMID); workerOwn == nil || workerOwn.State != VMStateHibernated || workerOwn.StoppedBy != "pressure" {
@@ -1845,7 +1858,7 @@ func TestOwnershipRegistry_PrimaryKeepaliveSkipsIdlePrimaryUnderCapacity(t *test
 	if len(idle) != 0 {
 		t.Fatalf("expected primary keepalive under capacity, got idle candidates: %+v", idle)
 	}
-	if stopped := reg.StopIdleVMs(); stopped != 0 {
+	if stopped := reg.StopIdleVMs(context.Background(), allowLifecycleRoute); stopped != 0 {
 		t.Fatalf("stopped = %d, want 0", stopped)
 	}
 	if own := reg.GetOwnership("primary-warm"); own == nil || own.State != VMStateActive {
@@ -1894,7 +1907,11 @@ func TestOwnershipRegistry_PrimaryKeepaliveReclaimsLowerPriorityFirstUnderPressu
 	if len(idle) != 1 || idle[0].Kind != VMKindWorker {
 		t.Fatalf("idle candidates = %+v, want only lower-priority worker", idle)
 	}
-	if stopped := reg.StopIdleVMs(); stopped != 1 {
+	denyRoute := func(context.Context, string, string) error { return errors.New("route missing") }
+	if stopped := reg.StopIdleVMs(context.Background(), denyRoute); stopped != 0 {
+		t.Fatalf("route-refused idle stop = %d, want 0", stopped)
+	}
+	if stopped := reg.StopIdleVMs(context.Background(), allowLifecycleRoute); stopped != 1 {
 		t.Fatalf("stopped = %d, want 1", stopped)
 	}
 	if own := reg.GetOwnership("pressure-user"); own == nil || own.State != VMStateActive {
@@ -1987,7 +2004,13 @@ func TestOwnershipRegistry_WarmAlwaysOnResumesHibernatedPrimaryOnly(t *testing.T
 		t.Fatalf("hibernate candidate: %v", err)
 	}
 
-	if warmed := reg.WarmAlwaysOnDesktops(); warmed != 1 {
+	if warmed := reg.WarmAlwaysOnDesktops(context.Background(), func(context.Context, string, string) error { return fmt.Errorf("route missing") }); warmed != 0 {
+		t.Fatalf("warmed without D-ROUTE = %d, want 0", warmed)
+	}
+	if len(mock.resumes) != 0 {
+		t.Fatalf("route-refused warmer resumed VMs: %+v", mock.resumes)
+	}
+	if warmed := reg.WarmAlwaysOnDesktops(context.Background(), func(context.Context, string, string) error { return nil }); warmed != 1 {
 		t.Fatalf("warmed = %d, want 1", warmed)
 	}
 	if len(mock.resumes) != 1 || mock.resumes[0] != premium.VMID {
@@ -2378,7 +2401,7 @@ func TestHandler_HibernateWorker(t *testing.T) {
 		t.Fatalf("RequestWorker: %v", err)
 	}
 
-	body := fmt.Sprintf(`{"worker_id":%q}`, worker.WorkerID)
+	body := fmt.Sprintf(`{"user_id":"user-1","desktop_id":"primary","worker_id":%q}`, worker.WorkerID)
 	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/hibernate-worker", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Caller", "true")
@@ -3115,7 +3138,7 @@ func TestOwnershipRegistry_IdleTimeoutChecks(t *testing.T) {
 	}
 
 	// Stop idle VMs.
-	stopped := reg.StopIdleVMs()
+	stopped := reg.StopIdleVMs(context.Background(), allowLifecycleRoute)
 	if stopped != 1 {
 		t.Errorf("expected 1 VM stopped, got %d", stopped)
 	}
@@ -3147,7 +3170,7 @@ func TestOwnershipRegistry_IdleSweeperHibernatesIdleVM(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	reg.StartIdleSweeper(ctx, 5*time.Millisecond)
+	reg.StartIdleSweeper(ctx, 5*time.Millisecond, func(context.Context, string, string) error { return nil })
 
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
@@ -4734,6 +4757,7 @@ func TestOwnershipRegistry_PersistsOwnershipAndRebootsSameVMIDAfterRestart(t *te
 		},
 	}
 	restarted.SetVMManager(mock)
+	restarted.ReattachManagedVMs(context.Background(), func(context.Context, string, string) error { return nil })
 
 	resolved, err := restarted.ResolveOrAssign("user-persist")
 	if err != nil {
@@ -4785,6 +4809,15 @@ func TestOwnershipRegistry_ReattachesPersistedVMWhenManagerCanAdopt(t *testing.T
 
 	mock := &mockVMManager{}
 	restarted.SetVMManager(mock)
+	if got := restarted.ReattachManagedVMs(context.Background(), func(context.Context, string, string) error { return fmt.Errorf("route missing") }); got != 0 {
+		t.Fatalf("reattached without D-ROUTE = %d, want 0", got)
+	}
+	if len(mock.reattaches) != 0 {
+		t.Fatalf("route-refused reattach calls = %+v", mock.reattaches)
+	}
+	if got := restarted.ReattachManagedVMs(context.Background(), func(context.Context, string, string) error { return nil }); got != 1 {
+		t.Fatalf("reattached count = %d, want 1", got)
+	}
 
 	reattached := restarted.GetOwnership("user-reattach")
 	if reattached == nil {
@@ -4863,6 +4896,7 @@ func TestOwnershipRegistry_ReattachReconcilesGatewayCredential(t *testing.T) {
 			own.VMID: rawToken,
 		},
 	})
+	reg.ReattachManagedVMs(context.Background(), func(context.Context, string, string) error { return nil })
 
 	select {
 	case got := <-ensured:
@@ -4979,3 +5013,5 @@ func TestSetGatewayURL(t *testing.T) {
 		t.Errorf("expected gateway URL http://gateway.test:8084, got %s", gwURL)
 	}
 }
+
+func allowLifecycleRoute(context.Context, string, string) error { return nil }

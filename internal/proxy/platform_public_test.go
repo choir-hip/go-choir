@@ -50,12 +50,10 @@ func TestPlatformPublicationResolveIsPublicAndInternalOnly(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{
-		Port:              "0",
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
-		CorpusdURL:      corpusd.URL,
-	}, pub)
+		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -102,12 +100,10 @@ func TestPlatformPublicationResolveAndExportPropagateNotFound(t *testing.T) {
 	}))
 	defer corpusd.Close()
 
-	h, err := NewHandler(&Config{
-		Port:              "0",
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        "http://127.0.0.1:1",
 		AuthPublicKeyPath: "/unused/in/test",
-		CorpusdURL:      corpusd.URL,
-	}, pub)
+		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}
@@ -212,12 +208,10 @@ func TestHandlePublicationProposalReadsPrivateDerivativeAndPostsProjection(t *te
 	}))
 	defer sandbox.Close()
 
-	h, err := NewHandler(&Config{
-		Port:              "0",
+	h, err := NewHandler(&Config{AllowDirectSandboxForTests: true, Port: "0",
 		SandboxURL:        sandbox.URL,
 		AuthPublicKeyPath: "/unused/in/test",
-		CorpusdURL:      corpusd.URL,
-	}, pub)
+		CorpusdURL:        corpusd.URL}, pub)
 	if err != nil {
 		t.Fatalf("NewHandler: %v", err)
 	}

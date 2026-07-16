@@ -11,6 +11,9 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
 const (
@@ -21,15 +24,6 @@ const (
 
 type emailDraftSourceRef struct {
 	EmailAppagentRunID string `json:"email_appagent_run_id"`
-}
-
-type vmctlResolveRequest struct {
-	UserID    string `json:"user_id"`
-	DesktopID string `json:"desktop_id,omitempty"`
-}
-
-type vmctlResolveResponse struct {
-	SandboxURL string `json:"sandbox_url"`
 }
 
 func (h *Handler) emitApprovedDraftTraceEvents(ctx context.Context, draft EmailDraft, approvalEventID, approvalEventType, approvalProviderMessageID, sentMessageID, providerMessageID string) {
@@ -86,38 +80,20 @@ func (h *Handler) resolveTraceRuntimeURL(ctx context.Context, ownerID string) (s
 }
 
 func resolveOwnerSandboxURL(ctx context.Context, vmctlURL, ownerID string) (string, error) {
-	body, err := json.Marshal(vmctlResolveRequest{
-		UserID:    ownerID,
-		DesktopID: primaryDesktopID,
-	})
+	ownerID = strings.TrimSpace(ownerID)
+	slotID, err := routeledger.RouteSlotID(ownerID, primaryDesktopID)
 	if err != nil {
 		return "", err
 	}
-	endpoint := strings.TrimRight(strings.TrimSpace(vmctlURL), "/") + "/internal/vmctl/resolve"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	client := vmctl.NewClientWithTimeout(strings.TrimSpace(vmctlURL), 15*time.Second)
+	if _, err := client.ResolveComputerVersionRoute(ctx, slotID); err != nil {
+		return "", fmt.Errorf("maild: resolve immutable ComputerVersion route: %w", err)
+	}
+	resolved, err := client.ResolveDesktopContext(ctx, ownerID, primaryDesktopID)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("vmctl resolve status %s: %s", resp.Status, strings.TrimSpace(string(data)))
-	}
-	var resolved vmctlResolveResponse
-	if err := json.Unmarshal(data, &resolved); err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(resolved.SandboxURL) == "" {
+	if resolved == nil || strings.TrimSpace(resolved.SandboxURL) == "" {
 		return "", fmt.Errorf("vmctl resolved empty sandbox_url")
 	}
 	return strings.TrimSpace(resolved.SandboxURL), nil

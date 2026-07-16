@@ -124,14 +124,28 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.vmctlClient == nil {
-		resp.CurrentComputer.State = "static"
-		resp.CurrentComputer.WarmnessClass = "static"
-		resp.CurrentComputer.LookupStatus = "static"
-		resp.CurrentComputer.Protection = "static sandbox routing"
+		resp.Status = "degraded"
 		resp.Computers = []computeComputer{resp.CurrentComputer}
-		if h.cfg != nil && strings.TrimSpace(h.cfg.SandboxURL) != "" {
-			resp.Runtime = h.probeRuntimeHealthForTarget(h.cfg.SandboxURL)
+		if h.cfg != nil && h.cfg.AllowDirectSandboxForTests {
+			resp.CurrentComputer.State = "static"
+			resp.CurrentComputer.WarmnessClass = "static"
+			resp.CurrentComputer.LookupStatus = "test-direct"
+			resp.CurrentComputer.Protection = "test-only direct sandbox routing"
+			resp.Computers = []computeComputer{resp.CurrentComputer}
+			if strings.TrimSpace(h.cfg.SandboxURL) != "" {
+				resp.Runtime = h.probeRuntimeHealthForTarget(h.cfg.SandboxURL)
+			}
+		} else {
+			resp.Warnings = append(resp.Warnings, "ComputerVersion route authority is not configured")
 		}
+		h.writeComputeStatus(w, &resp, authResult.UserID, desktopID)
+		return
+	}
+	if err := h.ensureComputerVersionRoute(r.Context(), authResult.UserID, desktopID); err != nil {
+		resp.Status = "degraded"
+		resp.CurrentComputer.Protection = "immutable ComputerVersion route unavailable"
+		resp.Warnings = append(resp.Warnings, err.Error())
+		resp.Computers = []computeComputer{resp.CurrentComputer}
 		h.writeComputeStatus(w, &resp, authResult.UserID, desktopID)
 		return
 	}
@@ -300,6 +314,10 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 	desktopID := strings.TrimSpace(req.DesktopID)
 	if desktopID == "" {
 		desktopID = requestDesktopID(r)
+	}
+	if err := h.ensureComputerVersionRoute(r.Context(), authResult.UserID, desktopID); err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "immutable ComputerVersion route unavailable"})
+		return
 	}
 
 	switch action {
