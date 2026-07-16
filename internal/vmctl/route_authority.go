@@ -132,8 +132,17 @@ func (h *Handler) requireComputerVersionRoute(ctx context.Context, userID, deskt
 	if err != nil {
 		return err
 	}
-	if _, err := h.routeAuthority.Resolve(ctx, slotID); err != nil {
+	resolution, err := h.routeAuthority.Resolve(ctx, slotID)
+	if err != nil {
 		return fmt.Errorf("vmctl: immutable ComputerVersion route %s unavailable: %w", slotID, err)
+	}
+	if own := h.registry.GetOwnershipForDesktop(userID, desktopID); own != nil && own.SnapshotKind == "constructed-computer-version" {
+		if !own.ConstructionCommitted || validateConstructedOwnership(own) != nil {
+			return fmt.Errorf("vmctl: constructed lifecycle is not finalized for D-ROUTE")
+		}
+		if *own.ConstructionVersion != resolution.Slot.Current {
+			return fmt.Errorf("vmctl: constructed realization ComputerVersion does not match D-ROUTE")
+		}
 	}
 	return nil
 }

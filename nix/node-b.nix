@@ -501,6 +501,7 @@ in
         # corpusd world-wire SQL server. vmctl is the sole route CAS writer.
         "VMCTL_ROUTE_DSN=root@tcp(127.0.0.1:13306)/platform?parseTime=true&multiStatements=true&clientFoundRows=true"
         "VMCTL_ARTIFACTS_ROOT=${platformArtifactsDir}"
+        "VMCTL_BASE_BLOB_ROOT=${platformArtifactsDir}/computer-inputs/blobs"
         # Guest images are a stable boot substrate. At boot, guest sandboxes
         # fetch the current sandbox service package from this host-side pointer
         # and execute it from their writable data disk, so ordinary runtime code
@@ -744,6 +745,8 @@ in
     "d ${platformDoltDir} 0750 root root -"
     "d ${platformDoltDBDir} 0750 root root -"
     "d ${platformArtifactsDir} 0750 root root -"
+    "d ${platformArtifactsDir}/computer-inputs 0750 root root -"
+    "d ${platformArtifactsDir}/computer-inputs/blobs 0750 root root -"
     "d ${platformArtifactsDir}/sha256 0750 root root -"
     # SearXNG secret key file directory (writable by the searx service)
     "d /var/lib/searx 0750 searx searx -"

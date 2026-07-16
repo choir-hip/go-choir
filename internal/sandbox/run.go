@@ -179,6 +179,7 @@ func Run() {
 		}
 	})
 	RegisterFileRoutes(s, fileHandler)
+	s.HandleFunc("/internal/computer-version/observations", ConstructionObservationHandler{FilesRoot: filesRoot}.ServeHTTP)
 
 	// Default-on: install the full per-profile tool registry. Set
 	// RUNTIME_DISABLE_TOOLS=1 to opt out (for stub-only tests where no tools

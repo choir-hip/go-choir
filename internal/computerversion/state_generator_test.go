@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/quick"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/base/blob"
@@ -488,5 +490,141 @@ func TestTreeToFSSkipsTombstones(t *testing.T) {
 	// dead.txt should NOT exist.
 	if _, err := os.Stat(filepath.Join(targetDir, "dead.txt")); !os.IsNotExist(err) {
 		t.Errorf("dead.txt should not exist, got err=%v", err)
+	}
+}
+
+func TestStateGeneratorGenerativeValidTapeRoundTrip(t *testing.T) {
+	property := func(seed []byte) bool {
+		if len(seed) == 0 {
+			seed = []byte{0}
+		}
+		jrn := journal.NewMemJournal()
+		blobs, err := blob.NewStore(t.TempDir())
+		if err != nil {
+			t.Log(err)
+			return false
+		}
+		appendEvent := func(event model.Event) bool {
+			if _, err := jrn.Append(event); err != nil {
+				t.Log(err)
+				return false
+			}
+			return true
+		}
+		for index, folder := range []string{"left", "right"} {
+			event := mkCreateEvent(fmt.Sprintf("base_evt_folder_%d", index), "base_item_folder_"+folder, "", folder, model.KindFolder, fmt.Sprintf("base_ver_folder_%d", index), nil)
+			event.PayloadJSON = basetree.Payload{Name: folder, Kind: model.KindFolder, VersionID: model.VersionID(fmt.Sprintf("base_ver_folder_%d", index))}.JSON()
+			if !appendEvent(event) {
+				return false
+			}
+		}
+
+		expected := make(map[string][]byte)
+		fileCount := 1 + len(seed)%8
+		for index := 0; index < fileCount; index++ {
+			selector := seed[index%len(seed)]
+			itemID := fmt.Sprintf("base_item_%d", index)
+			name := fmt.Sprintf("file-%d.txt", index)
+			parent := "base_item_folder_left"
+			path := filepath.Join("left", name)
+			content := []byte(fmt.Sprintf("create-%d-%x", index, selector))
+			ref, err := blobs.Put(content)
+			if err != nil {
+				t.Log(err)
+				return false
+			}
+			create := mkCreateEvent(fmt.Sprintf("base_evt_create_%d", index), itemID, parent, name, model.KindFile, fmt.Sprintf("base_ver_%d_0", index), content)
+			create.PayloadJSON = basetree.Payload{Name: name, ParentItemID: model.ItemID(parent), Kind: model.KindFile, VersionID: model.VersionID(fmt.Sprintf("base_ver_%d_0", index)), BlobRef: ref, ContentHash: sha256Hex(content)}.JSON()
+			if !appendEvent(create) {
+				return false
+			}
+			expected[path] = content
+
+			if selector&1 != 0 {
+				content = []byte(fmt.Sprintf("update-%d-%x", index, seed))
+				ref, err = blobs.Put(content)
+				if err != nil {
+					t.Log(err)
+					return false
+				}
+				update := mkCreateEvent(fmt.Sprintf("base_evt_update_%d", index), itemID, "", "", model.KindFile, fmt.Sprintf("base_ver_%d_1", index), content)
+				update.EventType = model.EventUpdate
+				update.PayloadJSON = basetree.Payload{VersionID: model.VersionID(fmt.Sprintf("base_ver_%d_1", index)), BlobRef: ref, ContentHash: sha256Hex(content)}.JSON()
+				if !appendEvent(update) {
+					return false
+				}
+				expected[path] = content
+			}
+			if selector&2 != 0 {
+				movedName := fmt.Sprintf("moved-%d.txt", index)
+				move := mkCreateEvent(fmt.Sprintf("base_evt_move_%d", index), itemID, "", "", model.KindFile, "", nil)
+				move.EventType = model.EventMove
+				move.PayloadJSON = basetree.Payload{ParentItemID: "base_item_folder_right", Name: movedName}.JSON()
+				if !appendEvent(move) {
+					return false
+				}
+				delete(expected, path)
+				path = filepath.Join("right", movedName)
+				expected[path] = content
+			}
+			if selector&4 != 0 {
+				content = []byte(fmt.Sprintf("blob-upload-%d-%x", index, selector))
+				ref, err = blobs.Put(content)
+				if err != nil {
+					t.Log(err)
+					return false
+				}
+				upload := mkCreateEvent(fmt.Sprintf("base_evt_upload_%d", index), itemID, "", "", model.KindFile, fmt.Sprintf("base_ver_%d_2", index), content)
+				upload.EventType = model.EventBlobUpload
+				upload.BlobRef = ref
+				upload.PayloadJSON = basetree.Payload{VersionID: model.VersionID(fmt.Sprintf("base_ver_%d_2", index)), BlobRef: ref, ContentHash: sha256Hex(content)}.JSON()
+				if !appendEvent(upload) {
+					return false
+				}
+				expected[path] = content
+			}
+			if selector&8 != 0 && fileCount > 1 && index != fileCount-1 {
+				remove := mkCreateEvent(fmt.Sprintf("base_evt_delete_%d", index), itemID, "", "", model.KindFile, "", nil)
+				remove.EventType = model.EventDelete
+				remove.PayloadJSON = basetree.Payload{}.JSON()
+				if !appendEvent(remove) {
+					return false
+				}
+				delete(expected, path)
+			}
+		}
+
+		program, err := NewJournalArtifactProgram(jrn.Entries(), "generative/base-journal", generatorFixedTime)
+		if err != nil {
+			t.Log(err)
+			return false
+		}
+		version := ComputerVersion{CodeRef: "code:generative", ArtifactProgramRef: program.Ref}
+		root := t.TempDir()
+		generator := StateGenerator{Journal: jrn, Blobs: blobs, ArtifactProgram: program}
+		if err := generator.Generate(context.Background(), version, root); err != nil {
+			t.Log(err)
+			return false
+		}
+		for path, want := range expected {
+			got, err := os.ReadFile(filepath.Join(root, path))
+			if err != nil || string(got) != string(want) {
+				t.Logf("path %q: got %q err=%v want %q", path, got, err, want)
+				return false
+			}
+		}
+		observed, err := FilesystemProjectionObservationSet(context.Background(), "generative", version, root)
+		if err != nil {
+			t.Log(err)
+			return false
+		}
+		if len(observed.Observations) != 2*len(expected) {
+			t.Logf("observation count = %d, expected two observations per %d files, observations=%+v", len(observed.Observations), len(expected), observed.Observations)
+			return false
+		}
+		return true
+	}
+	if err := quick.Check(property, &quick.Config{MaxCount: 40}); err != nil {
+		t.Fatal(err)
 	}
 }

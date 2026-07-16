@@ -1299,6 +1299,24 @@ func TestBuildFirecrackerConfig_LegacyBootIncludesRuntimeServiceURLs(t *testing.
 	}
 }
 
+func TestBuildFirecrackerConfigUsesConstructedDataDevice(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	mgr := NewManager(cfg)
+	constructed := filepath.Join(cfg.StateDir, "vm-constructed", "data.img")
+	fcConfig := mgr.buildFirecrackerConfig(VMConfig{
+		VMID:           "vm-constructed",
+		StoreDiskPath:  "/nix/store/storedisk.erofs",
+		DataDevicePath: constructed,
+		KernelParams:   "root=fstab init=/nix/store/init",
+		GuestPort:      8085,
+	}, 9000)
+	drives := fcConfig["drives"].([]map[string]interface{})
+	if got := drives[len(drives)-1]["path_on_host"]; got != constructed {
+		t.Fatalf("data drive path = %v, want constructed path %s", got, constructed)
+	}
+}
+
 func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T) {
 	cfg := DefaultManagerConfig()
 	cfg.StateDir = t.TempDir()
@@ -1323,6 +1341,7 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		DesktopID:         "primary",
 		WorkerID:          "worker-123",
 		CandidateID:       "worker-123",
+		CodeRef:           "code:sha256:abc123",
 	}
 
 	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9000)
@@ -1365,6 +1384,7 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"choir.desktop_id=primary",
 		"choir.worker_id=worker-123",
 		"choir.candidate_id=worker-123",
+		"choir.code_ref=code:sha256:abc123",
 		"ip=10.200.0.2::10.200.0.1:255.255.255.252::eth0:off",
 	} {
 		if !containsStr(bootArgs, arg) {

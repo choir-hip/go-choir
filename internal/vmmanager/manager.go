@@ -123,6 +123,11 @@ type VMConfig struct {
 	// callers cannot pretend a best-effort copy is an isolated fork.
 	SourceVMID string
 
+	// DataDevicePath binds this launch to an already-instantiated mutable block
+	// device. When set, vmmanager verifies and attaches it without creating,
+	// copying, growing, or otherwise mutating the device.
+	DataDevicePath string
+
 	// GatewayToken is the sandbox credential token for authenticating to
 	// the host-side gateway. Written to a file in the persistent directory
 	// so the guest init script can read and set RUNTIME_GATEWAY_TOKEN.
@@ -138,6 +143,7 @@ type VMConfig struct {
 	DesktopID    string
 	WorkerID     string
 	CandidateID  string
+	CodeRef      string
 
 	// Epoch is the monotonically increasing boot counter for this VM.
 	// On fresh boot, the epoch increments. On resume from hibernate,
@@ -636,16 +642,32 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		cfg.MachineMemSizeMib = m.cfg.MachineMemSizeMib
 	}
 
-	// Prepare per-VM disk images.
+	// Prepare per-VM disk images. A typed constructor may supply an immutable
+	// realization binding; that path is attach-only and bypasses every legacy
+	// create/copy/grow behavior below.
 	if cfg.StoreDiskPath != "" {
-		// The erofs nix-store disk is shared and read-only. Only the mutable
-		// per-VM data image is created here.
 		vmDataDir := filepath.Join(m.cfg.StateDir, cfg.VMID)
 		if err := os.MkdirAll(vmDataDir, 0o755); err != nil {
 			return nil, fmt.Errorf("create VM data dir %s: %w", vmDataDir, err)
 		}
 		dataImg := filepath.Join(vmDataDir, "data.img")
-		if _, err := os.Stat(dataImg); os.IsNotExist(err) {
+		if cfg.DataDevicePath != "" {
+			if cfg.SourceVMID != "" {
+				return nil, fmt.Errorf("VM %s cannot combine constructed data device with source VM clone", cfg.VMID)
+			}
+			constructedPath, err := filepath.Abs(filepath.Clean(cfg.DataDevicePath))
+			if err != nil {
+				return nil, fmt.Errorf("resolve constructed data device for VM %s: %w", cfg.VMID, err)
+			}
+			info, err := os.Lstat(constructedPath)
+			if err != nil {
+				return nil, fmt.Errorf("stat constructed data device for VM %s: %w", cfg.VMID, err)
+			}
+			if !info.Mode().IsRegular() {
+				return nil, fmt.Errorf("constructed data device for VM %s is not a regular file", cfg.VMID)
+			}
+			cfg.DataDevicePath = constructedPath
+		} else if _, err := os.Stat(dataImg); os.IsNotExist(err) {
 			if cfg.SourceVMID != "" {
 				if source, ok := m.vms[cfg.SourceVMID]; ok && source.State == StateRunning {
 					return nil, fmt.Errorf("source VM %s is running; refusing unsafe live data image copy", cfg.SourceVMID)
@@ -654,13 +676,8 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 				if err := m.copySparseFile(sourceDataImg, dataImg); err != nil {
 					return nil, fmt.Errorf("clone data image for VM %s from %s: %w", cfg.VMID, cfg.SourceVMID, err)
 				}
-			} else {
-				// Create a sparse ext4 data image for mutable state. This must
-				// be large enough for desktop files, Texture artifacts, and generated
-				// proof outputs; tiny images make "persistent" desktops unusable.
-				if err := m.createDataImage(dataImg, dataImageSizeMB); err != nil {
-					return nil, fmt.Errorf("create data image for VM %s: %w", cfg.VMID, err)
-				}
+			} else if err := m.createDataImage(dataImg, dataImageSizeMB); err != nil {
+				return nil, fmt.Errorf("create data image for VM %s: %w", cfg.VMID, err)
 			}
 		} else if err == nil && cfg.SourceVMID == "" {
 			if err := m.ensureDataImageMinSize(dataImg, dataImageSizeMB); err != nil {
@@ -669,6 +686,8 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		} else if err != nil {
 			return nil, fmt.Errorf("stat data image for VM %s: %w", cfg.VMID, err)
 		}
+	} else if cfg.DataDevicePath != "" {
+		return nil, fmt.Errorf("constructed data device requires store-disk boot")
 	} else if cfg.RootfsPath != "" {
 		// Legacy approach: create a per-VM writable copy of the rootfs.
 		// The base rootfs image is read-only (from the Nix store or
@@ -860,6 +879,10 @@ func (m *Manager) ResumeVM(vmID string) (*VMInstance, error) {
 // survived vmctl restart. It trusts the durable routing metadata only after
 // both the saved PID exists and the guest health endpoint responds.
 func (m *Manager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstance, error) {
+	return m.ReattachVMWithConfig(vmID, hostURL, epoch, VMConfig{})
+}
+
+func (m *Manager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, overrides VMConfig) (*VMInstance, error) {
 	if strings.TrimSpace(vmID) == "" {
 		return nil, fmt.Errorf("vm_id is required")
 	}
@@ -889,7 +912,7 @@ func (m *Manager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstance, er
 			epoch = loaded
 		}
 	}
-	cfg := VMConfig{
+	cfg := mergeVMConfigOverrides(VMConfig{
 		VMID:              vmID,
 		KernelImagePath:   m.cfg.KernelImagePath,
 		InitrdPath:        m.cfg.InitrdPath,
@@ -900,7 +923,9 @@ func (m *Manager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstance, er
 		MachineMemSizeMib: m.cfg.MachineMemSizeMib,
 		PersistentDir:     filepath.Join(m.cfg.StateDir, vmID, "persist"),
 		Epoch:             epoch,
-	}
+	}, overrides)
+	cfg.VMID = vmID
+	cfg.Epoch = epoch
 	cfg.GatewayToken = m.resolveGatewayToken(cfg)
 	inst := &VMInstance{
 		Config:          cfg,
@@ -1187,6 +1212,9 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	if overrides.SourceVMID != "" {
 		cfg.SourceVMID = overrides.SourceVMID
 	}
+	if overrides.DataDevicePath != "" {
+		cfg.DataDevicePath = overrides.DataDevicePath
+	}
 	if overrides.GatewayToken != "" {
 		cfg.GatewayToken = overrides.GatewayToken
 	}
@@ -1204,6 +1232,9 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	}
 	if overrides.CandidateID != "" {
 		cfg.CandidateID = overrides.CandidateID
+	}
+	if overrides.CodeRef != "" {
+		cfg.CodeRef = overrides.CodeRef
 	}
 	return cfg
 }
@@ -1268,7 +1299,10 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 
 	// Per-VM data volume for mutable sandbox state (always present).
 	// vmmanager creates a data.img per-VM in the state directory.
-	dataImgPath := filepath.Join(m.cfg.StateDir, cfg.VMID, "data.img")
+	dataImgPath := cfg.DataDevicePath
+	if dataImgPath == "" {
+		dataImgPath = filepath.Join(m.cfg.StateDir, cfg.VMID, "data.img")
+	}
 	drives = append(drives, map[string]interface{}{
 		"drive_id":       "data",
 		"path_on_host":   dataImgPath,
@@ -1396,7 +1430,7 @@ func sourceServiceRuntimeOwnerID(cfg VMConfig) string {
 }
 
 func guestIdentityKernelParams(cfg VMConfig) []string {
-	params := make([]string, 0, 5)
+	params := make([]string, 0, 6)
 	if value := kernelParamValue(cfg.ComputerKind); value != "" {
 		params = append(params, "choir.computer_kind="+value)
 	}
@@ -1411,6 +1445,9 @@ func guestIdentityKernelParams(cfg VMConfig) []string {
 	}
 	if value := kernelParamValue(cfg.CandidateID); value != "" {
 		params = append(params, "choir.candidate_id="+value)
+	}
+	if value := kernelParamValue(cfg.CodeRef); value != "" {
+		params = append(params, "choir.code_ref="+value)
 	}
 	return params
 }

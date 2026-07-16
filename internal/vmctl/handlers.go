@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/server"
 )
 
@@ -119,11 +120,17 @@ type reclaimResponse struct {
 }
 
 // Handler provides HTTP handlers for the vmctl service.
+type immutableArtifactOpener interface {
+	OpenSeekableArtifact(context.Context, string, string) (computerversion.ReadSeekCloser, error)
+}
+
 type Handler struct {
 	registry                 *OwnershipRegistry
 	sandboxRuntimePackageDir string
 	routeAuthority           *RouteAuthority
 	routeAuthorityRequired   bool
+	immutableArtifacts       immutableArtifactOpener
+	construction             *constructionService
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
@@ -136,6 +143,10 @@ func NewHandler(registry *OwnershipRegistry) *Handler {
 // sandbox/runtime code moves through the fast host service pointer path.
 func (h *Handler) SetSandboxRuntimePackageDir(path string) {
 	h.sandboxRuntimePackageDir = strings.TrimSpace(path)
+}
+
+func (h *Handler) SetImmutableArtifactOpener(opener immutableArtifactOpener) {
+	h.immutableArtifacts = opener
 }
 
 // writeJSON writes a JSON response.
@@ -1069,6 +1080,50 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if rawCodeRef := strings.TrimSpace(r.URL.Query().Get("code_ref")); rawCodeRef != "" {
+		if h.routeAuthority == nil || h.routeAuthority.inputs == nil || h.immutableArtifacts == nil {
+			writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "immutable runtime package authority is unavailable"})
+			return
+		}
+		codeRef := computerversion.CodeRef(rawCodeRef)
+		closure, err := h.routeAuthority.inputs.ResolveCode(r.Context(), codeRef)
+		if err != nil || closure.Ref != codeRef || closure.Verify() != nil {
+			writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "immutable runtime package not found"})
+			return
+		}
+		var runtimeArtifact *computerversion.CodeArtifact
+		for i := range closure.Artifacts {
+			if closure.Artifacts[i].Name == computerversion.SandboxRuntimeArtifactName {
+				runtimeArtifact = &closure.Artifacts[i]
+				break
+			}
+		}
+		if runtimeArtifact == nil {
+			writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "immutable runtime package artifact not found"})
+			return
+		}
+		artifact, err := h.immutableArtifacts.OpenSeekableArtifact(r.Context(), runtimeArtifact.URI, runtimeArtifact.SHA256)
+		if err != nil {
+			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "immutable runtime package verification failed"})
+			return
+		}
+		defer artifact.Close()
+		if err := validateRuntimePackageTar(artifact); err != nil {
+			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "immutable runtime package archive is invalid"})
+			return
+		}
+		if _, err := artifact.Seek(0, io.SeekStart); err != nil {
+			writeVMCTLJSON(w, http.StatusInternalServerError, vmctlErrorResponse{Error: "immutable runtime package rewind failed"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-tar")
+		w.Header().Set("Content-Disposition", `attachment; filename="go-choir-sandbox-runtime.tar"`)
+		if _, err := io.Copy(w, artifact); err != nil {
+			log.Printf("vmctl: stream immutable runtime package %s: %v", codeRef, err)
+		}
+		return
+	}
+
 	root := h.sandboxRuntimePackageDir
 	if root == "" {
 		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "sandbox runtime package directory is not configured"})
@@ -1102,6 +1157,59 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 	if err := writeRuntimePackageTar(tw, root, artifactBuild, runtimePackageServiceEnv(r)); err != nil {
 		log.Printf("vmctl: stream runtime package from %s: %v", root, err)
 		return
+	}
+}
+
+func validateRuntimePackageTar(reader io.Reader) error {
+	archive := tar.NewReader(reader)
+	seen := make(map[string]byte)
+	sawSandbox := false
+	const maxEntries = 100000
+	for entries := 0; ; entries++ {
+		if entries >= maxEntries {
+			return fmt.Errorf("runtime package: archive has too many entries")
+		}
+		header, err := archive.Next()
+		if err == io.EOF {
+			if entries == 0 || !sawSandbox {
+				return fmt.Errorf("runtime package: executable bin/sandbox is required")
+			}
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("runtime package: read archive: %w", err)
+		}
+		name := filepath.Clean(header.Name)
+		if name == "." || filepath.IsAbs(name) || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("runtime package: unsafe archive path %q", header.Name)
+		}
+		if _, duplicate := seen[name]; duplicate {
+			return fmt.Errorf("runtime package: duplicate archive path %q", name)
+		}
+		for parent := filepath.Dir(name); parent != "."; parent = filepath.Dir(parent) {
+			if seen[parent] == tar.TypeSymlink || seen[parent] == tar.TypeLink {
+				return fmt.Errorf("runtime package: path descends through archive link %q", parent)
+			}
+		}
+		seen[name] = header.Typeflag
+		switch header.Typeflag {
+		case tar.TypeReg, tar.TypeRegA:
+			if name == "bin/sandbox" && header.Mode&0o111 != 0 {
+				sawSandbox = true
+			}
+		case tar.TypeDir:
+		case tar.TypeSymlink, tar.TypeLink:
+			target := filepath.Clean(header.Linkname)
+			if filepath.IsAbs(target) || target == ".." || strings.HasPrefix(target, ".."+string(filepath.Separator)) {
+				return fmt.Errorf("runtime package: unsafe link target %q", header.Linkname)
+			}
+			resolved := filepath.Clean(filepath.Join(filepath.Dir(name), target))
+			if resolved == ".." || strings.HasPrefix(resolved, ".."+string(filepath.Separator)) {
+				return fmt.Errorf("runtime package: link escapes archive root")
+			}
+		default:
+			return fmt.Errorf("runtime package: unsupported archive entry type %d", header.Typeflag)
+		}
 	}
 }
 
@@ -1381,6 +1489,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
 	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
+	s.HandleFunc("/internal/vmctl/computer-version/construct", h.HandleConstructComputerVersion)
 	s.HandleFunc("/internal/vmctl/sandbox-proxy/", h.HandleSandboxProxy)
 }
 

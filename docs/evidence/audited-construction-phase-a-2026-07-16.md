@@ -181,3 +181,13 @@ Conjecture delta: C2 and C3 remain unproven; the preflight adds concrete falsifi
 - Admissible proof: focused crash/error-order tests must show pre-boot durability, no identity-free BootVM error, no disk reclaim while VM cleanup is uncertain, and fail-closed restart/legacy replacement behavior; then a newly frozen independent G2 review.
 - Rollback: source remains unpublished; prior checkpoint `28a07e59` and frozen patch `3b5e51728becc0b3aabb1f8975285b78dd31ba3a20b847230863be6ddf1eb949` identify the pre-structural candidate.
 - Route/promotion state: no D-ROUTE CAS, promotion, or production mutation executed.
+
+### G2 accepted constructor round-trip
+
+- Frozen base: `449f84f0`.
+- Frozen candidate: `/tmp/choir-g2-construction-churn-proven.patch`; SHA-256 `439da6ce2c7e20f451c185e9d377868693b28d201ec0cac45b74fbcb95de4278`; 26 staged paths.
+- Deterministic evidence: all affected focused Go suites and `go vet` passed; Node B Nix vmctl environment evaluation passed; real e2fsprogs execution passed `TestExt4BackendChurnReclaimReconstructionBound`, including debugfs cache write/delete, physical allocation accounting, receipt-bound root reclaim, same-ID reconstruction, and the 2 GiB policy bound.
+- Independent gate packet: `/tmp/choir-g2-consensus-churn-proven/`. Codex, Cursor, GPT-5.5, and OpenCode adjudicated `accept` with no blocking findings. Gemini and GLM were unavailable and did not contribute votes. The reproducible-minority rule found no remaining blocker.
+- Accepted boundary: immutable exact-one CodeRef/runtime and ArtifactProgram replay; substrate-independent generated semantic state; fresh sparse ext4 realization with independent pre/post host geometry and guest statfs joins; explicit allocation/headroom/reclaim policy; durable pre-Boot construction intent; finalized-only route/reattach lifecycle; identity-preserving cleanup uncertainty; no prior image read/clone/grow, third store, route CAS, or promotion.
+- Residual G2 risks carried forward: ownership write/rename lacks host-power-loss fsync proof; uncommitted crash residue requires explicit cleanup; deployed Node B geometry/reconstruction remains mandatory; constructed disk lifetime outside failed-construction cleanup must be joined in later destruction/fleet lifecycle acceptance.
+- Decision: G2 accepted. Phase D verifier/promotion/route work may begin. No D-ROUTE CAS is authorized until G3 accepts its frozen candidate.

@@ -345,8 +345,8 @@ orchestration:
 
 now:
   status: working
-  slice: "C-construct-and-boot"
-  question: "Can one production function resolve a ComputerVersion, instantiate a fresh thin Firecracker-compatible disk through a typed backend contract, materialize and verify its ArtifactProgram, boot it, and emit joined construction and geometry receipts without reading or cloning any prior realization?"
+  slice: "D-verify-and-route"
+  question: "Can an independent verifier recompute the complete ComputerVersion/input/output/observation and disk-policy/backend/device/allocation/geometry joins, issue an immutable promotion certificate, and freeze a vmctl-only atomic D-ROUTE CAS candidate with tested rollback without executing the CAS?"
   reconciliation:
     observed_at: 2026-07-16T07:50:08Z
     source_ref: refs/heads/main@7d310551c01dd5c63be3dcbb641dd752a201d8d6_equals_refs/remotes/origin/main_and_remote_origin_main
@@ -391,6 +391,10 @@ now:
     - "GitHub Actions CI 29480269240 attempt 2: success; Node B deploy job 87564091427: success"
     - "https://choir.news/health?g1=7d310551: matching commit and proxy/vmctl healthy"
     - "Node B missing D-ROUTE probe: HTTP 404 route ledger slot not found"
+    - "/tmp/choir-g2-construction-churn-proven.patch SHA-256 439da6ce2c7e20f451c185e9d377868693b28d201ec0cac45b74fbcb95de4278"
+    - "/tmp/choir-g2-consensus-churn-proven: Codex, Cursor, GPT-5.5, and OpenCode accept; no blocking findings; Gemini unavailable"
+    - "nix shell nixpkgs#e2fsprogs -c go test ./internal/diskinstantiation: pass including real ext4 churn/reclaim/same-ID reconstruction"
+    - "focused affected Go suites and go vet: pass; Node B Nix vmctl environment evaluation: pass"
   blocker_or_risk: "G1 is accepted and landed. The existing VMManagerScopedMaterializer intentionally stops before VM launch; production has no typed disk-instantiation contract, policy resolver, independently verifiable backend receipt, fresh-realization constructor, joined construction receipt store, or boot/geometry acceptance. Existing data.img creation and reboot paths remain superseded substrate that Phase C must replace rather than patch."
   next_action: "Implement C-construct-and-boot from landed commit 7d310551: map existing VM creation/materializer interfaces, define the typed substrate-independent disk plan/backend/device/receipt contract and policy resolver, connect one production ComputerVersion materializer that resolves inputs, creates a fresh optimized device without any source VM/image, materializes and verifies typed state, boots Firecracker, and records joined immutable construction evidence. Prove arbitrary-valid-tape round trip plus coherent capacity/allocation/geometry, freeze the G2 candidate, and do not implement promotion or execute any route CAS before G2 accepts."
 

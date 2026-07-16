@@ -35,6 +35,9 @@ import (
 	"syscall"
 	"time"
 	"unicode"
+
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
 )
 
 // VMState represents the lifecycle state of a VM.
@@ -163,6 +166,13 @@ type VMOwnership struct {
 	// StoppedBy indicates why the VM was stopped. Empty if running.
 	// Valid values: "idle", "logout", "recovery", "manual".
 	StoppedBy string `json:"stopped_by,omitempty"`
+
+	// ConstructionVersion and ConstructionDisk bind constructor-created
+	// candidates to the exact immutable computer and attach-only device across
+	// vmctl restarts. They are absent on legacy ownerships.
+	ConstructionVersion   *computerversion.ComputerVersion `json:"construction_version,omitempty"`
+	ConstructionDisk      *diskinstantiation.Receipt       `json:"construction_disk,omitempty"`
+	ConstructionCommitted bool                             `json:"construction_committed,omitempty"`
 }
 
 // WorkerRequest is the typed internal vmctl request for a background worker VM.
@@ -203,6 +213,10 @@ func (o *VMOwnership) IsReady() bool {
 // the registry delegates VM boot/stop/resume/recover operations to the
 // concrete vmmanager.Manager. When Firecracker is not available, the
 // registry runs in host-process mode with no-op VM lifecycle calls.
+type configuredVMReattacher interface {
+	ReattachVMWithConfig(vmID, hostURL string, epoch int64, cfg VMManagerConfig) (*VMInstanceInfo, error)
+}
+
 type VMManager interface {
 	// BootVM launches a new Firecracker VM and returns its instance info.
 	BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error)
@@ -256,6 +270,7 @@ type VMManagerConfig struct {
 	MachineMemSizeMib int
 	PersistentDir     string
 	SourceVMID        string
+	DataDevicePath    string
 	// GatewayToken is the credential token for the sandbox to authenticate
 	// to the host-side gateway. Written to the persistent directory so the
 	// guest init script can read it and set RUNTIME_GATEWAY_TOKEN.
@@ -265,6 +280,7 @@ type VMManagerConfig struct {
 	DesktopID    string
 	WorkerID     string
 	CandidateID  string
+	CodeRef      string
 }
 
 // VMImageProfile points a VM boot at a non-default guest image. Ordinary
@@ -481,6 +497,15 @@ func (r *OwnershipRegistry) loadLocked() error {
 		own.UserID = strings.TrimSpace(own.UserID)
 		own.VMID = strings.TrimSpace(own.VMID)
 		own.DesktopID = normalizeDesktopID(own.DesktopID)
+		if own.SnapshotKind == "constructed-computer-version" {
+			if err := validateConstructedOwnership(&own); err != nil {
+				return fmt.Errorf("load constructed ownership %s: %w", own.VMID, err)
+			}
+			if !own.ConstructionCommitted {
+				own.State = VMStateFailed
+				own.StoppedBy = "construction-incomplete"
+			}
+		}
 		if own.Kind == "" {
 			own.Kind = VMKindInteractive
 		}
@@ -516,8 +541,14 @@ func (r *OwnershipRegistry) loadLocked() error {
 }
 
 func (r *OwnershipRegistry) saveLocked() {
+	if err := r.writePersistenceLocked(); err != nil {
+		log.Printf("vmctl: persist ownership registry: %v", err)
+	}
+}
+
+func (r *OwnershipRegistry) writePersistenceLocked() error {
 	if r.persistencePath == "" {
-		return
+		return nil
 	}
 	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
 	for _, own := range r.ownerships {
@@ -534,28 +565,22 @@ func (r *OwnershipRegistry) saveLocked() {
 		bk := string(b.Kind) + "|" + b.UserID + "|" + b.DesktopID + "|" + b.WorkerID + "|" + b.VMID
 		return ak < bk
 	})
-	state := persistedOwnershipState{
-		SavedAt:      time.Now().UTC(),
-		EpochCounter: r.epochCounter,
-		Ownerships:   ownerships,
-	}
+	state := persistedOwnershipState{SavedAt: time.Now().UTC(), EpochCounter: r.epochCounter, Ownerships: ownerships}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		log.Printf("vmctl: persist ownership registry: marshal: %v", err)
-		return
+		return fmt.Errorf("marshal: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(r.persistencePath), 0o750); err != nil {
-		log.Printf("vmctl: persist ownership registry: mkdir: %v", err)
-		return
+		return fmt.Errorf("mkdir: %w", err)
 	}
 	tmp := r.persistencePath + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o640); err != nil {
-		log.Printf("vmctl: persist ownership registry: write: %v", err)
-		return
+		return fmt.Errorf("write: %w", err)
 	}
 	if err := os.Rename(tmp, r.persistencePath); err != nil {
-		log.Printf("vmctl: persist ownership registry: rename: %v", err)
+		return fmt.Errorf("rename: %w", err)
 	}
+	return nil
 }
 
 // SetVMManager sets the Firecracker VM lifecycle manager. When set, the
@@ -566,6 +591,131 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	r.mu.Lock()
 	r.vmManager = mgr
 	r.mu.Unlock()
+}
+
+func validateConstructedOwnership(own *VMOwnership) error {
+	if own == nil || own.ConstructionVersion == nil || !own.ConstructionVersion.Valid() || own.ConstructionDisk == nil {
+		return fmt.Errorf("constructed lifecycle binding is incomplete")
+	}
+	if err := diskinstantiation.VerifyReceiptIntegrity(*own.ConstructionDisk); err != nil {
+		return fmt.Errorf("constructed disk receipt: %w", err)
+	}
+	if own.ConstructionDisk.RealizationID != own.VMID || strings.TrimSpace(own.ConstructionDisk.DevicePath) == "" {
+		return fmt.Errorf("constructed disk receipt does not match VM identity")
+	}
+	return nil
+}
+
+func (r *OwnershipRegistry) beginConstructedCandidate(vmID, userID, desktopID, credential string, version computerversion.ComputerVersion, disk diskinstantiation.Receipt) error {
+	vmID = strings.TrimSpace(vmID)
+	userID = strings.TrimSpace(userID)
+	desktopID = strings.TrimSpace(desktopID)
+	if vmID == "" || userID == "" || desktopID == "" || !version.Valid() || disk.RealizationID != vmID {
+		return fmt.Errorf("vmctl: constructed candidate lifecycle identity is incomplete")
+	}
+	if err := diskinstantiation.VerifyReceiptIntegrity(disk); err != nil {
+		return fmt.Errorf("vmctl: constructed candidate disk receipt: %w", err)
+	}
+	key := ownershipKey(userID, desktopID)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.persistencePath == "" {
+		return fmt.Errorf("vmctl: constructed candidate requires durable ownership persistence")
+	}
+	if _, exists := r.vmByID[vmID]; exists {
+		return fmt.Errorf("vmctl: constructed candidate VM %s is already registered", vmID)
+	}
+	if _, exists := r.ownerships[key]; exists {
+		return fmt.Errorf("vmctl: constructed candidate desktop %s already exists for owner %s", desktopID, userID)
+	}
+	now := time.Now().UTC()
+	own := &VMOwnership{
+		VMID: vmID, UserID: userID, DesktopID: desktopID, Kind: VMKindInteractive,
+		SnapshotKind: "constructed-computer-version", Published: false,
+		State: VMStateBooting, CreatedAt: now, LastActiveAt: now,
+		SandboxCredential: credential, ConstructionVersion: &version, ConstructionDisk: &disk,
+	}
+	r.ownerships[key] = own
+	r.vmByID[vmID] = own
+	if err := r.writePersistenceLocked(); err != nil {
+		delete(r.ownerships, key)
+		delete(r.vmByID, vmID)
+		return fmt.Errorf("vmctl: persist constructed candidate intent: %w", err)
+	}
+	return nil
+}
+
+func (r *OwnershipRegistry) activateConstructedCandidate(vmID, sandboxURL string, epoch int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.vmByID[strings.TrimSpace(vmID)]
+	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.ConstructionCommitted || epoch <= 0 || strings.TrimSpace(sandboxURL) == "" {
+		return fmt.Errorf("vmctl: constructed candidate activation does not match durable intent")
+	}
+	priorURL, priorEpoch, priorState := own.SandboxURL, own.Epoch, own.State
+	own.SandboxURL = strings.TrimSpace(sandboxURL)
+	own.Epoch = epoch
+	own.State = VMStateActive
+	if err := r.writePersistenceLocked(); err != nil {
+		own.SandboxURL, own.Epoch, own.State = priorURL, priorEpoch, priorState
+		return fmt.Errorf("vmctl: persist constructed candidate activation: %w", err)
+	}
+	return nil
+}
+
+func (r *OwnershipRegistry) commitConstructedCandidate(vmID string, version computerversion.ComputerVersion, disk diskinstantiation.Receipt) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.vmByID[strings.TrimSpace(vmID)]
+	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.ConstructionVersion == nil || *own.ConstructionVersion != version || own.ConstructionDisk == nil || own.ConstructionDisk.DevicePath != disk.DevicePath {
+		return fmt.Errorf("vmctl: constructed candidate lifecycle binding mismatch")
+	}
+	if err := diskinstantiation.VerifyReceiptIntegrity(disk); err != nil || disk.RealizationID != own.VMID {
+		return fmt.Errorf("vmctl: final constructed candidate disk receipt is invalid: %v", err)
+	}
+	prior, priorCommitted := own.ConstructionDisk, own.ConstructionCommitted
+	own.ConstructionDisk = &disk
+	own.ConstructionCommitted = true
+	if err := r.writePersistenceLocked(); err != nil {
+		own.ConstructionDisk, own.ConstructionCommitted = prior, priorCommitted
+		return fmt.Errorf("vmctl: persist final constructed candidate evidence: %w", err)
+	}
+	return nil
+}
+
+func (r *OwnershipRegistry) markConstructedCandidateFailed(vmID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.vmByID[strings.TrimSpace(vmID)]
+	if own == nil || own.SnapshotKind != "constructed-computer-version" {
+		return nil
+	}
+	priorState, priorStoppedBy := own.State, own.StoppedBy
+	own.State = VMStateFailed
+	own.StoppedBy = "construction-failed"
+	if err := r.writePersistenceLocked(); err != nil {
+		own.State, own.StoppedBy = priorState, priorStoppedBy
+		return fmt.Errorf("vmctl: persist constructed candidate failure: %w", err)
+	}
+	return nil
+}
+
+func (r *OwnershipRegistry) removeConstructedCandidate(vmID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.vmByID[strings.TrimSpace(vmID)]
+	if own == nil || own.SnapshotKind != "constructed-computer-version" {
+		return nil
+	}
+	key := ownershipKey(own.UserID, own.DesktopID)
+	delete(r.ownerships, key)
+	delete(r.vmByID, own.VMID)
+	if err := r.writePersistenceLocked(); err != nil {
+		r.ownerships[key] = own
+		r.vmByID[own.VMID] = own
+		return fmt.Errorf("vmctl: persist constructed candidate removal: %w", err)
+	}
+	return nil
 }
 
 // ReattachManagedVMs adopts VM processes that survived vmctl restart only
@@ -598,7 +748,18 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 			log.Printf("vmctl: reattach refused for VM %s: %v", own.VMID, err)
 			continue
 		}
-		info, err := mgr.ReattachVM(own.VMID, own.SandboxURL, own.Epoch)
+		var info *VMInstanceInfo
+		var err error
+		if own.SnapshotKind == "constructed-computer-version" {
+			reattacher, ok := mgr.(configuredVMReattacher)
+			if !ok || !own.ConstructionCommitted || validateConstructedOwnership(&own) != nil {
+				log.Printf("vmctl: constructed reattach skipped for VM %s: finalized configured reattach unavailable", own.VMID)
+				continue
+			}
+			info, err = reattacher.ReattachVMWithConfig(own.VMID, own.SandboxURL, own.Epoch, vmManagerConfigForOwnership(&own, ""))
+		} else {
+			info, err = mgr.ReattachVM(own.VMID, own.SandboxURL, own.Epoch)
+		}
 		if err != nil {
 			log.Printf("vmctl: reattach skipped for VM %s: %v", own.VMID, err)
 			continue
@@ -1073,7 +1234,7 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 		return VMManagerConfig{}
 	}
 	cpu, mem := machineShapeForOwnership(own)
-	return VMManagerConfig{
+	cfg := VMManagerConfig{
 		VMID:              own.VMID,
 		GuestPort:         8085,
 		MachineCPUCount:   cpu,
@@ -1085,6 +1246,11 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 		WorkerID:          own.WorkerID,
 		CandidateID:       candidateIDForOwnership(own),
 	}
+	if own.ConstructionCommitted && validateConstructedOwnership(own) == nil {
+		cfg.DataDevicePath = own.ConstructionDisk.DevicePath
+		cfg.CodeRef = string(own.ConstructionVersion.CodeRef)
+	}
+	return cfg
 }
 
 // issueGatewayToken requests a gateway credential token for the given
@@ -1411,6 +1577,11 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 			// No pending waiter means this is a stale booting ownership, for
 			// example after a process restart. Fall through and recover it the
 			// same way as a failed/degraded ownership.
+		}
+
+		if own.SnapshotKind == "constructed-computer-version" {
+			r.mu.Unlock()
+			return nil, fmt.Errorf("constructed VM %s requires audited reconstruction after lifecycle failure", own.VMID)
 		}
 
 		// VM exists but failed or is degraded. Create a new one

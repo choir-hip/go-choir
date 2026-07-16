@@ -3679,21 +3679,25 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 // It records lifecycle calls so tests can verify that the OwnershipRegistry
 // properly delegates to the VM manager when one is configured.
 type mockVMManager struct {
-	mu          sync.Mutex
-	boots       []VMManagerConfig
-	stops       []string
-	hibernates  []string
-	resumes     []string
-	reattaches  []string
-	recovers    []string
-	refreshes   []string
-	recoverCfgs []VMManagerConfig
-	refreshCfgs []VMManagerConfig
-	destroys    []string
-	tokens      map[string]string
+	mu           sync.Mutex
+	boots        []VMManagerConfig
+	stops        []string
+	hibernates   []string
+	resumes      []string
+	reattaches   []string
+	reattachCfgs []VMManagerConfig
+	recovers     []string
+	refreshes    []string
+	recoverCfgs  []VMManagerConfig
+	refreshCfgs  []VMManagerConfig
+	destroys     []string
+	tokens       map[string]string
 	// Configurable responses
 	bootResponse      *VMInstanceInfo
 	bootError         error
+	bootHook          func(VMManagerConfig)
+	stopError         error
+	destroyError      error
 	resumeResponse    *VMInstanceInfo
 	resumeError       error
 	reattachResponse  *VMInstanceInfo
@@ -3713,6 +3717,9 @@ type mockVMManager struct {
 
 func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
 	m.boots = append(m.boots, cfg)
+	if m.bootHook != nil {
+		m.bootHook(cfg)
+	}
 	if m.bootError != nil {
 		return nil, m.bootError
 	}
@@ -3724,7 +3731,7 @@ func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
 
 func (m *mockVMManager) StopVM(vmID string) error {
 	m.stops = append(m.stops, vmID)
-	return nil
+	return m.stopError
 }
 
 func (m *mockVMManager) HibernateVM(vmID string) error {
@@ -3771,6 +3778,11 @@ func (m *mockVMManager) ReattachVM(vmID, hostURL string, epoch int64) (*VMInstan
 	return &VMInstanceInfo{HostURL: hostURL, Epoch: epoch, Healthy: true, State: "running"}, nil
 }
 
+func (m *mockVMManager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, cfg VMManagerConfig) (*VMInstanceInfo, error) {
+	m.reattachCfgs = append(m.reattachCfgs, cfg)
+	return m.ReattachVM(vmID, hostURL, epoch)
+}
+
 func (m *mockVMManager) RecoverVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
 	m.recovers = append(m.recovers, vmID)
 	m.recoverCfgs = append(m.recoverCfgs, cfg)
@@ -3797,7 +3809,7 @@ func (m *mockVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstance
 
 func (m *mockVMManager) DestroyVMState(vmID string) error {
 	m.destroys = append(m.destroys, vmID)
-	return nil
+	return m.destroyError
 }
 
 func (m *mockVMManager) GetVM(vmID string) *VMInstanceInfo {

@@ -279,21 +279,9 @@ func (v *LocalArtifactContentVerifier) VerifyArtifact(ctx context.Context, rawUR
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if !validContentAddressedURI(rawURI, digest) {
-		return fmt.Errorf("computer input resolver: artifact URI is not bound to content digest")
-	}
-	parsed, _ := url.Parse(rawURI)
-	artifactPath := filepath.Clean(parsed.Path)
-	if parsed.Scheme == "artifact+sha256" {
-		if v == nil || v.artifactRoot == "" || v.artifactRoot == "." {
-			return fmt.Errorf("computer input resolver: artifact root is required for artifact+sha256 URI")
-		}
-		relative := strings.TrimPrefix(artifactPath, string(filepath.Separator))
-		artifactPath = filepath.Join(v.artifactRoot, relative)
-		rootPrefix := v.artifactRoot + string(filepath.Separator)
-		if artifactPath != v.artifactRoot && !strings.HasPrefix(artifactPath, rootPrefix) {
-			return fmt.Errorf("computer input resolver: artifact URI escapes artifact root")
-		}
+	artifactPath, err := v.localArtifactPath(rawURI, digest)
+	if err != nil {
+		return err
 	}
 	file, err := os.Open(artifactPath)
 	if err != nil {
@@ -315,6 +303,92 @@ func (v *LocalArtifactContentVerifier) VerifyArtifact(ctx context.Context, rawUR
 		return fmt.Errorf("computer input resolver: immutable artifact content hash mismatch")
 	}
 	return nil
+}
+
+// ReadArtifact returns one digest-verified immutable artifact payload. It reads
+// and hashes the same byte slice, avoiding a verify/read race.
+type ReadSeekCloser interface {
+	io.Reader
+	io.Seeker
+	io.Closer
+}
+
+// OpenSeekableArtifact returns a digest-verified regular file positioned at
+// byte zero. Verification and later reads share one descriptor, avoiding path
+// replacement between verification and streaming.
+func (v *LocalArtifactContentVerifier) OpenSeekableArtifact(ctx context.Context, rawURI, digest string) (ReadSeekCloser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	artifactPath, err := v.localArtifactPath(rawURI, digest)
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.Open(artifactPath)
+	if err != nil {
+		return nil, fmt.Errorf("computer input resolver: open immutable artifact: %w", err)
+	}
+	closeOnError := true
+	defer func() {
+		if closeOnError {
+			_ = file.Close()
+		}
+	}()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("computer input resolver: immutable artifact must be a regular file")
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return nil, fmt.Errorf("computer input resolver: hash immutable artifact: %w", err)
+	}
+	if got := hex.EncodeToString(hash.Sum(nil)); !strings.EqualFold(got, digest) {
+		return nil, fmt.Errorf("computer input resolver: immutable artifact content hash mismatch")
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("computer input resolver: rewind immutable artifact: %w", err)
+	}
+	closeOnError = false
+	return file, nil
+}
+
+func (v *LocalArtifactContentVerifier) ReadArtifact(ctx context.Context, rawURI, digest string) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	artifactPath, err := v.localArtifactPath(rawURI, digest)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(artifactPath)
+	if err != nil {
+		return nil, fmt.Errorf("computer input resolver: read immutable artifact: %w", err)
+	}
+	if got := immutableInputSHA256Hex(data); !strings.EqualFold(got, digest) {
+		return nil, fmt.Errorf("computer input resolver: immutable artifact content hash mismatch")
+	}
+	return data, nil
+}
+
+func (v *LocalArtifactContentVerifier) localArtifactPath(rawURI, digest string) (string, error) {
+	if !validContentAddressedURI(rawURI, digest) {
+		return "", fmt.Errorf("computer input resolver: artifact URI is not bound to content digest")
+	}
+	parsed, _ := url.Parse(rawURI)
+	artifactPath := filepath.Clean(parsed.Path)
+	if parsed.Scheme != "artifact+sha256" {
+		return artifactPath, nil
+	}
+	if v == nil || v.artifactRoot == "" || v.artifactRoot == "." {
+		return "", fmt.Errorf("computer input resolver: artifact root is required for artifact+sha256 URI")
+	}
+	relative := strings.TrimPrefix(artifactPath, string(filepath.Separator))
+	artifactPath = filepath.Join(v.artifactRoot, relative)
+	rootPrefix := v.artifactRoot + string(filepath.Separator)
+	if artifactPath != v.artifactRoot && !strings.HasPrefix(artifactPath, rootPrefix) {
+		return "", fmt.Errorf("computer input resolver: artifact URI escapes artifact root")
+	}
+	return artifactPath, nil
 }
 
 type SQLInputCatalog struct {

@@ -84,6 +84,10 @@ let
     next="$runtime_root/.sandbox-next"
 
     if [ -z "$runtime_url" ]; then
+      if [ -n "''${CHOIR_CODE_REF:-}" ]; then
+        echo "go-choir-sandbox: immutable CodeRef requires RUNTIME_VMCTL_URL" >&2
+        exit 1
+      fi
       echo "go-choir-sandbox: RUNTIME_VMCTL_URL is unavailable; using baked sandbox runtime" >&2
       exit 0
     fi
@@ -92,13 +96,20 @@ let
     rm -rf "$next"
     mkdir -p "$next"
 
+    package_url="$runtime_url/internal/vmctl/runtime-package/sandbox"
+    if [ -n "''${CHOIR_CODE_REF:-}" ]; then
+      package_url="$package_url?code_ref=''${CHOIR_CODE_REF}"
+    fi
     if ${pkgs.curl}/bin/curl -fsS --retry 3 --retry-delay 1 --retry-all-errors \
       -H "X-Internal-Caller: true" \
-      "$runtime_url/internal/vmctl/runtime-package/sandbox" |
+      "$package_url" |
       ${pkgs.gnutar}/bin/tar -x -C "$next"; then
       if [ ! -x "$next/bin/sandbox" ]; then
-        echo "go-choir-sandbox: downloaded runtime package lacks bin/sandbox; keeping current runtime" >&2
+        echo "go-choir-sandbox: downloaded runtime package lacks bin/sandbox" >&2
         rm -rf "$next"
+        if [ -n "''${CHOIR_CODE_REF:-}" ]; then
+          exit 1
+        fi
         exit 0
       fi
       rm -rf "$previous"
@@ -108,8 +119,11 @@ let
       mv "$next" "$current"
       echo "go-choir-sandbox: installed host-provided sandbox runtime package"
     else
-      echo "go-choir-sandbox: runtime package download failed; keeping current or baked runtime" >&2
+      echo "go-choir-sandbox: runtime package download failed" >&2
       rm -rf "$next"
+      if [ -n "''${CHOIR_CODE_REF:-}" ]; then
+        exit 1
+      fi
     fi
   '';
 
@@ -172,6 +186,10 @@ let
       exec "$dynamic" "$@"
     fi
 
+    if [ -n "''${CHOIR_CODE_REF:-}" ]; then
+      echo "go-choir-sandbox: immutable CodeRef runtime is unavailable" >&2
+      exit 1
+    fi
     export RUNTIME_SKILLS_ROOT="${goChoirPackages.sandbox}/share/go-choir/skills"
     exec ${goChoirPackages.sandbox}/bin/sandbox "$@"
   '';
@@ -341,6 +359,9 @@ EOF
             ;;
           choir.candidate_id=*)
             echo "CHOIR_CANDIDATE_ID=''${param#choir.candidate_id=}" >> "$ENV_FILE"
+            ;;
+          choir.code_ref=*)
+            echo "CHOIR_CODE_REF=''${param#choir.code_ref=}" >> "$ENV_FILE"
             ;;
           choir.gateway_token=*)
             echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"

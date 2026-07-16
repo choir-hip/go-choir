@@ -11,7 +11,9 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/yusefmosiah/go-choir/internal/base/blob"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -131,7 +133,9 @@ func main() {
 		if err := routeDB.PingContext(pingCtx); err != nil {
 			log.Fatalf("vmctl: ping ComputerVersion route database: %v", err)
 		}
-		inputs := computerversion.NewSQLInputCatalog(routeDB, computerversion.NewLocalArtifactContentVerifier(os.Getenv("VMCTL_ARTIFACTS_ROOT")))
+		artifactVerifier := computerversion.NewLocalArtifactContentVerifier(os.Getenv("VMCTL_ARTIFACTS_ROOT"))
+		inputs := computerversion.NewSQLInputCatalog(routeDB, artifactVerifier)
+		handler.SetImmutableArtifactOpener(artifactVerifier)
 		if err := inputs.EnsureSchema(pingCtx); err != nil {
 			log.Fatalf("vmctl: initialize immutable input catalog: %v", err)
 		}
@@ -144,6 +148,32 @@ func main() {
 			log.Fatalf("vmctl: initialize ComputerVersion route authority: %v", err)
 		}
 		handler.SetRouteAuthority(authority)
+		if blobRoot := strings.TrimSpace(os.Getenv("VMCTL_BASE_BLOB_ROOT")); blobRoot != "" {
+			blobs, err := blob.OpenStore(blobRoot)
+			if err != nil {
+				log.Fatalf("vmctl: open immutable Base blob store: %v", err)
+			}
+			stateRoot := strings.TrimSpace(os.Getenv("VM_STATE_DIR"))
+			materializer := computerversion.ProductionMaterializer{
+				Inputs:    inputs,
+				Artifacts: artifactVerifier,
+				Blobs:     blobs,
+				Disk:      diskinstantiation.Ext4Backend{WorkRoot: stateRoot},
+				DiskPlan: diskinstantiation.Plan{
+					DeviceID:     "data",
+					LogicalBytes: 32 << 30,
+					Filesystem:   diskinstantiation.FilesystemContract{Type: diskinstantiation.FilesystemExt4, Label: "choir-data", BlockSizeBytes: 4096},
+					Allocation:   diskinstantiation.AllocationContract{Mode: diskinstantiation.AllocationSparse, MaxAllocatedBytes: 2 << 30, MinimumAvailableBytes: 2 << 30},
+				},
+				Launcher: vmctl.NewVMConstructionLauncher(registry, nil),
+			}
+			handler.SetConstructionService(materializer, computerversion.CapabilityManifest{
+				Materializer: computerversion.ProductionMaterializerName,
+				Substrate:    computerversion.VMManagerSubstrateFirecracker,
+				Supported:    []computerversion.ObservationKind{computerversion.ObservationFileManifest, computerversion.ObservationBlobSet, computerversion.ObservationVMStateManifest},
+			})
+			log.Printf("vmctl: production ComputerVersion constructor configured")
+		}
 		log.Printf("vmctl: ComputerVersion route authority configured on the corpusd world-wire SQL server")
 	} else {
 		log.Printf("vmctl: ComputerVersion route authority unavailable (VMCTL_ROUTE_DSN is not configured)")
@@ -203,12 +233,14 @@ func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 		MachineMemSizeMib: cfg.MachineMemSizeMib,
 		PersistentDir:     cfg.PersistentDir,
 		SourceVMID:        cfg.SourceVMID,
+		DataDevicePath:    cfg.DataDevicePath,
 		GatewayToken:      cfg.GatewayToken,
 		ComputerKind:      cfg.ComputerKind,
 		OwnerID:           cfg.OwnerID,
 		DesktopID:         cfg.DesktopID,
 		WorkerID:          cfg.WorkerID,
 		CandidateID:       cfg.CandidateID,
+		CodeRef:           cfg.CodeRef,
 	}
 }
 
@@ -276,6 +308,14 @@ func (a *vmManagerAdapter) ResumeVM(vmID string) (*vmctl.VMInstanceInfo, error) 
 
 func (a *vmManagerAdapter) ReattachVM(vmID, hostURL string, epoch int64) (*vmctl.VMInstanceInfo, error) {
 	inst, err := a.mgr.ReattachVM(vmID, hostURL, epoch)
+	if err != nil {
+		return nil, err
+	}
+	return toVMInstanceInfo(inst), nil
+}
+
+func (a *vmManagerAdapter) ReattachVMWithConfig(vmID, hostURL string, epoch int64, cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
+	inst, err := a.mgr.ReattachVMWithConfig(vmID, hostURL, epoch, toManagerVMConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
