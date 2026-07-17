@@ -434,8 +434,10 @@ now:
     - docs/evidence/g4-fleet-cutover-candidate-2026-07-17.json
     - docs/evidence/g4-fleet-cutover-accepted-review-2026-07-17.md
     - "G4 repaired panel: Cursor, Gemini 3.5, GPT-5.5, and OpenCode accept with no blockers and high confidence; Devin, Codex CLI, and GLM 5.2 timed out without verdict"
-  blocker_or_risk: "G4 is accepted with no reproducible blocker. The packet still is not a route signature: every live row may drift, every mutation requires fresh owner/G3 signatures and exact route/ownership joins, and any failure must fully roll back and restore before the next route. The high-risk owner ArtifactProgram is bound to one owner only; 149 other plans explicitly make no legacy-data migration claim."
-  next_action: "Commit the accepted G4 packet and adjudication receipt, reverify the retained synthetic control without mutation, then execute the a@b.com near-new canary through exact detach, construction, independent verification, paired signed bootstrap/rollback preparation, G3 acceptance, CAS, no-SSH product readback, and restart durability. Stop and restore completely on any refusal before touching the next route."
+    - docs/evidence/g4-first-fleet-canary-tap-collision-2026-07-17.md
+    - "first fleet canary containment: control route reverified; a@b.com exact detach aa54eac3; Firecracker refused shared vm-candidat-tap with EBUSY; candidate cleanup complete; route absent; exact legacy restore and data.img stat invariants pass"
+  blocker_or_risk: "Accepted G4 execution stopped safely on its first mutable canary. a@b.com was exactly detached, but Firecracker rejected TAP vm-candidat-tap with EBUSY before construction returned. Candidate cleanup completed, route remained absent, and exact legacy restore preserved the reviewed disk tuple. This is a network-allocation substrate blocker, not a route/owner symptom; no other fleet row may move until repaired and deployed."
+  next_action: "Map TAP name/address allocation and cleanup in current source, check for an existing collision-safe replacement before patching, reproduce the long-ID collision deterministically, then repair the substrate. Deploy and prove distinct disposable candidates, refresh the restored a@b.com row, and resume from serial sequence 1 only after the exact live plan is re-frozen."
 
 successor:
   status: unauthorized_until_this_definition_complete
