@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "E-zero-realization-reconstruction"
-  question: "Can the generation-1 synthetic route survive complete accepted-realization loss and reconstruct the same typed state from its immutable ComputerVersion without reusing or repairing data.img?"
+  slice: "E-corrupted-disk-replacement"
+  question: "Can the routed synthetic computer detect an intentionally corrupted realization image, refuse reuse/manual repair, remove it through the audited lifecycle, and reconstruct the same semantic state from immutable ComputerVersion A?"
   reconciliation:
-    observed_at: 2026-07-17T03:35:00Z
-    source_ref: refs/heads/main@9d786659_equals_refs/remotes/origin/main@9d786659
-    deploy_identity: "Docs-only authority head 9d786659; Node B activation receipt target and selected vmctl artifact remain e3de55581a1cae3ecce1431f5f4440ab01f62fc8; CI run 29550365185 succeeded; vmctl active"
+    observed_at: 2026-07-17T04:19:00Z
+    source_ref: refs/heads/main@ba1fd5a4973618326c8eebe9b14456941724c114_equals_refs/remotes/origin/main@ba1fd5a4973618326c8eebe9b14456941724c114
+    deploy_identity: "Node B activation receipt target and selected vmctl artifact ba1fd5a4973618326c8eebe9b14456941724c114; CI run 29553132488 succeeded; vmctl active"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -361,13 +361,13 @@ now:
     worktree_inventory_ref: "canonical main and origin/main equal at e3de5558 before the code-free G3 frozen-packet checkpoint; only the Definition and new durable G3 evidence packet are intentional"
     status: reconciled
   candidate:
-    id: candidate-control-20260717-e
-    state: routed_generation_1_active_reconstruction_pending
+    id: candidate-control-20260717-f
+    state: routed_generation_1_reconstructed_active
     ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
     owner: autoputer-control
-    base: refs/heads/main@e3de55581a1cae3ecce1431f5f4440ab01f62fc8
-    digest: "route-bootstrap:sha256:eac7ab973a643c250e825700fd18348af6c4ba43b5912440a2d4172d0834d70d"
-    scope: [synthetic-control-route, generation-1, accepted-version-a, zero-realization-reconstruction]
+    base: refs/heads/main@ba1fd5a4973618326c8eebe9b14456941724c114
+    digest: "109a15a8863a7ebbc559ecf843992c165e26feeae1bbec721a0df71dd1d8119d"
+    scope: [synthetic-control-route, generation-1, reconstructed-version-a, corrupted-disk-replacement]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -408,8 +408,8 @@ now:
     - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governed because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
     - "/tmp/choir-g3-bootstrap-e-consensus-repair: Codex, Cursor, GPT-5.5, and Gemini accept with no blockers and high confidence; OpenCode no usable verdict; Devin and GLM 5.2 timed out"
     - "bootstrap transition receipt c3490ed2-287f-4b9f-a3c3-85c5055a50a0: generation 0 -> 1 at 2026-07-17T03:34:44.112910201Z; exact immutable ComputerVersion and certificate joined; independent route readback matched"
-  blocker_or_risk: "The exact routed-realization disposal boundary passes local normal/race/HTTP contracts and preserves the full route slot/receipt, but it has not passed CI or activated on Node B. No staging destruction is authorized until deployed vmctl identity includes this exact source."
-  next_action: "Commit and deploy the tested exact routed-disposal boundary, confirm selected vmctl artifact identity, then freeze a request bound to generation 1, receipt c3490ed2-287f-4b9f-a3c3-85c5055a50a0, ComputerVersion A, candidate-control-20260717-e, and disk receipt b82e1347. Stop through vmctl, dispose through the exact endpoint, prove zero realization state with route unchanged, and reconstruct a new realization from immutable inputs."
+  blocker_or_risk: "Zero-realization reconstruction is proven: E's ownership/process/state/image were removed, route generation 1 and receipt remained byte-identical, and fresh F reproduced the same semantic blob/file state on a new disk. Corrupted-disk proof must use only the synthetic F image and preserve route/evidence; the safe failure injection and stopped-state transition must be frozen before mutation."
+  next_action: "Freeze and document a bounded corruption experiment for candidate-control-20260717-f: hibernate through vmctl, hash and corrupt only its realization-local ext4 superblock, attempt supported resume to observe refusal, then use the exact routed disposal bound to generation 1/receipt c3490ed2 and disk receipt 83d281ac. Prove the corrupted image is gone, reconstruct a fresh realization from ComputerVersion A, and compare semantic observations separately from realization evidence."
 
 successor:
   status: unauthorized_until_this_definition_complete

@@ -264,3 +264,17 @@
 - Mutation remains unexercised on Node B until this exact source commit passes CI, deploys the selected vmctl artifact, and an exact generation-1 request is frozen. No additional route CAS occurred.
 - Heresy delta: discovered `1`; introduced `0`; repaired `1` locally, pending deployed zero-realization reconstruction proof.
 - Rollback: revert the routed-disposal implementation before exercise. After exercise, reconstruct from immutable ComputerVersion A; destroyed realization-local state must not be restored.
+
+## Zero-realization reconstruction — deployed proof
+
+- Source/deploy identity: `ba1fd5a4973618326c8eebe9b14456941724c114`; CI run `29553132488` succeeded across normal/race/vet/build/docs/SBOM gates; Node B deploy receipt selected and activated vmctl at the same commit.
+- Frozen destruction request: SHA-256 `56e15dd23a748dda4eed6f2e54cc9dedf298c00e3cd58897bd5c5c3a6bae3830`; exact slot generation `1`; latest receipt `c3490ed2-287f-4b9f-a3c3-85c5055a50a0`; realization `candidate-control-20260717-e`; ComputerVersion A; disk receipt `b82e1347...`.
+- Routed disposal receipt: SHA-256 `e47c25816cb1b630ca96138688c7ed2ac3cb2443b2d381fec82ae29a0a87e224`; prior state `hibernated`; disposed at `2026-07-17T04:16:37.496597801Z`; `route_preserved=true`; exact generation/latest receipt unchanged.
+- Zero-state proof: no durable/in-memory ownership, Firecracker process, state directory, or `data.img` remained for realization E. Independent route GET still returned byte-identical SHA-256 `da48b2a16366faf4b8e945ccd88b40a774bc7c0da229d20babbffb9facce58f7`, generation 1 and receipt `c3490ed2...`.
+- Reconstruction request: SHA-256 `cc68a236b1e89a7f4156d15fd8ae40067207f53b0fc5f9ac16169da502b6616d`; new realization `candidate-control-20260717-f`; same routed CodeRef and ArtifactProgramRef; no route CAS.
+- Construction receipt: SHA-256 `f05ca70eebf8de45d395da167210880fd15f26e182eaac52b4da1f3d88ff99ea`; new disk receipt `disk-instantiation:sha256:83d281ac7b80d97104532f3f172b66798183e3cd9e8704acdfdf733a6a841d6f`; new device path; 10,596,352 allocated bytes; healthy epoch 1; equivalence `equivalent`.
+- Semantic proof: blob-set and file-manifest observations exactly matched realization E, including `audit.txt`; the VM-state observation intentionally differed and bound only the fresh realization F/disk/boot geometry. This preserves the required separation between ComputerVersion semantics and realization evidence.
+- Product-path proof: realization F's live `/internal/computer-version/observations` returned the expected typed CodeRef/ArtifactProgramRef state; SHA-256 `267a42ab9b86c2f2198be87b3f616e56e0ee1a093c8163a8341e7309a6a1bd9a`. Independent route readback remained generation 1/receipt `c3490ed2...`, SHA-256 `da48b2a...`.
+- Expected refusal: attempting to prepare a same-version promotion after verification returned `promotion certificate: active and candidate ComputerVersion must differ`; no candidate, evidence pin, signature, or route CAS resulted. Same-version reconstruction correctly needs no promotion.
+- Result: destruction of the accepted realization and its complete image did not lose promised semantic state or route authority. `data.img` is proven disposable for this control version.
+- Heresy delta: discovered `1`; introduced `0`; repaired `1` in deployed behavior. Residual risk moves to corrupted-image and allocation-pressure replacement plus distinct-version promote/rollback.
