@@ -129,7 +129,7 @@ type pulseAccountRecord struct {
 
 func (r *OwnershipRegistry) PulseSummary() PulseSummary {
 	now := time.Now().UTC()
-	cfg, ownerships, cachedEmails := r.retentionSnapshot()
+	cfg, ownerships, cachedEmails, _ := r.retentionSnapshot()
 	users, warnings := loadPulseAccountsFromAuthDB(cfg.AuthDBPath)
 	authDataAvailable := len(warnings) == 0
 	userByID := make(map[string]pulseAccountRecord, len(users)+len(cachedEmails))

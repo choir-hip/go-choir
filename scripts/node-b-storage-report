@@ -483,6 +483,8 @@ my $retention = capture_json("curl -fsS http://127.0.0.1:8083/internal/vmctl/ret
 my $retention_shadow = capture_json("curl -fsS http://127.0.0.1:8083/internal/vmctl/retention-shadow-plan");
 my @ownerships = read_ownerships();
 my %by_vm = map { ($_->{vm_id} || "") => $_ } @ownerships;
+my @detached_rollback = $retention && ref($retention->{protected_detached_legacy}) eq "ARRAY" ? @{$retention->{protected_detached_legacy}} : ();
+my %detached_by_vm = map { ($_->{vm_id} || "") => $_ } @detached_rollback;
 
 my $sqlite = find_sqlite();
 my $email_mapping = "unavailable: sqlite3 is not installed on Node B";
@@ -774,15 +776,18 @@ for my $o (@ownerships) {
 
 for my $vm (sort keys %state_dir_bytes) {
   next if $by_vm{$vm};
+  my $detached = $detached_by_vm{$vm};
   push @rows, {
     vm_id => $vm,
     user_id => "",
-    state => "orphan_state_dir",
+    state => $detached ? "detached_legacy_rollback" : "orphan_state_dir",
     kind => "",
     warmness => "",
     desktop => "",
     published => "",
-    role => "orphan_review",
+    role => $detached ? "rollback_protected" : "orphan_review",
+    receipt_id => $detached ? ($detached->{receipt_id} || "") : "",
+    route_slot_id => $detached ? ($detached->{route_slot_id} || "") : "",
     dir_bytes => $state_dir_bytes{$vm},
     data_alloc => du_size("$vm_state_dir/$vm/data.img"),
     data_logical => stat_size("$vm_state_dir/$vm/data.img"),
@@ -944,6 +949,8 @@ if ($report_format eq "json") {
       retention_projected_delete_count => $projected_delete_count + 0,
       retention_projected_delete_bytes => $projected_delete_bytes + 0,
       retention_ephemeral_ownerships => $ephemeral_ownerships + 0,
+      detached_rollback_state_count => scalar(@detached_rollback) + 0,
+      detached_rollback_state => \@detached_rollback,
       retention_reason => $retention_reason,
       retention_shadow_mode => $retention_shadow_mode,
       retention_shadow_projected_delete_count => $retention_shadow_projected_delete_count + 0,
@@ -1057,6 +1064,7 @@ print "- retention_mode: `$retention_mode`\n";
 print "- retention_projected_delete_count: `$projected_delete_count`\n";
 print "- retention_projected_delete_bytes: `" . fmt_bytes($projected_delete_bytes) . "`\n";
 print "- retention_ephemeral_ownerships: `$ephemeral_ownerships`\n";
+print "- detached_rollback_state_count: `" . scalar(@detached_rollback) . "`\n";
 print "- retention_reason: `$retention_reason`\n";
 print "- retention_shadow_mode: `$retention_shadow_mode`\n";
 print "- retention_shadow_projected_delete_count: `$retention_shadow_projected_delete_count`\n";

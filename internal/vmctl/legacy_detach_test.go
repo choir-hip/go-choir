@@ -233,6 +233,59 @@ func TestLegacyDetachReloadRejectsDuplicateLegacyOwner(t *testing.T) {
 	}
 }
 
+func TestRetentionProtectsValidatedDetachedLegacyRollbackState(t *testing.T) {
+	authority, _, _, _ := newRouteAuthorityFixture(t)
+	stateDir := t.TempDir()
+	registry := NewOwnershipRegistry("http://sandbox")
+	manager := &mockVMManager{}
+	registry.SetVMManager(manager)
+	if err := registry.SetPersistencePath(filepath.Join(stateDir, "ownerships.json")); err != nil {
+		t.Fatal(err)
+	}
+	registry.SetRetentionPruneConfig(RetentionPruneConfig{Mode: RetentionPruneModeDryRun, StateDir: stateDir, OrphanMinAge: time.Hour, MaxDeletes: 10, MaxBytes: 1 << 30})
+	createdAt := time.Now().Add(-4 * time.Hour).UTC()
+	registerLegacyOwnershipFixture(t, registry, VMOwnership{VMID: "vm-detached-rollback", UserID: "owner", DesktopID: "primary", Kind: VMKindInteractive, Published: true, State: VMStateStopped, CreatedAt: createdAt, LastActiveAt: createdAt, Epoch: 8})
+	for _, vmID := range []string{"vm-detached-rollback", "vm-unrelated-orphan"} {
+		dir := filepath.Join(stateDir, vmID)
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(dir, createdAt, createdAt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	slotID, _ := routeledger.RouteSlotID("owner", "primary")
+	request := LegacyOwnershipDetachRequest{RouteSlotID: slotID, VMID: "vm-detached-rollback", ExpectedState: VMStateStopped, ExpectedEpoch: 8, InventorySHA256: repeatedHex('d')}
+	authorizeLegacyDetachRequest(t, &request, authority)
+	receipt, err := authority.detachLegacyOwnership(t.Context(), registry, request, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := registry.RetentionPrunePlan()
+	if plan.Inventory.DetachedRollbackStateDirs != 1 || len(plan.ProtectedDetachedLegacy) != 1 || plan.ProtectedDetachedLegacy[0].VMID != "vm-detached-rollback" || plan.ProtectedDetachedLegacy[0].ReceiptID != receipt.ID {
+		t.Fatalf("detached rollback protection = %+v inventory=%+v", plan.ProtectedDetachedLegacy, plan.Inventory)
+	}
+	if retentionPlanHasVM(plan, "vm-detached-rollback") {
+		t.Fatalf("detached rollback state became reclaim candidate: %+v", plan.Candidates)
+	}
+	if !retentionPlanHasVM(plan, "vm-unrelated-orphan") {
+		t.Fatalf("unrelated orphan lost reclaim eligibility: %+v", plan.Candidates)
+	}
+	if registry.destroyRetentionCandidate(RetentionPruneCandidate{VMID: "vm-detached-rollback", Reason: "orphan_state_dir"}) || len(manager.destroys) != 0 {
+		t.Fatalf("detached rollback state was destroyed: %+v", manager.destroys)
+	}
+	if _, err := authority.restoreLegacyOwnership(t.Context(), registry, receipt); err != nil {
+		t.Fatal(err)
+	}
+	restoredPlan := registry.RetentionPrunePlan()
+	if restoredPlan.Inventory.DetachedRollbackStateDirs != 0 || len(restoredPlan.ProtectedDetachedLegacy) != 0 {
+		t.Fatalf("restore retained detached classification: %+v", restoredPlan.ProtectedDetachedLegacy)
+	}
+	if ownership := registry.GetOwnershipForDesktop("owner", "primary"); ownership == nil || ownership.VMID != "vm-detached-rollback" {
+		t.Fatalf("exact ownership was not restored: %+v", ownership)
+	}
+}
+
 func TestLegacyOwnershipDetachRefusesStaleAndConstructedBindings(t *testing.T) {
 	authority, version, _, _ := newRouteAuthorityFixture(t)
 	registry := NewOwnershipRegistry("http://sandbox")

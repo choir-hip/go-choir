@@ -27,6 +27,12 @@ jq -e '
     [.auth_identity_mapping.protected_email_results[]
       | select(.email == $email and .present == 1 and .action == "refuse_delete")]
     | length >= 1;
+  def detached_rollback_excluded:
+    . as $root
+    | (($root.vmctl.detached_rollback_state // []) | length) == ($root.vmctl.retention_plan.inventory.detached_rollback_state_dirs // 0)
+    and all(($root.vmctl.detached_rollback_state // [])[];
+      .vm_id as $vm_id
+      | all(($root.vmctl.retention_plan.candidates // [])[]; .vm_id != $vm_id));
 
   (.mode == "report-only; no deletion, GC, service restart, or VM mutation")
   and (.policies.active_delete_authorized == 0)
@@ -47,6 +53,7 @@ jq -e '
         + .manual_recovery_snapshots.metadata_present_count
         + .manual_recovery_snapshots.metadata_invalid_count)
        == .manual_recovery_snapshots.snapshot_count)
+  and detached_rollback_excluded
   and (.projected_reclaim_and_refusals.vmctl_active_retention_candidates_bytes == 0)
   and ((.vmctl.retention_shadow_plan == null) or (.vmctl.retention_shadow_mode == "dry-run"))
 ' "$report" >/dev/null

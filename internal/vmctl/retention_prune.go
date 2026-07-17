@@ -48,14 +48,15 @@ type RetentionPruneConfigSummary struct {
 }
 
 type RetentionPruneInventory struct {
-	Ownerships           int   `json:"ownerships"`
-	StateDirs            int   `json:"state_dirs"`
-	OrphanStateDirs      int   `json:"orphan_state_dirs"`
-	EphemeralOwnerships  int   `json:"ephemeral_ownerships"`
-	Candidates           int   `json:"candidates"`
-	CandidateBytes       int64 `json:"candidate_bytes"`
-	ProjectedDeleteCount int   `json:"projected_delete_count"`
-	ProjectedDeleteBytes int64 `json:"projected_delete_bytes"`
+	Ownerships                int   `json:"ownerships"`
+	StateDirs                 int   `json:"state_dirs"`
+	OrphanStateDirs           int   `json:"orphan_state_dirs"`
+	DetachedRollbackStateDirs int   `json:"detached_rollback_state_dirs"`
+	EphemeralOwnerships       int   `json:"ephemeral_ownerships"`
+	Candidates                int   `json:"candidates"`
+	CandidateBytes            int64 `json:"candidate_bytes"`
+	ProjectedDeleteCount      int   `json:"projected_delete_count"`
+	ProjectedDeleteBytes      int64 `json:"projected_delete_bytes"`
 }
 
 type RetentionPruneCandidate struct {
@@ -73,14 +74,21 @@ type RetentionPruneCandidate struct {
 	ProposedAction string  `json:"proposed_action"`
 }
 
+type RetentionProtectedState struct {
+	ReceiptID   string `json:"receipt_id"`
+	RouteSlotID string `json:"route_slot_id"`
+	VMID        string `json:"vm_id"`
+}
+
 type RetentionPrunePlan struct {
-	Mode       string                      `json:"mode"`
-	Decision   string                      `json:"decision"`
-	Reason     string                      `json:"reason"`
-	Inventory  RetentionPruneInventory     `json:"inventory"`
-	Candidates []RetentionPruneCandidate   `json:"candidates,omitempty"`
-	Config     RetentionPruneConfigSummary `json:"config"`
-	Warnings   []string                    `json:"warnings,omitempty"`
+	Mode                    string                      `json:"mode"`
+	Decision                string                      `json:"decision"`
+	Reason                  string                      `json:"reason"`
+	Inventory               RetentionPruneInventory     `json:"inventory"`
+	Candidates              []RetentionPruneCandidate   `json:"candidates,omitempty"`
+	ProtectedDetachedLegacy []RetentionProtectedState   `json:"protected_detached_legacy,omitempty"`
+	Config                  RetentionPruneConfigSummary `json:"config"`
+	Warnings                []string                    `json:"warnings,omitempty"`
 }
 
 type RetentionPruneResult struct {
@@ -166,12 +174,12 @@ func retentionPruneConfigSummary(cfg RetentionPruneConfig) RetentionPruneConfigS
 }
 
 func (r *OwnershipRegistry) RetentionPrunePlan() RetentionPrunePlan {
-	cfg, ownerships, emails := r.retentionSnapshot()
-	return retentionPrunePlanFromSnapshot(cfg, ownerships, emails)
+	cfg, ownerships, emails, detached := r.retentionSnapshot()
+	return retentionPrunePlanFromSnapshot(cfg, ownerships, emails, detached)
 }
 
 func (r *OwnershipRegistry) RetentionShadowPlan() RetentionPrunePlan {
-	cfg, ownerships, emails, ok := r.retentionShadowSnapshot()
+	cfg, ownerships, emails, detached, ok := r.retentionShadowSnapshot()
 	if !ok {
 		cfg := normalizeRetentionPruneConfig(RetentionPruneConfig{Mode: RetentionPruneModeOff})
 		return RetentionPrunePlan{
@@ -181,10 +189,10 @@ func (r *OwnershipRegistry) RetentionShadowPlan() RetentionPrunePlan {
 			Config:   retentionPruneConfigSummary(cfg),
 		}
 	}
-	return retentionPrunePlanFromSnapshot(cfg, ownerships, emails)
+	return retentionPrunePlanFromSnapshot(cfg, ownerships, emails, detached)
 }
 
-func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, ownerships []*VMOwnership, emails map[string]string) RetentionPrunePlan {
+func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, ownerships []*VMOwnership, emails map[string]string, detached map[string]RetentionProtectedState) RetentionPrunePlan {
 	plan := RetentionPrunePlan{
 		Mode:     cfg.Mode,
 		Decision: "disabled",
@@ -199,13 +207,21 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, ownerships []*VMOw
 		emails[k] = v
 	}
 	plan.Warnings = append(plan.Warnings, warnings...)
-	ownedVMs := make(map[string]bool, len(ownerships))
+	ownedVMs := make(map[string]bool, len(ownerships)+len(detached))
 	for _, own := range ownerships {
 		if own != nil && strings.TrimSpace(own.VMID) != "" {
 			ownedVMs[own.VMID] = true
 		}
 	}
+	for vmID, protected := range detached {
+		ownedVMs[vmID] = true
+		plan.ProtectedDetachedLegacy = append(plan.ProtectedDetachedLegacy, protected)
+	}
+	sort.Slice(plan.ProtectedDetachedLegacy, func(i, j int) bool {
+		return plan.ProtectedDetachedLegacy[i].VMID < plan.ProtectedDetachedLegacy[j].VMID
+	})
 	plan.Inventory.Ownerships = len(ownerships)
+	plan.Inventory.DetachedRollbackStateDirs = len(detached)
 	now := time.Now()
 	candidates := make([]RetentionPruneCandidate, 0)
 	orphans, stateDirCount, orphanCount, orphanWarnings := retentionOrphanCandidates(cfg, ownedVMs, now)
@@ -263,7 +279,7 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, ownerships []*VMOw
 	return plan
 }
 
-func (r *OwnershipRegistry) retentionSnapshot() (RetentionPruneConfig, []*VMOwnership, map[string]string) {
+func (r *OwnershipRegistry) retentionSnapshot() (RetentionPruneConfig, []*VMOwnership, map[string]string, map[string]RetentionProtectedState) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	cfg := normalizeRetentionPruneConfig(r.retentionPrune)
@@ -278,14 +294,15 @@ func (r *OwnershipRegistry) retentionSnapshot() (RetentionPruneConfig, []*VMOwne
 	for userID, email := range r.retentionUserEmails {
 		emails[userID] = email
 	}
-	return cfg, ownerships, emails
+	detached := r.retentionDetachedProtectedLocked()
+	return cfg, ownerships, emails, detached
 }
 
-func (r *OwnershipRegistry) retentionShadowSnapshot() (RetentionPruneConfig, []*VMOwnership, map[string]string, bool) {
+func (r *OwnershipRegistry) retentionShadowSnapshot() (RetentionPruneConfig, []*VMOwnership, map[string]string, map[string]RetentionProtectedState, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if !r.retentionShadowPruneEnabled {
-		return RetentionPruneConfig{}, nil, nil, false
+		return RetentionPruneConfig{}, nil, nil, nil, false
 	}
 	cfg := normalizeRetentionPruneConfig(r.retentionShadowPrune)
 	if cfg.Mode != RetentionPruneModeOff {
@@ -302,7 +319,23 @@ func (r *OwnershipRegistry) retentionShadowSnapshot() (RetentionPruneConfig, []*
 	for userID, email := range r.retentionUserEmails {
 		emails[userID] = email
 	}
-	return cfg, ownerships, emails, true
+	detached := r.retentionDetachedProtectedLocked()
+	return cfg, ownerships, emails, detached, true
+}
+
+func (r *OwnershipRegistry) retentionDetachedProtectedLocked() map[string]RetentionProtectedState {
+	detached := make(map[string]RetentionProtectedState, len(r.detachedLegacy))
+	for _, receipt := range r.detachedLegacy {
+		if receipt.Validate() != nil {
+			continue
+		}
+		vmID := strings.TrimSpace(receipt.Ownership.VMID)
+		if vmID == "" {
+			continue
+		}
+		detached[vmID] = RetentionProtectedState{ReceiptID: receipt.ID, RouteSlotID: receipt.RouteSlotID, VMID: vmID}
+	}
+	return detached
 }
 
 func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]bool, now time.Time) ([]RetentionPruneCandidate, int, int, []string) {
@@ -488,9 +521,10 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	mgr := r.vmManager
 	cfg := normalizeRetentionPruneConfig(r.retentionPrune)
 	current := cloneOwnership(r.vmByID[candidate.VMID])
+	detached := r.detachedLegacyHasVMIDLocked(candidate.VMID)
 	email := strings.TrimSpace(r.retentionUserEmails[candidate.UserID])
 	r.mu.RUnlock()
-	if mgr == nil {
+	if mgr == nil || detached {
 		return false
 	}
 	if current != nil {
@@ -507,12 +541,21 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	} else if candidate.Reason != "orphan_state_dir" {
 		return false
 	}
+	if current == nil {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+		if r.vmByID[candidate.VMID] != nil || r.detachedLegacyHasVMIDLocked(candidate.VMID) {
+			return false
+		}
+		if err := mgr.DestroyVMState(candidate.VMID); err != nil {
+			log.Printf("vmctl: retention prune skipped %s: %v", candidate.VMID, err)
+			return false
+		}
+		return true
+	}
 	if err := mgr.DestroyVMState(candidate.VMID); err != nil {
 		log.Printf("vmctl: retention prune skipped %s: %v", candidate.VMID, err)
 		return false
-	}
-	if current == nil {
-		return true
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -528,6 +571,16 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	delete(r.vmByID, current.VMID)
 	r.saveLocked()
 	return true
+}
+
+func (r *OwnershipRegistry) detachedLegacyHasVMIDLocked(vmID string) bool {
+	vmID = strings.TrimSpace(vmID)
+	for _, receipt := range r.detachedLegacy {
+		if receipt.Validate() == nil && strings.TrimSpace(receipt.Ownership.VMID) == vmID {
+			return true
+		}
+	}
+	return false
 }
 
 func loadRetentionEmailsFromAuthDB(path string) (map[string]string, []string) {
