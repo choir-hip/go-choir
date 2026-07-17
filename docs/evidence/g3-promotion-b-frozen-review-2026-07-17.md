@@ -59,3 +59,17 @@ The vmctl-prepared frozen candidate is `/tmp/choir-control-promotion-candidate-i
 ## Reviewer obligation
 
 Recompute the durable JSON hashes; validate exact route/version/identity/disk/verification/approval/certificate joins; verify stale generation, stale receipt, wrong route, wrong owner, forged signature, and replay refusal from source/tests; confirm current route remains generation 1; and adjudicate `ACCEPT`, `REPAIR`, `REJECT`, or `ESCALATE`. A reproducible minority blocker governs. Review must not sign, publish, pin new evidence, call apply-promotion, or execute any route transition.
+
+
+## Independent adjudication — accepted
+
+Panel output: `/tmp/choir-g3-promotion-b-consensus`.
+
+- Codex: `ACCEPT`, no blockers, high confidence.
+- Cursor: `ACCEPT`, no blockers, high confidence.
+- OMP GPT-5.5: `ACCEPT`, no blockers, high confidence.
+- OMP Gemini 3.5: `ACCEPT`, no blockers, high confidence.
+- OpenCode exited successfully but could not access `/tmp` and emitted no adjudication; it is not counted.
+- Devin and OMP GLM 5.2 timed out without verdicts.
+
+All four usable adjudications independently recomputed the seven frozen hashes and accepted the typed A/B, construction, verification, approval, certificate, generation, prior-receipt, refusal, and rollback joins. No minority blocker exists. G3 therefore authorizes applying only the exact frozen promotion candidate. Route state remained generation 1 A throughout review; no CAS was executed by the panel.
