@@ -40,26 +40,6 @@ timing is inadmissible. Reconcile and revise the draft from the completed
 predecessor's deployed baseline, set owner-ratified numerical SLOs, and promote
 it through all registries before execution.
 
-## Independent CI Maintenance — Executable
-
-[`definitions/choir-ci-optimization-2026-07-16.md`](definitions/choir-ci-optimization-2026-07-16.md)
-is an owner-authorized, scope-disjoint CI-maintenance `/goal` entrypoint. It may
-run concurrently with Autoputer because it cannot change app/platform source,
-product authority, or product state. This does not create a second product
-mission: Autoputer remains the sole product `/goal`. The active slice removes
-the restored topology's duplicate selected-Race horn by using one classifier
-output to choose standard or `-race` execution on the complete 3+4 Go matrices.
-It preserves integration smoke and explicitly runs the one regression that
-skips under Race. Standalone scheduled/manual Race remains complete and its own
-changes execute through a path-filtered pull-request trigger. Differential SBOM
-construction may overlap tests only as an unaccepted candidate; a post-`check`
-finalizer must verify exact run identity, fixed requiredness, baseline-relative
-diff contents, and all checksums before publishing accepted state. GitHub
-Actions is the acceptance environment. The CI-only landing must prove
-deploy-impact/Node B skip and remain serialized against same-ref cancellation.
-Generic workflow dispatch, direct Race dispatch, direct main push, and direct
-Node B mutation remain excluded.
-
 ## Supporting Maintenance
 
 [`definitions/choir-seam-repair-2026-07-10.md`](definitions/choir-seam-repair-2026-07-10.md)
@@ -94,11 +74,6 @@ The sole product invocation is:
 /goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
 ```
 
-The independent CI-maintenance invocation is:
-
-```text
-/goal docs/definitions/choir-ci-optimization-2026-07-16.md
-```
 
 This index owns no current slice, next action, execution order, resumption,
 completion, mutation, rollback sequencing, or escalation authority. Consult

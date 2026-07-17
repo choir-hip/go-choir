@@ -212,28 +212,22 @@ nodes:
     title: CI Re-Enablement and Evidence-Bounded Optimization
     path: docs/definitions/choir-ci-optimization-2026-07-16.md
     ledger: ''
-    status: working
+    status: complete
     kind: ci_maintenance
-    entrypoint: true
-    execution_mode: scope_disjoint_maintenance
+    entrypoint: false
+    execution_mode: historical_ci_maintenance
     depends_on: []
     enables: []
     note: >-
-      Owner-authorized CI-only maintenance entrypoint concurrent with, but not
-      competing with, the sole Autoputer product mission. The restoration
-      receipts remain historical evidence; the active bounded slice consolidates
-      classifier-selected Race onto the complete 3+4 Go matrices, preserves
-      integration smoke and the explicit non-Race-only regression, and removes
-      the parent reusable-workflow horn. Standalone Race remains complete and
-      path-tests its own changes. SBOM construction may overlap checks only as
-      an unaccepted run-bound artifact; accepted cache/artifact publication stays
-      downstream of successful check and exact identity, fixed-requiredness,
-      checksum, and baseline-relative differential verification. Rebased commits
-      1ba8d909 and a3bf59a1 repaired the first frozen review's requiredness,
-      diff-content, standalone-hosted-route, and cache-path findings. The landing
-      is PR-mediated and serialized across main CI/Race cancellation groups;
-      CI-only deploy classification and Node B skip are mandatory. Generic
-      dispatch and direct Node B mutation remain excluded.
+      Completed CI-only maintenance record. PR 60 landed the consolidated
+      classifier-selected 3+4 Race matrices, explicit integration and non-Race
+      exclusion coverage, sharded standalone Race, and parallel unaccepted SBOM
+      construction with fail-closed accepted publication. PR CI and standalone
+      Race runs 29554632413 and 29554632461 passed. Natural high-risk main run
+      29559210595 passed all seven matrix jobs and the parent gate, accepted
+      checksummed artifact 8398872741, reduced observed check time from 12m31s
+      to 9m29s, and reduced workflow completion from 29m54s to 17m20s. This node
+      is retained as historical authority/evidence, not an executable entrypoint.
     sources:
       - .github/workflows/ci.yml
       - .github/workflows/race.yml
