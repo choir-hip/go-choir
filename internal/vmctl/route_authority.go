@@ -485,6 +485,27 @@ type ConstructedCandidateDisposalReceipt struct {
 	RouteAbsent   bool                            `json:"route_absent"`
 }
 
+type disposeRoutedConstructedRealizationRequest struct {
+	RouteSlotID             string                          `json:"route_slot_id"`
+	ExpectedGeneration      uint64                          `json:"expected_generation"`
+	ExpectedLatestReceiptID string                          `json:"expected_latest_receipt_id"`
+	RealizationID           string                          `json:"realization_id"`
+	Version                 computerversion.ComputerVersion `json:"computer_version"`
+	DiskReceiptID           string                          `json:"disk_receipt_id"`
+}
+
+type RoutedConstructedRealizationDisposalReceipt struct {
+	RouteSlotID     string                          `json:"route_slot_id"`
+	RouteGeneration uint64                          `json:"route_generation"`
+	LatestReceiptID string                          `json:"latest_receipt_id"`
+	RealizationID   string                          `json:"realization_id"`
+	Version         computerversion.ComputerVersion `json:"computer_version"`
+	DiskReceiptID   string                          `json:"disk_receipt_id"`
+	PriorState      VMState                         `json:"prior_state"`
+	DisposedAt      time.Time                       `json:"disposed_at"`
+	RoutePreserved  bool                            `json:"route_preserved"`
+}
+
 func (a *RouteAuthority) disposeUnroutedConstructedCandidate(ctx context.Context, registry *OwnershipRegistry, request disposeConstructedCandidateRequest, disposedAt time.Time) (ConstructedCandidateDisposalReceipt, error) {
 	if a == nil || a.ledger == nil || registry == nil {
 		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route authority and ownership registry are required")
@@ -505,6 +526,58 @@ func (a *RouteAuthority) disposeUnroutedConstructedCandidate(ctx context.Context
 		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route absence changed during disposal")
 	}
 	return ConstructedCandidateDisposalReceipt{RouteSlotID: request.RouteSlotID, RealizationID: request.RealizationID, Version: request.Version, DiskReceiptID: request.DiskReceiptID, PriorState: priorState, DisposedAt: disposedAt.UTC(), RouteAbsent: true}, nil
+}
+
+func (a *RouteAuthority) disposeRoutedConstructedRealization(ctx context.Context, registry *OwnershipRegistry, request disposeRoutedConstructedRealizationRequest, disposedAt time.Time) (RoutedConstructedRealizationDisposalReceipt, error) {
+	if a == nil || a.ledger == nil || registry == nil {
+		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: route authority and ownership registry are required")
+	}
+	if request.ExpectedGeneration == 0 || strings.TrimSpace(request.ExpectedLatestReceiptID) == "" {
+		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: exact route receipt binding is required")
+	}
+	a.mutationMu.Lock()
+	defer a.mutationMu.Unlock()
+	beforeSlot, beforeReceipt, err := a.ledger.Resolve(ctx, request.RouteSlotID)
+	if err != nil {
+		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: resolve route slot: %w", err)
+	}
+	if beforeSlot.ID != request.RouteSlotID || beforeSlot.Generation != request.ExpectedGeneration || string(beforeSlot.LatestReceiptID) != request.ExpectedLatestReceiptID || !routeledger.SameVersion(beforeSlot.Current, request.Version) || beforeReceipt.ID != beforeSlot.LatestReceiptID || beforeReceipt.RouteSlotID != beforeSlot.ID || beforeReceipt.CommittedGeneration != beforeSlot.Generation || !routeledger.SameVersion(beforeReceipt.New, beforeSlot.Current) {
+		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: route receipt bindings do not match")
+	}
+	priorState, err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID)
+	if err != nil {
+		return RoutedConstructedRealizationDisposalReceipt{}, err
+	}
+	afterSlot, afterReceipt, err := a.ledger.Resolve(ctx, request.RouteSlotID)
+	if err != nil || afterSlot != beforeSlot || afterReceipt != beforeReceipt {
+		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: route receipt changed during disposal")
+	}
+	return RoutedConstructedRealizationDisposalReceipt{
+		RouteSlotID: request.RouteSlotID, RouteGeneration: beforeSlot.Generation, LatestReceiptID: string(beforeSlot.LatestReceiptID),
+		RealizationID: request.RealizationID, Version: request.Version, DiskReceiptID: request.DiskReceiptID,
+		PriorState: priorState, DisposedAt: disposedAt.UTC(), RoutePreserved: true,
+	}, nil
+}
+
+func (h *Handler) HandleDisposeRoutedConstructedRealization(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil || h.registry == nil {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "exact routed realization disposal unavailable"})
+		return
+	}
+	defer r.Body.Close()
+	var request disposeRoutedConstructedRealizationRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid routed realization disposal request"})
+		return
+	}
+	receipt, err := h.routeAuthority.disposeRoutedConstructedRealization(r.Context(), h.registry, request, time.Now().UTC())
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, receipt)
 }
 
 func (h *Handler) HandleDisposeUnroutedConstructedCandidate(w http.ResponseWriter, r *http.Request) {

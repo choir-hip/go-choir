@@ -252,3 +252,15 @@
 - Conjecture delta: route durability and realization disposability require an explicit lifecycle operation that preserves route authority while removing realization authority; generic logout semantics cannot establish this invariant.
 - Heresy delta: discovered `1` (audited reconstruction demanded by runtime but no supported exact routed destruction path); introduced `0`; repaired `0` at this checkpoint.
 - Rollback: revert the narrow routed-disposal implementation before it is exercised. After exercise, reconstruct the same immutable version; never restore by reusing the destroyed image.
+
+## Exact routed-realization disposal boundary — local proof
+
+- Source repair: vmctl now exposes internal POST `/internal/vmctl/computer-version-realizations/dispose-routed`, serialized by the same mutation lock as every signed route CAS and the unrouted disposal path.
+- Exact bindings: request requires route slot, expected generation, expected latest transition receipt ID, exact current ComputerVersion, realization ID, and disk receipt ID. The route slot/current version/generation/latest receipt join is checked before ownership mutation and the complete slot/receipt is required unchanged afterward.
+- Realization safety: the existing constructed-ownership contract still requires committed, unpublished, exact owner/desktop/version/disk bindings and stopped/hibernated/failed process state. Durable ownership is removed before exact `DestroyVMState`; destruction failure restores durable ownership.
+- Typed receipt: response records preserved route generation/latest receipt, exact realization/version/disk, prior state, disposal time, and `route_preserved=true`.
+- Regression contract: stale generation refuses without destruction; exact HTTP disposal removes in-memory and durable ownership/state; independent ledger readback proves the complete route slot and transition receipt unchanged; replay refuses.
+- Verification: focused normal and race tests passed; full `go test ./internal/vmctl -count=1`, `go vet ./internal/vmctl`, and `git diff --check` passed.
+- Mutation remains unexercised on Node B until this exact source commit passes CI, deploys the selected vmctl artifact, and an exact generation-1 request is frozen. No additional route CAS occurred.
+- Heresy delta: discovered `1`; introduced `0`; repaired `1` locally, pending deployed zero-realization reconstruction proof.
+- Rollback: revert the routed-disposal implementation before exercise. After exercise, reconstruct from immutable ComputerVersion A; destroyed realization-local state must not be restored.

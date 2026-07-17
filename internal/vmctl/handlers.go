@@ -1468,6 +1468,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/computer-version-inputs/pin-artifact-program", h.HandlePinComputerVersionArtifactProgram)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/pin-authorization-evidence", h.HandlePinComputerVersionAuthorizationEvidence)
 	s.HandleFunc("/internal/vmctl/computer-version-realizations/dispose-unrouted", h.HandleDisposeUnroutedConstructedCandidate)
+	s.HandleFunc("/internal/vmctl/computer-version-realizations/dispose-routed", h.HandleDisposeRoutedConstructedRealization)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/prepare-bootstrap", h.HandlePrepareComputerVersionRouteBootstrap)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-bootstrap", h.HandleApplyFrozenComputerVersionBootstrap)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/prepare-promotion", h.HandlePrepareComputerVersionRoutePromotion)
