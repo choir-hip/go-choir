@@ -179,37 +179,37 @@ measures:
     cannot_prove: "Absence of all CI defects."
 
 now:
-  status: working
-  slice: "semantic differential SBOM cache repair"
-  question: "Can accepted SBOMs reuse unchanged normalized dependency inventories while binding every candidate to the current package derivation and output?"
+  status: complete
+  slice: "semantic differential SBOM cache repair accepted"
+  question: "Did accepted SBOM caching become materially differential for unchanged dependency inventories without weakening current artifact identity or the independent acceptance gate?"
   reconciliation:
-    observed_at: 2026-07-17T17:58:39Z
-    source_ref: "origin/main 627e74201aba346c92c71e8f1620c8bef7b82342; problem checkpoint 31ea6d63; authority checkpoint b97fd7dd; implementation candidate 6fa82d06; no-force fresh-main merge 2ec07035; hosted PR run 29600440546"
-    deploy_identity: "not_applicable_ci_only; repair and measurement must classify deploy_needed=false and Node B must skip"
-    authority_identities: [owner-request-2026-07-17-semantic-sbom-cache, choir-doctrine@627e7420, AGENTS@627e7420, definition-skill@627e7420]
+    observed_at: 2026-07-17T18:40:31Z
+    source_ref: "origin/main 5dc5ac07f0f03461086c9166c2307cc6f204acb7; PR 62 merge; canonical run 29602947097 attempt 2; accepted artifact 8416254509"
+    deploy_identity: "CI-only landing; deploy_needed=false; Node B job 87963394855 skipped; FlakeHub job 87963394880 skipped"
+    authority_identities: [owner-request-2026-07-17-semantic-sbom-cache, choir-doctrine@5dc5ac07, AGENTS@5dc5ac07, definition-skill@5dc5ac07]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean isolated worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-sbom-semantic-cache-2026-07-17; protected parent Autoputer work remains outside this branch"
-    status: hosted_pr_passed_fresh_main_merged_pending_recheck
+    worktree_inventory_ref: "clean isolated receipt branch /private/tmp/go-choir-ci-integration-owner; protected parent Autoputer work untouched; merged implementation branch retained until terminal receipt lands"
+    status: terminal_semantic_sbom_cache_accepted
   candidate:
     id: ci-semantic-sbom-cache-candidate-1
-    state: hosted_pr_passed_pending_fresh_main_recheck
-    ref: 2ec070354c9c3965efa1e717d07ef97cd190fb75
+    state: accepted
+    ref: 5dc5ac07f0f03461086c9166c2307cc6f204acb7
     owner: ci-mission
     base: 627e74201aba346c92c71e8f1620c8bef7b82342
     digest: "ci.yml 25e77aa4e786d36e447a835f969d8b8a0541aa22c53d918eb9381974025dcf60; builder ef21bc19577c2aa264e34513671e640d1399f4c178cdaa0e8b02ecd2f3a17eb4; fingerprint 7c55e5597d9fde06dbb0a58f7138ad0dcd4a985a2322a47c7be09d3ba28e2050; verifier 1e889349f95094b86d97d3ce84196550a95b2a88ca51d74a07a7b526227fd6af; workflow contract ee309b3aeb37aed0b170c1cf64a7ad966cfee3694aed1e1f8ff6de2d4462b315"
     scope: [.github/workflows/ci.yml, .github/scripts/build-sboms-differential, .github/scripts/build-sboms-differential-test, .github/scripts/sbom-semantic-fingerprint, .github/scripts/sbom-semantic-fingerprint-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, .github/scripts/ci-workflow-contract-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
   decision:
-    selected: "Cache normalized runtime dependency inventories by a deterministic semantic fingerprint, but always evaluate and verify the current package derivation/output identity. A semantic hit may copy only a checksummed accepted baseline, replace every old root derivation/output reference with the current roots, refresh generation identity, and pass independent finalizer validation. Missing, mismatched, or unprovable fingerprints rebuild."
-    kind: implementation_authority
+    selected: "Accepted normalized dependency inventories are reused under a deterministic semantic fingerprint while every candidate remains bound to current package derivation/output identity. Checksummed semantic hits rebind all root identity, and independent finalization recomputes fingerprints, roots, content, and checksums."
+    kind: terminal_acceptance
     status: settled
     source: owner
-    evidence_ref: "owner request 2026-07-17 plus docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md"
-    owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-17T16:38:33Z
-    consequence: "Exact deployed-artifact identity remains mandatory. Only the dependency inventory may be reused, under a fail-closed fingerprint and rebind contract. The first hosted run must also safely derive fingerprints for a legacy accepted baseline or rebuild."
-  evidence_refs: [problem-checkpoint-31ea6d63, authority-checkpoint-b97fd7dd, implementation-candidate-6fa82d06, pr-62, pr-run-29600440546, run-29559210595, artifact-8398872741, run-29570035893, artifact-8403147713, pre-rebase-local-semantic-rebind-10-packages-63.75s, pre-rebase-local-independent-finalizer-57.61s, merged-main-local-focused-contract-suite]
-  blocker_or_risk: "Fresh-main hosted recheck, main acceptance, and landing remain. PR run 29600440546 passed all selected 3+4 Race jobs, check, hosted semantic contracts, doccheck, and Node B/FlakeHub skips. Pre-rebase local proof at base 4e5cd3fc rebound ten first-party inventories in 63.75s and independently verified them in 57.61s. Fresh main legitimately changes vmctl's semantic fingerprint; main proof must build changed packages and rebind only unchanged packages. Exact Nix Go 1.26.1 is pinned and mismatches fail closed."
-  next_action: "Push the no-force merge from fresh main, require the refreshed hosted PR check, merge only with main CI/Race idle, then measure the canonical main SBOM candidate and finalizer against 16m55s/7s and 19m30s/13s observed baselines."
+    evidence_ref: "PR 62; run 29602947097 attempt 2; artifact 8416254509"
+    owner_ratification_ref: owner-request-2026-07-17-semantic-sbom-cache
+    recorded_at: 2026-07-17T18:40:31Z
+    consequence: "Ten unchanged first-party inventories rebound with zero package builds. Candidate construction fell from 16m55s/19m30s to 2m52s; the complete selected workflow fell from 17m14s/19m57s to 12m45s while retaining all seven Race jobs, parent check, independent SBOM finalizer, and Node B skip."
+  evidence_refs: [pr-62, merge-5dc5ac07, pr-run-29602167381, main-run-29602947097-attempt-2, candidate-job-87961418650, finalizer-job-87963393922, accepted-artifact-8416254509]
+  blocker_or_risk: "No completion blocker. Residual optimization axis: independent finalization now takes 2m50s because it deliberately recomputes semantic and current-root identity on a separate runner; this is slower than the former exact-check finalizer but the full workflow is 4m29s faster than the matched 17m14s baseline. A future bounded optimization may batch Nix evaluations without weakening independence."
+  next_action: "Land this docs-only terminal receipt through a PR, verify Docs Truth Check, remove the CI maintenance entrypoint from all registries, and leave the Autoputer product Definition as the sole executable /goal."
 
 receipts:
   - id: semantic-sbom-cache-define
@@ -236,14 +236,30 @@ receipts:
     disposition: "Deterministic per-package dependency fingerprints use the exact Nix Go toolchain, transitive selected production sources, module locks, and Nix inputs. Checksummed semantic hits rebind every root derivation/output reference; the finalizer independently recomputes current and baseline fingerprints, validates exact roots, and proves normalized SBOM content unchanged."
     problem_ref: docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md
     authorization_ref: owner-request-2026-07-17-semantic-sbom-cache
-    candidate_or_evidence_refs: [ci-yml-25e77aa4, builder-ef21bc19, fingerprint-7c55e559, verifier-1e889349, workflow-contract-ee309b3a, pr-run-29600440546]
+    candidate_or_evidence_refs: [ci-yml-25e77aa4, builder-ef21bc19, fingerprint-7c55e559, verifier-1e889349, workflow-contract-ee309b3a, pr-run-29602167381, main-run-29602947097-attempt-2, accepted-artifact-8416254509]
     landing:
-      source_commit: 2ec070354c9c3965efa1e717d07ef97cd190fb75
-      ci_ref: "PR 62 run 29600440546 passed; fresh-main merge recheck pending"
-      deploy_ref: ci_only_node_b_skip_required
+      source_commit: 5dc5ac07f0f03461086c9166c2307cc6f204acb7
+      ci_ref: "PR 62 runs 29600440546 and 29602167381; canonical run 29602947097 attempt 2"
+      deploy_ref: "deploy_needed=false; Node B job 87963394855 skipped; FlakeHub job 87963394880 skipped"
       environment_identity: github_actions
-      deployed_acceptance: "PR hosted contracts and full 3+4 Race selected path passed; main SBOM acceptance pending"
-    registry_conformance_ref: "run 29600440546 Docs Truth Check passed; merged-main local doccheck passed"
+      deployed_acceptance: terminal_semantic_sbom_cache_accepted
+    registry_conformance_ref: "PR hosted Docs Truth Check passed; terminal receipt local doccheck pending"
+  - id: semantic-sbom-cache-terminal-acceptance
+    boundary: accept
+    commit_or_artifact: run:29602947097:attempt:2
+    proof_refs: [pr-62, merge-5dc5ac07, pr-run-29602167381, main-run-29602947097-attempt-2, artifact-8416254509]
+    rollback_ref: "Revert merge 5dc5ac07 through a pull request."
+    disposition: "Canonical acceptance rebound ten first-party dependency inventories, exactly reused zot, preserved the allowed obscura failure, built zero packages, independently verified eleven SBOM files and all current roots/checksums/fingerprints, published artifact 8416254509, and skipped Node B and FlakeHub. Candidate construction completed in 2m52s versus 16m55s/19m30s baselines; the complete workflow completed in 12m45s versus 17m14s/19m57s."
+    problem_ref: docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md
+    authorization_ref: owner-request-2026-07-17-semantic-sbom-cache
+    candidate_or_evidence_refs: [candidate-job-87961418650, finalizer-job-87963393922, artifact-8416254509, ten-semantic-rebound, one-exact-reused, one-allowed-skip, zero-builds, eleven-verified-checksums]
+    landing:
+      source_commit: 5dc5ac07f0f03461086c9166c2307cc6f204acb7
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29602947097
+      deploy_ref: "Node B 87963394855 skipped; FlakeHub 87963394880 skipped"
+      environment_identity: github_actions
+      deployed_acceptance: terminal_semantic_sbom_cache_accepted
+    registry_conformance_ref: "terminal receipt local doccheck pending; hosted docs truth pending"
   - id: ci-pareto-candidate-implement
     boundary: implement
     commit_or_artifact: a3bf59a1f938ce3ed92ce2d968c7c386db369801
