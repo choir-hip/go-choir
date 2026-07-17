@@ -183,21 +183,21 @@ now:
   slice: "Pareto CI topology repair"
   question: "Can one classifier-selected 3+4 matrix mode and fail-closed parallel SBOM construction remove duplicate work without weakening any accepted assurance?"
   reconciliation:
-    observed_at: 2026-07-17T03:45:00Z
+    observed_at: 2026-07-17T04:15:27Z
     source_ref: "origin/main 0e0dfb99342846c71f595b3444f4b865cb074756; selected-Race baseline run 29550365185 at e3de55581a1cae3ecce1431f5f4440ab01f62fc8"
     deploy_identity: "not_applicable_ci_only; landing must classify deploy_needed=false and Node B must skip"
     authority_identities: [owner-request-2026-07-16-ci-pareto, choir-doctrine@0e0dfb99, AGENTS@0e0dfb99, definition-skill@0e0dfb99]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean isolated worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-pareto-topology-2026-07-17; protected parent /Users/wiz/go-choir has five Autoputer-owned modified paths and remains untouched"
-    status: problem_documented_implementation_pending
+    status: reviewed_candidate_ready_for_hosted_pr
   candidate:
     id: ci-pareto-candidate-1
-    state: not_yet_implemented
-    ref: branch:codex/ci-pareto-topology-2026-07-17
+    state: reviewed_ready
+    ref: commit:9b53d3561299328a24db35de723c29a30cf0c4f9
     owner: ci-mission
     base: 0e0dfb99342846c71f595b3444f4b865cb074756
-    digest: pending
-    scope: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/build-sboms-differential-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, scripts/go-test-integration, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md]
+    digest: "ci.yml 2beb6d3f970694c9cbb7851d0c1d125950ef049086c809a6379bf11a02911f7d; race.yml 957f8f3dab3fca192a78156e7ff032effb5fbcc4e7bddd98e14794612e6ffc4b; verifier 83ad36cbede20bba0d75655dad5600c88262aa1acdeb20990b6cbe8d8c148773; workflow contract 34a029dd2b110286736abe21b0552a0dcb86f01491e210d79e23b51c57f535d3"
+    scope: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, .github/scripts/ci-impact-classify-test, .github/scripts/ci-workflow-contract-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
   decision:
     selected: "Derive race_selected once; substitute -race on the existing complete matrices; explicitly preserve the one non-Race-only regression and integration smoke; shard standalone Race non-runtime; split SBOM construction from fail-closed post-check promotion."
     kind: implementation_authority
@@ -207,11 +207,27 @@ now:
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-17T03:45:00Z
     consequence: "The former complete restoration receipt remains historical evidence, but the Definition is reopened until the optimized topology lands and passes matched hosted acceptance."
-  evidence_refs: [docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, run-29550365185, agentic-consensus-2026-07-17]
-  blocker_or_risk: "No implementation blocker. Quantitative improvement is unproved until hosted runs. The highest correctness risks are silent loss of the Race-skipped regression, divergent selector expressions, and candidate SBOM publication before check."
-  next_action: "Commit this documentation-only problem checkpoint, then implement the bounded workflow/scripts candidate and its fail-closed contracts."
+  evidence_refs: [docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, run-29550365185, agentic-consensus-2026-07-17, commit-905e7e9d, commit-52dd366a, commit-9b53d356, local-ci-contract-suite, local-focused-non-race-regression, local-race-integration-smoke, independent-review-race-resolved, independent-review-sbom-resolved]
+  blocker_or_risk: "No local or frozen-review blocker remains. Review found and the candidate repaired four defects: manifest-supplied requiredness, unverified differential contents, an unexecuted standalone Race PR route, and a mismatched finalizer cache restore path. Hosted PR/main receipts and measured improvement remain unproved."
+  next_action: "Commit this reviewed candidate/registry receipt, push a draft PR, and require both CI and path-filtered standalone Race hosted checks before serialized merge."
 
 receipts:
+  - id: ci-pareto-candidate-implement
+    boundary: implement
+    commit_or_artifact: 9b53d3561299328a24db35de723c29a30cf0c4f9
+    proof_refs: [docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, local-ci-contract-suite, local-focused-non-race-regression, local-race-integration-smoke, independent-review-race-resolved, independent-review-sbom-resolved]
+    rollback_ref: 0e0dfb99342846c71f595b3444f4b865cb074756
+    disposition: "Frozen candidate consolidates selected Race onto the complete 3+4 matrices, keeps the one focused non-Race exclusion and integration smoke, path-tests standalone race.yml on its own PR changes, and permits accepted SBOM publication only after exact baseline-relative verification downstream of check."
+    problem_ref: docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md
+    authorization_ref: owner-request-2026-07-16-ci-pareto
+    candidate_or_evidence_refs: [candidate-9b53d356, ci-yml-sha256-2beb6d3f970694c9, race-yml-sha256-957f8f3dab3fca19, verifier-sha256-83ad36cbede20bba, workflow-contract-sha256-34a029dd2b110286]
+    landing:
+      source_commit: pending_pr_merge
+      ci_ref: pending_hosted_pr
+      deploy_ref: ci_only_deploy_skip_required
+      environment_identity: github_actions
+      deployed_acceptance: pending
+    registry_conformance_ref: pending_receipt_commit
   - id: corrected-problem-and-baseline-define
     boundary: define
     commit_or_artifact: 27f03875702f503d8ef551035733eb5f40e27a1c

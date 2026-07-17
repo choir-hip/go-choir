@@ -43,6 +43,7 @@ Connecting those existing pieces is cheaper and safer than adding another test t
 ## Required repair invariants
 
 - Derive `race_selected` exactly once in `plan`; both Go matrices and `check` consume that output.
+- A `ci.yml` change must select the consolidated Race topology it changes; a `race.yml` change must execute the modified standalone workflow through a path-filtered pull-request trigger rather than falsely selecting an unrelated inline route.
 - A selected Race run substitutes `-race` on the complete ordinary 3+4 matrix population; it does not run a reduced Race sample.
 - Preserve integration smoke on runtime shard 1.
 - Preserve `TestCancelRunTrajectoryDrainsMoreThanOneActivePage`, which intentionally skips under Race, with one focused non-Race invocation rather than retaining the duplicate ordinary horn.
@@ -56,6 +57,8 @@ Connecting those existing pieces is cheaper and safer than adding another test t
 ## Independent review
 
 A five-agent architecture panel on the frozen observed topology converged on the substitution-and-overlap design. All usable reviews required one authoritative Race selector and fail-closed SBOM promotion. Reviewers also required complete Race coverage, explicit integration-smoke preservation, exact artifact identity/checksum verification, and hosted measurement before quantitative claims. One reviewer identified the Race-only skip in `trajectory_test.go`; this record promotes that edge case to a repair invariant.
+
+Frozen implementation review then found four concrete defects: candidate-supplied required flags, differential records whose substantive contents were not verified, a standalone `race.yml` change that did not execute its modified workflow on pull requests, and a finalizer cache restore path that differed from the accepted cache save path. Commits `52dd366a` and `9b53d356` repaired all four. Follow-up reviewers confirmed the Race route/aggregate selector and end-to-end SBOM promotion surfaces have no remaining blocker.
 
 ## Rollback
 

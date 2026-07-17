@@ -46,17 +46,19 @@ it through all registries before execution.
 is an owner-authorized, scope-disjoint CI-maintenance `/goal` entrypoint. It may
 run concurrently with Autoputer because it cannot change app/platform source,
 product authority, or product state. This does not create a second product
-mission: Autoputer remains the sole product `/goal`. The CI mission restores the
-full reusable race workflow for either classifier selection and re-enables the
-already-wired host-side SBOM topology as post-`check`, non-blocking audit
-evidence. GitHub Actions is its acceptance environment; its normal CI-only
-landing must prove deploy-impact/Node B skip. The owner authorizes a draft PR
-and PR-mediated merge after hosted evidence, plus a Node B deployment only if a
-later concrete CI deploy slice says the accepted landing path requires it.
-Generic workflow dispatch and direct Node B mutation remain excluded. Any main
-landing must be serialized because same-ref CI cancels an in-flight run.
-Separate main Race observation must also coordinate the `race-${github.ref}`
-cancellation group.
+mission: Autoputer remains the sole product `/goal`. The active slice removes
+the restored topology's duplicate selected-Race horn by using one classifier
+output to choose standard or `-race` execution on the complete 3+4 Go matrices.
+It preserves integration smoke and explicitly runs the one regression that
+skips under Race. Standalone scheduled/manual Race remains complete and its own
+changes execute through a path-filtered pull-request trigger. Differential SBOM
+construction may overlap tests only as an unaccepted candidate; a post-`check`
+finalizer must verify exact run identity, fixed requiredness, baseline-relative
+diff contents, and all checksums before publishing accepted state. GitHub
+Actions is the acceptance environment. The CI-only landing must prove
+deploy-impact/Node B skip and remain serialized against same-ref cancellation.
+Generic workflow dispatch, direct Race dispatch, direct main push, and direct
+Node B mutation remain excluded.
 
 ## Supporting Maintenance
 
