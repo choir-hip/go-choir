@@ -717,6 +717,33 @@ func (r *OwnershipRegistry) commitConstructedCandidate(vmID string, version comp
 	return nil
 }
 
+func (r *OwnershipRegistry) setConstructedCandidatePublishedExact(routeSlotID, vmID string, version computerversion.ComputerVersion, diskReceiptID string, published bool) error {
+	ownerID, desktopID, err := routeledger.ParseRouteSlotID(routeSlotID)
+	if err != nil || strings.TrimSpace(vmID) == "" || !version.Valid() || strings.TrimSpace(diskReceiptID) == "" {
+		return fmt.Errorf("vmctl constructed route publication: exact identity bindings are required")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.vmByID[strings.TrimSpace(vmID)]
+	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.UserID != ownerID || own.DesktopID != desktopID || !own.ConstructionCommitted || validateConstructedOwnership(own) != nil || *own.ConstructionVersion != version || own.ConstructionDisk.ID != diskReceiptID {
+		return fmt.Errorf("vmctl constructed route publication: ownership bindings do not match")
+	}
+	if published && own.State != VMStateActive && own.State != VMStateDegraded {
+		return fmt.Errorf("vmctl constructed route publication: candidate is not active")
+	}
+	if own.Published == published {
+		return nil
+	}
+	priorPublished, priorActiveAt := own.Published, own.LastActiveAt
+	own.Published = published
+	own.LastActiveAt = time.Now().UTC()
+	if err := r.writePersistenceLocked(); err != nil {
+		own.Published, own.LastActiveAt = priorPublished, priorActiveAt
+		return fmt.Errorf("vmctl constructed route publication: persist state: %w", err)
+	}
+	return nil
+}
+
 func (r *OwnershipRegistry) markConstructedCandidateFailed(vmID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

@@ -270,11 +270,16 @@ func (a *RouteAuthority) applyFrozenBootstrap(ctx context.Context, candidate Fro
 			return RouteResolution{}, err
 		}
 		plan = candidate.Rollback
-	} else if _, _, err := a.ledger.Resolve(ctx, candidate.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+	} else {
+		current, err := a.Resolve(ctx, candidate.RouteSlotID)
 		if err == nil {
-			return RouteResolution{}, routeledger.ErrStaleTransition
+			bootstrapCommand := candidate.Bootstrap.command(routeledger.ApprovalRef(current.LatestReceipt.ApprovalRef))
+			if current.Slot.Generation != 1 || !routeledger.SameVersion(current.Slot.Current, candidate.Verification.Version) || current.Slot.LatestReceiptID != candidate.Rollback.RollbackTargetReceiptID || !transitionReceiptMatchesCommand(current.LatestReceipt, bootstrapCommand) {
+				return RouteResolution{}, routeledger.ErrStaleTransition
+			}
+		} else if !errors.Is(err, routeledger.ErrSlotNotFound) {
+			return RouteResolution{}, err
 		}
-		return RouteResolution{}, err
 	}
 	approval, err := decodeOwnerApproval(candidate.ApprovalEvidence)
 	if err != nil {
@@ -712,6 +717,54 @@ type applyFrozenBootstrapRequest struct {
 	Action     string                        `json:"action"`
 }
 
+func (h *Handler) applyFrozenBootstrapWithOwnership(ctx context.Context, candidate FrozenRouteBootstrapCandidate, acceptance G3PromotionAcceptance, rollback bool) (RouteResolution, error) {
+	h.routeLifecycleMu.Lock()
+	defer h.routeLifecycleMu.Unlock()
+	if h.registry == nil || h.routeAuthority == nil {
+		return RouteResolution{}, fmt.Errorf("vmctl constructed route lifecycle is not configured")
+	}
+	if err := candidate.Validate(); err != nil {
+		return RouteResolution{}, err
+	}
+	if err := h.routeAuthority.verifyFrozenOwnerApproval(candidate.RouteSlotID, candidate.Verification, candidate.ApprovalEvidence); err != nil {
+		return RouteResolution{}, err
+	}
+	if err := acceptance.verifyBootstrap(h.routeAuthority.promotionKey, candidate); err != nil {
+		return RouteResolution{}, err
+	}
+	verification := candidate.Verification
+	if rollback {
+		resolution, err := h.routeAuthority.applyFrozenBootstrap(ctx, candidate, acceptance, true)
+		if err != nil {
+			return RouteResolution{}, err
+		}
+		if err := h.registry.setConstructedCandidatePublishedExact(candidate.RouteSlotID, verification.VMID, verification.Version, verification.DiskReceiptID, false); err != nil {
+			return resolution, fmt.Errorf("vmctl bootstrap rollback removed route but could not unpublish exact ownership: %w", err)
+		}
+		return resolution, nil
+	}
+	current, err := h.routeAuthority.Resolve(ctx, candidate.RouteSlotID)
+	if err == nil {
+		bootstrapCommand := candidate.Bootstrap.command(routeledger.ApprovalRef(current.LatestReceipt.ApprovalRef))
+		if current.Slot.Generation != 1 || !routeledger.SameVersion(current.Slot.Current, verification.Version) || current.Slot.LatestReceiptID != candidate.Rollback.RollbackTargetReceiptID || !transitionReceiptMatchesCommand(current.LatestReceipt, bootstrapCommand) {
+			return RouteResolution{}, routeledger.ErrStaleTransition
+		}
+	} else if !errors.Is(err, routeledger.ErrSlotNotFound) {
+		return RouteResolution{}, err
+	}
+	if err := h.registry.setConstructedCandidatePublishedExact(candidate.RouteSlotID, verification.VMID, verification.Version, verification.DiskReceiptID, true); err != nil {
+		return RouteResolution{}, err
+	}
+	resolution, err := h.routeAuthority.applyFrozenBootstrap(ctx, candidate, acceptance, false)
+	if err == nil {
+		return resolution, nil
+	}
+	if compensationErr := h.registry.setConstructedCandidatePublishedExact(candidate.RouteSlotID, verification.VMID, verification.Version, verification.DiskReceiptID, false); compensationErr != nil {
+		return RouteResolution{}, errors.Join(err, fmt.Errorf("vmctl bootstrap refusal could not restore unpublished ownership: %w", compensationErr))
+	}
+	return RouteResolution{}, err
+}
+
 func (h *Handler) HandleApplyFrozenComputerVersionBootstrap(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil {
 		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "signed bootstrap unavailable"})
@@ -725,7 +778,7 @@ func (h *Handler) HandleApplyFrozenComputerVersionBootstrap(w http.ResponseWrite
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid frozen bootstrap request"})
 		return
 	}
-	resolution, err := h.routeAuthority.applyFrozenBootstrap(r.Context(), request.Candidate, request.Acceptance, request.Action == "rollback")
+	resolution, err := h.applyFrozenBootstrapWithOwnership(r.Context(), request.Candidate, request.Acceptance, request.Action == "rollback")
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return
@@ -754,7 +807,9 @@ func (h *Handler) HandleApplyFrozenComputerVersionPromotion(w http.ResponseWrite
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid frozen promotion request"})
 		return
 	}
+	h.routeLifecycleMu.Lock()
 	resolution, err := h.routeAuthority.applyFrozenPromotion(r.Context(), request.Candidate, request.Acceptance, request.Action == "rollback")
+	h.routeLifecycleMu.Unlock()
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return

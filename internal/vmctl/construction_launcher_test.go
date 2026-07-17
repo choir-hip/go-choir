@@ -140,6 +140,54 @@ func TestVMConstructionLauncherBindsDeviceCodeAndProductReadback(t *testing.T) {
 	}
 }
 
+func TestConstructedRoutePublicationIsExactAndPersistenceSafe(t *testing.T) {
+	version := computerversion.ComputerVersion{CodeRef: "code:sha256:publication", ArtifactProgramRef: "artifact-program:sha256:publication"}
+	disk, err := diskinstantiation.FinalizeReceipt(diskinstantiation.Receipt{
+		Backend: diskinstantiation.Ext4BackendName, RealizationID: "candidate-publication", DeviceID: "data",
+		DevicePath: "/var/lib/go-choir/vm-state/candidate-publication/data.img", CreatedAt: time.Now(),
+		Geometry: diskinstantiation.GeometryReceipt{FilesystemType: diskinstantiation.FilesystemExt4, FilesystemLabel: "choir-data", PartitionLayout: diskinstantiation.PartitionLayoutNone, DeviceLogicalBytes: 32 << 30, FilesystemBytes: 32 << 30, FilesystemBlockSize: 4096, FilesystemBlocks: (32 << 30) / 4096, AllocatedBytes: 128 << 20},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	persistencePath := filepath.Join(root, "ownerships.json")
+	registry := NewOwnershipRegistry("http://sandbox.test")
+	if err := registry.SetPersistencePath(persistencePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.beginConstructedCandidate("candidate-publication", "owner", "primary", "credential", version, disk); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.activateConstructedCandidate("candidate-publication", "http://candidate.test", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.commitConstructedCandidate("candidate-publication", version, disk); err != nil {
+		t.Fatal(err)
+	}
+	slotID, err := routeledger.RouteSlotID("owner", "primary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry.persistencePath = root
+	if err := registry.setConstructedCandidatePublishedExact(slotID, "candidate-publication", version, disk.ID, true); err == nil {
+		t.Fatal("publication unexpectedly survived ownership persistence failure")
+	}
+	if ownership := registry.GetOwnershipByVMID("candidate-publication"); ownership == nil || ownership.Published {
+		t.Fatalf("failed publication changed in-memory ownership: %+v", ownership)
+	}
+	registry.persistencePath = persistencePath
+	if err := registry.setConstructedCandidatePublishedExact(slotID, "candidate-publication", version, disk.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.setConstructedCandidatePublishedExact(slotID, "candidate-publication", version, "disk-instantiation:sha256:substituted", false); err == nil {
+		t.Fatal("substituted disk receipt unpublished routed ownership")
+	}
+	if ownership := registry.GetOwnershipByVMID("candidate-publication"); ownership == nil || !ownership.Published {
+		t.Fatalf("binding refusal changed published ownership: %+v", ownership)
+	}
+}
+
 func TestDisposeUnroutedConstructedCandidateRequiresExactStoppedBindings(t *testing.T) {
 	version := computerversion.ComputerVersion{CodeRef: "code:sha256:dispose", ArtifactProgramRef: "artifact-program:sha256:dispose"}
 	disk, err := diskinstantiation.FinalizeReceipt(diskinstantiation.Receipt{

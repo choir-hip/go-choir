@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
@@ -131,6 +132,7 @@ type Handler struct {
 	routeAuthorityRequired   bool
 	immutableArtifacts       immutableArtifactOpener
 	construction             *constructionService
+	routeLifecycleMu         sync.Mutex
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.

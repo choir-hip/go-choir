@@ -282,7 +282,12 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 	if _, err := authority.applyFrozenBootstrap(t.Context(), unsignedFrozen, unsignedAcceptance, false); err == nil {
 		t.Fatal("unsigned owner approval reached bootstrap")
 	}
-	handler := NewHandler(NewOwnershipRegistry("http://sandbox"))
+	registry := NewOwnershipRegistry("http://sandbox")
+	persistencePath := filepath.Join(t.TempDir(), "ownerships.json")
+	if err := registry.SetPersistencePath(persistencePath); err != nil {
+		t.Fatal(err)
+	}
+	handler := NewHandler(registry)
 	handler.SetRouteAuthority(authority)
 	requestPayload, err := json.Marshal(applyFrozenBootstrapRequest{Candidate: unsignedFrozen, Acceptance: unsignedAcceptance, Action: "bootstrap"})
 	if err != nil {
@@ -329,9 +334,32 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 		t.Fatal("pre-freeze G3 acceptance reached bootstrap")
 	}
 	acceptance.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
-	resolution, err := authority.applyFrozenBootstrap(t.Context(), frozen, acceptance, false)
-	if err != nil || resolution.Slot.Generation != 1 || resolution.Slot.Current != version {
-		t.Fatalf("signed bootstrap: %+v err=%v", resolution, err)
+	if err := registry.beginConstructedCandidate(verification.VMID, verification.Identity.OwnerID, verification.Identity.DesktopID, "credential", version, verification.Disk); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.activateConstructedCandidate(verification.VMID, "http://candidate.test", verification.Epoch); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.commitConstructedCandidate(verification.VMID, version, verification.Disk); err != nil {
+		t.Fatal(err)
+	}
+	requestPayload, err = json.Marshal(applyFrozenBootstrapRequest{Candidate: frozen, Acceptance: acceptance, Action: "bootstrap"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/internal/vmctl/computer-version-routes/apply-bootstrap", bytes.NewReader(requestPayload))
+	request.Header.Set("X-Internal-Caller", "true")
+	response = httptest.NewRecorder()
+	handler.HandleApplyFrozenComputerVersionBootstrap(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("signed HTTP bootstrap status=%d body=%s", response.Code, response.Body.String())
+	}
+	var resolution RouteResolution
+	if err := json.Unmarshal(response.Body.Bytes(), &resolution); err != nil || resolution.Slot.Generation != 1 || resolution.Slot.Current != version {
+		t.Fatalf("signed HTTP bootstrap: %+v err=%v", resolution, err)
+	}
+	if ownership := registry.GetOwnershipByVMID(verification.VMID); ownership == nil || !ownership.Published {
+		t.Fatalf("bootstrap ownership = %+v, want exact published candidate", ownership)
 	}
 	gateEvidence, err := ledger.ResolveAuthorizationEvidence(t.Context(), string(resolution.TransitionReceipt.ApprovalRef))
 	if err != nil {
@@ -344,8 +372,13 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 	if execution.Action != string(routeledger.TransitionBootstrap) || !transitionReceiptMatchesCommand(*resolution.TransitionReceipt, execution.command(gateEvidence)) {
 		t.Fatalf("bootstrap receipt did not join authorized execution: execution=%+v receipt=%+v", execution, resolution.TransitionReceipt)
 	}
-	if _, err := authority.applyFrozenBootstrap(t.Context(), frozen, acceptance, false); !errors.Is(err, routeledger.ErrStaleTransition) {
-		t.Fatalf("replayed bootstrap error = %v", err)
+	replayRequest := httptest.NewRequest(http.MethodPost, "/internal/vmctl/computer-version-routes/apply-bootstrap", bytes.NewReader(requestPayload))
+	replayRequest.Header.Set("X-Internal-Caller", "true")
+	replayResponse := httptest.NewRecorder()
+	handler.HandleApplyFrozenComputerVersionBootstrap(replayResponse, replayRequest)
+	var replayedBootstrap RouteResolution
+	if err := json.Unmarshal(replayResponse.Body.Bytes(), &replayedBootstrap); err != nil || replayResponse.Code != http.StatusOK || replayedBootstrap.TransitionReceipt == nil || replayedBootstrap.TransitionReceipt.ID != resolution.TransitionReceipt.ID {
+		t.Fatalf("replayed HTTP bootstrap status=%d result=%+v err=%v", replayResponse.Code, replayedBootstrap, err)
 	}
 	rollbackPayload, err := json.Marshal(applyFrozenBootstrapRequest{Candidate: frozen, Acceptance: acceptance, Action: "rollback"})
 	if err != nil {
@@ -368,6 +401,16 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 	if _, _, err := ledger.Resolve(t.Context(), slotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
 		t.Fatalf("bootstrap rollback left route present: %v", err)
 	}
+	if ownership := registry.GetOwnershipByVMID(verification.VMID); ownership == nil || ownership.Published {
+		t.Fatalf("bootstrap rollback ownership = %+v, want exact unpublished candidate", ownership)
+	}
+	restarted := NewOwnershipRegistry("http://sandbox")
+	if err := restarted.SetPersistencePath(persistencePath); err != nil {
+		t.Fatal(err)
+	}
+	if ownership := restarted.GetOwnershipByVMID(verification.VMID); ownership == nil || ownership.Published {
+		t.Fatalf("restart bootstrap rollback ownership = %+v, want exact unpublished candidate", ownership)
+	}
 	rollbackGate, err := ledger.ResolveAuthorizationEvidence(t.Context(), string(withdrawn.TransitionReceipt.ApprovalRef))
 	if err != nil {
 		t.Fatal(err)
@@ -375,15 +418,15 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 	if err := json.Unmarshal(rollbackGate.Payload, &execution); err != nil || execution.Action != string(routeledger.TransitionBootstrapRollback) || !transitionReceiptMatchesCommand(*withdrawn.TransitionReceipt, execution.command(rollbackGate)) {
 		t.Fatalf("bootstrap rollback receipt did not join authorized execution: execution=%+v receipt=%+v err=%v", execution, withdrawn.TransitionReceipt, err)
 	}
-	replayRequest := httptest.NewRequest(http.MethodPost, "/internal/vmctl/computer-version-routes/apply-bootstrap", bytes.NewReader(rollbackPayload))
-	replayRequest.Header.Set("X-Internal-Caller", "true")
-	replayResponse := httptest.NewRecorder()
-	handler.HandleApplyFrozenComputerVersionBootstrap(replayResponse, replayRequest)
-	if replayResponse.Code != http.StatusOK {
-		t.Fatalf("bootstrap rollback replay status=%d body=%s", replayResponse.Code, replayResponse.Body.String())
+	rollbackReplayRequest := httptest.NewRequest(http.MethodPost, "/internal/vmctl/computer-version-routes/apply-bootstrap", bytes.NewReader(rollbackPayload))
+	rollbackReplayRequest.Header.Set("X-Internal-Caller", "true")
+	rollbackReplayResponse := httptest.NewRecorder()
+	handler.HandleApplyFrozenComputerVersionBootstrap(rollbackReplayResponse, rollbackReplayRequest)
+	if rollbackReplayResponse.Code != http.StatusOK {
+		t.Fatalf("bootstrap rollback replay status=%d body=%s", rollbackReplayResponse.Code, rollbackReplayResponse.Body.String())
 	}
 	var replayed RouteResolution
-	if err := json.Unmarshal(replayResponse.Body.Bytes(), &replayed); err != nil || replayed.TransitionReceipt == nil || replayed.TransitionReceipt.ID != withdrawn.TransitionReceipt.ID || !replayed.RouteAbsent {
+	if err := json.Unmarshal(rollbackReplayResponse.Body.Bytes(), &replayed); err != nil || replayed.TransitionReceipt == nil || replayed.TransitionReceipt.ID != withdrawn.TransitionReceipt.ID || !replayed.RouteAbsent {
 		t.Fatalf("bootstrap rollback replay = %+v err=%v", replayed, err)
 	}
 }
