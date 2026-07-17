@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
@@ -34,6 +35,7 @@ type RouteAuthority struct {
 	memoryLedger *routeledger.MemoryLedger
 	inputs       computerversion.ImmutableInputResolver
 	promotionKey ed25519.PublicKey
+	mutationMu   sync.Mutex
 }
 
 // NewRouteAuthority accepts the one concrete durable ledger implementation so
@@ -199,6 +201,8 @@ func (a *RouteAuthority) transitionAuthorizedWithEvidence(ctx context.Context, c
 	if a == nil || a.ledger == nil || a.inputs == nil {
 		return RouteResolution{}, fmt.Errorf("vmctl route authority: not configured")
 	}
+	a.mutationMu.Lock()
+	defer a.mutationMu.Unlock()
 	if err := command.Validate(); err != nil {
 		return RouteResolution{}, err
 	}
@@ -462,6 +466,64 @@ type prepareRoutePromotionRequest struct {
 	RouteSlotID  string                             `json:"route_slot_id"`
 	Construction computerversion.ConstructionResult `json:"construction"`
 	Approval     OwnerPromotionApproval             `json:"approval"`
+}
+
+type disposeConstructedCandidateRequest struct {
+	RouteSlotID   string                          `json:"route_slot_id"`
+	RealizationID string                          `json:"realization_id"`
+	Version       computerversion.ComputerVersion `json:"computer_version"`
+	DiskReceiptID string                          `json:"disk_receipt_id"`
+}
+
+type ConstructedCandidateDisposalReceipt struct {
+	RouteSlotID   string                          `json:"route_slot_id"`
+	RealizationID string                          `json:"realization_id"`
+	Version       computerversion.ComputerVersion `json:"computer_version"`
+	DiskReceiptID string                          `json:"disk_receipt_id"`
+	DisposedAt    time.Time                       `json:"disposed_at"`
+	RouteAbsent   bool                            `json:"route_absent"`
+}
+
+func (a *RouteAuthority) disposeUnroutedConstructedCandidate(ctx context.Context, registry *OwnershipRegistry, request disposeConstructedCandidateRequest, disposedAt time.Time) (ConstructedCandidateDisposalReceipt, error) {
+	if a == nil || a.ledger == nil || registry == nil {
+		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route authority and ownership registry are required")
+	}
+	a.mutationMu.Lock()
+	defer a.mutationMu.Unlock()
+	if _, _, err := a.ledger.Resolve(ctx, request.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+		if err == nil {
+			return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route slot is present")
+		}
+		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: resolve route slot: %w", err)
+	}
+	if err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID); err != nil {
+		return ConstructedCandidateDisposalReceipt{}, err
+	}
+	if _, _, err := a.ledger.Resolve(ctx, request.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route absence changed during disposal")
+	}
+	return ConstructedCandidateDisposalReceipt{RouteSlotID: request.RouteSlotID, RealizationID: request.RealizationID, Version: request.Version, DiskReceiptID: request.DiskReceiptID, DisposedAt: disposedAt.UTC(), RouteAbsent: true}, nil
+}
+
+func (h *Handler) HandleDisposeUnroutedConstructedCandidate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil || h.registry == nil {
+		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "exact constructed candidate disposal unavailable"})
+		return
+	}
+	defer r.Body.Close()
+	var request disposeConstructedCandidateRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid constructed candidate disposal request"})
+		return
+	}
+	receipt, err := h.routeAuthority.disposeUnroutedConstructedCandidate(r.Context(), h.registry, request, time.Now().UTC())
+	if err != nil {
+		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+		return
+	}
+	writeVMCTLJSON(w, http.StatusOK, receipt)
 }
 
 func (h *Handler) HandlePrepareComputerVersionRouteBootstrap(w http.ResponseWriter, r *http.Request) {

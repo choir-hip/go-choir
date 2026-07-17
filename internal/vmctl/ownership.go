@@ -38,6 +38,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
 )
 
 // VMState represents the lifecycle state of a VM.
@@ -696,6 +697,43 @@ func (r *OwnershipRegistry) markConstructedCandidateFailed(vmID string) error {
 	if err := r.writePersistenceLocked(); err != nil {
 		own.State, own.StoppedBy = priorState, priorStoppedBy
 		return fmt.Errorf("vmctl: persist constructed candidate failure: %w", err)
+	}
+	return nil
+}
+
+func (r *OwnershipRegistry) disposeConstructedCandidateExact(routeSlotID, vmID string, version computerversion.ComputerVersion, diskReceiptID string) error {
+	ownerID, desktopID, err := routeledger.ParseRouteSlotID(routeSlotID)
+	if err != nil || strings.TrimSpace(vmID) == "" || !version.Valid() || strings.TrimSpace(diskReceiptID) == "" {
+		return fmt.Errorf("vmctl candidate disposal: exact identity bindings are required")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	own := r.vmByID[strings.TrimSpace(vmID)]
+	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.UserID != ownerID || own.DesktopID != desktopID || own.Published || !own.ConstructionCommitted || validateConstructedOwnership(own) != nil || *own.ConstructionVersion != version || own.ConstructionDisk.ID != diskReceiptID {
+		return fmt.Errorf("vmctl candidate disposal: constructed ownership bindings do not match")
+	}
+	if own.State != VMStateStopped && own.State != VMStateHibernated && own.State != VMStateFailed {
+		return fmt.Errorf("vmctl candidate disposal: candidate must be non-active")
+	}
+	manager := r.vmManager
+	if manager == nil || manager.GetVM(own.VMID) != nil {
+		return fmt.Errorf("vmctl candidate disposal: candidate process state is not safely stopped")
+	}
+	key := ownershipKey(own.UserID, own.DesktopID)
+	delete(r.ownerships, key)
+	delete(r.vmByID, own.VMID)
+	if err := r.writePersistenceLocked(); err != nil {
+		r.ownerships[key] = own
+		r.vmByID[own.VMID] = own
+		return fmt.Errorf("vmctl candidate disposal: persist ownership removal: %w", err)
+	}
+	if err := manager.DestroyVMState(own.VMID); err != nil {
+		r.ownerships[key] = own
+		r.vmByID[own.VMID] = own
+		if restoreErr := r.writePersistenceLocked(); restoreErr != nil {
+			return fmt.Errorf("vmctl candidate disposal: destroy state: %v; restore ownership: %w", err, restoreErr)
+		}
+		return fmt.Errorf("vmctl candidate disposal: destroy state: %w", err)
 	}
 	return nil
 }

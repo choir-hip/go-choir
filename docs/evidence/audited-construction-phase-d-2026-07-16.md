@@ -189,3 +189,12 @@
 - Protected surfaces: route slot remains absent, no authorization evidence was pinned, no real-user/platform route is in scope, and the failed owner's recovery images remain untouched.
 - Rollback: revert the exact-disposal endpoint after this candidate is disposed; reconstruction can use a new clean candidate only after durable ownership removal succeeds.
 - Heresy delta: discovered 1 (constructor can create durable candidates but lacks an exact supported disposition boundary); introduced 0; repaired 0 at this checkpoint.
+
+## Exact candidate disposal boundary — local proof
+
+- Source repair: vmctl now exposes internal POST `/internal/vmctl/computer-version-realizations/dispose-unrouted`, serialized with every signed route CAS by the route authority.
+- Exact bindings: route slot, realization ID, ComputerVersion, and disk receipt ID must match one durable constructor-created, committed, unpublished ownership in stopped/hibernated/failed state; a live VM process refuses disposal.
+- Fate sharing: route absence is checked before and after deletion while the route mutation lock is held. Durable ownership removal is written before state destruction; a destruction failure restores ownership metadata. Routed candidates, mismatched receipts, and replayed disposal requests refuse without mutation.
+- Verification: affected vmctl/routeledger/computerversion package tests and vet passed; targeted route/disposal race test passed; `git diff --check` passed.
+- No staging disposition occurs until this exact source commit passes CI and activates on Node B.
+- Heresy delta: discovered 1; introduced 0; repaired 1 locally, pending deployed exact-disposal proof.

@@ -362,7 +362,7 @@ now:
     status: reconciled
   candidate:
     id: candidate-control-20260716-d
-    state: repaired_verifier_deployed_stale_candidate_requires_guarded_disposal
+    state: exact_candidate_disposal_tested_pending_deploy
     ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
     owner: autoputer-control
     base: refs/heads/main@7122f2799be4458f4b925be11990321c7e70ffc4
@@ -404,8 +404,8 @@ now:
     - "construction candidate-control-20260716-d: SHA-256 00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984; disk receipt c96eded7; healthy epoch 1; equivalent"
     - docs/evidence/audited-construction-phase-d-2026-07-16.md
     - "owner authorization, 2026-07-16: blanket approval limited to synthetic route computer:autoputer-control:control-20260716 through independently accepted bootstrap, second-version promote/rollback, restart proof, and hibernated rollback retention; no real-user/platform/fleet route authorized"
-  blocker_or_risk: "CI 29544762352 succeeded and Node B activated verifier repair 20ec1c19. The old construction boot receipt correctly became stale across that deployment. vmctl has no exact supported disposition API, so the durable stopped constructed ownership blocks safe same-identity reconstruction. No route/evidence CAS occurred; raw host deletion and broad retention pruning are forbidden."
-  next_action: "Implement and prove an exact guarded vmctl disposal boundary for the stale unpublished constructed control candidate, deploy it, dispose only candidate-control-20260716-d while its route remains absent, reconstruct from the same immutable inputs, and freeze the new non-executed bootstrap candidate."
+  blocker_or_risk: "The local exact-disposal boundary refuses present routes, mismatched bindings, active processes, and replay while serializing against signed route CAS. It is not staging evidence until its exact commit passes CI and activates on Node B. No route/evidence CAS occurred; raw host deletion and broad retention pruning remain forbidden."
+  next_action: "Commit and deploy the tested exact-disposal boundary, verify matching Node B activation, dispose only stale candidate-control-20260716-d with exact route/version/disk bindings, reconstruct from the same immutable inputs, and freeze the new non-executed bootstrap candidate."
 
 successor:
   status: unauthorized_until_this_definition_complete

@@ -8,12 +8,22 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
 )
+
+type presentRouteLedger struct {
+	routeAuthorityReader
+}
+
+func (presentRouteLedger) Resolve(context.Context, string) (routeledger.Slot, routeledger.TransitionReceipt, error) {
+	return routeledger.Slot{}, routeledger.TransitionReceipt{}, nil
+}
 
 func TestVMConstructionLauncherBindsDeviceCodeAndProductReadback(t *testing.T) {
 	version := computerversion.ComputerVersion{CodeRef: "code:sha256:test", ArtifactProgramRef: "artifact-program:sha256:test"}
@@ -127,6 +137,81 @@ func TestVMConstructionLauncherBindsDeviceCodeAndProductReadback(t *testing.T) {
 	}
 	if len(reattachManager.boots) != 0 {
 		t.Fatalf("legacy replacement booted for failed constructed lifecycle: %+v", reattachManager.boots)
+	}
+}
+
+func TestDisposeUnroutedConstructedCandidateRequiresExactStoppedBindings(t *testing.T) {
+	version := computerversion.ComputerVersion{CodeRef: "code:sha256:dispose", ArtifactProgramRef: "artifact-program:sha256:dispose"}
+	disk, err := diskinstantiation.FinalizeReceipt(diskinstantiation.Receipt{
+		Backend: diskinstantiation.Ext4BackendName, RealizationID: "candidate-dispose", DeviceID: "data",
+		DevicePath: "/var/lib/go-choir/vm-state/candidate-dispose/data.img", CreatedAt: time.Now(),
+		Geometry: diskinstantiation.GeometryReceipt{FilesystemType: diskinstantiation.FilesystemExt4, FilesystemLabel: "choir-data", PartitionLayout: diskinstantiation.PartitionLayoutNone, DeviceLogicalBytes: 32 << 30, FilesystemBytes: 32 << 30, FilesystemBlockSize: 4096, FilesystemBlocks: (32 << 30) / 4096, AllocatedBytes: 128 << 20},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "ownerships.json")
+	registry := NewOwnershipRegistry("http://sandbox.test")
+	if err := registry.SetPersistencePath(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.beginConstructedCandidate("candidate-dispose", "owner", "control", "credential", version, disk); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.activateConstructedCandidate("candidate-dispose", "http://candidate.test", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.commitConstructedCandidate("candidate-dispose", version, disk); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := NewOwnershipRegistry("http://sandbox.test")
+	if err := restarted.SetPersistencePath(path); err != nil {
+		t.Fatal(err)
+	}
+	manager := &mockVMManager{}
+	restarted.SetVMManager(manager)
+	ledger := routeledger.NewMemoryLedger()
+	authority := &RouteAuthority{ledger: ledger, memoryLedger: ledger}
+	slotID, err := routeledger.RouteSlotID("owner", "control")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := disposeConstructedCandidateRequest{RouteSlotID: slotID, RealizationID: "candidate-dispose", Version: version, DiskReceiptID: disk.ID}
+	presentAuthority := &RouteAuthority{ledger: presentRouteLedger{}}
+	if _, err := presentAuthority.disposeUnroutedConstructedCandidate(t.Context(), restarted, request, time.Now()); err == nil || !strings.Contains(err.Error(), "route slot is present") {
+		t.Fatalf("present route disposal error = %v", err)
+	}
+	if len(manager.destroys) != 0 || restarted.GetOwnershipByVMID(request.RealizationID) == nil {
+		t.Fatal("present-route refusal mutated candidate")
+	}
+	mismatched := request
+	mismatched.DiskReceiptID = "disk-instantiation:sha256:wrong"
+	if _, err := authority.disposeUnroutedConstructedCandidate(t.Context(), restarted, mismatched, time.Now()); err == nil {
+		t.Fatal("mismatched disk receipt authorized candidate disposal")
+	}
+	if len(manager.destroys) != 0 || restarted.GetOwnershipByVMID(request.RealizationID) == nil {
+		t.Fatal("refused disposal mutated candidate")
+	}
+	receipt, err := authority.disposeUnroutedConstructedCandidate(t.Context(), restarted, request, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !receipt.RouteAbsent || receipt.RealizationID != request.RealizationID || receipt.DiskReceiptID != disk.ID || !containsString(manager.destroys, request.RealizationID) {
+		t.Fatalf("disposal receipt or destruction mismatch: receipt=%+v destroys=%v", receipt, manager.destroys)
+	}
+	if restarted.GetOwnershipByVMID(request.RealizationID) != nil {
+		t.Fatal("disposed ownership remains in memory")
+	}
+	persisted := NewOwnershipRegistry("http://sandbox.test")
+	if err := persisted.SetPersistencePath(path); err != nil {
+		t.Fatal(err)
+	}
+	if persisted.GetOwnershipByVMID(request.RealizationID) != nil {
+		t.Fatal("disposed ownership remains in durable registry")
+	}
+	if _, err := authority.disposeUnroutedConstructedCandidate(t.Context(), restarted, request, time.Now()); err == nil {
+		t.Fatal("replayed candidate disposal did not refuse")
 	}
 }
 
