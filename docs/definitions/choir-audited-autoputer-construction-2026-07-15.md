@@ -358,16 +358,16 @@ now:
       - mission_graph:docs/mission-graph.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
       - authority_manifest:docs/doc-authority-manifest.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "canonical main and origin/main equal at e3de5558 before the code-free G3 frozen-packet checkpoint; only the Definition and new durable G3 evidence packet are intentional"
+    worktree_inventory_ref: "canonical main and origin/main equal at ccff94ddb1aceacd6e4cc2877e5859a87fe15dc4 before the distinct-version G3 frozen-packet checkpoint; only the Definition and new durable G3 evidence packet are intentional"
     status: reconciled
   candidate:
-    id: candidate-control-20260717-h
-    state: routed_generation_1_allocation_recovered_active
-    ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
+    id: candidate-control-20260717-i
+    state: unpublished_distinct_version_b_frozen_for_g3_no_cas
+    ref: "ComputerVersion(code:sha256:f47a6a0f295f186157f008f0ccb5999de254b274042fa876f47f00daa36579ff, artifact-program:sha256:c349329330a83abfdd22f6726b0e0dc7e3c7f30fe8dffa9c43d70faa04c15d5a)"
     owner: autoputer-control
-    base: refs/heads/main@5f168039e9dac0b86d6855f6addb58d3b3186550
-    digest: "54b7faa6e0b8701d2589a2073537006f3f2e01e09e4bfddb5e0416809c27b205"
-    scope: [synthetic-control-route, generation-1, allocation-recovered-version-a, distinct-version-promotion-rollback]
+    base: refs/heads/main@ccff94ddb1aceacd6e4cc2877e5859a87fe15dc4
+    digest: "9e3fd4d6c5a6277d661f80a0fe8a18ae3250f0474919d192af93ed2b8db5a67e"
+    scope: [synthetic-control-route, generation-1-version-a, distinct-version-b, frozen-promote-rollback-no-cas]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -408,8 +408,10 @@ now:
     - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governed because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
     - "/tmp/choir-g3-bootstrap-e-consensus-repair: Codex, Cursor, GPT-5.5, and Gemini accept with no blockers and high confidence; OpenCode no usable verdict; Devin and GLM 5.2 timed out"
     - "bootstrap transition receipt c3490ed2-287f-4b9f-a3c3-85c5055a50a0: generation 0 -> 1 at 2026-07-17T03:34:44.112910201Z; exact immutable ComputerVersion and certificate joined; independent route readback matched"
-  blocker_or_risk: "Allocation-pressure replacement is proven: authenticated guest churn raised physical use from 151,318,528 to 824,688,640 bytes after deletion; exact disposal/reconstruction produced fresh H at 11,489,280 bytes with 32 GiB logical capacity and identical semantic state. Route generation 1 remains ComputerVersion A. A distinct immutable B input and fresh realization are still required for the reviewed promote/rollback contract."
-  next_action: "Create unique immutable CodeRef/ArtifactProgramRef inputs for ComputerVersion B through the existing catalog; construct and independently verify a fresh B realization; freeze the generation-2 promotion and rollback plan without CAS; run deterministic checks and a fresh G3 consensus over exact durable artifacts; only after acceptance sign/apply promotion, verify route and served typed state, then apply the frozen rollback to A and verify exact receipt lineage."
+    - docs/evidence/g3-promotion-b-frozen-review-2026-07-17.md
+    - "distinct B construction ee63449c7fac; independent verification 0587e697; frozen promotion candidate 193c793e; generation 1 A route readback unchanged; no promote or rollback CAS executed"
+  blocker_or_risk: "Distinct immutable ComputerVersion B is pinned, freshly materialized as candidate-control-20260717-i, independently verified, product-read back, and frozen with exact A-to-B promotion and B-to-A rollback preconditions while route generation 1 remains A. The only remaining G3 blocker is independent adjudication of the durable frozen packet; no CAS is authorized before acceptance."
+  next_action: "Commit the frozen G3-B packet without code, run the skill-owned agentic-consensus panel against exact durable and /tmp evidence, repair and re-review any reproducible blocker, and only after acceptance apply the frozen promotion to generation 2. Verify route and served B typed state, then apply the frozen rollback to A, reconstruct A, and verify exact prior-receipt lineage and product state."
 
 successor:
   status: unauthorized_until_this_definition_complete
