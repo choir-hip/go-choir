@@ -1037,11 +1037,25 @@ func TestIPTablesDeleteArgsForListedRuleRejectsNonMatchingRule(t *testing.T) {
 }
 
 func TestTapNameForVMID(t *testing.T) {
-	if got := tapNameForVMID("vm-abcdef012345"); got != "vm-vm-abcde-tap" {
-		t.Fatalf("tapNameForVMID() = %q", got)
+	ids := []string{
+		"vm-abcdef012345",
+		"short",
+		"candidate-control-20260717-j",
+		"candidate-fleet-49ee3bd0ec6f366a164c02d2",
 	}
-	if got := tapNameForVMID("short"); got != "vm-short-tap" {
-		t.Fatalf("tapNameForVMID(short) = %q", got)
+	seen := make(map[string]string, len(ids))
+	for _, id := range ids {
+		got := tapNameForVMID(id)
+		if len(got) != 15 || !strings.HasPrefix(got, "vm-") {
+			t.Fatalf("tapNameForVMID(%q) = %q, want a 15-byte vm- name", id, got)
+		}
+		if prior, exists := seen[got]; exists {
+			t.Fatalf("tapNameForVMID collision: %q and %q both map to %q", prior, id, got)
+		}
+		seen[got] = id
+		if again := tapNameForVMID(id); again != got {
+			t.Fatalf("tapNameForVMID(%q) is not deterministic: %q then %q", id, got, again)
+		}
 	}
 }
 
@@ -1114,8 +1128,8 @@ func TestBuildFirecrackerConfig_NoHostControlPlaneAccess(t *testing.T) {
 	}
 	// The host_dev_name should be a VM-specific tap device, not a host interface.
 	hostDev, _ := netIfaces[0]["host_dev_name"].(string)
-	if !containsStr(hostDev, "vm-") || !containsStr(hostDev, "-tap") {
-		t.Errorf("expected VM-specific tap device name, got: %s", hostDev)
+	if !strings.HasPrefix(hostDev, "vm-") || len(hostDev) != 15 {
+		t.Errorf("expected collision-resistant VM-specific tap device name, got: %s", hostDev)
 	}
 }
 

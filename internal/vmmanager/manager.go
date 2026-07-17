@@ -24,6 +24,8 @@
 package vmmanager
 
 import (
+	"crypto/sha256"
+	"encoding/base32"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -2302,11 +2304,14 @@ func tapReachableHostServicePorts() []string {
 }
 
 func tapNameForVMID(vmID string) string {
-	prefix := vmID
-	if len(prefix) > 8 {
-		prefix = prefix[:8]
-	}
-	return fmt.Sprintf("vm-%s-tap", prefix)
+	// Linux interface names are limited to 15 visible bytes. Human-readable
+	// prefixes collapse every long constructed ID (for example,
+	// "candidate-control" and "candidate-fleet") onto the same TAP. Bind the
+	// full stable VM identity into 60 bits while retaining the vm- namespace
+	// used by stale-subnet reclamation and firewall cleanup.
+	digest := sha256.Sum256([]byte(vmID))
+	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(digest[:])
+	return "vm-" + strings.ToLower(encoded[:12])
 }
 
 // findBinary locates a binary by name, falling back to common NixOS paths.

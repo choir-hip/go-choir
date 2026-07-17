@@ -36,3 +36,14 @@ No fleet retry is authorized while TAP allocation remains ambiguous. Preserve th
 **Heresy delta:** `discovered: 1`, `introduced: 0`, `repaired: 0` — discovered a fleet-blocking shared TAP identity in the Firecracker substrate.
 
 **Conjecture delta:** “accepted per-route construction can allocate a distinct network device for every reviewed candidate ID” moved from assumed to falsified. G4 remains accepted as a packet, but fleet execution is blocked until the substrate is repaired and the live canary row is re-frozen.
+
+
+## Source repair candidate — deployment pending
+
+Git binary-diff SHA-256: `99364aebbd48147fedb8ce819a14dbaac235fec3c41a725d312d00f9ee4ddd0b`.
+
+`internal/vmmanager.tapNameForVMID` used only the first eight VM-ID bytes inside a 15-byte Linux interface name. Both `candidate-control-20260717-j` and `candidate-fleet-49ee3bd0ec6f366a164c02d2` therefore mapped to `vm-candidat-tap`; the active retained control owned that device when the fleet candidate booted. Host subnet allocation already has stale-link reclamation, but no alternative TAP identity allocator exists or is wired.
+
+The repair hashes the complete stable VM ID with SHA-256 and encodes 60 bits as lowercase unpadded base32, producing a 15-byte `vm-<12 chars>` name. It retains the `vm-` namespace used by subnet and firewall cleanup while separating long IDs that share human prefixes. Focused tests assert deterministic 15-byte names and explicit separation of the control/fleet collision pair; the Firecracker config isolation contract now requires the collision-resistant form. Full `go test ./internal/vmmanager -count=1` and `go vet ./internal/vmmanager` pass.
+
+Deployment migration began safely: the only active old-name control realization was hibernated under its accepted route at epoch 2, and the old binary removed `vm-candidat-tap`; `ip link show` confirmed the shared TAP absent before vmctl replacement. After deployment, resume/reverify it on its new hashed TAP, then prove two disposable long-prefix candidates can construct without a shared device before re-freezing the canary.

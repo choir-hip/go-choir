@@ -436,8 +436,10 @@ now:
     - "G4 repaired panel: Cursor, Gemini 3.5, GPT-5.5, and OpenCode accept with no blockers and high confidence; Devin, Codex CLI, and GLM 5.2 timed out without verdict"
     - docs/evidence/g4-first-fleet-canary-tap-collision-2026-07-17.md
     - "first fleet canary containment: control route reverified; a@b.com exact detach aa54eac3; Firecracker refused shared vm-candidat-tap with EBUSY; candidate cleanup complete; route absent; exact legacy restore and data.img stat invariants pass"
+    - "TAP repair candidate diff 99364aebbd48: complete VM ID SHA-256 to 60-bit lowercase base32 within Linux 15-byte vm- interface namespace; explicit control/fleet collision regression; full vmmanager tests and vet pass"
+    - "pre-deploy TAP migration: accepted control realization hibernated at epoch 2 under old runtime; old vm-candidat-tap confirmed absent"
   blocker_or_risk: "Accepted G4 execution stopped safely on its first mutable canary. a@b.com was exactly detached, but Firecracker rejected TAP vm-candidat-tap with EBUSY before construction returned. Candidate cleanup completed, route remained absent, and exact legacy restore preserved the reviewed disk tuple. This is a network-allocation substrate blocker, not a route/owner symptom; no other fleet row may move until repaired and deployed."
-  next_action: "Map TAP name/address allocation and cleanup in current source, check for an existing collision-safe replacement before patching, reproduce the long-ID collision deterministically, then repair the substrate. Deploy and prove distinct disposable candidates, refresh the restored a@b.com row, and resume from serial sequence 1 only after the exact live plan is re-frozen."
+  next_action: "Commit the collision-resistant full-identity TAP repair. Before deployment, hibernate the sole active old-name control route so the old binary removes its TAP; then push, require green CI and matching Node B identity, resume/reverify control on its hashed TAP, prove distinct long-prefix disposable candidates, refresh the restored a@b.com row, and resume sequence 1 only after exact re-freeze."
 
 successor:
   status: unauthorized_until_this_definition_complete
