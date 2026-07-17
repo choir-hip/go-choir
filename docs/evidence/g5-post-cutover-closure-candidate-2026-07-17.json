@@ -1,0 +1,398 @@
+{
+  "adversarial_receipts": {
+    "corrupted_routed_data_img_reconstruction": "deployed clean replacement without damaged image reuse indexed in Definition",
+    "full_disk_failed_gc_corrupt_journal_missing_blob_bad_hash_unavailable_coderef": "covered by deployed G2/E evidence indexed in Definition now.evidence_refs",
+    "pressure_replacement_and_reclaim": "deployed sparse allocation/churn/reconstruction plus post-fleet unrelated orphan reclaim",
+    "zero_realization_reconstruction": "owner first realization destroyed; second distinct realization equivalent; final disposable candidate destroyed"
+  },
+  "candidate_disposition": {
+    "failed_test_candidates": "disposed or rolled back as documented",
+    "fleet_current_realizations": "retained as active/hibernated accepted materializations",
+    "manual_owner_snapshots": "preserved; deletion excluded without separate authority",
+    "prior_legacy_realizations": "retained as exact bounded rollback state under validated detach receipts"
+  },
+  "decision_requested": "authorize registry terminal closure, terminal receipt, and Definition status complete",
+  "deterministic_evidence": {
+    "cli_security": {
+      "exposed_key": "rotated and revoked",
+      "help_secret_redaction_tests": "pass",
+      "replacement_key": "active; secret gitignored",
+      "temporary_verifier_key": "revoked"
+    },
+    "fleet": {
+      "canonical_durable_execution_receipts_sha256": "2a25c4946a3400c912e188b75739a2cd86d30ced89a0114b976424e6ffc5dde4",
+      "constructed_ownerships": 150,
+      "join_mismatches": 0,
+      "persisted_computers": 150,
+      "post_restart_join_sha256": "1864529a4503a42d25a93578bdb7aa16f4843fc687ff367658f97131b8b81f07",
+      "published_served_routes": 149,
+      "route_ownership_version_disk_joins": 150,
+      "serialized_cutover_receipts": 149,
+      "unpublished_control_routes": 1,
+      "vmctl_restart_status": "healthy"
+    },
+    "no_ssh_scope": {
+      "bootstrap_and_artifact_reads": "pass",
+      "computer_stop": "HTTP 403",
+      "immutable_inspection": "pass",
+      "revoked_key_reuse": "refused",
+      "temporary_read_only_key": "created, used, revoked; secret not retained"
+    },
+    "owner": {
+      "approval_ref": "approval:sha256:c2b96c781bbce6a7d4c00656462af6a0317f46a42dcd8b79f40c9be00e5fa89d",
+      "artifact_program_bytes": 609636416,
+      "artifact_program_files": 2076,
+      "computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:9d90c8666a1d9a69f46daca644bb9470505831bb9926e21d2a577d0bd9aa5a6f",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "desktop_id": "primary",
+      "disk_receipt_id": "disk-instantiation:sha256:af1ac24e778ce9abfdbb5ceb0c9f26f628d26fc86ab80c7763a11cdfc4c97e2e",
+      "no_ssh_reads": [
+        "choir computer status",
+        "GET /api/shell/bootstrap",
+        "GET /api/files",
+        "GET /api/files/.choir/source-lineage.json"
+      ],
+      "owner_id": "5bd6de97-3b58-408c-bf89-c42c81b083de",
+      "product_status": "active published ready after final vmctl restart",
+      "promotion_certificate_ref": "certificate:sha256:ad5deb98712158a24a3019f02b2ebc71b5038b81a9d38a9fe2a123ff363eae75",
+      "route_generation": 1,
+      "route_receipt_id": "d9dcef02-7cf1-51f7-972d-84921914adad"
+    },
+    "rollback": {
+      "current_system_generation": 561,
+      "detached_legacy_receipts": 149,
+      "exact_restore_contract": "validated, restart-safe, retention-protected",
+      "note": "stale generations 555-558 were deleted outside Definition authority; no GC ran; current and rollback were preserved",
+      "retained_system_generations": [
+        559,
+        560
+      ]
+    },
+    "source_ci_deploy": {
+      "activated_at": "2026-07-17T20:28:47Z",
+      "deployed_commit": "2bc1799f72ce437b35d4606a23d14e62b7239ac5",
+      "forced_acceptance_run": 29610242297,
+      "push_ci_run": 29609807147,
+      "status": "success"
+    },
+    "storage": {
+      "canonical_embedded_storage_report_sha256": "b26b27db12f705b923ea714a8409024d6b5e3a7e57231ba5d64e285d02c5e05d",
+      "captured_before_generation_boundary_incident": true,
+      "detached_rollback_dirs_protected": 149,
+      "manual_recovery_snapshots_preserved": 2,
+      "projected_retention_deletes": 0,
+      "root_available_gib": 237.49,
+      "unrelated_orphans_reclaimed": 100,
+      "vm_state_allocated_after_gib": 121.65,
+      "vm_state_allocated_before_gib": 230.27
+    }
+  },
+  "evidence_refs": [
+    "docs/evidence/audited-construction-phase-a-2026-07-16.md",
+    "docs/evidence/audited-construction-phase-d-2026-07-16.md",
+    "docs/evidence/g3-bootstrap-e-frozen-review-2026-07-17.md",
+    "docs/evidence/g3-promotion-b-frozen-review-2026-07-17.md",
+    "docs/evidence/g4-owner-zero-realization-reconstruction-2026-07-17.json",
+    "docs/evidence/g4-bootstrap-rollback-deployed-proof-2026-07-17.json",
+    "docs/evidence/g4-fleet-cutover-candidate-2026-07-17.json",
+    "docs/evidence/g4-fleet-cutover-accepted-review-2026-07-17.md",
+    "docs/evidence/g4-detached-rollback-reclaim-blocker-2026-07-17.md",
+    "docs/evidence/g5-product-inspection-and-generation-boundary-blocker-2026-07-17.md",
+    "docs/evidence/g5-cli-help-credential-leak-2026-07-17.md",
+    "docs/evidence/g5-post-cutover-reproducibility-2026-07-17.json",
+    "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md"
+  ],
+  "frozen_input": {
+    "base_ref": "refs/heads/main@2bc1799f72ce437b35d4606a23d14e62b7239ac5",
+    "candidate_ref": "refs/heads/main@2bc1799f72ce437b35d4606a23d14e62b7239ac5",
+    "content_digest": {
+      "algorithm": "sha256(source_tar_sha256 + newline + reproducibility_artifact_sha256)",
+      "value": "65805c4f97acc9a21e85b6cca77eb67df0e30a99b8792b07873641335f6f9550"
+    },
+    "git_tree": "22e07c8a86bf547669170b3ae548a83771857b5a",
+    "path_scope": "entire tracked source tree at git tree 22e07c8a plus this packet and docs/evidence/g5-post-cutover-reproducibility-2026-07-17.json; excludes gitignored secrets and all other mutable /tmp bodies",
+    "reproducibility_artifact": {
+      "canonical_serialization": "specified inside artifact",
+      "execution_receipts": 149,
+      "path": "docs/evidence/g5-post-cutover-reproducibility-2026-07-17.json",
+      "post_restart_joins": 150,
+      "sha256": "23b8e439a512c3c10200798bf5fc8ef58caf450ffcd0a47c79ed3d0c1c0b4491"
+    },
+    "source_tar_sha256": "aab03be55c0baf1fd96ce9d60726be78b7ed016df981cd2f6497f9bd1e16235f"
+  },
+  "gate": "G5-frozen-post-cutover-closure",
+  "heresy_delta": {
+    "discovered": [
+      "product status originally omitted immutable route/construction evidence",
+      "CLI help rendered CHOIR_API_KEY default"
+    ],
+    "introduced": [
+      "integration authority deleted stale system profile generations 555-558 outside Definition authority; current/rollback preserved and no GC invoked"
+    ],
+    "repaired": [
+      "all 150 computer identities route over immutable ComputerVersion",
+      "all served realizations join constructed ownership and D-ROUTE receipts",
+      "detached rollback state fate-shares with pressure reclaim",
+      "authenticated product status exposes redacted immutable joins",
+      "CLI help no longer renders environment secrets and exposed key was revoked"
+    ]
+  },
+  "mutation_class": "red",
+  "proposed_adjudication": "accept_with_recorded_heresy_if_no_reproducible_blocker",
+  "proposed_registry_delta": {
+    "docs/ACTIVE.md": {
+      "replace_lines_6_through_19_with": "## Completed Definitions \u2014 Historical Evidence Authority\n\n[`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md) completed audited fleet-wide ComputerVersion construction, D-ROUTE cutover, rollback, reconstruction, and no-SSH product inspection. It is historical evidence authority, not an executable `/goal` entrypoint. No top-level product Definition is currently executable.\n\nThe superseded [`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md) remains historical evidence. Its runtime and lifecycle receipts remain citable, but its completion framing was falsified by the deployed opaque-disk outage. Do not execute it.",
+      "successor_clause": "Keep the performance optimization successor explicitly blocked, draft, and non-executable pending owner ratification and registry promotion."
+    },
+    "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md": {
+      "replace_now_with": {
+        "blocker_or_risk": "No completion blocker. Residual separately governed risks: 149 detached legacy rollback directories, two manual owner recovery snapshots, one unpublished control route, and unknown secondary exposure of the revoked admin credential.",
+        "candidate": {
+          "base": "refs/heads/main@2bc1799f72ce437b35d4606a23d14e62b7239ac5",
+          "digest": "packet SHA recorded by accepted G5 review",
+          "id": "g5-post-cutover-closure-2026-07-17",
+          "owner": "integration-authority",
+          "ref": "docs/evidence/g5-post-cutover-closure-candidate-2026-07-17.json",
+          "reproducibility_ref": "docs/evidence/g5-post-cutover-reproducibility-2026-07-17.json",
+          "scope": [
+            "terminal-receipt",
+            "registry-closure",
+            "status-complete"
+          ],
+          "state": "accepted_for_terminal_closure"
+        },
+        "decision": "preserve existing settled owner architectural decision verbatim",
+        "evidence_refs": [
+          "docs/evidence/audited-construction-phase-a-2026-07-16.md",
+          "docs/evidence/audited-construction-phase-d-2026-07-16.md",
+          "docs/evidence/g3-bootstrap-e-frozen-review-2026-07-17.md",
+          "docs/evidence/g3-promotion-b-frozen-review-2026-07-17.md",
+          "docs/evidence/g4-owner-zero-realization-reconstruction-2026-07-17.json",
+          "docs/evidence/g4-bootstrap-rollback-deployed-proof-2026-07-17.json",
+          "docs/evidence/g4-fleet-cutover-candidate-2026-07-17.json",
+          "docs/evidence/g4-fleet-cutover-accepted-review-2026-07-17.md",
+          "docs/evidence/g4-detached-rollback-reclaim-blocker-2026-07-17.md",
+          "docs/evidence/g5-product-inspection-and-generation-boundary-blocker-2026-07-17.md",
+          "docs/evidence/g5-cli-help-credential-leak-2026-07-17.md",
+          "docs/evidence/g5-post-cutover-reproducibility-2026-07-17.json",
+          "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md",
+          "docs/evidence/g5-post-cutover-closure-candidate-2026-07-17.json",
+          "docs/evidence/g5-post-cutover-accepted-review-2026-07-17.md",
+          "docs/evidence/audited-construction-terminal-receipt-2026-07-17.md"
+        ],
+        "next_action": "none under this completed Definition; any successor requires separate owner ratification and registry promotion.",
+        "question": "none; G5 accepted",
+        "reconciliation": {
+          "authority_identities": "preserve existing owner/doctrine/registry identities; terminal docs-only closure commit recorded in terminal receipt",
+          "deploy_identity": "Node B deployed exact source 2bc1799f72ce437b35d4606a23d14e62b7239ac5; push CI 29609807147 success; forced deployed acceptance 29610242297 success",
+          "observed_at": "2026-07-17T20:28:47Z",
+          "policy_resolution_ref": "not_applicable",
+          "source_ref": "refs/heads/main@2bc1799f72ce437b35d4606a23d14e62b7239ac5_equals_refs/remotes/origin/main@2bc1799f72ce437b35d4606a23d14e62b7239ac5",
+          "status": "reconciled",
+          "worktree_inventory_ref": "terminal closure commit contains only accepted G5 evidence, terminal receipt, Definition state, and coherent registry changes"
+        },
+        "slice": "terminal",
+        "status": "complete"
+      },
+      "replace_successor_status_with": "eligible_for_separate_owner_ratified_definition_but_not_executable"
+    },
+    "docs/doc-authority-manifest.yaml": {
+      "replace_entry_with": {
+        "annotations": {
+          "authority": "completed_mission_evidence",
+          "doc_role": "definition",
+          "entrypoint": false,
+          "lifecycle": "complete"
+        },
+        "claim_scope": "historical",
+        "is_evidence": true,
+        "is_root": [],
+        "path": "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md",
+        "refresh_triggers": [],
+        "supersedes": [
+          "docs/definitions/choir-autoputer-completion-2026-07-14.md"
+        ],
+        "witnesses": [
+          "docs/evidence/audited-construction-terminal-receipt-2026-07-17.md",
+          "docs/evidence/g5-post-cutover-accepted-review-2026-07-17.md",
+          "docs/mission-graph.yaml",
+          "docs/ACTIVE.md"
+        ]
+      }
+    },
+    "docs/mission-graph.yaml": {
+      "replace_node_with": {
+        "depends_on": [],
+        "enables": [
+          "choir-computerversion-performance-optimization-draft-2026-07-15"
+        ],
+        "entrypoint": false,
+        "execution_mode": "completed_non_executable",
+        "id": "choir-audited-autoputer-construction-2026-07-15",
+        "kind": "spine",
+        "ledger": "",
+        "note": "Completed audited construction; retained as historical evidence authority only. The successor remains blocked and non-executable pending separate owner ratification and registry promotion.",
+        "path": "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md",
+        "sources": [
+          "docs/evidence/audited-construction-terminal-receipt-2026-07-17.md",
+          "docs/standing-questions.md",
+          "docs/computer-ontology.md",
+          "docs/agent-product-doctrine.md",
+          "docs/definitions/og-dolt-heresy-completion-2026-07-08.md",
+          "AGENTS.md",
+          "docs/choir-doctrine.md"
+        ],
+        "status": "settled",
+        "title": "Make the Autoputer Real \u2014 Audited Computer Construction"
+      }
+    }
+  },
+  "proposed_terminal_receipt": {
+    "acceptance_level": "promotion-level for audited ComputerVersion construction, fleet D-ROUTE cutover, rollback, and no-SSH inspection; successor external-agent capsule work excluded",
+    "accepted_gate": "G5-frozen-post-cutover-closure",
+    "accepted_trajectory_and_run_ids": {
+      "ci_run_ids": [
+        29609807147,
+        29610242297
+      ],
+      "fleet_execution_receipts": "149 rows in reproducibility artifact",
+      "owner_route_receipt_id": "d9dcef02-7cf1-51f7-972d-84921914adad",
+      "owner_verification_receipt_id": "verification receipt retained in owner construction evidence",
+      "route_receipts": "150 rows in reproducibility artifact"
+    },
+    "ci_runs": {
+      "forced_deployed_acceptance": 29610242297,
+      "push": 29609807147
+    },
+    "conjecture_delta": {
+      "confirmed": [
+        "ComputerVersion semantics are independent of disk representation",
+        "production can construct, verify, route, restart, roll back, destroy, and reconstruct sparse realizations fleet-wide",
+        "legacy rollback state can fate-share with pressure reclaim",
+        "joined immutable identity is inspectable without SSH"
+      ],
+      "falsified": [
+        "a surviving mutable data.img is the computer",
+        "fleet closure can rely on aggregate-only non-durable receipts",
+        "CLI environment-backed secret defaults are safe in help output"
+      ]
+    },
+    "credential_incident_precision": "The revoked API key identifier ak_257c3cae-877d-4d1a-ad21-155d2b7b56b5 is recorded; the secret credential value is not recorded. Key identifiers are not bearer credentials.",
+    "heresy_delta": {
+      "discovered": [
+        "product status originally omitted immutable route/construction evidence",
+        "CLI help rendered CHOIR_API_KEY default"
+      ],
+      "introduced": [
+        "integration authority deleted stale system profile generations 555-558 outside Definition authority; current/rollback preserved and no GC invoked"
+      ],
+      "repaired": [
+        "all 150 computer identities route over immutable ComputerVersion",
+        "all served realizations join constructed ownership and D-ROUTE receipts",
+        "detached rollback state fate-shares with pressure reclaim",
+        "authenticated product status exposes redacted immutable joins",
+        "CLI help no longer renders environment secrets and exposed key was revoked"
+      ]
+    },
+    "human_learning_digest": "The durable computer is the immutable ComputerVersion plus authoritative route and accepted materializer receipts; disk images are replaceable realizations. Closure evidence must preserve row-level receipts, not only counts and digests. CLI flag metadata is an output surface and must never contain environment secrets.",
+    "mutation_class": "red",
+    "next_realism_axis": "owner-ratified successor Definition for external-agent capsule development through supported Choir CLI, only after separate baseline/SLO reconciliation and registry promotion",
+    "path": "docs/evidence/audited-construction-terminal-receipt-2026-07-17.md",
+    "product_evidence": {
+      "authenticated_browser": "owner-authenticated choir.news session: desktop online, bootstrap/files/audit marker exact after restart",
+      "deployed_command": "CHOIR_API_KEY=<temporary-read-only-secret> go run ./cmd/choir computer status",
+      "read_only_product_requests": [
+        "GET https://choir.news/api/shell/bootstrap -> HTTP 200, candidate-fleet-e15cb89f25d963c220319b7b",
+        "GET https://choir.news/api/files -> HTTP 200",
+        "GET https://choir.news/api/files/.choir/source-lineage.json -> HTTP 200, owner/computer lineage exact"
+      ],
+      "result": "exit 0; status ok; active published recovered-owner computer; immutable_identity.joined=true; runtime ready; secret excluded",
+      "scoped_refusal": "temporary read-only key: choir computer stop -> HTTP 403; key revoked; reuse refused"
+    },
+    "protected_surfaces": [
+      "Texture canonical state",
+      "D-ROUTE route authority",
+      "ComputerVersion realizations",
+      "Trace/evidence",
+      "promotion/rollback",
+      "vmctl",
+      "owner auth credentials",
+      "deployment routing"
+    ],
+    "residual_risks": [
+      "149 detached legacy rollback directories require separately authorized disposition after retention TTL",
+      "two manual owner recovery snapshots remain preserved",
+      "secondary exposure of the revoked admin credential is unknown",
+      "one control route intentionally remains unpublished",
+      "external-agent capsule development remains a separate unauthorized successor"
+    ],
+    "rollback_refs": [
+      "149 validated detached legacy receipts protected from reclaim",
+      "system generations 559 and 560 retained",
+      "manual owner recovery snapshots preserved",
+      "exact route rollback/disposal/legacy restore receipts indexed by Definition"
+    ],
+    "source_commit": "2bc1799f72ce437b35d4606a23d14e62b7239ac5",
+    "source_tree": "22e07c8a86bf547669170b3ae548a83771857b5a",
+    "staging": {
+      "activated_at": "2026-07-17T20:28:47Z",
+      "deployed_commit": "2bc1799f72ce437b35d4606a23d14e62b7239ac5",
+      "health": "ok",
+      "ownerships": 150
+    },
+    "status": "complete",
+    "verifier_contracts": [
+      "150 ComputerVersion/route/ownership/disk joins independently recomputable with zero mismatches",
+      "149 execution receipts join 1:1 to final routes",
+      "semantic ComputerVersion identity excludes disk backend/device/geometry",
+      "owner product inspection uses supported authenticated CLI/API with scoped mutation refusal",
+      "restart, rollback, retention, deletion/corruption/pressure recovery receipts retained"
+    ]
+  },
+  "protected_surfaces": [
+    "ComputerVersion",
+    "artifact_program",
+    "disk_instantiation_backend",
+    "vmctl",
+    "Firecracker",
+    "all_computer_routes",
+    "promotion_rollback",
+    "auth_session",
+    "staging_deploy"
+  ],
+  "repair_history": [
+    {
+      "minority_verdict": "repair",
+      "panel": "initial G5",
+      "repaired": [
+        "durable 149 receipt bodies",
+        "durable 150 join rows",
+        "canonical serialization",
+        "proposed terminal receipt",
+        "proposed registry delta"
+      ]
+    },
+    {
+      "durability_action": "commit exact packet and artifact before final panel",
+      "minority_verdict": "repair",
+      "panel": "first repaired G5",
+      "repaired": [
+        "orphan aggregate digests replaced by durable canonical digests",
+        "content_digest added",
+        "full terminal now state proposed",
+        "exact ACTIVE replacement proposed",
+        "exact product command/results added",
+        "credential identifier distinguished from credential value"
+      ]
+    }
+  ],
+  "review_contract": {
+    "builder": "packet claims terminal prerequisites satisfied except review itself",
+    "falsifier": "seek omitted routes/receipts, unsafe deletion, SSH-only proof, backend leakage, stale deployment, bypass, credential exposure, or unsupported claims",
+    "minority_rule": "one reproducible blocker overrides unsupported majority pass",
+    "verifier": "independently recompute joins and distinguish semantic ComputerVersion evidence from realization/disk evidence"
+  },
+  "schema_version": 1
+}
