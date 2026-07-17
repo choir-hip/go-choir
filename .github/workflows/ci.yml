@@ -432,7 +432,7 @@ jobs:
       - name: Restore accepted baseline for differential verification
         uses: actions/cache/restore@v6
         with:
-          path: ${{ runner.temp }}/sbom-verification-baseline
+          path: ${{ runner.temp }}/sbom-baseline
           key: sbom-bundle-v2-${{ github.sha }}
           restore-keys: |
             sbom-bundle-v2-
@@ -445,7 +445,7 @@ jobs:
 
       - name: Verify candidate identity, completeness, and checksums
         shell: bash
-        run: .github/scripts/verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/sbom-verification-baseline"
+        run: .github/scripts/verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/sbom-baseline"
 
       - name: Stage verified bundle as accepted baseline
         shell: bash

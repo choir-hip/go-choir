@@ -69,7 +69,7 @@ for pattern in \
   "needs.sbom-candidate.result == 'success'" \
   'actions/download-artifact@v8' \
   'Restore accepted baseline for differential verification' \
-  'verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/sbom-verification-baseline"' \
+  'verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/sbom-baseline"' \
   'actions/cache/save@v6' \
   'Upload accepted SBOM artifact'; do
   grep -Fq -- "$pattern" <<<"$finalizer_segment" || {
