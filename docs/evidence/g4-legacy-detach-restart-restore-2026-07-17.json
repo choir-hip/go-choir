@@ -1,0 +1,303 @@
+{
+  "captured_at": "2026-07-17T06:27:00Z",
+  "checks": {
+    "detach_receipt_persisted": true,
+    "detach_removed_exact_ownership": true,
+    "detached_restart_durable": true,
+    "forged_authorization_refused_without_mutation": true,
+    "restore_consumed_receipt": true,
+    "restore_exact_identity_state_epoch": true,
+    "restored_restart_durable": true,
+    "route_absent_before_and_after": true,
+    "state_image_metadata_unchanged": true
+  },
+  "ci": {
+    "conclusion": "success",
+    "run_id": 29559210595,
+    "url": "https://github.com/choir-hip/go-choir/actions/runs/29559210595"
+  },
+  "data_image_stat": {
+    "choir-g4-fixture-data-stat-before.txt": "29:16733179:2147483648:135888:1778559452:1778559452",
+    "choir-g4-fixture-data-stat-detached.txt": "29:16733179:2147483648:135888:1778559452:1778559452",
+    "choir-g4-fixture-data-stat-restarted.txt": "29:16733179:2147483648:135888:1778559452:1778559452",
+    "choir-g4-fixture-data-stat-restored-restart.txt": "29:16733179:2147483648:135888:1778559452:1778559452",
+    "choir-g4-fixture-data-stat-restored.txt": "29:16733179:2147483648:135888:1778559452:1778559452"
+  },
+  "deploy_receipt": {
+    "activated_at": "2026-07-17T06:22:35Z",
+    "artifacts": {
+      "gateway": {
+        "commit": "b746fd71756fd9d0ed84a1317bda549cf351fd22",
+        "status": "active"
+      },
+      "proxy": {
+        "commit": "b746fd71756fd9d0ed84a1317bda549cf351fd22",
+        "status": "active"
+      },
+      "sandbox": {
+        "commit": "b746fd71756fd9d0ed84a1317bda549cf351fd22",
+        "status": "installed"
+      },
+      "vmctl": {
+        "commit": "b746fd71756fd9d0ed84a1317bda549cf351fd22",
+        "status": "active"
+      }
+    },
+    "github": {
+      "run_attempt": "1",
+      "run_id": "29559210595"
+    },
+    "schema_version": 1,
+    "target_commit": "b746fd71756fd9d0ed84a1317bda549cf351fd22"
+  },
+  "detach_receipt": {
+    "authorization": {
+      "authorized_at": "2026-07-17T06:27:47.478617Z",
+      "decision": "detach",
+      "expected_epoch": 1,
+      "expected_state": "hibernated",
+      "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+      "key_id": "g4-disposable-detach-restart-restore-20260717",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "signature": "l84a5knx1rCJRN8qgAYuZo88y1CmrYErYKbbwh8991/oP0jJLnIT7oBgZEeTKXlBSGVhXc8HL6OZJYgUxRpWCw==",
+      "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+    },
+    "detached_at": "2026-07-17T06:28:29.826876274Z",
+    "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+    "ownership": {
+      "created_at": "2026-05-12T03:59:02.002839788Z",
+      "desktop_id": "primary",
+      "epoch": 1,
+      "kind": "interactive",
+      "last_active_at": "2026-05-14T01:00:55.270949232Z",
+      "published": true,
+      "sandbox_url": "http://172.3.0.2:8085",
+      "state": "hibernated",
+      "stopped_by": "idle",
+      "user_id": "mission-restart-1778558340",
+      "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+    },
+    "prior_state": "hibernated",
+    "receipt_id": "legacy-detach:sha256:77b04490f6642d941d5240436df0f1f7da35c2409053764e52c3d89f36c56849",
+    "route_slot_id": "computer:mission-restart-1778558340:primary",
+    "state_preserved": true
+  },
+  "detach_request": {
+    "authorization": {
+      "authorized_at": "2026-07-17T06:27:47.478617Z",
+      "decision": "detach",
+      "expected_epoch": 1,
+      "expected_state": "hibernated",
+      "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+      "key_id": "g4-disposable-detach-restart-restore-20260717",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "signature": "l84a5knx1rCJRN8qgAYuZo88y1CmrYErYKbbwh8991/oP0jJLnIT7oBgZEeTKXlBSGVhXc8HL6OZJYgUxRpWCw==",
+      "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+    },
+    "expected_epoch": 1,
+    "expected_state": "hibernated",
+    "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+    "route_slot_id": "computer:mission-restart-1778558340:primary",
+    "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+  },
+  "final_ownership": {
+    "created_at": "2026-05-12T03:59:02.002Z",
+    "desktop_id": "primary",
+    "epoch": 1,
+    "kind": "interactive",
+    "last_active_at": "2026-05-14T01:00:55.270Z",
+    "objective_fingerprint": "4c71c8317e402caeb2192883005ab94867dc1e6472bae51aad3e662602c35d3f",
+    "published": true,
+    "sandbox_url": "http://172.3.0.2:8085",
+    "state": "hibernated",
+    "stopped_by": "idle",
+    "user_id": "mission-restart-1778558340",
+    "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff",
+    "warmness_class": "primary"
+  },
+  "fixture": {
+    "desktop_id": "primary",
+    "inventory_row_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+    "route_slot_id": "computer:mission-restart-1778558340:primary",
+    "user_id": "mission-restart-1778558340",
+    "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+  },
+  "forged_refusal": {
+    "http_status": 409,
+    "ownership_registry_sha256_unchanged": true,
+    "request": {
+      "authorization": {
+        "authorized_at": "2026-07-17T06:27:47.478617Z",
+        "decision": "detach",
+        "expected_epoch": 1,
+        "expected_state": "hibernated",
+        "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+        "key_id": "g4-disposable-detach-restart-restore-20260717",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "signature": "l84a5knx1rCJRN8qgAYuZo88y1CmrYErYKbbwh8991/oP0jJLnIT7oBgZEeTKXlBSGVhXc8HL6OZJYgUxRpWCw==",
+        "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+      },
+      "expected_epoch": 1,
+      "expected_state": "hibernated",
+      "inventory_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+    },
+    "response": {
+      "error": "vmctl legacy detach: signed authorization bindings are invalid"
+    }
+  },
+  "health": {
+    "active_vms": 0,
+    "by_kind": {
+      "interactive": 148,
+      "worker": 2
+    },
+    "by_state": {
+      "failed": 1,
+      "hibernated": 148,
+      "stopped": 1
+    },
+    "idle_eligible": 0,
+    "reclaim": {
+      "config": {
+        "max_candidates": 5,
+        "max_cpu_some_avg10": 90,
+        "max_io_some_avg10": 5,
+        "max_memory_some_avg10": 1,
+        "max_state_deletes": 25,
+        "min_idle_seconds": 1800,
+        "min_memory_available_bytes": 4294967296,
+        "min_memory_available_percent": 15,
+        "min_state_dir_available_bytes": 34359738368,
+        "min_state_dir_available_percent": 10,
+        "stale_state_min_age_seconds": 21600,
+        "state_dir": "/var/lib/go-choir/vm-state"
+      },
+      "decision": "observe",
+      "inventory": {
+        "active": 0,
+        "candidates_ranked": 0,
+        "eligible": 0,
+        "interactive": 148,
+        "protected": 0,
+        "total_ownerships": 150,
+        "workers": 2
+      },
+      "mode": "active",
+      "pressure": {
+        "cpu_pressure": false,
+        "cpu_psi_threshold": "cpu_some_avg10>90.00",
+        "io_pressure": false,
+        "io_psi_threshold": "io_some_avg10>5.00",
+        "memory_available_bytes": 27224506368,
+        "memory_available_percent": 81.47630483472157,
+        "memory_available_threshold": "available_bytes<4294967296,available_percent<15.00",
+        "memory_pressure": false,
+        "memory_psi_threshold": "memory_some_avg10>1.00",
+        "memory_total_bytes": 33414017024,
+        "pid_available": 4194065,
+        "pid_current": 239,
+        "pid_max": 4194304,
+        "pressure": false,
+        "sampled_at": "2026-07-17T06:31:06Z",
+        "state_dir_available_bytes": 276124672000,
+        "state_dir_available_percent": 54.10359299237755,
+        "state_dir_available_threshold": "available_bytes<34359738368,available_percent<10.00",
+        "state_dir_pressure": false
+      },
+      "reason": "no active ownerships are eligible for pressure reclaim"
+    },
+    "service": "vmctl",
+    "status": "ok",
+    "total_ownerships": 150,
+    "warmness": {
+      "by_class": {
+        "candidate": 1,
+        "critical_protected": 1,
+        "premium_always_on": 1,
+        "primary": 145,
+        "public_platform": 1,
+        "worker": 1
+      },
+      "policy": {
+        "always_on_user_count": 1,
+        "primary_keepalive_mode": "under-capacity"
+      }
+    }
+  },
+  "raw_artifact_sha256": {
+    "choir-g4-detach-deploy-receipt.json": "374896538a507cea4325336d3893205ec3144e8ea8c4c7bd18c8f2f5f8b79314",
+    "choir-g4-detach-health.json": "723ec252a2b3bc5f4ca36b47d3bd805c8f3d598157fb4c8971b08a311aeffafd",
+    "choir-g4-fixture-data-stat-before.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-fixture-data-stat-detached.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-fixture-data-stat-restarted.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-fixture-data-stat-restored-restart.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-fixture-data-stat-restored.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-fixture-detach-receipt.json": "0f9932f145acc2772d17c402bef0407b734e78e767ac6461291cbdbcd9369f55",
+    "choir-g4-fixture-final-ownership.json": "8de65ac239a845386d89382ced2db93245f686d489073fd8c0b3d067d5de35aa",
+    "choir-g4-fixture-forged-detach-response.json": "84292601e21cab38a49f753ecbdf1d3f70e06374dde3cb180faf82bf63071261",
+    "choir-g4-fixture-restore-response.json": "765eea91ab90c890031c7f1925f277adf77144e3605d61cbb64388acbf17383b",
+    "choir-g4-fixture-route-before.json": "314f64fd84ec75f0f6be77314969cc08613901ab885cd82746a09dfd42395611",
+    "choir-g4-fixture-route-restored.json": "314f64fd84ec75f0f6be77314969cc08613901ab885cd82746a09dfd42395611"
+  },
+  "restore_request": {
+    "receipt": {
+      "authorization": {
+        "authorized_at": "2026-07-17T06:27:47.478617Z",
+        "decision": "detach",
+        "expected_epoch": 1,
+        "expected_state": "hibernated",
+        "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+        "key_id": "g4-disposable-detach-restart-restore-20260717",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "signature": "l84a5knx1rCJRN8qgAYuZo88y1CmrYErYKbbwh8991/oP0jJLnIT7oBgZEeTKXlBSGVhXc8HL6OZJYgUxRpWCw==",
+        "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+      },
+      "detached_at": "2026-07-17T06:28:29.826876274Z",
+      "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+      "ownership": {
+        "created_at": "2026-05-12T03:59:02.002839788Z",
+        "desktop_id": "primary",
+        "epoch": 1,
+        "kind": "interactive",
+        "last_active_at": "2026-05-14T01:00:55.270949232Z",
+        "published": true,
+        "sandbox_url": "http://172.3.0.2:8085",
+        "state": "hibernated",
+        "stopped_by": "idle",
+        "user_id": "mission-restart-1778558340",
+        "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+      },
+      "prior_state": "hibernated",
+      "receipt_id": "legacy-detach:sha256:77b04490f6642d941d5240436df0f1f7da35c2409053764e52c3d89f36c56849",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "state_preserved": true
+    }
+  },
+  "restore_response": {
+    "created_at": "2026-05-12T03:59:02.002839788Z",
+    "desktop_id": "primary",
+    "epoch": 1,
+    "kind": "interactive",
+    "last_active_at": "2026-05-14T01:00:55.270949232Z",
+    "published": true,
+    "sandbox_url": "http://172.3.0.2:8085",
+    "state": "hibernated",
+    "stopped_by": "idle",
+    "user_id": "mission-restart-1778558340",
+    "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+  },
+  "route_absence": {
+    "after_restore": {
+      "error": "route ledger: slot not found"
+    },
+    "before": {
+      "error": "route ledger: slot not found"
+    },
+    "http_status": 404
+  },
+  "schema": "choir.g4.legacy-detach-restart-restore-proof.v1",
+  "source_commit": "b746fd71756fd9d0ed84a1317bda549cf351fd22",
+  "state_invariant": "device:inode:logical_bytes:allocated_blocks:mtime_epoch:ctime_epoch identical before detach, detached, detached restart, restore, and restored restart"
+}

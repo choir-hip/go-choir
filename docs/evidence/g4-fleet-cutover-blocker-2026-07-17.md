@@ -116,4 +116,4 @@ Focused proof on canonical source:
 - `go test ./internal/vmctl -count=1`: pass;
 - `go vet ./internal/vmctl`: pass.
 
-The source repair is not yet admissible staging evidence. Remaining blocker: push, green CI, matching Node B deployment, then execute an authorized disposable legacy detach, vmctl restart, exact restore, and state-byte/readback proof before freezing G4.
+The repair is now deployed and proven on the disposable synthetic legacy fixture `mission-restart-1778558340/primary`: signed detach, durable receipt, vmctl restart while detached, exact restore, second restart, unchanged data-image identity/geometry metadata throughout, route absence, and forged-authorization HTTP 409 without registry mutation. CI run `29559210595` and Node B deploy receipt identify commit `b746fd71756fd9d0ed84a1317bda549cf351fd22`. See `docs/evidence/g4-legacy-detach-restart-restore-2026-07-17.md` and its machine-readable packet. The implementation blocker is repaired; G4 remains closed pending frozen complete fleet planning and independent adjudication.
