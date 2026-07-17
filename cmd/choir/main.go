@@ -125,13 +125,16 @@ type client struct {
 }
 
 func newClient(flags *flag.FlagSet, args []string, stdout, stderr io.Writer) (*client, error) {
-	apiKey := flags.String("api-key", os.Getenv(apiKeyEnvVar), "API key (choir_sk_...)")
+	apiKey := flags.String("api-key", "", "API key (choir_sk_...); defaults to $"+apiKeyEnvVar)
 	host := flags.String("host", envOr(hostEnvVar, defaultHost), "Choir host")
 	timeout := flags.String("timeout", "", "Request timeout (for example 75s or 2m)")
 	if err := flags.Parse(args); err != nil {
 		return nil, err
 	}
 	key := strings.TrimSpace(*apiKey)
+	if key == "" {
+		key = strings.TrimSpace(os.Getenv(apiKeyEnvVar))
+	}
 	if key == "" {
 		return nil, fmt.Errorf("api key required: set --api-key or $%s", apiKeyEnvVar)
 	}

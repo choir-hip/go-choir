@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"net/http"
@@ -358,6 +359,40 @@ func TestTextureRevisionsHitsAPI(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"content": "hello"`) {
 		t.Fatalf("stdout = %q, want revision content", out.String())
+	}
+}
+
+func TestAPIKeyEnvironmentSecretNeverAppearsInHelp(t *testing.T) {
+	const secret = "choir_sk_verifier_known_secret_must_not_render"
+	t.Setenv(apiKeyEnvVar, secret)
+
+	fs := flag.NewFlagSet("secret-redaction", flag.ContinueOnError)
+	var flagHelp bytes.Buffer
+	fs.SetOutput(&flagHelp)
+	if _, err := newClient(fs, []string{"--help"}, io.Discard, io.Discard); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("newClient help error = %v, want flag.ErrHelp", err)
+	}
+	if strings.Contains(flagHelp.String(), secret) {
+		t.Fatalf("shared client flag help leaked environment secret: %s", flagHelp.String())
+	}
+	if !strings.Contains(flagHelp.String(), "$CHOIR_API_KEY") {
+		t.Fatalf("shared client flag help omitted safe environment hint: %s", flagHelp.String())
+	}
+
+	for _, args := range [][]string{
+		{"wire", "stories", "--help"},
+		{"texture", "read", "--help"},
+		{"run", "list", "--help"},
+		{"computer", "status", "--help"},
+		{"api-key", "list", "--help"},
+		{"api-key", "create", "--help"},
+		{"api-key", "revoke", "--help"},
+	} {
+		var stdout, stderr bytes.Buffer
+		run(args, &stdout, &stderr)
+		if strings.Contains(stdout.String(), secret) || strings.Contains(stderr.String(), secret) {
+			t.Fatalf("%v help leaked environment secret: stdout=%q stderr=%q", args, stdout.String(), stderr.String())
+		}
 	}
 }
 
