@@ -559,7 +559,10 @@ func (r *OwnershipRegistry) loadLocked() error {
 			return fmt.Errorf("load legacy detach receipt %s: VM %s is also registered", id, receipt.Ownership.VMID)
 		}
 		if owner := r.ownerships[ownershipKey(receipt.Ownership.UserID, receipt.Ownership.DesktopID)]; owner != nil {
-			return fmt.Errorf("load legacy detach receipt %s: owner desktop is also registered", id)
+			constructedRollbackPair := owner.SnapshotKind == "constructed-computer-version" && owner.VMID != receipt.Ownership.VMID && owner.ConstructionCommitted && validateConstructedOwnership(owner) == nil
+			if !constructedRollbackPair {
+				return fmt.Errorf("load legacy detach receipt %s: owner desktop is also registered", id)
+			}
 		}
 	}
 	if state.EpochCounter > maxEpoch {

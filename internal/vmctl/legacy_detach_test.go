@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -141,6 +143,93 @@ func TestLegacyOwnershipDetachPersistsStateAndExactRestore(t *testing.T) {
 	}
 	if _, err := authority.restoreLegacyOwnership(context.Background(), restartedAgain, receipt); err != nil {
 		t.Fatalf("identical restore replay was not idempotent: %v", err)
+	}
+}
+
+func TestLegacyDetachReloadAllowsCommittedConstructedRollbackPair(t *testing.T) {
+	authority, version, _, _ := newRouteAuthorityFixture(t)
+	root := t.TempDir()
+	persistencePath := filepath.Join(root, "ownerships.json")
+	registry := NewOwnershipRegistry("http://sandbox")
+	registry.SetVMManager(&mockVMManager{})
+	if err := registry.SetPersistencePath(persistencePath); err != nil {
+		t.Fatal(err)
+	}
+	createdAt := time.Date(2026, 7, 17, 6, 0, 0, 0, time.UTC)
+	registerLegacyOwnershipFixture(t, registry, VMOwnership{
+		VMID: "vm-legacy-pair", UserID: "owner", DesktopID: "primary", Kind: VMKindInteractive,
+		Published: true, SandboxURL: "http://legacy.test", State: VMStateHibernated,
+		CreatedAt: createdAt, LastActiveAt: createdAt, Epoch: 4,
+	})
+	slotID, _ := routeledger.RouteSlotID("owner", "primary")
+	request := LegacyOwnershipDetachRequest{RouteSlotID: slotID, VMID: "vm-legacy-pair", ExpectedState: VMStateHibernated, ExpectedEpoch: 4, InventorySHA256: repeatedHex('f')}
+	authorizeLegacyDetachRequest(t, &request, authority)
+	receipt, err := authority.detachLegacyOwnership(t.Context(), registry, request, createdAt.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	verification := validVerificationReceipt(t, version, createdAt.Add(2*time.Minute))
+	if err := registry.beginConstructedCandidate(verification.VMID, verification.Identity.OwnerID, verification.Identity.DesktopID, "credential", version, verification.Disk); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.activateConstructedCandidate(verification.VMID, "http://candidate.test", verification.Epoch); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.commitConstructedCandidate(verification.VMID, version, verification.Disk); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.setConstructedCandidatePublishedExact(slotID, verification.VMID, version, verification.DiskReceiptID, true); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := NewOwnershipRegistry("http://sandbox")
+	if err := reloaded.SetPersistencePath(persistencePath); err != nil {
+		t.Fatal(err)
+	}
+	ownership := reloaded.GetOwnershipForDesktop("owner", "primary")
+	if ownership == nil || ownership.VMID != verification.VMID || !ownership.Published || ownership.State != VMStateStopped || !ownership.ConstructionCommitted {
+		t.Fatalf("reloaded constructed rollback pair ownership = %+v", ownership)
+	}
+	stored, ok := reloaded.detachedLegacy[receipt.ID]
+	if !ok || !reflect.DeepEqual(stored, receipt) {
+		t.Fatalf("reloaded detach receipt = %+v, present=%v", stored, ok)
+	}
+}
+
+func TestLegacyDetachReloadRejectsDuplicateLegacyOwner(t *testing.T) {
+	authority, _, _, _ := newRouteAuthorityFixture(t)
+	persistencePath := filepath.Join(t.TempDir(), "ownerships.json")
+	registry := NewOwnershipRegistry("http://sandbox")
+	registry.SetVMManager(&mockVMManager{})
+	if err := registry.SetPersistencePath(persistencePath); err != nil {
+		t.Fatal(err)
+	}
+	createdAt := time.Date(2026, 7, 17, 6, 0, 0, 0, time.UTC)
+	registerLegacyOwnershipFixture(t, registry, VMOwnership{VMID: "vm-detached", UserID: "owner", DesktopID: "primary", Kind: VMKindInteractive, Published: true, State: VMStateStopped, CreatedAt: createdAt, LastActiveAt: createdAt, Epoch: 2})
+	slotID, _ := routeledger.RouteSlotID("owner", "primary")
+	request := LegacyOwnershipDetachRequest{RouteSlotID: slotID, VMID: "vm-detached", ExpectedState: VMStateStopped, ExpectedEpoch: 2, InventorySHA256: repeatedHex('a')}
+	authorizeLegacyDetachRequest(t, &request, authority)
+	if _, err := authority.detachLegacyOwnership(t.Context(), registry, request, createdAt.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(persistencePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state persistedOwnershipState
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	state.Ownerships = append(state.Ownerships, &VMOwnership{VMID: "vm-live-legacy", UserID: "owner", DesktopID: "primary", Kind: VMKindInteractive, Published: true, State: VMStateStopped, CreatedAt: createdAt, LastActiveAt: createdAt, Epoch: 3})
+	data, err = json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(persistencePath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := NewOwnershipRegistry("http://sandbox")
+	if err := reloaded.SetPersistencePath(persistencePath); err == nil || !strings.Contains(err.Error(), "owner desktop is also registered") {
+		t.Fatalf("duplicate legacy owner reload error = %v", err)
 	}
 }
 
