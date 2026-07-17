@@ -159,20 +159,20 @@ measures:
     cannot_prove: "Absence of all CI defects."
 
 now:
-  status: checkpoint_incomplete
-  slice: "post-land natural Race selector acceptance"
-  question: "Which first later main Go, high-risk, or sampled stimulus selects the restored complete reusable Race workflow and passes all five jobs plus the parent check gate?"
+  status: complete
+  slice: "terminal CI restoration acceptance"
+  question: "Did a natural post-land main stimulus select the complete restored Race topology and pass all five reusable jobs plus the parent check gate?"
   reconciliation:
-    observed_at: 2026-07-16T21:25:11Z
-    source_ref: "origin/main 5520fc0341ef1f38470860fac19d545b4a992e8e; first post-land natural sampled push run 29535188855 completed"
-    deploy_identity: "run 29535188855: deploy_needed=false, Node B job 87747205065 skipped"
-    authority_identities: [owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority, choir-doctrine@5520fc03, AGENTS@5520fc03, definition-skill@5520fc03]
+    observed_at: 2026-07-17T02:23:18Z
+    source_ref: "origin/main 317c1c537afc30f2e71d0a20a62e2a0af17eb67a; natural high-risk main run 29548529828 completed successfully"
+    deploy_identity: "run 29548529828 completed; product-owned deploy and SBOM lanes also succeeded, but terminal CI acceptance relies only on the classifier, five Race jobs, and parent gate"
+    authority_identities: [owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority, choir-doctrine@317c1c53, AGENTS@317c1c53, definition-skill@317c1c53]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean receipt worktree /private/tmp/go-choir-ci-integration-owner at origin/main 5520fc03; protected parent Autoputer inventory unchanged; landed CI branches preserved and pushed"
-    status: natural_race_selected_terminal_proof_failed
+    worktree_inventory_ref: "clean closure worktree /private/tmp/go-choir-ci-integration-owner at origin/main 317c1c53; protected parent Autoputer inventory unchanged; landed CI and receipt branches preserved and pushed"
+    status: terminal_race_accepted
   candidate:
     id: ci-reenable-candidate-1
-    state: landed_canonical_sbom_accepted
+    state: landed_terminal_accepted
     ref: merge:71f07f7b3c1418d9e1b8e6426f8fbbd6c37d51bb
     owner: ci-mission
     base: e02bd0ad9e04a149466f9c3fec436395c2ec9da9
@@ -194,9 +194,9 @@ now:
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-16T19:50:40Z
     consequence: "PR 55 may merge and publish the rolling FlakeHub package after serialization checks. Node B must still skip. PR 2 remains a separate fresh-main branch with the frozen ci.yml digest and its own hosted and main acceptance."
-  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, pr-55, merge-e02bd0ad, run-29530010061, pr-56, run-29530622886, merge-71f07f7b, run-29530740469, job-87730340035, artifact-8389010915, job-87730211197, job-87730340741, run-29535188855, job-87744744084, job-87744744128, job-87747182458, job-87747205065]
-  blocker_or_risk: "The first natural post-land sampled stimulus selected the complete reusable Race topology in run 29535188855: all four runtime shards and the non-runtime Race job ran. Runtime shards 0, 1, and 2 passed. The non-runtime Race job failed because two internal/diskinstantiation ext4 tests rejected incomplete geometry; ordinary non-runtime shard 2 failed on the same tests. Runtime Race shard 3 failed when TestCancelRunTrajectoryDrainsMoreThanOneActivePage exceeded its context deadline. The parent gate therefore failed. These product-test failures are outside this CI maintenance Definition's admitted source scope; selection is proven, terminal success is not. deploy_needed=false and Node B skipped."
-  next_action: "Preserve run 29535188855 as the failed terminal attempt. The product-owning mission must document and repair the diskinstantiation geometry regression and agentcore deadline failure. Then observe the next natural classifier-selected main run and require all four runtime Race shards, the non-runtime Race job, and the parent check gate to succeed; do not manufacture a stimulus or dispatch Race."
+  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, pr-55, merge-e02bd0ad, run-29530010061, pr-56, run-29530622886, merge-71f07f7b, run-29530740469, job-87730340035, artifact-8389010915, job-87730211197, job-87730340741, run-29535188855, run-29546310837-attempt-2, commit-514c5402, commit-317c1c53, run-29548529828, job-87785953951, job-87785953966, job-87785953995, job-87785953998, job-87785954000, job-87787418412]
+  blocker_or_risk: "No completion blocker remains. Earlier natural selected runs exposed product-owned ext4 geometry and owner-scoped lookup timeout defects; those failures were recorded before repairs 514c5402 and 317c1c53. Terminal run 29548529828 classified go=true, high_risk_race=true, sampled_race=false and selected the complete reusable Race topology. The non-runtime Race job and runtime Race shards 0-3 all passed; parent gate job 87787418412 passed. Residual risk is bounded to defects outside the named acceptance floor, not an unproved restored lane."
+  next_action: "None. Preserve the landed workflow digest and terminal evidence. Any future CI optimization requires a new observed problem, authority boundary, and matched acceptance."
 
 receipts:
   - id: corrected-problem-and-baseline-define
@@ -328,6 +328,23 @@ receipts:
       environment_identity: github_actions
       deployed_acceptance: terminal_race_failed_product_tests
     registry_conformance_ref: "Docs Truth Check passed in run 29535188855"
+
+  - id: natural-race-terminal-acceptance
+    boundary: external_evidence
+    commit_or_artifact: 317c1c537afc30f2e71d0a20a62e2a0af17eb67a
+    proof_refs: [run-29548529828, job-87785940855, job-87785953951, job-87785953966, job-87785953995, job-87785953998, job-87785954000, job-87787418412]
+    rollback_ref: "Revert merge 71f07f7b through a pull request to restore the two literal pause conditions if the accepted Race or SBOM topology must be withdrawn."
+    disposition: "Terminal acceptance passed on a natural high-risk main stimulus. Classifier outputs were go=true, high_risk_race=true, sampled_race=false. The non-runtime Race job, all four runtime Race shards, and the parent check gate succeeded."
+    problem_ref: docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md
+    authorization_ref: owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority
+    candidate_or_evidence_refs: [frozen-ci-yml-sha256-f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25, natural-high-risk-stimulus-317c1c53]
+    landing:
+      source_commit: 317c1c537afc30f2e71d0a20a62e2a0af17eb67a
+      ci_ref: https://github.com/choir-hip/go-choir/actions/runs/29548529828
+      deploy_ref: "not part of this terminal acceptance; product-owned deploy job 87787428646 succeeded in the same run"
+      environment_identity: github_actions
+      deployed_acceptance: terminal_race_accepted
+    registry_conformance_ref: "Docs Truth Check job 87785953690 passed in run 29548529828"
 
 view:
   path: none
