@@ -1212,15 +1212,28 @@ jobs:
                 echo "==> Hot-refreshing active interactive computers onto deployed sandbox runtime package"
               fi
               ownerships_json=$(curl -fsS --retry 5 --retry-delay 2 --retry-all-errors -H "X-Internal-Caller: true" http://127.0.0.1:8083/internal/vmctl/list)
+              mapfile -t immutable_active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
+                .ownerships[]
+                | select(.state == "active")
+                | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
+                | select((.snapshot_kind // "") == "constructed-computer-version")
+                | [.user_id, (.desktop_id // "primary"), .vm_id, .sandbox_url, .construction_version.code_ref, .construction_version.artifact_program_ref, .construction_disk_receipt_id]
+                | @tsv
+              ')
+              for record in "${immutable_active_interactive[@]}"; do
+                IFS=$'\t' read -r immutable_user_id immutable_desktop_id immutable_vm_id immutable_sandbox_url immutable_code_ref immutable_program_ref immutable_disk_receipt_id <<< "$record"
+                echo "    Preserving immutable constructed computer ${immutable_vm_id} for user ${immutable_user_id} desktop ${immutable_desktop_id}: code=${immutable_code_ref} artifact_program=${immutable_program_ref} disk_receipt=${immutable_disk_receipt_id} endpoint=${immutable_sandbox_url}"
+              done
               mapfile -t active_interactive < <(printf '%s' "$ownerships_json" | jq -r '
                 .ownerships[]
                 | select(.state == "active")
                 | select((.kind == null) or (.kind == "") or (.kind == "interactive"))
+                | select((.snapshot_kind // "") != "constructed-computer-version")
                 | [.user_id, (.desktop_id // "primary"), .vm_id, .sandbox_url]
                 | @tsv
               ')
               if [ "${#active_interactive[@]}" -eq 0 ]; then
-                echo "    No active interactive computers need refresh"
+                echo "    No mutable active interactive computers need refresh"
               else
                 refresh_pids=()
                 refresh_status=0
@@ -1291,15 +1304,15 @@ jobs:
                   dump_deploy_service_diagnostics "active computer refresh or identity verification failed"
                   exit "$refresh_status"
                 fi
-                if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
-                  record_receipt_artifact ordinary_guest "$DEPLOY_COMMIT" active
-                fi
-                if [ "$sandbox_service_selected" = "true" ]; then
-                  record_receipt_artifact sandbox "$DEPLOY_COMMIT" active
-                fi
-                if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
-                  record_receipt_artifact active_computers "$DEPLOY_COMMIT" active
-                fi
+              fi
+              if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
+                record_receipt_artifact ordinary_guest "$DEPLOY_COMMIT" active
+              fi
+              if [ "$sandbox_service_selected" = "true" ]; then
+                record_receipt_artifact sandbox "$DEPLOY_COMMIT" active
+              fi
+              if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
+                record_receipt_artifact active_computers "$DEPLOY_COMMIT" active
               fi
             else
               echo "==> Skipping active computer refresh; ordinary guest image and sandbox runtime package unchanged"

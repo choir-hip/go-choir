@@ -30,6 +30,10 @@ require 'deploy-failures'
 require 'verify_artifact_manifest'
 require 'sandbox_runtime_commit=$(artifact_manifest_commit /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)'
 require 'wait_for_sandbox_commit "$refresh_sandbox_url" "$refresh_vm_id" "$sandbox_runtime_commit"'
+require 'select((.snapshot_kind // "") == "constructed-computer-version")'
+require 'select((.snapshot_kind // "") != "constructed-computer-version")'
+require 'Preserving immutable constructed computer ${immutable_vm_id}'
+require 'No mutable active interactive computers need refresh'
 reject 'git reset --hard origin/main'
 reject 'fast_build_host_service'
 reject 'active computer refresh failed; continuing'
@@ -48,5 +52,13 @@ receipt_artifacts='{}'
 artifacts_json="${receipt_artifacts:-"{}"}"
 jq -n --argjson artifacts "$artifacts_json" '{observed_artifacts: $artifacts}' |
   jq -e '.observed_artifacts == {}' >/dev/null
+
+# Constructed ComputerVersion realizations are immutable function results. Global
+# deploy refresh may update ordinary active primaries, never these frozen rows.
+mixed_inventory='{"ownerships":[{"user_id":"mutable-owner","desktop_id":"primary","vm_id":"vm-mutable","sandbox_url":"http://10.0.0.2:8085","state":"active","kind":"interactive"},{"user_id":"frozen-owner","desktop_id":"primary","vm_id":"vm-frozen","sandbox_url":"http://10.0.0.3:8085","state":"active","kind":"interactive","snapshot_kind":"constructed-computer-version","construction_version":{"code_ref":"code:sha256:frozen","artifact_program_ref":"artifact-program:sha256:frozen"},"construction_disk_receipt_id":"disk-instantiation:sha256:frozen"},{"user_id":"sleeping-owner","desktop_id":"primary","vm_id":"vm-sleeping","state":"hibernated","kind":"interactive"}]}'
+mutable_ids=$(printf '%s' "$mixed_inventory" | jq -r '.ownerships[] | select(.state == "active") | select((.kind == null) or (.kind == "") or (.kind == "interactive")) | select((.snapshot_kind // "") != "constructed-computer-version") | .vm_id')
+immutable_ids=$(printf '%s' "$mixed_inventory" | jq -r '.ownerships[] | select(.state == "active") | select((.kind == null) or (.kind == "") or (.kind == "interactive")) | select((.snapshot_kind // "") == "constructed-computer-version") | .vm_id')
+[ "$mutable_ids" = "vm-mutable" ]
+[ "$immutable_ids" = "vm-frozen" ]
 
 echo "deploy workflow contract tests passed"
