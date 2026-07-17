@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "D-route-bootstrap-preparation"
-  question: "Can the deployed sealed constructor produce one disposable frozen bootstrap candidate whose exact owner approval, G3 acceptance, route CAS, and rollback are independently auditable?"
+  slice: "D-route-bootstrap-g3-evidence-repair"
+  question: "Does the committed bootstrap-E packet durably bind the exact deployed constructor, predecessor disposal, independent verification, signed owner approval, frozen candidate, and pre-CAS route absence strongly enough for G3 acceptance?"
   reconciliation:
-    observed_at: 2026-07-16T21:57:57Z
-    source_ref: refs/heads/main@514c540203695ca5511524016b3242568f858473_equals_refs/remotes/origin/main@514c540203695ca5511524016b3242568f858473
-    deploy_identity: "Node B activation receipt target 514c540203695ca5511524016b3242568f858473 at 2026-07-16T21:42:03Z; vmctl active at that commit; public proxy /health build metadata remains independently stale at 9d9945e6"
+    observed_at: 2026-07-17T03:20:00Z
+    source_ref: refs/heads/main@e3de55581a1cae3ecce1431f5f4440ab01f62fc8_equals_refs/remotes/origin/main@e3de55581a1cae3ecce1431f5f4440ab01f62fc8
+    deploy_identity: "Node B activation receipt target and selected vmctl artifact e3de55581a1cae3ecce1431f5f4440ab01f62fc8; CI run 29550365185 succeeded; vmctl active"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -358,16 +358,16 @@ now:
       - mission_graph:docs/mission-graph.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
       - authority_manifest:docs/doc-authority-manifest.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "canonical main and origin/main equal at 514c5402 before staging promotion-key configuration; only the intentional Node B public-key and Definition state update are dirty"
+    worktree_inventory_ref: "canonical main and origin/main equal at e3de5558 before the code-free G3 frozen-packet checkpoint; only the Definition and new durable G3 evidence packet are intentional"
     status: reconciled
   candidate:
-    id: candidate-control-20260716-d
-    state: exact_candidate_disposal_tested_pending_deploy
+    id: candidate-control-20260717-e
+    state: frozen_pre_cas_g3_evidence_repair
     ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
     owner: autoputer-control
-    base: refs/heads/main@7122f2799be4458f4b925be11990321c7e70ffc4
-    digest: "00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984"
-    scope: [disposable-control-construction, pre-bootstrap-freeze, no-route-cas]
+    base: refs/heads/main@e3de55581a1cae3ecce1431f5f4440ab01f62fc8
+    digest: "route-bootstrap:sha256:eac7ab973a643c250e825700fd18348af6c4ba43b5912440a2d4172d0834d70d"
+    scope: [disposable-control-construction, frozen-bootstrap-e, g3-re-review-required, no-route-cas]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -404,8 +404,10 @@ now:
     - "construction candidate-control-20260716-d: SHA-256 00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984; disk receipt c96eded7; healthy epoch 1; equivalent"
     - docs/evidence/audited-construction-phase-d-2026-07-16.md
     - "owner authorization, 2026-07-16: blanket approval limited to synthetic route computer:autoputer-control:control-20260716 through independently accepted bootstrap, second-version promote/rollback, restart proof, and hibernated rollback retention; no real-user/platform/fleet route authorized"
-  blocker_or_risk: "Node B source receipt 317c1c53 omits vmctl and its stale binary returns HTTP 404 for exact disposal. Current source already normalizes persisted active candidates to stopped before route-gated reattach; focused proof confirms no active-orphan allowance is needed. The disposal receipt now records prior_state and the vmctl source delta forces artifact selection. General deployment receipts still omit unselected artifact identities; no route/evidence CAS occurred."
-  next_action: "Commit and deploy the restart-normalized prior-state disposal receipt, verify the active vmctl binary exposes the endpoint and loads candidate-control-20260716-d stopped, then execute only its exact route/version/disk-bound disposal and reconstruct from immutable inputs."
+    - docs/evidence/g3-bootstrap-e-frozen-review-2026-07-17.md
+    - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governs because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
+  blocker_or_risk: "The frozen bootstrap-E candidate is structurally accepted by three independent reviewers, but GPT-5.5 identified a reproducible protected-evidence blocker: the deployed identity, exact predecessor disposal, realization/verification/certificate IDs, file hashes, route 404, and no-CAS state were not durably bound. The new code-free packet repairs that record only; G3 must re-review the committed packet before any signature or CAS. Bootstrap remains irreversible to route absence."
+  next_action: "Commit and push the code-free frozen review packet, validate doc authority, then re-run G3 over that exact committed packet. Create a signed G3 acceptance and execute one bounded bootstrap CAS only if the re-review has no reproducible minority blocker and every live precondition still matches."
 
 successor:
   status: unauthorized_until_this_definition_complete
