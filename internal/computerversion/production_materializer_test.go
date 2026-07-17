@@ -210,6 +210,26 @@ func TestProductionMaterializerConstructsAndReadsBackLiveState(t *testing.T) {
 	if err := verification.Validate(); err != nil || verification.Version != version || verification.DiskReceiptID != result.Disk.ID || independentDisk.inspectCount != 1 {
 		t.Fatalf("invalid verification receipt: %+v err=%v", verification, err)
 	}
+	postVerificationGeometry := result.Disk.Geometry
+	postVerificationGeometry.AllocatedBytes += 64 << 20
+	driftedDisk := &constructionDiskFixture{actualGeometry: postVerificationGeometry}
+	driftedVerifier := verifier
+	driftedVerifier.Disk = driftedDisk
+	if _, err := driftedVerifier.Verify(t.Context(), materializer.DiskPlan, result); err != nil {
+		t.Fatalf("independent verifier rejected bounded post-boot allocation drift: %v", err)
+	}
+	overBoundGeometry := postVerificationGeometry
+	overBoundGeometry.AllocatedBytes = materializer.DiskPlan.Allocation.MaxAllocatedBytes + 1
+	driftedVerifier.Disk = &constructionDiskFixture{actualGeometry: overBoundGeometry}
+	if _, err := driftedVerifier.Verify(t.Context(), materializer.DiskPlan, result); err == nil || !strings.Contains(err.Error(), "allocated bytes exceed policy bound") {
+		t.Fatalf("independent verifier allocation-bound error = %v", err)
+	}
+	changedGeometry := postVerificationGeometry
+	changedGeometry.FilesystemBlocks--
+	driftedVerifier.Disk = &constructionDiskFixture{actualGeometry: changedGeometry}
+	if _, err := driftedVerifier.Verify(t.Context(), materializer.DiskPlan, result); err == nil || !strings.Contains(err.Error(), "changed outside allocation") {
+		t.Fatalf("independent verifier stable-geometry error = %v", err)
+	}
 	forged := result
 	forged.Inputs.Code.Artifacts = nil
 	if _, err := verifier.Verify(t.Context(), materializer.DiskPlan, forged); err == nil {

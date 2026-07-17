@@ -170,3 +170,11 @@
 - Protected surfaces: no route/evidence CAS occurred; the synthetic route remains absent; the constructed realization remains disposable and unpublished; real user/platform routes and protected recovery images remain untouched.
 - Rollback: revert the verifier repair before any route CAS. The failed freeze request is safe and leaves no ledger mutation.
 - Heresy delta: discovered 1 (mutable allocation accounting treated as immutable geometry); introduced 0; repaired 0 at this checkpoint.
+
+## Verifier geometry/allocation repair — local proof
+
+- Source repair: `IndependentRealizationVerifier.Verify` now uses the disk-instantiation contract's `RefreshAllocatedGeometry` check to compare every stable geometry field exactly while substituting only independently measured `AllocatedBytes`; the refreshed receipt is then verified against the typed 2 GiB allocation bound.
+- Regression contract: bounded post-boot allocation drift passes; allocation above policy refuses; changed filesystem block count refuses as stable-geometry mutation.
+- Verification: `go test ./internal/computerversion ./internal/diskinstantiation ./internal/vmctl -count=1` passed; `go vet` for the same packages passed; `git diff --check` passed.
+- Mutation remains unexercised in staging until source commit, CI, and Node B deployment identity agree. No route/evidence CAS occurred.
+- Heresy delta: discovered 1; introduced 0; repaired 1 in the local candidate, pending deployed reproduction.

@@ -121,8 +121,8 @@ func (v IndependentRealizationVerifier) Verify(ctx context.Context, plan diskins
 	if err != nil {
 		return RealizationVerificationReceipt{}, fmt.Errorf("realization verifier: independently inspect disk: %w", err)
 	}
-	if geometry != construction.Disk.Geometry {
-		return RealizationVerificationReceipt{}, fmt.Errorf("realization verifier: independent disk geometry mismatch")
+	if _, err := diskinstantiation.RefreshAllocatedGeometry(plan, construction.Disk, geometry); err != nil {
+		return RealizationVerificationReceipt{}, fmt.Errorf("realization verifier: independent disk geometry: %w", err)
 	}
 	launchRequest := ConstructedLaunchRequest{Identity: construction.Identity, Version: version, CodeClosure: code, Disk: construction.Disk}
 	live, err := v.Launcher.Observe(ctx, launchRequest, construction.Boot)
