@@ -595,7 +595,8 @@
       </div>
     {/if}
   {:else if authState === 'checking' || authState === 'reconnecting'}
-    <div class="loading">
+    <div class="loading" role="status" aria-live="polite">
+      <span class="loading-orbit" aria-hidden="true"></span>
       <p>{authState === 'reconnecting' ? 'Reconnecting…' : 'Loading…'}</p>
     </div>
   {:else}
@@ -811,10 +812,35 @@
 
   .loading {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 1.1rem;
     min-height: 100dvh;
     color: var(--choir-text-muted);
+  }
+
+  .loading p {
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+  }
+
+  .loading-orbit {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--choir-accent) 22%, transparent);
+    border-top-color: var(--choir-accent);
+    box-shadow: 0 0 24px color-mix(in srgb, var(--choir-accent) 24%, transparent);
+    animation: choir-loading-orbit 0.85s linear infinite;
+  }
+
+  @keyframes choir-loading-orbit {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loading-orbit { animation-duration: 2.4s; }
   }
 
   .auth-overlay {

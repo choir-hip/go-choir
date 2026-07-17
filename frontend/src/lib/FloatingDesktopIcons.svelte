@@ -322,16 +322,40 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 4px;
+    justify-content: flex-start;
+    gap: 5px;
     width: 80px;
-    padding: 8px 4px;
-    border-radius: 8px;
+    padding: 5px 3px 6px;
+    border-radius: 16px;
     cursor: pointer;
     user-select: none;
-    transition: background 0.15s, border-color 0.15s;
-    border: 2px solid transparent;
+    border: 1px solid transparent;
     background: transparent;
+    transition:
+      background var(--choir-motion-fast, 120ms ease),
+      border-color var(--choir-motion-fast, 120ms ease);
+    animation: desktop-icon-in 340ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  /* Gentle staggered entrance so the desktop composes itself on load. */
+  .desktop-icon:nth-child(1) { animation-delay: 20ms; }
+  .desktop-icon:nth-child(2) { animation-delay: 55ms; }
+  .desktop-icon:nth-child(3) { animation-delay: 90ms; }
+  .desktop-icon:nth-child(4) { animation-delay: 125ms; }
+  .desktop-icon:nth-child(5) { animation-delay: 160ms; }
+  .desktop-icon:nth-child(6) { animation-delay: 195ms; }
+  .desktop-icon:nth-child(7) { animation-delay: 230ms; }
+  .desktop-icon:nth-child(n + 8) { animation-delay: 265ms; }
+
+  @keyframes desktop-icon-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 
   .desktop-icon:hover {
@@ -345,45 +369,84 @@
 
   .desktop-icon.icon-selected {
     background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
-    border-color: color-mix(in srgb, var(--choir-border) 15%, transparent);
+    border-color: color-mix(in srgb, var(--choir-border-strong) 40%, transparent);
   }
 
   .desktop-icon.icon-active {
     background: var(--choir-state-hover);
-    border-color: var(--choir-border-strong);
+    border-color: color-mix(in srgb, var(--choir-border-strong) 70%, transparent);
   }
 
   .desktop-icon.icon-active .icon-label {
     color: var(--choir-text-primary);
   }
 
+  /* Emoji sits inside a soft app-tile so the rail reads as a launcher. */
   .icon-emoji {
-    font-size: 2rem;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    font-size: 1.62rem;
     line-height: 1;
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--choir-text-primary) 5%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
     pointer-events: none;
+    transition:
+      transform var(--choir-motion-fast, 120ms ease),
+      background var(--choir-motion-fast, 120ms ease),
+      box-shadow var(--choir-motion-fast, 120ms ease);
   }
 
+  .desktop-icon:hover .icon-emoji {
+    transform: translateY(-3px);
+    background: color-mix(in srgb, var(--choir-accent) 16%, transparent);
+    box-shadow:
+      0 10px 22px color-mix(in srgb, var(--choir-shadow-color) 34%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 12%, transparent);
+  }
+
+  .desktop-icon.icon-selected .icon-emoji {
+    background: color-mix(in srgb, var(--choir-accent) 14%, transparent);
+  }
+
+  .desktop-icon.icon-active .icon-emoji {
+    background: color-mix(in srgb, var(--choir-accent) 22%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--choir-border-strong) 60%, transparent),
+      0 8px 20px color-mix(in srgb, var(--choir-shadow-color) 30%, transparent);
+  }
+
+  /* Full labels wrap to two lines instead of truncating mid-word. */
   .icon-label {
-    font-size: 0.7rem;
-    font-weight: 500;
+    font-size: 0.68rem;
+    font-weight: 550;
     color: var(--choir-text-muted);
     text-align: center;
-    white-space: nowrap;
+    line-height: 1.14;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 72px;
+    overflow-wrap: anywhere;
+    max-width: 78px;
+    min-height: calc(2 * 1.14em);
     pointer-events: none;
+    text-shadow: 0 1px 2px color-mix(in srgb, var(--choir-shadow-color) 22%, transparent);
   }
 
   .open-indicator {
     position: absolute;
-    bottom: 2px;
+    bottom: 1px;
     left: 50%;
     transform: translateX(-50%);
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--choir-state-selected);
+    width: 16px;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--choir-accent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--choir-accent) 55%, transparent);
     pointer-events: none;
   }
 
@@ -391,15 +454,28 @@
   @media (max-width: 768px) {
     .desktop-icon {
       width: 72px;
-      padding: 6px 2px;
+      padding: 4px 2px 5px;
+      gap: 4px;
     }
 
     .icon-emoji {
-      font-size: 1.6rem;
+      width: 40px;
+      height: 40px;
+      font-size: 1.42rem;
     }
 
     .icon-label {
-      font-size: 0.65rem;
+      font-size: 0.64rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .desktop-icon {
+      animation: none;
+    }
+
+    .desktop-icon:hover .icon-emoji {
+      transform: none;
     }
   }
 </style>

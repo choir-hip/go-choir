@@ -324,7 +324,6 @@
     ? 'display:none;'
     : `left:${renderedX}px; top:${renderedY}px; width:${renderedWidth}px; height:${renderedHeight}px;`;
 
-  $: maxRestoreIcon = mode === 'maximized' ? '⤢' : '▢';
   $: maxRestoreTitle = mode === 'maximized' ? 'Restore' : 'Maximize';
   $: showResizeHandle = mode === 'normal' && !overviewOpen;
   $: overviewClass = overviewOpen ? `overview-preview overview-preview-${overviewPreviewState}` : '';
@@ -364,21 +363,41 @@
         on:click|stopPropagation={handleMinimize}
         title="Minimize"
         aria-label="Minimize"
-      >−</button>
+      >
+        <svg class="ctrl-glyph" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+          <line x1="2.5" y1="6" x2="9.5" y2="6" />
+        </svg>
+      </button>
       <button
         class="ctrl-btn maximize-btn"
         data-window-maximize
         on:click|stopPropagation={handleMaximizeRestore}
         title={maxRestoreTitle}
         aria-label={maxRestoreTitle}
-      >{maxRestoreIcon}</button>
+      >
+        {#if mode === 'maximized'}
+          <svg class="ctrl-glyph" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+            <rect x="2.4" y="3.6" width="6" height="6" rx="1.4" />
+            <path d="M4.6 3.6V2.7A1.3 1.3 0 0 1 5.9 1.4h2.9A1.3 1.3 0 0 1 10.1 2.7v2.9A1.3 1.3 0 0 1 8.8 6.9h-0.9" />
+          </svg>
+        {:else}
+          <svg class="ctrl-glyph" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+            <rect x="2.5" y="2.5" width="7" height="7" rx="1.6" />
+          </svg>
+        {/if}
+      </button>
       <button
         class="ctrl-btn close-btn"
         data-window-close
         on:click|stopPropagation={handleClose}
         title="Close"
         aria-label="Close"
-      >✕</button>
+      >
+        <svg class="ctrl-glyph" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
+          <line x1="3" y1="3" x2="9" y2="9" />
+          <line x1="9" y1="3" x2="3" y2="9" />
+        </svg>
+      </button>
     </div>
   </div>
 
@@ -510,18 +529,30 @@
     background: transparent;
     border: none;
     border-radius: var(--choir-radius-control-sm, 14px);
-    font-size: 0.7rem;
     cursor: pointer;
     color: var(--choir-text-muted);
     transition: background 0.15s, color 0.15s;
   }
 
-  .ctrl-btn:hover {
-    background: color-mix(in srgb, var(--choir-text-primary) 10%, transparent);
-    color: var(--choir-text-primary);
+  .ctrl-glyph {
+    width: 13px;
+    height: 13px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 
-  .close-btn:hover {
+  .ctrl-btn:hover,
+  .ctrl-btn:focus-visible {
+    background: color-mix(in srgb, var(--choir-text-primary) 10%, transparent);
+    color: var(--choir-text-primary);
+    outline: none;
+  }
+
+  .close-btn:hover,
+  .close-btn:focus-visible {
     background: var(--choir-status-danger-soft);
     color: var(--choir-status-danger);
   }
