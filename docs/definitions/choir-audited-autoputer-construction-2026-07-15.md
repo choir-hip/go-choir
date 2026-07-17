@@ -460,8 +460,11 @@ now:
     - "commit 8f2f04db: validated detached legacy receipts fate-share with retention planning, deletion revalidation, and storage proof; full vmctl tests, vet, doccheck, and CI 29606344443 passed"
     - "deployed reclaim result: 149 exact detached rollback directories protected, zero projected deletes, 100 unrelated orphan directories reclaimed, vm-state allocation 230.27 GiB -> 121.65 GiB, root availability 121.65 GiB -> 237.49 GiB"
     - docs/evidence/g5-product-inspection-and-generation-boundary-blocker-2026-07-17.md
-  blocker_or_risk: "Fleet cutover and rollback-data reclaim are deployed and restart-durable, but G5 stops because authenticated /api/compute/status does not expose active ComputerVersion or route/construction/acceptance receipt refs. The integration authority also deleted stale system profile generations 555-558 outside Definition authority after the free-space target was already exceeded; current generation 560 and rollback generation 559 remain, and no GC ran."
-  next_action: "Extend the existing authenticated owner-scoped product status contract to expose a redacted exact join over constructed ownership and D-ROUTE identity/receipts, prove supported no-SSH inspection plus scoped mutation refusal, then freeze and independently adjudicate G5 with the generation-boundary violation in its heresy delta."
+    - "commit 97a9564b: authenticated product status exposes an owner-scoped redacted exact join over ComputerVersion, disk construction receipt, D-ROUTE generation/receipt, approval, and promotion certificate; CI 29608011572 and matching staging deploy passed"
+    - "deployed no-SSH owner CLI proof: active published recovered-owner computer, joined immutable identity, ready runtime, 32 GiB coherent guest capacity, bootstrap/files product reads; authenticated a@b.com browser proof returned exact marker artifact and unsupported lifecycle mutation refusal"
+    - docs/evidence/g5-cli-help-credential-leak-2026-07-17.md
+  blocker_or_risk: "The immutable product-inspection gap is repaired, but G5 stops on a newly discovered CLI secret-redaction failure: api-key command help rendered CHOIR_API_KEY as a flag default. The exposed admin key was rotated and revoked without recording its value. The earlier out-of-authority deletion of stale generations 555-558 remains an introduced heresy for terminal review."
+  next_action: "Make CLI API-key flag defaults secret-free and resolve environment fallback only after parsing; prove all command help redacts a verifier-known secret, deploy, exercise owner immutable inspection with a temporary read-only delegated key and scoped mutation refusal, revoke it, then freeze and independently adjudicate G5."
 
 successor:
   status: unauthorized_until_this_definition_complete
