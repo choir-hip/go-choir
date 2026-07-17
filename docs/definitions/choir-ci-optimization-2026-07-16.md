@@ -207,9 +207,9 @@ now:
     owner_ratification_ref: owner-request-2026-07-17-semantic-sbom-cache
     recorded_at: 2026-07-17T18:40:31Z
     consequence: "Ten unchanged first-party inventories rebound with zero package builds. Candidate construction fell from 16m55s/19m30s to 2m52s; the complete selected workflow fell from 17m14s/19m57s to 12m45s while retaining all seven Race jobs, parent check, independent SBOM finalizer, and Node B skip."
-  evidence_refs: [pr-62, merge-5dc5ac07, pr-run-29602167381, main-run-29602947097-attempt-2, candidate-job-87961418650, finalizer-job-87963393922, accepted-artifact-8416254509]
-  blocker_or_risk: "No completion blocker. Residual optimization axis: independent finalization now takes 2m50s because it deliberately recomputes semantic and current-root identity on a separate runner; this is slower than the former exact-check finalizer but the full workflow is 4m29s faster than the matched 17m14s baseline. A future bounded optimization may batch Nix evaluations without weakening independence."
-  next_action: "Land this docs-only terminal receipt through a PR, verify Docs Truth Check, remove the CI maintenance entrypoint from all registries, and leave the Autoputer product Definition as the sole executable /goal."
+  evidence_refs: [pr-62, merge-5dc5ac07, pr-run-29602167381, main-run-29602947097-attempt-2, candidate-job-87961418650, finalizer-job-87963393922, accepted-artifact-8416254509, pr-63, terminal-docs-run-29604861447]
+  blocker_or_risk: "No completion blocker. Residual optimization axis: independent finalization takes 2m50s because it deliberately recomputes semantic and current-root identity on a separate runner; this is slower than the former exact-check finalizer but the full workflow is 4m29s faster than the matched 17m14s baseline. A future bounded optimization may batch Nix evaluations without weakening independence."
+  next_action: "No CI mission action remains. The CI maintenance entrypoint is removed from every registry; the Autoputer product Definition is again the sole executable /goal. Any future finalizer batching requires new bounded authority."
 
 receipts:
   - id: semantic-sbom-cache-define
@@ -243,7 +243,7 @@ receipts:
       deploy_ref: "deploy_needed=false; Node B job 87963394855 skipped; FlakeHub job 87963394880 skipped"
       environment_identity: github_actions
       deployed_acceptance: terminal_semantic_sbom_cache_accepted
-    registry_conformance_ref: "PR hosted Docs Truth Check passed; terminal receipt local doccheck pending"
+    registry_conformance_ref: "PR 63 run 29604861447 Docs Truth Check passed; local doccheck and registry YAML parse passed"
   - id: semantic-sbom-cache-terminal-acceptance
     boundary: accept
     commit_or_artifact: run:29602947097:attempt:2
@@ -259,7 +259,7 @@ receipts:
       deploy_ref: "Node B 87963394855 skipped; FlakeHub 87963394880 skipped"
       environment_identity: github_actions
       deployed_acceptance: terminal_semantic_sbom_cache_accepted
-    registry_conformance_ref: "terminal receipt local doccheck pending; hosted docs truth pending"
+    registry_conformance_ref: "PR 63 run 29604861447 Docs Truth Check passed; local doccheck and registry YAML parse passed"
   - id: ci-pareto-candidate-implement
     boundary: implement
     commit_or_artifact: a3bf59a1f938ce3ed92ce2d968c7c386db369801
