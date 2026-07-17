@@ -178,3 +178,14 @@
 - Verification: `go test ./internal/computerversion ./internal/diskinstantiation ./internal/vmctl -count=1` passed; `go vet` for the same packages passed; `git diff --check` passed.
 - Mutation remains unexercised in staging until source commit, CI, and Node B deployment identity agree. No route/evidence CAS occurred.
 - Heresy delta: discovered 1; introduced 0; repaired 1 in the local candidate, pending deployed reproduction.
+
+## Problem checkpoint — no supported exact candidate disposal boundary
+
+- Mutation class: red.
+- Substrate: vmctl constructed-candidate lifecycle.
+- Trigger: the verifier repair deployment correctly restarts vmctl, loading constructor-created ownership as stopped and invalidating the old boot receipt. Replaying the old construction receipt therefore refuses with `persisted realization binding mismatch`; this is safe restart behavior, not a route mutation.
+- Connection opportunity: immutable inputs make reconstruction cheap, but a replacement cannot reuse the owner/desktop candidate identity while the stale unpublished constructed ownership remains registered. vmctl has internal destruction logic and broad retention/pressure collectors, but no supported exact, guarded API for disposing one named constructor candidate.
+- Required repair: expose one internal exact-disposal operation bound to realization ID, route slot, ComputerVersion, and disk receipt; require a constructor-created non-active candidate; prove the route slot is absent; then destroy VM state and remove durable ownership atomically enough to refuse ambiguous/replayed requests. Do not use raw filesystem deletion, ownership JSON edits, or broad retention pressure.
+- Protected surfaces: route slot remains absent, no authorization evidence was pinned, no real-user/platform route is in scope, and the failed owner's recovery images remain untouched.
+- Rollback: revert the exact-disposal endpoint after this candidate is disposed; reconstruction can use a new clean candidate only after durable ownership removal succeeds.
+- Heresy delta: discovered 1 (constructor can create durable candidates but lacks an exact supported disposition boundary); introduced 0; repaired 0 at this checkpoint.
