@@ -40,6 +40,18 @@ timing is inadmissible. Reconcile and revise the draft from the completed
 predecessor's deployed baseline, set owner-ratified numerical SLOs, and promote
 it through all registries before execution.
 
+## Independent CI Maintenance — Executable
+
+[`definitions/choir-ci-optimization-2026-07-16.md`](definitions/choir-ci-optimization-2026-07-16.md)
+is reopened for an owner-authorized, scope-disjoint red repair of accepted SBOM
+caching. The active slice replaces ineffective exact-derivation-only
+first-party reuse with a fail-closed semantic dependency fingerprint. Every
+candidate must still bind the current package derivation and output path;
+checksummed baseline dependency data may be reused only after current-root
+rebinding and independent finalizer verification. Unknown or mismatched
+identity rebuilds. App/platform source, direct workflow dispatch, direct main
+push, deployment routing changes, and direct Node B mutation remain excluded.
+
 ## Supporting Maintenance
 
 [`definitions/choir-seam-repair-2026-07-10.md`](definitions/choir-seam-repair-2026-07-10.md)
@@ -72,6 +84,12 @@ The sole product invocation is:
 
 ```text
 /goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+```
+
+The independent CI-maintenance invocation is:
+
+```text
+/goal docs/definitions/choir-ci-optimization-2026-07-16.md
 ```
 
 

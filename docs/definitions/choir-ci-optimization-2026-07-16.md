@@ -179,39 +179,55 @@ measures:
     cannot_prove: "Absence of all CI defects."
 
 now:
-  status: complete
-  slice: "terminal Pareto CI acceptance"
-  question: "Did the landed topology preserve all selected assurance while reducing the observed check and workflow critical paths?"
+  status: working
+  slice: "semantic differential SBOM cache repair"
+  question: "Can accepted SBOMs reuse unchanged normalized dependency inventories while binding every candidate to the current package derivation and output?"
   reconciliation:
-    observed_at: 2026-07-17T06:37:49Z
-    source_ref: "origin/main d06c87c97beba0c2edab49e19e755e5a5a0dd982 contains PR 60 merge 3d7a609ff1fc3030674d3c7ae73369e40b1c05ea; natural high-risk run 29559210595 at b746fd71756fd9d0ed84a1317bda549cf351fd22 completed successfully"
-    deploy_identity: "CI-only PR run 29554632413 and first post-landing docs-only main run 29556555338 skipped Node B; the exact merge run 29556440070 was twice cancelled by later owner pushes before deploy. Natural vmctl stimulus run 29559210595 deployed successfully, but that deployment belongs to the product change and is not CI-maintenance acceptance."
-    authority_identities: [owner-request-2026-07-16-ci-pareto, choir-doctrine@d06c87c9, AGENTS@d06c87c9, definition-skill@d06c87c9]
+    observed_at: 2026-07-17T16:38:33Z
+    source_ref: "origin/main 4e5cd3fce15563550fbc02c9b6fcbdb7c00b319c; problem checkpoint 23a1d556; hosted runs 29559210595 and 29570035893"
+    deploy_identity: "not_applicable_ci_only; repair and measurement must classify deploy_needed=false and Node B must skip"
+    authority_identities: [owner-request-2026-07-17-semantic-sbom-cache, choir-doctrine@4e5cd3fc, AGENTS@4e5cd3fc, definition-skill@4e5cd3fc]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean terminal receipt worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-pareto-terminal-receipt-2026-07-17; protected parent Autoputer work remains outside this branch"
-    status: terminal_ci_pareto_accepted
+    worktree_inventory_ref: "clean isolated worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-sbom-semantic-cache-2026-07-17; protected parent Autoputer work remains outside this branch"
+    status: problem_documented_design_authorized
   candidate:
-    id: ci-pareto-candidate-1
-    state: landed_terminal_accepted
-    ref: merge:3d7a609ff1fc3030674d3c7ae73369e40b1c05ea
+    id: ci-semantic-sbom-cache-candidate-1
+    state: design_authorized
+    ref: pending_implementation
     owner: ci-mission
-    base: ba1fd5a4973618326c8eebe9b14456941724c114
-    digest: "landed ci.yml 2beb6d3f970694c9cbb7851d0c1d125950ef049086c809a6379bf11a02911f7d; race.yml 957f8f3dab3fca192a78156e7ff032effb5fbcc4e7bddd98e14794612e6ffc4b; verifier 83ad36cbede20bba0d75655dad5600c88262aa1acdeb20990b6cbe8d8c148773"
-    scope: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, .github/scripts/ci-impact-classify-test, .github/scripts/ci-workflow-contract-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
+    base: 4e5cd3fce15563550fbc02c9b6fcbdb7c00b319c
+    digest: pending
+    scope: [.github/workflows/ci.yml, .github/scripts/build-sboms-differential, .github/scripts/build-sboms-differential-test, .github/scripts/sbom-semantic-fingerprint, .github/scripts/sbom-semantic-fingerprint-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, .github/scripts/ci-workflow-contract-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
   decision:
-    selected: "Accept the landed single-mode 3+4 Race topology and parallel candidate/finalizer SBOM topology. Close the CI-maintenance entrypoint across every registry."
-    kind: terminal_acceptance
+    selected: "Cache normalized runtime dependency inventories by a deterministic semantic fingerprint, but always evaluate and verify the current package derivation/output identity. A semantic hit may copy only a checksummed accepted baseline, replace every old root derivation/output reference with the current roots, refresh generation identity, and pass independent finalizer validation. Missing, mismatched, or unprovable fingerprints rebuild."
+    kind: implementation_authority
     status: settled
     source: owner
-    evidence_ref: "owner request 2026-07-16; PR 60; PR runs 29554632413 and 29554632461; canonical run 29559210595; accepted SBOM artifact 8398872741"
+    evidence_ref: "owner request 2026-07-17 plus docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-17T06:37:49Z
-    consequence: "The optimized topology is canonical. Future optimization is a new bounded mission; non-runtime Race shard 0 is the next observed imbalance, not an acceptance blocker."
-  evidence_refs: [pr-60, merge-3d7a609f, pr-run-29554632413, standalone-race-run-29554632461, cancelled-landing-run-29556440070-attempts-1-and-2, ci-only-skip-run-29556555338, canonical-run-29559210595, check-job-87819170738, accepted-sbom-job-87820245468, accepted-sbom-artifact-8398872741, local-ci-contract-suite, independent-review-race-resolved, independent-review-sbom-resolved]
-  blocker_or_risk: "No completion blocker. The hosted comparison is between different high-risk change sets, so it proves observed topology performance rather than exact causal billing. Selected-run check time fell from 12m31s to 9m29s; workflow completion fell from 29m54s to 17m20s; summed public Go-test job time fell from 61m16s to 43m58s. Non-runtime Race shard 0 remains the slowest check-path job at 9m08s."
-  next_action: "None. Preserve PR 60 and run 29559210595 as terminal evidence. Rebalance non-runtime Race ownership only under a new measured CI-maintenance Definition."
+    recorded_at: 2026-07-17T16:38:33Z
+    consequence: "Exact deployed-artifact identity remains mandatory. Only the dependency inventory may be reused, under a fail-closed fingerprint and rebind contract. The first hosted run must also safely derive fingerprints for a legacy accepted baseline or rebuild."
+  evidence_refs: [problem-checkpoint-23a1d556, run-29559210595, artifact-8398872741, run-29570035893, artifact-8403147713]
+  blocker_or_risk: "Implementation and hosted proof remain. The highest risk is false semantic equivalence yielding a stale dependency inventory; current-root validation, baseline checksum validation, independently recomputed fingerprints, exact component equality on rebound, and rebuild-on-unknown are mandatory."
+  next_action: "Commit this reopened authority/registry boundary, implement the helper/builder/verifier contracts, then use hosted PR and main runs to compare candidate construction time against 16m55s and 19m30s observed baselines."
 
 receipts:
+  - id: semantic-sbom-cache-define
+    boundary: define
+    commit_or_artifact: pending_authority_commit
+    proof_refs: [docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md, run-29559210595, run-29570035893]
+    rollback_ref: 4e5cd3fce15563550fbc02c9b6fcbdb7c00b319c
+    disposition: "Owner-authorized repair separates semantic dependency identity from current root artifact identity. No workflow or script mutation occurs in this receipt."
+    problem_ref: docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md
+    authorization_ref: owner-request-2026-07-17-semantic-sbom-cache
+    candidate_or_evidence_refs: [problem-checkpoint-23a1d556, artifact-8398872741, artifact-8403147713]
+    landing:
+      source_commit: pending
+      ci_ref: not_applicable_until_push
+      deploy_ref: not_applicable_ci_only
+      environment_identity: github_actions
+      deployed_acceptance: pending
+    registry_conformance_ref: pending_authority_commit
   - id: ci-pareto-candidate-implement
     boundary: implement
     commit_or_artifact: a3bf59a1f938ce3ed92ce2d968c7c386db369801
