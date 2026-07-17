@@ -228,12 +228,12 @@ nodes:
       path-tests its own changes. SBOM construction may overlap checks only as
       an unaccepted run-bound artifact; accepted cache/artifact publication stays
       downstream of successful check and exact identity, fixed-requiredness,
-      checksum, and baseline-relative differential verification. Candidate
-      52dd366a repaired the first frozen review's requiredness, diff-content, and
-      standalone-hosted-route findings. The landing is PR-mediated and serialized
-      across main CI/Race cancellation groups; CI-only deploy classification and
-      Node B skip are mandatory. Generic dispatch and direct Node B mutation
-      remain excluded.
+      checksum, and baseline-relative differential verification. Rebased commits
+      1ba8d909 and a3bf59a1 repaired the first frozen review's requiredness,
+      diff-content, standalone-hosted-route, and cache-path findings. The landing
+      is PR-mediated and serialized across main CI/Race cancellation groups;
+      CI-only deploy classification and Node B skip are mandatory. Generic
+      dispatch and direct Node B mutation remain excluded.
     sources:
       - .github/workflows/ci.yml
       - .github/workflows/race.yml

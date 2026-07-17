@@ -62,7 +62,7 @@ start:
     - claim: "In run 29550365185 the parent check completed about 12m28s after workflow start, then the 17m21s differential-SBOM job extended total workflow time to about 30 minutes even though deploy and FlakeHub did not depend on it."
       evidence_ref: "docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md"
     - claim: "The existing 3-way non-runtime and 4-way runtime scripts forward -race, so selected Race can substitute on the ordinary matrices instead of adding a second test horn."
-      evidence_ref: "scripts/go-test-non-runtime-shards and scripts/go-test-runtime-shards at origin/main@0e0dfb99"
+      evidence_ref: "scripts/go-test-non-runtime-shards and scripts/go-test-runtime-shards at origin/main@ba1fd5a4"
   unknowns:
     - "Actual hosted duration of the consolidated Race matrices before a natural selected main run."
     - "Actual wall-clock and runner-duration reduction; all projected savings remain forecasts until matched hosted evidence."
@@ -96,7 +96,7 @@ finish:
     - action: "Compare plan-to-check, workflow completion, summed public job duration, and SBOM finalizer overhead with the observed baseline, reporting actual values without calling them billing."
       proves: "The new topology's real hosted Pareto effect is measured and can be rejected if assurance is preserved but time is not improved."
       evidence_class: matched_hosted_telemetry
-  rollback: "Revert the bounded optimization commit through a pull request to restore origin/main@0e0dfb99 behavior: complete reusable Race after ordinary matrices and differential SBOM after check. Coordinate main CI/Race cancellation groups before rollback. CI-only deploy classification must remain false, so no Node B rollback is expected."
+  rollback: "Revert the bounded optimization commits through a pull request to restore origin/main@ba1fd5a4 behavior: complete reusable Race after ordinary matrices and differential SBOM after check. Coordinate main CI/Race cancellation groups before rollback. CI-only deploy classification must remain false, so no Node B rollback is expected."
   landing:
     required: true
     environment: github_actions
@@ -184,18 +184,18 @@ now:
   question: "Can one classifier-selected 3+4 matrix mode and fail-closed parallel SBOM construction remove duplicate work without weakening any accepted assurance?"
   reconciliation:
     observed_at: 2026-07-17T04:15:27Z
-    source_ref: "origin/main 0e0dfb99342846c71f595b3444f4b865cb074756; selected-Race baseline run 29550365185 at e3de55581a1cae3ecce1431f5f4440ab01f62fc8"
+    source_ref: "origin/main ba1fd5a4973618326c8eebe9b14456941724c114; selected-Race baseline run 29550365185 at e3de55581a1cae3ecce1431f5f4440ab01f62fc8"
     deploy_identity: "not_applicable_ci_only; landing must classify deploy_needed=false and Node B must skip"
-    authority_identities: [owner-request-2026-07-16-ci-pareto, choir-doctrine@0e0dfb99, AGENTS@0e0dfb99, definition-skill@0e0dfb99]
+    authority_identities: [owner-request-2026-07-16-ci-pareto, choir-doctrine@ba1fd5a4, AGENTS@ba1fd5a4, definition-skill@ba1fd5a4]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean isolated worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-pareto-topology-2026-07-17; protected parent /Users/wiz/go-choir has five Autoputer-owned modified paths and remains untouched"
     status: reviewed_candidate_ready_for_hosted_pr
   candidate:
     id: ci-pareto-candidate-1
     state: reviewed_ready
-    ref: commit:9b53d3561299328a24db35de723c29a30cf0c4f9
+    ref: commit:a3bf59a1f938ce3ed92ce2d968c7c386db369801
     owner: ci-mission
-    base: 0e0dfb99342846c71f595b3444f4b865cb074756
+    base: ba1fd5a4973618326c8eebe9b14456941724c114
     digest: "ci.yml 2beb6d3f970694c9cbb7851d0c1d125950ef049086c809a6379bf11a02911f7d; race.yml 957f8f3dab3fca192a78156e7ff032effb5fbcc4e7bddd98e14794612e6ffc4b; verifier 83ad36cbede20bba0d75655dad5600c88262aa1acdeb20990b6cbe8d8c148773; workflow contract 34a029dd2b110286736abe21b0552a0dcb86f01491e210d79e23b51c57f535d3"
     scope: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, .github/scripts/ci-impact-classify-test, .github/scripts/ci-workflow-contract-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
   decision:
@@ -207,20 +207,20 @@ now:
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-17T03:45:00Z
     consequence: "The former complete restoration receipt remains historical evidence, but the Definition is reopened until the optimized topology lands and passes matched hosted acceptance."
-  evidence_refs: [docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, run-29550365185, agentic-consensus-2026-07-17, commit-905e7e9d, commit-52dd366a, commit-9b53d356, local-ci-contract-suite, local-focused-non-race-regression, local-race-integration-smoke, independent-review-race-resolved, independent-review-sbom-resolved]
+  evidence_refs: [docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, run-29550365185, agentic-consensus-2026-07-17, commit-01a4a053, commit-1ba8d909, commit-a3bf59a1, local-ci-contract-suite, local-focused-non-race-regression, local-race-integration-smoke, independent-review-race-resolved, independent-review-sbom-resolved]
   blocker_or_risk: "No local or frozen-review blocker remains. Review found and the candidate repaired four defects: manifest-supplied requiredness, unverified differential contents, an unexecuted standalone Race PR route, and a mismatched finalizer cache restore path. Hosted PR/main receipts and measured improvement remain unproved."
   next_action: "Commit this reviewed candidate/registry receipt, push a draft PR, and require both CI and path-filtered standalone Race hosted checks before serialized merge."
 
 receipts:
   - id: ci-pareto-candidate-implement
     boundary: implement
-    commit_or_artifact: 9b53d3561299328a24db35de723c29a30cf0c4f9
+    commit_or_artifact: a3bf59a1f938ce3ed92ce2d968c7c386db369801
     proof_refs: [docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, local-ci-contract-suite, local-focused-non-race-regression, local-race-integration-smoke, independent-review-race-resolved, independent-review-sbom-resolved]
-    rollback_ref: 0e0dfb99342846c71f595b3444f4b865cb074756
+    rollback_ref: ba1fd5a4973618326c8eebe9b14456941724c114
     disposition: "Frozen candidate consolidates selected Race onto the complete 3+4 matrices, keeps the one focused non-Race exclusion and integration smoke, path-tests standalone race.yml on its own PR changes, and permits accepted SBOM publication only after exact baseline-relative verification downstream of check."
     problem_ref: docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md
     authorization_ref: owner-request-2026-07-16-ci-pareto
-    candidate_or_evidence_refs: [candidate-9b53d356, ci-yml-sha256-2beb6d3f970694c9, race-yml-sha256-957f8f3dab3fca19, verifier-sha256-83ad36cbede20bba, workflow-contract-sha256-34a029dd2b110286]
+    candidate_or_evidence_refs: [candidate-a3bf59a1, ci-yml-sha256-2beb6d3f970694c9, race-yml-sha256-957f8f3dab3fca19, verifier-sha256-83ad36cbede20bba, workflow-contract-sha256-34a029dd2b110286]
     landing:
       source_commit: pending_pr_merge
       ci_ref: pending_hosted_pr
