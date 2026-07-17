@@ -184,18 +184,18 @@ now:
   question: "Can accepted SBOMs reuse unchanged normalized dependency inventories while binding every candidate to the current package derivation and output?"
   reconciliation:
     observed_at: 2026-07-17T17:23:59Z
-    source_ref: "origin/main 4e5cd3fce15563550fbc02c9b6fcbdb7c00b319c; problem checkpoint 23a1d556; authority checkpoint a76248a0; local semantic candidate against accepted artifact 8403147713"
+    source_ref: "origin/main 6f66f73e26b0fe422b29700f9c8ad5ae4ca27324; rebased problem checkpoint 31ea6d63; rebased authority checkpoint b97fd7dd; implementation candidate 6fa82d06; pre-rebase local semantic proof against accepted artifact 8403147713"
     deploy_identity: "not_applicable_ci_only; repair and measurement must classify deploy_needed=false and Node B must skip"
-    authority_identities: [owner-request-2026-07-17-semantic-sbom-cache, choir-doctrine@4e5cd3fc, AGENTS@4e5cd3fc, definition-skill@4e5cd3fc]
+    authority_identities: [owner-request-2026-07-17-semantic-sbom-cache, choir-doctrine@6f66f73e, AGENTS@6f66f73e, definition-skill@6f66f73e]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "clean isolated worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-sbom-semantic-cache-2026-07-17; protected parent Autoputer work remains outside this branch"
-    status: locally_verified_candidate_pending_hosted_acceptance
+    status: rebased_locally_verified_candidate_pending_hosted_acceptance
   candidate:
     id: ci-semantic-sbom-cache-candidate-1
-    state: locally_verified
-    ref: pending_candidate_commit
+    state: locally_verified_rebased
+    ref: 6fa82d06518a2b97bfd5bc9a6b73b850bd83e27a
     owner: ci-mission
-    base: 4e5cd3fce15563550fbc02c9b6fcbdb7c00b319c
+    base: 6f66f73e26b0fe422b29700f9c8ad5ae4ca27324
     digest: "ci.yml ffe6e0555a981b81457c5bc14a35f8e3484833d1afc8b294a1dcc10067f82367; builder ef21bc19577c2aa264e34513671e640d1399f4c178cdaa0e8b02ecd2f3a17eb4; fingerprint 7c55e5597d9fde06dbb0a58f7138ad0dcd4a985a2322a47c7be09d3ba28e2050; verifier 1e889349f95094b86d97d3ce84196550a95b2a88ca51d74a07a7b526227fd6af; workflow contract ee309b3aeb37aed0b170c1cf64a7ad966cfee3694aed1e1f8ff6de2d4462b315"
     scope: [.github/workflows/ci.yml, .github/scripts/build-sboms-differential, .github/scripts/build-sboms-differential-test, .github/scripts/sbom-semantic-fingerprint, .github/scripts/sbom-semantic-fingerprint-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, .github/scripts/ci-workflow-contract-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
   decision:
@@ -207,38 +207,38 @@ now:
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-17T16:38:33Z
     consequence: "Exact deployed-artifact identity remains mandatory. Only the dependency inventory may be reused, under a fail-closed fingerprint and rebind contract. The first hosted run must also safely derive fingerprints for a legacy accepted baseline or rebuild."
-  evidence_refs: [problem-checkpoint-23a1d556, authority-checkpoint-a76248a0, run-29559210595, artifact-8398872741, run-29570035893, artifact-8403147713, local-semantic-rebind-10-packages-63.75s, local-independent-finalizer-57.61s, local-focused-contract-suite]
-  blocker_or_risk: "Hosted proof and landing remain. Local proof rebound ten first-party inventories from legacy accepted artifact 8403147713 in 63.75s with no package build or sbomnix invocation; independent verification took 57.61s and rejected forged roots, content, checksums, fingerprints, and package sets. The fingerprint is pinned to the exact Nix Go 1.26.1 toolchain and fails closed on mismatch."
-  next_action: "Commit the verified candidate, rebase on fresh main, open a serialized PR, require hosted parser/contracts, merge only with main CI/Race idle, then measure the canonical main SBOM candidate and finalizer against 16m55s/7s and 19m30s/13s observed baselines."
+  evidence_refs: [problem-checkpoint-31ea6d63, authority-checkpoint-b97fd7dd, implementation-candidate-6fa82d06, run-29559210595, artifact-8398872741, run-29570035893, artifact-8403147713, pre-rebase-local-semantic-rebind-10-packages-63.75s, pre-rebase-local-independent-finalizer-57.61s, rebased-local-focused-contract-suite]
+  blocker_or_risk: "Hosted proof and landing remain. Pre-rebase local proof at base 4e5cd3fc rebound ten first-party inventories from legacy accepted artifact 8403147713 in 63.75s with no package build or sbomnix invocation; independent verification took 57.61s and rejected forged roots, content, checksums, fingerprints, and package sets. Fresh main 6f66f73e changes vmctl's semantic fingerprint, so hosted proof must build that legitimately changed package while rebinding unchanged packages. The fingerprint is pinned to exact Nix Go 1.26.1 and fails closed on mismatch."
+  next_action: "Commit the fresh-main identity receipt, open a serialized PR, require hosted parser/contracts, merge only with main CI/Race idle, then measure the canonical main SBOM candidate and finalizer against 16m55s/7s and 19m30s/13s observed baselines."
 
 receipts:
   - id: semantic-sbom-cache-define
     boundary: define
-    commit_or_artifact: a76248a0d8d948eadba893ca3bd79f4f02fe65af
+    commit_or_artifact: b97fd7ddc73adc8329508a4bf17da20569f7a17d
     proof_refs: [docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md, run-29559210595, run-29570035893]
-    rollback_ref: 4e5cd3fce15563550fbc02c9b6fcbdb7c00b319c
+    rollback_ref: 6f66f73e26b0fe422b29700f9c8ad5ae4ca27324
     disposition: "Owner-authorized repair separates semantic dependency identity from current root artifact identity. No workflow or script mutation occurs in this receipt."
     problem_ref: docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md
     authorization_ref: owner-request-2026-07-17-semantic-sbom-cache
-    candidate_or_evidence_refs: [problem-checkpoint-23a1d556, artifact-8398872741, artifact-8403147713]
+    candidate_or_evidence_refs: [problem-checkpoint-31ea6d63, artifact-8398872741, artifact-8403147713]
     landing:
-      source_commit: a76248a0d8d948eadba893ca3bd79f4f02fe65af
+      source_commit: b97fd7ddc73adc8329508a4bf17da20569f7a17d
       ci_ref: local-doccheck-and-registry-contracts
       deploy_ref: not_applicable_ci_only
       environment_identity: local_authority_boundary
       deployed_acceptance: not_applicable_definition_only
-    registry_conformance_ref: "a76248a0: local doccheck, YAML parse, and registry cardinality passed"
+    registry_conformance_ref: "b97fd7dd: local doccheck, YAML parse, and registry cardinality passed"
   - id: semantic-sbom-cache-implement
     boundary: implement
-    commit_or_artifact: pending_candidate_commit
-    proof_refs: [local-semantic-rebind-10-packages-63.75s, local-independent-finalizer-57.61s, local-focused-contract-suite]
-    rollback_ref: a76248a0d8d948eadba893ca3bd79f4f02fe65af
+    commit_or_artifact: 6fa82d06518a2b97bfd5bc9a6b73b850bd83e27a
+    proof_refs: [pre-rebase-local-semantic-rebind-10-packages-63.75s, pre-rebase-local-independent-finalizer-57.61s, rebased-local-focused-contract-suite]
+    rollback_ref: b97fd7ddc73adc8329508a4bf17da20569f7a17d
     disposition: "Deterministic per-package dependency fingerprints use the exact Nix Go toolchain, transitive selected production sources, module locks, and Nix inputs. Checksummed semantic hits rebind every root derivation/output reference; the finalizer independently recomputes current and baseline fingerprints, validates exact roots, and proves normalized SBOM content unchanged."
     problem_ref: docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md
     authorization_ref: owner-request-2026-07-17-semantic-sbom-cache
     candidate_or_evidence_refs: [ci-yml-ffe6e055, builder-ef21bc19, fingerprint-7c55e559, verifier-1e889349, workflow-contract-ee309b3a]
     landing:
-      source_commit: pending_pr_merge
+      source_commit: 6fa82d06518a2b97bfd5bc9a6b73b850bd83e27a
       ci_ref: pending_hosted
       deploy_ref: ci_only_node_b_skip_required
       environment_identity: github_actions
