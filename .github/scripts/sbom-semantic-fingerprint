@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+package="${1:?usage: sbom-semantic-fingerprint PACKAGE [REPOSITORY_ROOT]}"
+repo_root="${2:-.}"
+repo_root="$(cd "$repo_root" && pwd -P)"
+go_bin="${SBOM_GO_BIN:-go}"
+
+case "$package" in
+  auth|proxy|gateway|maild|maildctl|corpusd|sandbox|sourcecycled|vmctl)
+    kind=go
+    ;;
+  frontend)
+    kind=frontend
+    ;;
+  *)
+    echo "unsupported first-party SBOM package: $package" >&2
+    exit 2
+    ;;
+esac
+
+files="$(mktemp)"
+trap 'rm -f "$files"' EXIT
+
+for required in flake.nix flake.lock; do
+  if [[ ! -f "$repo_root/$required" ]]; then
+    echo "semantic fingerprint input is missing: $repo_root/$required" >&2
+    exit 1
+  fi
+  printf '%s\n' "$required" >> "$files"
+done
+
+if [[ "$kind" == "go" ]]; then
+  for required in go.mod go.sum; do
+    if [[ ! -f "$repo_root/$required" ]]; then
+      echo "semantic fingerprint input is missing: $repo_root/$required" >&2
+      exit 1
+    fi
+    printf '%s\n' "$required" >> "$files"
+  done
+
+  (
+    cd "$repo_root"
+    GOOS=linux GOARCH=amd64 CGO_ENABLED=1 "$go_bin" list -deps -json "./cmd/$package"
+  ) | jq -r --arg root "$repo_root/" '
+    select((.Dir // "") | startswith($root))
+    | .Dir as $dir
+    | [
+        (.GoFiles // []),
+        (.CgoFiles // []),
+        (.CFiles // []),
+        (.CXXFiles // []),
+        (.MFiles // []),
+        (.HFiles // []),
+        (.FFiles // []),
+        (.SFiles // []),
+        (.SysoFiles // []),
+        (.EmbedFiles // [])
+      ]
+    | add[]
+    | $dir + "/" + .
+  ' | while IFS= read -r absolute; do
+    relative="${absolute#"$repo_root/"}"
+    if [[ "$relative" == "$absolute" || ! -f "$repo_root/$relative" ]]; then
+      echo "semantic fingerprint resolved invalid repository file: $absolute" >&2
+      exit 1
+    fi
+    printf '%s\n' "$relative"
+  done >> "$files"
+else
+  for required in frontend/package.json frontend/package-lock.json; do
+    if [[ ! -f "$repo_root/$required" ]]; then
+      echo "semantic fingerprint input is missing: $repo_root/$required" >&2
+      exit 1
+    fi
+    printf '%s\n' "$required" >> "$files"
+  done
+fi
+
+{
+  printf 'choir-sbom-semantic-fingerprint-v1\n'
+  printf 'package=%s\n' "$package"
+  if [[ "$kind" == "go" ]]; then
+    printf 'go-toolchain=%s\n' "$("$go_bin" env GOVERSION)"
+  fi
+  sort -u "$files" | while IFS= read -r relative; do
+    printf '%s\t' "$relative"
+    sha256sum "$repo_root/$relative" | awk '{print $1}'
+  done
+} | sha256sum | awk '{print $1}'
