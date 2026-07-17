@@ -480,6 +480,7 @@ type ConstructedCandidateDisposalReceipt struct {
 	RealizationID string                          `json:"realization_id"`
 	Version       computerversion.ComputerVersion `json:"computer_version"`
 	DiskReceiptID string                          `json:"disk_receipt_id"`
+	PriorState    VMState                         `json:"prior_state"`
 	DisposedAt    time.Time                       `json:"disposed_at"`
 	RouteAbsent   bool                            `json:"route_absent"`
 }
@@ -496,13 +497,14 @@ func (a *RouteAuthority) disposeUnroutedConstructedCandidate(ctx context.Context
 		}
 		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: resolve route slot: %w", err)
 	}
-	if err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID); err != nil {
+	priorState, err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID)
+	if err != nil {
 		return ConstructedCandidateDisposalReceipt{}, err
 	}
 	if _, _, err := a.ledger.Resolve(ctx, request.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
 		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route absence changed during disposal")
 	}
-	return ConstructedCandidateDisposalReceipt{RouteSlotID: request.RouteSlotID, RealizationID: request.RealizationID, Version: request.Version, DiskReceiptID: request.DiskReceiptID, DisposedAt: disposedAt.UTC(), RouteAbsent: true}, nil
+	return ConstructedCandidateDisposalReceipt{RouteSlotID: request.RouteSlotID, RealizationID: request.RealizationID, Version: request.Version, DiskReceiptID: request.DiskReceiptID, PriorState: priorState, DisposedAt: disposedAt.UTC(), RouteAbsent: true}, nil
 }
 
 func (h *Handler) HandleDisposeUnroutedConstructedCandidate(w http.ResponseWriter, r *http.Request) {

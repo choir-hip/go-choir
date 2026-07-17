@@ -228,3 +228,12 @@
 - Protected surfaces: only synthetic route `computer:autoputer-control:control-20260716` and realization `candidate-control-20260716-d`; route must remain absent; no real-user/platform ownership or route may change.
 - Rollback: revert the orphan-disposal allowance before any route CAS; a failed destruction restores durable ownership and leaves the candidate un-routed.
 - Heresy delta: discovered 2 (deploy receipt source identity can omit a stale service artifact; route-refused orphan has no supported exact disposal transition); introduced 0; repaired 0 at this checkpoint.
+
+## Restart-normalized exact disposal receipt — local proof
+
+- Belief correction: current source already normalizes persisted booting/active/degraded/stopping ownerships to `state=stopped, stopped_by=vmctl-restart` before route-gated reattach. The staging ownership remained active only because Node B was still executing the pre-`a64c1cec` vmctl artifact. No active-orphan disposal allowance is needed or introduced.
+- Receipt improvement: successful exact disposal now records `prior_state`; the focused test proves an active constructed candidate is durably normalized to stopped on restart, exact mismatches and present routes refuse, destruction occurs only from the stopped state, and the receipt reports `prior_state=stopped`.
+- Verification: focused normal and race tests, full `internal/vmctl`, `go vet ./internal/vmctl`, and `git diff --check` pass.
+- Deployment effect: this vmctl source change forces the exact-disposal endpoint, restart normalization, and prior-state receipt into one selected vmctl artifact rather than trusting the incomplete source-only deployment identity.
+- Residual deployment risk: deployment receipts still omit unselected artifact identities and latest-push classification can miss changes after a failed deployment. This candidate repairs the concrete vmctl artifact gap but does not claim the general deployment-accounting substrate is repaired.
+- Heresy delta: discovered 2; introduced 0; repaired 1 locally (concrete vmctl artifact selection), with 1 deployment-accounting heresy remaining.

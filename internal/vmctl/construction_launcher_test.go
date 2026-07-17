@@ -169,6 +169,10 @@ func TestDisposeUnroutedConstructedCandidateRequiresExactStoppedBindings(t *test
 	if err := restarted.SetPersistencePath(path); err != nil {
 		t.Fatal(err)
 	}
+	restartedOwnership := restarted.GetOwnershipByVMID("candidate-dispose")
+	if restartedOwnership == nil || restartedOwnership.State != VMStateStopped || restartedOwnership.StoppedBy != "vmctl-restart" {
+		t.Fatalf("restarted candidate = %+v, want stopped vmctl-restart ownership", restartedOwnership)
+	}
 	manager := &mockVMManager{}
 	restarted.SetVMManager(manager)
 	ledger := routeledger.NewMemoryLedger()
@@ -197,7 +201,7 @@ func TestDisposeUnroutedConstructedCandidateRequiresExactStoppedBindings(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !receipt.RouteAbsent || receipt.RealizationID != request.RealizationID || receipt.DiskReceiptID != disk.ID || !containsString(manager.destroys, request.RealizationID) {
+	if !receipt.RouteAbsent || receipt.RealizationID != request.RealizationID || receipt.DiskReceiptID != disk.ID || receipt.PriorState != VMStateStopped || !containsString(manager.destroys, request.RealizationID) {
 		t.Fatalf("disposal receipt or destruction mismatch: receipt=%+v destroys=%v", receipt, manager.destroys)
 	}
 	if restarted.GetOwnershipByVMID(request.RealizationID) != nil {
