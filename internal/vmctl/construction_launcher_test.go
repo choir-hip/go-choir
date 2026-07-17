@@ -312,6 +312,66 @@ func TestDisposeRoutedConstructedRealizationPreservesExactRouteReceipt(t *testin
 	}
 }
 
+func TestDisposeRoutedConstructedRealizationAcceptsOnlyTerminalManagerState(t *testing.T) {
+	version := computerversion.ComputerVersion{CodeRef: "code:sha256:terminal-dispose", ArtifactProgramRef: "artifact-program:sha256:terminal-dispose"}
+	disk, err := diskinstantiation.FinalizeReceipt(diskinstantiation.Receipt{
+		Backend: diskinstantiation.Ext4BackendName, RealizationID: "candidate-terminal-dispose", DeviceID: "data",
+		DevicePath: "/var/lib/go-choir/vm-state/candidate-terminal-dispose/data.img", CreatedAt: time.Now(),
+		Geometry: diskinstantiation.GeometryReceipt{FilesystemType: diskinstantiation.FilesystemExt4, FilesystemLabel: "choir-data", PartitionLayout: diskinstantiation.PartitionLayoutNone, DeviceLogicalBytes: 32 << 30, FilesystemBytes: 32 << 30, FilesystemBlockSize: 4096, FilesystemBlocks: (32 << 30) / 4096, AllocatedBytes: 128 << 20},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slotID, err := routeledger.RouteSlotID("owner", "control")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name         string
+		managerState string
+		wantDisposed bool
+	}{
+		{name: "stopped", managerState: "stopped", wantDisposed: true},
+		{name: "hibernated", managerState: "hibernated", wantDisposed: true},
+		{name: "failed resume", managerState: "failed", wantDisposed: true},
+		{name: "running", managerState: "running", wantDisposed: false},
+		{name: "pending", managerState: "pending", wantDisposed: false},
+		{name: "unknown", managerState: "", wantDisposed: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			registry := NewOwnershipRegistry("http://sandbox.test")
+			if err := registry.SetPersistencePath(filepath.Join(t.TempDir(), "ownerships.json")); err != nil {
+				t.Fatal(err)
+			}
+			if err := registry.beginConstructedCandidate("candidate-terminal-dispose", "owner", "control", "credential", version, disk); err != nil {
+				t.Fatal(err)
+			}
+			if err := registry.activateConstructedCandidate("candidate-terminal-dispose", "http://candidate.test", 1); err != nil {
+				t.Fatal(err)
+			}
+			if err := registry.commitConstructedCandidate("candidate-terminal-dispose", version, disk); err != nil {
+				t.Fatal(err)
+			}
+			registry.mu.Lock()
+			registry.vmByID["candidate-terminal-dispose"].State = VMStateHibernated
+			registry.mu.Unlock()
+			manager := &mockVMManager{getVMs: map[string]*VMInstanceInfo{"candidate-terminal-dispose": {State: tc.managerState}}}
+			registry.SetVMManager(manager)
+
+			priorState, err := registry.disposeConstructedCandidateExact(slotID, "candidate-terminal-dispose", version, disk.ID)
+			if tc.wantDisposed {
+				if err != nil || priorState != VMStateHibernated || !containsString(manager.destroys, "candidate-terminal-dispose") || registry.GetOwnershipByVMID("candidate-terminal-dispose") != nil {
+					t.Fatalf("terminal disposal failed: prior_state=%s err=%v destroys=%v ownership=%+v", priorState, err, manager.destroys, registry.GetOwnershipByVMID("candidate-terminal-dispose"))
+				}
+				return
+			}
+			if err == nil || len(manager.destroys) != 0 || registry.GetOwnershipByVMID("candidate-terminal-dispose") == nil {
+				t.Fatalf("unsafe manager state mutated disposal: err=%v destroys=%v", err, manager.destroys)
+			}
+		})
+	}
+}
+
 func TestConstructedLifecyclePersistenceRejectsMissingBindings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "ownerships.json")
 	state := persistedOwnershipState{Ownerships: []*VMOwnership{{VMID: "candidate-corrupt", UserID: "owner", DesktopID: "candidate", Kind: VMKindInteractive, SnapshotKind: "constructed-computer-version", State: VMStateActive}}}

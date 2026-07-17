@@ -288,3 +288,11 @@
 - Existing-fix connection opportunity: do not invent a second cleanup path. Change exact disposal to reject only running/booting manager state and delegate stopped/failed instances to the existing `DestroyVMState`; keep exact route generation/receipt/version/disk bindings and ownership rollback semantics unchanged.
 - Problem-documentation-first checkpoint: no repair code is included in this receipt. Route generation 1 and latest receipt remain unchanged. The corrupted image and failed manager instance remain contained pending the source repair and deployment.
 - Heresy delta: discovered `1`; introduced `0`; repaired `0`.
+
+## Corrupted-image disposal source repair — deployment pending
+
+- Source repair connects the exact routed-disposal boundary to the existing terminal-state cleanup contract: an absent manager instance remains accepted; explicit `stopped`, `hibernated`, and `failed` manager records are delegated to `DestroyVMState`; `running`, `pending`, empty, and every unknown state are refused before ownership or route mutation.
+- Exact route generation/latest-receipt, ComputerVersion, construction disk receipt, committed ownership, unpublished candidate, and persisted rollback checks remain unchanged. No generic ownership-removal or host deletion path was introduced.
+- Focused normal and race contracts pass for terminal acceptance and running/pending/unknown refusal; the existing route-preservation/receipt contract still passes; full `go test ./internal/vmctl -count=1`, `go vet ./internal/vmctl`, and `git diff --check` pass.
+- This repairs the source behavior only. Staging disposal remains blocked until CI succeeds and Node B's selected vmctl artifact reports this source commit.
+- Heresy delta: discovered `0`; introduced `0`; repaired `1` in source, `0` deployed.

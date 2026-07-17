@@ -716,8 +716,18 @@ func (r *OwnershipRegistry) disposeConstructedCandidateExact(routeSlotID, vmID s
 		return "", fmt.Errorf("vmctl candidate disposal: candidate must be non-active")
 	}
 	manager := r.vmManager
-	if manager == nil || manager.GetVM(own.VMID) != nil {
+	if manager == nil {
 		return "", fmt.Errorf("vmctl candidate disposal: candidate process state is not safely stopped")
+	}
+	if instance := manager.GetVM(own.VMID); instance != nil {
+		switch strings.TrimSpace(instance.State) {
+		case "stopped", "hibernated", "failed":
+			// DestroyVMState is the existing terminal-state cleanup boundary. A
+			// failed resume may leave one of these manager records even though
+			// durable ownership correctly remained stopped or hibernated.
+		default:
+			return "", fmt.Errorf("vmctl candidate disposal: candidate process state is not safely stopped")
+		}
 	}
 	priorState := own.State
 	key := ownershipKey(own.UserID, own.DesktopID)
