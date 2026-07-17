@@ -209,7 +209,7 @@ now:
     consequence: "Ten unchanged first-party inventories rebound with zero package builds. Candidate construction fell from 16m55s/19m30s to 2m52s; the complete selected workflow fell from 17m14s/19m57s to 12m45s while retaining all seven Race jobs, parent check, independent SBOM finalizer, and Node B skip."
   evidence_refs: [pr-62, merge-5dc5ac07, pr-run-29602167381, main-run-29602947097-attempt-2, candidate-job-87961418650, finalizer-job-87963393922, accepted-artifact-8416254509, pr-63, terminal-docs-run-29604861447]
   blocker_or_risk: "No completion blocker. Residual optimization axis: independent finalization takes 2m50s because it deliberately recomputes semantic and current-root identity on a separate runner; this is slower than the former exact-check finalizer but the full workflow is 4m29s faster than the matched 17m14s baseline. A future bounded optimization may batch Nix evaluations without weakening independence."
-  next_action: "No CI mission action remains. The CI maintenance entrypoint is removed from every registry; the Autoputer product Definition is again the sole executable /goal. Any future finalizer batching requires new bounded authority."
+  next_action: "No CI mission action remains. The CI maintenance entrypoint is removed from every registry. Audited construction subsequently completed, so no product /goal is currently executable. Any future finalizer batching requires new bounded authority."
 
 receipts:
   - id: semantic-sbom-cache-define

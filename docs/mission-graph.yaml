@@ -14,29 +14,29 @@ rules:
   - id: no-historical-corpus
     text: Superseded Definitions may remain only as minimal discovery tombstones; ledgers, evidence, and retired topology do not return to this graph.
   - id: scoped-entrypoints
-    text: Exactly one working product spine with mission_orchestrator execution may set entrypoint true; a working owner-authorized ci_maintenance scope_disjoint_maintenance mission may also be executable only when its source, effect, landing, and concurrency boundaries are explicit.
+    text: Zero or one working product spine with mission_orchestrator execution may set entrypoint true; zero is the coherent terminal state until a successor is promoted. A working owner-authorized ci_maintenance scope_disjoint_maintenance mission may also be executable only when its source, effect, landing, and concurrency boundaries are explicit.
   - id: phase-order-owned-by-definition
-    text: Dependency and enables edges are discovery hints only; the active Definition owns phase order.
+    text: Dependency and enables edges are discovery hints only; a working Definition owns its phase order.
 node_fields:
   id: stable mission id
   title: human-readable mission title
-  path: active Definition path
+  path: Definition path
   ledger: always empty; raw mission ledgers are not retained
   status: working | blocked | settled | superseded; Definition blocked_incomplete maps to graph blocked
   kind: spine | subordinate_contract | product_completion | docs_truth | ci_maintenance
   entrypoint: whether the node accepts direct /goal execution
   member_of: containing mission id for subordinate contracts
-  suite_phases: active Definition phases that consume this contract
-  execution_mode: mission_orchestrator | subordinate_only | draft_non_executable | scope_disjoint_maintenance
+  suite_phases: working or completed Definition phases that consume this contract
+  execution_mode: mission_orchestrator | completed_non_executable | subordinate_only | draft_non_executable | scope_disjoint_maintenance
   depends_on: discovery prerequisite hints only; never suite containment or phase authority
   enables: discovery successor hints only; never execution authority
-  sources: current authority sources only
+  sources: current authority or terminal evidence sources only
 nodes:
   - id: og-dolt-heresy-completion-2026-07-08
     title: OG / Dolt / Heresy Completion
     path: docs/definitions/og-dolt-heresy-completion-2026-07-08.md
     ledger: ''
-    status: working
+    status: settled
     kind: subordinate_contract
     entrypoint: false
     member_of: choir-audited-autoputer-construction-2026-07-15
@@ -166,18 +166,18 @@ nodes:
     title: Make the Autoputer Real — Audited Computer Construction
     path: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
     ledger: ''
-    status: working
+    status: settled
     kind: spine
-    entrypoint: true
-    execution_mode: mission_orchestrator
+    entrypoint: false
+    execution_mode: completed_non_executable
     depends_on: []
     enables: [choir-computerversion-performance-optimization-draft-2026-07-15]
     note: >-
-      Sole executable product mission. Construct and boot fresh realizations
-      from immutable ComputerVersion inputs, prove typed equivalence after
-      destruction/reconstruction, and cut routing to D-ROUTE.
+      Completed audited construction; retained as historical evidence authority
+      only. The successor remains blocked and non-executable pending separate
+      owner ratification and registry promotion.
     sources:
-      - docs/ACTIVE.md
+      - docs/evidence/audited-construction-terminal-receipt-2026-07-17.md
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
@@ -306,8 +306,8 @@ nodes:
     entrypoint: false
     execution_mode: subordinate_only
     note: >-
-      Historical vocabulary contract. Current ontology is owned by doctrine and
-      the active audited-construction Definition.
+      Historical vocabulary contract. Current ontology is owned by doctrine; the
+      completed audited-construction Definition is retained as evidence.
     depends_on: []
     enables: []
     sources:

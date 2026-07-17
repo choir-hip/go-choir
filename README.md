@@ -33,7 +33,7 @@ The canonical doctrine and architecture source is
 [docs/choir-doctrine.md](docs/choir-doctrine.md). This README gives the
 orientation; Choir Doctrine wins on architectural conflicts.
 Use [docs/README.md](docs/README.md) as the documentation index and truth
-spine: it points to current architecture, the active Definition, the minimal
+spine: it points to current architecture, the active-work registry, the minimal
 mission graph, assertion register, and heresy detector manifest.
 
 Older docs and code comments may still describe Choir as a personal writing
@@ -295,10 +295,10 @@ stores remain distinct: the corpusd world-wire sql-server store and each
 computer's VM-local embedded app-state store. Narrow route-slot and transition
 receipt tables live on corpusd with vmctl as sole CAS writer; they are route
 control, not a third product-state store. The current `DoltPromotionAdapter`
-remains tag-only and non-conformant. These nonconformant paths remain blocked;
-the active
+remains tag-only and non-conformant. These nonconformant paths remain blocked. The completed
 [audited-construction Definition](docs/definitions/choir-audited-autoputer-construction-2026-07-15.md)
-exclusively assigns and sequences replacement or deletion.
+retains the evidence and deletion boundary; no current product `/goal` authorizes
+further replacement or deletion.
 
 ## Services
 
@@ -475,8 +475,8 @@ and rollback behavior were independently observed.
 
 Start with [docs/README.md](docs/README.md). It defines the bounded current
 packet: doctrine, operating contract, semantic registry, current state, domain
-contracts, and the one active product Definition. Historical missions and raw
-evidence are available through Git history, not the working-tree search corpus.
+contracts, and any currently promoted product Definition. The coherent terminal
+state has none; completed Definitions remain working-tree evidence or Git history.
 
 ## Repository Shape
 

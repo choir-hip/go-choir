@@ -292,9 +292,9 @@ behavior.
   "Activate" only updates the `ComputerSourceLineageRecord`
   (`ActiveSourceRef`, digests, `RouteProfile`) — a durable pointer flip in
   product state, with no route switch, process restart, or binary swap
-  consuming it. Making the flip real requires the active product Definition's
-  Phase D route-over-ComputerVersion work; deleted portfolio/design chains are
-  not executable successors.
+  consuming it. The completed route-over-ComputerVersion work does not authorize
+  this separate app-adoption cutover; a future promoted Definition is required.
+  Deleted portfolio/design chains are not executable successors.
 
 ## App Boundary Rules
 

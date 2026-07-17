@@ -172,7 +172,7 @@ documents:
     claim_scope: current
     is_root: []
     is_evidence: false
-    annotations: {doc_role: definition, authority: subordinate_contract, lifecycle: active}
+    annotations: {doc_role: definition, authority: subordinate_contract, lifecycle: settled}
     witnesses: [docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/mission-graph.yaml]
     refresh_triggers: [mission_state_change, product_ontology_change]
 
@@ -252,13 +252,13 @@ documents:
     refresh_triggers: []
 
   - path: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
-    claim_scope: current
-    is_root: [authority, entry]
-    is_evidence: false
-    annotations: {doc_role: definition, authority: mission, lifecycle: active, active_slice: audited_computer_construction}
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition, authority: completed_mission_evidence, lifecycle: complete, entrypoint: false}
     supersedes: [docs/definitions/choir-autoputer-completion-2026-07-14.md]
-    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md]
-    refresh_triggers: [mission_state_change, mission_graph_change, computer_version_change, vmctl_change, staging_deploy, audited_constructor_acceptance]
+    witnesses: [docs/evidence/audited-construction-terminal-receipt-2026-07-17.md, docs/evidence/g5-post-cutover-accepted-review-2026-07-17.md, docs/mission-graph.yaml, docs/ACTIVE.md]
+    refresh_triggers: []
 
   - path: docs/definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md
     claim_scope: current

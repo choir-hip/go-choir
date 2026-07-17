@@ -112,7 +112,7 @@ finish:
     registry_hygiene:
       required: true
       must_update: [docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
-      acceptance: "This Definition is the sole executable /goal entrypoint, the predecessor is historical evidence, and the standing-questions dangling-reference check reports no missing paths."
+      acceptance: "While working, this Definition is the sole executable /goal entrypoint. On terminal completion it becomes historical evidence and no successor is executable until separately promoted; the standing-questions dangling-reference check reports no missing paths."
   not_done_when:
     - "A route, promotion record, or recovery decision still targets a VM or desktop as durable identity."
     - "The constructor can silently use a prior data.img, persistent VM directory, mutable branch name, or unverified resolver result."
@@ -344,30 +344,30 @@ orchestration:
 
 
 now:
-  status: working
-  slice: "F-cutover-fleet-and-close"
-  question: "Can the accepted 150-plan G4 packet execute one exact route at a time, beginning with control revalidation and a@b.com, while every transition proves construction, independent verification, signed authority, product-path health, restart durability, and complete rollback before the next route?"
+  status: complete
+  slice: "terminal"
+  question: "none; G5 accepted"
   reconciliation:
-    observed_at: 2026-07-17T08:55:00Z
-    source_ref: refs/heads/main@6db85e456e2ec2817555c5efd9e1167ec5c2be45_equals_refs/remotes/origin/main@6db85e456e2ec2817555c5efd9e1167ec5c2be45
-    deploy_identity: "Node B deployed runtime 42e50b6b1fa3ae7461bb789ec173521a768b548d; CI run 29565482629 succeeded; documentation identity 6db85e45 adds only durable deployed proof"
+    observed_at: 2026-07-17T20:28:47Z
+    source_ref: refs/heads/main@015ab0151598cfee9601dc423fd39ee1bba87abe_equals_refs/remotes/origin/main@015ab0151598cfee9601dc423fd39ee1bba87abe_before_staged_terminal_closure
+    deploy_identity: "Node B deployed exact source 2bc1799f72ce437b35d4606a23d14e62b7239ac5; push CI 29609807147 and forced deployed acceptance 29610242297 succeeded; durable G5 evidence is on origin/main at 015ab0151598cfee9601dc423fd39ee1bba87abe"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
-      - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
-      - doctrine:docs/agent-product-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
-      - mission_graph:docs/mission-graph.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
-      - authority_manifest:docs/doc-authority-manifest.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
+      - doctrine:docs/choir-doctrine.md@staged_terminal_closure_candidate
+      - doctrine:docs/agent-product-doctrine.md@staged_terminal_closure_candidate
+      - mission_graph:docs/mission-graph.yaml@terminal_closure
+      - authority_manifest:docs/doc-authority-manifest.yaml@terminal_closure
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "canonical main and origin/main equal at 6db85e456e2ec2817555c5efd9e1167ec5c2be45 before the G4 adjudication candidate; only the reviewed frozen G4 packet, adjudication receipt, and Definition transition are intentional"
+    worktree_inventory_ref: "terminal closure contains the accepted G5 review, terminal receipt, compact Definition state, and coherent registry changes"
     status: reconciled
   candidate:
-    id: g4-fleet-cutover-candidate-2026-07-17
-    state: accepted_for_strictly_serialized_execution
-    ref: docs/evidence/g4-fleet-cutover-candidate-2026-07-17.json
+    id: g5-post-cutover-closure-2026-07-17
+    state: accepted_for_terminal_closure
+    ref: docs/evidence/g5-post-cutover-closure-candidate-2026-07-17.json
     owner: integration-authority
-    base: refs/heads/main@42e50b6b1fa3ae7461bb789ec173521a768b548d
-    digest: "b7f4529535990596b54d2f97e230470cc7d6ba4ec4e17f1c00d67beeed345b1f"
-    scope: [150-exact-route-plans, 149-legacy-mutations, one-retained-control, recovered-owner-only-artifact-program, serialized-rollback-before-next]
+    base: refs/heads/main@2bc1799f72ce437b35d4606a23d14e62b7239ac5
+    digest: "fdec8720e5d786809c9605f1c8b28aa2a3b23037ad3bf74ed759b1722e21fa50"
+    scope: [terminal-receipt, registry-closure, status-complete]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -376,98 +376,28 @@ now:
     evidence_ref: "Owner choices covering fleet scope, disposable data.img, legacy-data scope, corruption recovery, geometry, disk-instantiation abstraction/optimization, canonical-main integration, and Node B-only Firecracker acceptance in this 2026-07-15 conversation."
     owner_ratification_ref: not_applicable
     recorded_at: 2026-07-15T22:36:30Z
-    consequence: "ComputerVersion and semantic materialization cannot depend on disk representation. Invocation requires clean canonical main equal to origin/main. Every served realization must join an accepted materializer receipt to a pinned disk-policy/backend/device receipt; deletion, corruption, cache churn, and capacity pressure reconstruct through that boundary without losing promised state. Implementation lands through origin/main and protected claims require the matching staging Node B deployment. Worktrees are optional isolation, not acceptance. No fleet CAS or terminal closure may cross its preceding accepted gate."
+    consequence: "ComputerVersion and semantic materialization do not depend on disk representation. Every served realization joins an accepted materializer receipt to pinned disk realization evidence. The completed production fleet routes through D-ROUTE; terminal closure is accepted by G5."
   evidence_refs:
-    - start.observed_artifact
-    - docs/ACTIVE.md
-    - docs/mission-graph.yaml
-    - docs/doc-authority-manifest.yaml
-    - "GitHub Actions CI run 29468123745: success; deploy-impact deploy_needed=false"
-    - "https://choir.news/health at 2026-07-16T04:36:01Z: proxy/vmctl ok, deployed commit 9d9945e65f5b54069e1a86a530cb0960d96b3474"
     - docs/evidence/audited-construction-phase-a-2026-07-16.md
-    - "/tmp/choir-audited-construction-contained/node-b-storage-report.json: protected snapshots verified, no deletion authorized"
-    - "/tmp/choir-g1-consensus-final-22a2/omp-gemini35.out: accept, no blockers, high confidence"
-    - "/tmp/choir-g1-consensus-final-alternates/omp-gpt55.out: accept, no blockers, high confidence"
-    - "GitHub Actions CI 29480269240 attempt 2: success; Node B deploy job 87564091427: success"
-    - "https://choir.news/health?g1=7d310551: matching commit and proxy/vmctl healthy"
-    - "Node B missing D-ROUTE probe: HTTP 404 route ledger slot not found"
-    - "/tmp/choir-g2-construction-churn-proven.patch SHA-256 439da6ce2c7e20f451c185e9d377868693b28d201ec0cac45b74fbcb95de4278"
-    - "/tmp/choir-g2-consensus-churn-proven: Codex, Cursor, GPT-5.5, and OpenCode accept; no blocking findings; Gemini unavailable"
-    - "nix shell nixpkgs#e2fsprogs -c go test ./internal/diskinstantiation: pass including real ext4 churn/reclaim/same-ID reconstruction"
-    - "focused affected Go suites and go vet: pass; Node B Nix vmctl environment evaluation: pass"
-    - "/tmp/choir-g3-sealed-writer.patch SHA-256 8754f601425e0e10f0759d32a9502fb51d079469abdcbef2d0c6ea2a583253f3"
-    - "/tmp/choir-g3-consensus-sealed-writer-final: Codex, OpenCode, GPT-5.5, Gemini 3.5, and GLM 5.2 accept with no reproducible blocker; Devin and Cursor timed out without a verdict"
-    - "commit ab89a200: G3-accepted sealed SQL writer, independent verifier, typed disk receipt, fresh materializer/launcher joins, signed frozen bootstrap/promote/rollback envelopes; no route CAS executed"
-    - "GitHub Actions CI run 29536138235: success; Node B activation receipt 514c540203695ca5511524016b3242568f858473 at 2026-07-16T21:42:03Z with vmctl active"
-    - "owner-controlled Ed25519 private key stored outside the repository at ~/.config/choir/promotion-authority-ed25519.pem; staged Node B configuration contains only public key oEdoKFfUCLiOsxNX5J8bT3PQDrjqjVeuU8usTLHSYZ4="
-    - "Node B activation receipt 7122f2799be4458f4b925be11990321c7e70ffc4; vmctl signed promotion authority and production constructor active"
-    - "construction candidate-control-20260716-d: SHA-256 00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984; disk receipt c96eded7; healthy epoch 1; equivalent"
     - docs/evidence/audited-construction-phase-d-2026-07-16.md
-    - "owner authorization, 2026-07-16: blanket approval limited to synthetic route computer:autoputer-control:control-20260716 through independently accepted bootstrap, second-version promote/rollback, restart proof, and hibernated rollback retention; no real-user/platform/fleet route authorized"
     - docs/evidence/g3-bootstrap-e-frozen-review-2026-07-17.md
-    - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governed because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
-    - "/tmp/choir-g3-bootstrap-e-consensus-repair: Codex, Cursor, GPT-5.5, and Gemini accept with no blockers and high confidence; OpenCode no usable verdict; Devin and GLM 5.2 timed out"
-    - "bootstrap transition receipt c3490ed2-287f-4b9f-a3c3-85c5055a50a0: generation 0 -> 1 at 2026-07-17T03:34:44.112910201Z; exact immutable ComputerVersion and certificate joined; independent route readback matched"
     - docs/evidence/g3-promotion-b-frozen-review-2026-07-17.md
-    - "distinct B construction ee63449c7fac; independent verification 0587e697; frozen promotion candidate 193c793e; generation 1 A route readback unchanged; no promote or rollback CAS executed"
-    - "/tmp/choir-g3-promotion-b-consensus: Codex, Cursor, GPT-5.5, and Gemini 3.5 accept with no blocking findings and high confidence; OpenCode emitted no verdict; Devin and GLM 5.2 timed out"
-    - "promotion receipt f1df7f6f-31df-46da-83b8-ffd5d9a78e40: generation 1 A -> generation 2 B; routed lookup and authenticated product readback selected candidate I and audit-b.txt"
-    - "rollback receipt 8ae4f21a-14fd-4800-b044-76edef9604e7: generation 2 B -> generation 3 A, exact target receipt c3490ed2; fresh J reconstruction equivalent and routed A product state restored"
-    - "stale generation-1 promotion replay after generation 3: HTTP 409 with byte-identical route readback"
-    - docs/evidence/g4-fleet-inventory-2026-07-17.json
-    - docs/evidence/g4-fleet-cutover-blocker-2026-07-17.md
-    - "G4 inventory: 150 persisted computers/state directories, one accepted ComputerVersion route/ownership, and 149 unversioned legacy ownerships; no deletion authorized"
-    - "legacy detach/restore candidate diff f375de11568f: signed exact inventory binding, route-lock/absence checks, preserved VM state, durable hash-addressed receipt in the existing registry, restart-safe exact restore, and stale/constructed/tamper refusal"
-    - "go test ./internal/vmctl -run ^TestLegacyOwnershipDetach, full internal/vmctl tests, and go vet ./internal/vmctl: pass"
-    - "CI 29559210595: success; Node B deploy receipt commit b746fd71756fd9d0ed84a1317bda549cf351fd22 activated 2026-07-17T06:22:35Z"
-    - "deployed disposable legacy lifecycle: signed detach, durable receipt, detached vmctl restart, exact restore, restored restart, invariant data.img device/inode/geometry/timestamps, route absence, and forged-signature HTTP 409 with byte-identical registry"
-    - "g4-legacy-detach-restart-restore packet SHA-256 57b1a26f866d36c1ce72f2d0a9af492d528014ce8778ae5b21f754251e7b0083"
-    - "G4 bootstrap rollback blocker: 149 absent legacy routes can bootstrap but the signed route ledger has no exact generation-1 rollback-to-absence; legacy restore correctly requires absence, so post-bootstrap failure is not rollback-safe"
-    - "bootstrap rollback candidate diff f777e852c566: frozen deterministic bootstrap receipt, paired signed bootstrap/rollback plans, generation-1-only memory/SQL delete CAS, immutable generation-2 receipt, route absence, cross-slot/stale refusal, restart-durable and HTTP-idempotent replay"
-    - "go test ./internal/routeledger ./internal/vmctl and go vet both packages: pass"
-    - "CI 29561357407 success; Node B deploy receipt e6fa53f10db3ba9499175d7a1d7912a0cbe2f876 activated 2026-07-17T07:07:37Z"
-    - "deployed disposable first-bootstrap rollback: signed detach, construct/independent verify, paired-plan acceptance, generation-1 bootstrap, routed readback/healthy guest, stop, signed generation-2 rollback-to-absence, idempotent replay, exact unrouted disposal, exact legacy restore, restart durability, invariant legacy image metadata, and forged-plan HTTP 409 without mutation"
-    - "g4-bootstrap-rollback-deployed-proof packet SHA-256 76c6521bba9df23683164d696f8577fb37ef0f0c6071e81c0e96fad37cec2f87"
-    - "owner recovered-state ArtifactProgram artifact-program:sha256:9d90c8666a1d9a69f46daca644bb9470505831bb9926e21d2a577d0bd9aa5a6f: 2,076 files / 609,636,416 bytes; verified Texture/VText/actor hashes; independent owner candidate verification receipt verification:sha256:88b3e33d7cf700fa349ff900226a4a64c17e85b93b668f0d610096962774902a; allocated 627,773,440 bytes"
-    - "G4 staged lifecycle root-cause cluster and active unrouted disposal candidate diff 159e5f2cf6f: exact pre-stop validation, unrouted-only active stop capability, stop-failure preservation, routed terminal-only contract, and focused/full vmctl tests plus vet pass"
-    - "deployed owner zero-realization reconstruction receipt: first disk 5cd0eb3a / verification 88b3e33d; second disk 38d19298 / verification ac873a6d; identical observation 68360005 and product hashes; active disposal receipt 066202bc with route absent; final candidate ownership and data.img absent"
+    - docs/evidence/g4-owner-zero-realization-reconstruction-2026-07-17.json
+    - docs/evidence/g4-bootstrap-rollback-deployed-proof-2026-07-17.json
     - docs/evidence/g4-fleet-cutover-candidate-2026-07-17.json
     - docs/evidence/g4-fleet-cutover-accepted-review-2026-07-17.md
-    - "G4 repaired panel: Cursor, Gemini 3.5, GPT-5.5, and OpenCode accept with no blockers and high confidence; Devin, Codex CLI, and GLM 5.2 timed out without verdict"
-    - docs/evidence/g4-first-fleet-canary-tap-collision-2026-07-17.md
-    - "first fleet canary containment: control route reverified; a@b.com exact detach aa54eac3; Firecracker refused shared vm-candidat-tap with EBUSY; candidate cleanup complete; route absent; exact legacy restore and data.img stat invariants pass"
-    - "TAP repair candidate diff 99364aebbd48: complete VM ID SHA-256 to 60-bit lowercase base32 within Linux 15-byte vm- interface namespace; explicit control/fleet collision regression; full vmmanager tests and vet pass"
-    - "pre-deploy TAP migration: accepted control realization hibernated at epoch 2 under old runtime; old vm-candidat-tap confirmed absent"
-    - "commit 1c9ba54b: full-identity TAP repair; CI 29570035893 success; Node B exact deploy activated 2026-07-17T09:38:46Z"
-    - "deployed TAP proof: accepted control healthy on vm-tvkv4ngjjlb7; simultaneous disposable long-prefix candidate healthy on distinct vm-ukfekyjlysv2 and exactly disposed; sequence-1 candidate subsequently healthy on distinct vm-nqqm7vjpwmxr"
-    - docs/evidence/g4-first-fleet-canary-product-auth-blocker-2026-07-17.md
-    - "sequence-1 construction/verification passed: disk 69f63428 / verification 2b46d432; generation-1 bootstrap receipt d2f8fb62; public owner-authenticated session unavailable because mission authority does not possess the existing passkey"
-    - "sequence-1 exact rollback: signed generation-2 absence receipt a13734b6; stopped candidate disposed; legacy state/epoch/data.img tuple restored; vmctl restart retained route absence and exact ownership; no later row moved"
-    - docs/evidence/g4-first-fleet-canary-unpublished-route-blocker-2026-07-17.md
-    - "owner-authenticated Chrome product proof: CHOIR BIOS BOOTSTRAP FAILED (502); proxy exact cause desktop primary is not published; candidate direct health remained HTTP 200 ready"
-    - "fresh sequence-1 receipts: disk a00fe3dd / verification 60d40689 / bootstrap c27002f6; exact signed rollback-to-absence bce7a01a; candidate disposed and legacy tuple restored after vmctl restart"
-    - "commit 3b7f6d11: bootstrap route publication fate-sharing; CI 29597139827 success; Node B exact deploy activated 2026-07-17T16:54:20Z"
-    - "deployed public success before restart: owner-authenticated Chrome online; /api/shell/bootstrap HTTP 200 selected candidate-fleet-49ee3bd0ec6f366a164c02d2; /api/files HTTP 200; audit.txt exact; route generation 1 and ownership published true"
-    - docs/evidence/g4-published-canary-restart-blocker-2026-07-17.md
-    - "commit 6f66f73e: ownership reload accepts only validated committed constructed-current plus detached-legacy rollback pairs; focused/full vmctl tests, routeledger tests, vet, and doccheck pass; CI deterministic gates passed"
-    - docs/evidence/g4-immutable-canary-deploy-refresh-blocker-2026-07-17.md
-    - "staging partial activation proof: vmctl restarted healthy with 150 ownerships and retained sole active published constructed canary; deploy correctly withheld receipt after trying to refresh that immutable guest from frozen runtime 7122f279 to deploy commit 6f66f73e"
-    - "commit 627e7420: deploy refresh excludes immutable constructed computers and records an honest empty mutable set; CI 29600709320 success; forced deploy 29601931679 success; Node B activated 2026-07-17T18:11:29Z"
-    - "authenticated Chrome canary proof after deploy and restart: online desktop; bootstrap/files/audit HTTP 200; exact candidate and audit artifact; immutable runtime remained frozen at source 7122f279; signed rollback, disposal, exact legacy restore, and restart passed"
-    - "fresh repeat canary and recovered-owner canary passed construct/verify/publish/hibernate/restart; repeat owner-authenticated Chrome bootstrap and audit passed; repeat rollback/disposal/legacy restore/restart passed before final cutover"
-    - "serialized final fleet execution: sequences 1-149 completed in frozen order; each exact legacy row detached, sparse ComputerVersion realization constructed and independently verified, signed route CAS published, and realization hibernated; post-cutover vmctl restart healthy with 150 ownerships; all 149 route/ownership/version joins recomputed with zero mismatches"
     - docs/evidence/g4-detached-rollback-reclaim-blocker-2026-07-17.md
-    - "commit 8f2f04db: validated detached legacy receipts fate-share with retention planning, deletion revalidation, and storage proof; full vmctl tests, vet, doccheck, and CI 29606344443 passed"
-    - "deployed reclaim result: 149 exact detached rollback directories protected, zero projected deletes, 100 unrelated orphan directories reclaimed, vm-state allocation 230.27 GiB -> 121.65 GiB, root availability 121.65 GiB -> 237.49 GiB"
     - docs/evidence/g5-product-inspection-and-generation-boundary-blocker-2026-07-17.md
-    - "commit 97a9564b: authenticated product status exposes an owner-scoped redacted exact join over ComputerVersion, disk construction receipt, D-ROUTE generation/receipt, approval, and promotion certificate; CI 29608011572 and matching staging deploy passed"
-    - "deployed no-SSH owner CLI proof: active published recovered-owner computer, joined immutable identity, ready runtime, 32 GiB coherent guest capacity, bootstrap/files product reads; authenticated a@b.com browser proof returned exact marker artifact and unsupported lifecycle mutation refusal"
     - docs/evidence/g5-cli-help-credential-leak-2026-07-17.md
-  blocker_or_risk: "The immutable product-inspection gap is repaired, but G5 stops on a newly discovered CLI secret-redaction failure: api-key command help rendered CHOIR_API_KEY as a flag default. The exposed admin key was rotated and revoked without recording its value. The earlier out-of-authority deletion of stale generations 555-558 remains an introduced heresy for terminal review."
-  next_action: "Make CLI API-key flag defaults secret-free and resolve environment fallback only after parsing; prove all command help redacts a verifier-known secret, deploy, exercise owner immutable inspection with a temporary read-only delegated key and scoped mutation refusal, revoke it, then freeze and independently adjudicate G5."
+    - docs/evidence/g5-post-cutover-reproducibility-2026-07-17.json
+    - docs/evidence/g5-post-cutover-closure-candidate-2026-07-17.json
+    - docs/evidence/g5-post-cutover-accepted-review-2026-07-17.md
+    - docs/evidence/audited-construction-terminal-receipt-2026-07-17.md
+  blocker_or_risk: "No completion blocker. Residual separately governed risks: 149 detached legacy rollback directories, two manual owner recovery snapshots, one unpublished control route, and unknown secondary exposure of the revoked admin credential."
+  next_action: "none under this completed Definition; any successor requires separate owner ratification and registry promotion."
 
 successor:
-  status: unauthorized_until_this_definition_complete
+  status: eligible_for_separate_owner_ratified_definition_but_not_executable
   candidate_goal: "Make real Choir development run as capsule effects against a forked ComputerVersion, controlled through the supported Choir CLI by an external agent with no SSH."
   prerequisite_receipts: [zero_realization_reconstruction, route_over_computer_version, no_ssh_inspection, scoped_authority_refusal, promotion_rollback]
   note: "This mission makes that successor possible but does not implement or activate external-agent capsule development."
@@ -477,7 +407,7 @@ view:
   endpoint: "http://127.0.0.1:8788"
   generator: "node skills/definition/scripts/dashboard.mjs docs/definitions/choir-audited-autoputer-construction-2026-07-15.md --serve 127.0.0.1:8788 --watch"
   generator_version: "definition-dashboard-js/v1"
-  authority: "The skill-owned live dashboard is a human-readable, non-editable projection only; this Markdown/YAML Definition is the sole execution and completion authority. Localhost is transport for owner inspection, not an authority source."
+  authority: "The skill-owned dashboard was a human-readable, non-editable projection only. While working, this Markdown/YAML Definition was the sole execution and completion authority; now complete, it is historical evidence with no execution authority. Localhost was transport for owner inspection, not an authority source."
   lifecycle: "The dashboard process is an in-memory OMP session process, not a system LaunchAgent, so it does not survive a host reboot and must be restarted manually with the generator command above. A Tailscale serve tcp forward on tailnet port 8788 maps this loopback endpoint to the owner's iPhone; that forward survives reboot because Tailscale itself runs as a LaunchAgent, but nothing listens on 8788 until the dashboard process is restarted. Port 8788 is used because 8787 is occupied by HermesWebUI on this host."
   refresh: "The skill-owned server renders the owner view in memory rather than dumping YAML or creating a repository artifact; while served, server-sent events move the view from current to explicitly unavailable on Definition or repository-state invalidation and back to current only after successful regeneration. Every successful regeneration recomputes repository metadata from the dashboard process's worktree without fetching or mutating Git state. Under --watch, changes to dashboard-view.mjs and dashboard-git.mjs hot-reload into the running server; dashboard.mjs server changes still require a process restart. It never serves stale content as current or infers state."
   projection_contract:

@@ -1,11 +1,11 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-15. Every claim is marked **Live**, **Target**, or
-**Retired**. Current execution authority is
-[docs/definitions/choir-audited-autoputer-construction-2026-07-15.md](definitions/choir-audited-autoputer-construction-2026-07-15.md);
-the OG/Dolt Definition supplies subordinate D-ROUTE, detector, and deletion
-contracts to phases B, D, and F only. Earlier assessments and hard-cutover
-sources remain absorbed historical evidence.
+**Last updated:** 2026-07-17. Every claim is marked **Live**, **Target**, or
+**Retired**. No product Definition is currently executable. The completed
+[audited-construction Definition](definitions/choir-audited-autoputer-construction-2026-07-15.md)
+and OG/Dolt subordinate D-ROUTE, detector, and deletion contracts are retained
+as evidence. Earlier assessments and hard-cutover sources remain absorbed
+historical evidence.
 Previous revision: 2026-06-11 ontology revision — durable actors, trajectories,
 conjecture vocabulary; see the Ontology section.)
 
@@ -681,15 +681,11 @@ This section is the current authority for the public-identity roadmap target.
 
 - **Route-over-ComputerVersion (H031):** no product route resolves to a VM or
   desktop instance identity. Routes point at `ComputerVersion = (CodeRef,
-  ArtifactProgramRef)` records. The current implementation has a seam in
-  `internal/proxy/lineage_route_resolver.go` that still falls back to hard-coded
-  platform VM/desktop constants when the `route_profile` parser fails or
-  `PROXY_RUNTIME_DB_PATH` is unset; this is a known violation tracked by H031.
-  The variable and proxy direct-file-open path are obsolete embedded-mode
-  relics: embedded Dolt cannot be shared this way with the runtime process.
-  Keep `PROXY_RUNTIME_DB_PATH` unset in embedded deployments and do not call
-  the owner/desktop resolver “route-over-ComputerVersion.” The active
-  audited-construction Definition exclusively assigns replacement or deletion.
+  ArtifactProgramRef)` records. Audited construction completed the production
+  D-ROUTE cutover and proved 150 route/ownership/version/disk joins after
+  restart. Backend, device, geometry, and disk receipts remain separate
+  realization evidence. The removed direct-file resolver is historical; any
+  regression or further route mutation requires separate promoted authority.
 - **Timeout hardening (I3):** `vmctl.Client` and `DefaultVmctlTimeout` default to
   60s, `internal/server/server.go` sets `ReadTimeout`/`WriteTimeout` defaults to
   120s, and staging `/api/universal-wire/stories` returns a fast 504 within
@@ -795,8 +791,8 @@ against the world-wire store and not a separate promotion workspace. D-PROMO
 is settled for pinned `*sql.Conn` single-writer discipline on the embedded
 store: the `TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` bar
 passes. The current `DoltPromotionAdapter` is tag-only, non-conformant, and
-must remain disabled; the active audited-construction Definition exclusively
-assigns replacement or deletion.
+must remain disabled. Audited construction granted no further adapter mutation;
+replacement or deletion requires a separately promoted Definition.
 
 Per-user snapshot filesystem holds workspace and file state:
 

@@ -124,9 +124,9 @@ Branch isolation on the VM-local embedded store is settled for pinned
 single-writer connections (D-PROMO), but the current `DoltPromotionAdapter`
 remains tag-only and non-conformant. Its `Rollback` method still uses forbidden
 `DOLT_RESET --hard` on main, and its setter has no production caller. The
-adapter must remain unwired. The active audited-construction Definition
-exclusively assigns and sequences its replacement or deletion; no historical
-Phase D/E assignment authorizes work.
+adapter must remain unwired. Audited construction completed without granting
+new adapter mutation authority; replacement or deletion requires a separately
+promoted Definition. No historical Phase D/E assignment authorizes work.
 
 ## Ledger Split
 

@@ -4,9 +4,9 @@ This file carries product architecture rules for agents working on Choir. It is
 loaded on demand when a mission touches authority boundaries, harness behavior,
 Texture, runtime configuration, product-path verification, or run acceptance.
 Long-running missions now execute as Definition documents (`/goal <doc>.md`);
-see [skills/definition/SKILL.md](../skills/definition/SKILL.md) and
-[docs/definitions/choir-audited-autoputer-construction-2026-07-15.md](definitions/choir-audited-autoputer-construction-2026-07-15.md)
-for the current top-level product Definition.
+see [skills/definition/SKILL.md](../skills/definition/SKILL.md). The completed
+[audited-construction Definition](definitions/choir-audited-autoputer-construction-2026-07-15.md)
+is historical evidence; no top-level product Definition is currently executable.
 It inherits [Choir Doctrine](choir-doctrine.md) and must not become a competing
 doctrine source.
 
@@ -43,8 +43,8 @@ Foreground/canonical state stays stable. Background/candidate computers mutate. 
 - **D-PROMO interim:** branch isolation on the VM-local embedded store is
   settled for pinned single-writer connections; the current
   `DoltPromotionAdapter` is tag-only, non-conformant, and must remain disabled.
-  The active audited-construction Definition exclusively assigns and sequences
-  replacement or deletion.
+  Audited construction completed without granting new adapter mutation authority;
+  replacement or deletion requires a separately promoted Definition.
 - **Timeout hardening landed:** `vmctl.Client` defaults to 60 seconds and the
   server has bounded read/write timeouts (120-second defaults). Staging proved
   the induced resolve-failure path returns a bounded 504; re-prove after a

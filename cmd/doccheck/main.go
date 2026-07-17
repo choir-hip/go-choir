@@ -47,7 +47,7 @@ var highRead = map[string]bool{
 }
 
 // defaultReadPacket is intentionally small. It includes the docs router plus
-// the eleven content documents named by docs/README.md. --mode=live validates
+// the current content documents named by docs/README.md. --mode=live validates
 // this coherent current reading surface; the historical corpus remains
 // report-only until individual retention receipts exist.
 var defaultReadPacket = []string{
@@ -62,7 +62,6 @@ var defaultReadPacket = []string{
 	"docs/runtime-invariants.md",
 	"docs/texture-agentic-invariants-2026-06-13.md",
 	"docs/source-external-data-publication.md",
-	"docs/definitions/choir-audited-autoputer-construction-2026-07-15.md",
 }
 
 type manifestFile struct {
@@ -245,7 +244,7 @@ func main() {
 			fmt.Printf("doccheck live check failed: %d failures, %dms\n", len(rep.LiveFailures), rep.RuntimeMS)
 			os.Exit(1)
 		}
-		fmt.Printf("doccheck live check passed: 11 content documents plus router, %dms\n", rep.RuntimeMS)
+		fmt.Printf("doccheck live check passed: %d content documents plus router, %dms\n", len(defaultReadPacket)-1, rep.RuntimeMS)
 		os.Exit(0)
 	}
 	fmt.Printf("doccheck report-only complete: %d docs, %d warnings, %dms\n", rep.DocsScanned, len(rep.Warnings), rep.RuntimeMS)
@@ -799,16 +798,35 @@ func validateLiveReadPath(rep report) []warning {
 		if doc.Scope != "current" || doc.Annotations["doc_role"] != "definition" {
 			continue
 		}
+		if doc.Annotations["authority"] == "scope_disjoint_ci_maintenance" {
+			continue
+		}
+		hasAuthority := false
+		hasEntry := false
 		for _, root := range doc.IsRoot {
-			if root == "authority" {
-				productDefinitions++
-				authorityRootPath = cleanPath(doc.Path)
-				break
+			switch root {
+			case "authority":
+				hasAuthority = true
+			case "entry":
+				hasEntry = true
 			}
 		}
+		if !hasAuthority && !hasEntry {
+			continue
+		}
+		productDefinitions++
+		authorityRootPath = cleanPath(doc.Path)
+		if !hasAuthority || !hasEntry || len(doc.IsRoot) != 2 || !doc.Manifested || !doc.Exists {
+			failures = append(failures, warning{
+				Rule:     "L4",
+				Severity: "error",
+				Path:     doc.Path,
+				Message:  "current product Definition root must exist, be manifested, and carry exactly the authority and entry roots",
+			})
+		}
 	}
-	if productDefinitions != 1 {
-		failures = append(failures, warning{Rule: "L4", Severity: "error", Path: "docs/doc-authority-manifest.yaml", Message: fmt.Sprintf("expected exactly one current authority-root product Definition, found %d", productDefinitions)})
+	if productDefinitions > 1 {
+		failures = append(failures, warning{Rule: "L4", Severity: "error", Path: "docs/doc-authority-manifest.yaml", Message: fmt.Sprintf("expected at most one current authority-root product Definition, found %d", productDefinitions)})
 	}
 
 	var productEntrypoints []missionGraphNode
@@ -831,9 +849,11 @@ func validateLiveReadPath(rep report) []warning {
 			})
 		}
 	}
-	if len(productEntrypoints) != 1 {
-		failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("expected exactly one product mission graph entrypoint, found %d", len(productEntrypoints))})
-	} else if productDefinitions == 1 &&
+	if len(productEntrypoints) > 1 {
+		failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("expected at most one product mission graph entrypoint, found %d", len(productEntrypoints))})
+	} else if len(productEntrypoints) != productDefinitions {
+		failures = append(failures, warning{Rule: "L5", Severity: "error", Path: rep.MissionGraph.Path, Message: fmt.Sprintf("product mission graph entrypoint count %d does not match current authority-root product Definition count %d", len(productEntrypoints), productDefinitions)})
+	} else if len(productEntrypoints) == 1 &&
 		(productEntrypoints[0].Status != "working" ||
 			cleanPath(productEntrypoints[0].Path) != authorityRootPath) {
 		failures = append(failures, warning{
@@ -1005,8 +1025,8 @@ func validateMissionGraph(path string, docs map[string]*docInfo) (graphReport, [
 			}
 		}
 	}
-	if productEntrypoints != 1 {
-		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("expected exactly one product mission graph entrypoint, found %d", productEntrypoints)})
+	if productEntrypoints > 1 {
+		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("expected at most one product mission graph entrypoint, found %d", productEntrypoints)})
 	}
 	if maintenanceEntrypoints > 1 {
 		warnings = append(warnings, warning{Rule: "R5", Severity: "warning", Path: path, Message: fmt.Sprintf("expected at most one scope-disjoint CI maintenance entrypoint, found %d", maintenanceEntrypoints)})

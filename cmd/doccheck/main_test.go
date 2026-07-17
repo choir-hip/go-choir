@@ -60,13 +60,13 @@ func TestValidateMissionGraphEntrypointCardinality(t *testing.T) {
 		noWarnings   []string
 	}{
 		{
-			name: "zero rejected",
+			name: "zero product accepted",
 			nodes: `  - id: a
     title: A
-    status: working
+    status: settled
     kind: spine
 `,
-			wantWarnings: []string{"expected exactly one product mission graph entrypoint, found 0"},
+			noWarnings: []string{"product mission graph entrypoint"},
 		},
 		{
 			name: "one product accepted",
@@ -110,7 +110,7 @@ func TestValidateMissionGraphEntrypointCardinality(t *testing.T) {
 				"    execution_mode: mission_orchestrator\n" +
 				"    status: working\n" +
 				"    kind: spine\n",
-			wantWarnings: []string{"expected exactly one product mission graph entrypoint, found 2"},
+			wantWarnings: []string{"expected at most one product mission graph entrypoint, found 2"},
 		},
 		{
 			name: "stale maintenance rejected",
@@ -419,14 +419,14 @@ func TestValidateLiveReadPathRejectsInvalidMissionGraphEntrypointCardinality(t *
 		nodes     []missionGraphNode
 		wantCount string
 	}{
-		{name: "zero", wantCount: "found 0"},
+		{name: "zero with live authority root", wantCount: "does not match current authority-root product Definition count 1"},
 		{
 			name: "second product",
 			nodes: []missionGraphNode{
 				{ID: "old", EntryPoint: true, ExecutionMode: "mission_orchestrator", Status: "working", Kind: "spine"},
 				{ID: "current", EntryPoint: true, ExecutionMode: "mission_orchestrator", Status: "working", Kind: "spine"},
 			},
-			wantCount: "found 2",
+			wantCount: "at most one product mission graph entrypoint, found 2",
 		},
 	}
 
@@ -440,6 +440,45 @@ func TestValidateLiveReadPathRejectsInvalidMissionGraphEntrypointCardinality(t *
 				t.Fatalf("validateLiveReadPath() failures = %#v, want L5 containing %q", failures, tt.wantCount)
 			}
 		})
+	}
+}
+
+func TestValidateLiveReadPathRejectsMalformedProductAuthorityRoot(t *testing.T) {
+	rep := completeLivePacketReport()
+	for i := range rep.Documents {
+		if rep.Documents[i].Path == "docs/definitions/current.md" {
+			rep.Documents[i].IsRoot = []string{"authority"}
+		}
+	}
+	failures := validateLiveReadPath(rep)
+	if !hasWarningMessage(failures, "exactly the authority and entry roots") {
+		t.Fatalf("validateLiveReadPath() failures = %#v, want malformed authority-root failure", failures)
+	}
+}
+
+func TestValidateLiveReadPathRejectsEntryOnlyProductRoot(t *testing.T) {
+	rep := completeLivePacketReport()
+	for i := range rep.Documents {
+		if rep.Documents[i].Path == "docs/definitions/current.md" {
+			rep.Documents[i].IsRoot = []string{"entry"}
+		}
+	}
+	failures := validateLiveReadPath(rep)
+	if !hasWarningMessage(failures, "exactly the authority and entry roots") {
+		t.Fatalf("validateLiveReadPath() failures = %#v, want entry-only product-root failure", failures)
+	}
+}
+
+func TestValidateLiveReadPathRejectsUnknownProductRoot(t *testing.T) {
+	rep := completeLivePacketReport()
+	for i := range rep.Documents {
+		if rep.Documents[i].Path == "docs/definitions/current.md" {
+			rep.Documents[i].IsRoot = []string{"authority", "entry", "unknown"}
+		}
+	}
+	failures := validateLiveReadPath(rep)
+	if !hasWarningMessage(failures, "exactly the authority and entry roots") {
+		t.Fatalf("validateLiveReadPath() failures = %#v, want unknown product-root failure", failures)
 	}
 }
 
@@ -528,6 +567,21 @@ func TestValidateLiveReadPathRejectsInvalidScopeDisjointMaintenanceEntrypoint(t 
 	}
 }
 
+func TestValidateLiveReadPathAcceptsCoherentTerminalStateWithoutProductEntrypoint(t *testing.T) {
+	rep := completeLivePacketReport()
+	filtered := rep.Documents[:0]
+	for _, doc := range rep.Documents {
+		if doc.Annotations["doc_role"] != "definition" || doc.Annotations["authority"] == "scope_disjoint_ci_maintenance" {
+			filtered = append(filtered, doc)
+		}
+	}
+	rep.Documents = filtered
+	rep.MissionGraph.Nodes = nil
+	if failures := validateLiveReadPath(rep); len(failures) != 0 {
+		t.Fatalf("validateLiveReadPath() terminal failures = %#v, want none", failures)
+	}
+}
+
 func completeLivePacketReport() report {
 	rep := report{}
 	for _, path := range defaultReadPacket {
@@ -538,20 +592,26 @@ func completeLivePacketReport() report {
 			Exists:      true,
 			Annotations: map[string]string{},
 		}
-		if path == "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md" {
-			doc.Annotations["doc_role"] = "definition"
-			doc.IsRoot = []string{"authority", "entry"}
-		}
 		rep.Documents = append(rep.Documents, doc)
 		if path != "docs/README.md" {
 			rep.Edges = append(rep.Edges, edge{From: "docs/README.md", To: path, Kind: "markdown"})
 		}
 	}
+	rep.Documents = append(rep.Documents, docInfo{
+		Path:       "docs/definitions/current.md",
+		Scope:      "current",
+		IsRoot:     []string{"authority", "entry"},
+		Manifested: true,
+		Exists:     true,
+		Annotations: map[string]string{
+			"doc_role": "definition",
+		},
+	})
 	rep.MissionGraph = graphReport{
 		Path: defaultGraph,
 		Nodes: []missionGraphNode{{
 			ID:            "current",
-			Path:          "docs/definitions/choir-audited-autoputer-construction-2026-07-15.md",
+			Path:          "docs/definitions/current.md",
 			EntryPoint:    true,
 			ExecutionMode: "mission_orchestrator",
 			Status:        "working",

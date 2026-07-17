@@ -47,8 +47,9 @@ replaced by executable enforcement. Invariants trend toward TLA+ specs
 model-checked in CI, and heresies trend toward detectors that fail CI on
 regression. This document trends toward thesis + invariants + pointers. The
 mission form for long-running work is now `skills/definition/SKILL.md`
-(`/goal <doc>.md`). The sole current executable product Definition is
-[docs/definitions/choir-audited-autoputer-construction-2026-07-15.md](definitions/choir-audited-autoputer-construction-2026-07-15.md).
+(`/goal <doc>.md`). The audited-construction Definition completed on 2026-07-17 and is retained as
+historical evidence. No product Definition is currently executable; a successor
+must be separately owner-ratified and promoted through every registry.
 OG/Dolt supplies subordinate requirements and evidence only; it owns no
 sequencing, mutation, resumption, completion, or escalation.
 A heresy entry below without a CI detector is a heresy entry that is not yet done being
@@ -1171,8 +1172,10 @@ pattern. The test: if there are no `chan` declarations in
 
 #### H031 - Candidate Computer Modeled as VM Identity
 
-`status:` **active** (gated by phases B, D, and F of
-[docs/definitions/choir-audited-autoputer-construction-2026-07-15.md](definitions/choir-audited-autoputer-construction-2026-07-15.md)).
+`status:` **production route identity repaired** by completed phases B, D, and F
+of [audited construction](definitions/choir-audited-autoputer-construction-2026-07-15.md).
+The detector remains active against regression and residual legacy
+candidate-desktop identity surfaces.
 
 `bad pattern:` Implementing the candidate computer concept as physical VM or desktop instances. This includes forking by cloning a VM/image, running speculative mutations inside a candidate VM, and promotion/rollback as VM-route or image operations.
 

@@ -16,7 +16,7 @@ is the operating contract.
 
 ## Default Reading Packet
 
-Read these eleven documents or views before broad architecture or product work.
+Read these ten documents or views before broad architecture or product work.
 They are the whole default packet; historical material is opt-in.
 
 1. [`README.md`](../README.md) — human and developer entry point.
@@ -26,8 +26,8 @@ They are the whole default packet; historical material is opt-in.
 4. [`semantic-registry.md`](semantic-registry.md) — compact, non-overriding
    map of the doctrine's stable semantics.
 5. [`NOW.md`](NOW.md) — dated facts and freshness limits.
-6. [`ACTIVE.md`](ACTIVE.md) — confirmed active Definitions and work-state
-   caveats.
+6. [`ACTIVE.md`](ACTIVE.md) — confirmed active/completed Definitions and
+   work-state caveats.
 7. [`computer-ontology.md`](computer-ontology.md) — persistent computer,
    candidate, promotion, and rollback contract.
 8. [`runtime-invariants.md`](runtime-invariants.md) — runtime authority and
@@ -36,8 +36,6 @@ They are the whole default packet; historical material is opt-in.
    — canonical artifact contract.
 10. [`source-external-data-publication.md`](source-external-data-publication.md)
     — source, provenance, and publication contract.
-11. [`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md)
-    — the sole active top-level product Definition and mission orchestrator.
 
 The compact registry and views point to the source documents; none can override
 the doctrine, operating contract, or an explicitly promoted domain contract.
@@ -64,11 +62,12 @@ desktop/app state, follow its links to
 
 ## ACTIVE
 
-[`ACTIVE.md`](ACTIVE.md) is the curated work view. The product umbrella remains
-the one top-level Definition in the default packet. The completed
-[`documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md)
-is intentionally outside that packet: it is a deletion/maintenance receipt and
-cannot override product semantics.
+[`ACTIVE.md`](ACTIVE.md) is the curated work view. A working product Definition,
+when one is promoted, is added to the default packet as the sole authority root.
+The terminal state may coherently have none. Completed Definitions, including
+[`documentation-authority-reduction-2026-07-09.md`](definitions/documentation-authority-reduction-2026-07-09.md),
+remain outside that current packet as evidence and cannot override product
+semantics.
 
 `mission-graph.yaml` is a minimal discovery index for retained Definitions. A
 Definition owns its own state; the graph, Beads, and Git history do not override
@@ -84,7 +83,7 @@ claim matters, verify it against the current doctrine, domain contracts,
 Definition, and observed system state before acting on it.
 
 The pre-purge raw process-evidence and ledger corpus remains outside the
-worktree; bounded current evidence receipts remain where the active Definition
+worktree; bounded completion evidence receipts remain where the completed Definition
 requires them. Git history is still the forensic recovery surface for material
 not represented in the historical corpus.
 

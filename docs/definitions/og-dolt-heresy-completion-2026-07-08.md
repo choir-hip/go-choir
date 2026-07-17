@@ -2,28 +2,22 @@
 
 ## Subordinate Invocation Semantics
 
-This document supplies storage, promotion, heresy-detector, and deletion
-contracts to:
-
-```text
-/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
-```
-
-Do not invoke it independently while the active mission is `working`.
-Construction, routing, promotion, recovery, and deletion mutations execute only
-through the active Definition. Historical conclusions and detector/deletion
-contracts remain load-bearing; they do not create a second orchestrator or state
-capsule.
+This document supplied storage, promotion, heresy-detector, and deletion
+contracts to the completed
+[audited-construction Definition](choir-audited-autoputer-construction-2026-07-15.md).
+Neither document is currently executable. Historical conclusions and
+detector/deletion contracts remain load-bearing; they do not create an
+orchestrator, mutation authority, or state capsule.
 
 This document previously superseded the deleted 2026-07-07 program and heresy
 paradocs. Their conclusions remain absorbed here as historical evidence. The
-active mission now supersedes this document's independent execution authority.
+completed audited-construction mission superseded this document's independent execution authority; no current product Definition inherits it.
 
 ## Source Authority Order
 
-1. `docs/definitions/choir-audited-autoputer-construction-2026-07-15.md` for
-   active execution order, evidence, checkpoints, and resumption.
-2. This document's detector, deletion, and historical evidence contracts.
+1. Current doctrine and any future separately promoted Definition for execution.
+2. The completed audited-construction Definition and this document's detector,
+   deletion, and historical evidence contracts.
 3. Owner statements 2026-07-07/08: object graph becomes canonical by hard
    cutover; Dolt version-control features become load-bearing; all named
    heresies eliminated with executable enforcement; candidate computers are
@@ -293,7 +287,7 @@ migration_notes:
 settlement:
   settled_by: human
   invalidation_triggers:
-    - hard blocker in migration evidence (report as a requirement risk to the active Definition)
+    - hard blocker in migration evidence (retain as a requirement risk for any future promoted Definition)
 ```
 
 ### D-PROMO. Conjecture: branch isolation on the embedded store — SETTLED
@@ -343,7 +337,7 @@ adapter_requirements_if_supported:
   - All promotion operations for a candidate MUST run on a pinned sql.Conn or sql.Tx, never through the pool; connections must be closed/returned on success, failure, and panic (leak risk is real).
   - Concurrent capsule writers within the VM serialize through the store's single-writer discipline; CAS-retry at application level.
 requirement_effect:
-  - The active Definition alone assigns any branch-adapter, specification, or implementation work.
+  - No current Definition assigns branch-adapter, specification, or implementation work; future mutation requires separate promotion.
   - The tag-based adapter remains interim and disabled; `DOLT_RESET` rollback stays forbidden.
   - Any future adapter must use pinned connections and preserve single-writer isolation.
 settlement:
@@ -458,7 +452,7 @@ subordinate_contract:
     This subordinate document supplies requirements only; it owns no next
     action, implementation order, phase gate, or completion decision.
 formalization_contract:
-  - Require the specification and Go writer to satisfy the named route-slot, receipt, generation, and ComputerVersion conformance contract; implementation order is owned exclusively by the active Definition.
+  - Require the specification and Go writer to satisfy the named route-slot, receipt, generation, and ComputerVersion conformance contract; new implementation requires a separately promoted Definition.
   - Model receipt append and route change as one CAS action, rollback as the same action in reverse, and require NoReceiptWithoutRouteChange, NoRouteChangeWithoutReceipt, AtMostOneWinnerPerGeneration, and NoProjectionBeforeReceipt.
 protected_surfaces:
   - ComputerVersion route authority
@@ -533,7 +527,7 @@ non_definition:
 requirement_effect:
   - Active phases B/D/F consume the Dolt product-state requirement and the corpusd route-slot topology.
   - Commit boundaries, rollback, history correctness/latency, throughput, build friction, and replication remain verification axes, not sequencing or decision authority.
-  - Any demonstrated feasibility contradiction is a requirement risk reported to the active Definition; only that Definition determines escalation and sequencing.
+  - Any demonstrated feasibility contradiction remains a requirement risk; escalation or sequencing requires a separately promoted Definition.
 settlement:
   rule: Settled by owner authority. Verification tasks may change implementation tactics but not the chosen substrate without a new explicit owner decision.
   settled_by: human
@@ -764,10 +758,10 @@ determined_state:
       source: observed (`executeTextureEditTool` → `requiredContinuationAfterTextureEdit` → `extractEmailDraftIntent`, 2026-07-10)
       execution_effect: M3.1b is settled by deletion, inverted tests, CI, Node B identity, and a deployed Texture proof; broader H010/H024/H026 work remains.
     - claim: Historical D-ROUTE third-store topology is superseded; retained CAS/receipt semantics assign ordinary served-route authority to corpusd sql-server route-slot tables with vmctl as sole writer.
-      source: owner two-store directive, applied by the active mission's two-store-topology node
+      source: owner two-store directive, applied by the completed audited-construction two-store-topology node
       superseded_claim: one distinct durable Dolt-backed ComputerVersion route-control domain
       superseded_by: docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
-      active_definition_consumption: >-
+      completed_definition_consumption: >-
         Active phases B-resolve-immutable-inputs, D-verify-and-route, and
         F-cutover-owner-and-close own implementation. Receipt projection,
         fail-closed truth, idempotency, and sole-writer contracts remain
@@ -775,7 +769,7 @@ determined_state:
   settled_2026_07_08_owner:
     - claim: D-STORE is all-in on Dolt; native history/branch behavior becomes load-bearing. Storage inventory questions are engineering homework, not a renewed decision gate.
       source: owner authority, reaffirmed 2026-07-09
-      requirement_effect: Dolt remains the settled product-state substrate; only the active Definition determines tactics, sequencing, and escalation.
+      requirement_effect: Dolt remains the settled product-state substrate; new tactics, sequencing, or escalation require a separately promoted Definition.
     - claim: Dolt persistence taxonomy — two product-state stores (world-wire sql-server and per-VM embedded stores) plus one narrow vmctl-owned ComputerVersion route-control ledger; promotion preparation is an operation on the embedded store and activation is a CAS in the ledger.
       source: user-stated product-store constraints + orchestrator-settled route-control consequence + observed
       settled_effect: D-WIRE, D-PROMO, D-STORE, and D-ROUTE requirements are settled; promotion is decoupled from the wire store and VM ownership/desktop publication.
@@ -783,7 +777,7 @@ determined_state:
       source: user-stated
     - claim: Current wire-store data is junk (the wire loop has never worked end-to-end); the sql-server store stands up fresh with no data migration.
       source: user-stated
-      requirement_effect: D-WIRE supplies settled store and deletion constraints; only the active Definition determines sequencing and mutation.
+      requirement_effect: D-WIRE supplies settled store and deletion constraints; new sequencing or mutation requires a separately promoted Definition.
   open: []
 ```
 
@@ -826,20 +820,14 @@ no current status, sequencing, next action, mutation permission, resumption, or
 completion decision. Git history is the forensic source for their retired
 topology and wording.
 
-Current work may consume only the settled D-ROUTE and H031 requirements named
-in `subordinate_contract` above. All mutations and closure execute through:
-
-- `B-resolve-immutable-inputs`
-- `D-verify-and-route`
-- `F-cutover-owner-and-close`
-
-of
-`docs/definitions/choir-audited-autoputer-construction-2026-07-15.md`.
-A direct `/goal` on this document is forbidden.
+The completed audited-construction phases B, D, and F consumed the settled
+D-ROUTE and H031 requirements named in `subordinate_contract` above. No current
+mutation or closure authority remains. A direct `/goal` on this document is
+forbidden.
 ## Retained Evidence Contracts
 
 The following proof obligations and ledger entries are subordinate evidence
-consumed only by the active Definition's B/D/F gates.
+consumed by the completed audited-construction B/D/F gates.
 
 - Staging traces for request-path claims (`api.resolve` latency, 504s).
 - `go test ./...` plus inverted tests per deletion.
@@ -1072,12 +1060,12 @@ Per the definition skill. Specific bindings:
 The former escalation rules are retired. D-WIRE contradiction, D-PROMO
 architecture changes, D-STORE contradiction, irreversible SQL drops, external
 route/API removals, vocabulary cutovers, and red mutations without rollback are
-requirement risks supplied to active phases B/D/F. Escalation, mutation
-permission, and sequencing are owned exclusively by the active Definition.
+requirement risks historically supplied to completed phases B/D/F. Any new
+escalation, mutation, or sequencing requires a separately promoted Definition.
 
 ## Retained False-Completion Guards
 
-These guards constrain active B/D/F evidence; they do not define phases:
+These guards constrained completed B/D/F evidence; they do not define phases:
 
 - TLC green → implementation isolates.
 - adapter exists → promotion is Dolt-native.
@@ -1114,8 +1102,5 @@ Retained rollback references:
 - `d6ce587d` — pre-M3.1a behavior.
 - `73657a8f` — pre-M3.1b behavior.
 
-The sole current invocation is:
-
-```text
-/goal docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
-```
+The audited-construction successor completed on 2026-07-17 and is retained as
+historical evidence. No product `/goal` is currently authorized.
