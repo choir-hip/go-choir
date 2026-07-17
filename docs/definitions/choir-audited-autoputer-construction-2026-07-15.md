@@ -362,7 +362,7 @@ now:
     status: reconciled
   candidate:
     id: candidate-control-20260716-d
-    state: owner_approved_for_bounded_control_route_pending_freeze
+    state: owner_approved_freeze_blocked_by_post_boot_allocation_comparison
     ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
     owner: autoputer-control
     base: refs/heads/main@7122f2799be4458f4b925be11990321c7e70ffc4
@@ -404,8 +404,8 @@ now:
     - "construction candidate-control-20260716-d: SHA-256 00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984; disk receipt c96eded7; healthy epoch 1; equivalent"
     - docs/evidence/audited-construction-phase-d-2026-07-16.md
     - "owner authorization, 2026-07-16: blanket approval limited to synthetic route computer:autoputer-control:control-20260716 through independently accepted bootstrap, second-version promote/rollback, restart proof, and hibernated rollback retention; no real-user/platform/fleet route authorized"
-  blocker_or_risk: "The owner granted blanket approval for only the synthetic control route through exact signed bootstrap, independently reviewed second-version promote/rollback, restart proof, and hibernated rollback retention. This does not authorize any existing user/platform route or fleet cutover. Every exact frozen candidate still requires deterministic checks and independent G3 acceptance; any reproducible minority blocker stops mutation."
-  next_action: "Sign the exact approved owner payload for computer:autoputer-control:control-20260716, call deployed prepare-bootstrap to recompute independent verification and freeze a non-executed candidate, update this current card with its digest, then run deterministic checks and independent G3 review before any route/evidence CAS."
+  blocker_or_risk: "Deployed prepare-bootstrap safely refused before mutation because the verifier compared construction-time allocated bytes with post-boot allocated bytes as if allocation accounting were immutable geometry. Stable 32 GiB ext4 geometry matches; allocation increased from 11,849,728 to 152,604,672 bytes and remains below the 2 GiB policy. No route/evidence CAS occurred. Repair must preserve exact stable-geometry checks and independently enforce current allocation bounds."
+  next_action: "Repair the independent verifier to compare immutable disk geometry separately from mutable post-boot allocation accounting, prove strict geometry and allocation-policy refusals, deploy the repair, then replay the same signed non-executed bootstrap freeze request."
 
 successor:
   status: unauthorized_until_this_definition_complete

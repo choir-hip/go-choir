@@ -158,3 +158,15 @@
 - Gate condition: deterministic checks and independent G3 acceptance of each exact frozen candidate remain mandatory. Any reproducible minority blocker stops mutation and requires repair/review.
 - Explicit exclusions: every existing user route, `yusefnathanson@me.com`, universal/platform computers, generic/raw transition, G4 fleet cutover, G5 terminal closure, protected owner recovery images, and successor capsule work.
 - Bootstrap residual: the synthetic slot is durable and cannot transition back to absent. The accepted safe residue is a durable audit route and hibernated version-A realization, not deletion of route history.
+
+## Problem checkpoint — verifier confuses post-boot allocation with immutable geometry
+
+- Mutation class: red.
+- Substrate: independent realization verifier / disk-instantiation evidence join.
+- Trigger: deployed `prepare-bootstrap` for the owner-approved synthetic control candidate returned HTTP 409: `realization verifier: independent disk geometry mismatch`.
+- Evidence: the immutable construction receipt records 32 GiB device/filesystem geometry, 4 KiB blocks, 8,388,608 blocks, and 11,849,728 allocated bytes at construction. Read-only post-boot inspection records the same stable geometry but 152,604,672 allocated host bytes after the guest booted and wrote runtime state.
+- Root cause: `IndependentRealizationVerifier.Verify` compares the entire current `GeometryReceipt` to the construction-time geometry. `AllocatedBytes` is a measured optimization/accounting field that is expected to change after boot; it is not immutable filesystem geometry. The comparison therefore rejects a healthy realization before product-state readback.
+- Required repair: compare stable device/filesystem geometry exactly, then validate current allocation independently against the typed allocation policy. Do not weaken device size, filesystem size, block size/count, filesystem identity, partition layout, or allocation bounds.
+- Protected surfaces: no route/evidence CAS occurred; the synthetic route remains absent; the constructed realization remains disposable and unpublished; real user/platform routes and protected recovery images remain untouched.
+- Rollback: revert the verifier repair before any route CAS. The failed freeze request is safe and leaves no ledger mutation.
+- Heresy delta: discovered 1 (mutable allocation accounting treated as immutable geometry); introduced 0; repaired 0 at this checkpoint.
