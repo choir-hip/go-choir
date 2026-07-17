@@ -415,6 +415,10 @@ type OwnershipRegistry struct {
 	// Firecracker data disks live under the VM manager state dir; this file is
 	// the durable routing index that lets vmctl reattach to those disks.
 	persistencePath string
+
+	// detachedLegacy holds restart-durable, restorable legacy ownership receipts.
+	// The detached VM state remains under its existing VM ID and is never copied.
+	detachedLegacy map[string]LegacyOwnershipDetachReceipt
 }
 
 // NewOwnershipRegistry creates a new ownership registry.
@@ -438,14 +442,16 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		retentionUserEmails:        make(map[string]string),
 		warmnessPolicy:             DefaultWarmnessPolicyConfig(),
 		workerImageProfiles:        make(map[string]VMImageProfile),
+		detachedLegacy:             make(map[string]LegacyOwnershipDetachReceipt),
 		epochCounter:               1,
 	}
 }
 
 type persistedOwnershipState struct {
-	SavedAt      time.Time      `json:"saved_at"`
-	EpochCounter int64          `json:"epoch_counter"`
-	Ownerships   []*VMOwnership `json:"ownerships"`
+	SavedAt        time.Time                               `json:"saved_at"`
+	EpochCounter   int64                                   `json:"epoch_counter"`
+	Ownerships     []*VMOwnership                          `json:"ownerships"`
+	DetachedLegacy map[string]LegacyOwnershipDetachReceipt `json:"detached_legacy_receipts,omitempty"`
 }
 
 // SetPersistencePath enables durable ownership metadata. Existing metadata is
@@ -489,6 +495,16 @@ func (r *OwnershipRegistry) loadLocked() error {
 	r.workerVMs = make(map[string]*VMOwnership)
 	r.vmByID = make(map[string]*VMOwnership)
 	r.pendingWaiters = make(map[string][]chan *VMOwnership)
+	r.detachedLegacy = make(map[string]LegacyOwnershipDetachReceipt, len(state.DetachedLegacy))
+	for id, receipt := range state.DetachedLegacy {
+		if id != receipt.ID {
+			return fmt.Errorf("load legacy detach receipt %s: key does not match receipt", id)
+		}
+		if err := receipt.Validate(); err != nil {
+			return fmt.Errorf("load legacy detach receipt %s: %w", id, err)
+		}
+		r.detachedLegacy[id] = receipt
+	}
 	maxEpoch := r.epochCounter
 	for _, loaded := range state.Ownerships {
 		if loaded == nil || strings.TrimSpace(loaded.VMID) == "" || strings.TrimSpace(loaded.UserID) == "" {
@@ -533,6 +549,19 @@ func (r *OwnershipRegistry) loadLocked() error {
 		}
 		r.vmByID[own.VMID] = ptr
 	}
+	detachedRoutes := make(map[string]string, len(r.detachedLegacy))
+	for id, receipt := range r.detachedLegacy {
+		if existingID, exists := detachedRoutes[receipt.RouteSlotID]; exists {
+			return fmt.Errorf("load legacy detach receipts %s and %s: duplicate route %s", existingID, id, receipt.RouteSlotID)
+		}
+		detachedRoutes[receipt.RouteSlotID] = id
+		if r.vmByID[receipt.Ownership.VMID] != nil {
+			return fmt.Errorf("load legacy detach receipt %s: VM %s is also registered", id, receipt.Ownership.VMID)
+		}
+		if owner := r.ownerships[ownershipKey(receipt.Ownership.UserID, receipt.Ownership.DesktopID)]; owner != nil {
+			return fmt.Errorf("load legacy detach receipt %s: owner desktop is also registered", id)
+		}
+	}
 	if state.EpochCounter > maxEpoch {
 		maxEpoch = state.EpochCounter
 	}
@@ -566,7 +595,11 @@ func (r *OwnershipRegistry) writePersistenceLocked() error {
 		bk := string(b.Kind) + "|" + b.UserID + "|" + b.DesktopID + "|" + b.WorkerID + "|" + b.VMID
 		return ak < bk
 	})
-	state := persistedOwnershipState{SavedAt: time.Now().UTC(), EpochCounter: r.epochCounter, Ownerships: ownerships}
+	detached := make(map[string]LegacyOwnershipDetachReceipt, len(r.detachedLegacy))
+	for id, receipt := range r.detachedLegacy {
+		detached[id] = receipt
+	}
+	state := persistedOwnershipState{SavedAt: time.Now().UTC(), EpochCounter: r.epochCounter, Ownerships: ownerships, DetachedLegacy: detached}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)

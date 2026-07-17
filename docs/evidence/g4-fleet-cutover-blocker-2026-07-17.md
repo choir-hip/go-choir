@@ -95,3 +95,25 @@ On any pre-bootstrap failure: dispose the failed candidate if present, restore t
 ## Rollback and admissible proof
 
 Rollback for the repair is removal of the new endpoint before any detach receipt exists. After a detach, rollback is exact restore from that receipt. G4 remains blocked until focused persistence/restart/stale-binding/route-conflict tests pass on canonical main, the deployed Node B endpoint proves detach → failed-candidate restore on a disposable legacy fixture, and the complete inventory plus serialized per-route plans are frozen for independent review.
+
+
+## Source repair candidate — deployment pending
+
+Candidate digest: Git binary diff SHA-256 `f375de11568fd8d8174d865c4b7dae4693b4a480b2416af356b653de7401843d`.
+
+The candidate adds the typed internal endpoints:
+
+- `POST /internal/vmctl/computer-version-realizations/detach-legacy`;
+- `POST /internal/vmctl/computer-version-realizations/restore-legacy`.
+
+Detach now requires an Ed25519 authorization under the pinned promotion-authority key, binding the exact route slot, VM ID, lifecycle state, epoch, inventory-row SHA-256, decision, key ID, and timestamp. It runs under the same `RouteAuthority.mutationMu` as route CAS, proves route absence before and after mutation, refuses constructed or transitional ownerships, stops active/degraded VMs without destroying them, removes only the exact registry indexes, and atomically persists a hash-addressed receipt with complete restorable metadata. Detached receipts live in the existing ownership persistence file; no third store or route writer was added. Load rejects tampered receipts, duplicate detached routes, or any VM/owner identity registered both active and detached.
+
+Restore validates the exact durable receipt, runs under the route mutation lock, requires the route still be absent and no replacement ownership/VM/worker identity exist, atomically restores the ownership as a non-running lifecycle state, and consumes the detach receipt. Identical detach and restore replays are idempotent; stale inventory, forged authorization, changed route, constructed ownership, and tampered receipt paths refuse without mutation.
+
+Focused proof on canonical source:
+
+- `go test ./internal/vmctl -run '^TestLegacyOwnershipDetach' -count=1`: pass;
+- `go test ./internal/vmctl -count=1`: pass;
+- `go vet ./internal/vmctl`: pass.
+
+The source repair is not yet admissible staging evidence. Remaining blocker: push, green CI, matching Node B deployment, then execute an authorized disposable legacy detach, vmctl restart, exact restore, and state-byte/readback proof before freezing G4.

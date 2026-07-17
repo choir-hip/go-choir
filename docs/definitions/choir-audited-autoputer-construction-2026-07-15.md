@@ -417,8 +417,10 @@ now:
     - docs/evidence/g4-fleet-inventory-2026-07-17.json
     - docs/evidence/g4-fleet-cutover-blocker-2026-07-17.md
     - "G4 inventory: 150 persisted computers/state directories, one accepted ComputerVersion route/ownership, and 149 unversioned legacy ownerships; no deletion authorized"
-  blocker_or_risk: "Complete G4 inventory finds 150 persisted computers but only the accepted synthetic control has ComputerVersion and a route. For each of 149 unversioned legacy ownerships, matching construction is correctly refused while ownership exists, signed bootstrap requires that matching construction, and existing removal requires a route and destroys state. This dependency cycle blocks a frozen, rollback-safe fleet candidate; no real-user or fleet route has crossed G4."
-  next_action: "Implement the documented vmctl legacy detach/restore boundary: exact frozen-row preconditions, no existing route or ComputerVersion bindings, preserved old state directory, durable hash-addressed receipt, restart-safe persistence, exact restore before bootstrap only, and stale/route-conflict refusal. Deploy it, prove detach/failing-candidate/restore on a disposable legacy fixture, then freeze the complete per-route G4 cutover packet for consensus."
+    - "legacy detach/restore candidate diff f375de11568f: signed exact inventory binding, route-lock/absence checks, preserved VM state, durable hash-addressed receipt in the existing registry, restart-safe exact restore, and stale/constructed/tamper refusal"
+    - "go test ./internal/vmctl -run ^TestLegacyOwnershipDetach, full internal/vmctl tests, and go vet ./internal/vmctl: pass"
+  blocker_or_risk: "The documented legacy ownership dependency cycle has a locally verified source repair: signed exact detach/restore under the route mutation lock preserves VM state, persists a hash-addressed restorable receipt in the existing registry, and refuses routes, constructed ownerships, stale inventory, forged authorization, tampering, and identity collisions. It is not yet deployed evidence; no real-user or fleet ownership has been detached and no fleet route has crossed G4."
+  next_action: "Commit and push the detach/restore repair, require green CI and matching Node B deployment, then use a signed authorization on one disposable legacy fixture to prove detach, persisted receipt, vmctl restart, exact restore, unchanged state bytes, and route absence. Repair any failure before freezing the complete per-route G4 cutover packet for consensus."
 
 successor:
   status: unauthorized_until_this_definition_complete
