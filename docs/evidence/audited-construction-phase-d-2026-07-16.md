@@ -198,3 +198,13 @@
 - Verification: affected vmctl/routeledger/computerversion package tests and vet passed; targeted route/disposal race test passed; `git diff --check` passed.
 - No staging disposition occurs until this exact source commit passes CI and activates on Node B.
 - Heresy delta: discovered 1; introduced 0; repaired 1 locally, pending deployed exact-disposal proof.
+
+## Problem checkpoint — owner-scoped run lookup scans metadata
+
+- Mutation class: orange.
+- Substrate: object-graph identity lookup.
+- Trigger: CI run `29546310837` failed twice in race shard 3, and a focused non-race reproduction failed locally: `TestCancelRunTrajectoryDrainsMoreThanOneActivePage` times out in `GetRunOG` after creating 1,001 trajectory runs. The failure is `objectgraph dolt: scan object: context deadline exceeded`.
+- Root cause: `CancelRunTrajectory` already receives the authenticated owner ID but calls global `GetRun(runID)`, which uses `GetObjectByMetadata` and scans JSON metadata instead of deriving the immutable canonical run object ID from `(ownerID, runID)`. The repository already uses direct canonical-ID lookup for owner-scoped trajectories and work items.
+- Required repair: add an owner-scoped direct run lookup using `BuildCanonicalID` plus `GetObject`, preserve not-found semantics, and use it before trajectory cancellation. Retain the global metadata lookup only for callers that genuinely lack owner identity.
+- Rollback: revert the owner-scoped lookup and this checkpoint; no schema or stored data changes are required.
+- Heresy delta: discovered 1 (authenticated owner identity discarded before object lookup); introduced 0; repaired 0 at this checkpoint.

@@ -404,8 +404,8 @@ now:
     - "construction candidate-control-20260716-d: SHA-256 00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984; disk receipt c96eded7; healthy epoch 1; equivalent"
     - docs/evidence/audited-construction-phase-d-2026-07-16.md
     - "owner authorization, 2026-07-16: blanket approval limited to synthetic route computer:autoputer-control:control-20260716 through independently accepted bootstrap, second-version promote/rollback, restart proof, and hibernated rollback retention; no real-user/platform/fleet route authorized"
-  blocker_or_risk: "The local exact-disposal boundary refuses present routes, mismatched bindings, active processes, and replay while serializing against signed route CAS. It is not staging evidence until its exact commit passes CI and activates on Node B. No route/evidence CAS occurred; raw host deletion and broad retention pruning remain forbidden."
-  next_action: "Commit and deploy the tested exact-disposal boundary, verify matching Node B activation, dispose only stale candidate-control-20260716-d with exact route/version/disk bindings, reconstruct from the same immutable inputs, and freeze the new non-executed bootstrap candidate."
+  blocker_or_risk: "Exact-disposal commit a64c1cec is on canonical main, but CI run 29546310837 failed twice because owner-scoped CancelRunTrajectory discards owner identity and performs a global JSON-metadata scan that times out after 1,001 runs. The problem is checkpointed before repair. Node B remains on 20ec1c19; no route/evidence CAS occurred, and raw host deletion remains forbidden."
+  next_action: "Repair the owner-scoped run lookup with direct canonical-ID addressing, pass focused scale and race checks, deploy exact disposal plus lookup repair, then dispose only stale candidate-control-20260716-d with exact route/version/disk bindings and reconstruct from immutable inputs."
 
 successor:
   status: unauthorized_until_this_definition_complete
