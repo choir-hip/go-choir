@@ -216,3 +216,15 @@
 - Verification: focused owner-scope/wrong-owner/update-not-found contracts pass; full `internal/store` and `internal/agentcore` package tests pass; affected `go vet` and `git diff --check` pass. One unrelated process-restart fixture emitted a truncated ready marker during the first full run, then passed focused and the full agentcore package passed on retry.
 - Rollback: revert the direct owner-scoped lookup commit; no schema or stored data migration exists.
 - Heresy delta: discovered 1; introduced 0; repaired 1 locally, pending CI and deployed exact-disposal continuation.
+
+## Problem checkpoint — deployed receipt omits vmctl artifact and orphan remains active
+
+- Mutation class: red.
+- Substrate: deployment routing plus vmctl restart/disposal lifecycle.
+- Trigger: CI run `29548529828` passed every test/race/build gate and its Node B deploy job activated source target `317c1c537afc30f2e71d0a20a62e2a0af17eb67a`, but the deploy receipt lists only sandbox and gateway artifacts. The active `/var/lib/go-choir/services/vmctl/bin/vmctl` lacks the exact-disposal route and returns HTTP 404. The latest-commit deploy classification did not carry forward vmctl changes from the previously failed `a64c1cec` deployment.
+- Additional staging fact: restart correctly refuses to reattach `candidate-control-20260716-d` without D-ROUTE, leaving its durable ownership `state=active` while the new manager does not adopt it and the old Firecracker process survives. The exact-disposal guard currently requires a stopped/hibernated/failed ownership, so even a correctly deployed endpoint would have no supported transition for this route-refused orphan.
+- Existing safe substrate: `VMManager.DestroyVMState` already identifies and kills orphan Firecracker processes by exact VM ID, rechecks for live processes, refuses deletion if any remain, then removes only the exact state directory. Disposal already holds the route mutation lock, proves route absence, requires exact immutable version/disk bindings, removes ownership durably, and restores ownership on destruction failure.
+- Required repair: let exact disposal accept an `active` constructed ownership only when it is absent from the new manager; preserve the exact route/version/disk checks and rely on `DestroyVMState` to kill and verify the orphan before deleting state. Touch the vmctl artifact so the cumulative missed endpoint and this repair deploy together. Record the prior ownership state in the receipt.
+- Protected surfaces: only synthetic route `computer:autoputer-control:control-20260716` and realization `candidate-control-20260716-d`; route must remain absent; no real-user/platform ownership or route may change.
+- Rollback: revert the orphan-disposal allowance before any route CAS; a failed destruction restores durable ownership and leaves the candidate un-routed.
+- Heresy delta: discovered 2 (deploy receipt source identity can omit a stale service artifact; route-refused orphan has no supported exact disposal transition); introduced 0; repaired 0 at this checkpoint.
