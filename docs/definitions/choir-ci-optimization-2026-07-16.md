@@ -179,39 +179,71 @@ measures:
     cannot_prove: "Absence of all CI defects."
 
 now:
-  status: complete
-  slice: "terminal Pareto CI acceptance"
-  question: "Did the landed topology preserve all selected assurance while reducing the observed check and workflow critical paths?"
+  status: working
+  slice: "semantic differential SBOM cache repair"
+  question: "Can accepted SBOMs reuse unchanged normalized dependency inventories while binding every candidate to the current package derivation and output?"
   reconciliation:
-    observed_at: 2026-07-17T06:37:49Z
-    source_ref: "origin/main d06c87c97beba0c2edab49e19e755e5a5a0dd982 contains PR 60 merge 3d7a609ff1fc3030674d3c7ae73369e40b1c05ea; natural high-risk run 29559210595 at b746fd71756fd9d0ed84a1317bda549cf351fd22 completed successfully"
-    deploy_identity: "CI-only PR run 29554632413 and first post-landing docs-only main run 29556555338 skipped Node B; the exact merge run 29556440070 was twice cancelled by later owner pushes before deploy. Natural vmctl stimulus run 29559210595 deployed successfully, but that deployment belongs to the product change and is not CI-maintenance acceptance."
-    authority_identities: [owner-request-2026-07-16-ci-pareto, choir-doctrine@d06c87c9, AGENTS@d06c87c9, definition-skill@d06c87c9]
+    observed_at: 2026-07-17T17:58:39Z
+    source_ref: "origin/main 627e74201aba346c92c71e8f1620c8bef7b82342; problem checkpoint 31ea6d63; authority checkpoint b97fd7dd; implementation candidate 6fa82d06; no-force fresh-main merge 2ec07035; hosted PR run 29600440546"
+    deploy_identity: "not_applicable_ci_only; repair and measurement must classify deploy_needed=false and Node B must skip"
+    authority_identities: [owner-request-2026-07-17-semantic-sbom-cache, choir-doctrine@627e7420, AGENTS@627e7420, definition-skill@627e7420]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean terminal receipt worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-pareto-terminal-receipt-2026-07-17; protected parent Autoputer work remains outside this branch"
-    status: terminal_ci_pareto_accepted
+    worktree_inventory_ref: "clean isolated worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-sbom-semantic-cache-2026-07-17; protected parent Autoputer work remains outside this branch"
+    status: hosted_pr_passed_fresh_main_merged_pending_recheck
   candidate:
-    id: ci-pareto-candidate-1
-    state: landed_terminal_accepted
-    ref: merge:3d7a609ff1fc3030674d3c7ae73369e40b1c05ea
+    id: ci-semantic-sbom-cache-candidate-1
+    state: hosted_pr_passed_pending_fresh_main_recheck
+    ref: 2ec070354c9c3965efa1e717d07ef97cd190fb75
     owner: ci-mission
-    base: ba1fd5a4973618326c8eebe9b14456941724c114
-    digest: "landed ci.yml 2beb6d3f970694c9cbb7851d0c1d125950ef049086c809a6379bf11a02911f7d; race.yml 957f8f3dab3fca192a78156e7ff032effb5fbcc4e7bddd98e14794612e6ffc4b; verifier 83ad36cbede20bba0d75655dad5600c88262aa1acdeb20990b6cbe8d8c148773"
-    scope: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, .github/scripts/ci-impact-classify-test, .github/scripts/ci-workflow-contract-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
+    base: 627e74201aba346c92c71e8f1620c8bef7b82342
+    digest: "ci.yml 25e77aa4e786d36e447a835f969d8b8a0541aa22c53d918eb9381974025dcf60; builder ef21bc19577c2aa264e34513671e640d1399f4c178cdaa0e8b02ecd2f3a17eb4; fingerprint 7c55e5597d9fde06dbb0a58f7138ad0dcd4a985a2322a47c7be09d3ba28e2050; verifier 1e889349f95094b86d97d3ce84196550a95b2a88ca51d74a07a7b526227fd6af; workflow contract ee309b3aeb37aed0b170c1cf64a7ad966cfee3694aed1e1f8ff6de2d4462b315"
+    scope: [.github/workflows/ci.yml, .github/scripts/build-sboms-differential, .github/scripts/build-sboms-differential-test, .github/scripts/sbom-semantic-fingerprint, .github/scripts/sbom-semantic-fingerprint-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, .github/scripts/ci-workflow-contract-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
   decision:
-    selected: "Accept the landed single-mode 3+4 Race topology and parallel candidate/finalizer SBOM topology. Close the CI-maintenance entrypoint across every registry."
-    kind: terminal_acceptance
+    selected: "Cache normalized runtime dependency inventories by a deterministic semantic fingerprint, but always evaluate and verify the current package derivation/output identity. A semantic hit may copy only a checksummed accepted baseline, replace every old root derivation/output reference with the current roots, refresh generation identity, and pass independent finalizer validation. Missing, mismatched, or unprovable fingerprints rebuild."
+    kind: implementation_authority
     status: settled
     source: owner
-    evidence_ref: "owner request 2026-07-16; PR 60; PR runs 29554632413 and 29554632461; canonical run 29559210595; accepted SBOM artifact 8398872741"
+    evidence_ref: "owner request 2026-07-17 plus docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-17T06:37:49Z
-    consequence: "The optimized topology is canonical. Future optimization is a new bounded mission; non-runtime Race shard 0 is the next observed imbalance, not an acceptance blocker."
-  evidence_refs: [pr-60, merge-3d7a609f, pr-run-29554632413, standalone-race-run-29554632461, cancelled-landing-run-29556440070-attempts-1-and-2, ci-only-skip-run-29556555338, canonical-run-29559210595, check-job-87819170738, accepted-sbom-job-87820245468, accepted-sbom-artifact-8398872741, local-ci-contract-suite, independent-review-race-resolved, independent-review-sbom-resolved]
-  blocker_or_risk: "No completion blocker. The hosted comparison is between different high-risk change sets, so it proves observed topology performance rather than exact causal billing. Selected-run check time fell from 12m31s to 9m29s; workflow completion fell from 29m54s to 17m20s; summed public Go-test job time fell from 61m16s to 43m58s. Non-runtime Race shard 0 remains the slowest check-path job at 9m08s."
-  next_action: "None. Preserve PR 60 and run 29559210595 as terminal evidence. Rebalance non-runtime Race ownership only under a new measured CI-maintenance Definition."
+    recorded_at: 2026-07-17T16:38:33Z
+    consequence: "Exact deployed-artifact identity remains mandatory. Only the dependency inventory may be reused, under a fail-closed fingerprint and rebind contract. The first hosted run must also safely derive fingerprints for a legacy accepted baseline or rebuild."
+  evidence_refs: [problem-checkpoint-31ea6d63, authority-checkpoint-b97fd7dd, implementation-candidate-6fa82d06, pr-62, pr-run-29600440546, run-29559210595, artifact-8398872741, run-29570035893, artifact-8403147713, pre-rebase-local-semantic-rebind-10-packages-63.75s, pre-rebase-local-independent-finalizer-57.61s, merged-main-local-focused-contract-suite]
+  blocker_or_risk: "Fresh-main hosted recheck, main acceptance, and landing remain. PR run 29600440546 passed all selected 3+4 Race jobs, check, hosted semantic contracts, doccheck, and Node B/FlakeHub skips. Pre-rebase local proof at base 4e5cd3fc rebound ten first-party inventories in 63.75s and independently verified them in 57.61s. Fresh main legitimately changes vmctl's semantic fingerprint; main proof must build changed packages and rebind only unchanged packages. Exact Nix Go 1.26.1 is pinned and mismatches fail closed."
+  next_action: "Push the no-force merge from fresh main, require the refreshed hosted PR check, merge only with main CI/Race idle, then measure the canonical main SBOM candidate and finalizer against 16m55s/7s and 19m30s/13s observed baselines."
 
 receipts:
+  - id: semantic-sbom-cache-define
+    boundary: define
+    commit_or_artifact: b97fd7ddc73adc8329508a4bf17da20569f7a17d
+    proof_refs: [docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md, run-29559210595, run-29570035893]
+    rollback_ref: 627e74201aba346c92c71e8f1620c8bef7b82342
+    disposition: "Owner-authorized repair separates semantic dependency identity from current root artifact identity. No workflow or script mutation occurs in this receipt."
+    problem_ref: docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md
+    authorization_ref: owner-request-2026-07-17-semantic-sbom-cache
+    candidate_or_evidence_refs: [problem-checkpoint-31ea6d63, artifact-8398872741, artifact-8403147713]
+    landing:
+      source_commit: b97fd7ddc73adc8329508a4bf17da20569f7a17d
+      ci_ref: local-doccheck-and-registry-contracts
+      deploy_ref: not_applicable_ci_only
+      environment_identity: local_authority_boundary
+      deployed_acceptance: not_applicable_definition_only
+    registry_conformance_ref: "b97fd7dd: local doccheck, YAML parse, and registry cardinality passed"
+  - id: semantic-sbom-cache-implement
+    boundary: implement
+    commit_or_artifact: 6fa82d06518a2b97bfd5bc9a6b73b850bd83e27a
+    proof_refs: [pre-rebase-local-semantic-rebind-10-packages-63.75s, pre-rebase-local-independent-finalizer-57.61s, rebased-local-focused-contract-suite]
+    rollback_ref: b97fd7ddc73adc8329508a4bf17da20569f7a17d
+    disposition: "Deterministic per-package dependency fingerprints use the exact Nix Go toolchain, transitive selected production sources, module locks, and Nix inputs. Checksummed semantic hits rebind every root derivation/output reference; the finalizer independently recomputes current and baseline fingerprints, validates exact roots, and proves normalized SBOM content unchanged."
+    problem_ref: docs/problems/ci-sbom-exact-derivation-cache-is-not-first-party-differential-2026-07-17.md
+    authorization_ref: owner-request-2026-07-17-semantic-sbom-cache
+    candidate_or_evidence_refs: [ci-yml-25e77aa4, builder-ef21bc19, fingerprint-7c55e559, verifier-1e889349, workflow-contract-ee309b3a, pr-run-29600440546]
+    landing:
+      source_commit: 2ec070354c9c3965efa1e717d07ef97cd190fb75
+      ci_ref: "PR 62 run 29600440546 passed; fresh-main merge recheck pending"
+      deploy_ref: ci_only_node_b_skip_required
+      environment_identity: github_actions
+      deployed_acceptance: "PR hosted contracts and full 3+4 Race selected path passed; main SBOM acceptance pending"
+    registry_conformance_ref: "run 29600440546 Docs Truth Check passed; merged-main local doccheck passed"
   - id: ci-pareto-candidate-implement
     boundary: implement
     commit_or_artifact: a3bf59a1f938ce3ed92ce2d968c7c386db369801

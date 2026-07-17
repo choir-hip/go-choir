@@ -11,6 +11,35 @@ run_id=123456
 run_attempt=2
 packages=(auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot)
 required_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend zot "
+semantic_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend "
+
+mkdir -p "$tmpdir/bin"
+cat > "$tmpdir/bin/nix" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == "eval" && "$2" == "--raw" ]]
+attr="$3"
+package="${attr%.drvPath}"
+package="${package%.outPath}"
+package="${package##*.}"
+package="${package#\#}"
+case "$attr" in
+  .#sbom.*.drvPath) printf '/nix/store/sbom-%s.drv' "$package" ;;
+  .#packages.*.drvPath) printf '/nix/store/artifact-%s.drv' "$package" ;;
+  .#packages.*.outPath) printf '/nix/store/output-%s' "$package" ;;
+  *) echo "unexpected nix attribute: $attr" >&2; exit 2 ;;
+esac
+EOF
+cat > "$tmpdir/bin/fingerprint" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'semantic-%s' "$1" | sha256sum | awk '{print $1}'
+EOF
+chmod +x "$tmpdir/bin/nix" "$tmpdir/bin/fingerprint"
+export PATH="$tmpdir/bin:$PATH"
+export SBOM_FINGERPRINT_BIN="$tmpdir/bin/fingerprint"
+export SBOM_NIX_GO_VERSION="$(go env GOVERSION)"
+export SBOM_NIX_GO_VERSION="${SBOM_NIX_GO_VERSION#go}"
 
 make_bundle() {
   local bundle="$1"
@@ -19,10 +48,38 @@ make_bundle() {
   : > "$bundle/manifest.jsonl"
   : > "$bundle/diff-packages.jsonl"
 
-  local package required sha
+  local package required sha derivation artifact_derivation artifact_output semantic_fingerprint
   for package in "${packages[@]}"; do
     mkdir -p "$bundle/$package"
-    printf '{"package":"%s"}\n' "$package" > "$bundle/$package/sbom.json"
+    derivation="/nix/store/sbom-$package.drv"
+    artifact_derivation="/nix/store/artifact-$package.drv"
+    artifact_output="/nix/store/output-$package"
+    semantic_fingerprint="exact:$derivation"
+    if [[ "$semantic_packages" == *" $package "* ]]; then
+      semantic_fingerprint="$(printf 'semantic-%s' "$package" | sha256sum | awk '{print $1}')"
+    fi
+    jq -n \
+      --arg package "$package" \
+      --arg drv "$artifact_derivation" \
+      --arg out "$artifact_output" '
+        {
+          bomFormat: "CycloneDX",
+          serialNumber: "urn:uuid:00000000-0000-4000-8000-000000000000",
+          metadata: {
+            timestamp: "2026-01-01T00:00:00Z",
+            component: {
+              name: $package,
+              "bom-ref": $drv,
+              properties: [
+                {name: "nix:output_path", value: $out},
+                {name: "nix:drv_path", value: $drv}
+              ]
+            }
+          },
+          components: [],
+          dependencies: [{ref: $drv}]
+        }
+      ' > "$bundle/$package/sbom.json"
     sha="$(sha256sum "$bundle/$package/sbom.json" | awk '{print $1}')"
     required=false
     if [[ "$required_packages" == *" $package "* ]]; then
@@ -32,8 +89,12 @@ make_bundle() {
       --arg package "$package" \
       --argjson required "$required" \
       --arg source_commit "$source_commit" \
+      --arg derivation "$derivation" \
+      --arg artifact_derivation "$artifact_derivation" \
+      --arg artifact_output "$artifact_output" \
+      --arg semantic_fingerprint "$semantic_fingerprint" \
       --arg sha "$sha" \
-      '{package: $package, required: $required, status: "built", reason: "test", source_commit: $source_commit, previous_commit: "", derivation: "/nix/store/test", previous_derivation: "", sbom_sha256: $sha}' \
+      '{package: $package, required: $required, status: "built", reason: "test", source_commit: $source_commit, previous_commit: "", derivation: $derivation, previous_derivation: "", artifact_derivation: $artifact_derivation, artifact_output: $artifact_output, semantic_fingerprint: $semantic_fingerprint, previous_semantic_fingerprint: "", sbom_sha256: $sha}' \
       >> "$bundle/manifest.jsonl"
     jq -nc --arg package "$package" '{package: $package, status: "built", added: [], removed: []}' \
       >> "$bundle/diff-packages.jsonl"
@@ -52,11 +113,84 @@ make_bundle() {
     > "$bundle/candidate.json"
 }
 
+make_rebound_bundle() {
+  local baseline="$1"
+  local candidate="$2"
+  local baseline_commit="$3"
+  local package old_drv old_out sha
+
+  make_bundle "$baseline"
+  for package in auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend; do
+    old_drv="/nix/store/old-artifact-$package.drv"
+    old_out="/nix/store/old-output-$package"
+    jq \
+      --arg current_drv "/nix/store/artifact-$package.drv" \
+      --arg current_out "/nix/store/output-$package" \
+      --arg old_drv "$old_drv" \
+      --arg old_out "$old_out" '
+        walk(
+          if type == "string" and . == $current_drv then $old_drv
+          elif type == "string" and . == $current_out then $old_out
+          else .
+          end
+        )
+      ' "$baseline/$package/sbom.json" > "$baseline/$package/sbom.tmp"
+    mv "$baseline/$package/sbom.tmp" "$baseline/$package/sbom.json"
+  done
+  : > "$baseline/manifest.next"
+  while IFS= read -r record; do
+    package="$(jq -r .package <<<"$record")"
+    sha="$(sha256sum "$baseline/$package/sbom.json" | awk '{print $1}')"
+    jq -c \
+      --arg source_commit "$baseline_commit" \
+      --arg artifact_derivation "/nix/store/old-artifact-$package.drv" \
+      --arg artifact_output "/nix/store/old-output-$package" \
+      --arg sha "$sha" '
+        .source_commit = $source_commit
+        | .artifact_derivation = $artifact_derivation
+        | .artifact_output = $artifact_output
+        | .sbom_sha256 = $sha
+      ' <<<"$record" >> "$baseline/manifest.next"
+  done < "$baseline/manifest.jsonl"
+  mv "$baseline/manifest.next" "$baseline/manifest.jsonl"
+
+  make_bundle "$candidate"
+  jq -c \
+    --arg previous_commit "$baseline_commit" '
+      if (.package == "obscura" or .package == "zot") then
+        .previous_commit = $previous_commit
+      else
+        .status = "rebound"
+        | .reason = "identical_semantic_fingerprint"
+        | .previous_commit = $previous_commit
+        | .previous_semantic_fingerprint = .semantic_fingerprint
+      end
+    ' "$candidate/manifest.jsonl" > "$candidate/manifest.next"
+  mv "$candidate/manifest.next" "$candidate/manifest.jsonl"
+  jq \
+    --arg previous_commit "$baseline_commit" '
+      .previous_commit = $previous_commit
+      | .packages |= map(if (.package == "obscura" or .package == "zot") then . else .status = "rebound" end)
+    ' "$candidate/diff.json" > "$candidate/diff.next"
+  mv "$candidate/diff.next" "$candidate/diff.json"
+}
+
+refresh_sha() {
+  local bundle="$1"
+  local package="$2"
+  local sha
+  sha="$(sha256sum "$bundle/$package/sbom.json" | awk '{print $1}')"
+  jq -c --arg package "$package" --arg sha "$sha" \
+    'if .package == $package then .sbom_sha256 = $sha else . end' \
+    "$bundle/manifest.jsonl" > "$bundle/manifest.next"
+  mv "$bundle/manifest.next" "$bundle/manifest.jsonl"
+}
+
 expect_failure() {
   local name="$1"
   local bundle="$2"
   shift 2
-  if "$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" >"$tmpdir/$name.out" 2>&1; then
+  if "$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" "$@" >"$tmpdir/$name.out" 2>&1; then
     echo "$name: verifier unexpectedly accepted invalid candidate" >&2
     exit 1
   fi
@@ -77,6 +211,32 @@ mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
 jq --arg commit "$baseline_commit" '.previous_commit = $commit' "$bundle/diff.json" > "$bundle/diff.tmp"
 mv "$bundle/diff.tmp" "$bundle/diff.json"
 "$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" "$baseline" >/dev/null
+
+rebound_baseline="$tmpdir/rebound-baseline"
+rebound_bundle="$tmpdir/rebound-valid"
+make_rebound_bundle "$rebound_baseline" "$rebound_bundle" "$baseline_commit"
+"$verifier" "$rebound_bundle" "$source_commit" "$run_id" "$run_attempt" "$rebound_baseline" >/dev/null
+
+make_rebound_bundle "$rebound_baseline" "$rebound_bundle" "$baseline_commit"
+jq --arg stale "/nix/store/stale-auth.drv" \
+  'walk(if type == "string" and . == "/nix/store/artifact-auth.drv" then $stale else . end)' \
+  "$rebound_bundle/auth/sbom.json" > "$rebound_bundle/auth/sbom.next"
+mv "$rebound_bundle/auth/sbom.next" "$rebound_bundle/auth/sbom.json"
+refresh_sha "$rebound_bundle" auth
+expect_failure rebound-root "$rebound_bundle" "$rebound_baseline"
+
+make_rebound_bundle "$rebound_baseline" "$rebound_bundle" "$baseline_commit"
+jq '.components += [{name: "forged", purl: "pkg:generic/forged@1"}]' \
+  "$rebound_bundle/auth/sbom.json" > "$rebound_bundle/auth/sbom.next"
+mv "$rebound_bundle/auth/sbom.next" "$rebound_bundle/auth/sbom.json"
+refresh_sha "$rebound_bundle" auth
+expect_failure rebound-content "$rebound_bundle" "$rebound_baseline"
+
+make_rebound_bundle "$rebound_baseline" "$rebound_bundle" "$baseline_commit"
+jq -c 'if .package == "auth" then .semantic_fingerprint = "forged" else . end' \
+  "$rebound_bundle/manifest.jsonl" > "$rebound_bundle/manifest.next"
+mv "$rebound_bundle/manifest.next" "$rebound_bundle/manifest.jsonl"
+expect_failure semantic-fingerprint "$rebound_bundle" "$rebound_baseline"
 
 make_bundle "$bundle"
 jq -c 'if .package == "auth" then .source_commit = "wrong" else . end' "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"

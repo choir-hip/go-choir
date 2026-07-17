@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+fingerprint="$script_dir/sbom-semantic-fingerprint"
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+mkdir -p "$tmpdir/cmd/auth" "$tmpdir/internal/shared" "$tmpdir/internal/unrelated" "$tmpdir/frontend"
+cat > "$tmpdir/go.mod" <<'EOF'
+module example.test/semantic
+
+go 1.24
+EOF
+: > "$tmpdir/go.sum"
+printf '%s\n' '{ outputs = _: {}; }' > "$tmpdir/flake.nix"
+printf '%s\n' '{"nodes":{},"root":"root","version":7}' > "$tmpdir/flake.lock"
+cat > "$tmpdir/cmd/auth/main.go" <<'EOF'
+package main
+import "example.test/semantic/internal/shared"
+func main() { shared.Use() }
+EOF
+cat > "$tmpdir/internal/shared/shared.go" <<'EOF'
+package shared
+func Use() {}
+EOF
+cat > "$tmpdir/internal/unrelated/unrelated.go" <<'EOF'
+package unrelated
+func Ignore() {}
+EOF
+printf '%s\n' '{"name":"frontend","dependencies":{"x":"1"}}' > "$tmpdir/frontend/package.json"
+printf '%s\n' '{"name":"frontend","lockfileVersion":3,"packages":{}}' > "$tmpdir/frontend/package-lock.json"
+printf '%s\n' '<h1>first</h1>' > "$tmpdir/frontend/App.svelte"
+
+auth_initial="$($fingerprint auth "$tmpdir")"
+printf '%s\n' '// unrelated change' >> "$tmpdir/internal/unrelated/unrelated.go"
+auth_unrelated="$($fingerprint auth "$tmpdir")"
+[[ "$auth_initial" == "$auth_unrelated" ]]
+
+printf '%s\n' '// dependency change' >> "$tmpdir/internal/shared/shared.go"
+auth_dependency="$($fingerprint auth "$tmpdir")"
+[[ "$auth_dependency" != "$auth_initial" ]]
+
+frontend_initial="$($fingerprint frontend "$tmpdir")"
+printf '%s\n' '<h1>second</h1>' > "$tmpdir/frontend/App.svelte"
+frontend_source="$($fingerprint frontend "$tmpdir")"
+[[ "$frontend_initial" == "$frontend_source" ]]
+printf '%s\n' '{"name":"frontend","lockfileVersion":3,"packages":{"node_modules/x":{"version":"2"}}}' > "$tmpdir/frontend/package-lock.json"
+frontend_dependency="$($fingerprint frontend "$tmpdir")"
+[[ "$frontend_dependency" != "$frontend_initial" ]]
+
+if "$fingerprint" zot "$tmpdir" >/dev/null 2>&1; then
+  echo "external package unexpectedly received a semantic fingerprint" >&2
+  exit 1
+fi
+
+printf '%s\n' 'sbom-semantic-fingerprint: all tests passed'

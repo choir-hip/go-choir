@@ -99,12 +99,19 @@ jobs:
           fi
           echo "race_selected=$race_selected" >> "$GITHUB_OUTPUT"
 
+      - name: Set up Go for CI contract tests
+        if: steps.classify.outputs.ci == 'true'
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+
       - name: Test CI classifiers and differential SBOM reuse
         if: steps.classify.outputs.ci == 'true'
         shell: bash
         run: |
           set -euo pipefail
           .github/scripts/ci-impact-classify-test
+          .github/scripts/sbom-semantic-fingerprint-test
           .github/scripts/build-sboms-differential-test
           .github/scripts/verify-sbom-candidate-test
           .github/scripts/ci-workflow-contract-test
@@ -383,6 +390,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+          cache: true
+
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v20
         with:
@@ -397,7 +410,7 @@ jobs:
           restore-keys: |
             sbom-bundle-v2-
 
-      - name: Build changed packages and reuse identical SBOMs
+      - name: Reuse semantic inventories or build changed packages
         shell: bash
         run: .github/scripts/build-sboms-differential sboms "$RUNNER_TEMP/sbom-baseline" "$GITHUB_SHA"
 
@@ -428,6 +441,17 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+          cache: true
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v20
+        with:
+          determinate: false
 
       - name: Restore accepted baseline for differential verification
         uses: actions/cache/restore@v6

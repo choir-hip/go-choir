@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+fingerprint_bin="${SBOM_FINGERPRINT_BIN:-$script_dir/sbom-semantic-fingerprint}"
 output_dir="${1:-sboms}"
 baseline_dir="${2:-}"
 source_commit="${3:-$(git rev-parse HEAD)}"
 
 packages=(auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot)
 required_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend zot "
+semantic_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend "
 
 rm -rf "$output_dir"
 mkdir -p "$output_dir"
@@ -37,6 +40,122 @@ baseline_field() {
   fi
   jq -r --arg package "$package" --arg field "$field" \
     'select(.package == $package) | .[$field] // empty' "$baseline_manifest" | head -n 1
+}
+
+uses_semantic_fingerprint() {
+  [[ "$semantic_packages" == *" $1 "* ]]
+}
+
+manifest_or_sbom_identity() {
+  local package="$1"
+  local field="$2"
+  local property="$3"
+  local value
+  value="$(baseline_field "$package" "$field")"
+  if [[ -n "$value" ]]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+  if [[ -n "$baseline_dir" && -s "$baseline_dir/$package/sbom.json" ]]; then
+    jq -r --arg property "$property" \
+      '.metadata.component.properties[]? | select(.name == $property) | .value' \
+      "$baseline_dir/$package/sbom.json" | head -n 1
+  fi
+}
+
+root_identity_matches() {
+  local file="$1"
+  local artifact_derivation="$2"
+  local artifact_output="$3"
+  jq -e \
+    --arg drv "$artifact_derivation" \
+    --arg out "$artifact_output" '
+      .metadata.component."bom-ref" == $drv and
+      any(.metadata.component.properties[]?; .name == "nix:drv_path" and .value == $drv) and
+      any(.metadata.component.properties[]?; .name == "nix:output_path" and .value == $out) and
+      any(.dependencies[]?; .ref == $drv)
+    ' "$file" >/dev/null
+}
+
+rebind_root_identity() {
+  local baseline_sbom="$1"
+  local package_sbom="$2"
+  local previous_artifact_derivation="$3"
+  local previous_artifact_output="$4"
+  local artifact_derivation="$5"
+  local artifact_output="$6"
+  local serial timestamp
+
+  if ! root_identity_matches "$baseline_sbom" "$previous_artifact_derivation" "$previous_artifact_output"; then
+    return 1
+  fi
+
+  serial="urn:uuid:$(python3 -c 'import uuid; print(uuid.uuid4())')"
+  timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  jq \
+    --arg old_drv "$previous_artifact_derivation" \
+    --arg old_out "$previous_artifact_output" \
+    --arg new_drv "$artifact_derivation" \
+    --arg new_out "$artifact_output" \
+    --arg serial "$serial" \
+    --arg timestamp "$timestamp" '
+      walk(
+        if type == "string" and . == $old_drv then $new_drv
+        elif type == "string" and . == $old_out then $new_out
+        else .
+        end
+      )
+      | .serialNumber = $serial
+      | .metadata.timestamp = $timestamp
+    ' "$baseline_sbom" > "$package_sbom"
+
+  root_identity_matches "$package_sbom" "$artifact_derivation" "$artifact_output"
+}
+
+baseline_repo_parent=""
+baseline_repo=""
+prepare_legacy_baseline_repo() {
+  if [[ -n "$baseline_repo" ]]; then
+    return 0
+  fi
+  if [[ -z "$baseline_commit" || ! "$baseline_commit" =~ ^[0-9a-f]{40}$ ]]; then
+    return 1
+  fi
+  if ! git cat-file -e "${baseline_commit}^{commit}" 2>/dev/null; then
+    git fetch --no-tags --depth=1 origin "$baseline_commit" >/dev/null 2>&1 || return 1
+  fi
+  baseline_repo_parent="$(mktemp -d)"
+  baseline_repo="$baseline_repo_parent/repo"
+  mkdir -p "$baseline_repo"
+  git archive "$baseline_commit" | tar -x -C "$baseline_repo" || return 1
+}
+
+cleanup() {
+  if [[ -n "$baseline_repo_parent" ]]; then
+    rm -rf "$baseline_repo_parent"
+  fi
+}
+trap cleanup EXIT
+
+assert_semantic_go_toolchain() {
+  local nix_go_version setup_go_version
+  nix_go_version="${SBOM_NIX_GO_VERSION:-}"
+  if [[ -z "$nix_go_version" ]]; then
+    nix_go_version="$(nix derivation show .#packages.x86_64-linux.auth \
+      | jq -r '
+          .derivations[]
+          | .inputs.drvs
+          | keys[]
+          | select(test("-go-[0-9]+(\\.[0-9]+)*\\.drv$"))
+          | capture("-go-(?<version>[0-9]+(\\.[0-9]+)*)\\.drv$").version
+        ' | head -n 1)"
+  fi
+  setup_go_version="$(go env GOVERSION)"
+  setup_go_version="${setup_go_version#go}"
+  if [[ -z "$nix_go_version" || "$setup_go_version" != "$nix_go_version" ]]; then
+    echo "semantic fingerprint Go toolchain mismatch: Nix=${nix_go_version:-unknown} setup-go=${setup_go_version:-unknown}" >&2
+    return 1
+  fi
 }
 
 component_keys() {
@@ -81,6 +200,7 @@ failed=0
 required_failed=0
 built=0
 reused=0
+rebound=0
 skipped=0
 sbomnix_bin=""
 
@@ -102,20 +222,37 @@ ensure_sbomnix() {
   sbomnix_bin="$(nix build "github:${owner}/${repo}/${rev}#sbomnix" --no-link --print-out-paths)"
 }
 
+assert_semantic_go_toolchain
+
 for package in "${packages[@]}"; do
+
   required=false
   if is_required "$package"; then
     required=true
   fi
 
   attr=".#sbom.x86_64-linux.${package}"
-  echo "==> Evaluating SBOM derivation for ${package}"
+  package_attr=".#packages.x86_64-linux.${package}"
+  echo "==> Evaluating SBOM and artifact identity for ${package}"
   derivation="$(nix eval --raw "${attr}.drvPath")"
+  artifact_derivation="$(nix eval --raw "${package_attr}.drvPath")"
+  artifact_output="$(nix eval --raw "${package_attr}.outPath")"
   previous_derivation="$(baseline_field "$package" derivation)"
+  previous_artifact_derivation="$(manifest_or_sbom_identity "$package" artifact_derivation nix:drv_path)"
+  previous_artifact_output="$(manifest_or_sbom_identity "$package" artifact_output nix:output_path)"
   previous_status="$(baseline_field "$package" status)"
   previous_reason="$(baseline_field "$package" reason)"
   previous_failure_reason="$(baseline_field "$package" previous_reason)"
   previous_sha="$(baseline_field "$package" sbom_sha256)"
+  previous_fingerprint="$(baseline_field "$package" semantic_fingerprint)"
+  semantic_fingerprint="exact:${derivation}"
+  if uses_semantic_fingerprint "$package"; then
+    semantic_fingerprint="$("$fingerprint_bin" "$package" .)"
+    if [[ -z "$previous_fingerprint" ]] && prepare_legacy_baseline_repo; then
+      previous_fingerprint="$("$fingerprint_bin" "$package" "$baseline_repo" 2>/dev/null || true)"
+    fi
+  fi
+
   baseline_sbom=""
   if [[ -n "$baseline_dir" ]]; then
     baseline_sbom="${baseline_dir}/${package}/sbom.json"
@@ -138,21 +275,21 @@ for package in "${packages[@]}"; do
       --arg previous_commit "$baseline_commit" \
       --arg derivation "$derivation" \
       --arg previous_derivation "$previous_derivation" \
+      --arg artifact_derivation "$artifact_derivation" \
+      --arg artifact_output "$artifact_output" \
+      --arg semantic_fingerprint "$semantic_fingerprint" \
       --arg previous_reason "$previous_failure_reason" \
-      '{package: $package, required: $required, status: "skipped", reason: "unchanged_previous_failure", previous_reason: $previous_reason, source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation}' >> "$manifest"
+      '{package: $package, required: $required, status: "skipped", reason: "unchanged_previous_failure", previous_reason: $previous_reason, source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation, artifact_derivation: $artifact_derivation, artifact_output: $artifact_output, semantic_fingerprint: $semantic_fingerprint}' >> "$manifest"
     continue
   fi
 
   status=built
-  reason=derivation_changed
-  if [[ -n "$previous_derivation" && "$previous_derivation" == "$derivation" && -n "$baseline_sbom" && -s "$baseline_sbom" ]]; then
+  reason=semantic_fingerprint_changed
+  baseline_valid=false
+  if [[ -n "$baseline_sbom" && -s "$baseline_sbom" && -n "$previous_sha" ]]; then
     actual_previous_sha="$(sha256sum "$baseline_sbom" | awk '{print $1}')"
-    if [[ -n "$previous_sha" && "$previous_sha" == "$actual_previous_sha" ]]; then
-      cp "$baseline_sbom" "$package_sbom"
-      status=reused
-      reason=identical_derivation
-      reused=$((reused + 1))
-      echo "    Reused ${package} from ${baseline_commit:-previous baseline}"
+    if [[ "$previous_sha" == "$actual_previous_sha" ]]; then
+      baseline_valid=true
     else
       reason=baseline_checksum_mismatch
       echo "    Baseline checksum mismatch for ${package}; rebuilding"
@@ -161,9 +298,26 @@ for package in "${packages[@]}"; do
     reason=no_baseline
   fi
 
+  if [[ "$baseline_valid" == "true" && -n "$previous_derivation" && "$previous_derivation" == "$derivation" ]]; then
+    cp "$baseline_sbom" "$package_sbom"
+    status=reused
+    reason=identical_derivation
+    reused=$((reused + 1))
+    echo "    Reused ${package} from ${baseline_commit:-previous baseline}"
+  elif [[ "$baseline_valid" == "true" && -n "$previous_fingerprint" && "$previous_fingerprint" == "$semantic_fingerprint" ]] && \
+       uses_semantic_fingerprint "$package" && \
+       rebind_root_identity "$baseline_sbom" "$package_sbom" \
+         "$previous_artifact_derivation" "$previous_artifact_output" \
+         "$artifact_derivation" "$artifact_output"; then
+    status=rebound
+    reason=identical_semantic_fingerprint
+    rebound=$((rebound + 1))
+    echo "    Rebound unchanged dependency inventory for ${package} from ${baseline_commit:-previous baseline}"
+  fi
+
   if [[ "$status" == "built" ]]; then
     err_log="$(mktemp)"
-    if ! store_path="$(nix build ".#${package}" --no-link --print-out-paths 2>"$err_log")"; then
+    if ! store_path="$(nix build "$package_attr" --no-link --print-out-paths 2>"$err_log")"; then
       echo "    Failed to build package for ${package}" >&2
       sed -n '1,40p' "$err_log" >&2
       tail -80 "$err_log" >&2
@@ -178,11 +332,18 @@ for package in "${packages[@]}"; do
         --arg previous_commit "$baseline_commit" \
         --arg derivation "$derivation" \
         --arg previous_derivation "$previous_derivation" \
-        '{package: $package, required: $required, status: "failed", reason: "package_build_failed", source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation}' >> "$manifest"
+        --arg artifact_derivation "$artifact_derivation" \
+        --arg artifact_output "$artifact_output" \
+        --arg semantic_fingerprint "$semantic_fingerprint" \
+        '{package: $package, required: $required, status: "failed", reason: "package_build_failed", source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation, artifact_derivation: $artifact_derivation, artifact_output: $artifact_output, semantic_fingerprint: $semantic_fingerprint}' >> "$manifest"
       rm -f "$err_log"
       continue
     fi
     rm -f "$err_log"
+    if [[ "$store_path" != "$artifact_output" ]]; then
+      echo "    Built output identity mismatch for ${package}: expected $artifact_output, got $store_path" >&2
+      exit 1
+    fi
 
     err_log="$(mktemp)"
     if ! ensure_sbomnix 2>"$err_log" || ! "$sbomnix_bin/bin/sbomnix" --cdx "$package_sbom" "$store_path" 2>>"$err_log"; then
@@ -200,11 +361,18 @@ for package in "${packages[@]}"; do
         --arg previous_commit "$baseline_commit" \
         --arg derivation "$derivation" \
         --arg previous_derivation "$previous_derivation" \
-        '{package: $package, required: $required, status: "failed", reason: "sbomnix_failed", source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation}' >> "$manifest"
+        --arg artifact_derivation "$artifact_derivation" \
+        --arg artifact_output "$artifact_output" \
+        --arg semantic_fingerprint "$semantic_fingerprint" \
+        '{package: $package, required: $required, status: "failed", reason: "sbomnix_failed", source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation, artifact_derivation: $artifact_derivation, artifact_output: $artifact_output, semantic_fingerprint: $semantic_fingerprint}' >> "$manifest"
       rm -f "$err_log"
       continue
     fi
     rm -f "$err_log"
+    if ! root_identity_matches "$package_sbom" "$artifact_derivation" "$artifact_output"; then
+      echo "    Generated SBOM root identity mismatch for ${package}" >&2
+      exit 1
+    fi
     built=$((built + 1))
     echo "    Built ${package}"
   fi
@@ -219,8 +387,12 @@ for package in "${packages[@]}"; do
     --arg previous_commit "$baseline_commit" \
     --arg derivation "$derivation" \
     --arg previous_derivation "$previous_derivation" \
+    --arg artifact_derivation "$artifact_derivation" \
+    --arg artifact_output "$artifact_output" \
+    --arg semantic_fingerprint "$semantic_fingerprint" \
+    --arg previous_semantic_fingerprint "$previous_fingerprint" \
     --arg sbom_sha256 "$sbom_sha" \
-    '{package: $package, required: $required, status: $status, reason: $reason, source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation, sbom_sha256: $sbom_sha256}' >> "$manifest"
+    '{package: $package, required: $required, status: $status, reason: $reason, source_commit: $source_commit, previous_commit: $previous_commit, derivation: $derivation, previous_derivation: $previous_derivation, artifact_derivation: $artifact_derivation, artifact_output: $artifact_output, semantic_fingerprint: $semantic_fingerprint, previous_semantic_fingerprint: $previous_semantic_fingerprint, sbom_sha256: $sbom_sha256}' >> "$manifest"
 
   record_diff "$package" "$status" "$baseline_sbom" "$package_sbom"
 done
@@ -232,7 +404,7 @@ jq -s \
   "$diff_jsonl" > "$output_dir/diff.json"
 rm -f "$diff_jsonl"
 
-echo "==> SBOM generation complete: ${built} built, ${reused} reused, ${skipped} unchanged optional failures skipped, ${failed} failed"
+echo "==> SBOM generation complete: ${built} built, ${reused} exact reused, ${rebound} semantic rebound, ${skipped} unchanged optional failures skipped, ${failed} failed"
 if ((required_failed > 0)); then
   echo "${required_failed} required SBOM(s) failed" >&2
   exit 1
