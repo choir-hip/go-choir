@@ -361,13 +361,13 @@ now:
     worktree_inventory_ref: "canonical main and origin/main equal at ccff94ddb1aceacd6e4cc2877e5859a87fe15dc4 before the distinct-version G3 frozen-packet checkpoint; only the Definition and new durable G3 evidence packet are intentional"
     status: reconciled
   candidate:
-    id: candidate-control-20260717-i
-    state: unpublished_distinct_version_b_frozen_for_g3_no_cas
-    ref: "ComputerVersion(code:sha256:f47a6a0f295f186157f008f0ccb5999de254b274042fa876f47f00daa36579ff, artifact-program:sha256:c349329330a83abfdd22f6726b0e0dc7e3c7f30fe8dffa9c43d70faa04c15d5a)"
+    id: candidate-control-20260717-j
+    state: routed_generation_3_version_a_after_distinct_promotion_rollback
+    ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
     owner: autoputer-control
-    base: refs/heads/main@ccff94ddb1aceacd6e4cc2877e5859a87fe15dc4
-    digest: "9e3fd4d6c5a6277d661f80a0fe8a18ae3250f0474919d192af93ed2b8db5a67e"
-    scope: [synthetic-control-route, generation-1-version-a, distinct-version-b, frozen-promote-rollback-no-cas]
+    base: refs/heads/main@808121a2
+    digest: "666cd64c42739b4c8eb02b546cb6141cd0725400564458569551e2458110707e"
+    scope: [synthetic-control-route, generation-2-distinct-b-promoted, generation-3-rollback-a, fresh-a-product-readback]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -411,8 +411,11 @@ now:
     - docs/evidence/g3-promotion-b-frozen-review-2026-07-17.md
     - "distinct B construction ee63449c7fac; independent verification 0587e697; frozen promotion candidate 193c793e; generation 1 A route readback unchanged; no promote or rollback CAS executed"
     - "/tmp/choir-g3-promotion-b-consensus: Codex, Cursor, GPT-5.5, and Gemini 3.5 accept with no blocking findings and high confidence; OpenCode emitted no verdict; Devin and GLM 5.2 timed out"
-  blocker_or_risk: "G3 accepted the distinct immutable B frozen packet: four independent usable reviewers recomputed all hashes and accepted without blockers; no minority blocker exists. Route remains generation 1 A and candidate-control-20260717-i remains the exact healthy verified B realization. Execution risk is now bounded to applying the exact signed candidate and immediately refusing/rolling back on any generation, receipt, version, identity, health, or product-state mismatch."
-  next_action: "Apply only frozen promotion candidate route-promotion:sha256:193c793ea0a4ba3f42bd7e70f8946401560682d81d0e83c2bfbb6e973bb63f3b. Verify generation 2 and served B typed state through the product route, then apply its frozen rollback to A, dispose B, reconstruct A, and verify generation 3 exact prior-receipt lineage and product state."
+    - "promotion receipt f1df7f6f-31df-46da-83b8-ffd5d9a78e40: generation 1 A -> generation 2 B; routed lookup and authenticated product readback selected candidate I and audit-b.txt"
+    - "rollback receipt 8ae4f21a-14fd-4800-b044-76edef9604e7: generation 2 B -> generation 3 A, exact target receipt c3490ed2; fresh J reconstruction equivalent and routed A product state restored"
+    - "stale generation-1 promotion replay after generation 3: HTTP 409 with byte-identical route readback"
+  blocker_or_risk: "Distinct-version promotion and rollback are proven on the authorized synthetic route: generation 1 A promoted to generation 2 B with routed B product readback, B was exactly disposed, the frozen rollback restored generation 3 A through the bootstrap receipt lineage, and fresh J serves A product state; stale promotion replay is refused without mutation. No real-user or fleet route has crossed G4."
+  next_action: "Freeze the G4 fleet inventory and cutover candidate from current deployed receipts. Prove every targeted staging computer/route can be reconstructed through the audited materializer, include exact rollback and refusal boundaries, run deterministic checks, then obtain independent G4 adjudication before any real-user or fleet route CAS."
 
 successor:
   status: unauthorized_until_this_definition_complete
