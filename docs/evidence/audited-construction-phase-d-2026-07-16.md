@@ -150,3 +150,11 @@
 - Candidate state: constructed and committed as an unpublished disposable candidate; no route candidate has been frozen, no owner approval or G3 acceptance has been signed, and no route/evidence CAS has occurred.
 - Registry hygiene: three refused input-shaping attempts left immutable catalog/artifact records for empty, missing-parent, and invalid-version journals; their disk instantiations were reclaimed and no ownership was committed. Classify these immutable records during candidate disposal rather than deleting evidence before closure.
 - Rollback/disposal: destroy `candidate-control-20260716-d` and its realization-local device through vmctl's constructed-candidate lifecycle; retain immutable input and construction receipts as evidence. No owner route currently exists for `computer:autoputer-control:control-20260716`.
+
+## Owner authorization boundary — synthetic control route
+
+- Granted: 2026-07-16 in this mission conversation.
+- Scope: blanket approval limited to `computer:autoputer-control:control-20260716` and the exact constructed/future reviewed control receipts needed to bootstrap version A, construct version B, promote B, execute the pre-signed rollback to A, prove restart durability, and retain A hibernated as rollback state.
+- Gate condition: deterministic checks and independent G3 acceptance of each exact frozen candidate remain mandatory. Any reproducible minority blocker stops mutation and requires repair/review.
+- Explicit exclusions: every existing user route, `yusefnathanson@me.com`, universal/platform computers, generic/raw transition, G4 fleet cutover, G5 terminal closure, protected owner recovery images, and successor capsule work.
+- Bootstrap residual: the synthetic slot is durable and cannot transition back to absent. The accepted safe residue is a durable audit route and hibernated version-A realization, not deletion of route history.
