@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "E-allocation-churn-reconstruction"
-  question: "Can a 32 GiB routed synthetic realization absorb bounded cache churn, expose physical allocation growth, and return below the 2 GiB bound through supported audited disposal/reconstruction without changing ComputerVersion A or semantic observations?"
+  slice: "E-distinct-version-promotion-rollback"
+  question: "Can vmctl independently verify a distinct ComputerVersion B, freeze and review its generation-2 promotion, execute exactly one route CAS, prove served identity, then roll back exactly to accepted ComputerVersion A without realization authority leaking into the route?"
   reconciliation:
-    observed_at: 2026-07-17T05:06:00Z
-    source_ref: refs/heads/main@ec593c3901a4ff724d6e61e02c0328d31884eade_equals_refs/remotes/origin/main@ec593c3901a4ff724d6e61e02c0328d31884eade
-    deploy_identity: "Node B activation receipt target and selected vmctl artifact ec593c3901a4ff724d6e61e02c0328d31884eade; CI run 29555013810 succeeded; vmctl active"
+    observed_at: 2026-07-17T05:12:00Z
+    source_ref: refs/heads/main@5f168039e9dac0b86d6855f6addb58d3b3186550_equals_refs/remotes/origin/main@5f168039e9dac0b86d6855f6addb58d3b3186550
+    deploy_identity: "Node B selected vmctl artifact ec593c3901a4ff724d6e61e02c0328d31884eade; CI run 29555013810 succeeded; later source changes are docs/CI-only and do not alter selected vmctl behavior"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -361,13 +361,13 @@ now:
     worktree_inventory_ref: "canonical main and origin/main equal at e3de5558 before the code-free G3 frozen-packet checkpoint; only the Definition and new durable G3 evidence packet are intentional"
     status: reconciled
   candidate:
-    id: candidate-control-20260717-g
-    state: routed_generation_1_corruption_recovered_active
+    id: candidate-control-20260717-h
+    state: routed_generation_1_allocation_recovered_active
     ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
     owner: autoputer-control
-    base: refs/heads/main@ec593c3901a4ff724d6e61e02c0328d31884eade
-    digest: "52d44689c56165ea338bf3c0d7e7a1d58d1a5e6327cfd3a233f75e66d4a0a58a"
-    scope: [synthetic-control-route, generation-1, corruption-recovered-version-a, allocation-churn-reconstruction]
+    base: refs/heads/main@5f168039e9dac0b86d6855f6addb58d3b3186550
+    digest: "54b7faa6e0b8701d2589a2073537006f3f2e01e09e4bfddb5e0416809c27b205"
+    scope: [synthetic-control-route, generation-1, allocation-recovered-version-a, distinct-version-promotion-rollback]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -408,8 +408,8 @@ now:
     - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governed because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
     - "/tmp/choir-g3-bootstrap-e-consensus-repair: Codex, Cursor, GPT-5.5, and Gemini accept with no blockers and high confidence; OpenCode no usable verdict; Devin and GLM 5.2 timed out"
     - "bootstrap transition receipt c3490ed2-287f-4b9f-a3c3-85c5055a50a0: generation 0 -> 1 at 2026-07-17T03:34:44.112910201Z; exact immutable ComputerVersion and certificate joined; independent route readback matched"
-  blocker_or_risk: "Corrupted-image replacement is proven on deployed ec593c39: the damaged image failed mount, exact lifecycle disposal accepted the failed manager record, route authority stayed byte-identical, and fresh G reproduced semantic state. Residual: resume failure response can lose its HTTP body when readiness timeout meets the server write deadline; documented before repair, but replacement receipts remain complete. Allocation proof still needs bounded product-path churn plus before/after physical-allocation receipts."
-  next_action: "Inventory supported guest/product write-delete and deployed disk-inspection boundaries. Drive bounded disposable cache churn inside candidate-control-20260717-g without host image editing, receipt logical versus allocated bytes, then hibernate and exact-dispose G through route-bound lifecycle. Reconstruct H from ComputerVersion A, prove allocation returns below 2 GiB with semantic observations unchanged, and preserve the route receipt."
+  blocker_or_risk: "Allocation-pressure replacement is proven: authenticated guest churn raised physical use from 151,318,528 to 824,688,640 bytes after deletion; exact disposal/reconstruction produced fresh H at 11,489,280 bytes with 32 GiB logical capacity and identical semantic state. Route generation 1 remains ComputerVersion A. A distinct immutable B input and fresh realization are still required for the reviewed promote/rollback contract."
+  next_action: "Create unique immutable CodeRef/ArtifactProgramRef inputs for ComputerVersion B through the existing catalog; construct and independently verify a fresh B realization; freeze the generation-2 promotion and rollback plan without CAS; run deterministic checks and a fresh G3 consensus over exact durable artifacts; only after acceptance sign/apply promotion, verify route and served typed state, then apply the frozen rollback to A and verify exact receipt lineage."
 
 successor:
   status: unauthorized_until_this_definition_complete
