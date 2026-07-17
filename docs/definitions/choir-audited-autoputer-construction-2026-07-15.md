@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "E-distinct-version-promotion-rollback"
-  question: "Can vmctl independently verify a distinct ComputerVersion B, freeze and review its generation-2 promotion, execute exactly one route CAS, prove served identity, then roll back exactly to accepted ComputerVersion A without realization authority leaking into the route?"
+  slice: "F-cutover-fleet-and-close"
+  question: "Can the accepted 150-plan G4 packet execute one exact route at a time, beginning with control revalidation and a@b.com, while every transition proves construction, independent verification, signed authority, product-path health, restart durability, and complete rollback before the next route?"
   reconciliation:
-    observed_at: 2026-07-17T05:12:00Z
-    source_ref: refs/heads/main@5f168039e9dac0b86d6855f6addb58d3b3186550_equals_refs/remotes/origin/main@5f168039e9dac0b86d6855f6addb58d3b3186550
-    deploy_identity: "Node B selected vmctl artifact ec593c3901a4ff724d6e61e02c0328d31884eade; CI run 29555013810 succeeded; later source changes are docs/CI-only and do not alter selected vmctl behavior"
+    observed_at: 2026-07-17T08:55:00Z
+    source_ref: refs/heads/main@6db85e456e2ec2817555c5efd9e1167ec5c2be45_equals_refs/remotes/origin/main@6db85e456e2ec2817555c5efd9e1167ec5c2be45
+    deploy_identity: "Node B deployed runtime 42e50b6b1fa3ae7461bb789ec173521a768b548d; CI run 29565482629 succeeded; documentation identity 6db85e45 adds only durable deployed proof"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -358,16 +358,16 @@ now:
       - mission_graph:docs/mission-graph.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
       - authority_manifest:docs/doc-authority-manifest.yaml@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "canonical main and origin/main equal at ccff94ddb1aceacd6e4cc2877e5859a87fe15dc4 before the distinct-version G3 frozen-packet checkpoint; only the Definition and new durable G3 evidence packet are intentional"
+    worktree_inventory_ref: "canonical main and origin/main equal at 6db85e456e2ec2817555c5efd9e1167ec5c2be45 before the G4 adjudication candidate; only the reviewed frozen G4 packet, adjudication receipt, and Definition transition are intentional"
     status: reconciled
   candidate:
-    id: candidate-control-20260717-j
-    state: routed_generation_3_version_a_after_distinct_promotion_rollback
-    ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
-    owner: autoputer-control
-    base: refs/heads/main@808121a2
-    digest: "666cd64c42739b4c8eb02b546cb6141cd0725400564458569551e2458110707e"
-    scope: [synthetic-control-route, generation-2-distinct-b-promoted, generation-3-rollback-a, fresh-a-product-readback]
+    id: g4-fleet-cutover-candidate-2026-07-17
+    state: accepted_for_strictly_serialized_execution
+    ref: docs/evidence/g4-fleet-cutover-candidate-2026-07-17.json
+    owner: integration-authority
+    base: refs/heads/main@42e50b6b1fa3ae7461bb789ec173521a768b548d
+    digest: "b7f4529535990596b54d2f97e230470cc7d6ba4ec4e17f1c00d67beeed345b1f"
+    scope: [150-exact-route-plans, 149-legacy-mutations, one-retained-control, recovered-owner-only-artifact-program, serialized-rollback-before-next]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -431,8 +431,11 @@ now:
     - "owner recovered-state ArtifactProgram artifact-program:sha256:9d90c8666a1d9a69f46daca644bb9470505831bb9926e21d2a577d0bd9aa5a6f: 2,076 files / 609,636,416 bytes; verified Texture/VText/actor hashes; independent owner candidate verification receipt verification:sha256:88b3e33d7cf700fa349ff900226a4a64c17e85b93b668f0d610096962774902a; allocated 627,773,440 bytes"
     - "G4 staged lifecycle root-cause cluster and active unrouted disposal candidate diff 159e5f2cf6f: exact pre-stop validation, unrouted-only active stop capability, stop-failure preservation, routed terminal-only contract, and focused/full vmctl tests plus vet pass"
     - "deployed owner zero-realization reconstruction receipt: first disk 5cd0eb3a / verification 88b3e33d; second disk 38d19298 / verification ac873a6d; identical observation 68360005 and product hashes; active disposal receipt 066202bc with route absent; final candidate ownership and data.img absent"
-  blocker_or_risk: "The owner-specific recovered-state ArtifactProgram has now produced two distinct, independently verified disposable realizations from the same immutable refs. The deployed exact endpoint disposed the second while active; both proof candidates and disks are absent. The first G4 panel returned three accept verdicts and one reproducible repair blocker: the closing reconstruction receipts were only ephemeral hashes and the frozen Definition still described deployment as pending. This durable proof update repairs that evidence-boundary defect. Fleet mutation remains unauthorized; no real-user ownership or route crossed G4."
-  next_action: "Commit the durable zero-realization proof and reconciled belief state, refreeze the 150-plan candidate against that documentation identity, rerun independent G4 adjudication, and proceed to strictly serialized cutover only if no reproducible blocker remains."
+    - docs/evidence/g4-fleet-cutover-candidate-2026-07-17.json
+    - docs/evidence/g4-fleet-cutover-accepted-review-2026-07-17.md
+    - "G4 repaired panel: Cursor, Gemini 3.5, GPT-5.5, and OpenCode accept with no blockers and high confidence; Devin, Codex CLI, and GLM 5.2 timed out without verdict"
+  blocker_or_risk: "G4 is accepted with no reproducible blocker. The packet still is not a route signature: every live row may drift, every mutation requires fresh owner/G3 signatures and exact route/ownership joins, and any failure must fully roll back and restore before the next route. The high-risk owner ArtifactProgram is bound to one owner only; 149 other plans explicitly make no legacy-data migration claim."
+  next_action: "Commit the accepted G4 packet and adjudication receipt, reverify the retained synthetic control without mutation, then execute the a@b.com near-new canary through exact detach, construction, independent verification, paired signed bootstrap/rollback preparation, G3 acceptance, CAS, no-SSH product readback, and restart durability. Stop and restore completely on any refusal before touching the next route."
 
 successor:
   status: unauthorized_until_this_definition_complete
