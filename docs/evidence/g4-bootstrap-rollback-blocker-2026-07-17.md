@@ -67,4 +67,4 @@ Focused proof:
 - `go test ./internal/routeledger ./internal/vmctl -count=1`: pass;
 - `go vet ./internal/routeledger ./internal/vmctl`: pass.
 
-This remains source evidence only. It does not reopen G4 until CI, matching Node B deployment, and the full disposable detach → construct/verify → signed bootstrap → signed rollback-to-absence → dispose → exact restore lifecycle succeed.
+The repair is deployed and the full disposable lifecycle passed at `e6fa53f10db3ba9499175d7a1d7912a0cbe2f876`: signed detach → construct/independently verify → paired-plan G3 acceptance → generation-1 bootstrap → candidate health/readback → stop → signed generation-2 rollback-to-absence → idempotent replay → exact unrouted disposal → exact legacy restore → vmctl restart. Route absence and the legacy image metadata invariant held, and a forged rollback-plan digest returned HTTP 409 without registry mutation. See `docs/evidence/g4-bootstrap-rollback-deployed-proof-2026-07-17.md` and its packet SHA-256 `76c6521bba9df23683164d696f8577fb37ef0f0c6071e81c0e96fad37cec2f87`. The substrate blocker is repaired; G4 remains closed only for refreshed fleet freezing and independent adjudication.

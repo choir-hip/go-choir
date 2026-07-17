@@ -1,0 +1,1604 @@
+{
+  "bootstrap_apply_request": {
+    "acceptance": {
+      "accepted_at": "2026-07-17T07:18:48.604251Z",
+      "bootstrap_plan_sha256": "651115fc0558eec51b4611767d2b894d011c0325d8402573cbb300e079007e0f",
+      "candidate_id": "route-bootstrap:sha256:2728b7e46dbec8348bc7bddf7bb073e2a6bee0530432cdd18add151cc0860bc7",
+      "certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "decision": "accept",
+      "key_id": "g4-bootstrap-rollback-g3-20260717",
+      "owner_id": "mission-restart-1778558340",
+      "rollback_plan_sha256": "8e4dff42fcc6c3d7d9105048a579442a15675a19f5fcc3bd217bb1415eedf6e6",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "signature": "62LBZfSeFO8xvbtvGhuTtS/RPrYwzy1VQr07OgE9a/95tkDPnbLQgBmthfvYaPdhv+IRzTWb7A7H5mxJMg51Bg==",
+      "verification_ref": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c"
+    },
+    "action": "bootstrap",
+    "candidate": {
+      "approval_evidence": {
+        "computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "created_at": "2026-07-17T07:17:32.11492Z",
+        "evidence_kind": "approval",
+        "evidence_ref": "approval:sha256:efc15c02dacdae92ae2dedc97da1358c62cfe79eaaaa1fb25e63a7eb0a67b61e",
+        "payload": {
+          "approved_at": "2026-07-17T07:17:32.11492Z",
+          "computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+          "decision": "approve",
+          "key_id": "g4-bootstrap-rollback-owner-20260717",
+          "owner_id": "mission-restart-1778558340",
+          "route_slot_id": "computer:mission-restart-1778558340:primary",
+          "signature": "Uk87C8h3Zj15x0BxW/N9xVURC0yt9G2Fwz0MXn5Gv0JxxyRxSvLaAhK61CudkhwSGQedN1zHw2tydtOPKVD9DQ=="
+        },
+        "payload_sha256": "9ad21409e461ea405c34e2b059988e02bfe1557e4bda8c35601b4e22a3155c8f",
+        "route_slot_id": "computer:mission-restart-1778558340:primary"
+      },
+      "bootstrap_plan": {
+        "expected_generation": 0,
+        "idempotency_key": "idempotency:bootstrap:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+        "new_computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "old_computer_version": {
+          "artifact_program_ref": "",
+          "code_ref": ""
+        },
+        "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "transition_kind": "bootstrap"
+      },
+      "candidate_id": "route-bootstrap:sha256:2728b7e46dbec8348bc7bddf7bb073e2a6bee0530432cdd18add151cc0860bc7",
+      "certificate_evidence": {
+        "computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "created_at": "2026-07-17T07:18:03.5186173Z",
+        "evidence_kind": "promotion_certificate",
+        "evidence_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+        "payload": {
+          "approval_ref": "approval:sha256:efc15c02dacdae92ae2dedc97da1358c62cfe79eaaaa1fb25e63a7eb0a67b61e",
+          "kind": "verified_route_bootstrap",
+          "route_slot_id": "computer:mission-restart-1778558340:primary",
+          "verification": {
+            "computer_version": {
+              "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+              "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+            },
+            "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+            "disk_plan": {
+              "allocation": {
+                "max_allocated_bytes": 2147483648,
+                "minimum_available_bytes": 2147483648,
+                "mode": "sparse"
+              },
+              "device_id": "data",
+              "filesystem": {
+                "block_size_bytes": 4096,
+                "label": "choir-data",
+                "reserved_percent": 0,
+                "type": "ext4"
+              },
+              "logical_bytes": 34359738368,
+              "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+            },
+            "disk_receipt": {
+              "backend": "linux-ext4-sparse-v1",
+              "created_at": "2026-07-17T07:15:14.622966668Z",
+              "device_id": "data",
+              "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+              "geometry": {
+                "allocated_bytes": 10600448,
+                "device_logical_bytes": 34359738368,
+                "filesystem_block_size_bytes": 4096,
+                "filesystem_blocks": 8388608,
+                "filesystem_bytes": 34359738368,
+                "filesystem_label": "choir-data",
+                "filesystem_type": "ext4",
+                "partition_layout": "none",
+                "partition_offset_bytes": 0
+              },
+              "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+              "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+            },
+            "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+            "epoch": 1,
+            "identity": {
+              "candidate_id": "primary",
+              "computer_kind": "candidate",
+              "desktop_id": "primary",
+              "owner_id": "mission-restart-1778558340",
+              "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+            },
+            "observation_sha256": "672fe5f30aa515bcc093d5052dd898d7b549ea545ebf5c3dee1e8ba3c579815c",
+            "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+            "runtime_geometry": {
+              "available_bytes": 33341689856,
+              "filesystem_block_size_bytes": 4096,
+              "filesystem_bytes": 33501757440
+            },
+            "verification_receipt_id": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+            "verified_at": "2026-07-17T07:18:03.518307959Z",
+            "verifier": "independent-production-realization-verifier",
+            "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+          }
+        },
+        "payload_sha256": "e963245fdccad0357550df530b123d7f4b956f11b95c90eec7eff8bf20e68051",
+        "route_slot_id": "computer:mission-restart-1778558340:primary"
+      },
+      "prepared_at": "2026-07-17T07:18:03.5186173Z",
+      "rollback_plan": {
+        "expected_generation": 1,
+        "idempotency_key": "idempotency:bootstrap-rollback:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+        "new_computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "old_computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+        "rollback_target_receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "transition_kind": "bootstrap_rollback"
+      },
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "verification": {
+        "computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+        "disk_plan": {
+          "allocation": {
+            "max_allocated_bytes": 2147483648,
+            "minimum_available_bytes": 2147483648,
+            "mode": "sparse"
+          },
+          "device_id": "data",
+          "filesystem": {
+            "block_size_bytes": 4096,
+            "label": "choir-data",
+            "reserved_percent": 0,
+            "type": "ext4"
+          },
+          "logical_bytes": 34359738368,
+          "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+        },
+        "disk_receipt": {
+          "backend": "linux-ext4-sparse-v1",
+          "created_at": "2026-07-17T07:15:14.622966668Z",
+          "device_id": "data",
+          "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+          "geometry": {
+            "allocated_bytes": 10600448,
+            "device_logical_bytes": 34359738368,
+            "filesystem_block_size_bytes": 4096,
+            "filesystem_blocks": 8388608,
+            "filesystem_bytes": 34359738368,
+            "filesystem_label": "choir-data",
+            "filesystem_type": "ext4",
+            "partition_layout": "none",
+            "partition_offset_bytes": 0
+          },
+          "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+          "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+        },
+        "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+        "epoch": 1,
+        "identity": {
+          "candidate_id": "primary",
+          "computer_kind": "candidate",
+          "desktop_id": "primary",
+          "owner_id": "mission-restart-1778558340",
+          "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+        },
+        "observation_sha256": "672fe5f30aa515bcc093d5052dd898d7b549ea545ebf5c3dee1e8ba3c579815c",
+        "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+        "runtime_geometry": {
+          "available_bytes": 33341689856,
+          "filesystem_block_size_bytes": 4096,
+          "filesystem_bytes": 33501757440
+        },
+        "verification_receipt_id": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+        "verified_at": "2026-07-17T07:18:03.518307959Z",
+        "verifier": "independent-production-realization-verifier",
+        "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+      }
+    }
+  },
+  "bootstrap_resolution": {
+    "artifact_program": {
+      "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+      "created_at": "2026-07-16T22:25:00Z",
+      "entries": [
+        {
+          "artifact_uri": "artifact+sha256://fea09a93dc461d71d9466cac33f883d8631c2a19822c60c90aba5a86395b00ec/computer-inputs/candidates/control-20260716/base-journal-v4.json",
+          "content_sha256": "fea09a93dc461d71d9466cac33f883d8631c2a19822c60c90aba5a86395b00ec",
+          "entry_hash": "cb1b06f49686dce50e7727c2f74e2454ae386da1da3c22e90232c710e17fc2cc",
+          "kind": "base_journal",
+          "sequence": 1
+        }
+      ]
+    },
+    "code_closure": {
+      "artifacts": [
+        {
+          "name": "sandbox-runtime.tar",
+          "sha256": "88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485",
+          "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/sandbox-runtime.tar"
+        }
+      ],
+      "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380",
+      "created_at": "2026-07-16T22:25:00Z",
+      "source_commit": "7122f2799be4458f4b925be11990321c7e70ffc4"
+    },
+    "latest_receipt": {
+      "approval_ref": "approval:sha256:939e463c1b921aeeb32463d5e82b353a9c54d94d3f0ce1e47efde8d75c081953",
+      "committed_at": "2026-07-17T07:19:19.187459Z",
+      "committed_generation": 1,
+      "expected_generation": 0,
+      "idempotency_key": "idempotency:bootstrap:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+      "new_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "transition_kind": "bootstrap"
+    },
+    "slot": {
+      "current_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "generation": 1,
+      "latest_receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+      "route_slot_id": "computer:mission-restart-1778558340:primary"
+    },
+    "transition_receipt": {
+      "approval_ref": "approval:sha256:939e463c1b921aeeb32463d5e82b353a9c54d94d3f0ce1e47efde8d75c081953",
+      "committed_at": "2026-07-17T07:19:19.187459048Z",
+      "committed_generation": 1,
+      "expected_generation": 0,
+      "idempotency_key": "idempotency:bootstrap:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+      "new_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "transition_kind": "bootstrap"
+    }
+  },
+  "candidate_disposal": {
+    "computer_version": {
+      "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+      "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+    },
+    "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+    "disposed_at": "2026-07-17T07:21:37.365225445Z",
+    "prior_state": "stopped",
+    "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+    "route_absent": true,
+    "route_slot_id": "computer:mission-restart-1778558340:primary"
+  },
+  "captured_at": "2026-07-17T07:13:00Z",
+  "checks": {
+    "candidate_disposed_only_after_absence": true,
+    "candidate_stopped_before_rollback": true,
+    "constructed_and_independently_verified": true,
+    "exact_legacy_restore": true,
+    "forged_rollback_refused_without_mutation": true,
+    "frozen_bootstrap_and_rollback_pair": true,
+    "guest_ready": true,
+    "legacy_image_metadata_invariant": true,
+    "rollback_receipt_generation_two": true,
+    "rollback_replay_idempotent": true,
+    "route_absent_after_restore_and_restart": true,
+    "routed_input_readback_join": true,
+    "signed_exact_detach": true,
+    "signed_generation_one_bootstrap": true,
+    "signed_generation_one_rollback_to_absence": true
+  },
+  "ci": {
+    "conclusion": "success",
+    "run_id": 29561357407,
+    "url": "https://github.com/choir-hip/go-choir/actions/runs/29561357407"
+  },
+  "construction": {
+    "boot": {
+      "booted_at": "2026-07-17T07:15:14.642422149Z",
+      "epoch": 1,
+      "healthy": true,
+      "host_url": "http://10.200.0.2:8085",
+      "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+    },
+    "disk_instantiation": {
+      "backend": "linux-ext4-sparse-v1",
+      "created_at": "2026-07-17T07:15:14.622966668Z",
+      "device_id": "data",
+      "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+      "geometry": {
+        "allocated_bytes": 10600448,
+        "device_logical_bytes": 34359738368,
+        "filesystem_block_size_bytes": 4096,
+        "filesystem_blocks": 8388608,
+        "filesystem_bytes": 34359738368,
+        "filesystem_label": "choir-data",
+        "filesystem_type": "ext4",
+        "partition_layout": "none",
+        "partition_offset_bytes": 0
+      },
+      "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+      "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+    },
+    "equivalence": {
+      "status": "equivalent"
+    },
+    "identity": {
+      "candidate_id": "primary",
+      "computer_kind": "candidate",
+      "desktop_id": "primary",
+      "owner_id": "mission-restart-1778558340",
+      "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+    },
+    "inputs": {
+      "artifact_program": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "created_at": "2026-07-16T22:25:00Z",
+        "entries": [
+          {
+            "artifact_uri": "artifact+sha256://fea09a93dc461d71d9466cac33f883d8631c2a19822c60c90aba5a86395b00ec/computer-inputs/candidates/control-20260716/base-journal-v4.json",
+            "content_sha256": "fea09a93dc461d71d9466cac33f883d8631c2a19822c60c90aba5a86395b00ec",
+            "entry_hash": "cb1b06f49686dce50e7727c2f74e2454ae386da1da3c22e90232c710e17fc2cc",
+            "kind": "base_journal",
+            "sequence": 1
+          }
+        ]
+      },
+      "code": {
+        "artifacts": [
+          {
+            "name": "sandbox-runtime.tar",
+            "sha256": "88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485",
+            "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/sandbox-runtime.tar"
+          }
+        ],
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380",
+        "created_at": "2026-07-16T22:25:00Z",
+        "source_commit": "7122f2799be4458f4b925be11990321c7e70ffc4"
+      }
+    },
+    "realization": {
+      "capabilities": {
+        "materializer": "production-computer-constructor",
+        "substrate": "firecracker/vmmanager",
+        "supported": [
+          "file_manifest",
+          "blob_set",
+          "vm_state_manifest"
+        ]
+      },
+      "id": "candidate-g4-bootstrap-rollback-20260717",
+      "observations": {
+        "name": "production-construction",
+        "observations": [
+          {
+            "key": "sha256:966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac",
+            "kind": "blob_set",
+            "value": "{\"blob_ref\":\"sha256:966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac\",\"size_bytes\":34,\"sha256\":\"966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac\"}"
+          },
+          {
+            "key": "audit.txt",
+            "kind": "file_manifest",
+            "value": "{\"path\":\"audit.txt\",\"size\":34,\"sha256\":\"966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac\",\"blob_ref\":\"sha256:966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac\"}"
+          },
+          {
+            "key": "vm:candidate-g4-bootstrap-rollback-20260717",
+            "kind": "vm_state_manifest",
+            "value": "{\"disk\":{\"receipt_id\":\"disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5\",\"backend\":\"linux-ext4-sparse-v1\",\"realization_id\":\"candidate-g4-bootstrap-rollback-20260717\",\"device_id\":\"data\",\"device_path\":\"/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img\",\"geometry\":{\"filesystem_type\":\"ext4\",\"filesystem_label\":\"choir-data\",\"partition_layout\":\"none\",\"partition_offset_bytes\":0,\"device_logical_bytes\":34359738368,\"filesystem_bytes\":34359738368,\"filesystem_block_size_bytes\":4096,\"filesystem_blocks\":8388608,\"allocated_bytes\":10600448},\"created_at\":\"2026-07-17T07:15:14.622966668Z\"},\"boot\":{\"vm_id\":\"candidate-g4-bootstrap-rollback-20260717\",\"host_url\":\"http://10.200.0.2:8085\",\"epoch\":1,\"healthy\":true,\"booted_at\":\"2026-07-17T07:15:14.642422149Z\"},\"runtime_geometry\":{\"filesystem_bytes\":33501757440,\"filesystem_block_size_bytes\":4096,\"available_bytes\":33341689856}}"
+          }
+        ],
+        "required": [
+          "blob_set",
+          "file_manifest",
+          "vm_state_manifest"
+        ],
+        "version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        }
+      },
+      "version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      }
+    }
+  },
+  "construction_request": {
+    "computer_version": {
+      "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+      "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+    },
+    "identity": {
+      "candidate_id": "primary",
+      "computer_kind": "candidate",
+      "desktop_id": "primary",
+      "owner_id": "mission-restart-1778558340",
+      "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+    }
+  },
+  "deploy_receipt": {
+    "activated_at": "2026-07-17T07:07:37Z",
+    "artifacts": {
+      "gateway": {
+        "commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
+        "status": "active"
+      },
+      "ordinary_guest": {
+        "commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
+        "status": "installed"
+      },
+      "playwright_guest": {
+        "commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
+        "status": "installed"
+      },
+      "proxy": {
+        "commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
+        "status": "active"
+      },
+      "sandbox": {
+        "commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
+        "status": "installed"
+      },
+      "vmctl": {
+        "commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
+        "status": "active"
+      }
+    },
+    "github": {
+      "run_attempt": "1",
+      "run_id": "29561357407"
+    },
+    "schema_version": 1,
+    "target_commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876"
+  },
+  "detach_receipt": {
+    "authorization": {
+      "authorized_at": "2026-07-17T07:14:35.094127Z",
+      "decision": "detach",
+      "expected_epoch": 1,
+      "expected_state": "hibernated",
+      "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+      "key_id": "g4-bootstrap-rollback-disposable-20260717",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "signature": "IGcCkYRM0XIEO+mSoeYImIMBNx5VKr2lAFEKZH4iQ761mKLyDMLKiosNpJjPLvBmYavXZR4/p90iA/7v+aQ9DA==",
+      "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+    },
+    "detached_at": "2026-07-17T07:14:52.660462823Z",
+    "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+    "ownership": {
+      "created_at": "2026-05-12T03:59:02.002839788Z",
+      "desktop_id": "primary",
+      "epoch": 1,
+      "kind": "interactive",
+      "last_active_at": "2026-05-14T01:00:55.270949232Z",
+      "published": true,
+      "sandbox_url": "http://172.3.0.2:8085",
+      "state": "hibernated",
+      "stopped_by": "idle",
+      "user_id": "mission-restart-1778558340",
+      "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+    },
+    "prior_state": "hibernated",
+    "receipt_id": "legacy-detach:sha256:7b5c171b359b9f2059776361f15f2f27a5c915752d3b910de8ab1b410e56ff83",
+    "route_slot_id": "computer:mission-restart-1778558340:primary",
+    "state_preserved": true
+  },
+  "detach_request": {
+    "authorization": {
+      "authorized_at": "2026-07-17T07:14:35.094127Z",
+      "decision": "detach",
+      "expected_epoch": 1,
+      "expected_state": "hibernated",
+      "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+      "key_id": "g4-bootstrap-rollback-disposable-20260717",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "signature": "IGcCkYRM0XIEO+mSoeYImIMBNx5VKr2lAFEKZH4iQ761mKLyDMLKiosNpJjPLvBmYavXZR4/p90iA/7v+aQ9DA==",
+      "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+    },
+    "expected_epoch": 1,
+    "expected_state": "hibernated",
+    "inventory_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+    "route_slot_id": "computer:mission-restart-1778558340:primary",
+    "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+  },
+  "final_ownership": {
+    "created_at": "2026-05-12T03:59:02.002Z",
+    "desktop_id": "primary",
+    "epoch": 1,
+    "kind": "interactive",
+    "last_active_at": "2026-05-14T01:00:55.270Z",
+    "objective_fingerprint": "4c71c8317e402caeb2192883005ab94867dc1e6472bae51aad3e662602c35d3f",
+    "published": true,
+    "sandbox_url": "http://172.3.0.2:8085",
+    "state": "hibernated",
+    "stopped_by": "idle",
+    "user_id": "mission-restart-1778558340",
+    "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff",
+    "warmness_class": "primary"
+  },
+  "fixture": {
+    "candidate_realization_id": "candidate-g4-bootstrap-rollback-20260717",
+    "desktop_id": "primary",
+    "inventory_row_sha256": "683d9aaf581617b764a6f806b68f59acc4426c024438eb42fc4bc431db6789e1",
+    "legacy_vm_id": "vm-bb1b05195c9186fa06f22455522e81ff",
+    "route_slot_id": "computer:mission-restart-1778558340:primary",
+    "user_id": "mission-restart-1778558340"
+  },
+  "forged_refusal": {
+    "http_status": 409,
+    "ownership_registry_sha256_unchanged": true,
+    "request": {
+      "acceptance": {
+        "accepted_at": "2026-07-17T07:18:48.604251Z",
+        "bootstrap_plan_sha256": "651115fc0558eec51b4611767d2b894d011c0325d8402573cbb300e079007e0f",
+        "candidate_id": "route-bootstrap:sha256:2728b7e46dbec8348bc7bddf7bb073e2a6bee0530432cdd18add151cc0860bc7",
+        "certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+        "computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "decision": "accept",
+        "key_id": "g4-bootstrap-rollback-g3-20260717",
+        "owner_id": "mission-restart-1778558340",
+        "rollback_plan_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "signature": "62LBZfSeFO8xvbtvGhuTtS/RPrYwzy1VQr07OgE9a/95tkDPnbLQgBmthfvYaPdhv+IRzTWb7A7H5mxJMg51Bg==",
+        "verification_ref": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c"
+      },
+      "action": "rollback",
+      "candidate": {
+        "approval_evidence": {
+          "computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "created_at": "2026-07-17T07:17:32.11492Z",
+          "evidence_kind": "approval",
+          "evidence_ref": "approval:sha256:efc15c02dacdae92ae2dedc97da1358c62cfe79eaaaa1fb25e63a7eb0a67b61e",
+          "payload": {
+            "approved_at": "2026-07-17T07:17:32.11492Z",
+            "computer_version": {
+              "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+              "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+            },
+            "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+            "decision": "approve",
+            "key_id": "g4-bootstrap-rollback-owner-20260717",
+            "owner_id": "mission-restart-1778558340",
+            "route_slot_id": "computer:mission-restart-1778558340:primary",
+            "signature": "Uk87C8h3Zj15x0BxW/N9xVURC0yt9G2Fwz0MXn5Gv0JxxyRxSvLaAhK61CudkhwSGQedN1zHw2tydtOPKVD9DQ=="
+          },
+          "payload_sha256": "9ad21409e461ea405c34e2b059988e02bfe1557e4bda8c35601b4e22a3155c8f",
+          "route_slot_id": "computer:mission-restart-1778558340:primary"
+        },
+        "bootstrap_plan": {
+          "expected_generation": 0,
+          "idempotency_key": "idempotency:bootstrap:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+          "new_computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "old_computer_version": {
+            "artifact_program_ref": "",
+            "code_ref": ""
+          },
+          "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+          "route_slot_id": "computer:mission-restart-1778558340:primary",
+          "transition_kind": "bootstrap"
+        },
+        "candidate_id": "route-bootstrap:sha256:2728b7e46dbec8348bc7bddf7bb073e2a6bee0530432cdd18add151cc0860bc7",
+        "certificate_evidence": {
+          "computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "created_at": "2026-07-17T07:18:03.5186173Z",
+          "evidence_kind": "promotion_certificate",
+          "evidence_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+          "payload": {
+            "approval_ref": "approval:sha256:efc15c02dacdae92ae2dedc97da1358c62cfe79eaaaa1fb25e63a7eb0a67b61e",
+            "kind": "verified_route_bootstrap",
+            "route_slot_id": "computer:mission-restart-1778558340:primary",
+            "verification": {
+              "computer_version": {
+                "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+                "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+              },
+              "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+              "disk_plan": {
+                "allocation": {
+                  "max_allocated_bytes": 2147483648,
+                  "minimum_available_bytes": 2147483648,
+                  "mode": "sparse"
+                },
+                "device_id": "data",
+                "filesystem": {
+                  "block_size_bytes": 4096,
+                  "label": "choir-data",
+                  "reserved_percent": 0,
+                  "type": "ext4"
+                },
+                "logical_bytes": 34359738368,
+                "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+              },
+              "disk_receipt": {
+                "backend": "linux-ext4-sparse-v1",
+                "created_at": "2026-07-17T07:15:14.622966668Z",
+                "device_id": "data",
+                "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+                "geometry": {
+                  "allocated_bytes": 10600448,
+                  "device_logical_bytes": 34359738368,
+                  "filesystem_block_size_bytes": 4096,
+                  "filesystem_blocks": 8388608,
+                  "filesystem_bytes": 34359738368,
+                  "filesystem_label": "choir-data",
+                  "filesystem_type": "ext4",
+                  "partition_layout": "none",
+                  "partition_offset_bytes": 0
+                },
+                "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+                "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+              },
+              "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+              "epoch": 1,
+              "identity": {
+                "candidate_id": "primary",
+                "computer_kind": "candidate",
+                "desktop_id": "primary",
+                "owner_id": "mission-restart-1778558340",
+                "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+              },
+              "observation_sha256": "672fe5f30aa515bcc093d5052dd898d7b549ea545ebf5c3dee1e8ba3c579815c",
+              "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+              "runtime_geometry": {
+                "available_bytes": 33341689856,
+                "filesystem_block_size_bytes": 4096,
+                "filesystem_bytes": 33501757440
+              },
+              "verification_receipt_id": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+              "verified_at": "2026-07-17T07:18:03.518307959Z",
+              "verifier": "independent-production-realization-verifier",
+              "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+            }
+          },
+          "payload_sha256": "e963245fdccad0357550df530b123d7f4b956f11b95c90eec7eff8bf20e68051",
+          "route_slot_id": "computer:mission-restart-1778558340:primary"
+        },
+        "prepared_at": "2026-07-17T07:18:03.5186173Z",
+        "rollback_plan": {
+          "expected_generation": 1,
+          "idempotency_key": "idempotency:bootstrap-rollback:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+          "new_computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "old_computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+          "rollback_target_receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+          "route_slot_id": "computer:mission-restart-1778558340:primary",
+          "transition_kind": "bootstrap_rollback"
+        },
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "verification": {
+          "computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+          "disk_plan": {
+            "allocation": {
+              "max_allocated_bytes": 2147483648,
+              "minimum_available_bytes": 2147483648,
+              "mode": "sparse"
+            },
+            "device_id": "data",
+            "filesystem": {
+              "block_size_bytes": 4096,
+              "label": "choir-data",
+              "reserved_percent": 0,
+              "type": "ext4"
+            },
+            "logical_bytes": 34359738368,
+            "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+          },
+          "disk_receipt": {
+            "backend": "linux-ext4-sparse-v1",
+            "created_at": "2026-07-17T07:15:14.622966668Z",
+            "device_id": "data",
+            "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+            "geometry": {
+              "allocated_bytes": 10600448,
+              "device_logical_bytes": 34359738368,
+              "filesystem_block_size_bytes": 4096,
+              "filesystem_blocks": 8388608,
+              "filesystem_bytes": 34359738368,
+              "filesystem_label": "choir-data",
+              "filesystem_type": "ext4",
+              "partition_layout": "none",
+              "partition_offset_bytes": 0
+            },
+            "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+            "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+          },
+          "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+          "epoch": 1,
+          "identity": {
+            "candidate_id": "primary",
+            "computer_kind": "candidate",
+            "desktop_id": "primary",
+            "owner_id": "mission-restart-1778558340",
+            "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+          },
+          "observation_sha256": "672fe5f30aa515bcc093d5052dd898d7b549ea545ebf5c3dee1e8ba3c579815c",
+          "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+          "runtime_geometry": {
+            "available_bytes": 33341689856,
+            "filesystem_block_size_bytes": 4096,
+            "filesystem_bytes": 33501757440
+          },
+          "verification_receipt_id": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+          "verified_at": "2026-07-17T07:18:03.518307959Z",
+          "verifier": "independent-production-realization-verifier",
+          "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+        }
+      }
+    },
+    "response": {
+      "error": "vmctl promotion authority: G3 bootstrap acceptance bindings are invalid"
+    }
+  },
+  "frozen_candidate": {
+    "approval_evidence": {
+      "computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "created_at": "2026-07-17T07:17:32.11492Z",
+      "evidence_kind": "approval",
+      "evidence_ref": "approval:sha256:efc15c02dacdae92ae2dedc97da1358c62cfe79eaaaa1fb25e63a7eb0a67b61e",
+      "payload": {
+        "approved_at": "2026-07-17T07:17:32.11492Z",
+        "computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+        "decision": "approve",
+        "key_id": "g4-bootstrap-rollback-owner-20260717",
+        "owner_id": "mission-restart-1778558340",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "signature": "Uk87C8h3Zj15x0BxW/N9xVURC0yt9G2Fwz0MXn5Gv0JxxyRxSvLaAhK61CudkhwSGQedN1zHw2tydtOPKVD9DQ=="
+      },
+      "payload_sha256": "9ad21409e461ea405c34e2b059988e02bfe1557e4bda8c35601b4e22a3155c8f",
+      "route_slot_id": "computer:mission-restart-1778558340:primary"
+    },
+    "bootstrap_plan": {
+      "expected_generation": 0,
+      "idempotency_key": "idempotency:bootstrap:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+      "new_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "transition_kind": "bootstrap"
+    },
+    "candidate_id": "route-bootstrap:sha256:2728b7e46dbec8348bc7bddf7bb073e2a6bee0530432cdd18add151cc0860bc7",
+    "certificate_evidence": {
+      "computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "created_at": "2026-07-17T07:18:03.5186173Z",
+      "evidence_kind": "promotion_certificate",
+      "evidence_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "payload": {
+        "approval_ref": "approval:sha256:efc15c02dacdae92ae2dedc97da1358c62cfe79eaaaa1fb25e63a7eb0a67b61e",
+        "kind": "verified_route_bootstrap",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "verification": {
+          "computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+          "disk_plan": {
+            "allocation": {
+              "max_allocated_bytes": 2147483648,
+              "minimum_available_bytes": 2147483648,
+              "mode": "sparse"
+            },
+            "device_id": "data",
+            "filesystem": {
+              "block_size_bytes": 4096,
+              "label": "choir-data",
+              "reserved_percent": 0,
+              "type": "ext4"
+            },
+            "logical_bytes": 34359738368,
+            "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+          },
+          "disk_receipt": {
+            "backend": "linux-ext4-sparse-v1",
+            "created_at": "2026-07-17T07:15:14.622966668Z",
+            "device_id": "data",
+            "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+            "geometry": {
+              "allocated_bytes": 10600448,
+              "device_logical_bytes": 34359738368,
+              "filesystem_block_size_bytes": 4096,
+              "filesystem_blocks": 8388608,
+              "filesystem_bytes": 34359738368,
+              "filesystem_label": "choir-data",
+              "filesystem_type": "ext4",
+              "partition_layout": "none",
+              "partition_offset_bytes": 0
+            },
+            "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+            "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+          },
+          "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+          "epoch": 1,
+          "identity": {
+            "candidate_id": "primary",
+            "computer_kind": "candidate",
+            "desktop_id": "primary",
+            "owner_id": "mission-restart-1778558340",
+            "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+          },
+          "observation_sha256": "672fe5f30aa515bcc093d5052dd898d7b549ea545ebf5c3dee1e8ba3c579815c",
+          "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+          "runtime_geometry": {
+            "available_bytes": 33341689856,
+            "filesystem_block_size_bytes": 4096,
+            "filesystem_bytes": 33501757440
+          },
+          "verification_receipt_id": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+          "verified_at": "2026-07-17T07:18:03.518307959Z",
+          "verifier": "independent-production-realization-verifier",
+          "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+        }
+      },
+      "payload_sha256": "e963245fdccad0357550df530b123d7f4b956f11b95c90eec7eff8bf20e68051",
+      "route_slot_id": "computer:mission-restart-1778558340:primary"
+    },
+    "prepared_at": "2026-07-17T07:18:03.5186173Z",
+    "rollback_plan": {
+      "expected_generation": 1,
+      "idempotency_key": "idempotency:bootstrap-rollback:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+      "new_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "rollback_target_receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "transition_kind": "bootstrap_rollback"
+    },
+    "route_slot_id": "computer:mission-restart-1778558340:primary",
+    "verification": {
+      "computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+      "disk_plan": {
+        "allocation": {
+          "max_allocated_bytes": 2147483648,
+          "minimum_available_bytes": 2147483648,
+          "mode": "sparse"
+        },
+        "device_id": "data",
+        "filesystem": {
+          "block_size_bytes": 4096,
+          "label": "choir-data",
+          "reserved_percent": 0,
+          "type": "ext4"
+        },
+        "logical_bytes": 34359738368,
+        "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+      },
+      "disk_receipt": {
+        "backend": "linux-ext4-sparse-v1",
+        "created_at": "2026-07-17T07:15:14.622966668Z",
+        "device_id": "data",
+        "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+        "geometry": {
+          "allocated_bytes": 10600448,
+          "device_logical_bytes": 34359738368,
+          "filesystem_block_size_bytes": 4096,
+          "filesystem_blocks": 8388608,
+          "filesystem_bytes": 34359738368,
+          "filesystem_label": "choir-data",
+          "filesystem_type": "ext4",
+          "partition_layout": "none",
+          "partition_offset_bytes": 0
+        },
+        "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+        "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+      },
+      "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+      "epoch": 1,
+      "identity": {
+        "candidate_id": "primary",
+        "computer_kind": "candidate",
+        "desktop_id": "primary",
+        "owner_id": "mission-restart-1778558340",
+        "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+      },
+      "observation_sha256": "672fe5f30aa515bcc093d5052dd898d7b549ea545ebf5c3dee1e8ba3c579815c",
+      "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+      "runtime_geometry": {
+        "available_bytes": 33341689856,
+        "filesystem_block_size_bytes": 4096,
+        "filesystem_bytes": 33501757440
+      },
+      "verification_receipt_id": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+      "verified_at": "2026-07-17T07:18:03.518307959Z",
+      "verifier": "independent-production-realization-verifier",
+      "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+    }
+  },
+  "guest_health": {
+    "active_provider": "gateway",
+    "build": {
+      "built_at": "20260716215836",
+      "commit": "7122f2799be4458f4b925be11990321c7e70ffc4",
+      "service": "sandbox",
+      "version": "0.1.0"
+    },
+    "persistent_disk": {
+      "avail_bytes": 33341689856,
+      "cap_bytes": 33501757440,
+      "critical": false,
+      "default_cap_bytes": 8589934592,
+      "source": "guest",
+      "total_bytes": 33501757440,
+      "used_bytes": 160067584,
+      "used_percent": 0.4777886183632998,
+      "warning": false
+    },
+    "researcher_count": 3,
+    "running_processor_runs": 0,
+    "running_runs": 0,
+    "runtime_health": "ready",
+    "sandbox_id": "candidate-g4-bootstrap-rollback-20260717",
+    "service": "sandbox",
+    "status": "ready"
+  },
+  "legacy_data_image_stat": {
+    "choir-g4-bootstrap-rollback-legacy-stat-before.txt": "29:16733179:2147483648:135888:1778559452:1778559452",
+    "choir-g4-bootstrap-rollback-legacy-stat-detached.txt": "29:16733179:2147483648:135888:1778559452:1778559452",
+    "choir-g4-bootstrap-rollback-legacy-stat-restarted.txt": "29:16733179:2147483648:135888:1778559452:1778559452",
+    "choir-g4-bootstrap-rollback-legacy-stat-restored.txt": "29:16733179:2147483648:135888:1778559452:1778559452"
+  },
+  "legacy_restore": {
+    "created_at": "2026-05-12T03:59:02.002839788Z",
+    "desktop_id": "primary",
+    "epoch": 1,
+    "kind": "interactive",
+    "last_active_at": "2026-05-14T01:00:55.270949232Z",
+    "published": true,
+    "sandbox_url": "http://172.3.0.2:8085",
+    "state": "hibernated",
+    "stopped_by": "idle",
+    "user_id": "mission-restart-1778558340",
+    "vm_id": "vm-bb1b05195c9186fa06f22455522e81ff"
+  },
+  "prepare_request": {
+    "approval": {
+      "approved_at": "2026-07-17T07:17:32.11492Z",
+      "computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+      "decision": "approve",
+      "key_id": "g4-bootstrap-rollback-owner-20260717",
+      "owner_id": "mission-restart-1778558340",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "signature": "Uk87C8h3Zj15x0BxW/N9xVURC0yt9G2Fwz0MXn5Gv0JxxyRxSvLaAhK61CudkhwSGQedN1zHw2tydtOPKVD9DQ=="
+    },
+    "construction": {
+      "boot": {
+        "booted_at": "2026-07-17T07:15:14.642422149Z",
+        "epoch": 1,
+        "healthy": true,
+        "host_url": "http://10.200.0.2:8085",
+        "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+      },
+      "disk_instantiation": {
+        "backend": "linux-ext4-sparse-v1",
+        "created_at": "2026-07-17T07:15:14.622966668Z",
+        "device_id": "data",
+        "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+        "geometry": {
+          "allocated_bytes": 10600448,
+          "device_logical_bytes": 34359738368,
+          "filesystem_block_size_bytes": 4096,
+          "filesystem_blocks": 8388608,
+          "filesystem_bytes": 34359738368,
+          "filesystem_label": "choir-data",
+          "filesystem_type": "ext4",
+          "partition_layout": "none",
+          "partition_offset_bytes": 0
+        },
+        "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+        "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+      },
+      "equivalence": {
+        "status": "equivalent"
+      },
+      "identity": {
+        "candidate_id": "primary",
+        "computer_kind": "candidate",
+        "desktop_id": "primary",
+        "owner_id": "mission-restart-1778558340",
+        "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+      },
+      "inputs": {
+        "artifact_program": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "created_at": "2026-07-16T22:25:00Z",
+          "entries": [
+            {
+              "artifact_uri": "artifact+sha256://fea09a93dc461d71d9466cac33f883d8631c2a19822c60c90aba5a86395b00ec/computer-inputs/candidates/control-20260716/base-journal-v4.json",
+              "content_sha256": "fea09a93dc461d71d9466cac33f883d8631c2a19822c60c90aba5a86395b00ec",
+              "entry_hash": "cb1b06f49686dce50e7727c2f74e2454ae386da1da3c22e90232c710e17fc2cc",
+              "kind": "base_journal",
+              "sequence": 1
+            }
+          ]
+        },
+        "code": {
+          "artifacts": [
+            {
+              "name": "sandbox-runtime.tar",
+              "sha256": "88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485",
+              "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/sandbox-runtime.tar"
+            }
+          ],
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380",
+          "created_at": "2026-07-16T22:25:00Z",
+          "source_commit": "7122f2799be4458f4b925be11990321c7e70ffc4"
+        }
+      },
+      "realization": {
+        "capabilities": {
+          "materializer": "production-computer-constructor",
+          "substrate": "firecracker/vmmanager",
+          "supported": [
+            "file_manifest",
+            "blob_set",
+            "vm_state_manifest"
+          ]
+        },
+        "id": "candidate-g4-bootstrap-rollback-20260717",
+        "observations": {
+          "name": "production-construction",
+          "observations": [
+            {
+              "key": "sha256:966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac",
+              "kind": "blob_set",
+              "value": "{\"blob_ref\":\"sha256:966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac\",\"size_bytes\":34,\"sha256\":\"966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac\"}"
+            },
+            {
+              "key": "audit.txt",
+              "kind": "file_manifest",
+              "value": "{\"path\":\"audit.txt\",\"size\":34,\"sha256\":\"966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac\",\"blob_ref\":\"sha256:966f934d51fa1095735ffe3ba709bef935b0df6e9f45dbcd56dd8c58b02377ac\"}"
+            },
+            {
+              "key": "vm:candidate-g4-bootstrap-rollback-20260717",
+              "kind": "vm_state_manifest",
+              "value": "{\"disk\":{\"receipt_id\":\"disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5\",\"backend\":\"linux-ext4-sparse-v1\",\"realization_id\":\"candidate-g4-bootstrap-rollback-20260717\",\"device_id\":\"data\",\"device_path\":\"/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img\",\"geometry\":{\"filesystem_type\":\"ext4\",\"filesystem_label\":\"choir-data\",\"partition_layout\":\"none\",\"partition_offset_bytes\":0,\"device_logical_bytes\":34359738368,\"filesystem_bytes\":34359738368,\"filesystem_block_size_bytes\":4096,\"filesystem_blocks\":8388608,\"allocated_bytes\":10600448},\"created_at\":\"2026-07-17T07:15:14.622966668Z\"},\"boot\":{\"vm_id\":\"candidate-g4-bootstrap-rollback-20260717\",\"host_url\":\"http://10.200.0.2:8085\",\"epoch\":1,\"healthy\":true,\"booted_at\":\"2026-07-17T07:15:14.642422149Z\"},\"runtime_geometry\":{\"filesystem_bytes\":33501757440,\"filesystem_block_size_bytes\":4096,\"available_bytes\":33341689856}}"
+            }
+          ],
+          "required": [
+            "blob_set",
+            "file_manifest",
+            "vm_state_manifest"
+          ],
+          "version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          }
+        },
+        "version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        }
+      }
+    },
+    "route_slot_id": "computer:mission-restart-1778558340:primary"
+  },
+  "raw_artifact_sha256": {
+    "choir-g4-bootstrap-rollback-bootstrap-resolution.json": "6fc70fc784f3bd68d2e3dd59697d3223a1644b33f1090c059072d5d2ca5e28e0",
+    "choir-g4-bootstrap-rollback-candidate.json": "5051f5b2a34bf60adf45ed0251790859c97997c35d4f7192c8d85f24f758603c",
+    "choir-g4-bootstrap-rollback-construction.json": "73ce3c3bc1d2b86da1d3ff2b8063556e9736f14458925a2fca3d979b26b635a7",
+    "choir-g4-bootstrap-rollback-deploy-receipt.json": "93f92bafaca9b36ca62a50087c0a07a993d900adc94efc4e54c8c077d8da9ca5",
+    "choir-g4-bootstrap-rollback-detach-receipt.json": "16bf3b29b624911cf4a33fac226a865c6fe5102a5afbc0e9414b881a68119a9f",
+    "choir-g4-bootstrap-rollback-dispose-receipt.json": "ef7b012de15f6f3167c59ed261d42fa27089faa46c01bbe2fd3e86b5d4447710",
+    "choir-g4-bootstrap-rollback-final-ownership.json": "8de65ac239a845386d89382ced2db93245f686d489073fd8c0b3d067d5de35aa",
+    "choir-g4-bootstrap-rollback-forged-response.json": "33221db988b4244d4ea77db5d4967c277c5befa3331ebc053c37d85c5b2679de",
+    "choir-g4-bootstrap-rollback-guest-health.json": "441b61bb2bea3051c7862116e2dc9f2367dd66ccb09658a7520eb2e2cbf4d0fb",
+    "choir-g4-bootstrap-rollback-legacy-stat-before.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-bootstrap-rollback-legacy-stat-detached.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-bootstrap-rollback-legacy-stat-restarted.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-bootstrap-rollback-legacy-stat-restored.txt": "620f92c16d4cbd556454ff53c0b128fb2a1dbdac36ec09a95b56e13142c06e2e",
+    "choir-g4-bootstrap-rollback-replay.json": "7d6446188dd22042af1464112c690f0ebf1282feb9dfc40203db025860a02e8f",
+    "choir-g4-bootstrap-rollback-resolution.json": "8769f4631c05c348b3a3fa99c19e657979e4917c1b7e3697d408dd6bdc5f4883",
+    "choir-g4-bootstrap-rollback-restore-response.json": "765eea91ab90c890031c7f1925f277adf77144e3605d61cbb64388acbf17383b",
+    "choir-g4-bootstrap-rollback-route-absent.json": "314f64fd84ec75f0f6be77314969cc08613901ab885cd82746a09dfd42395611",
+    "choir-g4-bootstrap-rollback-route-before.json": "314f64fd84ec75f0f6be77314969cc08613901ab885cd82746a09dfd42395611",
+    "choir-g4-bootstrap-rollback-route-final.json": "314f64fd84ec75f0f6be77314969cc08613901ab885cd82746a09dfd42395611",
+    "choir-g4-bootstrap-rollback-route-restarted.json": "314f64fd84ec75f0f6be77314969cc08613901ab885cd82746a09dfd42395611",
+    "choir-g4-bootstrap-rollback-routed-readback.json": "dd2e332c34292b0b376a38bc981446bfb2f84de5390ee41d7a328bd65a037e60",
+    "choir-g4-bootstrap-rollback-stop-response.json": "156072f70f2334c0ec18b98a325a6e21d7e6865abee27e1ee80494d1ed01d5f9"
+  },
+  "rollback_apply_request": {
+    "acceptance": {
+      "accepted_at": "2026-07-17T07:18:48.604251Z",
+      "bootstrap_plan_sha256": "651115fc0558eec51b4611767d2b894d011c0325d8402573cbb300e079007e0f",
+      "candidate_id": "route-bootstrap:sha256:2728b7e46dbec8348bc7bddf7bb073e2a6bee0530432cdd18add151cc0860bc7",
+      "certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "decision": "accept",
+      "key_id": "g4-bootstrap-rollback-g3-20260717",
+      "owner_id": "mission-restart-1778558340",
+      "rollback_plan_sha256": "8e4dff42fcc6c3d7d9105048a579442a15675a19f5fcc3bd217bb1415eedf6e6",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "signature": "62LBZfSeFO8xvbtvGhuTtS/RPrYwzy1VQr07OgE9a/95tkDPnbLQgBmthfvYaPdhv+IRzTWb7A7H5mxJMg51Bg==",
+      "verification_ref": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c"
+    },
+    "action": "rollback",
+    "candidate": {
+      "approval_evidence": {
+        "computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "created_at": "2026-07-17T07:17:32.11492Z",
+        "evidence_kind": "approval",
+        "evidence_ref": "approval:sha256:efc15c02dacdae92ae2dedc97da1358c62cfe79eaaaa1fb25e63a7eb0a67b61e",
+        "payload": {
+          "approved_at": "2026-07-17T07:17:32.11492Z",
+          "computer_version": {
+            "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+            "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+          },
+          "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+          "decision": "approve",
+          "key_id": "g4-bootstrap-rollback-owner-20260717",
+          "owner_id": "mission-restart-1778558340",
+          "route_slot_id": "computer:mission-restart-1778558340:primary",
+          "signature": "Uk87C8h3Zj15x0BxW/N9xVURC0yt9G2Fwz0MXn5Gv0JxxyRxSvLaAhK61CudkhwSGQedN1zHw2tydtOPKVD9DQ=="
+        },
+        "payload_sha256": "9ad21409e461ea405c34e2b059988e02bfe1557e4bda8c35601b4e22a3155c8f",
+        "route_slot_id": "computer:mission-restart-1778558340:primary"
+      },
+      "bootstrap_plan": {
+        "expected_generation": 0,
+        "idempotency_key": "idempotency:bootstrap:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+        "new_computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "old_computer_version": {
+          "artifact_program_ref": "",
+          "code_ref": ""
+        },
+        "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "transition_kind": "bootstrap"
+      },
+      "candidate_id": "route-bootstrap:sha256:2728b7e46dbec8348bc7bddf7bb073e2a6bee0530432cdd18add151cc0860bc7",
+      "certificate_evidence": {
+        "computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "created_at": "2026-07-17T07:18:03.5186173Z",
+        "evidence_kind": "promotion_certificate",
+        "evidence_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+        "payload": {
+          "approval_ref": "approval:sha256:efc15c02dacdae92ae2dedc97da1358c62cfe79eaaaa1fb25e63a7eb0a67b61e",
+          "kind": "verified_route_bootstrap",
+          "route_slot_id": "computer:mission-restart-1778558340:primary",
+          "verification": {
+            "computer_version": {
+              "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+              "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+            },
+            "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+            "disk_plan": {
+              "allocation": {
+                "max_allocated_bytes": 2147483648,
+                "minimum_available_bytes": 2147483648,
+                "mode": "sparse"
+              },
+              "device_id": "data",
+              "filesystem": {
+                "block_size_bytes": 4096,
+                "label": "choir-data",
+                "reserved_percent": 0,
+                "type": "ext4"
+              },
+              "logical_bytes": 34359738368,
+              "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+            },
+            "disk_receipt": {
+              "backend": "linux-ext4-sparse-v1",
+              "created_at": "2026-07-17T07:15:14.622966668Z",
+              "device_id": "data",
+              "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+              "geometry": {
+                "allocated_bytes": 10600448,
+                "device_logical_bytes": 34359738368,
+                "filesystem_block_size_bytes": 4096,
+                "filesystem_blocks": 8388608,
+                "filesystem_bytes": 34359738368,
+                "filesystem_label": "choir-data",
+                "filesystem_type": "ext4",
+                "partition_layout": "none",
+                "partition_offset_bytes": 0
+              },
+              "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+              "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+            },
+            "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+            "epoch": 1,
+            "identity": {
+              "candidate_id": "primary",
+              "computer_kind": "candidate",
+              "desktop_id": "primary",
+              "owner_id": "mission-restart-1778558340",
+              "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+            },
+            "observation_sha256": "672fe5f30aa515bcc093d5052dd898d7b549ea545ebf5c3dee1e8ba3c579815c",
+            "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+            "runtime_geometry": {
+              "available_bytes": 33341689856,
+              "filesystem_block_size_bytes": 4096,
+              "filesystem_bytes": 33501757440
+            },
+            "verification_receipt_id": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+            "verified_at": "2026-07-17T07:18:03.518307959Z",
+            "verifier": "independent-production-realization-verifier",
+            "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+          }
+        },
+        "payload_sha256": "e963245fdccad0357550df530b123d7f4b956f11b95c90eec7eff8bf20e68051",
+        "route_slot_id": "computer:mission-restart-1778558340:primary"
+      },
+      "prepared_at": "2026-07-17T07:18:03.5186173Z",
+      "rollback_plan": {
+        "expected_generation": 1,
+        "idempotency_key": "idempotency:bootstrap-rollback:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+        "new_computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "old_computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+        "rollback_target_receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+        "route_slot_id": "computer:mission-restart-1778558340:primary",
+        "transition_kind": "bootstrap_rollback"
+      },
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "verification": {
+        "computer_version": {
+          "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+          "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+        },
+        "construction_sha256": "3f06545f1dc1560f93ca1e9910f4448d9519aec3e5ea8a630990df051018652a",
+        "disk_plan": {
+          "allocation": {
+            "max_allocated_bytes": 2147483648,
+            "minimum_available_bytes": 2147483648,
+            "mode": "sparse"
+          },
+          "device_id": "data",
+          "filesystem": {
+            "block_size_bytes": 4096,
+            "label": "choir-data",
+            "reserved_percent": 0,
+            "type": "ext4"
+          },
+          "logical_bytes": 34359738368,
+          "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+        },
+        "disk_receipt": {
+          "backend": "linux-ext4-sparse-v1",
+          "created_at": "2026-07-17T07:15:14.622966668Z",
+          "device_id": "data",
+          "device_path": "/var/lib/go-choir/vm-state/candidate-g4-bootstrap-rollback-20260717/data.img",
+          "geometry": {
+            "allocated_bytes": 10600448,
+            "device_logical_bytes": 34359738368,
+            "filesystem_block_size_bytes": 4096,
+            "filesystem_blocks": 8388608,
+            "filesystem_bytes": 34359738368,
+            "filesystem_label": "choir-data",
+            "filesystem_type": "ext4",
+            "partition_layout": "none",
+            "partition_offset_bytes": 0
+          },
+          "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+          "receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5"
+        },
+        "disk_receipt_id": "disk-instantiation:sha256:ba8e4de6596c6d41bfdc92aae9664aa6765f0d4bbc82fd87f045f61943f761b5",
+        "epoch": 1,
+        "identity": {
+          "candidate_id": "primary",
+          "computer_kind": "candidate",
+          "desktop_id": "primary",
+          "owner_id": "mission-restart-1778558340",
+          "realization_id": "candidate-g4-bootstrap-rollback-20260717"
+        },
+        "observation_sha256": "672fe5f30aa515bcc093d5052dd898d7b549ea545ebf5c3dee1e8ba3c579815c",
+        "realization_id": "candidate-g4-bootstrap-rollback-20260717",
+        "runtime_geometry": {
+          "available_bytes": 33341689856,
+          "filesystem_block_size_bytes": 4096,
+          "filesystem_bytes": 33501757440
+        },
+        "verification_receipt_id": "verification:sha256:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+        "verified_at": "2026-07-17T07:18:03.518307959Z",
+        "verifier": "independent-production-realization-verifier",
+        "vm_id": "candidate-g4-bootstrap-rollback-20260717"
+      }
+    }
+  },
+  "rollback_replay": {
+    "artifact_program": {
+      "artifact_program_ref": "",
+      "created_at": "0001-01-01T00:00:00Z",
+      "entries": null
+    },
+    "code_closure": {
+      "artifacts": null,
+      "code_ref": "",
+      "created_at": "0001-01-01T00:00:00Z",
+      "source_commit": ""
+    },
+    "latest_receipt": {
+      "approval_ref": "",
+      "committed_at": "0001-01-01T00:00:00Z",
+      "committed_generation": 0,
+      "expected_generation": 0,
+      "idempotency_key": "",
+      "new_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "promotion_certificate_ref": "",
+      "receipt_id": "",
+      "route_slot_id": "",
+      "transition_kind": ""
+    },
+    "route_absent": true,
+    "slot": {
+      "current_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "generation": 0,
+      "latest_receipt_id": "",
+      "route_slot_id": ""
+    },
+    "transition_receipt": {
+      "approval_ref": "approval:sha256:a15a7708068efd6a3af70431d8d847c7bea208313252d011e0f9fd9ebaaf8ded",
+      "committed_at": "2026-07-17T07:20:14.893769Z",
+      "committed_generation": 2,
+      "expected_generation": 1,
+      "idempotency_key": "idempotency:bootstrap-rollback:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+      "new_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "receipt_id": "c194920b-8bf8-4e36-9231-3613bfc4bdcc",
+      "rollback_target_receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "transition_kind": "bootstrap_rollback"
+    }
+  },
+  "rollback_resolution": {
+    "artifact_program": {
+      "artifact_program_ref": "",
+      "created_at": "0001-01-01T00:00:00Z",
+      "entries": null
+    },
+    "code_closure": {
+      "artifacts": null,
+      "code_ref": "",
+      "created_at": "0001-01-01T00:00:00Z",
+      "source_commit": ""
+    },
+    "latest_receipt": {
+      "approval_ref": "",
+      "committed_at": "0001-01-01T00:00:00Z",
+      "committed_generation": 0,
+      "expected_generation": 0,
+      "idempotency_key": "",
+      "new_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "promotion_certificate_ref": "",
+      "receipt_id": "",
+      "route_slot_id": "",
+      "transition_kind": ""
+    },
+    "route_absent": true,
+    "slot": {
+      "current_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "generation": 0,
+      "latest_receipt_id": "",
+      "route_slot_id": ""
+    },
+    "transition_receipt": {
+      "approval_ref": "approval:sha256:a15a7708068efd6a3af70431d8d847c7bea208313252d011e0f9fd9ebaaf8ded",
+      "committed_at": "2026-07-17T07:20:14.893769213Z",
+      "committed_generation": 2,
+      "expected_generation": 1,
+      "idempotency_key": "idempotency:bootstrap-rollback:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+      "new_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "receipt_id": "c194920b-8bf8-4e36-9231-3613bfc4bdcc",
+      "rollback_target_receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "transition_kind": "bootstrap_rollback"
+    }
+  },
+  "route_absence": {
+    "after_restart": {
+      "error": "route ledger: slot not found"
+    },
+    "after_restore": {
+      "error": "route ledger: slot not found"
+    },
+    "after_rollback": {
+      "error": "route ledger: slot not found"
+    },
+    "before": {
+      "error": "route ledger: slot not found"
+    },
+    "http_status_each": 404
+  },
+  "routed_readback": {
+    "artifact_program": {
+      "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+      "created_at": "2026-07-16T22:25:00Z",
+      "entries": [
+        {
+          "artifact_uri": "artifact+sha256://fea09a93dc461d71d9466cac33f883d8631c2a19822c60c90aba5a86395b00ec/computer-inputs/candidates/control-20260716/base-journal-v4.json",
+          "content_sha256": "fea09a93dc461d71d9466cac33f883d8631c2a19822c60c90aba5a86395b00ec",
+          "entry_hash": "cb1b06f49686dce50e7727c2f74e2454ae386da1da3c22e90232c710e17fc2cc",
+          "kind": "base_journal",
+          "sequence": 1
+        }
+      ]
+    },
+    "code_closure": {
+      "artifacts": [
+        {
+          "name": "sandbox-runtime.tar",
+          "sha256": "88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485",
+          "uri": "artifact+sha256://88ee7eff4bac6e60beeb31f1c86932fcfcc228f9406dc4d648aa0b01488c1485/computer-inputs/candidates/control-20260716/sandbox-runtime.tar"
+        }
+      ],
+      "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380",
+      "created_at": "2026-07-16T22:25:00Z",
+      "source_commit": "7122f2799be4458f4b925be11990321c7e70ffc4"
+    },
+    "latest_receipt": {
+      "approval_ref": "approval:sha256:939e463c1b921aeeb32463d5e82b353a9c54d94d3f0ce1e47efde8d75c081953",
+      "committed_at": "2026-07-17T07:19:19.187459Z",
+      "committed_generation": 1,
+      "expected_generation": 0,
+      "idempotency_key": "idempotency:bootstrap:c5f6eb06b2d01821bc3d3bdcfdb7b7632f66f3fcf874dfcf013e77de75800f0c",
+      "new_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "old_computer_version": {
+        "artifact_program_ref": "",
+        "code_ref": ""
+      },
+      "promotion_certificate_ref": "certificate:sha256:5a45159d90b840a7f0652368904b77da7e585e9659d949cbb7ab6810c05cdd68",
+      "receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+      "route_slot_id": "computer:mission-restart-1778558340:primary",
+      "transition_kind": "bootstrap"
+    },
+    "slot": {
+      "current_computer_version": {
+        "artifact_program_ref": "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d",
+        "code_ref": "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380"
+      },
+      "generation": 1,
+      "latest_receipt_id": "6ed12bf4-98cf-5924-9f29-016f3153b34c",
+      "route_slot_id": "computer:mission-restart-1778558340:primary"
+    }
+  },
+  "schema": "choir.g4.bootstrap-rollback-deployed-proof.v1",
+  "source_commit": "e6fa53f10db3ba9499175d7a1d7912a0cbe2f876",
+  "stop_response": {
+    "status": "stopped"
+  }
+}
