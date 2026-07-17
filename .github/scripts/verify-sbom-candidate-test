@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+verifier="$script_dir/verify-sbom-candidate"
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
+source_commit=1111111111111111111111111111111111111111
+run_id=123456
+run_attempt=2
+packages=(auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend obscura zot)
+required_packages=" auth proxy gateway maild maildctl corpusd sandbox sourcecycled vmctl frontend zot "
+
+make_bundle() {
+  local bundle="$1"
+  rm -rf "$bundle"
+  mkdir -p "$bundle"
+  : > "$bundle/manifest.jsonl"
+  : > "$bundle/diff-packages.jsonl"
+
+  local package required sha
+  for package in "${packages[@]}"; do
+    mkdir -p "$bundle/$package"
+    printf '{"package":"%s"}\n' "$package" > "$bundle/$package/sbom.json"
+    sha="$(sha256sum "$bundle/$package/sbom.json" | awk '{print $1}')"
+    required=false
+    if [[ "$required_packages" == *" $package "* ]]; then
+      required=true
+    fi
+    jq -nc \
+      --arg package "$package" \
+      --argjson required "$required" \
+      --arg source_commit "$source_commit" \
+      --arg sha "$sha" \
+      '{package: $package, required: $required, status: "built", reason: "test", source_commit: $source_commit, previous_commit: "", derivation: "/nix/store/test", previous_derivation: "", sbom_sha256: $sha}' \
+      >> "$bundle/manifest.jsonl"
+    jq -nc --arg package "$package" '{package: $package, status: "built", added: [], removed: []}' \
+      >> "$bundle/diff-packages.jsonl"
+  done
+
+  jq -s \
+    --arg source_commit "$source_commit" \
+    '{source_commit: $source_commit, previous_commit: "", packages: .}' \
+    "$bundle/diff-packages.jsonl" > "$bundle/diff.json"
+  rm "$bundle/diff-packages.jsonl"
+  jq -n \
+    --arg source_commit "$source_commit" \
+    --arg run_id "$run_id" \
+    --arg run_attempt "$run_attempt" \
+    '{schema_version: 1, source_commit: $source_commit, run_id: $run_id, run_attempt: $run_attempt}' \
+    > "$bundle/candidate.json"
+}
+
+expect_failure() {
+  local name="$1"
+  local bundle="$2"
+  shift 2
+  if "$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" >"$tmpdir/$name.out" 2>&1; then
+    echo "$name: verifier unexpectedly accepted invalid candidate" >&2
+    exit 1
+  fi
+}
+
+bundle="$tmpdir/valid"
+make_bundle "$bundle"
+"$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" >/dev/null
+
+make_bundle "$bundle"
+jq -c 'if .package == "auth" then .source_commit = "wrong" else . end' "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"
+mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
+expect_failure source-commit "$bundle"
+
+make_bundle "$bundle"
+sed -n '2,$p' "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"
+mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
+expect_failure package-cardinality "$bundle"
+
+make_bundle "$bundle"
+jq -c 'if .package == "auth" then .status = "failed" | del(.sbom_sha256) else . end' "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"
+mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
+expect_failure required-failure "$bundle"
+
+make_bundle "$bundle"
+printf 'corrupt\n' >> "$bundle/proxy/sbom.json"
+expect_failure checksum "$bundle"
+
+make_bundle "$bundle"
+jq '.run_attempt = "1"' "$bundle/candidate.json" > "$bundle/candidate.tmp"
+mv "$bundle/candidate.tmp" "$bundle/candidate.json"
+expect_failure attempt-identity "$bundle"
+
+make_bundle "$bundle"
+jq 'del(.packages[0])' "$bundle/diff.json" > "$bundle/diff.tmp"
+mv "$bundle/diff.tmp" "$bundle/diff.json"
+expect_failure differential-set "$bundle"
+
+make_bundle "$bundle"
+mkdir -p "$bundle/undeclared"
+printf '{}\n' > "$bundle/undeclared/sbom.json"
+expect_failure undeclared-file "$bundle"
+
+echo "verify-sbom-candidate: all tests passed"

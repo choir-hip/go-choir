@@ -49,9 +49,13 @@ jobs:
         run: scripts/go-test-runtime-shards -race
 
   go-test-race:
-    name: Go Test (non-runtime race)
+    name: Go Test (non-runtime race shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
     steps:
       - uses: actions/checkout@v6
 
@@ -71,11 +75,9 @@ jobs:
           restore-keys: |
             go-build-v2-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Go test non-runtime packages with -race
+      - name: Go test non-runtime shard with -race
         shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t packages < <(go list ./... | grep -Ev '^github.com/yusefmosiah/go-choir/internal/(agentcore|textureowner)$')
-          if (( ${#packages[@]} > 0 )); then
-            scripts/go-test-with-timing -race -count=1 "${packages[@]}"
-          fi
+        env:
+          TOTAL_SHARDS: 3
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: scripts/go-test-non-runtime-shards -race

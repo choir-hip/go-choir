@@ -101,8 +101,15 @@ else
     esac
 
     case "$path" in
-      .github/workflows/ci.yml|.github/scripts/build-sboms-*)
+      .github/workflows/ci.yml|.github/scripts/*sbom*)
         mark sbom "$path -> differential SBOM implementation verification"
+        ;;
+    esac
+
+    case "$path" in
+      .github/workflows/ci.yml|.github/workflows/race.yml)
+        mark go "$path -> exercise changed Go-test topology"
+        mark high_risk_race "$path -> exercise changed Race topology"
         ;;
     esac
 

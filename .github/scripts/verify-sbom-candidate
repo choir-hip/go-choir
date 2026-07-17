@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bundle="${1:?usage: verify-sbom-candidate BUNDLE SOURCE_COMMIT RUN_ID RUN_ATTEMPT}"
+source_commit="${2:?source commit is required}"
+run_id="${3:?run id is required}"
+run_attempt="${4:?run attempt is required}"
+manifest="$bundle/manifest.jsonl"
+diff="$bundle/diff.json"
+candidate="$bundle/candidate.json"
+
+for file in "$manifest" "$diff" "$candidate"; do
+  if [[ ! -s "$file" ]]; then
+    echo "SBOM candidate is missing required file: $file" >&2
+    exit 1
+  fi
+done
+
+expected_packages='["auth","corpusd","frontend","gateway","maild","maildctl","obscura","proxy","sandbox","sourcecycled","vmctl","zot"]'
+
+jq -e -s \
+  --arg source_commit "$source_commit" \
+  --argjson expected "$expected_packages" '
+    (map(.package) | sort) == $expected and
+    (map(.package) | unique | length) == ($expected | length) and
+    all(.source_commit == $source_commit) and
+    all(.status == "built" or .status == "reused" or .status == "failed" or .status == "skipped") and
+    all(
+      if .required then
+        (.status == "built" or .status == "reused") and
+        (.sbom_sha256 | type == "string" and test("^[0-9a-f]{64}$"))
+      elif .status == "built" or .status == "reused" then
+        (.sbom_sha256 | type == "string" and test("^[0-9a-f]{64}$"))
+      else
+        (has("sbom_sha256") | not)
+      end
+    )
+  ' "$manifest" >/dev/null || {
+    echo "SBOM manifest failed package, source, status, or required-package validation" >&2
+    exit 1
+  }
+
+jq -e \
+  --arg source_commit "$source_commit" \
+  --argjson expected_success "$(jq -s 'map(select(.status == "built" or .status == "reused") | {package, status}) | sort_by(.package)' "$manifest")" '
+    .source_commit == $source_commit and
+    (.packages | type == "array") and
+    (.packages | map({package, status}) | sort_by(.package)) == $expected_success and
+    (.packages | map(.package) | unique | length) == ($expected_success | length)
+  ' "$diff" >/dev/null || {
+    echo "SBOM differential failed source or package-set validation" >&2
+    exit 1
+  }
+
+jq -e \
+  --arg source_commit "$source_commit" \
+  --arg run_id "$run_id" \
+  --arg run_attempt "$run_attempt" '
+    .schema_version == 1 and
+    .source_commit == $source_commit and
+    .run_id == $run_id and
+    .run_attempt == $run_attempt
+  ' "$candidate" >/dev/null || {
+    echo "SBOM candidate identity does not match this workflow attempt" >&2
+    exit 1
+  }
+
+verified=0
+while IFS=$'\t' read -r package expected_sha; do
+  sbom="$bundle/$package/sbom.json"
+  if [[ ! -s "$sbom" ]]; then
+    echo "SBOM manifest declares missing file: $sbom" >&2
+    exit 1
+  fi
+  actual_sha="$(sha256sum "$sbom" | awk '{print $1}')"
+  if [[ "$actual_sha" != "$expected_sha" ]]; then
+    echo "SBOM checksum mismatch for $package: expected $expected_sha, got $actual_sha" >&2
+    exit 1
+  fi
+  verified=$((verified + 1))
+done < <(jq -r 'select(.status == "built" or .status == "reused") | [.package, .sbom_sha256] | @tsv' "$manifest")
+
+expected_count="$(jq -s 'map(select(.status == "built" or .status == "reused")) | length' "$manifest")"
+if [[ "$verified" -ne "$expected_count" ]]; then
+  echo "SBOM file verification count mismatch: expected $expected_count, got $verified" >&2
+  exit 1
+fi
+
+shopt -s nullglob
+sbom_files=("$bundle"/*/sbom.json)
+if [[ "${#sbom_files[@]}" -ne "$expected_count" ]]; then
+  echo "SBOM candidate contains undeclared or misplaced files: expected $expected_count, got ${#sbom_files[@]}" >&2
+  exit 1
+fi
+
+echo "SBOM candidate verified: source=$source_commit run=$run_id attempt=$run_attempt packages=$verified"
