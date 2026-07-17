@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ci="$root/.github/workflows/ci.yml"
+race="$root/.github/workflows/race.yml"
+
+require() {
+  local file="$1"
+  local pattern="$2"
+  if ! grep -Fq -- "$pattern" "$file"; then
+    echo "CI workflow contract missing from ${file#$root/}: $pattern" >&2
+    exit 1
+  fi
+}
+
+reject() {
+  local file="$1"
+  local pattern="$2"
+  if grep -Fq -- "$pattern" "$file"; then
+    echo "CI workflow contract forbids in ${file#$root/}: $pattern" >&2
+    exit 1
+  fi
+}
+
+require "$ci" 'race_selected: ${{ steps.select-race.outputs.race_selected }}'
+require "$ci" 'HIGH_RISK_RACE: ${{ steps.classify.outputs.high_risk_race }}'
+require "$ci" 'SAMPLED_RACE: ${{ steps.classify.outputs.sampled_race }}'
+require "$ci" 'RACE_SELECTED: ${{ needs.plan.outputs.race_selected }}'
+require "$ci" 'scripts/go-test-non-runtime-shards -race'
+require "$ci" 'scripts/go-test-runtime-shards -race'
+require "$ci" 'scripts/go-test-integration -race'
+require "$ci" "go test -count=1 -run '^TestCancelRunTrajectoryDrainsMoreThanOneActivePage$' ./internal/agentcore"
+reject "$ci" 'uses: ./.github/workflows/race.yml'
+reject "$ci" 'needs.plan.outputs.high_risk_race'
+reject "$ci" 'needs.plan.outputs.sampled_race'
+require "$ci" 'case "${{ needs.plan.outputs.race_selected }}" in'
+
+require "$race" 'pull_request:'
+require "$race" '      - .github/workflows/race.yml'
+require "$race" 'name: Go Test (non-runtime race shard ${{ matrix.shard }})'
+require "$race" 'shard: [0, 1, 2]'
+require "$race" 'run: scripts/go-test-non-runtime-shards -race'
+reject "$race" 'go list ./...'
+
+candidate_segment="$(sed -n '/^  sbom-candidate:/,/^  sbom:/p' "$ci")"
+finalizer_segment="$(sed -n '/^  sbom:/,/^  build-frontend:/p' "$ci")"
+check_segment="$(sed -n '/^  check:/,/^  sbom-candidate:/p' "$ci")"
+
+for pattern in \
+  'needs: plan' \
+  'Build changed packages and reuse identical SBOMs' \
+  'Bind candidate to this workflow attempt' \
+  'Upload unaccepted SBOM candidate' \
+  'retention-days: 1'; do
+  grep -Fq -- "$pattern" <<<"$candidate_segment" || {
+    echo "SBOM candidate contract missing: $pattern" >&2
+    exit 1
+  }
+done
+if grep -Fq -- 'actions/cache/save' <<<"$candidate_segment" || grep -Fq -- 'Upload accepted SBOM artifact' <<<"$candidate_segment"; then
+  echo "SBOM candidate must not publish accepted state" >&2
+  exit 1
+fi
+
+for pattern in \
+  'needs: [plan, check, sbom-candidate]' \
+  "needs.check.result == 'success'" \
+  "needs.sbom-candidate.result == 'success'" \
+  'actions/download-artifact@v8' \
+  'Restore accepted baseline for differential verification' \
+  'verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/sbom-baseline"' \
+  'actions/cache/save@v6' \
+  'Upload accepted SBOM artifact'; do
+  grep -Fq -- "$pattern" <<<"$finalizer_segment" || {
+    echo "SBOM finalizer contract missing: $pattern" >&2
+    exit 1
+  }
+done
+
+verify_line="$(grep -nF 'verify-sbom-candidate sboms' <<<"$finalizer_segment" | cut -d: -f1)"
+cache_line="$(grep -nF 'actions/cache/save@v6' <<<"$finalizer_segment" | cut -d: -f1)"
+upload_line="$(grep -nF 'Upload accepted SBOM artifact' <<<"$finalizer_segment" | cut -d: -f1)"
+if [[ -z "$verify_line" || -z "$cache_line" || -z "$upload_line" || "$cache_line" -le "$verify_line" || "$upload_line" -le "$verify_line" ]]; then
+  echo "SBOM accepted cache and artifact must follow candidate verification" >&2
+  exit 1
+fi
+
+if grep -Eq '(^|, )race(,|])' <<<"$check_segment"; then
+  echo "parent check must not depend on the duplicate reusable Race horn" >&2
+  exit 1
+fi
+
+require "$ci" 'needs: [plan, check]'
+
+echo "ci-workflow-contract: all tests passed"

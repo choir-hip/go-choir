@@ -273,7 +273,7 @@ documents:
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: definition, authority: scope_disjoint_ci_maintenance, lifecycle: active, entrypoint: true}
-    witnesses: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, .github/scripts/build-sboms-differential, docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md]
+    witnesses: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, .github/scripts/build-sboms-differential, .github/scripts/verify-sbom-candidate, .github/scripts/ci-workflow-contract-test, docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md]
     refresh_triggers: [ci_baseline_capture, ci_lane_change, candidate_freeze, github_actions_acceptance, owner_landing_authority, doccheck_entrypoint_contract, mission_state_change]
 
   - path: docs/definitions/choir-wire-store-conformance-2026-07-11.md

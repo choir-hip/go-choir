@@ -57,57 +57,68 @@ start:
       evidence_ref: ".github/scripts/deploy-impact-classify and its contract test at 0e5f5c7e"
     - claim: "The parent workflow concurrency group ci-${github.ref} and reusable/scheduled Race group race-${github.ref} each cancel an in-flight run on the same ref, so concurrent mission execution is scope-disjoint but main CI and main Race observations are shared serialized resources."
       evidence_ref: ".github/workflows/ci.yml and .github/workflows/race.yml concurrency at 0e5f5c7e"
+    - claim: "Successful selected-Race run 29550365185 executed the ordinary 3+4 Go matrices and then repeated the same package population through the reusable 4+1 Race workflow; the unsharded Race non-runtime job took about 12m10s."
+      evidence_ref: "docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md"
+    - claim: "In run 29550365185 the parent check completed about 12m28s after workflow start, then the 17m21s differential-SBOM job extended total workflow time to about 30 minutes even though deploy and FlakeHub did not depend on it."
+      evidence_ref: "docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md"
+    - claim: "The existing 3-way non-runtime and 4-way runtime scripts forward -race, so selected Race can substitute on the ordinary matrices instead of adding a second test horn."
+      evidence_ref: "scripts/go-test-non-runtime-shards and scripts/go-test-runtime-shards at origin/main@ba1fd5a4"
   unknowns:
-    - "No authorized billing or metrics authority is available; actual billed minutes are unknown."
-    - "Whether cache reuse across prior runs, serialized priming, or same-run artifact transfer is the best compile-cost candidate; they are separate experiments."
-    - "Whether any optimization beyond re-enabling the already-proved lanes has matched-run critical-path benefit."
+    - "Actual hosted duration of the consolidated Race matrices before a natural selected main run."
+    - "Actual wall-clock and runner-duration reduction; all projected savings remain forecasts until matched hosted evidence."
+    - "Whether SBOM candidate construction and the Go matrices contend enough on hosted infrastructure to change either lane's duration."
 
 finish:
-  deliver: "Restore the paused race and differential-SBOM safety signals without changing application/platform behavior or weakening CI, deploy, or publishing protection, then admit only optimizations proved to reduce GitHub Actions duration on matched runs."
-  artifact: "A frozen, reviewed CI-only candidate and landed GitHub Actions workflow in which classifier selection invokes the complete reusable race workflow, the already-wired host-side SBOM job runs after successful check on selected main pushes, and deploy-impact still skips CI-only changes. Hosted proof is split by actual stimulus: PR parsing, CI-only main SBOM/deploy-skip behavior, and a separately selected post-land race run."
+  deliver: "Preserve the restored Race and differential-SBOM assurances while removing the duplicate selected-Race Go-test horn, sharding standalone Race consistently, and overlapping unaccepted SBOM construction with the check path."
+  artifact: "A reviewed and landed CI-only topology with one authoritative race_selected output; standard-or-Race execution on the same complete 3+4 Go matrices; one focused non-Race exception for the regression intentionally skipped under instrumentation; a complete sharded scheduled/manual race.yml; and an identity-bound SBOM candidate that only a successful post-check finalizer can promote to accepted cache and durable artifact."
   acceptance:
-    - action: "Fetch GitHub run 29295978398 and current paused run 29468123745 job timelines."
-      proves: "The baseline topology, durations, full five-job race fan-out, successful host-side SBOM, and present paused state are observed rather than inferred."
+    - action: "Measure job timelines on successful selected-Race run 29550365185 and bind every structural claim to the current workflow and shard scripts."
+      proves: "The duplicate horn and serialized SBOM critical path are observed rather than inferred; public durations remain telemetry, not billing."
       evidence_class: github_actions_timeline
-    - action: "Run classifier, SBOM differential, deploy-impact, workflow-contract, shell-syntax, YAML, and doc truth checks against the candidate."
-      proves: "The candidate preserves local deterministic contracts, including CI-only deploy skip; it does not prove hosted execution."
+    - action: "Run classifier, shard, SBOM construction/promotion, deploy-impact, workflow-contract, shell-syntax, YAML, and doc-truth contracts locally."
+      proves: "One selector drives both matrices, all matrix scripts receive the intended mode, the non-Race-only regression and integration smoke remain selected, and malformed or mismatched SBOM candidates cannot be promoted."
       evidence_class: deterministic_local_contracts
-    - action: "Freeze the candidate by base, commit, scoped paths, and digest; obtain independent review before treating it as ready."
-      proves: "Review addresses an immutable candidate and can reject scope, protection, evidence, or rollback defects."
+    - action: "Freeze the bounded candidate by base, commit, scoped paths, and workflow digest; obtain independent review of the immutable candidate."
+      proves: "Review can reject coverage loss, duplicated selector logic, unsafe SBOM publication, changed deploy dependencies, or scope expansion."
       evidence_class: frozen_candidate_review
-    - action: "Run the candidate on a pull request and record hosted parsing plus every job conclusion. For this .github-only PR stimulus, record go=false, high_risk_race=false, race unselected, SBOM skipped because the event is not a main push, and deploy-impact skipped because it is not a main event."
-      proves: "The candidate parses and executes on the hosted platform; it does not prove live SBOM, deploy-impact output, or race selection."
+    - action: "Run the candidate on a pull request and record hosted parsing plus every job conclusion; require the workflow/script contract suite to pass."
+      proves: "The replacement topology parses and its deterministic contracts execute on GitHub-hosted runners; PR stimulus alone does not prove a main-only SBOM route or selected Race."
       evidence_class: github_actions_candidate_parse
-    - action: "Immediately before the PR merge, query GitHub Actions for active main CI and Race runs. Record either no active run or an owner-coordinated window, record the expected merge SHA/event, and wait for that main CI receipt before another CI or Race observation on main."
-      proves: "Same-ref cancellation cannot silently supersede unrelated main CI or Race evidence during this landing."
+    - action: "Immediately before merge, fresh-fetch main and confirm no active main CI or Race run can be cancelled; merge only through the pull request."
+      proves: "The main landing is serialized and does not silently supersede another mission's evidence."
       evidence_class: github_actions_serialization
-    - action: "After an explicitly owner-authorized, serialized CI-only main landing, observe check success, SBOM success, fetch and verify the complete checksummed SBOM artifact and differential counts, observe deploy-impact report deploy_needed=false, and observe deploy-staging skipped. Record race as selected or unselected from the actual landing SHA without requiring it for this receipt."
-      proves: "The canonical CI-only stimulus restores host-side SBOM and preserves the Node B skip and post-check non-blocking relationship; it does not by itself prove race selection."
+    - action: "On the landing or first suitable natural main run, require a successful SBOM candidate and finalizer, download the durable artifact, verify exact run/attempt/SHA identity, 12 unique package records, required-package success, all declared checksums, and differential consistency; confirm deploy_needed=false and Node B skipped for the CI-only landing."
+      proves: "Parallel construction does not weaken accepted-baseline or durable-artifact integrity and the landing does not deploy."
       evidence_class: canonical_ci_only_sbom_acceptance
-    - action: "Separately observe the first post-land main push that the unchanged classifier actually selects via high_risk_race=true or push+go=true+sampled_race=true; require all five reusable race jobs and the parent check gate to succeed. Do not manufacture an app/platform change. A scheduled or separately owner-authorized direct race.yml run may prove the five-job workflow but cannot substitute for parent ci.yml selector/check proof."
-      proves: "The restored parent classifier route selects the complete reusable race workflow and binds its result into check."
+    - action: "Observe the first natural main run with race_selected=true; require all three non-runtime Race shards, all four runtime Race shards, the focused non-Race-only regression, integration smoke, and the parent check gate to pass, with no parent reusable-Race horn."
+      proves: "Race substitutes for rather than duplicates ordinary coverage on the complete owned matrix population."
       evidence_class: post_land_race_selector_acceptance
-  rollback: "Revert the bounded CI commit to restore the two literal pause conditions. The owner authorizes PR creation and PR-mediated main merge; a Node B deployment is admissible only through a later recorded, concrete CI deploy slice if the accepted path requires it. Retain protected relationships and coordinate both cancellation groups; generic workflow dispatch and direct Node B mutation remain excluded."
+    - action: "Compare plan-to-check, workflow completion, summed public job duration, and SBOM finalizer overhead with the observed baseline, reporting actual values without calling them billing."
+      proves: "The new topology's real hosted Pareto effect is measured and can be rejected if assurance is preserved but time is not improved."
+      evidence_class: matched_hosted_telemetry
+  rollback: "Revert the bounded optimization commits through a pull request to restore origin/main@ba1fd5a4 behavior: complete reusable Race after ordinary matrices and differential SBOM after check. Coordinate main CI/Race cancellation groups before rollback. CI-only deploy classification must remain false, so no Node B rollback is expected."
   landing:
     required: true
     environment: github_actions
-    required_receipts: [pushed_candidate_commit, frozen_candidate_review, github_actions_candidate_parse, main_concurrency_window, owner_authorized_serialized_main_landing, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance]
+    required_receipts: [problem_documented_before_repair, deterministic_local_contracts, frozen_candidate_review, github_actions_candidate_parse, github_actions_serialization, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance, matched_hosted_telemetry]
   not_done_when:
-    - "Only local checks, a draft, or a reviewer narrative exists."
-    - "A sampled condition is described as one shard even though it invokes the full reusable workflow."
-    - "A duration or rounded runner-minute estimate is called actual billing."
-    - "SBOM is described as gating check or deploy without a separately authorized red relationship change."
-    - "One .github-only landing is claimed to prove both SBOM and race even though that stimulus sets go=false and high_risk_race=false and race depends on the landing SHA's sample bucket."
-    - "A direct main push, generic workflow dispatch, direct Race dispatch, or direct Node B mutation occurs outside this Definition's recorded route and both relevant cancellation groups are not coordinated."
+    - "Only workflow edits, local checks, a draft PR, or reviewer forecasts exist."
+    - "Race selection is recomputed in multiple jobs or any selected package population runs both ordinary and Race modes."
+    - "The regression intentionally skipped under Race or runtime-shard-1 integration smoke is lost."
+    - "An SBOM candidate cache key can match an accepted-baseline restore prefix, or candidate construction can publish the durable artifact."
+    - "The finalizer does not fail closed on run/attempt/SHA identity, exact package set, required-package status, declared files, checksums, or differential consistency."
+    - "Deploy or FlakeHub waits on SBOM finalization, or check/deploy/publish protection is weakened."
+    - "Projected latency or runner-duration savings are reported as observed before matched hosted proof."
+    - "A direct main push, generic workflow dispatch, direct Race dispatch, or direct Node B mutation occurs."
 
 boundaries:
   mutation_class: red
-  class_rationale: "The Definition/registry boundary is green. Re-enabling race and SBOM changes protected CI assurance and supply-chain publishing conditions, so implementation uses red ceremony even though it changes no app/platform runtime. The bounded doccheck cardinality repair below is yellow documentation-truth tooling, sequenced only after its observed problem record."
-  conjecture_delta: "The pauses are reversible conditions over already-wired, previously successful lanes; restoration should reuse that topology. Optimization candidates must be separated by mechanism and admitted only by matched critical-path evidence."
+  class_rationale: "Race selection/check acceptance and SBOM accepted-baseline publication are protected assurance surfaces. The change alters no app/platform runtime and the problem/Definition checkpoint precedes repair code."
+  conjecture_delta: "A selected Race execution on the same complete 3+4 shard population is an assurance-preserving substitute for the duplicate ordinary horn when the one known instrumentation skip is run explicitly without Race. Unaccepted SBOM construction can overlap tests because only a post-check identity/checksum finalizer creates accepted state."
   heresy_delta:
-    discovered: ["The draft falsely treated sampled_race as partial-matrix execution, described the repaired SBOM topology as unwired, conflated cache reuse with same-run compilation sharing, implied SBOM gated deployment, and used public duration as billing proof.", "The mission graph permits one scope-disjoint CI maintenance entrypoint alongside the product spine, but doccheck still hard-codes one total graph entrypoint and rejects the live registry."]
+    discovered: ["The terminal restoration topology remained Pareto-suboptimal: selected runs duplicated the complete Go-test population and serialized a 17-minute SBOM job after check.", "The completed Definition's artifact froze the restoration topology and declared no next action even though its title and owner intent included evidence-bounded optimization.", "TestCancelRunTrajectoryDrainsMoreThanOneActivePage intentionally skips under Race, so naive substitution would silently narrow selected-run coverage."]
     introduced: []
-    repaired: ["The live Definition corrects those claims before workflow mutation and the SBOM problem record now names c96c7b49 plus its successful run."]
+    repaired: ["The prior registry/doccheck mismatch and paused Race/SBOM routes remain repaired.", "The new problem record and reopened Definition separate observed facts from forecast savings and make the non-Race-only test an explicit acceptance invariant."]
   authority_sources:
     - "Owner delegation and supervision in Codex task 019f6933-ea56-7403-b535-da4eafa4d1f7 on 2026-07-16: promote and run this independent CI-only mission concurrently; no app/platform changes; serialize shared main CI and Race observations."
     - "Owner authority in Codex task 019f6933-ea56-7403-b535-da4eafa4d1f7 on 2026-07-16: create PRs, merge this CI-only change to main, and deploy Node B when the accepted landing path requires it."
@@ -115,17 +126,20 @@ boundaries:
     - AGENTS.md
     - docs/standing-questions.md
     - skills/definition/SKILL.md
+    - "Owner request on 2026-07-16 to resume the /goal, investigate why restored CI remains about 30 minutes with an apparently duplicate Race horn, use the agentic-consensus panel, and design a Pareto-efficient workflow."
   must_preserve:
     - "Autoputer remains the sole executable product Definition; this is a scope-disjoint CI-maintenance entrypoint, not a competing product mission."
     - "The parent dirty Autoputer Definition and all app/platform source are untouched."
-    - "high_risk_race and sampled_race each select the entire reusable race workflow unless a new reviewed workflow input is designed and proved."
-    - "SBOM remains post-check, main-push-only, and non-blocking relative to deploy."
+    - "high_risk_race and sampled_race derive one authoritative race_selected output consumed by both complete Go matrices and the parent check."
+    - "Selected Race substitutes -race on all three non-runtime and all four runtime shards; it is not a reduced sample and does not retain the duplicate parent reusable-workflow horn."
+    - "The complete scheduled/manual race.yml route remains available and keeps all runtime and non-runtime package coverage."
+    - "Runtime shard 1 preserves integration smoke; TestCancelRunTrajectoryDrainsMoreThanOneActivePage receives one focused non-Race invocation when Race is selected."
+    - "SBOM construction may overlap checks only as an unaccepted, run-bound artifact; only a successful post-check finalizer may create the accepted cache key and durable artifact."
     - "check, deploy-impact, deploy-staging, FlakeHub, docs-only routing, and supply-chain artifact integrity are not weakened."
-    - "Deploy classifier/contract tests remain in deploy-impact unless equivalent coverage on every non-doc main push is designed and proved."
-    - "Ripgrep setup is measured as conditional; no claim says it is fetched every run."
-    - "The landing route is draft PR, hosted evidence, a recorded main concurrency window, and PR-mediated merge. Direct push to main remains outside this Definition even though the owner authorized main landing."
-    - "Normal CI-only landing must prove deploy_needed=false and Node B skipped. The owner has authorized a Node B deployment only if a later Define slice names the exact accepted CI deploy path, event, verification, and rollback; generic workflow dispatch and direct Node B mutation remain excluded now."
-    - "Main landing and separate main Race observation are coordinated against ci-${github.ref} and race-${github.ref}; force-push remains forbidden."
+    - "Deploy and FlakeHub remain dependent on check rather than SBOM finalization."
+    - "The landing route is draft PR, hosted evidence, a recorded main concurrency window, and PR-mediated merge. Direct push to main, force-push, generic workflow dispatch, and direct Race dispatch remain excluded."
+    - "Normal CI-only landing must prove deploy_needed=false and Node B skipped."
+    - "Main landing and natural selected-Race observation are coordinated against ci-${github.ref} and race-${github.ref}."
   excluded: [app_source, platform_source, direct_main_push, direct_node_b_mutation, workflow_dispatch, direct_race_dispatch, force_push, new_runner_provider, billing_claim_without_authority]
   protected_surfaces: [ci_check_gate, race_lane, sbom_audit_and_publishing, deploy_impact_classifier, deploy_staging, flakehub_publish, docs_only_fast_path, main_ci_concurrency, main_race_concurrency]
   completion_evidence_floor: [github_actions_timeline, deterministic_local_contracts, frozen_candidate_review, github_actions_candidate_parse, github_actions_serialization, canonical_ci_only_sbom_acceptance, post_land_race_selector_acceptance]
@@ -139,66 +153,81 @@ boundaries:
     excluded_effects: [product_authority_change, app_or_platform_behavior, generic_workflow_dispatch, node_b_deployment]
 
 measures:
-  - name: hosted critical path
+  - name: plan-to-check latency
     kind: telemetry
-    baseline: "24m15s pre-pause full-signal run 29295978398; 5m53s current paused run 29468123745; change sets differ"
-    desired: "lower on matched candidate runs without losing selected evidence"
-    decision_use: "Rank separately scoped optimization candidates."
-    cannot_prove: "Correctness, actual billed cost, or causality across unmatched change sets."
-  - name: runner duration
+    baseline: "about 12m28s on selected-Race run 29550365185"
+    desired: "bounded by the slowest consolidated Race shard plus the parent gate, without a second Go-test horn"
+    decision_use: "Reject consolidation if complete assurance costs more check-path time than the restored topology."
+    cannot_prove: "Actual billing or causal improvement without a comparable hosted stimulus."
+  - name: workflow completion latency
     kind: telemetry
-    baseline: "85m15s summed raw job duration for run 29295978398; 31m51s for run 29468123745"
-    desired: "lower on matched runs"
-    decision_use: "Identify expensive lanes and setup steps."
-    cannot_prove: "Actual billing; rounded runner minutes are estimates only."
+    baseline: "about 30 minutes on run 29550365185 because 17m21s SBOM started after check"
+    desired: "approximately max(check path, SBOM candidate path) plus a small finalizer"
+    decision_use: "Verify SBOM construction actually leaves the serialized critical path."
+    cannot_prove: "Correctness or actual billing."
+  - name: public runner duration
+    kind: telemetry
+    baseline: "run 29550365185 includes seven ordinary Go jobs plus five reusable Race jobs"
+    desired: "remove the seven-job duplicate horn when Race is selected, net of candidate/finalizer overhead"
+    decision_use: "Quantify resource-direction improvement without presenting public elapsed time as billed minutes."
+    cannot_prove: "Invoice cost."
   - name: assurance preservation
     kind: gate
-    baseline: "Race paused; SBOM paused; check/deploy/publish relationships otherwise intact"
-    desired: "Selected full race and host-side SBOM restored with protected relationships unchanged"
-    decision_use: "Reject any candidate that narrows or misstates assurance."
+    baseline: "complete ordinary and Race populations, focused non-Race behavior implicitly covered by the ordinary horn, integration smoke, post-check accepted SBOM"
+    desired: "same observable contracts with one selected matrix mode and fail-closed SBOM promotion"
+    decision_use: "Reject any faster candidate that narrows coverage or accepted-artifact integrity."
     cannot_prove: "Absence of all CI defects."
 
 now:
-  status: complete
-  slice: "terminal CI restoration acceptance"
-  question: "Did a natural post-land main stimulus select the complete restored Race topology and pass all five reusable jobs plus the parent check gate?"
+  status: working
+  slice: "Pareto CI topology repair"
+  question: "Can one classifier-selected 3+4 matrix mode and fail-closed parallel SBOM construction remove duplicate work without weakening any accepted assurance?"
   reconciliation:
-    observed_at: 2026-07-17T02:23:18Z
-    source_ref: "origin/main 317c1c537afc30f2e71d0a20a62e2a0af17eb67a; natural high-risk main run 29548529828 completed successfully"
-    deploy_identity: "run 29548529828 completed; product-owned deploy and SBOM lanes also succeeded, but terminal CI acceptance relies only on the classifier, five Race jobs, and parent gate"
-    authority_identities: [owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority, choir-doctrine@317c1c53, AGENTS@317c1c53, definition-skill@317c1c53]
+    observed_at: 2026-07-17T04:15:27Z
+    source_ref: "origin/main ba1fd5a4973618326c8eebe9b14456941724c114; selected-Race baseline run 29550365185 at e3de55581a1cae3ecce1431f5f4440ab01f62fc8"
+    deploy_identity: "not_applicable_ci_only; landing must classify deploy_needed=false and Node B must skip"
+    authority_identities: [owner-request-2026-07-16-ci-pareto, choir-doctrine@ba1fd5a4, AGENTS@ba1fd5a4, definition-skill@ba1fd5a4]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "clean closure worktree /private/tmp/go-choir-ci-integration-owner at origin/main 317c1c53; protected parent Autoputer inventory unchanged; landed CI and receipt branches preserved and pushed"
-    status: terminal_race_accepted
+    worktree_inventory_ref: "clean isolated worktree /private/tmp/go-choir-ci-integration-owner on codex/ci-pareto-topology-2026-07-17; protected parent /Users/wiz/go-choir has five Autoputer-owned modified paths and remains untouched"
+    status: reviewed_candidate_ready_for_hosted_pr
   candidate:
-    id: ci-reenable-candidate-1
-    state: landed_terminal_accepted
-    ref: merge:71f07f7b3c1418d9e1b8e6426f8fbbd6c37d51bb
+    id: ci-pareto-candidate-1
+    state: reviewed_ready
+    ref: commit:a3bf59a1f938ce3ed92ce2d968c7c386db369801
     owner: ci-mission
-    base: e02bd0ad9e04a149466f9c3fec436395c2ec9da9
-    digest: "landed ci.yml sha256 f60b63fe5e1613a9f7432f1f7c79bc577a1aee52dac7195ec4de1ad39ee4ee25, unchanged from reviewed candidate 8e4aa074f970b69ce59cffa07b280f164ca1c161"
-    scope: [.github/workflows/ci.yml, docs/definitions/choir-ci-optimization-2026-07-16.md]
-  scope_amendment:
-    id: doccheck-scoped-maintenance-entrypoint-contract
-    mutation_class: yellow
-    admitted_paths: [cmd/doccheck/main.go, cmd/doccheck/main_test.go]
-    problem_ref: docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md
-    acceptance: "Exactly one working product spine remains the authority-root /goal; at most one working scope-disjoint ci_maintenance entrypoint is admitted only when its manifest identity is current, entry-only, and non-authority-root."
-    excluded: [workflow_semantics, app_source, platform_source, node_b_deployment]
+    base: ba1fd5a4973618326c8eebe9b14456941724c114
+    digest: "ci.yml 2beb6d3f970694c9cbb7851d0c1d125950ef049086c809a6379bf11a02911f7d; race.yml 957f8f3dab3fca192a78156e7ff032effb5fbcc4e7bddd98e14794612e6ffc4b; verifier 83ad36cbede20bba0d75655dad5600c88262aa1acdeb20990b6cbe8d8c148773; workflow contract 34a029dd2b110286736abe21b0552a0dcb86f01491e210d79e23b51c57f535d3"
+    scope: [.github/workflows/ci.yml, .github/workflows/race.yml, .github/scripts/ci-impact-classify, .github/scripts/ci-impact-classify-test, .github/scripts/ci-workflow-contract-test, .github/scripts/verify-sbom-candidate, .github/scripts/verify-sbom-candidate-test, docs/definitions/choir-ci-optimization-2026-07-16.md, docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml]
   decision:
-    selected: "Merge PR 55 through the pull request after a fresh-main and idle-cancellation-group check; its automatic rolling FlakeHub publication is explicitly authorized. Continue the remaining CI mission PR landings within the existing Definition boundaries."
-    kind: authority
+    selected: "Derive race_selected once; substitute -race on the existing complete matrices; explicitly preserve the one non-Race-only regression and integration smoke; shard standalone Race non-runtime; split SBOM construction from fail-closed post-check promotion."
+    kind: implementation_authority
     status: settled
     source: owner
-    evidence_ref: "owner-message-2026-07-16T19:50:40Z-flakehub-and-ci-merge-authority"
+    evidence_ref: "owner request 2026-07-16 plus five-agent consensus recorded in docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md"
     owner_ratification_ref: not_applicable
-    recorded_at: 2026-07-16T19:50:40Z
-    consequence: "PR 55 may merge and publish the rolling FlakeHub package after serialization checks. Node B must still skip. PR 2 remains a separate fresh-main branch with the frozen ci.yml digest and its own hosted and main acceptance."
-  evidence_refs: [docs/evidence/ci-optimization-baseline-2026-07-16.md, docs/evidence/ci-reenable-candidate-review-2026-07-16.md, docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md, run-29295978398, run-29468123745, commit-c96c7b49, candidate-8e4aa074, pr-55, merge-e02bd0ad, run-29530010061, pr-56, run-29530622886, merge-71f07f7b, run-29530740469, job-87730340035, artifact-8389010915, job-87730211197, job-87730340741, run-29535188855, run-29546310837-attempt-2, commit-514c5402, commit-317c1c53, run-29548529828, job-87785953951, job-87785953966, job-87785953995, job-87785953998, job-87785954000, job-87787418412]
-  blocker_or_risk: "No completion blocker remains. Earlier natural selected runs exposed product-owned ext4 geometry and owner-scoped lookup timeout defects; those failures were recorded before repairs 514c5402 and 317c1c53. Terminal run 29548529828 classified go=true, high_risk_race=true, sampled_race=false and selected the complete reusable Race topology. The non-runtime Race job and runtime Race shards 0-3 all passed; parent gate job 87787418412 passed. Residual risk is bounded to defects outside the named acceptance floor, not an unproved restored lane."
-  next_action: "None. Preserve the landed workflow digest and terminal evidence. Any future CI optimization requires a new observed problem, authority boundary, and matched acceptance."
+    recorded_at: 2026-07-17T03:45:00Z
+    consequence: "The former complete restoration receipt remains historical evidence, but the Definition is reopened until the optimized topology lands and passes matched hosted acceptance."
+  evidence_refs: [docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, run-29550365185, agentic-consensus-2026-07-17, commit-01a4a053, commit-1ba8d909, commit-a3bf59a1, local-ci-contract-suite, local-focused-non-race-regression, local-race-integration-smoke, independent-review-race-resolved, independent-review-sbom-resolved]
+  blocker_or_risk: "No local or frozen-review blocker remains. Review found and the candidate repaired four defects: manifest-supplied requiredness, unverified differential contents, an unexecuted standalone Race PR route, and a mismatched finalizer cache restore path. Hosted PR/main receipts and measured improvement remain unproved."
+  next_action: "Commit this reviewed candidate/registry receipt, push a draft PR, and require both CI and path-filtered standalone Race hosted checks before serialized merge."
 
 receipts:
+  - id: ci-pareto-candidate-implement
+    boundary: implement
+    commit_or_artifact: a3bf59a1f938ce3ed92ce2d968c7c386db369801
+    proof_refs: [docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md, local-ci-contract-suite, local-focused-non-race-regression, local-race-integration-smoke, independent-review-race-resolved, independent-review-sbom-resolved]
+    rollback_ref: ba1fd5a4973618326c8eebe9b14456941724c114
+    disposition: "Frozen candidate consolidates selected Race onto the complete 3+4 matrices, keeps the one focused non-Race exclusion and integration smoke, path-tests standalone race.yml on its own PR changes, and permits accepted SBOM publication only after exact baseline-relative verification downstream of check."
+    problem_ref: docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md
+    authorization_ref: owner-request-2026-07-16-ci-pareto
+    candidate_or_evidence_refs: [candidate-a3bf59a1, ci-yml-sha256-2beb6d3f970694c9, race-yml-sha256-957f8f3dab3fca19, verifier-sha256-83ad36cbede20bba, workflow-contract-sha256-34a029dd2b110286]
+    landing:
+      source_commit: pending_pr_merge
+      ci_ref: pending_hosted_pr
+      deploy_ref: ci_only_deploy_skip_required
+      environment_identity: github_actions
+      deployed_acceptance: pending
+    registry_conformance_ref: pending_receipt_commit
   - id: corrected-problem-and-baseline-define
     boundary: define
     commit_or_artifact: 27f03875702f503d8ef551035733eb5f40e27a1c

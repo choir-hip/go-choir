@@ -220,23 +220,27 @@ nodes:
     enables: []
     note: >-
       Owner-authorized CI-only maintenance entrypoint concurrent with, but not
-      competing with, the sole Autoputer product mission. It may touch admitted
-      CI and mission paths only. It restores the complete reusable race workflow
-      and already-wired host-side SBOM audit job without changing check/deploy
-      relationships. Frozen candidate 8e4aa074 is reviewed and checkpointed;
-      its P1/P2 acceptance contract now separates PR parsing, CI-only main SBOM
-      and deploy-skip proof, and a classifier-selected post-land race proof,
-      coordinating both CI and Race cancellation groups. The workflow has no
-      implementation overlap with origin/main a1d2f88c, but shared registries
-      require reconciliation. The owner authorizes PR creation and PR-mediated
-      main merge after hosted evidence. Normal CI-only landing must prove Node B
-      skip; generic dispatch/direct Node B mutation remain excluded unless a
-      later concrete deploy slice is admitted. Both cancellation groups remain
-      serialized.
+      competing with, the sole Autoputer product mission. The restoration
+      receipts remain historical evidence; the active bounded slice consolidates
+      classifier-selected Race onto the complete 3+4 Go matrices, preserves
+      integration smoke and the explicit non-Race-only regression, and removes
+      the parent reusable-workflow horn. Standalone Race remains complete and
+      path-tests its own changes. SBOM construction may overlap checks only as
+      an unaccepted run-bound artifact; accepted cache/artifact publication stays
+      downstream of successful check and exact identity, fixed-requiredness,
+      checksum, and baseline-relative differential verification. Rebased commits
+      1ba8d909 and a3bf59a1 repaired the first frozen review's requiredness,
+      diff-content, standalone-hosted-route, and cache-path findings. The landing
+      is PR-mediated and serialized across main CI/Race cancellation groups;
+      CI-only deploy classification and Node B skip are mandatory. Generic
+      dispatch and direct Node B mutation remain excluded.
     sources:
       - .github/workflows/ci.yml
       - .github/workflows/race.yml
       - .github/scripts/build-sboms-differential
+      - .github/scripts/verify-sbom-candidate
+      - .github/scripts/ci-workflow-contract-test
+      - docs/problems/ci-duplicate-race-and-serialized-sbom-critical-path-2026-07-17.md
       - docs/problems/ci-sbom-nested-nix-sandbox-2026-07-09.md
       - docs/problems/ci-maintenance-entrypoint-doccheck-cardinality-2026-07-16.md
       - docs/evidence/ci-optimization-baseline-2026-07-16.md

@@ -38,9 +38,15 @@ assert_output frontend-change $'frontend/src/routes/+page.svelte\n' \
   'frontend=true' 'go=false' 'sbom=true' 'flakehub=true'
 
 assert_output workflow-only $'.github/workflows/ci.yml\n' \
-  'non_docs=true' 'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
+  'non_docs=true' 'go=true' 'sbom=true' 'high_risk_race=true' 'flakehub=false' 'ci=true'
+
+assert_output race-workflow $'.github/workflows/race.yml\n' \
+  'non_docs=true' 'go=false' 'sbom=false' 'high_risk_race=false' 'flakehub=false' 'ci=true'
 
 assert_output sbom-helper $'.github/scripts/build-sboms-differential\n' \
+  'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
+
+assert_output sbom-verifier $'.github/scripts/verify-sbom-candidate\n' \
   'go=false' 'sbom=true' 'flakehub=false' 'ci=true'
 
 assert_output specs-change $'specs/promotion.tla\n' \
