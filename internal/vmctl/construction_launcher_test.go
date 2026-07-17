@@ -219,6 +219,69 @@ func TestDisposeUnroutedConstructedCandidateRequiresExactStoppedBindings(t *test
 	}
 }
 
+func TestDisposeUnroutedConstructedCandidateStopsExactActiveCandidate(t *testing.T) {
+	version := computerversion.ComputerVersion{CodeRef: "code:sha256:active-dispose", ArtifactProgramRef: "artifact-program:sha256:active-dispose"}
+	disk, err := diskinstantiation.FinalizeReceipt(diskinstantiation.Receipt{
+		Backend: diskinstantiation.Ext4BackendName, RealizationID: "candidate-active-dispose", DeviceID: "data",
+		DevicePath: "/var/lib/go-choir/vm-state/candidate-active-dispose/data.img", CreatedAt: time.Now(),
+		Geometry: diskinstantiation.GeometryReceipt{FilesystemType: diskinstantiation.FilesystemExt4, FilesystemLabel: "choir-data", PartitionLayout: diskinstantiation.PartitionLayoutNone, DeviceLogicalBytes: 32 << 30, FilesystemBytes: 32 << 30, FilesystemBlockSize: 4096, FilesystemBlocks: (32 << 30) / 4096, AllocatedBytes: 128 << 20},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := NewOwnershipRegistry("http://sandbox.test")
+	if err := registry.SetPersistencePath(filepath.Join(t.TempDir(), "ownerships.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.beginConstructedCandidate("candidate-active-dispose", "owner", "control", "credential", version, disk); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.activateConstructedCandidate("candidate-active-dispose", "http://candidate.test", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.commitConstructedCandidate("candidate-active-dispose", version, disk); err != nil {
+		t.Fatal(err)
+	}
+	manager := &mockVMManager{getVMs: map[string]*VMInstanceInfo{"candidate-active-dispose": {State: "running"}}, stopError: errors.New("stop refused")}
+	registry.SetVMManager(manager)
+	ledger := routeledger.NewMemoryLedger()
+	authority := &RouteAuthority{ledger: ledger, memoryLedger: ledger}
+	slotID, err := routeledger.RouteSlotID("owner", "control")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := disposeConstructedCandidateRequest{RouteSlotID: slotID, RealizationID: "candidate-active-dispose", Version: version, DiskReceiptID: disk.ID}
+
+	wrong := request
+	wrong.DiskReceiptID = "disk-instantiation:sha256:wrong"
+	if _, err := authority.disposeUnroutedConstructedCandidate(t.Context(), registry, wrong, time.Now()); err == nil {
+		t.Fatal("wrong disk receipt authorized active candidate stop")
+	}
+	if len(manager.stops) != 0 || len(manager.destroys) != 0 {
+		t.Fatalf("forged disposal caused lifecycle side effects: stops=%v destroys=%v", manager.stops, manager.destroys)
+	}
+
+	if _, err := authority.disposeUnroutedConstructedCandidate(t.Context(), registry, request, time.Now()); err == nil || !strings.Contains(err.Error(), "stop active candidate") {
+		t.Fatalf("stop failure error = %v", err)
+	}
+	own := registry.GetOwnershipByVMID(request.RealizationID)
+	if own == nil || own.State != VMStateActive || len(manager.destroys) != 0 {
+		t.Fatalf("stop failure did not preserve active candidate: ownership=%+v destroys=%v", own, manager.destroys)
+	}
+
+	manager.stopError = nil
+	receipt, err := authority.disposeUnroutedConstructedCandidate(t.Context(), registry, request, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.PriorState != VMStateActive || !receipt.RouteAbsent || !containsString(manager.stops, request.RealizationID) || !containsString(manager.destroys, request.RealizationID) {
+		t.Fatalf("active disposal receipt or lifecycle mismatch: receipt=%+v stops=%v destroys=%v", receipt, manager.stops, manager.destroys)
+	}
+	if registry.GetOwnershipByVMID(request.RealizationID) != nil {
+		t.Fatal("actively disposed ownership remains")
+	}
+}
+
 func TestDisposeRoutedConstructedRealizationPreservesExactRouteReceipt(t *testing.T) {
 	version := computerversion.ComputerVersion{CodeRef: "code:sha256:routed-dispose", ArtifactProgramRef: "artifact-program:sha256:routed-dispose"}
 	disk, err := diskinstantiation.FinalizeReceipt(diskinstantiation.Receipt{
@@ -358,7 +421,7 @@ func TestDisposeRoutedConstructedRealizationAcceptsOnlyTerminalManagerState(t *t
 			manager := &mockVMManager{getVMs: map[string]*VMInstanceInfo{"candidate-terminal-dispose": {State: tc.managerState}}}
 			registry.SetVMManager(manager)
 
-			priorState, err := registry.disposeConstructedCandidateExact(slotID, "candidate-terminal-dispose", version, disk.ID)
+			priorState, err := registry.disposeConstructedCandidateExact(slotID, "candidate-terminal-dispose", version, disk.ID, false)
 			if tc.wantDisposed {
 				if err != nil || priorState != VMStateHibernated || !containsString(manager.destroys, "candidate-terminal-dispose") || registry.GetOwnershipByVMID("candidate-terminal-dispose") != nil {
 					t.Fatalf("terminal disposal failed: prior_state=%s err=%v destroys=%v ownership=%+v", priorState, err, manager.destroys, registry.GetOwnershipByVMID("candidate-terminal-dispose"))

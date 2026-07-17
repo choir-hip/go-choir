@@ -547,7 +547,7 @@ func (a *RouteAuthority) disposeUnroutedConstructedCandidate(ctx context.Context
 		}
 		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: resolve route slot: %w", err)
 	}
-	priorState, err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID)
+	priorState, err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID, true)
 	if err != nil {
 		return ConstructedCandidateDisposalReceipt{}, err
 	}
@@ -573,7 +573,7 @@ func (a *RouteAuthority) disposeRoutedConstructedRealization(ctx context.Context
 	if beforeSlot.ID != request.RouteSlotID || beforeSlot.Generation != request.ExpectedGeneration || string(beforeSlot.LatestReceiptID) != request.ExpectedLatestReceiptID || !routeledger.SameVersion(beforeSlot.Current, request.Version) || beforeReceipt.ID != beforeSlot.LatestReceiptID || beforeReceipt.RouteSlotID != beforeSlot.ID || beforeReceipt.CommittedGeneration != beforeSlot.Generation || !routeledger.SameVersion(beforeReceipt.New, beforeSlot.Current) {
 		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: route receipt bindings do not match")
 	}
-	priorState, err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID)
+	priorState, err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID, false)
 	if err != nil {
 		return RoutedConstructedRealizationDisposalReceipt{}, err
 	}

@@ -734,7 +734,7 @@ func (r *OwnershipRegistry) markConstructedCandidateFailed(vmID string) error {
 	return nil
 }
 
-func (r *OwnershipRegistry) disposeConstructedCandidateExact(routeSlotID, vmID string, version computerversion.ComputerVersion, diskReceiptID string) (VMState, error) {
+func (r *OwnershipRegistry) disposeConstructedCandidateExact(routeSlotID, vmID string, version computerversion.ComputerVersion, diskReceiptID string, stopActive bool) (VMState, error) {
 	ownerID, desktopID, err := routeledger.ParseRouteSlotID(routeSlotID)
 	if err != nil || strings.TrimSpace(vmID) == "" || !version.Valid() || strings.TrimSpace(diskReceiptID) == "" {
 		return "", fmt.Errorf("vmctl candidate disposal: exact identity bindings are required")
@@ -745,30 +745,52 @@ func (r *OwnershipRegistry) disposeConstructedCandidateExact(routeSlotID, vmID s
 	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.UserID != ownerID || own.DesktopID != desktopID || own.Published || !own.ConstructionCommitted || validateConstructedOwnership(own) != nil || *own.ConstructionVersion != version || own.ConstructionDisk.ID != diskReceiptID {
 		return "", fmt.Errorf("vmctl candidate disposal: constructed ownership bindings do not match")
 	}
-	if own.State != VMStateStopped && own.State != VMStateHibernated && own.State != VMStateFailed {
-		return "", fmt.Errorf("vmctl candidate disposal: candidate must be non-active")
-	}
 	manager := r.vmManager
 	if manager == nil {
 		return "", fmt.Errorf("vmctl candidate disposal: candidate process state is not safely stopped")
 	}
-	if instance := manager.GetVM(own.VMID); instance != nil {
-		switch strings.TrimSpace(instance.State) {
-		case "stopped", "hibernated", "failed":
-			// DestroyVMState is the existing terminal-state cleanup boundary. A
-			// failed resume may leave one of these manager records even though
-			// durable ownership correctly remained stopped or hibernated.
-		default:
-			return "", fmt.Errorf("vmctl candidate disposal: candidate process state is not safely stopped")
-		}
-	}
 	priorState := own.State
+	instance := manager.GetVM(own.VMID)
+	switch own.State {
+	case VMStateActive, VMStateDegraded:
+		if !stopActive || instance == nil {
+			return "", fmt.Errorf("vmctl candidate disposal: candidate must be non-active")
+		}
+		switch strings.TrimSpace(instance.State) {
+		case "running", "active", "degraded":
+		default:
+			return "", fmt.Errorf("vmctl candidate disposal: candidate process state does not match active ownership")
+		}
+		// Exact ownership, version, disk, publication, and route bindings are
+		// validated before this side effect. Generic stop remains route-gated;
+		// only the unrouted disposal authority opts into this fate-sharing stop.
+		if err := manager.StopVM(own.VMID); err != nil {
+			return "", fmt.Errorf("vmctl candidate disposal: stop active candidate: %w", err)
+		}
+		own.State = VMStateStopped
+		own.StoppedBy = "candidate-disposal"
+		own.LastActiveAt = time.Now()
+	case VMStateStopped, VMStateHibernated, VMStateFailed:
+		if instance != nil {
+			switch strings.TrimSpace(instance.State) {
+			case "stopped", "hibernated", "failed":
+				// DestroyVMState is the existing terminal-state cleanup boundary.
+			default:
+				return "", fmt.Errorf("vmctl candidate disposal: candidate process state is not safely stopped")
+			}
+		}
+	default:
+		return "", fmt.Errorf("vmctl candidate disposal: candidate must be non-active")
+	}
 	key := ownershipKey(own.UserID, own.DesktopID)
 	delete(r.ownerships, key)
 	delete(r.vmByID, own.VMID)
 	if err := r.writePersistenceLocked(); err != nil {
 		r.ownerships[key] = own
 		r.vmByID[own.VMID] = own
+		if restoreErr := r.writePersistenceLocked(); restoreErr != nil {
+			return "", fmt.Errorf("vmctl candidate disposal: persist ownership removal: %v; persist stopped ownership: %w", err, restoreErr)
+		}
 		return "", fmt.Errorf("vmctl candidate disposal: persist ownership removal: %w", err)
 	}
 	if err := manager.DestroyVMState(own.VMID); err != nil {

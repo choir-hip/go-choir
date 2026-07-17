@@ -54,10 +54,19 @@ After it has validated route absence, realization identity, owner/desktop bindin
 3. destroy the exact realization and reclaim its construction disk through the existing disposal path;
 4. atomically remove only the matching constructed ownership;
 5. emit the existing immutable disposal receipt;
-6. remain idempotent for exact replay and refuse stale, routed, wrong-version, wrong-disk, published, legacy, or foreign candidates without stopping them.
+6. preserve the existing safe replay refusal and refuse stale, routed, wrong-version, wrong-disk, published, legacy, or foreign candidates without stopping them.
 
 Validation must precede the stop side effect. A forged request must not become a capability to stop another VM. Stop failure must preserve the ownership and disk for retry; destroy/reclaim failure must leave diagnosable state and cannot be reported as disposal success.
 
 ## G4 consequence
 
 No fleet detach or CAS is authorized until this source repair passes focused tests, CI and matching Node B deploy, and the deployed owner proof candidate is disposed while active through the exact unrouted endpoint, reconstructed from the same immutable refs, independently verified with a new realization/disk receipt, and then safely disposed or retained for frozen G4 review.
+
+
+## Source repair candidate — deployment pending
+
+Git binary-diff SHA-256: `159e5f2cf6f2d6b2bdb69359b34271eca345448b381d9301e52dde6d4304262f`.
+
+The exact disposal method now takes an authority-owned `stopActive` capability. Only the already route-absence-locked unrouted disposal path passes it; routed disposal retains the terminal-state-only contract. The registry validates exact constructed ownership, version, disk receipt, owner/desktop, non-published state, VM manager presence, and running manager state before calling `StopVM`. Stop failure leaves the active ownership and disk unchanged. Success marks the exact ownership stopped in memory, then uses the existing persisted removal and `DestroyVMState` boundary. Persistence or destroy failure restores a stopped, diagnosable ownership rather than claiming success or resurrecting an active process.
+
+Focused contracts prove wrong-disk refusal before stop, stop-failure preservation, active stop plus exact destruction, route-preserving terminal-only disposal, unsafe manager-state refusal, and durable ownership removal. `go test ./internal/vmctl -run '^TestDispose(UnroutedConstructedCandidate|RoutedConstructedRealization)' -count=1`, full `go test ./internal/vmctl -count=1`, and `go vet ./internal/vmctl` pass.
