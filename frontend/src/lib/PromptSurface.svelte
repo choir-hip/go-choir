@@ -465,6 +465,19 @@
     box-shadow:
       inset 0 14px 28px color-mix(in srgb, var(--choir-shadow-color) 2%, transparent),
       0 12px 30px color-mix(in srgb, var(--choir-shadow-color) 22%, transparent);
+    transition: box-shadow var(--choir-motion-fast, 120ms ease);
+  }
+
+  /* Focus affordance: the command field glows when the prompt is active. */
+  .command-field:focus-within {
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--choir-accent) 42%, transparent),
+      inset 0 14px 28px color-mix(in srgb, var(--choir-shadow-color) 2%, transparent),
+      0 12px 34px color-mix(in srgb, var(--choir-accent) 14%, transparent);
+  }
+
+  .command-field textarea::placeholder {
+    color: var(--choir-text-subtle, var(--choir-subtle));
   }
 
   .command-field textarea {

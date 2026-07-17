@@ -324,7 +324,12 @@ function themeBodyBackground(theme: ChoirTheme): string {
       theme.colors.bg,
     ].join(', ');
   }
-  return theme.colors.bg;
+  return [
+    `radial-gradient(120% 90% at 78% -10%, ${colorMix(theme.colors.accent, 13)}, transparent 52%)`,
+    `radial-gradient(90% 80% at 8% 108%, ${colorMix(theme.colors.accent2, 9)}, transparent 46%)`,
+    `linear-gradient(180deg, ${colorMix(theme.colors.bg2, 68)}, transparent 40%)`,
+    theme.colors.bg,
+  ].join(', ');
 }
 
 function themeBodyOverlay(theme: ChoirTheme): string {

@@ -433,6 +433,7 @@
       0 10px 30px color-mix(in srgb, var(--choir-accent) 10%, transparent);
     transform-origin: top left;
     transition: box-shadow 0.15s, filter 0.15s;
+    animation: floating-window-open 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
     user-select: none;
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - var(--choir-prompt-surface-top-offset, 0px) - var(--choir-prompt-surface-bottom-offset, 64px) - 16px);
@@ -636,7 +637,22 @@
     }
   }
 
+  @keyframes floating-window-open {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    .window {
+      animation: none;
+    }
+
     .window.overview-preview-live {
       transition: none;
     }

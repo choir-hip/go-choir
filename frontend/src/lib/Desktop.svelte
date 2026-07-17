@@ -239,10 +239,13 @@
         height: Math.max(520, viewportHeight - 88),
       };
     }
+    // Keep the preview window clear of the desktop icon rail on the left
+    // (icons occupy roughly x < 140) so app labels stay readable.
+    const x = Math.max(148, Math.round(viewportWidth * 0.1));
     return {
-      x: Math.max(32, Math.round(viewportWidth * 0.06)),
+      x,
       y: 34,
-      width: Math.max(820, Math.round(viewportWidth * 0.84)),
+      width: Math.max(760, viewportWidth - x - 32),
       height: Math.max(620, Math.round(viewportHeight * 0.86)),
     };
   }

@@ -855,11 +855,36 @@
     overscroll-behavior: contain;
     background: color-mix(in srgb, var(--choir-bg) 58%, transparent);
     backdrop-filter: blur(10px);
+    animation: auth-overlay-in 200ms ease both;
   }
 
   .auth-overlay-panel {
     position: relative;
     width: min(100%, 480px);
+    animation: auth-panel-in 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  @keyframes auth-overlay-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes auth-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .auth-overlay,
+    .auth-overlay-panel {
+      animation: none;
+    }
   }
 
   .auth-overlay-close {
