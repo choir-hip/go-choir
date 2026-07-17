@@ -278,3 +278,13 @@
 - Expected refusal: attempting to prepare a same-version promotion after verification returned `promotion certificate: active and candidate ComputerVersion must differ`; no candidate, evidence pin, signature, or route CAS resulted. Same-version reconstruction correctly needs no promotion.
 - Result: destruction of the accepted realization and its complete image did not lose promised semantic state or route authority. `data.img` is proven disposable for this control version.
 - Heresy delta: discovered `1`; introduced `0`; repaired `1` in deployed behavior. Residual risk moves to corrupted-image and allocation-pressure replacement plus distinct-version promote/rollback.
+
+## Corrupted-image replacement blocker — documented before repair
+
+- Observed `2026-07-17T04:22:08Z`–`04:25:09Z` on synthetic realization `candidate-control-20260717-f` only. Mutation class: red. Substrate: vmctl/VMManager lifecycle. Protected surfaces: routed ComputerVersion A, generation-1 receipt, synthetic realization-local `data.img`.
+- Failure injection was bounded: after vmctl hibernation and process absence, only the ext4 primary-superblock magic at image byte offset 1080 was zeroed. The 4 KiB superblock-region SHA-256 changed from `325530ca566e303eabaa645c651c6f1b0d6cd92e56cb35c8f380deea07ee8705` to `71a3c8adf16af46e7308161b7904196fa9f494292977a3d1e216fedd07c3d1b5`.
+- Supported `/internal/vmctl/resume` did not reuse the image successfully: guest output reported `[FAILED] Failed to mount /mnt/persistent` and dependency failure for local filesystems; vmmanager killed Firecracker after readiness timeout and marked the manager instance failed at `04:25:09Z`.
+- Split-state defect: the persisted ownership correctly remained `hibernated`, but VMManager retained a failed instance. The exact routed-disposal endpoint then returned HTTP 409 `vmctl candidate disposal: candidate process state is not safely stopped` because it rejects every non-nil manager instance before calling `DestroyVMState`, even though `DestroyVMState` is the existing safe boundary that accepts non-running instances and kills/removes stale process state.
+- Existing-fix connection opportunity: do not invent a second cleanup path. Change exact disposal to reject only running/booting manager state and delegate stopped/failed instances to the existing `DestroyVMState`; keep exact route generation/receipt/version/disk bindings and ownership rollback semantics unchanged.
+- Problem-documentation-first checkpoint: no repair code is included in this receipt. Route generation 1 and latest receipt remain unchanged. The corrupted image and failed manager instance remain contained pending the source repair and deployment.
+- Heresy delta: discovered `1`; introduced `0`; repaired `0`.
