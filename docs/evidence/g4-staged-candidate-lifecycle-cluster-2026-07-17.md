@@ -70,3 +70,10 @@ Git binary-diff SHA-256: `159e5f2cf6f2d6b2bdb69359b34271eca345448b381d9301e52dde
 The exact disposal method now takes an authority-owned `stopActive` capability. Only the already route-absence-locked unrouted disposal path passes it; routed disposal retains the terminal-state-only contract. The registry validates exact constructed ownership, version, disk receipt, owner/desktop, non-published state, VM manager presence, and running manager state before calling `StopVM`. Stop failure leaves the active ownership and disk unchanged. Success marks the exact ownership stopped in memory, then uses the existing persisted removal and `DestroyVMState` boundary. Persistence or destroy failure restores a stopped, diagnosable ownership rather than claiming success or resurrecting an active process.
 
 Focused contracts prove wrong-disk refusal before stop, stop-failure preservation, active stop plus exact destruction, route-preserving terminal-only disposal, unsafe manager-state refusal, and durable ownership removal. `go test ./internal/vmctl -run '^TestDispose(UnroutedConstructedCandidate|RoutedConstructedRealization)' -count=1`, full `go test ./internal/vmctl -count=1`, and `go vet ./internal/vmctl` pass.
+
+
+## Deployed closure
+
+Commit `42e50b6b1fa3ae7461bb789ec173521a768b548d` passed CI run `29565482629` and deployed to Node B. The exact unrouted disposal endpoint removed the reconstructed owner proof candidate while its ownership and VM manager were active; the receipt records `prior_state: active` and `route_absent: true`. The same immutable CodeRef and ArtifactProgramRef produced two independently verified realizations with distinct disk receipts and matching product-path hashes. Both disposable ownerships and disks are absent in the final inventory. Durable receipt: `docs/evidence/g4-owner-zero-realization-reconstruction-2026-07-17.md` plus its adjacent JSON.
+
+The clustered staged-lifecycle blocker is **repaired**. Routed disposal remains terminal-only; legacy detach/restore remains route-absence-locked; generic product stop remains route-gated. No broader stop bypass was introduced.
