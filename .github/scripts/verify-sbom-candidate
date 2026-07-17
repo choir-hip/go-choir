@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-bundle="${1:?usage: verify-sbom-candidate BUNDLE SOURCE_COMMIT RUN_ID RUN_ATTEMPT}"
+bundle="${1:?usage: verify-sbom-candidate BUNDLE SOURCE_COMMIT RUN_ID RUN_ATTEMPT [BASELINE]}"
 source_commit="${2:?source commit is required}"
 run_id="${3:?run id is required}"
 run_attempt="${4:?run attempt is required}"
+baseline="${5:-}"
 manifest="$bundle/manifest.jsonl"
 diff="$bundle/diff.json"
 candidate="$bundle/candidate.json"
@@ -17,13 +18,20 @@ for file in "$manifest" "$diff" "$candidate"; do
 done
 
 expected_packages='["auth","corpusd","frontend","gateway","maild","maildctl","obscura","proxy","sandbox","sourcecycled","vmctl","zot"]'
+previous_commit=""
+if [[ -n "$baseline" && -s "$baseline/manifest.jsonl" ]]; then
+  previous_commit="$(jq -r 'select(.source_commit != null) | .source_commit' "$baseline/manifest.jsonl" | head -n 1)"
+fi
 
 jq -e -s \
   --arg source_commit "$source_commit" \
+  --arg previous_commit "$previous_commit" \
   --argjson expected "$expected_packages" '
     (map(.package) | sort) == $expected and
     (map(.package) | unique | length) == ($expected | length) and
     all(.source_commit == $source_commit) and
+    all(.previous_commit == $previous_commit) and
+    all(if .package == "obscura" then .required == false else .required == true end) and
     all(.status == "built" or .status == "reused" or .status == "failed" or .status == "skipped") and
     all(
       if .required then
@@ -42,8 +50,10 @@ jq -e -s \
 
 jq -e \
   --arg source_commit "$source_commit" \
+  --arg previous_commit "$previous_commit" \
   --argjson expected_success "$(jq -s 'map(select(.status == "built" or .status == "reused") | {package, status}) | sort_by(.package)' "$manifest")" '
     .source_commit == $source_commit and
+    .previous_commit == $previous_commit and
     (.packages | type == "array") and
     (.packages | map({package, status}) | sort_by(.package)) == $expected_success and
     (.packages | map(.package) | unique | length) == ($expected_success | length)
@@ -65,6 +75,17 @@ jq -e \
     exit 1
   }
 
+component_keys() {
+  local file="$1"
+  jq -r '
+    (.components // [])[]
+    | (.purl // ."bom-ref" // ((.name // "unknown") + "@" + (.version // "unknown")))
+  ' "$file" | sort -u
+}
+
+tmpdir="$(mktemp -d)"
+trap 'rm -rf "$tmpdir"' EXIT
+
 verified=0
 while IFS=$'\t' read -r package expected_sha; do
   sbom="$bundle/$package/sbom.json"
@@ -75,6 +96,23 @@ while IFS=$'\t' read -r package expected_sha; do
   actual_sha="$(sha256sum "$sbom" | awk '{print $1}')"
   if [[ "$actual_sha" != "$expected_sha" ]]; then
     echo "SBOM checksum mismatch for $package: expected $expected_sha, got $actual_sha" >&2
+    exit 1
+  fi
+
+  before_keys="$tmpdir/$package.before"
+  after_keys="$tmpdir/$package.after"
+  if [[ -n "$baseline" && -s "$baseline/$package/sbom.json" ]]; then
+    component_keys "$baseline/$package/sbom.json" > "$before_keys"
+  else
+    : > "$before_keys"
+  fi
+  component_keys "$sbom" > "$after_keys"
+  expected_added="$(comm -13 "$before_keys" "$after_keys" | jq -R . | jq -csS .)"
+  expected_removed="$(comm -23 "$before_keys" "$after_keys" | jq -R . | jq -csS .)"
+  actual_added="$(jq -cS --arg package "$package" '.packages[] | select(.package == $package) | .added' "$diff")"
+  actual_removed="$(jq -cS --arg package "$package" '.packages[] | select(.package == $package) | .removed' "$diff")"
+  if [[ "$actual_added" != "$expected_added" || "$actual_removed" != "$expected_removed" ]]; then
+    echo "SBOM differential content mismatch for $package" >&2
     exit 1
   fi
   verified=$((verified + 1))

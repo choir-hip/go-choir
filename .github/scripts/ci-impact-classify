@@ -107,7 +107,7 @@ else
     esac
 
     case "$path" in
-      .github/workflows/ci.yml|.github/workflows/race.yml)
+      .github/workflows/ci.yml)
         mark go "$path -> exercise changed Go-test topology"
         mark high_risk_race "$path -> exercise changed Race topology"
         ;;

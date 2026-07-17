@@ -66,6 +66,18 @@ bundle="$tmpdir/valid"
 make_bundle "$bundle"
 "$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" >/dev/null
 
+baseline="$tmpdir/baseline"
+baseline_commit=0000000000000000000000000000000000000000
+make_bundle "$baseline"
+jq -c --arg commit "$baseline_commit" '.source_commit = $commit' "$baseline/manifest.jsonl" > "$baseline/manifest.tmp"
+mv "$baseline/manifest.tmp" "$baseline/manifest.jsonl"
+make_bundle "$bundle"
+jq -c --arg commit "$baseline_commit" '.previous_commit = $commit' "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"
+mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
+jq --arg commit "$baseline_commit" '.previous_commit = $commit' "$bundle/diff.json" > "$bundle/diff.tmp"
+mv "$bundle/diff.tmp" "$bundle/diff.json"
+"$verifier" "$bundle" "$source_commit" "$run_id" "$run_attempt" "$baseline" >/dev/null
+
 make_bundle "$bundle"
 jq -c 'if .package == "auth" then .source_commit = "wrong" else . end' "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"
 mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
@@ -82,6 +94,14 @@ mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
 expect_failure required-failure "$bundle"
 
 make_bundle "$bundle"
+jq -c 'if .package == "auth" then .required = false | .status = "failed" | del(.sbom_sha256) else . end' "$bundle/manifest.jsonl" > "$bundle/manifest.tmp"
+mv "$bundle/manifest.tmp" "$bundle/manifest.jsonl"
+jq 'del(.packages[] | select(.package == "auth"))' "$bundle/diff.json" > "$bundle/diff.tmp"
+mv "$bundle/diff.tmp" "$bundle/diff.json"
+rm "$bundle/auth/sbom.json"
+expect_failure required-downgrade "$bundle"
+
+make_bundle "$bundle"
 printf 'corrupt\n' >> "$bundle/proxy/sbom.json"
 expect_failure checksum "$bundle"
 
@@ -94,6 +114,11 @@ make_bundle "$bundle"
 jq 'del(.packages[0])' "$bundle/diff.json" > "$bundle/diff.tmp"
 mv "$bundle/diff.tmp" "$bundle/diff.json"
 expect_failure differential-set "$bundle"
+
+make_bundle "$bundle"
+jq '.packages[0].added = ["pkg:forged/component@1"]' "$bundle/diff.json" > "$bundle/diff.tmp"
+mv "$bundle/diff.tmp" "$bundle/diff.json"
+expect_failure differential-content "$bundle"
 
 make_bundle "$bundle"
 mkdir -p "$bundle/undeclared"

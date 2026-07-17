@@ -34,7 +34,10 @@ require "$ci" "go test -count=1 -run '^TestCancelRunTrajectoryDrainsMoreThanOneA
 reject "$ci" 'uses: ./.github/workflows/race.yml'
 reject "$ci" 'needs.plan.outputs.high_risk_race'
 reject "$ci" 'needs.plan.outputs.sampled_race'
+require "$ci" 'case "${{ needs.plan.outputs.race_selected }}" in'
 
+require "$race" 'pull_request:'
+require "$race" '      - .github/workflows/race.yml'
 require "$race" 'name: Go Test (non-runtime race shard ${{ matrix.shard }})'
 require "$race" 'shard: [0, 1, 2]'
 require "$race" 'run: scripts/go-test-non-runtime-shards -race'
@@ -65,7 +68,8 @@ for pattern in \
   "needs.check.result == 'success'" \
   "needs.sbom-candidate.result == 'success'" \
   'actions/download-artifact@v8' \
-  'verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"' \
+  'Restore accepted baseline for differential verification' \
+  'verify-sbom-candidate sboms "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/sbom-verification-baseline"' \
   'actions/cache/save@v6' \
   'Upload accepted SBOM artifact'; do
   grep -Fq -- "$pattern" <<<"$finalizer_segment" || {

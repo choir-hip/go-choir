@@ -1,7 +1,9 @@
 name: Race Detector
 
 on:
-  workflow_call:
+  pull_request:
+    paths:
+      - .github/workflows/race.yml
   workflow_dispatch:
   schedule:
     - cron: '17 8 * * 1'
