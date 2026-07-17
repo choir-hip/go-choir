@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -10,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
+	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -28,20 +31,32 @@ type computeStatusResponse struct {
 }
 
 type computeComputer struct {
-	DesktopID        string `json:"desktop_id"`
-	Role             string `json:"role,omitempty"`
-	Current          bool   `json:"current,omitempty"`
-	Kind             string `json:"kind"`
-	State            string `json:"state"`
-	WarmnessClass    string `json:"warmness_class"`
-	Published        bool   `json:"published"`
-	Epoch            int64  `json:"epoch,omitempty"`
-	StoppedBy        string `json:"stopped_by,omitempty"`
-	LastActiveAt     string `json:"last_active_at,omitempty"`
-	Protection       string `json:"protection"`
-	Reclaimable      bool   `json:"reclaimable"`
-	RecoveryEligible bool   `json:"recovery_eligible"`
-	LookupStatus     string `json:"lookup_status"`
+	DesktopID         string                    `json:"desktop_id"`
+	Role              string                    `json:"role,omitempty"`
+	Current           bool                      `json:"current,omitempty"`
+	Kind              string                    `json:"kind"`
+	State             string                    `json:"state"`
+	WarmnessClass     string                    `json:"warmness_class"`
+	Published         bool                      `json:"published"`
+	Epoch             int64                     `json:"epoch,omitempty"`
+	StoppedBy         string                    `json:"stopped_by,omitempty"`
+	LastActiveAt      string                    `json:"last_active_at,omitempty"`
+	Protection        string                    `json:"protection"`
+	Reclaimable       bool                      `json:"reclaimable"`
+	RecoveryEligible  bool                      `json:"recovery_eligible"`
+	LookupStatus      string                    `json:"lookup_status"`
+	ImmutableIdentity *computeImmutableIdentity `json:"immutable_identity,omitempty"`
+}
+
+type computeImmutableIdentity struct {
+	ComputerVersion         computerversion.ComputerVersion `json:"computer_version"`
+	ConstructionDiskReceipt string                          `json:"construction_disk_receipt_id"`
+	RouteGeneration         uint64                          `json:"route_generation"`
+	RouteReceiptID          string                          `json:"route_receipt_id"`
+	TransitionKind          routeledger.TransitionKind      `json:"transition_kind"`
+	ApprovalRef             string                          `json:"approval_ref"`
+	PromotionCertificateRef string                          `json:"promotion_certificate_ref"`
+	Joined                  bool                            `json:"joined"`
 }
 
 type computeRuntimeStatus struct {
@@ -194,6 +209,13 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		resp.CurrentComputer.Protection = protectionText(resp.CurrentComputer.WarmnessClass)
 		resp.CurrentComputer.Reclaimable = reclaimableWarmness(resp.CurrentComputer.WarmnessClass)
 	}
+	identity, identityErr := h.currentImmutableIdentity(r.Context(), authResult.UserID, desktopID, own.ConstructionVersion, own.ConstructionDiskID, own.ConstructionCommitted)
+	if identityErr != nil {
+		resp.Status = "degraded"
+		resp.Warnings = append(resp.Warnings, "immutable identity evidence unavailable")
+	} else {
+		resp.CurrentComputer.ImmutableIdentity = identity
+	}
 	if own.SandboxURL != "" && strings.EqualFold(own.State, string(vmctl.VMStateActive)) {
 		resp.Runtime = h.probeRuntimeHealthForTarget(own.SandboxURL)
 	}
@@ -209,6 +231,32 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	resp.Computers, resp.Warnings = appendComputerList(resp.Computers, resp.Warnings, listed, listWarnings)
 
 	h.writeComputeStatus(w, &resp, authResult.UserID, desktopID)
+}
+
+func (h *Handler) currentImmutableIdentity(ctx context.Context, userID, desktopID string, version *computerversion.ComputerVersion, diskReceiptID string, committed bool) (*computeImmutableIdentity, error) {
+	if !committed && version == nil && strings.TrimSpace(diskReceiptID) == "" {
+		return nil, nil
+	}
+	if h == nil || h.vmctlClient == nil || !committed || version == nil || !version.Valid() || strings.TrimSpace(diskReceiptID) == "" {
+		return nil, fmt.Errorf("constructed ownership identity is incomplete")
+	}
+	slotID, err := routeledger.RouteSlotID(userID, desktopID)
+	if err != nil {
+		return nil, err
+	}
+	resolution, err := h.vmctlClient.ResolveComputerVersionRoute(ctx, slotID)
+	if err != nil {
+		return nil, err
+	}
+	receipt := resolution.LatestReceipt
+	if receipt.Validate() != nil || resolution.Slot.ID != slotID || resolution.Slot.Current != *version || receipt.ID != resolution.Slot.LatestReceiptID || receipt.New != *version || receipt.CommittedGeneration != resolution.Slot.Generation {
+		return nil, fmt.Errorf("constructed ownership and route evidence do not join")
+	}
+	return &computeImmutableIdentity{
+		ComputerVersion: *version, ConstructionDiskReceipt: strings.TrimSpace(diskReceiptID),
+		RouteGeneration: resolution.Slot.Generation, RouteReceiptID: string(receipt.ID), TransitionKind: receipt.Kind,
+		ApprovalRef: string(receipt.ApprovalRef), PromotionCertificateRef: string(receipt.PromotionCertificateRef), Joined: true,
+	}, nil
 }
 
 func (h *Handler) writeComputeStatus(w http.ResponseWriter, resp *computeStatusResponse, userID, desktopID string) {

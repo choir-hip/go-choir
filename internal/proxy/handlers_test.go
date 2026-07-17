@@ -3287,6 +3287,58 @@ func TestVMctlRouting_HealthReportsRedactedVMctlStatus(t *testing.T) {
 	}
 }
 
+func TestCurrentImmutableIdentityJoinsRedactedProductEvidence(t *testing.T) {
+	createdAt := time.Date(2026, 7, 17, 19, 0, 0, 0, time.UTC)
+	closure, err := computerversion.NewCodeClosure(strings.Repeat("1", 40), []computerversion.CodeArtifact{{
+		Name: "sandbox", SHA256: strings.Repeat("a", 64), URI: "nix-store+sha256://" + strings.Repeat("a", 64) + "/nix/store/test-sandbox",
+	}}, createdAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	program, err := computerversion.NewArtifactProgram([]computerversion.ArtifactProgramEntry{{
+		Kind: "test", ContentSHA256: strings.Repeat("b", 64), ArtifactURI: "artifact+sha256://" + strings.Repeat("b", 64) + "/test/state",
+	}}, createdAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := computerversion.ComputerVersion{CodeRef: closure.Ref, ArtifactProgramRef: program.Ref}
+	slotID, _ := routeledger.RouteSlotID("owner-private", "primary")
+	receipt := routeledger.TransitionReceipt{
+		ID: "11111111-1111-4111-8111-111111111111", RouteSlotID: slotID, Kind: routeledger.TransitionBootstrap,
+		New: version, CommittedGeneration: 1, ApprovalRef: routeledger.ApprovalRef("approval:sha256:" + strings.Repeat("c", 64)),
+		PromotionCertificateRef: routeledger.PromotionCertificateRef("certificate:sha256:" + strings.Repeat("d", 64)),
+		IdempotencyKey:          routeledger.IdempotencyKey("idempotency:product-inspection"), CommittedAt: createdAt,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(vmctl.RouteResolution{
+			Slot:          routeledger.Slot{ID: slotID, Current: version, Generation: 1, LatestReceiptID: receipt.ID},
+			LatestReceipt: receipt, CodeClosure: closure, ArtifactProgram: program,
+		})
+	}))
+	defer srv.Close()
+	h := &Handler{vmctlClient: vmctl.NewClient(srv.URL)}
+	identity, err := h.currentImmutableIdentity(t.Context(), "owner-private", "primary", &version, "disk-instantiation:sha256:"+strings.Repeat("e", 64), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity == nil || !identity.Joined || identity.ComputerVersion != version || identity.RouteReceiptID != string(receipt.ID) || identity.RouteGeneration != 1 || identity.ApprovalRef != string(receipt.ApprovalRef) {
+		t.Fatalf("immutable identity = %+v", identity)
+	}
+	body, err := json.Marshal(identity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"owner-private", slotID, "vm_id", "sandbox_url", "device_path"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("immutable identity leaked %q in %s", forbidden, body)
+		}
+	}
+	mismatched := computerversion.ComputerVersion{CodeRef: version.CodeRef, ArtifactProgramRef: computerversion.ArtifactProgramRef("artifact-program:sha256:" + strings.Repeat("f", 64))}
+	if _, err := h.currentImmutableIdentity(t.Context(), "owner-private", "primary", &mismatched, "disk-instantiation:sha256:"+strings.Repeat("e", 64), true); err == nil {
+		t.Fatal("mismatched ownership and route identity was accepted")
+	}
+}
+
 func TestComputeStatusDoesNotCreateOwnershipAndRedactsIdentity(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 	client := vmctl.NewClient(vmctlSrv.URL)
