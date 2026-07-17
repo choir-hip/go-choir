@@ -475,3 +475,115 @@ func digestString(value string) string {
 	digest := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(digest[:])
 }
+
+func TestMemoryLedgerBootstrapRollbackRemovesOnlyGenerationOneRoute(t *testing.T) {
+	ledger := NewMemoryLedger()
+	slotID := mustSlotID(t, "owner-bootstrap-rollback", "primary")
+	version := version("code:bootstrap-rollback", "program:bootstrap-rollback")
+	bootstrap := TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: version, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bootstrap-rollback-base"}
+	_, bootstrapReceipt, err := ledger.Transition(t.Context(), bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bootstrapReceipt.ID != BootstrapReceiptID(slotID, bootstrap.IdempotencyKey) {
+		t.Fatalf("bootstrap receipt ID = %q, want frozen %q", bootstrapReceipt.ID, BootstrapReceiptID(slotID, bootstrap.IdempotencyKey))
+	}
+	rollback := TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrapRollback, Old: version, New: version, ExpectedGeneration: 1, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, RollbackTargetReceiptID: bootstrapReceipt.ID, IdempotencyKey: "idempotency:bootstrap-rollback-absence"}
+	otherSlotID := mustSlotID(t, "owner-bootstrap-rollback-other", "primary")
+	_, otherReceipt, err := ledger.Transition(t.Context(), TransitionCommand{RouteSlotID: otherSlotID, Kind: TransitionBootstrap, New: version, ApprovalRef: testApprovalRef, PromotionCertificateRef: testCertificateRef, IdempotencyKey: "idempotency:bootstrap-rollback-other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	crossSlot := rollback
+	crossSlot.RollbackTargetReceiptID = otherReceipt.ID
+	crossSlot.IdempotencyKey = "idempotency:bootstrap-rollback-cross-slot"
+	if _, _, err := ledger.Transition(t.Context(), crossSlot); err == nil {
+		t.Fatal("cross-slot bootstrap receipt authorized rollback")
+	}
+	if current, _, err := ledger.Resolve(t.Context(), slotID); err != nil || current.Generation != 1 {
+		t.Fatalf("cross-slot refusal mutated route: slot %+v err %v", current, err)
+	}
+	slot, receipt, err := ledger.Transition(t.Context(), rollback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slot != (Slot{}) || receipt.Validate() != nil || receipt.Kind != TransitionBootstrapRollback || receipt.CommittedGeneration != 2 {
+		t.Fatalf("bootstrap rollback result = slot %+v receipt %+v", slot, receipt)
+	}
+	if _, _, err := ledger.Resolve(t.Context(), slotID); !errors.Is(err, ErrSlotNotFound) {
+		t.Fatalf("withdrawn route resolve error = %v", err)
+	}
+	replayedSlot, replayed, err := ledger.Transition(t.Context(), rollback)
+	if err != nil || replayedSlot != (Slot{}) || replayed.ID != receipt.ID {
+		t.Fatalf("bootstrap rollback replay = slot %+v receipt %+v err %v", replayedSlot, replayed, err)
+	}
+	stale := rollback
+	stale.IdempotencyKey = "idempotency:bootstrap-rollback-stale"
+	if _, _, err := ledger.Transition(t.Context(), stale); !errors.Is(err, ErrSlotNotFound) {
+		t.Fatalf("non-replay against absent route error = %v", err)
+	}
+}
+
+func TestSQLLedgerBootstrapRollbackPersistsReceiptAndRouteAbsence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "runtime.db")
+	productStore, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger, catalog := newSQLRouteLedger(t, productStore.DB())
+	slotID := mustSlotID(t, "owner-sql-bootstrap-rollback", "primary")
+	version := pinSQLVersion(t, catalog, "bootstrap-rollback")
+	bootstrapApproval, bootstrapCertificate := pinSQLTransitionEvidence(t, ledger, slotID, version, "bootstrap-rollback-base")
+	bootstrap := TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: version, ApprovalRef: bootstrapApproval, PromotionCertificateRef: bootstrapCertificate, IdempotencyKey: "idempotency:sql-bootstrap-rollback-base"}
+	_, bootstrapReceipt, err := transitionSQLForTest(ledger, t.Context(), bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollbackApproval, rollbackCertificate := pinSQLTransitionEvidence(t, ledger, slotID, version, "bootstrap-rollback-absence")
+	rollback := TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrapRollback, Old: version, New: version, ExpectedGeneration: 1, ApprovalRef: rollbackApproval, PromotionCertificateRef: rollbackCertificate, RollbackTargetReceiptID: bootstrapReceipt.ID, IdempotencyKey: "idempotency:sql-bootstrap-rollback-absence"}
+	otherSlotID := mustSlotID(t, "owner-sql-bootstrap-rollback-other", "primary")
+	otherApproval, otherCertificate := pinSQLTransitionEvidence(t, ledger, otherSlotID, version, "bootstrap-rollback-other")
+	_, otherReceipt, err := transitionSQLForTest(ledger, t.Context(), TransitionCommand{RouteSlotID: otherSlotID, Kind: TransitionBootstrap, New: version, ApprovalRef: otherApproval, PromotionCertificateRef: otherCertificate, IdempotencyKey: "idempotency:sql-bootstrap-rollback-other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	crossSlot := rollback
+	crossSlot.RollbackTargetReceiptID = otherReceipt.ID
+	crossSlot.IdempotencyKey = "idempotency:sql-bootstrap-rollback-cross-slot"
+	if _, _, err := transitionSQLForTest(ledger, t.Context(), crossSlot); err == nil {
+		t.Fatal("SQL cross-slot bootstrap receipt authorized rollback")
+	}
+	if current, _, err := ledger.Resolve(t.Context(), slotID); err != nil || current.Generation != 1 {
+		t.Fatalf("SQL cross-slot refusal mutated route: slot %+v err %v", current, err)
+	}
+	slot, receipt, err := transitionSQLForTest(ledger, t.Context(), rollback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slot != (Slot{}) || receipt.Validate() != nil || receipt.CommittedGeneration != 2 {
+		t.Fatalf("SQL bootstrap rollback = slot %+v receipt %+v", slot, receipt)
+	}
+	if _, _, err := ledger.Resolve(t.Context(), slotID); !errors.Is(err, ErrSlotNotFound) {
+		t.Fatalf("SQL withdrawn route resolve error = %v", err)
+	}
+	replayedSlot, replayed, err := transitionSQLForTest(ledger, t.Context(), rollback)
+	if err != nil || replayedSlot != (Slot{}) || replayed.ID != receipt.ID {
+		t.Fatalf("SQL bootstrap rollback replay = slot %+v receipt %+v err %v", replayedSlot, replayed, err)
+	}
+	if err := productStore.Close(); err != nil {
+		t.Fatal(err)
+	}
+	restartedStore, err := store.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = restartedStore.Close() }()
+	restarted := NewSQLLedger(restartedStore.DB())
+	if _, _, err := restarted.Resolve(t.Context(), slotID); !errors.Is(err, ErrSlotNotFound) {
+		t.Fatalf("restarted withdrawn route resolve error = %v", err)
+	}
+	replayedSlot, replayed, err = transitionSQLForTest(restarted, t.Context(), rollback)
+	if err != nil || replayedSlot != (Slot{}) || replayed.ID != receipt.ID {
+		t.Fatalf("restarted SQL rollback replay = slot %+v receipt %+v err %v", replayedSlot, replayed, err)
+	}
+}

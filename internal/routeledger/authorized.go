@@ -72,6 +72,7 @@ type SignedRouteExecution struct {
 	CandidateCertRef string                                         `json:"candidate_certificate_ref"`
 	Acceptance       SignedG3Acceptance                             `json:"g3_acceptance"`
 	Plan             FrozenTransitionPlan                           `json:"transition_plan"`
+	CompanionPlan    *FrozenTransitionPlan                          `json:"companion_transition_plan"`
 	OwnerApproval    SignedOwnerApproval                            `json:"owner_approval"`
 	Verification     computerversion.RealizationVerificationReceipt `json:"verification"`
 	PreparedAt       time.Time                                      `json:"prepared_at"`
@@ -120,9 +121,17 @@ func validateSignedExecution(command TransitionCommand, evidence []Authorization
 	if execution.CandidateID == "" || execution.Action != string(command.Kind) || execution.Plan.command(command.ApprovalRef) != command || execution.PreparedAt.IsZero() || execution.Verification.Validate() != nil || execution.Verification.ID != execution.VerificationRef {
 		return fmt.Errorf("route ledger: signed execution command or verification binding is invalid")
 	}
+	if execution.CompanionPlan == nil || execution.CompanionPlan.RouteSlotID != command.RouteSlotID || execution.CompanionPlan.command(command.ApprovalRef).Validate() != nil {
+		return fmt.Errorf("route ledger: signed execution companion plan is missing or invalid")
+	}
 	planDigest := frozenPlanSHA256(execution.Plan)
-	if (command.Kind == TransitionBootstrap && (execution.Acceptance.BootstrapPlanSHA256 != planDigest || execution.Acceptance.PromotePlanSHA256 != "" || execution.Acceptance.RollbackPlanSHA256 != "")) || (command.Kind == TransitionPromote && execution.Acceptance.PromotePlanSHA256 != planDigest) || (command.Kind == TransitionRollback && execution.Acceptance.RollbackPlanSHA256 != planDigest) {
-		return fmt.Errorf("route ledger: signed G3 acceptance does not authorize the transition plan")
+	companionDigest := frozenPlanSHA256(*execution.CompanionPlan)
+	bootstrapAccepted := command.Kind == TransitionBootstrap && execution.CompanionPlan.Kind == TransitionBootstrapRollback && execution.Acceptance.BootstrapPlanSHA256 == planDigest && execution.Acceptance.RollbackPlanSHA256 == companionDigest && execution.Acceptance.PromotePlanSHA256 == ""
+	bootstrapRollbackAccepted := command.Kind == TransitionBootstrapRollback && execution.CompanionPlan.Kind == TransitionBootstrap && execution.Acceptance.RollbackPlanSHA256 == planDigest && execution.Acceptance.BootstrapPlanSHA256 == companionDigest && execution.Acceptance.PromotePlanSHA256 == ""
+	promotionAccepted := command.Kind == TransitionPromote && execution.CompanionPlan.Kind == TransitionRollback && execution.Acceptance.PromotePlanSHA256 == planDigest && execution.Acceptance.RollbackPlanSHA256 == companionDigest && execution.Acceptance.BootstrapPlanSHA256 == ""
+	rollbackAccepted := command.Kind == TransitionRollback && execution.CompanionPlan.Kind == TransitionPromote && execution.Acceptance.RollbackPlanSHA256 == planDigest && execution.Acceptance.PromotePlanSHA256 == companionDigest && execution.Acceptance.BootstrapPlanSHA256 == ""
+	if !bootstrapAccepted && !bootstrapRollbackAccepted && !promotionAccepted && !rollbackAccepted {
+		return fmt.Errorf("route ledger: signed G3 acceptance does not authorize the transition plan pair")
 	}
 	ownerID, computerID, err := ParseRouteSlotID(command.RouteSlotID)
 	if err != nil || execution.Verification.Identity.OwnerID != ownerID || execution.Verification.Identity.DesktopID != computerID {

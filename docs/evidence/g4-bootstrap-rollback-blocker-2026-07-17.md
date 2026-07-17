@@ -47,3 +47,24 @@ The transition must not become a generic route deletion API and must not introdu
 Rollback for the repair itself: revert its source commit before executing any fleet bootstrap. If a disposable bootstrap was already rolled back to absence, restore the exact legacy receipt before reverting.
 
 Heresy delta: `discovered`: missing rollback authority for first bootstrap; `introduced`: none; `repaired`: none at this checkpoint.
+
+
+## Source repair candidate — deployment pending
+
+Candidate Git binary-diff SHA-256: `f777e852c566791ff577daa3ae5534c0432f51208dea0af8f2b215fe80d14d4d`.
+
+The candidate implements `bootstrap_rollback` as a typed, generation-1-only route transition. It requires identical old/new ComputerVersion bindings (the version is receipt/evidence identity, not a resulting route), expected generation 1, and the exact deterministic bootstrap receipt. Memory and SQL ledgers verify that the target receipt is the current slot's generation-1 bootstrap receipt, append a generation-2 rollback receipt, and delete exactly the matching slot. Replay returns the original receipt while the route remains absent; a new or substituted command against absence refuses.
+
+A frozen bootstrap candidate now contains both bootstrap and rollback plans. The future bootstrap receipt ID is deterministically derived from the route slot and unique bootstrap idempotency key, so the rollback target is frozen before G3. Owner/G3 acceptance signs both plan digests. Each SQL authorization envelope fate-shares the executed plan with its companion; the SQL boundary independently verifies both signed digests, their kinds, route, evidence, and command validity rather than trusting vmctl to claim that a rollback exists.
+
+The existing apply-bootstrap endpoint now requires explicit `action: bootstrap|rollback`. Bootstrap rollback verifies the exact current generation-1 bootstrap result, then uses the same signed evidence/CAS boundary. After commit, vmctl requires route resolution to return not found and returns the immutable rollback receipt with `route_absent: true`.
+
+Focused proof:
+
+- memory ledger: deterministic bootstrap receipt, cross-slot refusal without mutation, exact rollback-to-absence, receipt validation, absent-route refusal, and idempotent replay;
+- SQL ledger: the same contracts plus persisted absence and replay after store restart;
+- signed vmctl/HTTP path: frozen paired plans, owner/G3 signatures, bootstrap receipt join, stale bootstrap replay refusal, signed rollback-to-absence, signed evidence join, route-not-found, and idempotent HTTP replay;
+- `go test ./internal/routeledger ./internal/vmctl -count=1`: pass;
+- `go vet ./internal/routeledger ./internal/vmctl`: pass.
+
+This remains source evidence only. It does not reopen G4 until CI, matching Node B deployment, and the full disposable detach → construct/verify → signed bootstrap → signed rollback-to-absence → dispose → exact restore lifecycle succeed.

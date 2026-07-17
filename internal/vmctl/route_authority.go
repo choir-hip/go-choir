@@ -19,6 +19,7 @@ type RouteResolution struct {
 	Slot              routeledger.Slot                `json:"slot"`
 	LatestReceipt     routeledger.TransitionReceipt   `json:"latest_receipt"`
 	TransitionReceipt *routeledger.TransitionReceipt  `json:"transition_receipt,omitempty"`
+	RouteAbsent       bool                            `json:"route_absent,omitempty"`
 	CodeClosure       computerversion.CodeClosure     `json:"code_closure"`
 	ArtifactProgram   computerversion.ArtifactProgram `json:"artifact_program"`
 }
@@ -222,6 +223,18 @@ func (a *RouteAuthority) transitionAuthorizedWithEvidence(ctx context.Context, c
 	if err != nil {
 		return RouteResolution{}, err
 	}
+	if command.Kind == routeledger.TransitionBootstrapRollback {
+		if slot != (routeledger.Slot{}) {
+			return RouteResolution{}, fmt.Errorf("vmctl route authority: bootstrap rollback returned a route slot")
+		}
+		if _, _, err := a.ledger.Resolve(ctx, command.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+			if err == nil {
+				return RouteResolution{}, fmt.Errorf("vmctl route authority: bootstrap rollback left route present")
+			}
+			return RouteResolution{}, err
+		}
+		return RouteResolution{TransitionReceipt: &receipt, RouteAbsent: true}, nil
+	}
 	resolution, err := a.Resolve(ctx, command.RouteSlotID)
 	if err != nil {
 		return RouteResolution{}, fmt.Errorf("vmctl route authority: resolve committed route: %w", err)
@@ -233,7 +246,7 @@ func (a *RouteAuthority) transitionAuthorizedWithEvidence(ctx context.Context, c
 	return resolution, nil
 }
 
-func (a *RouteAuthority) applyFrozenBootstrap(ctx context.Context, candidate FrozenRouteBootstrapCandidate, acceptance G3PromotionAcceptance) (RouteResolution, error) {
+func (a *RouteAuthority) applyFrozenBootstrap(ctx context.Context, candidate FrozenRouteBootstrapCandidate, acceptance G3PromotionAcceptance, rollback bool) (RouteResolution, error) {
 	if err := candidate.Validate(); err != nil {
 		return RouteResolution{}, err
 	}
@@ -243,7 +256,21 @@ func (a *RouteAuthority) applyFrozenBootstrap(ctx context.Context, candidate Fro
 	if err := acceptance.verifyBootstrap(a.promotionKey, candidate); err != nil {
 		return RouteResolution{}, err
 	}
-	if _, _, err := a.ledger.Resolve(ctx, candidate.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+	plan := candidate.Bootstrap
+	companion := candidate.Rollback
+	if rollback {
+		companion = candidate.Bootstrap
+		current, err := a.Resolve(ctx, candidate.RouteSlotID)
+		if err == nil {
+			bootstrapCommand := candidate.Bootstrap.command(routeledger.ApprovalRef(current.LatestReceipt.ApprovalRef))
+			if current.Slot.Generation != 1 || !routeledger.SameVersion(current.Slot.Current, candidate.Verification.Version) || current.Slot.LatestReceiptID != candidate.Rollback.RollbackTargetReceiptID || !transitionReceiptMatchesCommand(current.LatestReceipt, bootstrapCommand) {
+				return RouteResolution{}, routeledger.ErrStaleTransition
+			}
+		} else if !errors.Is(err, routeledger.ErrSlotNotFound) {
+			return RouteResolution{}, err
+		}
+		plan = candidate.Rollback
+	} else if _, _, err := a.ledger.Resolve(ctx, candidate.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
 		if err == nil {
 			return RouteResolution{}, routeledger.ErrStaleTransition
 		}
@@ -253,7 +280,7 @@ func (a *RouteAuthority) applyFrozenBootstrap(ctx context.Context, candidate Fro
 	if err != nil {
 		return RouteResolution{}, err
 	}
-	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(routeledger.TransitionBootstrap), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, candidate.Bootstrap)
+	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(plan.Kind), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, plan, companion)
 	if err != nil {
 		return RouteResolution{}, err
 	}
@@ -276,11 +303,13 @@ func (a *RouteAuthority) applyFrozenPromotion(ctx context.Context, candidate Fro
 		return RouteResolution{}, err
 	}
 	plan := candidate.Promote
+	companion := candidate.Rollback
 	if rollback {
 		if err := verifyPromotedSuccessor(current, candidate, acceptance); err != nil {
 			return RouteResolution{}, err
 		}
 		plan = candidate.Rollback
+		companion = candidate.Promote
 	} else if current.Slot.Generation != candidate.Route.Slot.Generation || !routeledger.SameVersion(current.Slot.Current, candidate.Route.Slot.Current) || current.Slot.LatestReceiptID != candidate.Route.Slot.LatestReceiptID {
 		return RouteResolution{}, routeledger.ErrStaleTransition
 	}
@@ -288,7 +317,7 @@ func (a *RouteAuthority) applyFrozenPromotion(ctx context.Context, candidate Fro
 	if err != nil {
 		return RouteResolution{}, err
 	}
-	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(plan.Kind), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, plan)
+	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(plan.Kind), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, plan, companion)
 	if err != nil {
 		return RouteResolution{}, err
 	}
@@ -302,7 +331,7 @@ func verifyPromotedSuccessor(current RouteResolution, candidate FrozenRoutePromo
 	if err != nil {
 		return err
 	}
-	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(routeledger.TransitionPromote), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, candidate.Promote)
+	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(routeledger.TransitionPromote), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, candidate.Promote, candidate.Rollback)
 	if err != nil {
 		return err
 	}
@@ -680,6 +709,7 @@ type applyFrozenPromotionRequest struct {
 type applyFrozenBootstrapRequest struct {
 	Candidate  FrozenRouteBootstrapCandidate `json:"candidate"`
 	Acceptance G3PromotionAcceptance         `json:"acceptance"`
+	Action     string                        `json:"action"`
 }
 
 func (h *Handler) HandleApplyFrozenComputerVersionBootstrap(w http.ResponseWriter, r *http.Request) {
@@ -691,11 +721,11 @@ func (h *Handler) HandleApplyFrozenComputerVersionBootstrap(w http.ResponseWrite
 	var request applyFrozenBootstrapRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
+	if err := decoder.Decode(&request); err != nil || (request.Action != "bootstrap" && request.Action != "rollback") {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid frozen bootstrap request"})
 		return
 	}
-	resolution, err := h.routeAuthority.applyFrozenBootstrap(r.Context(), request.Candidate, request.Acceptance)
+	resolution, err := h.routeAuthority.applyFrozenBootstrap(r.Context(), request.Candidate, request.Acceptance, request.Action == "rollback")
 	if err != nil {
 		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 		return

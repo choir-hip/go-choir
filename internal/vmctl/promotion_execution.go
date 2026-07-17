@@ -54,6 +54,7 @@ type AuthorizedRouteExecution struct {
 	CandidateCertRef string                                         `json:"candidate_certificate_ref"`
 	Acceptance       G3PromotionAcceptance                          `json:"g3_acceptance"`
 	Plan             FrozenRouteTransitionPlan                      `json:"transition_plan"`
+	CompanionPlan    *FrozenRouteTransitionPlan                     `json:"companion_transition_plan"`
 	OwnerApproval    OwnerPromotionApproval                         `json:"owner_approval"`
 	Verification     computerversion.RealizationVerificationReceipt `json:"verification"`
 	PreparedAt       time.Time                                      `json:"prepared_at"`
@@ -71,13 +72,13 @@ func approvalEvidenceRef(approval OwnerPromotionApproval, routeSlotID string, ve
 	return evidence.Ref
 }
 
-func newAuthorizedRouteExecution(candidateID, action string, approval OwnerPromotionApproval, verification computerversion.RealizationVerificationReceipt, candidateCertRef string, acceptance G3PromotionAcceptance, preparedAt time.Time, plan FrozenRouteTransitionPlan) (AuthorizedRouteExecution, routeledger.AuthorizationEvidence, error) {
+func newAuthorizedRouteExecution(candidateID, action string, approval OwnerPromotionApproval, verification computerversion.RealizationVerificationReceipt, candidateCertRef string, acceptance G3PromotionAcceptance, preparedAt time.Time, plan FrozenRouteTransitionPlan, companionPlan FrozenRouteTransitionPlan) (AuthorizedRouteExecution, routeledger.AuthorizationEvidence, error) {
 	execution := AuthorizedRouteExecution{
 		CandidateID: candidateID, Action: action, OwnerApprovalRef: approvalEvidenceRef(approval, plan.RouteSlotID, verification),
 		VerificationRef: verification.ID, CandidateCertRef: candidateCertRef,
-		Acceptance: acceptance, Plan: plan, OwnerApproval: approval, Verification: verification, PreparedAt: preparedAt.UTC(),
+		Acceptance: acceptance, Plan: plan, CompanionPlan: &companionPlan, OwnerApproval: approval, Verification: verification, PreparedAt: preparedAt.UTC(),
 	}
-	if candidateID == "" || execution.OwnerApprovalRef == "" || execution.VerificationRef == "" || candidateCertRef == "" || acceptance.CandidateID != candidateID || action != string(plan.Kind) {
+	if candidateID == "" || execution.OwnerApprovalRef == "" || execution.VerificationRef == "" || candidateCertRef == "" || acceptance.CandidateID != candidateID || action != string(plan.Kind) || companionPlan.RouteSlotID != plan.RouteSlotID || companionPlan.Validate() != nil {
 		return AuthorizedRouteExecution{}, routeledger.AuthorizationEvidence{}, fmt.Errorf("vmctl promotion authority: execution authorization bindings are invalid")
 	}
 	if err := plan.Validate(); err != nil {

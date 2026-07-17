@@ -157,8 +157,14 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 			return Slot{}, TransitionReceipt{}, ErrIdempotencyReuse
 		}
 		current, err := querySlot(ctx, tx, replayed.RouteSlotID, true)
+		if command.Kind == TransitionBootstrapRollback && errors.Is(err, ErrSlotNotFound) {
+			return Slot{}, replayed, nil
+		}
 		if err != nil {
 			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: resolve idempotent transition slot: %w", err)
+		}
+		if command.Kind == TransitionBootstrapRollback {
+			return Slot{}, TransitionReceipt{}, ErrStaleTransition
 		}
 		return current, replayed, nil
 	}
@@ -184,6 +190,12 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: rollback target receipt does not prove the requested prior ComputerVersion")
 		}
 	}
+	if command.Kind == TransitionBootstrapRollback {
+		target, err := queryReceiptByID(ctx, tx, command.RollbackTargetReceiptID)
+		if err != nil || target.Kind != TransitionBootstrap || target.RouteSlotID != command.RouteSlotID || target.ID != current.LatestReceiptID || target.CommittedGeneration != 1 || !SameVersion(target.New, command.Old) {
+			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: bootstrap rollback target does not prove the current generation-one bootstrap")
+		}
+	}
 
 	generation := uint64(1)
 	if exists {
@@ -203,17 +215,24 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: append receipt: %w", err)
 	}
 	if exists {
-		result, err := tx.ExecContext(ctx, `UPDATE computer_version_route_slots
-			SET current_code_ref = ?, current_artifact_program_ref = ?, generation = ?, latest_receipt_id = ?, updated_at = ?
-			WHERE route_slot_id = ? AND generation = ? AND current_code_ref = ? AND current_artifact_program_ref = ?`,
-			receipt.New.CodeRef, receipt.New.ArtifactProgramRef, generation, receipt.ID, receipt.CommittedAt,
-			command.RouteSlotID, command.ExpectedGeneration, command.Old.CodeRef, command.Old.ArtifactProgramRef)
+		var result sql.Result
+		if command.Kind == TransitionBootstrapRollback {
+			result, err = tx.ExecContext(ctx, `DELETE FROM computer_version_route_slots
+				WHERE route_slot_id = ? AND generation = ? AND current_code_ref = ? AND current_artifact_program_ref = ? AND latest_receipt_id = ?`,
+				command.RouteSlotID, command.ExpectedGeneration, command.Old.CodeRef, command.Old.ArtifactProgramRef, command.RollbackTargetReceiptID)
+		} else {
+			result, err = tx.ExecContext(ctx, `UPDATE computer_version_route_slots
+				SET current_code_ref = ?, current_artifact_program_ref = ?, generation = ?, latest_receipt_id = ?, updated_at = ?
+				WHERE route_slot_id = ? AND generation = ? AND current_code_ref = ? AND current_artifact_program_ref = ?`,
+				receipt.New.CodeRef, receipt.New.ArtifactProgramRef, generation, receipt.ID, receipt.CommittedAt,
+				command.RouteSlotID, command.ExpectedGeneration, command.Old.CodeRef, command.Old.ArtifactProgramRef)
+		}
 		if err != nil {
-			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: update slot: %w", err)
+			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: mutate slot: %w", err)
 		}
 		rows, err := result.RowsAffected()
 		if err != nil {
-			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: inspect slot update: %w", err)
+			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: inspect slot mutation: %w", err)
 		}
 		if rows != 1 {
 			return Slot{}, TransitionReceipt{}, ErrStaleTransition
@@ -225,6 +244,9 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 	}
 	if err := tx.Commit(); err != nil {
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: commit transition: %w", err)
+	}
+	if command.Kind == TransitionBootstrapRollback {
+		return Slot{}, receipt, nil
 	}
 	slot := Slot{ID: command.RouteSlotID, Current: command.New, Generation: generation, LatestReceiptID: receipt.ID}
 	return slot, receipt, nil

@@ -101,7 +101,7 @@ func (a G3PromotionAcceptance) verify(publicKey ed25519.PublicKey, candidate Fro
 
 func (a G3PromotionAcceptance) verifyBootstrap(publicKey ed25519.PublicKey, candidate FrozenRouteBootstrapCandidate) error {
 	ownerID, _, err := routeledger.ParseRouteSlotID(candidate.RouteSlotID)
-	if err != nil || len(publicKey) != ed25519.PublicKeySize || a.Decision != "accept" || a.CandidateID != candidate.ID || a.RouteSlotID != candidate.RouteSlotID || a.OwnerID != ownerID || a.ComputerVersion != candidate.Verification.Version || a.VerificationRef != candidate.Verification.ID || a.CertificateRef != candidate.CertificateEvidence.Ref || a.BootstrapPlanSHA256 != transitionPlanSHA256(candidate.Bootstrap) || a.PromotePlanSHA256 != "" || a.RollbackPlanSHA256 != "" || a.KeyID == "" || a.AcceptedAt.IsZero() || !a.AcceptedAt.After(candidate.PreparedAt) {
+	if err != nil || len(publicKey) != ed25519.PublicKeySize || a.Decision != "accept" || a.CandidateID != candidate.ID || a.RouteSlotID != candidate.RouteSlotID || a.OwnerID != ownerID || a.ComputerVersion != candidate.Verification.Version || a.VerificationRef != candidate.Verification.ID || a.CertificateRef != candidate.CertificateEvidence.Ref || a.BootstrapPlanSHA256 != transitionPlanSHA256(candidate.Bootstrap) || a.PromotePlanSHA256 != "" || a.RollbackPlanSHA256 != transitionPlanSHA256(candidate.Rollback) || a.KeyID == "" || a.AcceptedAt.IsZero() || !a.AcceptedAt.After(candidate.PreparedAt) {
 		return fmt.Errorf("vmctl promotion authority: G3 bootstrap acceptance bindings are invalid")
 	}
 	signature, err := base64.StdEncoding.DecodeString(a.Signature)

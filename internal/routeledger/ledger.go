@@ -46,9 +46,10 @@ type AuthorizationEvidence struct {
 }
 
 const (
-	TransitionBootstrap TransitionKind = "bootstrap"
-	TransitionPromote   TransitionKind = "promote"
-	TransitionRollback  TransitionKind = "rollback"
+	TransitionBootstrap         TransitionKind = "bootstrap"
+	TransitionPromote           TransitionKind = "promote"
+	TransitionRollback          TransitionKind = "rollback"
+	TransitionBootstrapRollback TransitionKind = "bootstrap_rollback"
 )
 
 type Slot struct {
@@ -152,6 +153,10 @@ func (c TransitionCommand) Validate() error {
 	case TransitionRollback:
 		if !c.Old.Valid() || !validReceiptID(c.RollbackTargetReceiptID) {
 			return fmt.Errorf("route ledger: rollback requires old ComputerVersion and prior receipt ref")
+		}
+	case TransitionBootstrapRollback:
+		if c.ExpectedGeneration != 1 || !c.Old.Valid() || !SameVersion(c.Old, c.New) || !validReceiptID(c.RollbackTargetReceiptID) {
+			return fmt.Errorf("route ledger: bootstrap rollback requires generation one, the exact bootstrapped ComputerVersion, and its receipt ref")
 		}
 	default:
 		return fmt.Errorf("route ledger: unsupported transition kind %q", c.Kind)
@@ -301,6 +306,10 @@ func (r TransitionReceipt) Validate() error {
 		if !r.Old.Valid() || !validReceiptID(r.RollbackTargetReceiptID) || r.CommittedGeneration != r.ExpectedGeneration+1 {
 			return fmt.Errorf("route ledger: persisted rollback receipt is invalid")
 		}
+	case TransitionBootstrapRollback:
+		if r.ExpectedGeneration != 1 || !r.Old.Valid() || !SameVersion(r.Old, r.New) || !validReceiptID(r.RollbackTargetReceiptID) || r.CommittedGeneration != 2 {
+			return fmt.Errorf("route ledger: persisted bootstrap rollback receipt is invalid")
+		}
 	default:
 		return fmt.Errorf("route ledger: persisted receipt kind is invalid")
 	}
@@ -364,6 +373,12 @@ func (l *MemoryLedger) transitionLocked(command TransitionCommand) (Slot, Transi
 		if !receiptMatchesCommand(receipt, command) {
 			return Slot{}, TransitionReceipt{}, ErrIdempotencyReuse
 		}
+		if command.Kind == TransitionBootstrapRollback {
+			if _, present := l.slots[command.RouteSlotID]; present {
+				return Slot{}, TransitionReceipt{}, ErrStaleTransition
+			}
+			return Slot{}, receipt, nil
+		}
 		return l.slots[command.RouteSlotID], receipt, nil
 	}
 	current, exists := l.slots[command.RouteSlotID]
@@ -380,14 +395,24 @@ func (l *MemoryLedger) transitionLocked(command TransitionCommand) (Slot, Transi
 			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: rollback target receipt does not prove the requested prior ComputerVersion")
 		}
 	}
+	if command.Kind == TransitionBootstrapRollback {
+		target, ok := l.receipts[command.RollbackTargetReceiptID]
+		if !ok || target.Kind != TransitionBootstrap || target.RouteSlotID != command.RouteSlotID || target.ID != current.LatestReceiptID || target.CommittedGeneration != 1 || !SameVersion(target.New, command.Old) {
+			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: bootstrap rollback target does not prove the current generation-one bootstrap")
+		}
+	}
 	committedGeneration := uint64(1)
 	if exists {
 		committedGeneration = current.Generation + 1
 	}
 	receipt := newReceipt(command, committedGeneration, l.now().UTC())
-	slot := Slot{ID: command.RouteSlotID, Current: command.New, Generation: committedGeneration, LatestReceiptID: receipt.ID}
 	l.receipts[receipt.ID] = receipt
 	l.byKey[command.IdempotencyKey] = receipt.ID
+	if command.Kind == TransitionBootstrapRollback {
+		delete(l.slots, command.RouteSlotID)
+		return Slot{}, receipt, nil
+	}
+	slot := Slot{ID: command.RouteSlotID, Current: command.New, Generation: committedGeneration, LatestReceiptID: receipt.ID}
 	l.slots[slot.ID] = slot
 	return slot, receipt, nil
 }
@@ -482,9 +507,20 @@ func authorizationEvidenceEqual(left, right AuthorizationEvidence) bool {
 	return string(leftJSON) == string(rightJSON)
 }
 
+// BootstrapReceiptID is stable before the CAS so a frozen bootstrap candidate
+// can bind the only receipt that may later authorize rollback to route absence.
+func BootstrapReceiptID(routeSlotID string, idempotencyKey IdempotencyKey) ReceiptID {
+	name := "choir-route-bootstrap-receipt\x00" + strings.TrimSpace(routeSlotID) + "\x00" + strings.TrimSpace(string(idempotencyKey))
+	return ReceiptID(uuid.NewSHA1(uuid.NameSpaceURL, []byte(name)).String())
+}
+
 func newReceipt(command TransitionCommand, generation uint64, committedAt time.Time) TransitionReceipt {
+	receiptID := ReceiptID(uuid.NewString())
+	if command.Kind == TransitionBootstrap {
+		receiptID = BootstrapReceiptID(command.RouteSlotID, command.IdempotencyKey)
+	}
 	return TransitionReceipt{
-		ID:                      ReceiptID(uuid.NewString()),
+		ID:                      receiptID,
 		RouteSlotID:             command.RouteSlotID,
 		Kind:                    command.Kind,
 		Old:                     command.Old,

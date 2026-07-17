@@ -87,10 +87,10 @@ func TestSQLRouteCASRequiresPinnedSignedExecutionEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	acceptance := G3PromotionAcceptance{CandidateID: frozen.ID, RouteSlotID: slotID, OwnerID: "owner", ComputerVersion: version, VerificationRef: verification.ID, CertificateRef: frozen.CertificateEvidence.Ref, BootstrapPlanSHA256: transitionPlanSHA256(frozen.Bootstrap), Decision: "accept", KeyID: "g3-key", AcceptedAt: now.Add(2 * time.Second)}
+	acceptance := G3PromotionAcceptance{CandidateID: frozen.ID, RouteSlotID: slotID, OwnerID: "owner", ComputerVersion: version, VerificationRef: verification.ID, CertificateRef: frozen.CertificateEvidence.Ref, BootstrapPlanSHA256: transitionPlanSHA256(frozen.Bootstrap), RollbackPlanSHA256: transitionPlanSHA256(frozen.Rollback), Decision: "accept", KeyID: "g3-key", AcceptedAt: now.Add(2 * time.Second)}
 	payload, _ = acceptance.SigningPayload()
 	acceptance.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
-	resolution, err := authority.applyFrozenBootstrap(t.Context(), frozen, acceptance)
+	resolution, err := authority.applyFrozenBootstrap(t.Context(), frozen, acceptance, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,15 +276,15 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	unsignedAcceptance := G3PromotionAcceptance{CandidateID: unsignedFrozen.ID, RouteSlotID: slotID, OwnerID: "owner", ComputerVersion: version, VerificationRef: unsignedFrozen.Verification.ID, CertificateRef: unsignedFrozen.CertificateEvidence.Ref, Decision: "accept", KeyID: "g3-owner-key", AcceptedAt: now.Add(time.Minute), BootstrapPlanSHA256: transitionPlanSHA256(unsignedFrozen.Bootstrap)}
+	unsignedAcceptance := G3PromotionAcceptance{CandidateID: unsignedFrozen.ID, RouteSlotID: slotID, OwnerID: "owner", ComputerVersion: version, VerificationRef: unsignedFrozen.Verification.ID, CertificateRef: unsignedFrozen.CertificateEvidence.Ref, Decision: "accept", KeyID: "g3-owner-key", AcceptedAt: now.Add(time.Minute), BootstrapPlanSHA256: transitionPlanSHA256(unsignedFrozen.Bootstrap), RollbackPlanSHA256: transitionPlanSHA256(unsignedFrozen.Rollback)}
 	unsignedPayload, _ := unsignedAcceptance.SigningPayload()
 	unsignedAcceptance.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, unsignedPayload))
-	if _, err := authority.applyFrozenBootstrap(t.Context(), unsignedFrozen, unsignedAcceptance); err == nil {
+	if _, err := authority.applyFrozenBootstrap(t.Context(), unsignedFrozen, unsignedAcceptance, false); err == nil {
 		t.Fatal("unsigned owner approval reached bootstrap")
 	}
 	handler := NewHandler(NewOwnershipRegistry("http://sandbox"))
 	handler.SetRouteAuthority(authority)
-	requestPayload, err := json.Marshal(applyFrozenBootstrapRequest{Candidate: unsignedFrozen, Acceptance: unsignedAcceptance})
+	requestPayload, err := json.Marshal(applyFrozenBootstrapRequest{Candidate: unsignedFrozen, Acceptance: unsignedAcceptance, Action: "bootstrap"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,6 +305,7 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 	forgedCandidate := frozen
 	forgedCandidate.CertificateEvidence = forgedCertificate
 	forgedCandidate.Bootstrap.PromotionCertificateRef = routeledger.PromotionCertificateRef(forgedCertificate.Ref)
+	forgedCandidate.Rollback.PromotionCertificateRef = routeledger.PromotionCertificateRef(forgedCertificate.Ref)
 	forgedCandidate.ID = ""
 	forgedPayload, _ := frozenBootstrapPayload(forgedCandidate)
 	forgedDigest := sha256.Sum256(forgedPayload)
@@ -312,23 +313,23 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 	if err := forgedCandidate.Validate(); err == nil || !strings.Contains(err.Error(), "certificate evidence payload mismatch") {
 		t.Fatalf("substituted bootstrap certificate error = %v", err)
 	}
-	acceptance := G3PromotionAcceptance{CandidateID: frozen.ID, RouteSlotID: slotID, OwnerID: "owner", ComputerVersion: version, VerificationRef: frozen.Verification.ID, CertificateRef: frozen.CertificateEvidence.Ref, Decision: "accept", KeyID: "g3-owner-key", AcceptedAt: now.Add(time.Minute), BootstrapPlanSHA256: transitionPlanSHA256(frozen.Bootstrap)}
+	acceptance := G3PromotionAcceptance{CandidateID: frozen.ID, RouteSlotID: slotID, OwnerID: "owner", ComputerVersion: version, VerificationRef: frozen.Verification.ID, CertificateRef: frozen.CertificateEvidence.Ref, Decision: "accept", KeyID: "g3-owner-key", AcceptedAt: now.Add(time.Minute), BootstrapPlanSHA256: transitionPlanSHA256(frozen.Bootstrap), RollbackPlanSHA256: transitionPlanSHA256(frozen.Rollback)}
 	payload, _ := acceptance.SigningPayload()
 	wrongKey := ed25519.NewKeyFromSeed([]byte(strings.Repeat("x", ed25519.SeedSize)))
 	wrongAcceptance := acceptance
 	wrongAcceptance.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(wrongKey, payload))
-	if _, err := authority.applyFrozenBootstrap(t.Context(), frozen, wrongAcceptance); err == nil {
+	if _, err := authority.applyFrozenBootstrap(t.Context(), frozen, wrongAcceptance, false); err == nil {
 		t.Fatal("wrong-key G3 acceptance reached bootstrap")
 	}
 	earlyAcceptance := acceptance
 	earlyAcceptance.AcceptedAt = frozen.PreparedAt
 	earlyPayload, _ := earlyAcceptance.SigningPayload()
 	earlyAcceptance.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, earlyPayload))
-	if _, err := authority.applyFrozenBootstrap(t.Context(), frozen, earlyAcceptance); err == nil {
+	if _, err := authority.applyFrozenBootstrap(t.Context(), frozen, earlyAcceptance, false); err == nil {
 		t.Fatal("pre-freeze G3 acceptance reached bootstrap")
 	}
 	acceptance.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, payload))
-	resolution, err := authority.applyFrozenBootstrap(t.Context(), frozen, acceptance)
+	resolution, err := authority.applyFrozenBootstrap(t.Context(), frozen, acceptance, false)
 	if err != nil || resolution.Slot.Generation != 1 || resolution.Slot.Current != version {
 		t.Fatalf("signed bootstrap: %+v err=%v", resolution, err)
 	}
@@ -343,8 +344,47 @@ func TestSignedFrozenBootstrapIsOnlyFirstRouteCASPath(t *testing.T) {
 	if execution.Action != string(routeledger.TransitionBootstrap) || !transitionReceiptMatchesCommand(*resolution.TransitionReceipt, execution.command(gateEvidence)) {
 		t.Fatalf("bootstrap receipt did not join authorized execution: execution=%+v receipt=%+v", execution, resolution.TransitionReceipt)
 	}
-	if _, err := authority.applyFrozenBootstrap(t.Context(), frozen, acceptance); !errors.Is(err, routeledger.ErrStaleTransition) {
+	if _, err := authority.applyFrozenBootstrap(t.Context(), frozen, acceptance, false); !errors.Is(err, routeledger.ErrStaleTransition) {
 		t.Fatalf("replayed bootstrap error = %v", err)
+	}
+	rollbackPayload, err := json.Marshal(applyFrozenBootstrapRequest{Candidate: frozen, Acceptance: acceptance, Action: "rollback"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rollbackRequest := httptest.NewRequest(http.MethodPost, "/internal/vmctl/computer-version-routes/apply-bootstrap", bytes.NewReader(rollbackPayload))
+	rollbackRequest.Header.Set("X-Internal-Caller", "true")
+	rollbackResponse := httptest.NewRecorder()
+	handler.HandleApplyFrozenComputerVersionBootstrap(rollbackResponse, rollbackRequest)
+	if rollbackResponse.Code != http.StatusOK {
+		t.Fatalf("signed HTTP bootstrap rollback status=%d body=%s", rollbackResponse.Code, rollbackResponse.Body.String())
+	}
+	var withdrawn RouteResolution
+	if err := json.Unmarshal(rollbackResponse.Body.Bytes(), &withdrawn); err != nil {
+		t.Fatal(err)
+	}
+	if !withdrawn.RouteAbsent || withdrawn.TransitionReceipt == nil || withdrawn.TransitionReceipt.Kind != routeledger.TransitionBootstrapRollback || withdrawn.TransitionReceipt.RollbackTargetReceiptID != resolution.TransitionReceipt.ID {
+		t.Fatalf("bootstrap rollback result = %+v", withdrawn)
+	}
+	if _, _, err := ledger.Resolve(t.Context(), slotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
+		t.Fatalf("bootstrap rollback left route present: %v", err)
+	}
+	rollbackGate, err := ledger.ResolveAuthorizationEvidence(t.Context(), string(withdrawn.TransitionReceipt.ApprovalRef))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(rollbackGate.Payload, &execution); err != nil || execution.Action != string(routeledger.TransitionBootstrapRollback) || !transitionReceiptMatchesCommand(*withdrawn.TransitionReceipt, execution.command(rollbackGate)) {
+		t.Fatalf("bootstrap rollback receipt did not join authorized execution: execution=%+v receipt=%+v err=%v", execution, withdrawn.TransitionReceipt, err)
+	}
+	replayRequest := httptest.NewRequest(http.MethodPost, "/internal/vmctl/computer-version-routes/apply-bootstrap", bytes.NewReader(rollbackPayload))
+	replayRequest.Header.Set("X-Internal-Caller", "true")
+	replayResponse := httptest.NewRecorder()
+	handler.HandleApplyFrozenComputerVersionBootstrap(replayResponse, replayRequest)
+	if replayResponse.Code != http.StatusOK {
+		t.Fatalf("bootstrap rollback replay status=%d body=%s", replayResponse.Code, replayResponse.Body.String())
+	}
+	var replayed RouteResolution
+	if err := json.Unmarshal(replayResponse.Body.Bytes(), &replayed); err != nil || replayed.TransitionReceipt == nil || replayed.TransitionReceipt.ID != withdrawn.TransitionReceipt.ID || !replayed.RouteAbsent {
+		t.Fatalf("bootstrap rollback replay = %+v err=%v", replayed, err)
 	}
 }
 
@@ -405,7 +445,7 @@ func TestSignedFrozenPromotionIsOnlyVmctlPromoteAndRollbackPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, staleRollbackGate, err := newAuthorizedRouteExecution(frozen.ID, string(routeledger.TransitionRollback), approvalValue, frozen.Verification, frozen.CertificateEvidence.Ref, acceptance, frozen.PreparedAt, frozen.Rollback)
+	_, staleRollbackGate, err := newAuthorizedRouteExecution(frozen.ID, string(routeledger.TransitionRollback), approvalValue, frozen.Verification, frozen.CertificateEvidence.Ref, acceptance, frozen.PreparedAt, frozen.Rollback, frozen.Promote)
 	if err != nil {
 		t.Fatal(err)
 	}
