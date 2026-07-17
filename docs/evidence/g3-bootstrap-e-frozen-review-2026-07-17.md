@@ -61,3 +61,13 @@ These files remain non-authoritative transport copies; their hashes bind the exa
 - Heresy delta: discovered `1` (prompt-only/ephemeral evidence presented at a protected gate); introduced `0`; repaired `1` in this durable packet, pending independent re-review.
 - Rollback before CAS: discard the frozen candidate or regenerate it if any bound file, deployed identity, route state, realization state, signature, or timestamp changes.
 - Residual after an accepted bootstrap CAS: the synthetic slot cannot return to absent. Recovery must reconstruct the same immutable ComputerVersion and later use only separately frozen, reviewed, and signed promote/rollback transitions. Never mutate or clone a failed `data.img`.
+
+## Repaired G3 terminal adjudication
+
+- Reviewed base: committed durable packet and Definition at `main@1e82fe48`; deployed constructor/vmctl remained `e3de55581a1cae3ecce1431f5f4440ab01f62fc8`; the three transport hashes remained exact.
+- Review packet: `/tmp/choir-g3-bootstrap-e-consensus-repair`.
+- Codex, Cursor, OMP GPT-5.5, and OMP Gemini 3.5 each returned `ACCEPT`, `Blocking findings: none`, and `Confidence: high` after independently inspecting the committed packet, frozen JSON, typed joins, signatures, and mutation/refusal paths.
+- OpenCode emitted no usable adjudication because its external-directory policy refused the `/tmp` JSON. Devin and OMP GLM 5.2 timed out without adjudication. No completed reviewer reported a blocker.
+- Adjudication: `accept`. The prior durable-evidence blocker is repaired. G3 authorizes a separately signed acceptance over candidate `route-bootstrap:sha256:eac7ab973a643c250e825700fd18348af6c4ba43b5912440a2d4172d0834d70d` and one bounded bootstrap CAS only while the exact route remains absent, the same realization remains healthy, all frozen hashes/bindings remain unchanged, and the deployed signed writer remains `e3de5558`.
+- Main residual risk: a successful bootstrap creates generation 1 and the route cannot return to absent. The accepted residue is the durable synthetic audit route; recovery is immutable reconstruction and later separately accepted promote/rollback, never route-history deletion or mutable-image repair.
+- Heresy delta for the evidence repair: discovered `1`; introduced `0`; repaired `1`; no route/evidence CAS occurred during review.

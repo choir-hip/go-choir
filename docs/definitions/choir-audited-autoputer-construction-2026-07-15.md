@@ -405,9 +405,10 @@ now:
     - docs/evidence/audited-construction-phase-d-2026-07-16.md
     - "owner authorization, 2026-07-16: blanket approval limited to synthetic route computer:autoputer-control:control-20260716 through independently accepted bootstrap, second-version promote/rollback, restart proof, and hibernated rollback retention; no real-user/platform/fleet route authorized"
     - docs/evidence/g3-bootstrap-e-frozen-review-2026-07-17.md
-    - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governs because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
-  blocker_or_risk: "The frozen bootstrap-E candidate is structurally accepted by three independent reviewers, but GPT-5.5 identified a reproducible protected-evidence blocker: the deployed identity, exact predecessor disposal, realization/verification/certificate IDs, file hashes, route 404, and no-CAS state were not durably bound. The new code-free packet repairs that record only; G3 must re-review the committed packet before any signature or CAS. Bootstrap remains irreversible to route absence."
-  next_action: "Commit and push the code-free frozen review packet, validate doc authority, then re-run G3 over that exact committed packet. Create a signed G3 acceptance and execute one bounded bootstrap CAS only if the re-review has no reproducible minority blocker and every live precondition still matches."
+    - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governed because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
+    - "/tmp/choir-g3-bootstrap-e-consensus-repair: Codex, Cursor, GPT-5.5, and Gemini accept with no blockers and high confidence; OpenCode no usable verdict; Devin and GLM 5.2 timed out"
+  blocker_or_risk: "G3 accepted the committed bootstrap-E packet with no reproducible minority blocker. The remaining protected risk is first-bootstrap irreversibility: generation 1 cannot return to route absence. Any change to route absence, candidate health, frozen hashes, bindings, deployed writer identity, or timestamps invalidates this authorization and requires a new freeze/review."
+  next_action: "Commit the G3 adjudication receipt, recheck route absence and candidate health, sign one G3 acceptance over the exact candidate and bootstrap-plan digest, then execute and read back one bounded bootstrap CAS. Stop on any precondition mismatch; do not retry with modified evidence."
 
 successor:
   status: unauthorized_until_this_definition_complete
