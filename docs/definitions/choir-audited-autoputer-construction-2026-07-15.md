@@ -414,8 +414,11 @@ now:
     - "promotion receipt f1df7f6f-31df-46da-83b8-ffd5d9a78e40: generation 1 A -> generation 2 B; routed lookup and authenticated product readback selected candidate I and audit-b.txt"
     - "rollback receipt 8ae4f21a-14fd-4800-b044-76edef9604e7: generation 2 B -> generation 3 A, exact target receipt c3490ed2; fresh J reconstruction equivalent and routed A product state restored"
     - "stale generation-1 promotion replay after generation 3: HTTP 409 with byte-identical route readback"
-  blocker_or_risk: "Distinct-version promotion and rollback are proven on the authorized synthetic route: generation 1 A promoted to generation 2 B with routed B product readback, B was exactly disposed, the frozen rollback restored generation 3 A through the bootstrap receipt lineage, and fresh J serves A product state; stale promotion replay is refused without mutation. No real-user or fleet route has crossed G4."
-  next_action: "Freeze the G4 fleet inventory and cutover candidate from current deployed receipts. Prove every targeted staging computer/route can be reconstructed through the audited materializer, include exact rollback and refusal boundaries, run deterministic checks, then obtain independent G4 adjudication before any real-user or fleet route CAS."
+    - docs/evidence/g4-fleet-inventory-2026-07-17.json
+    - docs/evidence/g4-fleet-cutover-blocker-2026-07-17.md
+    - "G4 inventory: 150 persisted computers/state directories, one accepted ComputerVersion route/ownership, and 149 unversioned legacy ownerships; no deletion authorized"
+  blocker_or_risk: "Complete G4 inventory finds 150 persisted computers but only the accepted synthetic control has ComputerVersion and a route. For each of 149 unversioned legacy ownerships, matching construction is correctly refused while ownership exists, signed bootstrap requires that matching construction, and existing removal requires a route and destroys state. This dependency cycle blocks a frozen, rollback-safe fleet candidate; no real-user or fleet route has crossed G4."
+  next_action: "Implement the documented vmctl legacy detach/restore boundary: exact frozen-row preconditions, no existing route or ComputerVersion bindings, preserved old state directory, durable hash-addressed receipt, restart-safe persistence, exact restore before bootstrap only, and stale/route-conflict refusal. Deploy it, prove detach/failing-candidate/restore on a disposable legacy fixture, then freeze the complete per-route G4 cutover packet for consensus."
 
 successor:
   status: unauthorized_until_this_definition_complete
