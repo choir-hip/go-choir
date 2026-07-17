@@ -71,3 +71,14 @@ These files remain non-authoritative transport copies; their hashes bind the exa
 - Adjudication: `accept`. The prior durable-evidence blocker is repaired. G3 authorizes a separately signed acceptance over candidate `route-bootstrap:sha256:eac7ab973a643c250e825700fd18348af6c4ba43b5912440a2d4172d0834d70d` and one bounded bootstrap CAS only while the exact route remains absent, the same realization remains healthy, all frozen hashes/bindings remain unchanged, and the deployed signed writer remains `e3de5558`.
 - Main residual risk: a successful bootstrap creates generation 1 and the route cannot return to absent. The accepted residue is the durable synthetic audit route; recovery is immutable reconstruction and later separately accepted promote/rollback, never route-history deletion or mutable-image repair.
 - Heresy delta for the evidence repair: discovered `1`; introduced `0`; repaired `1`; no route/evidence CAS occurred during review.
+
+## Accepted bootstrap execution and readback
+
+- Pre-CAS checks: deployed target and selected vmctl artifact both equaled `e3de55581a1cae3ecce1431f5f4440ab01f62fc8`; the three frozen file SHA-256 values matched this packet; exact route resolve returned HTTP 404; realization `candidate-control-20260717-e` and its guest were healthy.
+- Signed G3 acceptance: exact candidate `route-bootstrap:sha256:eac7ab973a643c250e825700fd18348af6c4ba43b5912440a2d4172d0834d70d`; bootstrap-plan SHA-256 `7535e5b0cd67a77d881c174ec032e56e90d2469ad104b3536d9975dd80e21dbe`; accepted at `2026-07-17T03:34:16.785347Z`; key ID `g3-control-route-20260717`.
+- Apply request SHA-256: `2179cb5ce16aeb9e4cbe37ac19da691c77fe32b1486bb1fa91587f3c260c136b`.
+- Atomic transition receipt: `c3490ed2-287f-4b9f-a3c3-85c5055a50a0`; transition `bootstrap`; expected generation `0`; committed generation `1`; committed at `2026-07-17T03:34:44.112910201Z`; immutable new ComputerVersion exactly matches the frozen candidate; certificate ref `certificate:sha256:d3694d74d1d6ec47b7f01843a4f700278cc20969cabdfbc80aa404873b2d5023`; idempotency key remained verification-bound.
+- Returned resolution SHA-256: `7e3de5944ed291b071006f219595ce500d31943a2794f11f893576747e9c9cca`.
+- Independent GET readback SHA-256: `da48b2a16366faf4b8e945ccd88b40a774bc7c0da229d20babbffb9facce58f7`; slot generation, current ComputerVersion, latest receipt ID, transition fields, CodeRef closure, and ArtifactProgram entries matched the apply result.
+- Result: G3 is consumed for exactly one bounded bootstrap. The synthetic audit route is now durable at generation 1. No fleet/user/platform route changed.
+- Protected-surface result: discovered `0`; introduced `0`; repaired `0`; accepted irreversible residue is the synthetic route itself. Recovery must proceed through immutable reconstruction and separately reviewed signed transitions.

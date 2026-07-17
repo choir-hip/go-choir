@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "D-route-bootstrap-g3-evidence-repair"
-  question: "Does the committed bootstrap-E packet durably bind the exact deployed constructor, predecessor disposal, independent verification, signed owner approval, frozen candidate, and pre-CAS route absence strongly enough for G3 acceptance?"
+  slice: "E-zero-realization-reconstruction"
+  question: "Can the generation-1 synthetic route survive complete accepted-realization loss and reconstruct the same typed state from its immutable ComputerVersion without reusing or repairing data.img?"
   reconciliation:
-    observed_at: 2026-07-17T03:20:00Z
-    source_ref: refs/heads/main@e3de55581a1cae3ecce1431f5f4440ab01f62fc8_equals_refs/remotes/origin/main@e3de55581a1cae3ecce1431f5f4440ab01f62fc8
-    deploy_identity: "Node B activation receipt target and selected vmctl artifact e3de55581a1cae3ecce1431f5f4440ab01f62fc8; CI run 29550365185 succeeded; vmctl active"
+    observed_at: 2026-07-17T03:35:00Z
+    source_ref: refs/heads/main@9d786659_equals_refs/remotes/origin/main@9d786659
+    deploy_identity: "Docs-only authority head 9d786659; Node B activation receipt target and selected vmctl artifact remain e3de55581a1cae3ecce1431f5f4440ab01f62fc8; CI run 29550365185 succeeded; vmctl active"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -362,12 +362,12 @@ now:
     status: reconciled
   candidate:
     id: candidate-control-20260717-e
-    state: frozen_pre_cas_g3_evidence_repair
+    state: routed_generation_1_active_reconstruction_pending
     ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
     owner: autoputer-control
     base: refs/heads/main@e3de55581a1cae3ecce1431f5f4440ab01f62fc8
     digest: "route-bootstrap:sha256:eac7ab973a643c250e825700fd18348af6c4ba43b5912440a2d4172d0834d70d"
-    scope: [disposable-control-construction, frozen-bootstrap-e, g3-re-review-required, no-route-cas]
+    scope: [synthetic-control-route, generation-1, accepted-version-a, zero-realization-reconstruction]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -407,8 +407,9 @@ now:
     - docs/evidence/g3-bootstrap-e-frozen-review-2026-07-17.md
     - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governed because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
     - "/tmp/choir-g3-bootstrap-e-consensus-repair: Codex, Cursor, GPT-5.5, and Gemini accept with no blockers and high confidence; OpenCode no usable verdict; Devin and GLM 5.2 timed out"
-  blocker_or_risk: "G3 accepted the committed bootstrap-E packet with no reproducible minority blocker. The remaining protected risk is first-bootstrap irreversibility: generation 1 cannot return to route absence. Any change to route absence, candidate health, frozen hashes, bindings, deployed writer identity, or timestamps invalidates this authorization and requires a new freeze/review."
-  next_action: "Commit the G3 adjudication receipt, recheck route absence and candidate health, sign one G3 acceptance over the exact candidate and bootstrap-plan digest, then execute and read back one bounded bootstrap CAS. Stop on any precondition mismatch; do not retry with modified evidence."
+    - "bootstrap transition receipt c3490ed2-287f-4b9f-a3c3-85c5055a50a0: generation 0 -> 1 at 2026-07-17T03:34:44.112910201Z; exact immutable ComputerVersion and certificate joined; independent route readback matched"
+  blocker_or_risk: "The generation-1 synthetic route is intentionally irreversible to absence. Before destructive reconstruction proof, the supported lifecycle boundary must be identified: route history and immutable input/evidence must survive while realization-local VM state and data.img are removed without raw host deletion or broad retention pruning."
+  next_action: "Map the existing supported lifecycle operation for an accepted routed realization, prefer wiring an existing exact boundary over adding another, and freeze the safe destroy/reconstruct procedure. Then remove only realization-local state, prove zero realizations, reconstruct from the routed immutable ComputerVersion, and verify typed product state and route receipt durability."
 
 successor:
   status: unauthorized_until_this_definition_complete
