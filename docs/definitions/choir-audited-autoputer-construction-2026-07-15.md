@@ -345,12 +345,12 @@ orchestration:
 
 now:
   status: working
-  slice: "E-corrupted-disk-replacement"
-  question: "Can the routed synthetic computer detect an intentionally corrupted realization image, refuse reuse/manual repair, remove it through the audited lifecycle, and reconstruct the same semantic state from immutable ComputerVersion A?"
+  slice: "E-allocation-churn-reconstruction"
+  question: "Can a 32 GiB routed synthetic realization absorb bounded cache churn, expose physical allocation growth, and return below the 2 GiB bound through supported audited disposal/reconstruction without changing ComputerVersion A or semantic observations?"
   reconciliation:
-    observed_at: 2026-07-17T04:19:00Z
-    source_ref: refs/heads/main@ba1fd5a4973618326c8eebe9b14456941724c114_equals_refs/remotes/origin/main@ba1fd5a4973618326c8eebe9b14456941724c114
-    deploy_identity: "Node B activation receipt target and selected vmctl artifact ba1fd5a4973618326c8eebe9b14456941724c114; CI run 29553132488 succeeded; vmctl active"
+    observed_at: 2026-07-17T05:06:00Z
+    source_ref: refs/heads/main@ec593c3901a4ff724d6e61e02c0328d31884eade_equals_refs/remotes/origin/main@ec593c3901a4ff724d6e61e02c0328d31884eade
+    deploy_identity: "Node B activation receipt target and selected vmctl artifact ec593c3901a4ff724d6e61e02c0328d31884eade; CI run 29555013810 succeeded; vmctl active"
     authority_identities:
       - definition:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md#definition_version=2
       - doctrine:docs/choir-doctrine.md@d87bdc446ecc28585c3bc08d4d469b9f94d3c246
@@ -361,13 +361,13 @@ now:
     worktree_inventory_ref: "canonical main and origin/main equal at e3de5558 before the code-free G3 frozen-packet checkpoint; only the Definition and new durable G3 evidence packet are intentional"
     status: reconciled
   candidate:
-    id: candidate-control-20260717-f
-    state: routed_generation_1_reconstructed_active
+    id: candidate-control-20260717-g
+    state: routed_generation_1_corruption_recovered_active
     ref: "ComputerVersion(code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380, artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d)"
     owner: autoputer-control
-    base: refs/heads/main@ba1fd5a4973618326c8eebe9b14456941724c114
-    digest: "109a15a8863a7ebbc559ecf843992c165e26feeae1bbec721a0df71dd1d8119d"
-    scope: [synthetic-control-route, generation-1, reconstructed-version-a, corrupted-disk-replacement]
+    base: refs/heads/main@ec593c3901a4ff724d6e61e02c0328d31884eade
+    digest: "52d44689c56165ea338bf3c0d7e7a1d58d1a5e6327cfd3a233f75e66d4a0a58a"
+    scope: [synthetic-control-route, generation-1, corruption-recovered-version-a, allocation-churn-reconstruction]
   decision:
     selected: "Use the skill-owned live dashboard as a non-authoritative projection and OMP orchestration with frozen G1 immutable-authority, G2 constructor/disk-backend round-trip, G3 pre-route-CAS, G4 pre-fleet-cutover, and G5 pre-terminal-closure gates. Completion is fleet-wide substrate-independent ComputerVersion materialization through an intelligent optimized disk-instantiation backend with disposable realizations; legacy yusefnathanson@me.com data gets one bounded best-effort extraction attempt. Canonical main is the serialized integration surface, origin/main is the deploy source, and staging Node B is the sole Firecracker acceptance host."
     kind: architectural
@@ -408,8 +408,8 @@ now:
     - "G3 bootstrap-E initial panel: Codex, Cursor, and Gemini accept; GPT-5.5 repair governed because current facts existed only in prompt and /tmp; no G3 signature or route CAS executed"
     - "/tmp/choir-g3-bootstrap-e-consensus-repair: Codex, Cursor, GPT-5.5, and Gemini accept with no blockers and high confidence; OpenCode no usable verdict; Devin and GLM 5.2 timed out"
     - "bootstrap transition receipt c3490ed2-287f-4b9f-a3c3-85c5055a50a0: generation 0 -> 1 at 2026-07-17T03:34:44.112910201Z; exact immutable ComputerVersion and certificate joined; independent route readback matched"
-  blocker_or_risk: "The split-state repair passes focused normal/race contracts and full vmctl tests locally: exact disposal now accepts only explicit terminal manager states and delegates them to existing DestroyVMState; running/pending/unknown states remain fail-closed. The corrupted synthetic image remains contained pending CI and selected vmctl artifact deployment; route generation 1 and receipt are unchanged."
-  next_action: "Publish the terminal-state exact-disposal repair, require successful CI and selected Node B vmctl identity, then retry the frozen F disposal bound to generation 1/receipt c3490ed2 and disk receipt 83d281ac. Prove the corrupted image, failed manager state, ownership, and process are gone with route unchanged; reconstruct from ComputerVersion A and compare semantic observations."
+  blocker_or_risk: "Corrupted-image replacement is proven on deployed ec593c39: the damaged image failed mount, exact lifecycle disposal accepted the failed manager record, route authority stayed byte-identical, and fresh G reproduced semantic state. Residual: resume failure response can lose its HTTP body when readiness timeout meets the server write deadline; documented before repair, but replacement receipts remain complete. Allocation proof still needs bounded product-path churn plus before/after physical-allocation receipts."
+  next_action: "Inventory supported guest/product write-delete and deployed disk-inspection boundaries. Drive bounded disposable cache churn inside candidate-control-20260717-g without host image editing, receipt logical versus allocated bytes, then hibernate and exact-dispose G through route-bound lifecycle. Reconstruct H from ComputerVersion A, prove allocation returns below 2 GiB with semantic observations unchanged, and preserve the route receipt."
 
 successor:
   status: unauthorized_until_this_definition_complete
