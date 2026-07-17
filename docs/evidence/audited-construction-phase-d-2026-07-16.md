@@ -208,3 +208,11 @@
 - Required repair: add an owner-scoped direct run lookup using `BuildCanonicalID` plus `GetObject`, preserve not-found semantics, and use it before trajectory cancellation. Retain the global metadata lookup only for callers that genuinely lack owner identity.
 - Rollback: revert the owner-scoped lookup and this checkpoint; no schema or stored data changes are required.
 - Heresy delta: discovered 1 (authenticated owner identity discarded before object lookup); introduced 0; repaired 0 at this checkpoint.
+
+## Owner-scoped canonical run lookup — local proof
+
+- Source repair: owner-known runtime reads, cancellation, and run updates now derive the immutable `choir.run` canonical object ID from `(owner_id, run_id)` and use `GetObject`; legacy callers without owner identity retain the prior global lookup and not-found semantics.
+- Regression: the 1,001-run trajectory cancellation test now passes at production speed. The scale-only case is explicitly skipped under race instrumentation because instrumentation exceeds the intentional 30-second production drain deadline; focused race execution confirms the skip rather than timing out.
+- Verification: focused owner-scope/wrong-owner/update-not-found contracts pass; full `internal/store` and `internal/agentcore` package tests pass; affected `go vet` and `git diff --check` pass. One unrelated process-restart fixture emitted a truncated ready marker during the first full run, then passed focused and the full agentcore package passed on retry.
+- Rollback: revert the direct owner-scoped lookup commit; no schema or stored data migration exists.
+- Heresy delta: discovered 1; introduced 0; repaired 1 locally, pending CI and deployed exact-disposal continuation.

@@ -945,6 +945,11 @@ func (s *Store) GetRun(ctx context.Context, runID string) (types.RunRecord, erro
 	return s.GetRunOG(ctx, runID)
 }
 
+// GetRunByOwner returns a run by its owner-scoped canonical identity.
+func (s *Store) GetRunByOwner(ctx context.Context, ownerID, runID string) (types.RunRecord, error) {
+	return s.GetRunByOwnerOG(ctx, ownerID, runID)
+}
+
 // UpdateRun updates an existing run record.
 func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 	if !rec.State.Active() {
@@ -954,7 +959,13 @@ func (s *Store) UpdateRun(ctx context.Context, rec types.RunRecord) error {
 	defer s.trajectoryMu.Unlock()
 	rec.TrajectoryID = runTrajectoryID(rec)
 
-	existing, err := s.GetRunOG(ctx, rec.RunID)
+	var existing types.RunRecord
+	var err error
+	if rec.OwnerID == "" {
+		existing, err = s.GetRunOG(ctx, rec.RunID)
+	} else {
+		existing, err = s.GetRunByOwnerOG(ctx, rec.OwnerID, rec.RunID)
+	}
 	if err != nil {
 		return err
 	}

@@ -404,8 +404,8 @@ now:
     - "construction candidate-control-20260716-d: SHA-256 00802b8018459b62f57b4d913c04d5dd642b89c1b43bbc5c5b776df4d02b1984; disk receipt c96eded7; healthy epoch 1; equivalent"
     - docs/evidence/audited-construction-phase-d-2026-07-16.md
     - "owner authorization, 2026-07-16: blanket approval limited to synthetic route computer:autoputer-control:control-20260716 through independently accepted bootstrap, second-version promote/rollback, restart proof, and hibernated rollback retention; no real-user/platform/fleet route authorized"
-  blocker_or_risk: "Exact-disposal commit a64c1cec is on canonical main, but CI run 29546310837 failed twice because owner-scoped CancelRunTrajectory discards owner identity and performs a global JSON-metadata scan that times out after 1,001 runs. The problem is checkpointed before repair. Node B remains on 20ec1c19; no route/evidence CAS occurred, and raw host deletion remains forbidden."
-  next_action: "Repair the owner-scoped run lookup with direct canonical-ID addressing, pass focused scale and race checks, deploy exact disposal plus lookup repair, then dispose only stale candidate-control-20260716-d with exact route/version/disk bindings and reconstruct from immutable inputs."
+  blocker_or_risk: "The owner-scoped canonical lookup repair passes focused scale, wrong-owner, legacy not-found, full store/agentcore, vet, and formatting checks locally. Exact-disposal commit a64c1cec remains undeployed because its prior CI run failed before this repair; Node B remains on 20ec1c19. No route/evidence CAS occurred, and raw host deletion remains forbidden."
+  next_action: "Commit and deploy the canonical lookup repair with exact disposal, verify matching Node B activation, then dispose only stale candidate-control-20260716-d with exact route/version/disk bindings and reconstruct from immutable inputs."
 
 successor:
   status: unauthorized_until_this_definition_complete

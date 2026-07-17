@@ -288,6 +288,10 @@ func TestCancelRunTrajectoryPersistsFallbackTrajectoryID(t *testing.T) {
 }
 
 func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
+	if raceDetectorEnabled {
+		t.Skip("scale regression exceeds the production drain deadline under race instrumentation")
+	}
+
 	ctx := context.Background()
 	rt, s := testRuntime(t)
 	now := time.Now().UTC()

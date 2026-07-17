@@ -658,12 +658,9 @@ func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, own
 // not exist or does not belong to the owner, it returns ErrNotFound
 // (VAL-RUNTIME-006: caller-scoped).
 func (rt *Runtime) GetRun(ctx context.Context, runID, ownerID string) (*types.RunRecord, error) {
-	rec, err := rt.store.GetRun(ctx, runID)
+	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
 	if err != nil {
 		return nil, err
-	}
-	if rec.OwnerID != ownerID {
-		return nil, store.ErrNotFound
 	}
 	return &rec, nil
 }
@@ -1120,17 +1117,13 @@ func (rt *Runtime) CancelRun(ctx context.Context, runID, ownerID string) error {
 // against activation state writes, so a late provider return cannot replace it.
 func (rt *Runtime) terminalizeRun(ctx context.Context, runID, ownerID, reason string) error {
 	rt.runningMu.Lock()
-	rec, err := rt.store.GetRun(ctx, runID)
+	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
 	if err != nil {
 		rt.runningMu.Unlock()
 		if err == store.ErrNotFound {
 			return fmt.Errorf("run not found: %s", runID)
 		}
 		return fmt.Errorf("lookup run: %w", err)
-	}
-	if rec.OwnerID != ownerID {
-		rt.runningMu.Unlock()
-		return store.ErrNotFound
 	}
 	if rec.State.Terminal() {
 		rt.runningMu.Unlock()
@@ -1264,12 +1257,9 @@ func (rt *Runtime) CancelRunTrajectory(ctx context.Context, runID, ownerID strin
 	if runID == "" || ownerID == "" {
 		return nil, fmt.Errorf("cancel trajectory: run_id and owner_id are required")
 	}
-	rec, err := rt.store.GetRun(ctx, runID)
+	rec, err := rt.store.GetRunByOwner(ctx, ownerID, runID)
 	if err != nil {
 		return nil, err
-	}
-	if rec.OwnerID != ownerID {
-		return nil, store.ErrNotFound
 	}
 	trajectoryID := trajectoryIDForRun(&rec)
 	if trajectoryID == "" {

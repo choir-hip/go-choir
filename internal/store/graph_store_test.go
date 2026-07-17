@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -118,6 +119,17 @@ func TestOGCreateAndGetRun(t *testing.T) {
 	}
 	if got.TrajectoryID != rec.TrajectoryID {
 		t.Errorf("trajectory_id: got %q, want %q", got.TrajectoryID, rec.TrajectoryID)
+	}
+
+	ownerScoped, err := s.GetRunByOwnerOG(ctx, rec.OwnerID, rec.RunID)
+	if err != nil {
+		t.Fatalf("get owner-scoped run: %v", err)
+	}
+	if ownerScoped.RunID != rec.RunID || ownerScoped.OwnerID != rec.OwnerID {
+		t.Fatalf("owner-scoped run = %+v, want run %q owned by %q", ownerScoped, rec.RunID, rec.OwnerID)
+	}
+	if _, err := s.GetRunByOwnerOG(ctx, "another-owner", rec.RunID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("wrong-owner lookup error = %v, want ErrNotFound", err)
 	}
 }
 

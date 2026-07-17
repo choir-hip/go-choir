@@ -301,6 +301,42 @@ func (s *Store) CreateRunOG(ctx context.Context, rec types.RunRecord) error {
 	return nil
 }
 
+func (s *Store) getRunObjectByOwnerOG(ctx context.Context, ownerID, runID string) (objectgraph.Object, error) {
+	suffix := objectgraph.StableSuffixFromKey(runID)
+	canonicalID, err := objectgraph.BuildCanonicalID(ogKindRun, ownerID, suffix)
+	if err != nil {
+		return objectgraph.Object{}, err
+	}
+	graphStore := s.ogReadStore
+	if graphStore == nil {
+		graphStore = s.ogStore
+	}
+	if graphStore == nil {
+		return objectgraph.Object{}, fmt.Errorf("store: object graph not initialized")
+	}
+	obj, err := graphStore.GetObject(ctx, canonicalID)
+	if err != nil {
+		if err == objectgraph.ErrNotFound {
+			return objectgraph.Object{}, ErrNotFound
+		}
+		return objectgraph.Object{}, err
+	}
+	return obj, nil
+}
+
+// GetRunByOwnerOG retrieves a run directly by its owner-scoped canonical ID.
+func (s *Store) GetRunByOwnerOG(ctx context.Context, ownerID, runID string) (types.RunRecord, error) {
+	obj, err := s.getRunObjectByOwnerOG(ctx, ownerID, runID)
+	if err != nil {
+		return types.RunRecord{}, err
+	}
+	var rec types.RunRecord
+	if err := ogDecode(obj, &rec); err != nil {
+		return types.RunRecord{}, err
+	}
+	return rec, nil
+}
+
 // GetRunOG retrieves a run by ID from the object graph.
 func (s *Store) GetRunOG(ctx context.Context, runID string) (types.RunRecord, error) {
 	obj, err := s.ogGetByKey(ctx, ogKindRun, "run_id", runID)
@@ -321,10 +357,17 @@ func (s *Store) GetRunOG(ctx context.Context, runID string) (types.RunRecord, er
 // Since CreateObject is an upsert (ON DUPLICATE KEY UPDATE), this is
 // the same as CreateRunOG but preserves the original created_at.
 func (s *Store) UpdateRunOG(ctx context.Context, rec types.RunRecord) error {
-	// Fetch the existing object to preserve created_at.
-	existing, err := s.ogGetByKey(ctx, ogKindRun, "run_id", rec.RunID)
+	// Fetch the existing object to preserve identity and created_at. Legacy
+	// callers without owner identity retain the global not-found behavior.
+	var existing objectgraph.Object
+	var err error
+	if rec.OwnerID == "" {
+		existing, err = s.ogGetByKey(ctx, ogKindRun, "run_id", rec.RunID)
+	} else {
+		existing, err = s.getRunObjectByOwnerOG(ctx, rec.OwnerID, rec.RunID)
+	}
 	if err != nil {
-		if err == objectgraph.ErrNotFound {
+		if err == ErrNotFound || err == objectgraph.ErrNotFound {
 			return fmt.Errorf("%w: run %s", ErrNotFound, rec.RunID)
 		}
 		return fmt.Errorf("update run: %w", err)
