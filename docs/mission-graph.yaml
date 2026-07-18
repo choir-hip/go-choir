@@ -185,7 +185,7 @@ nodes:
       - AGENTS.md
       - docs/choir-doctrine.md
   - id: choir-cli-self-development-2026-07-16
-    title: Make Choir Self-Developing — CLI-Controlled Computer Changes
+    title: Make Choir Self-Developing — Capsule-Scoped Audited Work
     path: docs/definitions/choir-cli-self-development-2026-07-16.md
     ledger: ''
     status: working
@@ -194,19 +194,48 @@ nodes:
     execution_mode: mission_orchestrator
     depends_on:
       - choir-audited-autoputer-construction-2026-07-15
-    enables: []
+    enables: [choir-in-choir-computer-control-draft-2026-07-18]
     note: >-
-      Sole executable product mission. Connect a content-addressed external
-      source change to a durable ComputerChange lifecycle, audited
-      ComputerVersion construction and verification, vmctl-only frozen D-ROUTE
-      promotion, served product readback, restart, rollback, and re-promotion
-      through the supported choir CLI without SSH.
+      Sole executable product mission from code-free conformance through
+      deployed G3 closure. One stable Choir computer owns a canonical event
+      chain; privacy-safe trajectory commitments, guest-local capsules, typed
+      role cutover, scoped external approval, atomic guest materialization,
+      checkpoints, restart/reconstruction, rejection, and rollback are one
+      executable path. Worker/candidate VMs, host authority, SSH, and raw vmctl
+      do not count.
     sources:
       - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
       - docs/evidence/audited-construction-terminal-receipt-2026-07-17.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/standing-questions.md
+      - docs/ACTIVE.md
+      - AGENTS.md
+  - id: choir-in-choir-computer-control-draft-2026-07-18
+    title: DRAFT — Choir-in-Choir Computer Control
+    path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
+    ledger: ''
+    status: blocked
+    kind: product_completion
+    entrypoint: false
+    execution_mode: draft_non_executable
+    depends_on:
+      - choir-cli-self-development-2026-07-16
+    enables: []
+    note: >-
+      Owner-authorized non-executable successor draft. After capsule-based
+      self-development is deployed and accepted, a cosuper on computer A may
+      use the supported choir CLI from a scoped capsule under a target-bound,
+      revocable grant to control computer B. B retains authority for its own
+      agents, capsules, event history, state, lifecycle, and refusals. The
+      draft grants no host access, SSH, raw vmctl, shared owner credentials,
+      candidate VMs, transitive grants, implementation, or /goal execution.
+    sources:
+      - docs/definitions/choir-cli-self-development-2026-07-16.md
+      - docs/standing-questions.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
+      - docs/choir-doctrine.md
       - docs/ACTIVE.md
       - AGENTS.md
   - id: choir-computerversion-performance-optimization-draft-2026-07-15

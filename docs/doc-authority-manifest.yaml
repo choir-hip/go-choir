@@ -266,7 +266,15 @@ documents:
     is_evidence: false
     annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
     witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/evidence/audited-construction-terminal-receipt-2026-07-17.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md]
-    refresh_triggers: [mission_state_change, source_build_contract_change, computer_change_lifecycle_change, route_promotion_change, staging_acceptance]
+    refresh_triggers: [mission_state_change, computer_event_authority_change, capsule_role_cutover, trajectory_audit_change, guest_materialization_change, staging_acceptance]
+
+  - path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
+    claim_scope: current
+    is_root: []
+    is_evidence: false
+    annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: blocked, entrypoint: false}
+    witnesses: [docs/definitions/choir-cli-self-development-2026-07-16.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
+    refresh_triggers: [self_development_completion, capsule_cutover, trajectory_event_authority, cross_computer_grant_decision, registry_promotion]
 
   - path: docs/definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md
     claim_scope: current

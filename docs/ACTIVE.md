@@ -6,13 +6,14 @@ corpus and does not make an unverified graph status into a live work claim.
 ## Active Definition — Sole `/goal` Authority
 
 [`definitions/choir-cli-self-development-2026-07-16.md`](definitions/choir-cli-self-development-2026-07-16.md)
-is the sole executable top-level product Definition. It makes one disposable
-staging Choir computer self-develop through the supported `choir` CLI: a scoped
-external agent submits a content-addressed code change, Choir builds and verifies
-a new `ComputerVersion`, vmctl alone performs the frozen D-ROUTE CAS, and
-supported product reads prove restart, rollback, and re-promotion without SSH.
-It owns execution order, mutation, evidence, rollback, and completion until its
-terminal closure.
+is the sole executable top-level product Definition from code-free contract
+conformance through deployed G3 closure. It cuts self-development over to one
+stable Choir computer with a content-addressed canonical event chain, complete
+privacy-safe trajectory commitments, guest-local fail-closed capsules, no-bash
+Super, capsule-only CoSuper effects, retired VSuper, typed Researcher updates,
+external scoped approval, atomic guest materialization, checkpoint/route
+projection, restart/reconstruction, rejection, and event-derived rollback. It
+owns execution order, mutation, evidence, rollback, and completion until closure.
 
 ## Completed Definitions — Historical Evidence Authority
 
@@ -49,6 +50,15 @@ timing is inadmissible. Reconcile and revise the draft from the completed
 predecessor's deployed baseline, set owner-ratified numerical SLOs, and promote
 it through all registries before execution.
 
+[`definitions/choir-in-choir-computer-control-draft-2026-07-18.md`](definitions/choir-in-choir-computer-control-draft-2026-07-18.md)
+is the owner-authorized, non-executable successor draft for computer-to-computer
+control after capsule-based self-development is complete. Its first acceptance
+has a cosuper on computer A use the supported `choir` CLI from a scoped capsule
+under a target-bound grant to control disposable computer B; B remains the
+authority for its own agents, capsules, event history, state, and refusals.
+The draft authorizes no implementation, host access, raw vmctl, SSH, shared
+owner credential, candidate VM, recursive grant chain, or registry promotion.
+
 ## Supporting Maintenance
 
 [`definitions/choir-seam-repair-2026-07-10.md`](definitions/choir-seam-repair-2026-07-10.md)
@@ -84,17 +94,18 @@ Invoke only:
 ```
 
 The completed audited-construction Definition is historical evidence authority.
-The performance draft remains blocked and non-executable; capsule execution is
-outside the active mission and requires separate owner ratification.
+The performance and Choir-in-Choir drafts remain blocked and non-executable.
+Capsule execution and its event authority are now the active mission.
 
 This index owns no current slice, next action, execution order, resumption,
 completion, mutation, rollback sequencing, or escalation authority. Consult the active self-development Definition before execution. Autopaper remains unauthorized.
 
-The OG/Dolt/heresy contract supplies D-ROUTE's corpusd/vmctl CAS semantics,
-receipt projection gates, H031 detection, and deletion bars retained from completed phases B,
-D, and F. It does not own execution order or storage topology. The owner-settled
-topology has two non-conflated Dolt stores plus corpusd route-slot tables with
-vmctl as sole CAS writer; route control is never a third store.
+The OG/Dolt/heresy contract supplies the currently deployed D-ROUTE
+corpusd/vmctl CAS mechanics, receipt gates, H031 detection, and deletion bars.
+The newer owner-settled active Definition makes the stable computer's canonical
+event history the semantic authority: vmctl remains the protected lifecycle and
+route-projection actuator, not the origin of promotion. The active A contract
+must reconcile doctrine/ontology without creating a third semantic store.
 
 D-STORE is settled by owner authority: Choir is all-in on Dolt. Storage
 questions about history latency, commit batching, rollback mechanics, ICU/build
