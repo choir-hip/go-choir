@@ -42,12 +42,16 @@ start:
       preserves_original_observation: true
       clarification: "Whole-mission consensus exposed additional source facts: capsule HostAuthority is host-side and unwired; VSuper remains effectful; the guest updater and public self-development API do not exist; complete trajectory privacy/migration/append protocols were underspecified; and C required deployed evidence before D deployed. The execution contract below repairs those blockers before code."
       evidence_ref: "/tmp/choir-selfdev-full-mission-round1 panel; source citations in observed_artifact"
+    - corrected_at: 2026-07-18T22:17:41Z
+      preserves_original_observation: true
+      clarification: "Owner clarified that candidate VMs and worker VMs are obsolete product concepts, not merely forbidden self-development fallbacks. Their lifecycle/controller/tool/profile/prompt/API code must be deleted in this mission; no unrelated-worker-VM retention exception remains. Generic delegated agents may continue only through the durable agent/capsule model and are not worker VMs."
+      evidence_ref: "Owner clarification in this 2026-07-18 conversation"
 
 owner_ratification:
   status: settled
   settled_by: owner
-  recorded_at: 2026-07-18T19:26:00Z
-  delegation_ref: "The owner instructed that the entire mission, not only A0, be executable and iterated with a diverse panel including Claude until confirmed. The owner-settled product boundaries are stable ComputerID/event identity, promotion as accepted event, no-bash Super, capsule-scoped CoSuper effects, typed Researcher writes, no candidate VMs, reconstructibility, and vmctl as route actuator. The exact topology below is the conservative integration under the already owner-settled two-Dolt/D-ROUTE contract; it does not ratify a third store or alter vmctl's sole route-slot CAS."
+  recorded_at: 2026-07-18T22:17:41Z
+  delegation_ref: "The owner instructed that the entire mission, not only A0, be executable and iterated with a diverse panel including Claude until confirmed. The owner-settled product boundaries are stable ComputerID/event identity, promotion as accepted event, no-bash Super, capsule-scoped CoSuper effects, typed Researcher writes, complete deletion of candidate-VM and worker-VM concepts/code, reconstructibility, and vmctl as route actuator. Generic delegated agents are not worker VMs. The exact topology below remains under the owner-settled two-Dolt/D-ROUTE contract; it does not ratify a third store or alter vmctl's sole route-slot CAS."
   outcome: "One stable Choir computer develops itself through complete causal event audit, real capsule-scoped effects, external approval, typed guest materialization, supported public CLI/API control, deployed restart/reconstruction, rejection, and rollback."
   execution_contract:
     identity_and_promotion:
@@ -122,9 +126,9 @@ owner_ratification:
       - "Isolation is fail-closed: user/PID/mount/network/UTS/IPC namespaces, cgroup v2 limits, read-only immutable lowerdir, private overlay upperdir, no host bind mounts, capability drop, no_new_privs, broker default-deny seccomp, capability-specific workload seccomp, and enforcing Landlock are mandatory. Missing kernel support or cleanup failure refuses admission; best-effort downgrade is forbidden."
       - "Build capsules have no external network, secrets, host/vsock devices, or mutable dependency cache. Lowerdir pins the source tree, toolchain, module/dependency cache, build recipe, and base event head."
     role_cutover:
-      - "Super retains orchestration, capsule lifecycle, delegation, inspection, verification request, and decision-proposal tools only—no bash, writable file, coding, shipper, worker-VM, candidate, route, or host tools."
+      - "Super retains orchestration, capsule lifecycle, durable agent delegation, inspection, verification request, and decision-proposal tools only—no bash, writable file, coding, shipper, worker-VM, candidate, route, or host tools."
       - "CoSuper retains its agent loop and research/read tools but every shell/filesystem/build action is a capsule_* broker verb under one capability; direct core-VM coding/write tools are removed."
-      - "VSuper/candidate-super and its aliases are retired from production profiles and prompts for this mission; requests fail closed. No sibling profile may retain AllowWritableFiles, AllowCodingTools, shipper, or VM-delegation authority."
+      - "VSuper/candidate-super and all aliases, worker-VM/candidate-VM lifecycle/controllers/tools/APIs/prompts, and their retention/configuration code are deleted from production. Requests using retired names fail closed. No sibling profile may retain AllowWritableFiles, AllowCodingTools, shipper, or VM-delegation authority. Generic delegated agents use durable runs/trajectories and capsules; they are not worker VMs."
       - "Researcher remains VM-local with read/research/evidence tools and the typed update_coagent source-packet write. It has no bash, raw Dolt, writable file, capsule commit, acceptance, route, or host authority. Its typed mutation is appended through ComputerEventAppender in the same logical operation."
     capsule_effect_bundle:
       required: [bundle_version, computer_id, base_event_head, trajectory_ref, capsule_identity, capability_policy_digest, source_tree_ref, ordered_file_effects, generated_artifact_refs, build_recipe_ref, runtime_artifact_ref, test_receipts, verifier_receipts, dependency_toolchain_refs, resource_receipts, content_digest]
@@ -179,7 +183,7 @@ owner_ratification:
       modes: [off, audit_only, propose_only, accept_once]
       authority: "Mode is a generation-CAS platform control row on the existing corpusd sql-server, changed only through the public owner-scoped mode endpoint. It is not semantic state or a third authority. Guest admission requires a current signed ModeReceipt; unreachable, missing, expired, stale-generation, or mismatched target defaults to off. Mode bindings operation/bundle/expiry and expected desired/effective heads/commitments are forbidden for off, audit_only, and propose_only and mandatory for accept_once. Before genesis, ModeReceipt uses the zero head and may remain off only."
       operation_matrix: "Under off: mode get/set, status/inspect/event/receipt reads, lifecycle, deterministic refusals, owner-scoped safety rollback, and exactly one `computer:self_development:genesis` call are available. Genesis requires absent row, disposable target, frozen baseline/G0/G1 receipts, zero head, and mode off; it leaves mode off. Audit, proposal, and approval refuse under off. audit_only additionally permits non-effectful event/reconstruction probes. propose_only additionally permits one capsule/frozen proposal and rejection, but not approval. accept_once permits only the exact bound approval and returns to propose_only after its decision. Owner rollback is available under every mode but, if pending is non-null, must first complete the recovery/MaterializationFailed transition; it never overlaps another transition."
-      old_path: "Worker/candidate-VM and direct role self-development paths are removed in the release candidate, not retained as fallback. Unrelated distributed-worker features require explicit non-self-development caller classification. With mode off, self-development refuses rather than falling back."
+      old_path: "Worker-VM and candidate-VM concepts and code are deleted in the release candidate, together with direct-role self-development paths; none are retained as unrelated features or fallbacks. With mode off, self-development refuses rather than falling back."
     gate_rejection_and_platform_rollback:
       G0: "Set blocked_incomplete; mutate no behavior; repair and re-freeze owner contract conformance."
       G1: "Discard or repair the unlanded code candidate; no deployment or role cutover."
@@ -189,7 +193,7 @@ owner_ratification:
 
 finish:
   deliver: "One explicitly disposable staging Choir computer develops Choir itself end to end through the supported public choir CLI: complete causal audit, real capsule-scoped cosuper effects, independent verification, external scoped approval, typed guest materialization, restart/reconstruction, rejection, rollback, and exact deployed receipts—with no direct super/cosuper/VSuper mutation, worker/candidate VM, host daemon/repair, mutable branch, package/lineage activation, SSH, raw vmctl, internal API, or model rerun."
-  artifact: "The settled event, privacy, capsule, role, updater, checkpoint, public CLI/API/auth, activation, and rollback contracts above implemented as one clean cutover; old self-development paths deleted or refused; Choir-in-Choir remains blocked."
+  artifact: "The settled event, privacy, capsule, role, updater, checkpoint, public CLI/API/auth, activation, and rollback contracts above implemented as one clean cutover; worker-VM/candidate-VM code and all old self-development paths deleted, retired names refused, and Choir-in-Choir blocked."
   acceptance:
     - action: "From a clean external client, use a key bound to the disposable ComputerID and `choir self-dev start --computer ...`; observe durable operation/trajectory identity through status/inspect before and after runtime restart."
       proves: "Explicit product-path intake and durable targeting exist without ambient current-computer or internal routes."
@@ -240,7 +244,7 @@ boundaries:
   mutation_class: red
   protected_surfaces: [computer_event_authority, agent_trajectories, privacy_and_secrets, embedded_Dolt, platform_control_head_CAS, immutable_artifacts, ComputerVersion_checkpoints, capsule_isolation, guest_capability_authority, tool_registry, agent_roles, guest_updater, public_API, choir_CLI, API_key_scopes, vmctl_route_projection, run_acceptance, deployment_routing]
   heresy_delta:
-    discovered: ["audited construction omitted complete trajectory causality", "direct Super/CoSuper/VSuper mutation and worker paths remain live", "capsule host dependency and isolation/broker/cleanup are unwired scaffolds", "no canonical event ledger, privacy protocol, guest updater, or public self-development API exists", "promotion-as-route and candidate-VM prose conflicts with the owner cutover", "the previous C/D order required deployed proof before deployment"]
+    discovered: ["audited construction omitted complete trajectory causality", "direct Super/CoSuper/VSuper mutation and obsolete worker-VM/candidate-VM paths remain live", "capsule host dependency and isolation/broker/cleanup are unwired scaffolds", "no canonical event ledger, privacy protocol, guest updater, or public self-development API exists", "promotion-as-route and candidate-VM prose conflicts with the owner cutover", "the previous C/D order required deployed proof before deployment", "the initial G0 packet incorrectly preserved an unrelated-worker-VM exception"]
     introduced: []
     repaired: []
   must_preserve:
@@ -283,20 +287,20 @@ execution:
       - "Replace current route-flip/candidate-VM/promotion claims in docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/current-architecture.md, and registry witnesses with the exact identity/promotion/event/checkpoint clauses above."
       - "Freeze a complete writer/caller/deletion inventory covering Trace/EventRecord/Trajectory/run memory, embedded Dolt, platform head and route CAS, ArtifactProgram/ComputerVersion, AppAdoption/lineage, all role profiles/tool installers, VSuper aliases, worker/shipper paths, capsule HostClient/HostAuthority, Executor/broker/tape, API/CLI routes, and materializers."
       - "Freeze concrete V1 tables/indexes/canonical encoding, append/recovery state machine, genesis fixture, reducer compatibility, privacy classification/redaction/encryption, guest authority, updater, public CLI/API/auth, activation modes, and all rollback refs exactly conforming to this contract. Ordinary naming/library choices may vary; semantic behavior may not."
-      - "Document every obsolete path's delete/retire/non-self-development disposition and prove no third semantic store or host dependency is proposed."
+      - "Document every obsolete path's delete/retire disposition; worker-VM/candidate-VM code has no retention classification. Prove no third semantic store or host dependency is proposed."
     exit: "G0 receives a code-free conformance packet with no unresolved owner/authority/security/migration/product decision."
-  - id: B-implement-disabled-cutover
-    purpose: "Implement the entire event, capsule, role, updater, checkpoint, CLI/API, auth, and activation substrate with effects off by default."
+  - id: B-implement-cutover-effects-off
+    purpose: "Implement the entire event, capsule, role, updater, checkpoint, CLI/API, auth, and activation substrate while self-development activation remains off by default. Normal non-self-development product behavior is not disabled."
     entry: "G0 accepted exact conformance; any semantic deviation returns to blocked_incomplete and owner review."
     work:
       - "Implement event chain/head CAS, constructor credential-envelope seam, signed receipt/trust-root rotation, exact route-command certificate and post-genesis legacy refusal, embedded projection, genesis, replay, privacy/artifact handling, reducer/version compatibility, failure injection, and the R0→R1 one-way platform rollback ratchet."
       - "Replace host capability dependency with guest-local authority; implement mandatory kernel isolation, broker routes, resource/network/path policy, cleanup/restart/revocation, frozen bundles, and a signed public no-SSH KernelCapabilityReceipt bound to ComputerID, realization, immutable guest image/config digest, observed boot parameters, capability values, and observation time."
-      - "Cut over all roles/aliases, retire VSuper and self-development worker/candidate/package paths, and preserve only explicitly classified unrelated workers."
+      - "Cut over all roles/aliases; delete VSuper, worker-VM, candidate-VM, and self-development package/lineage paths. Preserve generic durable agent delegation only through runs/trajectories and capsules; preserve no VM-worker exception."
       - "Implement choir-updater release slots/recovery, checkpoint/projection adapter, public self-dev/lifecycle API, CLI grammar, scoped keys, durable operations, and off/audit_only/propose_only/accept_once modes."
       - "Build from pinned offline inputs and add focused deterministic tests for every declared state transition/refusal."
     exit: "A frozen source candidate builds and deterministic tests pass; all self-development effects remain off. G1 reviews the complete candidate, migrations, negative caller inventory, and prior rollback refs before landing."
   - id: C-land-and-deploy-off
-    purpose: "Land the complete disabled-by-default cutover before any deployed effect proof."
+    purpose: "Land the complete cutover with self-development activation mode off before any deployed effect proof."
     entry: "G1 accepted the frozen code candidate."
     work:
       - "Freeze R0 source/deploy identity, baseline ComputerVersion/event head/route generation/release pointer. Commit and push origin/main; monitor CI and Node B deployment; verify choir.news build identity equals the pushed SHA."
@@ -336,13 +340,13 @@ orchestration:
   decision_gates:
     - id: G0-owner-contract-conformance
       after: A-contract-conformance
-      before: B-implement-disabled-cutover
-      frozen_input_required: [owner_execution_contract, doctrine_diff, writer_caller_inventory, V1_schema_encoding, append_recovery_protocol, genesis_migration, constructor_credential_seam, receipt_fields_and_trust_roots, exact_route_transition_binding, privacy_retention, capability_TCB, updater_contract, public_CLI_API_auth, mode_operation_matrix, immutable_kernel_capability_receipt, deployed_kernel_receipt_contract, deletion_dispositions, rollback_refs]
+      before: B-implement-cutover-effects-off
+      frozen_input_required: [owner_execution_contract, doctrine_diff, writer_caller_deletion_inventory, V1_schema_encoding, append_recovery_protocol, genesis_migration, constructor_credential_seam, receipt_fields_and_trust_roots, exact_route_transition_binding, privacy_retention, capability_TCB, updater_contract, public_CLI_API_auth, mode_operation_matrix, immutable_kernel_capability_receipt, deployed_kernel_receipt_contract, deletion_dispositions, rollback_refs]
       deterministic_first: "Standing-decision conformance; exact two-Dolt/corpusd table and typed transport map; no-third-store/host-dependency check; constructor credential delivery with no agent/host-daemon exposure; receipt canonicalization/signing/rotation/revocation; post-genesis sole route certificate and exact RouteTransitionCommand; complete writer/caller set; genesis/concurrency/state-machine totality; migration/recovery; public API/auth/decision/mode/lifecycle/refusal coherence; positive reproducible immutable-image kernel receipt; exact signed public no-SSH deployed receipt contract."
       review: "Diverse agentic-consensus panel verifies conformance only; it cannot change or ratify semantics."
       minority_rule: "Any unresolved owner decision, omitted writer, dual authority, host dependency, destructive migration, privacy hole, undefined rollback, missing mandatory immutable guest-kernel capability, or undefined public no-SSH deployed capability receipt sets blocked_incomplete and blocks B."
-    - id: G1-frozen-disabled-code-candidate
-      after: B-implement-disabled-cutover
+    - id: G1-frozen-effects-off-code-candidate
+      after: B-implement-cutover-effects-off
       before: C-land-and-deploy-off
       frozen_input_required: [base_ref, candidate_ref, path_scope, content_digest, tests, migration_rehearsal, role_tool_inventory, API_contract_tests, updater_failure_tests, kernel_capability_receipt_tests, platform_rollback_ref]
       deterministic_first: "Build; event ordering/idempotency/tamper/pin/recovery; reducer/genesis; privacy canaries; role/tool absence; capability/isolation source contracts; signed kernel receipt identity/digest/tamper/staleness tests; updater state machine; API/auth/idempotency; mode-off refusal."
@@ -369,14 +373,14 @@ orchestration:
 
 now:
   status: working
-  slice: "A-contract-conformance"
-  question: "Do current doctrine, writers, API surfaces, and migration/deletion dispositions conform exactly to the settled whole-mission execution contract, with no omitted authority or host dependency?"
+  slice: "B-disabled-cutover"
+  question: "Can the complete source cutover implement the accepted G0 contracts with activation off, delete every obsolete worker/candidate path, and freeze one deterministic G1 candidate without weakening the two-store/event/route authority?"
   reconciliation:
-    observed_at: 2026-07-18T19:26:00Z
-    source_ref: refs/heads/main@6738abdbe30b6b19a6b572e42801f6c810102304_equals_refs/remotes/origin/main@6738abdbe30b6b19a6b572e42801f6c810102304_before_definition_repair
-    deploy_identity: "choir.news /health reported proxy commit 2bc1799f72ce437b35d4606a23d14e62b7239ac5 during reconciliation; no new behavior claimed"
+    observed_at: 2026-07-18T22:32:45Z
+    source_ref: refs/heads/main@5483a082d0012890343deb3693eea15c53a98415_equals_refs/remotes/origin/main@5483a082d0012890343deb3693eea15c53a98415_before_G0_docs
+    deploy_identity: "choir.news /health reported proxy commit 2bc1799f72ce437b35d4606a23d14e62b7239ac5; A changes documentation only and claims no new behavior"
     authority_identities: [owner_whole_mission_mandate:2026-07-18, predecessor:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md@complete, successor:docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md@blocked]
-    worktree_inventory_ref: "Four intentional modified authority docs and one intentional untracked successor draft; no runtime files changed."
+    worktree_inventory_ref: "Intentional A/G0 candidate modifies this Definition and six doctrine/ontology/current-state support docs and adds one conformance evidence packet; no runtime file changed."
     status: reconciled
   prerequisite_preflight:
     observed_at: 2026-07-18T21:41:00Z
@@ -393,25 +397,26 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: full-self-development-definition-consensus-repair
-    state: confirmed_for_execution
-    ref: docs/definitions/choir-cli-self-development-2026-07-16.md
+    id: self-development-G0-contract-conformance
+    state: accepted_G0_contract
+    ref: docs/evidence/self-development-g0-conformance-2026-07-18.md
     owner: integration-authority
-    base: 6738abdbe30b6b19a6b572e42801f6c810102304
-    freeze_identity: external_review_manifest_preflight_round_7_definition_sha256_9d0f8e591064e6275374900fd4b5f0d4d177d33ebdad864ad5d9512e737cbf46
-    scope: [active_definition, choir_in_choir_draft, registries]
+    base: 5483a082d0012890343deb3693eea15c53a98415
+    freeze_identity: "sha256:31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd"
+    freeze_algorithm: "Replace the complete freeze_identity scalar with pending_content_digest, then compute lowercase SHA-256 for each repo-relative scope path in listed order; encode each row as <hex><two ASCII spaces><path><LF>; freeze identity is lowercase SHA-256 of the concatenated UTF-8 rows. Equivalent command after the substitution: shasum -a 256 <ordered paths> | shasum -a 256."
+    scope: [docs/definitions/choir-cli-self-development-2026-07-16.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/current-architecture.md, docs/runtime-invariants.md, docs/platform-os-app-state.md, docs/evidence/self-development-g0-conformance-2026-07-18.md]
   decision:
-    selected: "Execute the entire A→F mission under the fixed execution contract above. A/G0 reconciles rather than invents semantics; all implementation deploys effects-off; deployed G2 precedes the only bounded acceptance; G3 precedes closure."
+    selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
     status: settled
     source: owner
     settled_by: owner
-    evidence_ref: "Owner whole-mission instruction in this 2026-07-18 conversation plus earlier VM/capsule/event/role decisions"
-    recorded_at: 2026-07-18T19:26:00Z
-    consequence: "The mission is not limited to A0. Once whole-mission consensus confirms this frozen contract, /goal may execute continuously through every gate; gate rejection follows the declared rollback rather than silently shrinking authority."
-  evidence_refs: [docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md, internal/capsule/executor.go, internal/capsule/capsule.go, internal/capsule/transaction/tape.go, internal/agentcore/tools_capsule.go, internal/agentcore/tool_profiles.go, internal/agentprofile/agentprofile.go, internal/trace/store.go, internal/types/task.go, cmd/choir/main.go]
-  blocker_or_risk: "Whole-mission frozen consensus found no reproducible semantic blocker. Preflight proved the existing constructor population/attachment seam and every mandatory capability in the pinned immutable guest configuration. The remaining known gap is exact-realization no-SSH kernel/config attestation; B must implement it and C must prove it before D, so it cannot become a surprise acceptance shortcut."
-  next_action: "Invoke `/goal docs/definitions/choir-cli-self-development-2026-07-16.md` and execute A-contract-conformance. Continue through A→G0→B→G1→C→D→G2→E→G3→F unless a declared gate disposition sets blocked_incomplete, repair, rejection, or rollback."
+    evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
+    recorded_at: 2026-07-18T22:17:41Z
+    consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md, internal/capsule/executor.go, internal/capsule/capsule.go, internal/capsule/transaction/tape.go, internal/agentcore/tools_capsule.go, internal/agentcore/tool_profiles.go, internal/agentprofile/agentprofile.go, internal/trace/store.go, internal/types/task.go, cmd/choir/main.go]
+  blocker_or_risk: "G0 is accepted. The terminal panel produced two confirmations and one claimed digest mismatch; exact recomputation from the documented substituted per-file rows yields 31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd, so the mismatch is rejected as non-reproducible. The immutable start receipt remains historical; current candidate dirt is reconciled in now. B remains unbuilt, and no behavior/deploy/accepted effect is authorized until its own G1/C/D gates."
+  next_action: "Land the code-free G0 boundary, then implement B as one activation-off clean cutover: canonical event/recovery substrate, guest-local capsule isolation, role and worker/candidate deletion, public updater/API/CLI/modes, deterministic tests, and a frozen G1 candidate."
 
 successor:
   status: selected_draft_non_executable
@@ -467,6 +472,17 @@ review_receipts:
     outcome: accept
     adjudication: "No reviewer found a whole-mission blocker. All independently confirmed the existing constructor populate/mkfs/attachment seam, positive pinned kernel capabilities, and the non-circular fail-closed G0→B/G1→C-before-D attestation order. A/G0 must freeze KernelCapabilityReceipt kind fields, signer/trust root, measurement derivation, freshness, and public verification; B/G1 must test loaded overlay state, uid/gid/mode, image-at-rest leakage, receipt tamper/staleness, and exact realization binding. These are already required conformance/implementation details, not new semantics or deferred blockers."
     receipt_binding: "The post-review mutation corrects the preflight timestamp and immutable-device wording, updates the candidate freeze identity, and appends this receipt. It changes no reviewed architecture, authority, phase, gate, acceptance criterion, rollback, or next-action semantics. Any later semantic change requires a new frozen panel."
+
+  - id: G0-terminal-contract-conformance-2026-07-18
+    reviewed_at: 2026-07-18T22:44:04Z
+    freeze_identity: sha256:31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd
+    manifest: /tmp/choir-selfdev-g0-terminal-panel/manifest.tsv
+    panel: [cursor, opencode, omp-gpt55]
+    health: "All three configured reviewers completed. OpenCode and omp-gpt55 confirmed; Cursor's sole finding was a claimed freeze mismatch."
+    verdicts: [opencode:CONFIRMED, omp-gpt55:CONFIRMED, cursor:REPAIR]
+    outcome: accept
+    adjudication: "All semantic blockers from prior G0 rounds are repaired. The Cursor digest finding is rejected by exact deterministic recomputation: after replacing only the freeze_identity scalar with pending_content_digest, the ordered per-file rows are 67a7de1f... definition, 31e43907... doctrine, f54bab30... ontology, 9c058788... agent doctrine, 7e9deb7e... architecture, 407f1777... runtime invariants, f8264c4d... platform state, and baebf4a2... packet; their framed-row SHA-256 is exactly 31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd. OpenCode's own report omitted substitution when displaying 6cfb2bd... but found no semantic blocker; omp-gpt55 independently reproduced the accepted digest. The claim that start.status must become dirty is also rejected: start is the immutable authoring receipt and now.reconciliation is the sole current inventory."
+    receipt_binding: "This post-review mutation advances now from A/G0 to B and appends the review receipt only. It changes no reviewed architecture, authority, schema, gate, acceptance, rollback, or deletion semantics. Any later semantic contract change requires a new frozen review."
 
 view:
   path: none

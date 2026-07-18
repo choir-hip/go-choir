@@ -4,9 +4,10 @@ This file carries product architecture rules for agents working on Choir. It is
 loaded on demand when a mission touches authority boundaries, harness behavior,
 Texture, runtime configuration, product-path verification, or run acceptance.
 Long-running missions now execute as Definition documents (`/goal <doc>.md`);
-see [skills/definition/SKILL.md](../skills/definition/SKILL.md). The completed
-[audited-construction Definition](definitions/choir-audited-autoputer-construction-2026-07-15.md)
-is historical evidence; no top-level product Definition is currently executable.
+see [skills/definition/SKILL.md](../skills/definition/SKILL.md). The active
+[self-development Definition](definitions/choir-cli-self-development-2026-07-16.md)
+is the sole executable top-level product authority. The completed audited
+construction Definition is historical evidence.
 It inherits [Choir Doctrine](choir-doctrine.md) and must not become a competing
 doctrine source.
 
@@ -16,35 +17,42 @@ unless `AGENTS.md` is carrying a newer explicitly promoted operating update.
 
 ## Authority Boundaries
 
-- `conductor` routes exogenous user/app/connector input into Texture/artifact state. It is not the semantic babysitter and not a direct-super router for ordinary prompts.
+- `conductor` routes exogenous user/app/connector input into Texture/artifact state. It has no self-development mutation authority.
 - Appagents own durable app artifacts. `texture` owns canonical document versions.
-- `researcher` writes structured findings/evidence, not canonical text or code.
-- `super` is the foreground orchestration root. It can request workers and candidate worlds.
-- `vsuper` owns a background/candidate computer or candidate world.
-- `cosuper` is subordinate to the super/vsuper that requested or assigned it.
-- Verification is a contract over evidence, not a separate privileged caste.
+- `researcher` reads/researches and may submit only the typed `update_coagent` source-packet mutation through the canonical event appender. It has no bash, raw Dolt, writable files, capsule commit, acceptance, route, or host authority.
+- `super` is the foreground orchestration root. It may orchestrate capsules, delegation, inspection, verification requests, and decision proposals; it has no bash, writable/coding, shipper, worker-VM, route, or host tools.
+- `co-super` remains an agent loop, but every shell, filesystem, and build effect is a capability-bound guest-local capsule broker verb.
+- `vsuper`, candidate-super, and aliases are retired from production profiles for self-development and fail closed.
+- Verification is a read-only contract over evidence. It cannot append, accept, materialize, checkpoint, or route an event.
 
-Foreground/canonical state stays stable. Background/candidate computers mutate. Canonical state changes only by promotion.
+One stable `ComputerID` plus its canonical event chain is the evolving
+computer. A frozen capsule effect bundle is speculative and inert. Canonical
+desired state changes only by an authorized acceptance event; effective state
+changes only after verified guest materialization.
 
 ## Current Invariants (2026-07-08)
 
-- **Route-over-ComputerVersion:** no product route resolves to a VM or desktop
-  identity; routes point at `ComputerVersion = (CodeRef, ArtifactProgramRef)`
-  records. This is currently violated by the hard-coded platform computer
-  fallback in `internal/proxy/route_resolver.go` and `internal/proxy/lineage_route_resolver.go`
-  (H031; see `docs/definitions/og-dolt-heresy-completion-2026-07-08.md` I1).
-- **Two Dolt stores:** the world-wire store (`internal/platform/objectgraph_store.go`,
-  moving to sql-server) and the VM-local embedded store (`internal/objectgraph/dolt_store.go`)
-  are distinct substrates. Promotion is an operation on the embedded store, not a
-  property of the world-wire store (see D-STORES in the umbrella mission).
-- **World Wire (formerly Universal Wire):** the public feed surface for the
-  Community Cloud. Remaining legacy names are historical or require separate
-  current authority.
-- **D-PROMO interim:** branch isolation on the VM-local embedded store is
-  settled for pinned single-writer connections; the current
-  `DoltPromotionAdapter` is tag-only, non-conformant, and must remain disabled.
-  Audited construction completed without granting new adapter mutation authority;
-  replacement or deletion requires a separately promoted Definition.
+- **Stable computer identity:** `ComputerID` plus its canonical event chain is
+  durable identity. `RealizationID` is replaceable machine state.
+- **One event authority:** exactly one trusted guest `ComputerEventAppender`
+  validates and sequences semantic events. corpusd mechanically performs typed
+  head CAS; Trace, trajectories, embedded state, vmctl, route tables, status,
+  checkpoints, and reducers are projections or actuators.
+- **Two Dolt stores:** narrow event-head/idempotency and platform-control rows
+  live on the existing corpusd world-wire sql-server; the VM-local embedded
+  Dolt indexes the chain and materializes effective state. Neither creates a
+  third semantic store or alternate head.
+- **Acceptance before effect:** an effect bundle is inert until acceptance.
+  Guest materialization, checkpoint publication, and route CAS cannot
+  acknowledge or substitute for the event.
+- **ComputerVersion checkpoint:** `(CodeRef, ArtifactProgramRef)` is an
+  immutable reconstruction checkpoint at an event head, not computer identity
+  or promotion authority.
+- **vmctl projection:** vmctl remains the sole route-slot CAS actuator and
+  verifies exact accepted-event, checkpoint, materialization, verifier, and
+  route-certificate joins. Post-genesis legacy route authority refuses.
+- **D-PROMO interim:** the tag-only `DoltPromotionAdapter` remains disabled and
+  its destructive reset path is forbidden.
 - **Timeout hardening landed:** `vmctl.Client` defaults to 60 seconds and the
   server has bounded read/write timeouts (120-second defaults). Staging proved
   the induced resolve-failure path returns a bounded 504; re-prove after a
@@ -62,29 +70,28 @@ entry followed by Texture artifact materialization. `super` before Texture is a
 route invariant failure. `super` after Texture is valid only when Texture requested
 execution through an explicit affordance such as `request_super_execution`.
 
-Prefer asynchronous supervision. A delegation, worker VM run, candidate preview,
-or verification job should leave durable status/evidence and return a handle
-rather than blocking the foreground supervisor until completion. If a required
-tool is blocking, treat that as runtime debt to repair or document precisely.
+Prefer asynchronous supervision. Capsule work, verification, and durable
+operations return handles and event-derived status. Worker-VM and candidate-VM
+delegation are obsolete and deleted, not classified for retention. Generic
+delegated agents use durable runs/trajectories and capsules.
 
-Avoid skip-level authority confusion. If `super` needs to address a `cosuper`,
-the owning `vsuper` must receive the same instruction or remain the forwarding
-authority. A subordinate should not have to reconcile competing directives from
-two supervisors.
+Super addresses a CoSuper through the durable run/trajectory and its
+capsule-bound operation handle. No VSuper forwarding authority exists for
+self-development. A subordinate must not reconcile competing supervisors or
+receive a capability from model-visible text.
 
-Verifier agents may be read-only with respect to product/canonical state, but
-they are not necessarily computation-only observers. They may run commands,
-write temporary scripts, or create tests inside an authorized scratch or
-candidate environment when that is required to verify behavior.
+Verifier agents are read-only with respect to canonical product state. They may
+execute only in an independently provisioned read-only capsule whose
+capabilities cannot commit, accept, materialize, checkpoint, or route effects.
 
 ## Harness Minimalism
 
-Keep the agent harness small and programmatically uniform across roles by
-default. The core tool loop, provider call semantics, run-memory plumbing,
-event emission, cancellation, retry, compaction, and continuation mechanics
-should behave identically for conductor, Texture, researcher, super, vsuper,
-co-super, verifier, and future agent roles unless there is a proven invariant
-that requires divergence.
+Keep the agent loop programmatically uniform where authority permits: provider
+call semantics, cancellation, retry, compaction, and durable trajectory
+projection should not fork by persona. Capability resolution, privacy-safe
+canonical event append, capsule isolation, and typed role policy are deliberate
+security boundaries. Production roles are conductor, Texture, Researcher,
+Super, CoSuper, and explicitly bounded appagents; VSuper aliases refuse.
 
 Prefer prompts, tool descriptions, capability policy, and product-visible
 state over role-specific harness branches. (Prompt content itself is moving
@@ -146,9 +153,9 @@ Node B environment variables or tracked server files as a substitute for a
 runtime policy path unless the mission is explicitly a platform config deploy.
 
 Role defaults are policy defaults, not architecture. Any configured model may
-serve any agent role when its declared capabilities match the current turn:
-conductor, Texture, researcher, super, vsuper, co-super, verifier, or future
-roles. Text-only models are valid for orchestration, research, coding, writing,
+serve any production agent role when its declared capabilities match the current
+turn: conductor, Texture, researcher, super, co-super, verifier, or a future
+bounded role. Text-only models are valid for orchestration, research, coding,
 and verification that does not need media input. Multimodal models are required
 only when the turn needs screenshots, images, video frames, files, or other
 media inputs. If a current policy maps a role to ChatGPT or Fireworks, treat
@@ -208,15 +215,16 @@ existing evidence:
 POST /api/run-acceptances/synthesize
 ```
 
-Required evidence should include trajectory/run ids, authority profile,
-build/deploy identity, worker/candidate handle evidence, AppChangePackage/
-adoption evidence or a precise blocker, verifier contracts, rollback refs,
-heresy delta, conjecture delta, and residual risks. Existing records may still
-carry legacy lease vocabulary; treat that as transitional H019 residue, not the
-target actor model. Use explicit levels: `docs-level`, `staging-smoke-level`,
-`export-level`, `promotion-level`, retired `continuation-level`.
+Required self-development evidence includes ComputerID; source/deploy identity;
+canonical, desired, and effective event heads; trajectory and capsule refs;
+bundle/verifier/decision/materialization/checkpoint/route receipts; role and
+authority refusals; restart/reconstruction; rejection; rollback; mutation and
+heresy deltas; and residual risks. Acceptance names match evidence class.
 
-Do not claim `promotion-level` without AppChangePackage adoption verifier contract evidence plus owner review and promote/rollback evidence. Do not claim retired `continuation-level` without run-memory/compaction and continuation evidence.
+Do not claim deployed self-development from AppChangePackage/AppAdoption,
+RunAcceptance, worker/candidate VM, local tests, a verifier statement,
+checkpoint publication, or route transition alone. Only the active
+Definition's complete deployed product path and G3 receipt can settle it.
 
 `continuation-level` is transitional H008/H014 residue: the durable-actor contract re-points this
 acceptance level at trajectory/work-item settlement evidence. No deleted

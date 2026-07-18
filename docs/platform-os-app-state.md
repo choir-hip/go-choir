@@ -64,13 +64,14 @@ and keep this file as the state ledger.
 
 ## State Model
 
-The common state has three layers:
+The common state has three layers plus an inert proposal boundary:
 
 ```text
 platform substrate
   -> platform/default computer state
-      -> user active computers
-          -> candidate/background computers
+      -> user computers
+          -> capsule effect bundles
+              -> accepted events and reconstructible checkpoints
 ```
 
 - **Platform substrate** is shared deploy machinery: GitHub `origin/main`, CI,
@@ -79,12 +80,11 @@ platform substrate
 - **Platform/default computer state** is the official app/desktop experience
   currently projected by `https://choir.news` and used as the conceptual base
   for new user computers.
-- **User active computers** are persistent private machine-worlds with their own
-  files, embedded Dolt state, desktop state, app state, prompts, and eventual
-  source/build divergence.
-- **Candidate/background computers** are speculative mutation contexts. They may
-  break, build, test, and produce deltas; they should not mutate active
-  foreground state before verification and promotion.
+- **User computers** are persistent private machine-worlds identified by stable
+  `ComputerID` plus canonical event chain, with replaceable realizations.
+- **Capsule effect bundles** are inert, content-addressed proposals. They never
+  become background/candidate computers or routes; scoped acceptance appends an
+  event before materialization or checkpoint/route projection.
 
 Platform behavior changes still land through:
 
@@ -111,16 +111,16 @@ platform docs record the common baseline and the desired divergence semantics.
 - **Public platform state:** host/platform services own accounts, routing,
   lifecycle, publication/public artifact records, and aggregate health. Browsers
   do not talk to Dolt directly.
-- **Computer lifecycle and disk retention:** active primary computers are
-  protected ahead of candidate/worker computers. Ordinary primaries stay warm
-  while capacity allows; configured always-on primaries have a protected lane.
-  Candidate and worker computers hibernate first. Disposable worker/candidate
-  VM disks are reclaimable after evidence has moved into product records.
-  Staging test/proof primary computers are reclaimable only when they are
-  explicitly classified by ephemeral account policy, currently `example.com`
-  auth emails, and only after they are stopped, hibernated, or failed past the
-  diagnostic TTL. Real primary computers are retained. Platform rollback keeps
-  Git refs plus a small NixOS generation tail, not every historical guest image.
+- **Computer lifecycle and disk retention:** primary computer realizations stay
+  warm while capacity allows; configured always-on primaries have a protected
+  lane. Reclaim ranks unprotected idle realizations, not candidate/worker
+  computers. Obsolete worker/candidate VM disks are legacy substrate debris to
+  delete under the active mission, not retained product lifecycle classes.
+  Staging test/proof primary computers are reclaimable only when explicitly
+  classified by ephemeral account policy, currently `example.com` auth emails,
+  and only after they are stopped, hibernated, or failed past the diagnostic
+  TTL. Real primary computers are retained. Platform rollback keeps Git refs
+  plus a small NixOS generation tail, not every historical guest image.
 
 ## Runtime Model Policy State
 
@@ -134,7 +134,7 @@ preference for its roles and tasks.
 The target state is:
 
 - any configured compatible model can serve conductor, Texture, researcher,
-  super, vsuper, co-super, verifier, or future roles;
+  super, co-super, verifier, or a future bounded role;
 - ChatGPT, Fireworks DeepSeek V4 Flash/Pro, Fireworks Kimi K2.6, and later
   catalog models are selectable by policy wherever the current turn's
   modality, tool, context, latency, and cost requirements match;
@@ -153,8 +153,8 @@ The target state is:
 
 This policy model deliberately separates "recommended defaults" from
 "compatible execution." A strong coding model may be the default for `super` or
-`vsuper`, and a fast writing model may be the default for Texture, but those are
-computer policy choices. They must remain changeable without creating
+`co-super`, and a fast writing model may be the default for Texture, but those
+are computer policy choices. They must remain changeable without creating
 role-specific provider assumptions in the runtime. The operational test is
 per-turn compatibility: if the next turn is text-only, a text-only model such as
 Fireworks DeepSeek V4 Flash/Pro remains eligible for any role, including
@@ -204,10 +204,11 @@ Current capabilities:
   spatial map identity, not session-local CSS z-index;
 - restore recovery can avoid hydrating every saved heavy app at once, and heavy
   restored background apps may stay suspended until raised;
-- Compute Monitor is the product surface for the signed-in user's current
-  computer, background candidate computers, app restore weight, and bounded
-  recovery actions. It intentionally does not expose host/platform pressure,
-  global vmctl inventory, deployed build metadata, or raw VM handles.
+- Compute Monitor is the product surface for the signed-in user's computer,
+  app restore weight, and bounded recovery actions. Its background-candidate
+  computer controls are obsolete residue deleted by the active
+  self-development mission. It intentionally does not expose host/platform
+  pressure, global vmctl inventory, deployed build metadata, or raw VM handles.
 
 Known gaps:
 
@@ -238,10 +239,10 @@ Known gaps:
 | **Files** | First-class file browser with navigation, upload, text-to-Texture open, known media routing to Image/Audio/Video/PDF/EPUB apps, and live file-change notifications for the current directory. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries and broaden live file events into richer change history. |
 | **Texture** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Source citation is tri-state: every source entity is cited (`source_ref` in the body), toolbar-only (a Style.texture style source), or marked-unused (`mark_source_unused` with rationale). The former `source_embed` block node is removed; all citations are `source_ref` with `display_mode` (`numbered_ref` \| `expanded_ref`). There is no `WireTexture` prompt control-flow branch; article-format guidance is unconditional, driven by the default Style.texture. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested Textures. | Continue version-advancement stability hardening. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
 | **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, Texture reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
-| **Web Lens** | Explicit live/original web inspection surface. It still carries legacy `browser` implementation IDs, data attributes, session tables, and iframe behavior, but the product object is Web Lens, not a general manual Browser app. Durable web-derived sources should default to Source Viewer/reader artifacts before live/original inspection. | Rename or quarantine browser-session implementation residue over time. Backend control/screenshot support remains a distinct substrate frontier for Web Lens, source acquisition, and candidate-computer inspection; it must not become a bypass around product APIs or the primary source-gathering workflow. |
+| **Web Lens** | Explicit live/original web inspection surface. It still carries legacy `browser` implementation IDs, data attributes, session tables, and iframe behavior, but the product object is Web Lens, not a general manual Browser app. Durable web-derived sources should default to Source Viewer/reader artifacts before live/original inspection. | Rename or quarantine browser-session implementation residue over time. Backend control/screenshot support remains a distinct substrate frontier for Web Lens, source acquisition, and capsule-proposal inspection; it must not become a bypass around product APIs or the primary source-gathering workflow. |
 | **Super Console** | Target replacement for retired Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that Texture can open. | Do not expose retired raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple retired chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
 | **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Features owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
-| **Compute Monitor** | First-class app for user-computer health and recovery. It uses authenticated product APIs to show only the current user's current computer, background candidate computers, warmness/protection, current runtime health, app/window restore weight, safe desktop-state recovery actions, and disabled unsafe controls. Manual refresh UI has been removed. | Add true event-backed computer status updates, trend history, app-owned process/resource accounting, candidate discard/hibernate actions, conductor recovery intents, and stronger long-session regression proof. |
+| **Compute Monitor** | First-class app for the signed-in user's stable computer, realization health, app restore weight, and bounded recovery. Existing background/candidate-computer controls are obsolete residue, not a product direction. | Delete candidate/worker lifecycle surfaces in the active self-development cutover. Add event-backed computer status, trend history, app-owned process/resource accounting, conductor recovery intents, and stronger long-session regression proof without exposing raw VM identities. |
 | **Features** (`frontend/src/lib/FeaturesApp.svelte`, app id `features`) | Launcher-facing AppChangePackage catalog. **Import** creates an adoption for hard-coded target `primary` and starts recipient build/verification. **Activate** records owner approval then calls promote; Roll back/Roll forward call the corresponding protocol APIs. | "Activate" updates `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests, `RouteProfile`) with approval and freshness guards. Nothing in the ordinary personal-computer path consumes `RouteProfile` to switch routes, restart a process, or swap runtime/UI binaries. Treat active/rolled-back labels and current API promotion-level records as adoption/lineage evidence, not completed ComputerVersion promotion. Preview exists server-side but has no Features UI. |
 | **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and Texture radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
@@ -287,14 +288,14 @@ behavior.
   server-side at `/api/adoptions/{id}/preview/*` (requires a verified
   recipient build), but the Features UI never calls it — there is no
   Try-it-now button or preview frame. Wiring it remains unowned product work.
-- **Promotion as a real route flip.** The pre-cutover design implied that
-  Install/Activate changes what the computer actually serves. Today
-  "Activate" only updates the `ComputerSourceLineageRecord`
-  (`ActiveSourceRef`, digests, `RouteProfile`) — a durable pointer flip in
-  product state, with no route switch, process restart, or binary swap
-  consuming it. The completed route-over-ComputerVersion work does not authorize
-  this separate app-adoption cutover; a future promoted Definition is required.
-  Deleted portfolio/design chains are not executable successors.
+- **Legacy adoption pointer mismatch.** The pre-cutover design implied that
+  Install/Activate changed what the computer actually served. Today “Activate”
+  only updates `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests,
+  `RouteProfile`) with no route switch, process restart, or binary swap consuming
+  it. Those records are package/adoption residue, not self-development
+  candidates, accepted events, or route authority. The active self-development
+  Definition deletes their use as a promotion path; deleted portfolio/design
+  chains are not executable successors.
 
 ## App Boundary Rules
 
@@ -654,38 +655,26 @@ dashboards:
 - Texture dashboard document:
   `b7663242-616b-4a23-a80f-bc7065f059fb`, final head revision
   `192cfee2-2601-4664-b945-db4eeb94e95f`;
-- worker proof:
-  request/start/observe/finish converged on worker run
-  `6e9eaaf3-5119-4318-8dde-a74e91a65a7b`, worker VM
-  `vm-2e6c63b2b834b6441c324cb32f82d24f`, worker
-  `worker-c38f1d6d33760bd2`;
-- proof covered successful `submit_worker_update` mirroring into the active
-  Texture channel (`worker_submit_update_mirrored`,
-  `mirrored_worker_update_count=1`), Texture synthesis into an owner-readable
-  request/start/observe/finish dashboard, Trace-visible worker events, and
-  runtime-supervision run acceptance without AppChangePackage requirements;
-- first Chiron sequential rerun after that proof did not produce a package:
-  evidence directory `test-results/chiron-sequential-20260523T081544Z`,
-  trajectory `d850d92a-b90d-48f3-842a-f9fa5d5d3a37`, Texture dashboard
-  `bcb8329e-ce45-426c-9bc5-5552fca3208f`, run acceptance
-  `runacc-86cb5ab95084483a9084` at `staging-smoke-level`, and outcome
-  `no_matching_package`. That probe isolated the next runtime gap:
-  active `finish_worker_delegation` needed to return and checkpoint
-  actionable worker/child-run evidence before terminal completion;
-- caveat: screenshot/video evidence was captured by the outer Playwright proof
-  harness. Product-requested `worker-playwright` evidence capture remains the
-  next proof requirement for UI experiment reruns.
+- historical retired-worker proof: the 2026-05 request/start/observe/finish
+  flow converged on worker run `6e9eaaf3-5119-4318-8dde-a74e91a65a7b` and VM
+  `vm-2e6c63b2b834b6441c324cb32f82d24f`; a later Chiron probe ended
+  `no_matching_package`. These ids are retained only as evidence of obsolete
+  worker-VM behavior. They authorize no current role, lifecycle, delegation,
+  capture, candidate, package, or promotion path. The active self-development
+  Definition deletes `finish_worker_delegation`, `worker-playwright`, and their
+  worker/candidate VM callers rather than treating them as future proof work.
 
 ## Divergence Plan
 
-This file is common platform state today. As source-lineage and personal
-promotion mature, the same shape should become per-computer state:
+This file is common platform state today. Computer-local self-development uses
+the same authority shape per computer:
 
 ```text
 platform-os-app-state.md
   -> platform/default computer state
       -> user computer app/source/build state
-          -> candidate computer delta and verifier state
+          -> inert capsule effect bundle
+              -> accepted event and verifier/materialization receipts
 ```
 
 Each divergent computer should eventually expose:
@@ -716,8 +705,9 @@ The highest-gradient UX gaps are:
    exist alongside it.
 7. Shelf/Desk/Desktop Overview behavior needs richer mobile desktop proof,
    live thumbnails, and configurable Shelf placement.
-8. Candidate/promotion surfaces should become contextual product surfaces.
+8. Capsule proposal review, verification, and scoped acceptance should become
+   contextual product surfaces without exposing VM or route identity.
 9. Features needs honest source-level uninstall/disable capability records,
-   non-Chiron accepted-record loading across source computers, a real
-   route-flip consumer for promotion (M6), and a Try-it-now flow wired to the
-   existing preview endpoint (M7). See "Design intent, not shipped" below.
+   non-Chiron accepted-record loading for package sharing, and a Try-it-now flow
+   wired to the existing preview endpoint (M7). Package previews and adoption
+   records are non-authorizing and do not become self-development promotion.

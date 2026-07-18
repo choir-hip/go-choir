@@ -47,9 +47,12 @@ replaced by executable enforcement. Invariants trend toward TLA+ specs
 model-checked in CI, and heresies trend toward detectors that fail CI on
 regression. This document trends toward thesis + invariants + pointers. The
 mission form for long-running work is now `skills/definition/SKILL.md`
-(`/goal <doc>.md`). The audited-construction Definition completed on 2026-07-17 and is retained as
-historical evidence. No product Definition is currently executable; a successor
-must be separately owner-ratified and promoted through every registry.
+(`/goal <doc>.md`). The audited-construction Definition completed on 2026-07-17
+and is retained as historical evidence. The owner-ratified active
+[self-development Definition](definitions/choir-cli-self-development-2026-07-16.md)
+is the sole executable product Definition; every other successor remains
+non-executable until separately owner-ratified and promoted through every
+registry.
 OG/Dolt supplies subordinate requirements and evidence only; it owns no
 sequencing, mutation, resumption, completion, or escalation.
 A heresy entry below without a CI detector is a heresy entry that is not yet done being
@@ -140,11 +143,11 @@ Preferred vocabulary:
 - artifact program;
 - trajectory and work item;
 - evidence, provenance, verifier contract, and acceptance class;
-- candidate world / candidate computer — a semantic term for speculative state:
-  a candidate is a ComputerVersion fork, never a VM;
+- stable ComputerID and canonical computer event chain;
+- ComputerVersion checkpoint `(CodeRef, ArtifactProgramRef)`;
+- capsule effect bundle — frozen speculative effects, never a VM or route;
 - capsule (ephemeral effect chamber);
-- materializer;
-- promotion and rollback.
+- materializer, acceptance, projection, and event-derived rollback.
 
 Avoid making these the root frame unless the sentence is explicitly about a
 surface: personal workspace, AI workspace, publishing system, sandbox, workflow,
@@ -167,12 +170,14 @@ of multiple ledgers, not a disposable sandbox and not a chat session.
 the canonical document and artifact control-plane core; other appagents own
 their own typed artifact domains.
 
-`C3 asserted` Canonical state remains stable. Risky or long-running mutation
-*effects* execute in capsules (ephemeral effect chambers whose effects become
-typed transactions in the artifact program), and speculative state lives as a
-forked ComputerVersion/ledger — a candidate world in the semantic sense, never
-a candidate VM. Speculative state becomes canonical only by promotion, an
-atomic route flip between ComputerVersions.
+`C3 asserted` A persistent computer is identified by stable `ComputerID` plus
+its canonical event chain. Risky or long-running mutation *effects* execute in
+capsules and remain inert as frozen effect bundles until an authorized
+acceptance event. Accepted state is materialized into guest releases and
+ComputerVersion checkpoints; vmctl may project a checkpoint into a serving
+route, but neither materialization, checkpoint publication, nor route CAS is
+promotion authority. A speculative self-development candidate is never a VM,
+desktop, mutable branch, package, lineage record, or candidate route.
 
 `C4 active` Wire, publication, review, and later economic surfaces are
 projections of the artifact-and-provenance substrate, not independent product
@@ -192,9 +197,11 @@ control, and continuation synthesis disappear.
 Settlement is rule-as-data over durable obligations and subject refs, not root
 run completion.
 
-`C8 active` Promotion should be one typed mutation transaction with approval,
-freshness, rollback, and per-ledger evidence, rather than ad hoc lineage flips
-or verifier-only admission.
+`C8 active` Promotion is an authorized semantic event with explicit proposal,
+verification, freshness, privacy, acceptance, materialization, checkpoint,
+projection, and rollback receipts. Exactly one per-computer event appender owns
+semantic ordering; infrastructure projections and verifier claims cannot
+acknowledge or settle the event.
 
 `C9 asserted` Shared-platform claims are evidence-scoped. Staging, verifier
 contracts, and owner review define the admissible strength of a claim.
@@ -347,8 +354,9 @@ Mutation classes:
 - `orange`: runtime behavior, product APIs, app state, database queries, or
   provider/model routing.
 - `red`: protected surfaces: Texture canonical writes, Trace/evidence semantics,
-  promotion/rollback, candidate-computer state, auth/session renewal, vmctl,
-  gateway/provider calls, run acceptance, and deployment routing.
+  canonical event acceptance, capsule effects, materialization/checkpoint/route
+  projection, rollback, auth/session renewal, vmctl, gateway/provider calls,
+  run acceptance, and deployment routing.
 - `black`: irreversible or production-destructive operations. These require
   explicit human authority and rollback/restore evidence before execution.
 
@@ -1189,11 +1197,21 @@ candidate-desktop identity surfaces.
 H031 contract in
 [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md).
 
-`why it violates the spec:` A candidate computer is a speculative fork of a platform or user computer — a forked `ComputerVersion = (CodeRef, ArtifactProgramRef)`, materialized on demand, with speculative effects executing in capsules, not a VM instance. Coupling promotion and routing to VM/desktop IDs violates substrate independence.
+`why it violates the spec:` For self-development, a candidate is a frozen
+`CapsuleEffectBundle` bound to stable `ComputerID` and a base event head. It is
+never a VM, desktop, mutable branch, package, lineage record, ComputerVersion,
+or route. Coupling acceptance to those projections creates a second authority.
 
-`successor pattern:` Candidate = `(CodeRef, forked ArtifactProgramRef)`; speculative effects execute in capsules (`internal/capsule` + `internal/runtime/tools_capsule.go`); promotion = atomic route flip between `ComputerVersion` records.
+`successor pattern:` speculative effects execute in guest-local capsules and
+freeze as an inert bundle; an authorized acceptance event advances desired
+state; verified guest materialization advances effective state; a
+ComputerVersion checkpoint and vmctl route CAS project that applied event.
 
-`deletion gate:` No route resolves to a VM identity; all routes and promotion records target `ComputerVersion` records; vmctl candidate-desktop lifecycle code is deleted.
+`deletion gate:` No self-development route resolves to a VM identity or accepts
+legacy owner/G3, worker, package, lineage, mutable-branch, or candidate-route
+authority. Post-genesis routes require the exact accepted-event checkpoint and
+RouteProjectionCertificate joins.
+
 ## Banned Patterns
 
 Agents must not introduce:
@@ -1222,9 +1240,11 @@ Agents must not introduce:
     instead of using Go channels — the test is whether `internal/actor/actor.go`
     contains `chan` declarations and the warm loop `select`s on the channel
     rather than calling `log.Unprocessed` in a polling pattern.
-16. new product routes, promotion records, or candidate-computer bindings that
-    resolve to VM or desktop identities instead of `ComputerVersion = (CodeRef,
-    ArtifactProgramRef)` records.
+16. new product routes, promotion records, or speculative-candidate bindings
+    that treat a VM, desktop, mutable branch, package, lineage record, or
+    `ComputerVersion` route as self-development candidate authority. The only
+    self-development candidate is a frozen capsule effect bundle; vmctl routes
+    only accepted checkpoints after an authorizing event.
 
 ## Active Cutover Order
 

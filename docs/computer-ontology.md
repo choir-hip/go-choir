@@ -18,8 +18,8 @@ forked, merged, published from, and updated over time.
 ## Cloud Boundary
 
 Choir clouds are deployment and ownership boundaries. A cloud contains NixOS
-host infrastructure, platform computers, user computers, candidate computers,
-source systems, policy, and publication/subscription boundaries.
+host infrastructure, platform computers, user computers, source systems,
+policy, and publication/subscription boundaries.
 
 Use these terms:
 
@@ -27,29 +27,26 @@ Use these terms:
   `choir.news`, World Wire (formerly Universal Wire), public publication
   surfaces, public user computers, and Community Cloud platform computers.
 - **Private Choir Cloud**: a customer-controlled deployment with its own NixOS
-  host or host cluster, platform computer(s), many user computers, candidate
-  computers, private source systems, policy, and optional publication or
-  subscription links to the Community Cloud.
+  host or host cluster, platform computer(s), many user computers, private
+  source systems, policy, and optional publication or subscription links to the
+  Community Cloud.
 - **Host**: the NixOS machine or host cluster running infrastructure services.
 - **Platform computer**: a persistent computer owned by a cloud itself rather
   than an individual user.
 - **User computer**: a persistent computer owned by a person or service account
   inside a cloud.
-- **Candidate computer**: a speculative fork of a platform computer or user
-  computer. A candidate is a forked
-  `ComputerVersion = (CodeRef, ArtifactProgramRef)` — forked by tape/program
-  reference — never a VM or desktop instance (see the H031
-  candidate-computer-as-VM heresy in [choir-doctrine.md](choir-doctrine.md)).
+- **Capsule effect bundle**: frozen speculative effects bound to a ComputerID
+  and base event head; the only self-development candidate.
 
 Do not model a customer Private Choir Cloud as just a tenant row in the
 Community Cloud. A private cloud may have a thousand employees, its own NixOS
 hosts, its own platform computers, and its own private user computers.
 
 Host-side daemons may still exist for edge routing, auth, gateway, lifecycle,
-publication, or source-service work. Product authority should remain scoped to
-the relevant cloud and computer: platform-level semantic work belongs to a
-platform computer, user-level semantic work belongs to a user computer, and
-candidate mutation belongs to a candidate computer.
+publication, or source-service work. Product authority remains scoped to the
+relevant cloud and computer: platform-level semantic work belongs to a platform
+computer, user-level semantic work belongs to a user computer, and speculative
+self-development effects remain inside guest capsules until accepted.
 
 ## Core Object
 
@@ -71,40 +68,45 @@ different merge laws.
 
 | Layer | Status now | Claim boundary |
 | --- | --- | --- |
-| Persistent user computer and VM lifecycle | **Live** | VM/desktop identifiers are current materializer/control identifiers, not the durable candidate ontology. |
-| Worker/background VM mutation | **Live transitional path** | A worker or forked desktop VM can host edits/builds and return evidence or an AppChangePackage. It is not itself a candidate `ComputerVersion`. |
-| `internal/computerversion` contracts/evidence machinery | **Substantial code-present substrate** | Contract tests and materialization/evidence code do not make route-over-ComputerVersion production behavior load-bearing. |
-| Candidate `ComputerVersion` route identity | **Target / not wired end to end** | Ordinary routes still resolve through owner/desktop/VM seams. |
-| Capsules | **Partially implemented, inert in the default product path** | Executor/host/tool code exists, but the default runtime does not install a production capsule path; isolation and transaction evidence are incomplete. |
-| Features adoption and activation | **Live protocol records** | Recipient verification, approval, and lineage updates do not switch the served runtime/UI. |
-| Personal promotion | **Target** | A real route/build cutover with rollback proof is not currently available through Choir CLI/UI. |
+| Persistent user computer and VM lifecycle | **Live** | A long-lived computer is identified by stable ComputerID; a realization is replaceable machine state. Existing lifecycle/status remain projections and actuators. |
+| Worker/background and candidate VM mutation | **Live obsolete code; delete** | Worker-VM and candidate-VM are retired concepts. This mission deletes their lifecycle/controller/tool/profile/prompt/API code; generic delegated agents use durable runs/trajectories and capsules. |
+| `internal/computerversion` constructor/verifier | **Live audited construction substrate** | ComputerVersion is an immutable reconstruction checkpoint at an event head, not the evolving computer or semantic promotion authority. |
+| Computer event authority | **Active target / not implemented** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery are specified by the active self-development Definition. |
+| Capsules | **Scaffolded, inert by default** | Current host authority, executor, broker, cleanup, and exec/file tools are non-conformant; the target is mandatory guest-local fail-closed isolation. |
+| Features adoption and activation | **Live unrelated protocol records** | AppAdoption/lineage records do not change served code and are forbidden as self-development promotion authority. |
+| Self-development acceptance/materialization | **Active target / not implemented** | Acceptance must append an event; guest updater, checkpoint, route projection, rejection, restart/reconstruction, and rollback require deployed proof. |
 
-Do not collapse a code-present substrate into a live product claim. In
-particular, `worker VM`, `forked desktop`, `AppChangePackage candidate ref`,
-`capsule`, and semantic `candidate ComputerVersion` are different objects.
+Do not collapse a code-present substrate into a live product claim. A worker
+VM, forked desktop, AppChangePackage, capsule, frozen effect bundle,
+ComputerVersion checkpoint, realization, and route projection are different
+objects with different authority.
 
-## Target Candidate Contract
+## Self-Development Candidate Contract
 
-The user experiences one active computer at a time. Choir may create candidate
-computers to explore risky mutations, long-running work, app changes, package
-installs, new Go binaries, new Svelte builds, generated media, or semantic data
-changes. A candidate computer can later be discarded, archived, merged into the
-active computer, promoted as the active computer, or packaged for publication.
+The user experiences one stable computer identified by `ComputerID` and its
+canonical event chain. A self-development candidate is a frozen,
+content-addressed `CapsuleEffectBundle` bound to the computer, base event head,
+trajectory, capsule identity, source tree, offline build inputs, runtime
+artifacts, tests, verifier receipts, and resource receipts. It is inert until
+an authorized acceptance event.
 
-A candidate computer is identified by its forked ComputerVersion
-`(CodeRef, ArtifactProgramRef)`, never by a VM or desktop instance. It is
-materialized on demand — as a VM, a container, or a narrower projection,
-according to the chosen materializer's capability manifest — and its
-speculative *effects* execute in capsules (the effect chambers in
-`internal/capsule` + `internal/runtime/tools_capsule.go`), whose transactions
-append to the candidate's tape. There is no background VM or desktop kept warm
-waiting to be switched to; promotion moves the route pointer between
-ComputerVersions (invariant `route-over-computer-version`).
+Capsules are ephemeral guest-local effect chambers. They do not own semantic
+state, event ordering, acceptance, materialization, checkpoint publication, or
+route projection. Candidate VMs, desktops, routes, mutable branches,
+AppChangePackages, AppAdoption/lineage records, host daemons, and host repair
+are not self-development candidates or fallbacks.
 
-When the implementation substrate is VM-backed, computer liveness follows this
-policy: active primary computers outrank candidate/background work,
-and future always-on computers must be modeled as a first-class lifecycle class
-rather than a cosmetic account flag.
+An accepted event changes desired state. A root-owned guest updater stages and
+health-checks the immutable release before an applied event advances effective
+state. `ComputerVersion = (CodeRef, ArtifactProgramRef)` is then a
+reconstruction checkpoint at that effective event head. vmctl may project the
+checkpoint into the serving route through its sole route-slot CAS, but the
+route is not computer identity or event authority.
+
+The normal computer is long-lived and reconstructible. A realization may be
+replaced without changing `ComputerID`; reconstruction verifies the immutable
+event chain and receipts, deterministically rebuilds embedded state, and never
+reruns a model, tool, or network observation.
 
 ## Dolt Store Taxonomy
 
@@ -113,12 +115,15 @@ D-STORES and D-WIRE in
 [docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)):
 
 - **World-wire store:** platform `ObjectGraphStore` at
-  `internal/platform/objectgraph_store.go`, served by `corpusd`. It is moving to
-  sql-server mode now (multi-writer); no data migration is needed.
+  `internal/platform/objectgraph_store.go`, served by `corpusd` in sql-server
+  mode. Narrow `computer_event_heads`, append/idempotency, mode, and lifecycle
+  control tables live beside—but are semantically separate from—world-wire
+  objects and route-slot tables. corpusd mechanically performs authenticated
+  event-head and platform-control CAS; it does not select semantic events.
 - **VM-local embedded store:** one embedded Dolt workspace per user VM at
-  `internal/objectgraph/dolt_store.go`, shared by all capsules in that VM.
-  Promotion (fork/promote/rollback) is an operation on this embedded store, not
-  a property of the world-wire store and not a separate promotion workspace.
+  `internal/objectgraph/dolt_store.go`. It indexes the externally pinned event
+  chain and materializes the accepted effective state; it is never the sole
+  durable event copy or an alternate head authority.
 
 Branch isolation on the VM-local embedded store is settled for pinned
 single-writer connections (D-PROMO), but the current `DoltPromotionAdapter`
@@ -132,16 +137,18 @@ promoted Definition. No historical Phase D/E assignment authorizes work.
 
 Do not force every change through one storage abstraction.
 
-| Ledger | Owns | Typical promotion |
+| Ledger | Owns | Transition authority |
 | --- | --- | --- |
-| VM/OS/runtime | machine image, installed packages, running services, local caches, process environment | snapshot/cutover, rebuild from typed inputs, or discard |
-| Dolt/app state | textures, appagent state, prompts, traces, run memory, theme records, file metadata, promotion records | Dolt branch/commit merge with app invariants on the VM-local embedded store; D-PROMO proved pinned-connection isolation, but the current adapter remains tag-only interim |
-| Actor recovery log (narrow SQLite) | durable actor updates and compacted activation snapshots used by `internal/actorruntime` | recovery/replay only; it must not become competing semantic app, trajectory, or promotion truth |
-| Choir Base (partial SQLite journal + tree/blob substrate) | append-only source/file observations, derived tree, content-addressed blobs, File Provider/materialization support | tested but not deployed as the canonical computer store; any product wiring must preserve embedded-Dolt app authority and declare reconciliation boundaries |
-| Source/build | Go code, Svelte code, tests, Nix/package recipes, app bundles | git-like patch/commit or typed package import |
-| Blob/content store | uploaded files, generated media, PDFs, audio, images, patch artifacts | content-addressed hash plus Dolt/artifact metadata |
-| Artifact/provenance graph | claims, citations, source anchors, verifier results, trace refs, promotion certificates | graph merge with provenance completeness checks |
-| Route identity | which computer currently serves the user or public endpoint | atomic pointer update with rollback pointer |
+| Canonical computer events | immutable causal envelopes, accepted/rejected effects, desired/effective heads and commitments | one guest `ComputerEventAppender` requests typed corpusd head CAS; no other writer appends semantic events |
+| VM/OS/runtime | realization, installed release, running services, local caches, process environment | root guest updater and lifecycle actuators project an authorized event; realization replacement does not change ComputerID |
+| Dolt/app state | textures, appagent state, typed Researcher updates, event index, accepted effective-state materialization | deterministic reducer plus exact event-head/state preconditions; typed Researcher updates fate-share with append |
+| Actor recovery log (narrow SQLite) | durable actor updates and compacted activation snapshots used by `internal/actorruntime` | recovery/replay only; never semantic event, trajectory, acceptance, or promotion truth |
+| Choir Base (partial SQLite journal + tree/blob substrate) | append-only source/file observations, derived tree, content-addressed blobs, File Provider/materialization support | tested but not canonical computer authority; product wiring must preserve the event/embedded-Dolt boundary |
+| Source/build | CodeRef source, offline recipe/toolchain/dependencies, runtime/service artifacts | capsule effect bundle becomes desired code only through an accepted event |
+| Blob/content store | event bodies, encrypted/private payloads, generated media, bundles, receipts, releases, checkpoints | content-addressed pin receipts before event-head acknowledgement |
+| Artifact/provenance graph | claims, citations, source anchors, verifier results, trace refs | evidence projection; cannot append, accept, or materialize an event |
+| ComputerVersion checkpoint | immutable reconstruction inputs at a canonical/effective event head | published only after applied materialization or rollback |
+| Route identity | serving projection of an accepted checkpoint | vmctl-only route CAS with exact accepted-event/certificate joins; never semantic promotion authority |
 
 The filesystem is not one thing. Source files under a repo are source/build
 state. Uploaded files and generated media are blob state. Runtime caches and temp
@@ -161,8 +168,8 @@ Choir should track lineage explicitly:
 ```text
 platform base P0
   -> user computer U0
-      -> active computer U1
-      -> candidate computer C1
+      -> accepted event E1
+          -> checkpoint U1
 ```
 
 Platform versions, platform computers, and user computers are different levels.
@@ -171,155 +178,91 @@ Platform versions, platform computers, and user computers are different levels.
   invariants, default apps, default prompts, and upgrade machinery.
 - A platform computer is a persistent cloud-owned computer for cloud-level
   agents, cloud-owned artifacts, publication/source systems, and shared indexes.
-- A user computer is a persistent fork of that baseline.
-- A candidate computer is a speculative fork of a platform or user computer — a
-  forked ComputerVersion `(CodeRef, ArtifactProgramRef)`, materialized on
-  demand, with speculative effects executing in capsules.
-- A published package/change is a typed artifact extracted from a user or
-  candidate computer so another computer can import it.
+- A user computer is identified by stable `ComputerID` and its canonical event
+  chain. Realizations and checkpoints may change without changing that identity.
+- A self-development candidate is an inert `CapsuleEffectBundle` at a base event
+  head, not a forked computer or serving route.
+- A published package/change is a typed sharing artifact. Import/adoption does
+  not accept, materialize, or route self-development.
 
-This split is essential. Users must be able to evolve their own computers
-quickly without waiting for global CI/deploy. They should also be able to
-receive platform updates without losing their local divergence.
+This split is essential. Computer evolution, source sharing, and platform
+deployment are different authorities and cannot substitute for one another.
 
-## Two Promotion Paths
+## Event-Derived Change Paths
 
-### Personal Promotion
+### Computer-local self-development
 
-Personal promotion changes one user's computer.
-
-Examples:
-
-- build a new runtime service binary inside a candidate computer;
-- build a new Svelte frontend for that user's computer;
-- install packages;
-- add a user-local app;
-- change a theme;
-- add podcast index data;
-- update prompts or agent definitions;
-- merge a texture/app state branch.
-
-The target is not `origin/main` and not the global staging deployment. The target
-is the user's active computer.
-
-Personal promotion needs local evidence:
+A local self-development operation targets one explicit `ComputerID`; it does
+not target `origin/main`, a candidate VM, or an ambient current computer.
 
 ```text
-base computer -> candidate computer
-active computer advanced during candidate work
-merge/replay foreground tail
-verify the candidate-derived computer
-switch user route
-keep previous active computer as rollback for a TTL
+canonical base event head
+  -> capability-bound capsule work
+  -> frozen effect bundle
+  -> independent verification
+  -> external scoped acceptance event
+  -> root guest materialization and health
+  -> applied event / effective state
+  -> ComputerVersion checkpoint
+  -> vmctl route projection
 ```
 
-### Platform/Public Promotion
+Concurrent causal observations may append while the proposal is open, but
+acceptance binds the immutable proposal/bundle plus exact desired and effective
+heads and commitments. A changed state projection refuses acceptance; it is not
+silently merged. Rejection retains the full event history without applying the
+bundle. Rollback selects a prior applied event/checkpoint and rematerializes it;
+events are never deleted.
 
-Platform/public promotion makes a change available beyond one user's computer.
+The typed state transition—not a generic filesystem merge—is the authority:
 
-Examples:
+- Source/build effects are ordered in the frozen bundle and rebuilt from
+  pinned offline inputs.
+- Typed Researcher updates fate-share their exact embedded-Dolt mutation with
+  the event append.
+- Blobs, private payloads, verifier results, releases, and checkpoints are
+  immutable content-addressed artifacts with signed receipts.
+- Runtime state is materialized by the root guest updater; opaque running
+  machine state is never merged or promoted.
+- vmctl changes only the serving route after verifying the accepted-event,
+  materialization, checkpoint, verifier, and certificate joins.
 
-- official Choir source change;
-- shared app package;
-- shared agent package;
-- platform runtime update;
-- public theme package;
-- publication artifact;
-- reusable verifier/tool.
+### Platform and public change
 
-The target may be the official platform baseline, a public package registry, a
-newspaper/public artifact graph, or later an economic/capital surface.
+Platform source changes still land through GitHub main, CI, NixOS deployment,
+and staging acceptance. Shared apps, agents, themes, publications, and other
+artifacts use their own package/publication protocols. Neither path appends a
+computer's acceptance event merely by deploying or importing bytes.
 
-Platform/public promotion needs higher ceremony: verifier contracts, provenance,
-review, compatibility with divergent user computers, rollback, and possibly
-staging/deploy proof.
+## Event and Projection Receipts
 
-## Algebraic Promotion
-
-Let a computer be a product of ledgers:
+Every nontrivial self-development transition produces independently verifiable
+immutable evidence:
 
 ```text
-W = (V, D, S, B, A, R)
+computer_id
+operation_id
+canonical_event_head
+desired_event_head
+effective_event_head
+desired_state_commitment
+effective_state_commitment
+proposal_event_ref
+bundle_digest
+verifier_certificate
+decision_event_ref
+materialization_receipt
+checkpoint_receipt
+route_projection_certificate
+route_transition_receipt
+rollback_target
 ```
 
-where:
-
-- `V` is VM/OS/runtime state;
-- `D` is Dolt/app state;
-- `S` is source/build state;
-- `B` is blob/content state;
-- `A` is artifact/provenance graph state;
-- `R` is route identity.
-
-If a candidate forks from base `B0`, while the active computer continues to
-change, promotion asks whether the two arrows from the same base have a valid
-join:
-
-```text
-        C
-      /   \
-    B0     M
-      \   /
-        A
-```
-
-`B0 -> A` is the active foreground tail.
-`B0 -> C` is the candidate delta.
-`M` is the merged computer state or an explicit conflict.
-
-Layer-specific joins differ:
-
-- Source/build: git-like three-way merge, patch apply, build/test checks.
-- Dolt/app: Dolt merge, table/key conflicts, app invariants.
-- Blobs: content-addressed union by hash, metadata conflicts in Dolt/artifacts.
-- Artifact graph: provenance-preserving graph merge.
-- VM/runtime: usually do not semantically merge opaque running-machine state;
-  rebuild, snapshot/cut over, or discard after typed ledgers check out.
-- Routes: atomic pointer update only after a promotion certificate exists.
-
-Promotion checks out when an independent verifier can recompute the typed joins,
-hashes, conflict list, verifier results, and route transition from durable
-records.
-
-## Promotion Certificate
-
-Every nontrivial promotion should produce a durable certificate.
-
-Useful fields:
-
-```text
-promotion_id
-promotion_kind: personal | platform | publication
-owner_id
-base_computer_id
-base_vm_snapshot
-base_dolt_commit
-base_source_sha_or_bundle
-active_computer_id
-active_vm_snapshot_at_cutover
-active_dolt_commit_at_cutover
-candidate_computer_id
-candidate_vm_snapshot
-candidate_dolt_commit
-candidate_source_sha_or_bundle
-blob_hashes
-artifact_refs
-merge_results
-conflicts
-verifier_results
-old_route
-new_route
-rollback_until
-```
-
-The certificate should prove:
-
-- no foreground update was silently lost;
-- no candidate mutation touched canonical state before promotion;
-- typed deltas were merged or explicitly conflicted;
-- verifier contracts ran against the state being promoted;
-- the route switch has a rollback target;
-- retrying the same promotion is idempotent.
+The canonical event chain proves ordering, authority, privacy commitments, and
+desired/effective transitions. Signed materialization, checkpoint, and route
+receipts attest projections of that state. They cannot acknowledge the event
+they project. Idempotent retries return the original durable receipt; changed
+requests conflict before effects.
 
 ## Platform Updates To Divergent Computers
 
@@ -350,52 +293,55 @@ Shared changes must become typed artifacts.
 
 Current state:
 
-- the code still has a `sandbox` service and many docs say VM;
-- users do not yet have fully first-class durable computer lineage;
-- candidate worker export now publishes reviewable AppChangePackage evidence
-  instead of queuing old patchset promotion candidates;
-- promotion-level acceptance is AppChangePackage adoption with mandatory
-  recipient Go/Svelte build, verifier contracts, promote/rollback evidence,
-  and owner/platform authority;
-- docs now distinguish canonical/current/evidence/historical/stale material.
+- audited ComputerVersion construction, verification, route CAS, rollback,
+  reconstruction, and no-SSH inspection are live;
+- direct Super/CoSuper/VSuper tools, worker/package paths, host capsule
+  authority, incomplete isolation, and plaintext CLI flags remain live or
+  scaffolded and are non-conformant for self-development;
+- no canonical per-computer event appender, privacy protocol, guest updater, or
+  supported public self-development API exists yet;
+- package/adoption records remain useful sharing artifacts but are not
+  self-development acceptance or served-code activation.
 
 Near target:
 
-- product/docs say `computer` for the user object and reserve `sandbox` for the
-  implementation service name;
-- active/background/candidate computers have explicit lineage;
-- candidate promotion records name the relevant ledgers, not just patch paths;
-- personal promotion can switch one user's active computer after typed merge,
-  verification, and rollback certificate;
-- platform/public promotion remains a separate higher-ceremony path.
+- one stable ComputerID owns a complete privacy-safe canonical event chain;
+- Super cannot mutate directly, CoSuper effects are capsule-only, VSuper
+  aliases refuse, and Researcher writes only through its typed update;
+- an inert frozen bundle becomes desired state only through scoped external
+  acceptance and becomes effective only after verified guest materialization;
+- checkpoints and vmctl routes are reconstructible projections with explicit
+  rollback receipts.
 
 Ideal direction:
 
-- users can evolve Choir inside Choir;
-- candidate computers run long autonomous work;
-- personal promotion is fast and reversible;
-- published packages are typed and importable;
-- platform updates merge into divergent user computers;
+- users can evolve Choir inside Choir without host access or candidate VMs;
+- complete audit preserves learning from proposals, refusals, failures,
+  rejections, applications, and rollbacks;
+- published packages remain typed and importable without becoming authority for
+  the recipient computer;
+- platform updates can be reconciled with divergent computers under a separate
+  owner-ratified protocol;
 - the artifact graph records who changed what, what verified, what failed, what
   was reused, and what became public memory.
 
-That is the learning economy of artifacts: computers generate candidate
-structure, verifiers and owners select, promotions retain, publications expose,
-citations connect, and future work can reuse the retained structure.
-
 ## Naming Rules
 
-- Use **computer** for the user-facing durable execution object.
-- Use **active computer** for the computer currently routed to the user.
-- Use **candidate computer** for a speculative fork that may become active,
-  merge back, publish a package, or be discarded. The name refers to a forked
-  ComputerVersion, not to a VM or desktop instance.
-- Use **background computer** when emphasizing long-running off-foreground work.
+- Use **computer** for the durable product object identified by ComputerID and
+  canonical event chain.
+- Use **realization** for replaceable VM/OS/runtime machine state.
+- Use **CapsuleEffectBundle** or **frozen effect bundle** for a speculative
+  self-development candidate.
+- Use **ComputerVersion checkpoint** for immutable reconstruction inputs at an
+  event head.
+- Use **route projection** for the currently served checkpoint; never call it
+  semantic promotion authority.
+- Do not use **background computer**, **candidate computer**, **worker VM**, or
+  **candidate VM** for current product architecture; those forked-machine
+  concepts are retired.
 - Use **sandbox** only for existing service/process names or legacy references.
-- Use **VM** or **microVM** only when discussing the implementation substrate.
-- Use **candidate world** for the broader speculative state branch when it may
-  be a VM, worktree, Dolt branch, package branch, or future substrate.
+- Use **VM** or **microVM** only for the implementation substrate.
 
-The user should not have to care whether their computer is currently backed by a
-Firecracker VM, host-process fallback, NixOS image, worktree, or later substrate.
-The implementation must care, record it, and verify transitions.
+The user should not have to care which realization serves the computer. The
+implementation must bind and verify realization, event, checkpoint, and route
+transitions.

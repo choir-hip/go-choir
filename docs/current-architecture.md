@@ -1,7 +1,9 @@
 # Choir Current Architecture
 
-**Last updated:** 2026-07-17. Every claim is marked **Live**, **Target**, or
-**Retired**. No product Definition is currently executable. The completed
+**Last updated:** 2026-07-18. Every claim is marked **Live**, **Target**, or
+**Retired**. The owner-ratified
+[self-development Definition](definitions/choir-cli-self-development-2026-07-16.md)
+is the sole executable top-level product authority. The completed
 [audited-construction Definition](definitions/choir-audited-autoputer-construction-2026-07-15.md)
 and OG/Dolt subordinate D-ROUTE, detector, and deletion contracts are retained
 as evidence. Earlier assessments and hard-cutover sources remain absorbed
@@ -57,16 +59,16 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 
 | Subsystem | Status | Current authority boundary |
 | --- | --- | --- |
-| Automatic computer / autoputer | **Live substrate, partial product** | Persistent web desktop, runtime, VM lifecycle, appagents, and host services are wired. Candidate route/promotion and terminology cutover remain incomplete. |
-| Choir CLI | **Code-present Phase 1** | Submit/read/trajectory/search/Wire/API-key surface; no lifecycle/package/promotion verbs, supported distribution, or `/goal` runner. |
+| Automatic computer | **Live persistent substrate; self-development not yet implemented** | Stable computers, audited ComputerVersion construction, lifecycle, checkpoint routes, and no-SSH inspection are live. Canonical event authority, capsule isolation, updater, and self-development acceptance remain the active cutover. |
+| Choir CLI | **Supported read/control subset** | Submit/read/trajectory/search/Wire/API-key/current-computer surfaces exist. Public explicitly targeted self-development, mode, lifecycle, receipt, and rollback commands do not yet exist; plaintext API-key flags and internal run routes still require replacement. |
 | Web desktop | **Live** | `frontend/src/lib/apps/registry.ts` is the executable app inventory; this memo and `platform-os-app-state.md` classify behavior and gaps. |
 | macOS desktop | **Buildable wrapper; shipment unproven here** | Wails shell around the Svelte product; distribution/daily-driver status requires dated acceptance evidence. |
 | Choir Base / File Provider | **Substantial tested substrate, product wiring incomplete** | Append-only journal, tree/blob, sync, and API helpers exist. No deployed product service currently owns the API, and Base is not canonical app-state authority. |
 | Autopaper | **Tabled** | No active Definition or canonical implementation. Revival requires a fresh Definition; issue residue is not authority. |
 | `corpusd` | **Code-present and deployment-wired** | Service/store writer and sanitized public API boundary for publication/World Wire; platform-computer agents remain semantic owners. |
 | `sourcecycled` | **Code-present, deployment-wired experimental adapter** | Poll cycles and queue state are in memory and lost on restart. It hands off/projects durable artifacts; it does not own canonical article meaning. |
-| Capsules | **Partially implemented, inert by default** | Executor/host/tools exist, but the default runtime has no production capsule wiring; target semantics must not be claimed live. |
-| Features activation | **Live adoption/lineage protocol, not served-code activation** | Approval/freshness/build/lineage records exist. No ordinary user route consumer, binary swap, or restart makes Activate a ComputerVersion cutover. |
+| Capsules | **Scaffolded, inert by default** | Host authority is unwired, isolation/broker/cleanup are incomplete, and exec/file tools return `not_implemented`. The active target is mandatory guest-local capsule authority and fail-closed isolation. |
+| Features activation | **Live unrelated adoption/lineage records** | Approval/freshness/build/lineage records do not change served code and cannot authorize self-development. |
 
 `/goal <definition.md>` is an external compatible-harness invocation. Choir's
 CLI, prompt bar, and runtime do not implement an end-to-end Definition runner.
@@ -104,9 +106,9 @@ authority.
 | **work item** | a durable assignment on a trajectory: objective, authority envelope, fingerprint-deduped. Replaces retired RunContinuation. |
 | **settlement** | a trajectory's goal closure, earned by its rule (e.g. publication: published AND listed AND no open work). Replaces root-run completion as liveness truth. |
 | **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
-| **authority envelope** | what a bounded profile (super/vsuper/co-super/researcher/texture/...) may do — code-enforced capability boundary. Profiles are envelopes, not personas. |
-| **capsule** | (partially implemented, inert in the default product path) an ephemeral effect-fenced execution chamber inside a computer; never a seat of agency, never promotion authority. Executor/host/tool code exists, but production wiring and proof do not. |
-| **MutationTransaction / promotion** | state change via a single commit point: per-ledger prepare → verify → owner approval → atomic flip → reconcile; freshness CAS against the foreground; rollback window explicit. |
+| **authority envelope** | a code-enforced profile boundary. Super orchestrates but cannot mutate directly; CoSuper effects are capsule broker verbs; Researcher has typed updates only; VSuper aliases are retired for self-development. |
+| **capsule** | an ephemeral guest-local effect chamber. Current executor/host/tool code is scaffolded and inert; target capsules require namespaces, cgroup v2, overlayfs, seccomp, Landlock, capability-bound AF_UNIX brokerage, and verified cleanup. |
+| **computer event / acceptance** | the canonical per-ComputerID causal and state-transition record. A frozen bundle remains inert until an authorized acceptance event; updater, checkpoint, and route are projections, not alternate promotion authorities. |
 | **conjecture / hyperthesis / assertion** | the epistemic vocabulary: a claim under test with a named blind edge and scope; an assertion is a supported conjecture with receipts; heresy is a circulating claim whose proof died. |
 
 Retired vocabulary: **"continuation"** (named two unrelated mechanisms; both
@@ -118,11 +120,11 @@ persistent computer (code/service rename deferred until capsules land).
 
 The self-improvement frame (one promotion discipline at every grain):
 
-| Level | Scope | Candidate | Verifier | Promotion |
+| Level | Scope | Candidate | Verifier | Acceptance / application |
 |---|---|---|---|---|
 | 1. Improvement in the small | Texture media content | draft revision | citation checks, review, rubrics | revision becomes current |
-| 2. Self-development | Choir's own code and architecture | candidate computer | verifier fleet, RunAcceptance | MutationTransaction route switch |
-| 3. Meta-learning | the conjecture discipline itself | docs branch / one-mission trial | did action/evidence/scope/stopping change | skill/doc/invariant updates |
+| 2. Self-development | Choir's own guest code and typed state | frozen capsule effect bundle at a base event head | independent read-only capsule plus declared receipts | acceptance event → guest materialization → checkpoint → vmctl route projection |
+| 3. Meta-learning | the conjecture discipline itself | docs branch / one-mission trial | did action/evidence/scope/stopping change | owner-ratified doctrine/Definition update |
 
 Same five-tuple at every level: `(CLAIM, TEST, HYPERTHESIS_EDGE, ΔO, SCOPE)`.
 Level N changes are admitted by gates at level N+1 — self-reference without
@@ -144,40 +146,42 @@ The product object is a persistent user **computer**, not a disposable sandbox.
 The current work is not to invent the product from scratch. The current work is
 to stabilize the deployed system around the right causal model.
 
-Choir is not retired chat and not a generic coding-agent runner. The visible product is
-a web desktop with apps. Some apps grow into appagents; most apps can remain
-plain display/control surfaces. The hidden product machinery is a dark factory
-of researchers, supers, cosupers, background computers, evidence, artifacts, document
-versions, candidate worlds, promotion records, and eventually publications,
+Choir is not retired chat and not a generic coding-agent runner. The visible
+product is a web desktop with apps. Some apps grow into appagents; most apps can
+remain plain display/control surfaces. The hidden product machinery is a dark
+factory of researchers, supers, cosupers, capsules, events, evidence, artifacts,
+document versions, checkpoints, projections, and eventually publications,
 radio traversals, and citation/economic state.
 
-The operating stance is now staging-first. Meaningful claims about vmctl,
-gateway credentials, live model/search calls, background/candidate computers,
-platform promotion, rollback, auth/session renewal, and Choir-in-Choir must be proven on
-`https://choir.news` after commit, push, CI, deploy, and staging health
-identity checks. Local development remains useful for fast frontend iteration
-and focused unit shaping, but local proof does not establish product readiness.
+The operating stance is staging-first. Meaningful claims about vmctl, gateway
+credentials, live model/search calls, lifecycle, event acceptance,
+materialization, checkpoint/route projection, rollback, auth/session renewal,
+and Choir-in-Choir require commit, push, CI, deployment, exact staging build
+identity, and product-path proof on `https://choir.news`. Local development
+remains useful for focused unit shaping, but local proof does not establish
+product readiness.
 
 This staging-first rule applies to platform behavior and shared runtime claims.
-It does not mean every user-local computer change must wait for global CI/deploy.
-The intended personal-computer path is that users can fork a candidate from
-their own active computer, change apps inside that candidate, build a new
-Go/Svelte runtime, install packages, and promote the verified candidate back
-into their own active computer with local verifier and rollback evidence. Treat
-that as target architecture until the product path is fully code-backed and
-proven.
+The self-development target is one long-lived, reconstructible computer: a
+CoSuper works only inside a capability-bound guest capsule; the resulting
+effect bundle is independently verified and remains inert until an external,
+ComputerID-scoped approval appends an acceptance event. A root guest updater
+then stages and health-checks the release, publishes a reconstruction
+checkpoint, and asks vmctl to project the accepted checkpoint into the route.
+No candidate VM, mutable branch, host daemon, AppAdoption/lineage record, raw
+vmctl, SSH, or internal API is part of that product path.
 
-The current promotion architecture is stable platform, divergent computers.
-Read [computer-ontology.md](computer-ontology.md) before changing
-source-lineage, app-package, runtime/UI promotion, platform-computer, or
-deployment behavior. The short version is:
+The current platform architecture is stable source and reconstructible
+computers. Read [computer-ontology.md](computer-ontology.md) before changing
+events, source lineage, guest releases, checkpoints, routes, or lifecycle. The
+short version is:
 
 ```text
 platform substrate changes -> GitHub main -> CI -> NixOS deploy
-user computer changes      -> active source ref -> candidate -> verify -> promote
-source/app sharing         -> app change package -> recipient candidate rebuild
-new-user default image     -> official platform computer fork
-public surface changes     -> platform computer candidate unless substrate changes
+computer semantic change   -> canonical event -> guest materialization
+served checkpoint change   -> applied event -> ComputerVersion -> vmctl route CAS
+source/app sharing         -> package/adoption protocol, never self-development authority
+new-user default image     -> official platform construction inputs
 private public surface     -> selected route projection, not whole-computer exposure
 ```
 
@@ -185,8 +189,8 @@ The current cloud vocabulary matters for source/news work:
 
 - the **Choir Community Cloud** is the public/shared deployment;
 - a **Private Choir Cloud** is a customer-controlled NixOS host or host cluster
-  with platform computer(s), many user computers, candidate computers, private
-  source systems, and optional publication/subscription links;
+  with platform computer(s), many user computers, private source systems, and
+  optional publication/subscription links;
 - **Wire** is the reusable source-to-Texture substrate;
 - **World Wire** is platform-level work in the Community Cloud, not a
   user-computer feature;
@@ -221,7 +225,7 @@ per-user computer runtime
   -> conductor routes owner intent
   -> app surfaces project durable state
   -> appagents own canonical semantic artifacts when needed
-  -> researcher/super/vsuper/co-super workers create evidence and candidates
+  -> researcher/super/co-super durable runs create evidence; capsule-scoped effects remain inert candidates
   -> user processors/reconcilers personalize accessible corpora where present
   -> embedded Dolt owns private computer product state
   -> zot can run as a Super Console subprocess when configured
@@ -237,8 +241,8 @@ Important boundary rules:
   stay narrow and should not become private document, appagent, or user-computer
   semantic owners.
 - The per-user computer runtime is where private conductor, Texture, appagent,
-  Trace, run memory, app state, source metadata, and candidate-control product
-  state live.
+  Trace, run memory, app state, source metadata, canonical event projections,
+  and inert capsule-proposal metadata live.
 - Platform-level semantic work, such as World Wire article/edition Textures
   and public source synthesis, should be scoped to platform computer authority
   even when host daemons perform serving, lifecycle, or adapter work.
@@ -273,9 +277,9 @@ model catalog are platform-owned, but the effective model policy for a user
 computer is computer-owned durable state. The platform may ship default role
 mappings, such as ChatGPT for a foreground role or Fireworks-hosted DeepSeek/Kimi
 for another, but those mappings are not architectural boundaries. Any configured
-model may serve conductor, Texture, researcher, super, vsuper, co-super, verifier,
-or future roles when its declared capabilities match the current turn. Text-only
-models can run orchestration, research, coding, writing, and text/code/evidence
+model may serve conductor, Texture, researcher, super, co-super, verifier, or
+future production roles when its declared capabilities match the current turn.
+Text-only models can run orchestration, research, coding, writing, and text/code/evidence
 verification. Multimodal models are required only for turns that actually need
 screenshots, images, video frames, uploaded files, or other media input. The
 target architecture is a hierarchy of platform catalog -> platform defaults ->
@@ -559,29 +563,26 @@ use the universal shell/API path.
 `texture` is the single writer for canonical document versions. It synthesizes user
 edits and worker updates into durable document state.
 
-`researcher` reads local files and the web, then writes findings/evidence to
-Dolt. Researcher does not own canonical document text.
+`researcher` reads local files and the web, then submits findings/evidence only
+through the typed `update_coagent` source-packet mutation. It has no bash, raw
+Dolt, writable files, capsule commit, acceptance, route, or host authority.
 
-`super` is the per-user foreground orchestration root for resource-heavy or
-mutable execution. The useful distinction is authority: `super` can request
-`vmctl` resources such as background/candidate worker worlds and promotions.
+`super` is the per-user foreground orchestration root. It can orchestrate
+capsules and delegation, inspect evidence, request verification, and propose a
+decision. It has no bash, direct writable/coding, shipper, worker-VM, route, or
+host tools.
 
-`vsuper` is the sovereign worker inside a background/candidate computer or candidate world. It
-may mutate candidate state within scope and may spawn local cosupers inside that
-VM boundary. It cannot promote canonical state.
+`vsuper`, `candidate-super`, and aliases are retired from production
+self-development profiles and fail closed.
 
-`cosuper` is a durable execution co-agent, usually running inside a background
-computer or under a vsuper. Only `super`/`vsuper` authority can request or assign
-cosuper work. Legacy lease wording is H019 residue unless it is explicitly about
-capacity/QoS rather than actor control. Cosupers should not be treated as
-one-shot subagents that disappear without live coordination.
+`cosuper` is a durable execution co-agent. Every shell, filesystem, and build
+effect occurs through a capability-bound guest-local capsule broker. It never
+receives direct core-VM mutation or host authority.
 
-`worker` is the general category for delegated agents such as researcher, super,
-cosuper, and future specialized workers with their own tools.
-
-For now, high reliance on `super` and `cosuper` is acceptable. Getting the
-factory working end to end matters more than perfect least privilege. Repeated
-privileged actions should later become narrower tools, workers, or appagents.
+`worker VM`, `background computer`, and `candidate VM` are obsolete product
+concepts. Their lifecycle/controller/tool/profile/prompt/API code is deleted by
+the active mission. Generic delegated agents remain durable runs/trajectories
+and perform effects only through capsules.
 
 ## Computer Model
 
@@ -594,56 +595,44 @@ The implementation may back a computer with a Firecracker VM, NixOS image,
 host-process fallback, worktree, or later substrate. The user-facing object is
 still the computer.
 
-VM-backed computers are retained by a typed warmness policy, not by a single
-idle timeout. Ordinary primary computers stay
-warm while capacity allows, candidates and workers hibernate first, and
+VM-backed computer realizations follow a typed warmness policy, not a single
+idle timeout. Ordinary primary computers stay warm while capacity allows;
 configured always-on primary computers have an explicit protected/resume lane.
+Delegated agents are durable runs, not worker computers, and speculative
+self-development effects are inert bundles, not hibernating computers.
 
-`active_computer`:
+`computer`:
 
-- The user-facing desktop computer.
-- Hosts the visible desktop, apps, appagents, per-user embedded Dolt, private
-  app state, local files, prompts, and user-specific runtime state.
+- The durable user-facing object identified by stable ComputerID plus canonical
+  event chain.
+- Hosts visible desktop/apps and typed embedded-Dolt state through a replaceable
+  realization.
 - May diverge from the platform baseline.
-- May expose one singleton Super Console repair app backed by out-of-process
-  `zot`; this is repair mode for the active computer, not a normal scripting
-  surface.
-- Should stay stable and responsive.
-- Should not be edited directly by `super`/`cosuper` for risky mutable work.
+- Is reconstructed from immutable events, receipts, releases, checkpoints, and
+  artifacts without model/tool/network rerun.
+- Is not edited directly by Super, CoSuper, a repair console, or host tools.
 
-`background_computer`:
+`realization`:
 
-- A fork of the user's active computer for risky, long-running, or mutable work.
-- Used for code edits, package installs, tests, builds, deploy prep, generated
-  workspace changes, and anything that may destabilize the active desktop.
-- Reports results back as artifacts, findings, branch/commit refs, previews,
-  tests, and proposed merges.
-- Can merge back into the active computer, publish a typed package, or be
-  promoted to active while the previous active snapshot remains available for
-  rollback.
+- Replaceable VM/OS/runtime machine state serving one ComputerID.
+- May be stopped, restarted, or reconstructed; it is never a speculative
+  candidate or semantic authority.
+- Contains root-owned guest updater and credential services outside agent and
+  capsule processes.
 
-`candidate_computer`:
+`capsule_effect_bundle`:
 
-- **Target semantic object:** a forked
-  `ComputerVersion = (CodeRef, ArtifactProgramRef)`, never the worker VM or
-  desktop that materializes its effects.
-- May be materialized by a background/worker substrate allowed to mutate and
-  fail; the substrate and candidate identity remain distinct.
-- Produces findings, traces, diagnostics, AppChangePackages, and recipient
-  adoption evidence.
-- Does not mutate canonical foreground state directly.
-- Becomes canonical only through promotion after verifier contracts and owner
-  decision, or remains discardable/archivable with rollback evidence.
+- The only self-development candidate.
+- Frozen, content-addressed effects from one capability-bound capsule at an
+  exact base event head.
+- Remains inert until independent verification and scoped acceptance.
+- Is discarded, rejected, applied, or retained as audit; it is never a VM,
+  desktop, mutable branch, package, lineage record, or route.
 
-`candidate_world` remains the broader substrate-neutral term for a speculative
-state branch. A candidate world may be a computer, a worktree, a Dolt branch, a
-package branch, or a future substrate.
-
-Shared worker computers are not a current architecture primitive. They may
-become a later cost optimization, but they should not complicate the immediate
-model. While existing OVH capacity is available, free users can receive
-temporary background computer forks gated by capacity. Privacy is a product tier
-decision, not a reason to preserve shared workers now.
+`worker_vm`, `background_computer`, `candidate_vm`, and `candidate_computer` as
+forked machine/computer concepts are retired. Their lifecycle, controller,
+tool, profile, prompt, API, configuration, and fallback code is deleted. Generic
+delegated agents are durable runs/trajectories and use capsules for effects.
 
 `platform_vm_pool`:
 
@@ -652,7 +641,7 @@ decision, not a reason to preserve shared workers now.
   served without hydrating a user's private active computer.
 - Can host publication readers, public previews, cached renderers, and other
   platform-visible app surfaces.
-- Should not be confused with a user's active/background computer model.
+- Is infrastructure for public serving, not a user or speculative computer.
 
 ## Public Identity And Routing
 
@@ -670,10 +659,10 @@ because of who owns it. Custom domains are a roadmap value proposition: after a
 domain owner proves control, the domain can serve the same published personal
 desktop/newspaper surface that would otherwise live under `choir.news/:handle`.
 
-Anonymous users may inspect public surfaces. When they attempt to mutate, Choir
-should ask them to register or log in, then create or resume a user-owned active
-or candidate computer. Platform/public mutation is a fork/proposal/promotion
-path, not direct anonymous mutation of the platform computer.
+Anonymous users may inspect public surfaces. Mutation requires authentication
+and an explicit target computer plus scoped authority. Self-development then
+uses proposal, event acceptance, guest materialization, checkpoint, and route
+projection; it never mutates the platform computer anonymously.
 
 This section is the current authority for the public-identity roadmap target.
 
@@ -691,139 +680,71 @@ This section is the current authority for the public-identity roadmap target.
   120s, and staging `/api/universal-wire/stories` returns a fast 504 within
   60s for an induced vmctl resolve failure. Bounded path is proven.
 
-## Promotion Paths
+## Self-Development And Platform Paths
 
-Personal promotion changes one user's computer. It may promote a new local Go
-binary, Svelte build, app bundle, theme, prompt, package install, Dolt branch,
-file/blob, or generated artifact into that user's active computer without a
-global platform deploy. It still needs source lineage, typed deltas, verifier
-evidence, foreground-tail reconciliation, route/adoption records, and rollback.
-Runtime Go and Svelte UI changes should be treated as a matched pair when app
-behavior crosses that boundary.
+Computer-local self-development targets one explicit stable `ComputerID`.
+CoSuper work executes only in a guest-local capability-bound capsule and
+freezes as an immutable effect bundle. Independent verification and external
+scoped approval append an acceptance event. A root guest updater atomically
+stages, restarts, and health-checks the guest release; only an applied event
+advances effective state. Constructor checkpoint publication and vmctl route
+CAS are subsequent projections with separate receipts.
 
-Super Console repair is a user-computer-local inner loop, not platform
-promotion. When a user's active computer is broken, its singleton Super Console
-may use out-of-process `zot` to inspect unified logs and private source/build
-state, patch runtime/UI/app code inside that computer, rebuild/restart locally,
-verify, and write a markdown diagnosis report. That local repair may remain
-private, later inspire a platform fix, or later be turned into a typed package,
-but it is not automatically a platform merge or AppChangePackage.
+Rejection preserves the proposal and trajectory without applying it. Rollback
+selects a prior applied event/checkpoint, rematerializes through the updater,
+and retains every event. Concurrent causal observations may append, but any
+changed desired/effective state projection makes an acceptance or rollback
+request stale and refuses it.
 
-Platform/public promotion changes shared state: the official Choir baseline,
-public packages, publication artifacts, shared app/agent packages, or public
-artifact graph state. It requires higher ceremony: verifier contracts,
-provenance, compatibility with divergent user computers, rollback, and often
-staging/deploy proof.
+Super Console and ordinary agents do not patch or restart the core VM directly.
+Diagnosis and control use supported public APIs/CLI and event/receipt
+inspection. Host access, `zot`, SSH, raw vmctl, candidate VM, mutable branch,
+AppChangePackage/AppAdoption/lineage, and internal APIs are not repair or
+self-development fallbacks.
 
-Source/package publication is not automatically platform deployment. A user may
-publish app/runtime/UI deltas from an approved candidate as an
-`AppChangePackage`; another user imports that package into their own candidate
-computer, rebases it onto their own source ref, builds their own matched
-runtime/UI artifacts, verifies, and promotes into their own active computer.
-Promotion records must account for foreground-tail changes by naming the target
-active source ref at candidate start and cutover, plus merge/rebase evidence
-and conflicts.
-
-This migration should be treated as one continuous app-change trajectory, not a
-checklist ladder. "Package exists", "candidate built", "record exists", and
-"route changed" are observations, not success states, unless the same
-AppChangePackage identity is carried through source refs, rebuilt artifacts,
-verifier results, authority decisions, rollback, Trace, and run acceptance.
-
-The public/logged-out product surface and new-user default base image should be
-modeled as the official platform computer. It can receive admin-controlled,
-later governance-controlled, candidate promotions without host redeploy when the
-substrate is unchanged. Host NixOS deploy remains for shared substrate behavior.
-Later, organizations, schools, communities, and hobbyist groups can publish
-their own promoted computer distributions as alternative base images for new
-users.
-
-Private user computers may later expose selected public routes, like personal
-websites or personal newspapers, but that must be explicit projection with
-visibility, provenance, and rollback. It must not expose the whole computer.
-Near term, automatic newspaper work should be built in user/candidate computers
-and promoted to the platform computer or published through corpusd where
-possible. Platform host deploys remain necessary for shared substrate changes
-such as gateway APIs, vmctl/runtime protocol, auth/routing/security, and
-corpusd service behavior.
-
-The algebraic question for either path is whether active and candidate deltas
-from the same base have a valid join. The VM/runtime ledger is usually not
-semantically merged as an opaque machine; typed ledgers such as source/build,
-Dolt/app state, blobs, and artifact provenance are merged or conflicted, then
-the route pointer changes atomically with rollback.
-
+Platform source changes remain GitHub main → CI → NixOS deploy → staging proof.
+Shared source/app/publication packages use separate sharing protocols. Neither
+deployment nor package import appends a computer acceptance event merely by
+moving bytes.
 ## State Placement
 
-Choir needs multiple state ledgers with different merge laws. The Dolt substrate
-is split into two stores that must not be conflated (see D-STORES in
-[docs/definitions/og-dolt-heresy-completion-2026-07-08.md](definitions/og-dolt-heresy-completion-2026-07-08.md)):
+Choir uses exactly two Dolt stores.
 
-- **World-wire store:** platform `ObjectGraphStore` at
-  `internal/platform/objectgraph_store.go`, served by `corpusd`. The platform
-  decision (D-WIRE) is to move this to sql-server mode now; no data migration
-  is needed and existing wire data is junk.
-- **VM-local embedded store:** one embedded Dolt workspace per user VM at
-  `internal/objectgraph/dolt_store.go`. Capsules are partially implemented but
-  not wired into the default product path; the workspace currently backs the
-  computer directly. If capsules land, the same
-  workspace will be shared by all capsules in that VM. Promotion
-  (fork/promote/rollback) is an operation on this embedded store, not a property
-  of the world-wire store and not a separate promotion workspace.
+- **World-wire sql-server:** the existing corpusd `platform` database contains
+  public/source object-graph tables, route-slot tables, and narrow
+  `computer_event_heads`, append/idempotency, key-history, mode, and lifecycle
+  control rows. corpusd mechanically performs authenticated head and
+  platform-control CAS. vmctl alone actuates route-slot CAS. Neither chooses or
+  appends semantic events.
+- **VM-local embedded Dolt:** one workspace per computer realization indexes
+  the externally pinned canonical event chain and materializes accepted
+  effective app state. It is never the sole durable event copy or an alternate
+  head/promotion authority. Every capsule sees only its private overlay and
+  broker-approved typed operations, not raw store access.
 
-The current Dolt/SQLite decision is the D-STORES/D-WIRE contract in this
-section and [computer-ontology.md](computer-ontology.md). Earlier decision
-records remain available only through Git history.
+The trusted guest `ComputerEventAppender` is the sole semantic writer for one
+ComputerID. Runtime EventRecord, Trace, trajectories, actor logs, run memory,
+reducers, status, checkpoints, routes, and vmctl are projections or actuators.
+Typed Researcher updates fate-share the exact embedded mutation with event CAS;
+other accepted state changes advance desired and effective heads through the
+declared updater state machine.
 
-VM-local embedded Dolt (one workspace per user VM, shared by its capsules once
- capsules are built) currently holds private product state directly:
+The embedded store materializes desktop/app graph, appagent state, Texture
+versions, prompts/policies, typed findings, local trajectory indexes, and
+publication staging metadata. The canonical causal envelope and immutable
+payload/receipt artifacts remain externally pinned. The tag-only
+`DoltPromotionAdapter` stays disabled; its destructive reset is forbidden.
 
-- desktop/app graph
-- appagent state
-- `texture` document/version content
-- prompts and policies
-- local trajectories
-- researcher findings and evidence metadata
-- publication staging metadata
+Per-realization filesystems hold release slots, working projections, uploads,
+large media, and caches. Source/build effects and accepted artifacts are pinned
+by digest; runtime caches and opaque machine accidents are not semantic state.
+Texture content remains embedded-Dolt authority with optional filesystem
+aliases.
 
-Promotion (fork/promote/rollback) operates against this embedded store, not
-against the world-wire store and not a separate promotion workspace. D-PROMO
-is settled for pinned `*sql.Conn` single-writer discipline on the embedded
-store: the `TestDoltEmbeddedBranchIsolationPinnedConnection -count=10` bar
-passes. The current `DoltPromotionAdapter` is tag-only, non-conformant, and
-must remain disabled. Audited construction granted no further adapter mutation;
-replacement or deletion requires a separately promoted Definition.
-
-Per-user snapshot filesystem holds workspace and file state:
-
-- working trees
-- uploaded files
-- large media
-- build artifacts
-- generated outputs
-- filesystem aliases or materialized shortcuts for Dolt-backed `texture` documents
-
-`texture` spans both: canonical content lives in embedded Dolt, while the
-filesystem should expose natural aliases/shortcuts so documents are discoverable
-from the desktop and file browser.
-
-World-wire store (historically misnamed "Platform Dolt") holds the public/source
-object graph served by `corpusd`:
-
-- publication proposals, publications, publication versions, and public routes
-- public artifact metadata and manifests
-- source/retrieval/citation/provenance records and wire/source object graph
-  (`og_objects` / `og_edges`)
-- consent, review, verifier, and related control records scoped to public/source
-  objects
-- later CHIPS economy state for public transactions
-
-It does not own VM lifecycle, platform VM pool state, auth/user account state,
-candidate-computer identity, promotion rollback, or general compute accounting.
-Those belong to platform control ledgers or VM-local embedded stores as named by
-their subsystem. Per D-WIRE, the world-wire store moves to sql-server mode for
-multi-writer access by proxy/runtime/wire agents. Per D-STORES, this does not
-change promotion mechanics: promotion operates on the VM-local embedded store.
+The world-wire store also holds publications, public routes, source/retrieval/
+citation/provenance objects, and public review/control records. Narrow event
+control tables are semantically separate from those objects and from route
+slots. They do not create a third store or grant corpusd semantic authorship.
 
 Two additional stores are code-present but narrower than product authority:
 
@@ -923,8 +844,8 @@ Computer, not a fixed visual doctrine.
 
 The root product should show the real desktop to signed-out visitors. Login is a
 mutation boundary, not a prerequisite for viewing. Prompt-bar input, file writes,
-LLM-backed actions, candidate creation, publication, and promotion should trigger
-auth when needed while preserving the user's current intent.
+LLM-backed actions, capsule-proposal creation, publication, and scoped acceptance
+should trigger auth when needed while preserving the user's current intent.
 
 The prompt bar should react optimistically to user input. Simple version: show a
 loading toast. Better version: animate or expand the prompt into the new `texture`
@@ -936,7 +857,7 @@ Web Lens currently still carries browser-session implementation names and
 frontend iframe behavior. The product ontology is narrower: durable web-derived
 sources should default to Source Viewer/reader artifacts, and Web Lens is an
 explicit live/original inspection surface reached from a source object. Backend
-browsing work can support Web Lens, source acquisition, and candidate-computer
+browsing work can support Web Lens, source acquisition, and capsule-proposal
 inspection, but it should not reintroduce a manual general browser as the
 primary source-gathering workflow.
 
@@ -976,6 +897,6 @@ Future coding agents should not simplify Choir into:
 The invariant is simpler:
 
 ```text
-versioned living documents + appagents + candidate computer execution + durable
-provenance + publication/citation readiness
+versioned living documents + appagents + capsule-scoped effects + canonical
+events + durable provenance + publication/citation readiness
 ```

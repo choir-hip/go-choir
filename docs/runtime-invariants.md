@@ -26,15 +26,15 @@ verification, and a deployed product-path acceptance proof. Documentation-only
 commits are exempt from automatic CI/deploy and should remain covered by the
 workflow path filters for `docs/**` and top-level `*.md`.
 
-Personal computer changes are not automatically platform behavior changes. A
-user-local app, prompt, theme, package install, Go binary, Svelte build, or
-Dolt/app-state change may be promoted into that user's computer without global
-CI/deploy, provided the personal promotion records lineage, typed deltas,
-verifier evidence, and rollback.
+Computer-local self-development is accepted only through the canonical event
+protocol. A verified capsule effect bundle remains inert until owner acceptance;
+guest materialization, checkpoint publication, and route projection follow the
+accepted event and retain rollback receipts. It does not become a VM, branch,
+package, lineage record, or route.
 
 `https://choir.news` is the acceptance environment for vmctl, gateway,
-live model/search calls, background/candidate computers, platform promotion, rollback,
-auth/session, and Choir-in-Choir claims.
+live model/search calls, computer lifecycle, self-development, platform
+promotion, rollback, auth/session, and Choir-in-Choir claims.
 
 ## Computer Lifecycle And Reclaim
 
@@ -51,27 +51,26 @@ Post-auth prewarm may start immediately after register/login/session proof, but
 it must use the same authenticated product route and proxy/vmctl authority as
 normal bootstrap.
 
-Lifecycle policy should classify running work by warmness class, including
-public platform computer, primary user computer, premium always-on primary
-computer, candidate/background computer, ordinary worker computer, and critical
-protected verifier/promotion/publication work. Browser-public health may expose
-only aggregate counts, timing summaries, and policy names for these classes; it
-must not expose user ids, VM ids, desktop ids, emails, prompt text, credentials,
-or gateway tokens.
+Lifecycle policy should classify running realizations by warmness class,
+including public platform computer, primary user computer, premium always-on
+primary computer, and critical protected verification/materialization/
+publication work. Browser-public health may expose only aggregate counts,
+timing summaries, and policy names for these classes; it must not expose user
+ids, VM ids, desktop ids, emails, prompt text, credentials, or gateway tokens.
 
 Pressure-aware policy supports both dry-run observation and active reclaim.
 Dry-run mode may report aggregate pressure, protected counts, and ranked
-candidate summaries through health without changing VM state. Active reclaim
-may hibernate only a bounded number of ranked, unprotected, idle candidates
+realization summaries through health without changing VM state. Active reclaim
+may hibernate only a bounded number of ranked, unprotected, idle realizations
 when host pressure crosses configured thresholds, and it must remain controlled
 by the fast rollback knob `VMCTL_PRESSURE_RECLAIM_MODE=off|dry-run|active`.
 
-Foreground active computers outrank background/candidate computers for
-retention. Recent activity, unknown last-active state, and verifier, promotion,
-rollback, or publication work are protected from pressure reclaim in the current
-implementation. Active reclaim must continue expanding protection to live
-prompt submissions, LLM calls, file writes, verifier runs, promotions, and
-publication actions as those states become first-class lifecycle signals.
+Foreground user-computer realizations outrank public/shared serving
+realizations for retention. Recent activity, unknown last-active state, and
+verification, materialization, rollback, or publication work are protected
+from pressure reclaim. Protection must cover live prompt submissions, LLM
+calls, file writes, verifier runs, materialization, and publication actions as
+those states become first-class lifecycle signals.
 
 Premium always-on primary computers are a first-class lifecycle class. Ordinary
 pressure reclaim must not silently demote them into best-effort idle keepalive;
@@ -105,67 +104,57 @@ guidance is unconditional, driven by the default Style.texture.
 `researcher` reads local context and the web, writes findings/evidence to Dolt,
 and does not own document text.
 
-`super` is the per-user privileged orchestration root. It can request `vmctl`
-resources such as background/candidate computer forks and promotions.
+`super` is the per-user privileged orchestration root. It may orchestrate
+durable delegated runs and capability-bound capsules and inspect their evidence;
+it does not directly mutate the computer, host, route, or canonical event state.
 
-`vsuper` is the sovereign worker inside a background/candidate computer or candidate world. It
-can mutate candidate state within scope and can spawn subordinate cosupers
-inside its own VM boundary. It cannot promote canonical state.
+`vsuper` is retired. Its aliases, profile, prompt, spawn rules, tool grants, and
+runtime paths are deleted; it must not survive as a privileged worker role.
 
-`cosuper` is a durable execution co-agent, usually in a background computer. Only
-`super` or `vsuper` authority can retired-lease cosuper work; cosupers coordinate within
-their assigned work but do not create more privileged execution roots.
+`cosuper` performs scoped effectful work only inside a capability-bound guest
+capsule. It has no host, raw VM, route, canonical event, or acceptance authority.
 
-`worker` is the general category for delegated agents such as researcher, super,
-cosuper, and future specialized workers with their own tools.
+Delegated agents such as researcher, super, cosuper, and future specialized
+roles are durable runs/trajectories with scoped tools. They are not worker
+computers or worker VMs.
 
 ## Computer Model
 
-The product object is a persistent user **computer**, not a disposable sandbox.
-Use `sandbox` only for the current runtime service/process name.
+The product object is one persistent user **computer**, not a disposable
+sandbox or a set of active/background/candidate machine forks. Use `sandbox`
+only for the current runtime service/process name.
 
-`active_computer` is the user's primary desktop computer. It hosts visible apps,
-appagents, per-user embedded Dolt, private app state, local files, prompts, and
-user-specific runtime state. It should stay stable and responsive.
+The computer is identified by stable `ComputerID` and canonical event chain. Its
+VM/OS/runtime realization is replaceable machine state. Checkpoints, releases,
+and route projections are reconstructions of accepted state, not candidate
+identity or semantic authority.
 
-`background_computer` is the product term for an isolated mutable context.
-Today the live execution substrate is commonly a worker or forked desktop VM;
-that VM is a transitional materializer, not a semantic candidate
-`ComputerVersion`. Risky mutable work goes there: code edits, package installs,
-tests, builds, deploy prep, generated files, and anything that can destabilize
-the active desktop.
+Risky self-development effects execute only inside capability-bound guest
+capsules. A capsule freezes an inert content-addressed effect bundle at an exact
+base event head. Verification and acceptance happen outside the capsule; only
+an accepted event authorizes guest materialization, checkpoint publication, and
+route projection.
 
-Background work returns artifacts, findings, branch/commit refs, previews, test
-results, and proposed merges. A background computer can merge back into active
-state, publish a typed package, or be promoted to active while the previous
-active snapshot remains available for rollback.
-
-The target `candidate_computer` is a forked
-`ComputerVersion = (CodeRef, ArtifactProgramRef)`. It is not yet wired as the
-ordinary route/promotion object. Current worker/background VMs may produce
-deltas and evidence but must not be described as completed candidate-computer
-promotion semantics.
-
-Candidate worlds are the broader substrate-neutral term. A candidate world may
-be a computer, worktree, Dolt branch, package branch, or future state branch.
-
-Shared worker computers are not a current invariant. They may become a later cost
-optimization, but the immediate model is active computer plus capacity-gated
-background computer forks, including for free users while capacity allows.
+`worker_vm`, `background_computer`, `candidate_vm`, and `candidate_computer` as
+forked product objects are retired. Generic delegation uses durable
+runs/trajectories and capsules instead.
 
 `platform_vm_pool` is a platform-level pool for public/unauthenticated and shared
-serving work. It is needed during the publication pass so published `texture`
-artifacts can be served without hydrating private user computers.
+serving work. It may serve published artifacts without hydrating private user
+computers; it is infrastructure, not a user, worker, background, or candidate
+computer.
 
 ## Super-Tier Execution Policy
 
-`super` and `cosuper` should not edit the live desktop directly. They may inspect
-or control it through typed APIs, but mutable workspace changes should happen in
-background/candidate computer forks.
+`super` and `cosuper` do not edit the live desktop directly. `super` may inspect
+and orchestrate through typed public APIs. Effectful `cosuper` work runs inside
+a capability-bound capsule with least-privilege tools and produces an inert
+bundle for external verification and acceptance.
 
-Do not over-design locks, retired leases, or predeclared edit scopes as the core safety
-model. The current safety model is VM placement, typed app APIs, durable
-provenance, Trace visibility, and merge/promotion review.
+Do not use VM placement, branch merge, route switching, or a role name as a
+safety or promotion model. Safety comes from capability isolation, typed app
+APIs, canonical events, independent verification, scoped acceptance, durable
+receipts, and event-derived rollback.
 
 ## State Placement
 
@@ -206,23 +195,27 @@ bundles. Uploaded/generated files belong in content-addressed blob storage with
 Dolt/artifact metadata. Runtime caches and temp files are machine state unless
 they are deliberately converted into typed artifacts.
 
-## Promotion
+## Acceptance And Platform Promotion
 
-Personal promotion and platform promotion are different invariants.
+Computer-local self-development and platform/public promotion are different
+authorities.
 
-Personal promotion changes one user's computer. It must preserve active
-foreground changes since the candidate fork, record conflicts instead of losing
-updates, verify the promoted state, switch routes atomically, and keep a rollback
-target for a TTL.
+Computer-local self-development starts with an inert capsule effect bundle at
+an exact canonical event head. Independent verification and scoped owner
+acceptance append the authorizing event. Guest materialization, checkpoint
+publication, and vmctl route projection follow the accepted event and preserve
+conflicts, stale-base refusals, exact receipts, and event-derived rollback.
+Neither a fork, package, `ComputerVersion`, nor route switch authorizes the
+change.
 
-Platform/public promotion changes shared state. It must use verifier contracts,
-owner/reviewer decision where required, rollback evidence, and staging/deployed
-proof when the change affects deployed platform behavior.
+Platform/public promotion changes shared deployed state. It must use verifier
+contracts, owner/reviewer decision where required, rollback evidence, and
+staging/deployed proof when the change affects deployed platform behavior.
 
-Do not promote opaque VM state as if it were a clean semantic merge. Promote
-typed artifacts: Dolt commits/branches, source/build deltas, blob hashes,
-artifact graph records, app packages, agent packages, verifier results, and
-route-switch certificates.
+Typed packages and source/build records may support sharing or adoption, but
+they never substitute for a computer-local accepted event. Opaque VM state,
+mutable branches, route certificates, and lineage pointers are not semantic
+promotion artifacts.
 
 ## Messaging
 
