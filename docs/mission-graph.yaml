@@ -171,7 +171,7 @@ nodes:
     entrypoint: false
     execution_mode: completed_non_executable
     depends_on: []
-    enables: [choir-computerversion-performance-optimization-draft-2026-07-15]
+    enables: [choir-cli-self-development-2026-07-16, choir-computerversion-performance-optimization-draft-2026-07-15]
     note: >-
       Completed audited construction; retained as historical evidence authority
       only. The successor remains blocked and non-executable pending separate
@@ -184,6 +184,31 @@ nodes:
       - docs/definitions/og-dolt-heresy-completion-2026-07-08.md
       - AGENTS.md
       - docs/choir-doctrine.md
+  - id: choir-cli-self-development-2026-07-16
+    title: Make Choir Self-Developing — CLI-Controlled Computer Changes
+    path: docs/definitions/choir-cli-self-development-2026-07-16.md
+    ledger: ''
+    status: working
+    kind: spine
+    entrypoint: true
+    execution_mode: mission_orchestrator
+    depends_on:
+      - choir-audited-autoputer-construction-2026-07-15
+    enables: []
+    note: >-
+      Sole executable product mission. Connect a content-addressed external
+      source change to a durable ComputerChange lifecycle, audited
+      ComputerVersion construction and verification, vmctl-only frozen D-ROUTE
+      promotion, served product readback, restart, rollback, and re-promotion
+      through the supported choir CLI without SSH.
+    sources:
+      - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+      - docs/evidence/audited-construction-terminal-receipt-2026-07-17.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
+      - docs/standing-questions.md
+      - docs/ACTIVE.md
+      - AGENTS.md
   - id: choir-computerversion-performance-optimization-draft-2026-07-15
     title: DRAFT — ComputerVersion Realization Performance Optimization
     path: docs/definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md

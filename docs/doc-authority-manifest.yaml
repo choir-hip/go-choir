@@ -53,7 +53,7 @@ documents:
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: active_work_navigation, authority: derived_support, lifecycle: living}
-    witnesses: [docs/mission-graph.yaml, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-seam-repair-2026-07-10.md]
+    witnesses: [docs/mission-graph.yaml, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-seam-repair-2026-07-10.md]
     refresh_triggers: [active_definition_change, mission_graph_change]
 
   - path: docs/current-architecture.md
@@ -259,6 +259,14 @@ documents:
     supersedes: [docs/definitions/choir-autoputer-completion-2026-07-14.md]
     witnesses: [docs/evidence/audited-construction-terminal-receipt-2026-07-17.md, docs/evidence/g5-post-cutover-accepted-review-2026-07-17.md, docs/mission-graph.yaml, docs/ACTIVE.md]
     refresh_triggers: []
+
+  - path: docs/definitions/choir-cli-self-development-2026-07-16.md
+    claim_scope: current
+    is_root: [authority, entry]
+    is_evidence: false
+    annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/evidence/audited-construction-terminal-receipt-2026-07-17.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md]
+    refresh_triggers: [mission_state_change, source_build_contract_change, computer_change_lifecycle_change, route_promotion_change, staging_acceptance]
 
   - path: docs/definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md
     claim_scope: current

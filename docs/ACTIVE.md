@@ -3,13 +3,23 @@
 **Status:** curated transition view. It is narrower than the legacy mission
 corpus and does not make an unverified graph status into a live work claim.
 
+## Active Definition — Sole `/goal` Authority
+
+[`definitions/choir-cli-self-development-2026-07-16.md`](definitions/choir-cli-self-development-2026-07-16.md)
+is the sole executable top-level product Definition. It makes one disposable
+staging Choir computer self-develop through the supported `choir` CLI: a scoped
+external agent submits a content-addressed code change, Choir builds and verifies
+a new `ComputerVersion`, vmctl alone performs the frozen D-ROUTE CAS, and
+supported product reads prove restart, rollback, and re-promotion without SSH.
+It owns execution order, mutation, evidence, rollback, and completion until its
+terminal closure.
+
 ## Completed Definitions — Historical Evidence Authority
 
 [`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md)
 completed audited fleet-wide `ComputerVersion` construction, D-ROUTE cutover,
 rollback, reconstruction, and no-SSH product inspection. It is historical
-evidence authority, not an executable `/goal` entrypoint. No top-level product
-Definition is currently executable.
+evidence authority, not an executable `/goal` entrypoint. The active self-development Definition depends on its accepted constructor, verifier, route, rollback, and no-SSH receipts.
 
 The superseded
 [`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md)
@@ -67,14 +77,18 @@ it active work or revising the product umbrella's semantics.
 
 ## Invocation
 
-No product `/goal` is currently authorized. The completed audited-construction
-Definition is historical evidence authority. The performance/capsule successor
-remains blocked and non-executable until separately owner-ratified and promoted
-through every registry.
+Invoke only:
+
+```text
+/goal /Users/wiz/go-choir/docs/definitions/choir-cli-self-development-2026-07-16.md
+```
+
+The completed audited-construction Definition is historical evidence authority.
+The performance draft remains blocked and non-executable; capsule execution is
+outside the active mission and requires separate owner ratification.
 
 This index owns no current slice, next action, execution order, resumption,
-completion, mutation, rollback sequencing, or escalation authority. Consult a
-future promoted Definition before execution. Autopaper remains unauthorized.
+completion, mutation, rollback sequencing, or escalation authority. Consult the active self-development Definition before execution. Autopaper remains unauthorized.
 
 The OG/Dolt/heresy contract supplies D-ROUTE's corpusd/vmctl CAS semantics,
 receipt projection gates, H031 detection, and deletion bars retained from completed phases B,
@@ -90,7 +104,7 @@ database-choice gate.
 ## Unowned External Work
 
 Runtime dissolution, actor/runtime extraction, broader source-system/Wire work,
-and external-agent capsule development have no active Definition. Do not resume
+full external-agent capsule execution, and ComputerVersion performance optimization have no active Definition. Do not resume
 deleted plans; any new program must be grounded in current code and staging
 evidence, owner-ratified, and promoted through every registry.
 
