@@ -411,9 +411,11 @@
     contain: paint;
     box-shadow:
       0 28px 80px color-mix(in srgb, var(--choir-shadow-color) 48%, transparent),
-      0 10px 30px color-mix(in srgb, var(--choir-accent) 10%, transparent);
+      0 10px 30px color-mix(in srgb, var(--choir-accent) 10%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--choir-border-strong) 42%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 7%, transparent);
     transform-origin: top left;
-    transition: box-shadow 0.15s, filter 0.15s;
+    transition: box-shadow 0.18s ease, filter 0.15s ease;
     user-select: none;
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - var(--choir-prompt-surface-top-offset, 0px) - var(--choir-prompt-surface-bottom-offset, 64px) - 16px);
@@ -462,7 +464,9 @@
   .window-active {
     box-shadow:
       0 30px 88px color-mix(in srgb, var(--choir-shadow-color) 52%, transparent),
-      0 0 54px color-mix(in srgb, var(--choir-accent) 24%, transparent);
+      0 0 54px color-mix(in srgb, var(--choir-accent) 24%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--choir-accent) 38%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 9%, transparent);
   }
 
   /* ---- Title bar ---- */
@@ -470,15 +474,17 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 0.5rem 0 0.75rem;
-    height: 36px;
-    min-height: 36px;
-    background-color: var(--choir-surface-pane);
-    background-image: linear-gradient(
-      color-mix(in srgb, var(--choir-surface-pane) 86%, transparent),
-      color-mix(in srgb, var(--choir-surface-pane) 86%, transparent)
-    );
-    box-shadow: 0 14px 30px color-mix(in srgb, var(--choir-shadow-color) 18%, transparent);
+    padding: 0 0.45rem 0 0.85rem;
+    height: 38px;
+    min-height: 38px;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--choir-text-primary) 5%, transparent),
+        transparent 58%
+      ),
+      color-mix(in srgb, var(--choir-surface-pane) 92%, transparent);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--choir-border) 55%, transparent);
     cursor: grab;
     flex-shrink: 0;
     touch-action: none;
@@ -486,7 +492,8 @@
 
   .titltexture {
     font-size: 0.8rem;
-    font-weight: 600;
+    font-weight: 650;
+    letter-spacing: 0.01em;
     color: var(--choir-text-accent);
     white-space: nowrap;
     overflow: hidden;
@@ -497,7 +504,7 @@
   .window-controls {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     flex-shrink: 0;
   }
 
@@ -507,18 +514,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: transparent;
+    background: color-mix(in srgb, var(--choir-surface-control) 70%, transparent);
     border: none;
-    border-radius: var(--choir-radius-control-sm, 14px);
-    font-size: 0.7rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
     cursor: pointer;
     color: var(--choir-text-muted);
-    transition: background 0.15s, color 0.15s;
+    transition: background 0.15s, color 0.15s, transform 0.15s;
   }
 
   .ctrl-btn:hover {
-    background: color-mix(in srgb, var(--choir-text-primary) 10%, transparent);
+    background: color-mix(in srgb, var(--choir-text-primary) 12%, transparent);
     color: var(--choir-text-primary);
+    transform: translateY(-0.5px);
   }
 
   .close-btn:hover {
@@ -590,8 +598,8 @@
     }
 
     .titlebar {
-      height: 40px;
-      min-height: 40px;
+      height: 42px;
+      min-height: 42px;
     }
 
     .ctrl-btn {
@@ -607,6 +615,10 @@
 
   @media (prefers-reduced-motion: reduce) {
     .window.overview-preview-live {
+      transition: none;
+    }
+
+    .ctrl-btn {
       transition: none;
     }
   }

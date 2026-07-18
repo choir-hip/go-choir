@@ -2,7 +2,7 @@
 
 ## 1. Atmosphere & Identity
 
-Choir feels like a persistent personal computer for research work: quiet, dense, recoverable, and deliberate. The signature is a themed desktop shell where panels, windows, and public readers use the same variable-driven surfaces instead of separate marketing pages.
+Choir feels like a persistent personal computer for research work: quiet, dense, recoverable, and deliberate. The signature is a themed desktop shell where panels, windows, and public readers use the same variable-driven surfaces instead of separate marketing pages. Default Noir gives the desktop a soft aurora atmosphere (theme body background + light overlay drift) so the workspace reads as depth, not a flat void. Auth treats **Choir** as the brand hero above the sign-in headline.
 
 ## 2. Color
 

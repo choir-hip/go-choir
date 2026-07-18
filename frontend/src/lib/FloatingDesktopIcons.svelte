@@ -323,19 +323,26 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    width: 80px;
-    padding: 8px 4px;
-    border-radius: 8px;
+    gap: 6px;
+    width: 84px;
+    padding: 10px 6px 8px;
+    border-radius: 16px;
     cursor: pointer;
     user-select: none;
-    transition: background 0.15s, border-color 0.15s;
-    border: 2px solid transparent;
+    transition:
+      background var(--choir-motion-fast, 120ms ease),
+      border-color var(--choir-motion-fast, 120ms ease),
+      box-shadow var(--choir-motion-fast, 120ms ease),
+      transform var(--choir-motion-fast, 120ms ease);
+    border: 1px solid transparent;
     background: transparent;
   }
 
   .desktop-icon:hover {
-    background: color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    background: color-mix(in srgb, var(--choir-surface-card) 55%, transparent);
+    border-color: color-mix(in srgb, var(--choir-border) 70%, transparent);
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--choir-shadow-color) 22%, transparent);
+    transform: translateY(-1px);
   }
 
   .desktop-icon:focus-visible {
@@ -344,13 +351,15 @@
   }
 
   .desktop-icon.icon-selected {
-    background: color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
-    border-color: color-mix(in srgb, var(--choir-border) 15%, transparent);
+    background: color-mix(in srgb, var(--choir-surface-card) 72%, transparent);
+    border-color: color-mix(in srgb, var(--choir-border-strong) 55%, transparent);
+    box-shadow: 0 12px 30px color-mix(in srgb, var(--choir-shadow-color) 24%, transparent);
   }
 
   .desktop-icon.icon-active {
-    background: var(--choir-state-hover);
-    border-color: var(--choir-border-strong);
+    background: color-mix(in srgb, var(--choir-state-selected) 88%, transparent);
+    border-color: color-mix(in srgb, var(--choir-accent) 40%, transparent);
+    box-shadow: 0 0 28px color-mix(in srgb, var(--choir-accent) 18%, transparent);
   }
 
   .desktop-icon.icon-active .icon-label {
@@ -358,48 +367,68 @@
   }
 
   .icon-emoji {
-    font-size: 2rem;
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 14px;
+    font-size: 1.55rem;
     line-height: 1;
     pointer-events: none;
+    background: color-mix(in srgb, var(--choir-control-bg) 88%, transparent);
+    box-shadow:
+      var(--choir-control-shadow),
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
   }
 
   .icon-label {
     font-size: 0.7rem;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--choir-text-muted);
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 72px;
+    max-width: 76px;
     pointer-events: none;
+    text-shadow: 0 1px 8px color-mix(in srgb, var(--choir-shadow-color) 50%, transparent);
   }
 
   .open-indicator {
     position: absolute;
-    bottom: 2px;
+    bottom: 3px;
     left: 50%;
     transform: translateX(-50%);
-    width: 4px;
-    height: 4px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
-    background: var(--choir-state-selected);
+    background: var(--choir-accent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--choir-accent) 55%, transparent);
     pointer-events: none;
   }
 
   /* Mobile: icons remain the same size and freely positionable */
   @media (max-width: 768px) {
     .desktop-icon {
-      width: 72px;
-      padding: 6px 2px;
+      width: 74px;
+      padding: 8px 2px 6px;
     }
 
     .icon-emoji {
-      font-size: 1.6rem;
+      width: 2.2rem;
+      height: 2.2rem;
+      font-size: 1.35rem;
     }
 
     .icon-label {
       font-size: 0.65rem;
+      max-width: 68px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .desktop-icon {
+      transition: none;
     }
   }
 </style>

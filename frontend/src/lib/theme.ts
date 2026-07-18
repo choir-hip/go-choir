@@ -324,7 +324,13 @@ function themeBodyBackground(theme: ChoirTheme): string {
       theme.colors.bg,
     ].join(', ');
   }
-  return theme.colors.bg;
+  // Futuristic Noir: quiet aurora so the desktop is not a flat void.
+  return [
+    `radial-gradient(ellipse 90% 60% at 12% -10%, ${colorMix(theme.colors.accent, 22)}, transparent 58%)`,
+    `radial-gradient(ellipse 70% 50% at 88% 8%, ${colorMix(theme.colors.accent2, 14)}, transparent 55%)`,
+    `radial-gradient(ellipse 55% 40% at 50% 110%, ${colorMix(theme.colors.accent, 10)}, transparent 60%)`,
+    `linear-gradient(165deg, ${theme.colors.bg2} 0%, ${theme.colors.bg} 42%, ${theme.colors.bg} 100%)`,
+  ].join(', ');
 }
 
 function themeBodyOverlay(theme: ChoirTheme): string {
@@ -334,7 +340,10 @@ function themeBodyOverlay(theme: ChoirTheme): string {
   if (theme.id === 'london-salmon') {
     return `linear-gradient(90deg, ${colorMix(theme.colors.accent, 8)} 1px, transparent 1px)`;
   }
-  return 'none';
+  return [
+    `radial-gradient(circle at 20% 18%, ${colorMix(theme.colors.accent2, 10)}, transparent 42%)`,
+    `radial-gradient(circle at 78% 72%, ${colorMix(theme.colors.accent, 8)}, transparent 46%)`,
+  ].join(', ');
 }
 
 function opaqueColor(value: string | undefined, fallback: string): string {

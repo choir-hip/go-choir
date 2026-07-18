@@ -98,7 +98,8 @@
 
 <div class="auth-entry" data-auth-entry aria-busy={ceremonyInProgress ? 'true' : 'false'}>
   <div class="auth-card">
-    <p class="auth-kicker">Continue in Choir</p>
+    <p class="auth-brand" aria-hidden="true">Choir</p>
+    <p class="auth-kicker">Continue</p>
     <h1>Sign in. Pick up where you left off.</h1>
     <p class="tagline">Your preview stays open. A passkey unlocks your saved work without a password.</p>
     <div class="auth-intent" data-auth-intent>
@@ -241,38 +242,55 @@
   }
 
   .auth-card {
+    position: relative;
     background:
-      linear-gradient(145deg, color-mix(in srgb, var(--choir-accent) 8%, transparent), transparent 42%),
+      linear-gradient(155deg, color-mix(in srgb, var(--choir-accent) 14%, transparent), transparent 38%),
+      linear-gradient(320deg, color-mix(in srgb, var(--choir-accent-2) 8%, transparent), transparent 46%),
       var(--choir-sheet-bg, var(--choir-state-selected));
-    border: 0;
+    border: 1px solid color-mix(in srgb, var(--choir-border-strong) 55%, transparent);
     border-radius: var(--choir-radius-panel, 22px);
-    padding: 1.55rem;
+    padding: 1.7rem 1.55rem 1.45rem;
     width: 100%;
     max-width: 480px;
     max-height: calc(100dvh - 2rem);
     overflow: auto;
     overscroll-behavior: contain;
     text-align: left;
-    box-shadow: var(--choir-shadow-floating);
+    box-shadow:
+      var(--choir-shadow-floating),
+      0 0 0 1px color-mix(in srgb, var(--choir-text-primary) 4%, transparent) inset,
+      0 0 60px color-mix(in srgb, var(--choir-accent) 12%, transparent);
     color: var(--choir-text-primary);
+    animation: auth-card-enter var(--choir-motion-sheet, 260ms cubic-bezier(0.2, 0.8, 0.2, 1)) both;
+  }
+
+  .auth-brand {
+    margin: 0 0 0.55rem;
+    font-family: var(--choir-font-display, inherit);
+    font-size: clamp(2.35rem, 6vw, 3.15rem);
+    font-weight: 780;
+    letter-spacing: -0.04em;
+    line-height: 0.92;
+    color: var(--choir-text-primary);
+    text-shadow: 0 0 42px color-mix(in srgb, var(--choir-accent) 28%, transparent);
   }
 
   .auth-kicker {
-    margin: 0 0 0.45rem;
+    margin: 0 0 0.4rem;
     color: var(--choir-accent);
     font-size: 0.72rem;
     font-weight: 820;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
   }
 
   h1 {
     font-family: var(--choir-font-display, inherit);
-    max-width: 18rem;
-    font-size: clamp(1.75rem, 3.5vw, 2.35rem);
-    font-weight: 780;
-    line-height: 0.98;
-    letter-spacing: 0;
+    max-width: 20rem;
+    font-size: clamp(1.35rem, 2.8vw, 1.7rem);
+    font-weight: 720;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
     color: var(--choir-text-primary);
     margin: 0 0 0.65rem;
   }
@@ -294,7 +312,9 @@
     font-size: 0.92rem;
     line-height: 1.35;
     overflow-wrap: anywhere;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 6%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 6%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--choir-border) 70%, transparent);
   }
 
   .auth-intent span {
@@ -332,7 +352,7 @@
     border: none;
     border-radius: var(--choir-radius-control-sm, 12px);
     cursor: pointer;
-    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    transition: background var(--choir-motion-fast, 120ms ease), color var(--choir-motion-fast, 120ms ease), box-shadow var(--choir-motion-fast, 120ms ease), transform var(--choir-motion-fast, 120ms ease);
   }
 
   .tab:hover {
@@ -375,7 +395,7 @@
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 8%, transparent),
       0 10px 28px color-mix(in srgb, var(--choir-shadow-color) 12%, transparent);
-    transition: box-shadow 0.2s;
+    transition: box-shadow var(--choir-motion-fast, 120ms ease);
   }
 
   input[type="email"]:focus {
@@ -399,19 +419,21 @@
     border: none;
     border-radius: var(--choir-radius-control, 16px);
     cursor: pointer;
-    box-shadow: var(--choir-control-shadow);
-    transition: filter 0.2s, transform 0.2s;
+    box-shadow: var(--choir-control-shadow), 0 0 28px color-mix(in srgb, var(--choir-accent) 22%, transparent);
+    transition: filter var(--choir-motion-fast, 120ms ease), transform var(--choir-motion-fast, 120ms ease), box-shadow var(--choir-motion-fast, 120ms ease);
   }
 
   .primary-action:hover:enabled {
     filter: brightness(1.08);
     transform: translateY(-1px);
+    box-shadow: var(--choir-control-shadow), 0 0 36px color-mix(in srgb, var(--choir-accent) 32%, transparent);
   }
 
   .primary-action:disabled {
     background: var(--choir-surface-control);
     color: var(--choir-text-subtle);
     cursor: not-allowed;
+    box-shadow: none;
   }
 
   .error {
@@ -456,6 +478,29 @@
     text-decoration: underline;
   }
 
+  @keyframes auth-card-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .auth-card {
+      animation: none;
+    }
+
+    .tab,
+    .primary-action,
+    input[type="email"] {
+      transition: none;
+    }
+  }
+
   :global(:root[data-theme-id='london-salmon']) .auth-card,
   :global(:root[data-theme-id='london-salmon']) .auth-view,
   :global(:root[data-theme-id='london-salmon']) .auth-intent,
@@ -464,6 +509,11 @@
   :global(:root[data-theme-id='london-salmon']) input[type="email"],
   :global(:root[data-theme-id='london-salmon']) .primary-action {
     font-family: var(--choir-font-ui, Georgia, serif);
+  }
+
+  :global(:root[data-theme-id='london-salmon']) .auth-brand {
+    font-family: var(--choir-font-display, Georgia, serif);
+    text-shadow: none;
   }
 
   :global(:root[data-theme-id='london-salmon']) .tab,

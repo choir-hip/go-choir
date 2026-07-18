@@ -827,8 +827,11 @@
     padding: 1rem;
     overflow: auto;
     overscroll-behavior: contain;
-    background: color-mix(in srgb, var(--choir-bg) 58%, transparent);
-    backdrop-filter: blur(10px);
+    background:
+      radial-gradient(ellipse 60% 45% at 50% 35%, color-mix(in srgb, var(--choir-accent) 16%, transparent), transparent 70%),
+      color-mix(in srgb, var(--choir-bg) 52%, transparent);
+    backdrop-filter: blur(14px) saturate(1.15);
+    animation: auth-overlay-enter var(--choir-motion-fast, 120ms ease) both;
   }
 
   .auth-overlay-panel {
@@ -851,10 +854,12 @@
     font-size: 0.95rem;
     line-height: 1;
     box-shadow: var(--choir-control-shadow);
+    transition: background var(--choir-motion-fast, 120ms ease), transform var(--choir-motion-fast, 120ms ease);
   }
 
   .auth-overlay-close:hover {
     background: var(--choir-state-selected);
+    transform: translateY(-1px);
   }
 
   .auth-overlay-close:focus-visible {
@@ -869,6 +874,19 @@
   .auth-overlay :global(.auth-card) {
     max-width: 480px;
     box-shadow: var(--choir-shadow-floating);
+  }
+
+  @keyframes auth-overlay-enter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .auth-overlay,
+    .auth-overlay-close {
+      animation: none;
+      transition: none;
+    }
   }
 
   :global(:root[data-theme-id='london-salmon']) .auth-overlay-close {

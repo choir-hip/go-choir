@@ -76,8 +76,11 @@
     inset: 0;
     z-index: 9998;
     border: 0;
-    background: color-mix(in srgb, var(--choir-bg) 72%, transparent);
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 100%, color-mix(in srgb, var(--choir-accent) 12%, transparent), transparent 55%),
+      color-mix(in srgb, var(--choir-bg) 68%, transparent);
     cursor: default;
+    animation: desk-backdrop-enter var(--choir-motion-fast, 120ms ease) both;
   }
 
   .desk-sheet {
@@ -91,11 +94,16 @@
     max-height: calc(100dvh - var(--choir-prompt-surface-size, 64px) - 28px);
     overflow: auto;
     overscroll-behavior: contain;
-    padding: 0.72rem;
+    padding: 0.78rem;
     background: var(--choir-sheet-bg);
     color: var(--choir-fg);
-    box-shadow: var(--choir-shadow-floating), 0 -18px 70px color-mix(in srgb, var(--choir-accent) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--choir-border-strong) 45%, transparent);
+    box-shadow:
+      var(--choir-shadow-floating),
+      0 -18px 70px color-mix(in srgb, var(--choir-accent) 12%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
     backdrop-filter: blur(var(--choir-blur));
+    animation: desk-sheet-enter var(--choir-motion-sheet, 260ms cubic-bezier(0.2, 0.8, 0.2, 1)) both;
   }
 
   .desk-sheet.placement-bottom {
@@ -153,6 +161,15 @@
     color: var(--choir-fg);
     cursor: pointer;
     box-shadow: var(--choir-control-shadow);
+    transition:
+      transform var(--choir-motion-fast, 120ms ease),
+      box-shadow var(--choir-motion-fast, 120ms ease),
+      background var(--choir-motion-fast, 120ms ease);
+  }
+
+  button:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--choir-control-shadow), 0 0 22px color-mix(in srgb, var(--choir-accent) 14%, transparent);
   }
 
   button:focus-visible {
@@ -196,7 +213,7 @@
   .app-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(7.6rem, 1fr));
-    gap: 0.38rem;
+    gap: 0.42rem;
   }
 
   .app-grid button {
@@ -247,6 +264,22 @@
 
   .plain-row {
     justify-self: start;
+  }
+
+  @keyframes desk-backdrop-enter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes desk-sheet-enter {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
   }
 
   @media (max-width: 768px) {
@@ -307,6 +340,15 @@
 
     footer {
       font-size: 0.72rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .desk-sheet-backdrop,
+    .desk-sheet,
+    button {
+      animation: none;
+      transition: none;
     }
   }
 </style>

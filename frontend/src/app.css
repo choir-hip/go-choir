@@ -485,6 +485,7 @@ body {
   border-color: transparent !important;
 }
 
+:root[data-theme-id='futuristic-noir'] body::before,
 :root[data-theme-id='carbon-fiber-kintsugi'] body::before,
 :root[data-theme-id='london-salmon'] body::before {
   content: '';
@@ -492,6 +493,12 @@ body {
   inset: 0;
   z-index: -1;
   pointer-events: none;
+}
+
+:root[data-theme-id='futuristic-noir'] body::before {
+  opacity: 0.85;
+  background: var(--choir-body-overlay);
+  animation: choir-atmosphere-drift 28s ease-in-out infinite alternate;
 }
 
 :root[data-theme-id='carbon-fiber-kintsugi'] body::before {
@@ -503,4 +510,15 @@ body {
   opacity: 0.12;
   background: var(--choir-body-overlay);
   background-size: 64px 100%;
+}
+
+@keyframes choir-atmosphere-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-1.5%, 1.2%, 0) scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme-id='futuristic-noir'] body::before {
+    animation: none;
+  }
 }

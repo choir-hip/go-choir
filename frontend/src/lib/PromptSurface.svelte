@@ -323,8 +323,24 @@
     border-radius: var(--choir-radius-pill);
     color: var(--choir-fg);
     background: var(--choir-prompt-surface-bg);
-    box-shadow: var(--choir-shadow-floating), var(--choir-shadow-glow);
+    border: 1px solid color-mix(in srgb, var(--choir-border-strong) 48%, transparent);
+    box-shadow:
+      var(--choir-shadow-floating),
+      var(--choir-shadow-glow),
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 8%, transparent);
     backdrop-filter: blur(var(--choir-blur));
+    transition:
+      box-shadow var(--choir-motion-fast, 120ms ease),
+      border-color var(--choir-motion-fast, 120ms ease),
+      transform var(--choir-motion-sheet, 260ms cubic-bezier(0.2, 0.8, 0.2, 1));
+  }
+
+  .prompt-surface.sheet-open {
+    box-shadow:
+      var(--choir-shadow-floating),
+      0 0 48px color-mix(in srgb, var(--choir-accent) 18%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--choir-text-primary) 10%, transparent);
+    border-color: color-mix(in srgb, var(--choir-accent) 34%, transparent);
   }
 
   .prompt-surface.placement-bottom {
@@ -348,6 +364,10 @@
     color: var(--choir-tetramark-color);
     box-shadow: var(--choir-control-shadow);
     cursor: pointer;
+    transition:
+      transform var(--choir-motion-fast, 120ms ease),
+      box-shadow var(--choir-motion-fast, 120ms ease),
+      color var(--choir-motion-fast, 120ms ease);
   }
 
   .desk-mark-button :global(svg),
@@ -365,8 +385,16 @@
   }
 
   .desk-mark-button:hover,
-  .desk-mark-button:focus-visible {
+  .desk-mark-button:focus-visible,
+  .voice-button:hover,
+  .voice-button:focus-visible {
     box-shadow: var(--choir-control-shadow), var(--choir-shadow-glow);
+    transform: translateY(-1px);
+  }
+
+  .desk-mark-button[aria-expanded='true'] {
+    color: var(--choir-accent-2);
+    box-shadow: var(--choir-control-shadow), 0 0 28px color-mix(in srgb, var(--choir-accent) 28%, transparent);
   }
 
   .window-count {
@@ -382,6 +410,7 @@
     color: var(--choir-text-on-accent);
     font-size: 0.66rem;
     font-weight: 850;
+    box-shadow: 0 0 16px color-mix(in srgb, var(--choir-accent) 40%, transparent);
   }
 
   .window-tray {
@@ -411,6 +440,16 @@
     min-height: 1.95rem;
     box-shadow: 0 8px 18px color-mix(in srgb, var(--choir-shadow-color) 18%, transparent);
     cursor: pointer;
+    transition:
+      background var(--choir-motion-fast, 120ms ease),
+      color var(--choir-motion-fast, 120ms ease),
+      box-shadow var(--choir-motion-fast, 120ms ease),
+      transform var(--choir-motion-fast, 120ms ease);
+  }
+
+  .window-tray-item:hover {
+    color: var(--choir-fg);
+    transform: translateY(-1px);
   }
 
   .window-tray-item > span {
@@ -449,9 +488,20 @@
       var(--choir-input-bg);
     min-height: 3.05rem;
     height: 3.05rem;
+    border: 1px solid color-mix(in srgb, var(--choir-border) 70%, transparent);
     box-shadow:
       inset 0 14px 28px color-mix(in srgb, var(--choir-shadow-color) 2%, transparent),
       0 12px 30px color-mix(in srgb, var(--choir-shadow-color) 22%, transparent);
+    transition:
+      border-color var(--choir-motion-fast, 120ms ease),
+      box-shadow var(--choir-motion-fast, 120ms ease);
+  }
+
+  .command-field:focus-within {
+    border-color: color-mix(in srgb, var(--choir-accent) 55%, transparent);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--choir-accent) 22%, transparent),
+      0 16px 36px color-mix(in srgb, var(--choir-shadow-color) 24%, transparent);
   }
 
   .command-field textarea {
@@ -569,9 +619,10 @@
     align-self: center;
     width: 0.78rem;
     height: 0.78rem;
-    border-radius: var(--choir-radius-control-sm);
+    border-radius: 999px;
     background: var(--choir-muted);
     box-shadow: 0 0 18px color-mix(in srgb, var(--choir-muted) 26%, transparent);
+    transition: background var(--choir-motion-fast, 120ms ease), box-shadow var(--choir-motion-fast, 120ms ease);
   }
 
   .online-indicator.online {
@@ -612,6 +663,21 @@
 
     .command-field textarea {
       padding-block: 0.46rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .prompt-surface,
+    .desk-mark-button,
+    .voice-button,
+    .window-tray-item,
+    .command-field,
+    .online-indicator {
+      transition: none;
+    }
+
+    .agent-chyron > div {
+      animation: none;
     }
   }
 </style>

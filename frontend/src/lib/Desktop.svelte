@@ -1802,7 +1802,7 @@
     flex-direction: column;
     height: 100dvh;
     min-height: 100dvh;
-    background: var(--choir-bg);
+    background: transparent;
     overflow: hidden;
   }
 
@@ -1828,6 +1828,18 @@
     height: 100dvh;
     padding-block-start: var(--choir-prompt-surface-top-offset, 0px);
     padding-block-end: var(--choir-prompt-surface-bottom-offset, 64px);
+  }
+
+  .desktop-area::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 48% 36% at 70% 28%, color-mix(in srgb, var(--choir-accent) 8%, transparent), transparent 70%),
+      radial-gradient(ellipse 40% 30% at 18% 78%, color-mix(in srgb, var(--choir-accent-2) 7%, transparent), transparent 68%);
+    opacity: 0.9;
   }
 
   /* Prevent flash of empty desktop while state loads (VAL-SHELL-022) */
