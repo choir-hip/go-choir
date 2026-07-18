@@ -29,13 +29,17 @@ start:
     existing_fix_connection: "Connect the audited vmctl constructor/verifier/frozen-route path to one durable product-owned ComputerChange lifecycle and a narrow choir CLI/API. Do not build another constructor, route writer, package activation tower, or third store."
   unknowns:
     - "The exact production build worker boundary that can import a content-addressed SourceChangeBundle and emit the sandbox runtime artifact without trusting a mutable branch."
-    - "The smallest existing runtime-store object-graph pattern that can persist ComputerChange transitions, operation handles, failures, and receipt refs without becoming route authority."
+    - "The narrowest corpusd world-wire control-record pattern that can persist ComputerChange transitions, operation handles, failures, and receipt refs beside—but not inside—D-ROUTE authority."
     - "Measured staging distribution for source-bundle validation, runtime build, construction, verification, frozen promotion, and rollback; initial bounds below are acceptance ceilings, not claimed baselines."
   corrections:
     - corrected_at: 2026-07-18T06:04:32Z
       preserves_original_observation: true
       clarification: "The Definition filename and owner decision retain the 2026-07-16 mission date. The executable start receipt was captured on 2026-07-18 after audited construction closed on 2026-07-17; the earlier authoring timestamp was not promoted as execution authority."
       evidence_ref: "Canonical repository history and machine UTC at frozen-review repair."
+    - corrected_at: 2026-07-18T06:30:00Z
+      preserves_original_observation: true
+      clarification: "Frozen-review architecture placed ComputerChange lifecycle in the VM-local runtime Dolt object graph. Source inspection falsified that placement: a route CAS replaces the served computer, so a lifecycle record present only in the prior VM-local ArtifactProgram can disappear or fork at cutover. ComputerChange control state therefore lives durably on the existing corpusd world-wire SQL server used by vmctl, logically separate from D-ROUTE tables and with no route-writing authority. VM-local state remains solely ArtifactProgram input."
+      evidence_ref: "docs/current-architecture.md:778-818; internal/store/store.go:1-16; cmd/vmctl/main.go:123-192; problem documented before ComputerChange repair code."
   owner_ratification:
     status: settled
     settled_by: owner
@@ -45,7 +49,7 @@ start:
 
 finish:
   deliver: "Make one Choir computer safely develop Choir itself through the supported choir CLI. An external agent submits a bounded, content-addressed source change against the exact active ComputerVersion, observes an asynchronous durable candidate lifecycle, receives independent verification, promotes through the existing vmctl-only frozen D-ROUTE CAS, observes the changed served computer, and rolls back or re-promotes—without SSH, host files, mutable remote branches, direct database access, or raw vmctl authority."
-  artifact: "A production ComputerChange product path with one durable lifecycle authority in the existing runtime Dolt object graph; a reproducible SourceChangeBundle-to-CodeClosure build boundary; owner-scoped public APIs and choir CLI commands for propose/status/approve/promote/rollback; joined receipts binding source input, built CodeClosure, candidate realization, verifier decision, delegated approval, frozen route plans, route CAS, served ComputerVersion, rollback, and restart durability."
+  artifact: "A production ComputerChange product path with one durable lifecycle authority on the existing corpusd world-wire SQL server; a reproducible SourceChangeBundle-to-CodeClosure build boundary; owner-scoped public APIs and choir CLI commands for propose/status/approve/promote/rollback; joined receipts binding source input, built CodeClosure, candidate realization, verifier decision, delegated approval, frozen route plans, route CAS, served ComputerVersion, rollback, and restart durability."
   acceptance:
     - action: "Using a mutation-scoped Choir key from an external client, target an explicitly disposable non-production staging computer with a proven prior-version rollback route and submit a content-addressed SourceChangeBundle containing a harmless verifier-known served marker against the exact active ComputerVersion and route generation. Receive a durable change ID within 10 seconds; let build, construction, and verification continue asynchronously."
       proves: "The product accepts a bounded development intent without SSH, a mutable branch, a long-held HTTP request, or an in-memory-only operation."
@@ -97,7 +101,7 @@ scope:
   mutation_class: red
   protected_surfaces: [ComputerVersion, CodeClosure, ArtifactProgramRef, candidate_computers, runtime_Dolt_object_graph, routeledger_evidence, vmctl, D_ROUTE, promotion, rollback, API_keys, credentials, product_API, deployment_routing, run_acceptance]
   allowed:
-    - "Add the minimal ComputerChange record, runtime-store methods, state-transition service, authenticated public handlers, choir CLI verbs, and focused verifier contracts required by the finish."
+    - "Add the minimal ComputerChange world-wire control record and store methods, state-transition service, authenticated public handlers, choir CLI verbs, and focused verifier contracts required by the finish."
     - "Add a bounded isolated SourceChangeBundle importer and reproducible runtime build that emits content-addressed CodeClosure inputs and receipt joins."
     - "Connect existing production construction, independent verification, signed authorization, frozen promotion/rollback, and vmctl route-client APIs."
     - "Delete or hard-refuse superseded computer-level activation paths where leaving them reachable would create split authority."
@@ -138,7 +142,7 @@ execution:
     entry: "Canonical main is clean and equals origin/main; registries promote this owner-ratified Definition; staging deploy mismatch is recorded rather than mistaken for acceptance."
     work:
       - "Document the source-build and lifecycle gaps before repair code; inventory every existing package, lineage, candidate, build, verifier, signer, and D-ROUTE writer path."
-      - "Define ComputerChange identity, owner/computer scope, allowed transitions, immutable request, operation handle, receipt refs, refusal reasons, idempotency, and restart reconstruction in the existing runtime Dolt object graph."
+      - "Define ComputerChange identity, owner/computer scope, allowed transitions, immutable request, operation handle, receipt refs, refusal reasons, idempotency, and restart reconstruction on the existing corpusd world-wire SQL server, logically isolated from route tables and unable to write them."
       - "Define SourceChangeBundle as a content-addressed Git bundle bound to owner/computer with exact active CodeRef-resolved CodeClosure.SourceCommit, one advertised candidate ref containing one direct-child commit, bundle SHA-256, full changed path/mode/delete/rename manifest, and requested base ComputerVersion/route generation. Enforce the input policy, quarantine bytes, validate ancestry and tree digest, and pin verified outputs only through the existing corpusd ComputerVersion input catalog."
       - "Build the candidate runtime in an isolated bounded worker from immutable bundle bytes; pin resulting source tree/runtime artifacts as a new CodeClosure. Reuse ArtifactProgramRef only under the explicit code-only policy: changed paths are allowlisted code/build paths; no program/state/tape delta exists; the resolved ArtifactProgram digest and app-state head equal the frozen base at propose, freeze, and CAS; the candidate cold-boots from that pin without live process/data.img continuity. Any tail requires replay/merge into a new ArtifactProgramRef, rebuild, and reverify, or refusal."
     exit: "Focused persistence, restart, adversarial bundle, deterministic build, and typed CodeClosure/ArtifactProgramRef join checks pass; G1 accepts the executable substrate candidate."
@@ -174,7 +178,7 @@ execution:
 orchestration:
   implementation_order: "A then B then C then D. Parallel read-only investigation and disjoint implementation are allowed inside a phase; ComputerChange state transitions, route CAS, landing, Definition state, and terminal registry authority remain serialized."
   state_authority:
-    lifecycle: "One ComputerChange object in the existing runtime Dolt object graph owns request, state, operation handles, idempotency, errors, and receipt refs."
+    lifecycle: "One ComputerChange control record on the existing corpusd world-wire SQL server owns request, state, operation handles, idempotency, errors, and receipt refs. It has no D-ROUTE mutation method; sharing the existing server is not sharing route authority or adding a third store."
     immutable_inputs: "Existing ComputerVersion input catalog owns CodeClosure and ArtifactProgramRef pins."
     candidate_realization: "vmctl owns candidate construction and realization lifecycle."
     verification_and_authorization: "Existing independent verifier and routeledger evidence own their typed receipts."
@@ -266,12 +270,12 @@ now:
     base: refs/heads/main@f06b0941
     scope: [definition, registries, problem_record]
   decision:
-    selected: "Use a narrow code-only SourceChangeBundle against the exact active ComputerVersion; persist one ComputerChange lifecycle in the existing runtime store; build and pin a new CodeClosure; reuse the exact ArtifactProgramRef only when state is unchanged; construct and verify an unpublished candidate; let a least-privilege delegated key invoke server-side approval and the existing vmctl-only frozen route CAS; prove served bytes, restart, rollback, and re-promotion."
+    selected: "Use a narrow code-only SourceChangeBundle against the exact active ComputerVersion; persist one ComputerChange lifecycle on the existing corpusd world-wire control store; build and pin a new CodeClosure; reuse the exact ArtifactProgramRef only when state is unchanged; construct and verify an unpublished candidate; let a least-privilege delegated key invoke server-side approval and the existing vmctl-only frozen route CAS; prove served bytes, restart, rollback, and re-promotion."
     kind: architectural
     status: settled
-    source: owner
-    settled_by: owner
-    evidence_ref: "Owner selected the self-developing computer and CLI-first external-agent interface in this 2026-07-16 conversation; architecture refines that outcome under settled two-store, vmctl-only D-ROUTE, no-SSH, and audited-construction constraints."
+    source: orchestrator
+    settled_by: orchestrator
+    evidence_ref: "Owner selected the self-developing computer and CLI-first external-agent outcome in this 2026-07-16 conversation; architecture refines that outcome under settled two-store, vmctl-only D-ROUTE, no-SSH, and audited-construction constraints."
     recorded_at: 2026-07-16T05:00:00Z
     consequence: "AppAdoption/lineage remains evidence, not activation. The performance draft stays blocked. This mission builds one honest end-to-end computer change rather than a general capsule or package system."
   evidence_refs:
@@ -284,7 +288,7 @@ now:
     - internal/vmctl/promotion_execution.go
     - internal/vmctl/promotion_authority.go
     - internal/vmctl/route_client.go
-  blocker_or_risk: "No execution-authority blocker. The SourceChangeBundle build executor remains the highest-risk unknown and G1 must reject any mutable-ref, non-hermetic, unbounded, or third-store implementation. Staging deploy identity remains intentionally behind source until a behavior-changing landing reaches Node B."
+  blocker_or_risk: "No execution-authority blocker. The SourceChangeBundle build executor remains the highest-risk unknown; the previously proposed VM-local lifecycle placement was falsified and repaired in the Definition before code and G1 must reject any mutable-ref, non-hermetic, unbounded, or third-store implementation. Staging deploy identity remains intentionally behind source until a behavior-changing landing reaches Node B."
   next_action: "Execute A-authority-and-input: document the concrete source-build/lifecycle gap, map existing build and store patterns, implement the smallest deterministic SourceChangeBundle importer and durable ComputerChange authority, then freeze G1 evidence before public mutation."
 
 successor:
