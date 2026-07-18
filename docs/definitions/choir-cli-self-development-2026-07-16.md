@@ -244,26 +244,26 @@ orchestration:
 
 now:
   status: working
-  slice: "Definition promotion and source/build discovery"
+  slice: "A-authority-and-input"
   question: "Which existing build boundary can import the frozen SourceChangeBundle and emit the production runtime artifact with the least new code while preserving content-addressed authority?"
   reconciliation:
-    observed_at: 2026-07-18T06:04:32Z
-    source_ref: refs/heads/main@a36ebb08b024d74c06c3124c49c46e5acc4d2b63_equals_refs/remotes/origin/main@a36ebb08b024d74c06c3124c49c46e5acc4d2b63_before_goal_owned_definition_and_consensus_edits
+    observed_at: 2026-07-18T06:20:00Z
+    source_ref: refs/heads/main@f06b0941_before_goal_start_reconciliation_equals_refs/remotes/origin/main@f06b0941
     deploy_identity: "choir.news /health reports 9d9945e65f5b54069e1a86a530cb0960d96b3474; acceptance blocked on a later pushed source and matching deployment"
     authority_identities:
       - owner_decision:2026-07-16-self-developing-computer-cli-first
       - predecessor:docs/definitions/choir-audited-autoputer-construction-2026-07-15.md@complete
-      - mission_graph:docs/mission-graph.yaml@pending_promotion
-      - authority_manifest:docs/doc-authority-manifest.yaml@pending_promotion
+      - mission_graph:docs/mission-graph.yaml@working_sole_entrypoint
+      - authority_manifest:docs/doc-authority-manifest.yaml@active_authority_and_entry_root
     policy_resolution_ref: "Owner-selected CLI-first external-agent ComputerVersion development; performance optimization remains separate and blocked."
-    worktree_inventory_ref: "Clean canonical main at authoring; Definition and registry edits become goal-owned candidate work."
-    status: reconciled_with_known_deploy_lag
+    worktree_inventory_ref: "Canonical main clean and equal origin/main at f06b0941 before this compact goal-start reconciliation; no unrelated work is present."
+    status: reconciled_for_execution_with_known_deploy_lag
   candidate:
     id: cli-self-development-definition-2026-07-16
-    state: authoring
+    state: registry_promoted_and_executable
     ref: docs/definitions/choir-cli-self-development-2026-07-16.md
     owner: integration-authority
-    base: refs/heads/main@a36ebb08b024d74c06c3124c49c46e5acc4d2b63
+    base: refs/heads/main@f06b0941
     scope: [definition, registries, problem_record]
   decision:
     selected: "Use a narrow code-only SourceChangeBundle against the exact active ComputerVersion; persist one ComputerChange lifecycle in the existing runtime store; build and pin a new CodeClosure; reuse the exact ArtifactProgramRef only when state is unchanged; construct and verify an unpublished candidate; let a least-privilege delegated key invoke server-side approval and the existing vmctl-only frozen route CAS; prove served bytes, restart, rollback, and re-promotion."
@@ -284,8 +284,8 @@ now:
     - internal/vmctl/promotion_execution.go
     - internal/vmctl/promotion_authority.go
     - internal/vmctl/route_client.go
-  blocker_or_risk: "Definition is not executable until its frozen architecture is reviewed, all three registries promote it as the sole /goal, canonical main is committed/pushed clean, and the start receipt is reconciled. The SourceChangeBundle build executor remains the highest-risk unknown."
-  next_action: "Run deterministic Definition/doc checks and independent frozen architecture review; repair reproducible blockers, promote all three registries, commit/push the Definition and consensus tooling repair, then invoke /goal on clean canonical main."
+  blocker_or_risk: "No execution-authority blocker. The SourceChangeBundle build executor remains the highest-risk unknown and G1 must reject any mutable-ref, non-hermetic, unbounded, or third-store implementation. Staging deploy identity remains intentionally behind source until a behavior-changing landing reaches Node B."
+  next_action: "Execute A-authority-and-input: document the concrete source-build/lifecycle gap, map existing build and store patterns, implement the smallest deterministic SourceChangeBundle importer and durable ComputerChange authority, then freeze G1 evidence before public mutation."
 
 successor:
   status: none_selected
