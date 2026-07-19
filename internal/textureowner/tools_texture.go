@@ -461,7 +461,7 @@ func (rt *Handler) requestPersistentSuperExecution(ctx context.Context, ownerID,
 			Kind:          "execution_request",
 			Summary:       objective,
 			Actions: []types.CoagentPacketAction{{
-				Type:      "request_worker",
+				Type:      "request_super_execution",
 				Objective: objective,
 				Inputs:    map[string]any{"requested_by_run_id": requesterRunID},
 				Safety: types.CoagentPacketActionSafety{
@@ -473,7 +473,7 @@ func (rt *Handler) requestPersistentSuperExecution(ctx context.Context, ownerID,
 		},
 		CreatedAt: now,
 	}
-	update.Content = "Coagent source packet ready.\nRole: " + agentprofile.Texture + ".\nSchema: " + update.Packet.SchemaVersion + "\nKind: " + update.Packet.Kind + "\nSummary: " + update.Packet.Summary + "\n\nActions:\n- request_worker - " + objective + "\n"
+	update.Content = "Coagent source packet ready.\nRole: " + agentprofile.Texture + ".\nSchema: " + update.Packet.SchemaVersion + "\nKind: " + update.Packet.Kind + "\nSummary: " + update.Packet.Summary + "\n\nActions:\n- request_super_execution - " + objective + "\n"
 	message := &types.ChannelMessage{
 		ChannelID:    channelID,
 		From:         requesterRunID,
@@ -1611,7 +1611,7 @@ func structuredSourceTargetKind(entity textureSourceEntity) string {
 	case "content_item":
 		return "content_item"
 	case "image", "video", "audio", "pdf", "transcript", "texture_span", "publication_span", "source_viewer_artifact", "reader_artifact", "file_artifact",
-		"command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log":
+		"command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log":
 		return strings.TrimSpace(entity.Target.TargetKind)
 	case "url", "web_url":
 		return "web_url"

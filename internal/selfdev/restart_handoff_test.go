@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,7 +28,7 @@ func TestRestartHandoffRestoresExactTransientCapability(t *testing.T) {
 	}
 	credentials := &GuestCredentials{
 		baseURL: "https://platform.test", computerID: "computer-stable", token: token,
-		expiresAt: expiresAt, keyID: "platform-test", publicKey: publicKey,
+		expiresAt: expiresAt, keyID: "platform-test", publicKey: publicKey, privacyKey: base64.RawStdEncoding.EncodeToString(make([]byte, 32)),
 	}
 	path := filepath.Join(t.TempDir(), "restart-capability")
 	if err := credentials.WriteRestartHandoff(context.Background(), path); err != nil {
@@ -40,7 +41,7 @@ func TestRestartHandoffRestoresExactTransientCapability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restored.token != token || restored.computerID != credentials.computerID || !restored.expiresAt.Equal(expiresAt) {
+	if restored.token != token || restored.computerID != credentials.computerID || restored.privacyKey != credentials.privacyKey || !restored.expiresAt.Equal(expiresAt) {
 		t.Fatalf("restored handoff changed capability binding: %+v", restored)
 	}
 	if _, err := RestoreGuestCredentials(path, "https://platform.test", "computer-other"); err == nil {

@@ -382,7 +382,7 @@ func TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping(
 	sources := coagentSourcesFromTypedEvidenceRefs([]string{
 		"command_output:cmd-runtime-tests",
 		"diff_hunk:diff-texture-evidence",
-		"app_change_package:acp-structured-texture",
+		"capsule_bundle:bundle-structured-texture",
 		"./proof/screenshots/texture-sources.png",
 		"benchmark_log:bench-runtime-shards",
 	})
@@ -407,7 +407,7 @@ func TestWorkerUpdateExecutionEvidenceBecomesSourceEntitiesWithoutProseScraping(
 	entities := handler.evidenceSourceEntitiesFromWorkerUpdates(ctx, ownerID, updates)
 	assertExecutionEntity(t, entities, "command_output", "cmd-runtime-tests", "")
 	assertExecutionEntity(t, entities, "diff_hunk", "diff-texture-evidence", "")
-	assertExecutionEntity(t, entities, "app_change_package", "acp-structured-texture", "")
+	assertExecutionEntity(t, entities, "capsule_bundle", "bundle-structured-texture", "")
 	assertExecutionEntity(t, entities, "file_artifact", "./proof/screenshots/texture-sources.png", "")
 	assertExecutionEntity(t, entities, "benchmark_log", "bench-runtime-shards", "")
 	foundTest := false

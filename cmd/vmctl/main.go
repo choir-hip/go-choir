@@ -113,10 +113,7 @@ func main() {
 
 		log.Printf("vmctl: Firecracker VM manager started (kernel=%s rootfs=%s)", mgrCfg.KernelImagePath, mgrCfg.RootfsPath)
 	} else {
-		if !vmmanager.HostProcessFallbackEnabled() {
-			log.Fatal("vmctl: Firecracker not available and host-process fallback is disabled")
-		}
-		log.Printf("vmctl: Firecracker not available, using host-process sandbox mode")
+		log.Fatal("vmctl: Firecracker is mandatory; host-process sandbox mode is forbidden")
 	}
 	handler := vmctl.NewHandler(registry)
 	handler.RequireRouteAuthority()

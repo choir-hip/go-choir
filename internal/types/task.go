@@ -261,47 +261,6 @@ const (
 	// rejects or fails a bounded input/control action.
 	EventBrowserControlFailed EventKind = "browser.control.failed"
 
-	// EventAppChangePackagePublished is emitted when a candidate app change is
-	// exported as a product-visible AppChangePackage.
-	EventAppChangePackagePublished EventKind = "app_change_package.published"
-
-	// EventAppAdoptionProposed is emitted when a recipient candidate computer
-	// starts applying an AppChangePackage.
-	EventAppAdoptionProposed EventKind = "app_adoption.proposed"
-
-	// EventAppAdoptionVerificationStarted is emitted before recipient-side
-	// verifier contracts run resource-heavy build work.
-	EventAppAdoptionVerificationStarted EventKind = "app_adoption.verification_started"
-
-	// EventAppAdoptionVerified is emitted when recipient-side verifier
-	// contracts accept the rebuilt app artifacts.
-	EventAppAdoptionVerified EventKind = "app_adoption.verified"
-
-	// EventAppAdoptionBlocked is emitted when recipient-side verifier contracts
-	// reject or cannot complete an adoption.
-	EventAppAdoptionBlocked EventKind = "app_adoption.blocked"
-
-	// EventAppAdoptionOwnerApproved is emitted when the owner approves a
-	// verified adoption for promotion. Review authorizes a verified
-	// transition; it does not replace verification.
-	EventAppAdoptionOwnerApproved EventKind = "app_adoption.owner_approved"
-
-	// EventAppAdoptionOwnerReviewResolved is emitted when a non-deployed owner
-	// adoption-review boundary approves or rejects a private candidate-package draft.
-	EventAppAdoptionOwnerReviewResolved EventKind = "app_adoption.owner_review_resolved"
-
-	// EventAppAdoptionSourceLineageSwitched is emitted when a non-deployed
-	// candidate-package adoption review advances only target source lineage.
-	EventAppAdoptionSourceLineageSwitched EventKind = "app_adoption.source_lineage_switched"
-
-	// EventAppAdoptionPromoted is emitted when an approved adoption advances a
-	// target computer source lineage.
-	EventAppAdoptionPromoted EventKind = "app_adoption.promoted"
-
-	// EventAppAdoptionRolledBack is emitted when an adoption restores the prior
-	// source lineage and route/artifact profile.
-	EventAppAdoptionRolledBack EventKind = "app_adoption.rolled_back"
-
 	// EventTextureAgentRevisionStarted is emitted when an appagent-driven
 	// document revision starts executing. The payload includes the doc_id
 	// so the frontend can correlate the revision to the open document

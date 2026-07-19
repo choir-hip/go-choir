@@ -3334,7 +3334,7 @@ func TestOpenAICompatibleExactToolChoiceSerialization(t *testing.T) {
 	chatBody, err := json.Marshal(openAIChatCompletionRequest{
 		Model:      "accounts/fireworks/models/deepseek-v4-pro",
 		Messages:   []openAIChatMessage{{Role: "user", Content: "start"}},
-		ToolChoice: openAIChatToolChoice("function:start_worker_delegation"),
+		ToolChoice: openAIChatToolChoice("function:request_super_execution"),
 	})
 	if err != nil {
 		t.Fatalf("marshal chat body: %v", err)
@@ -3351,14 +3351,14 @@ func TestOpenAICompatibleExactToolChoiceSerialization(t *testing.T) {
 		t.Fatalf("chat tool_choice.type = %#v, want function", chatChoice["type"])
 	}
 	fn, ok := chatChoice["function"].(map[string]any)
-	if !ok || fn["name"] != "start_worker_delegation" {
-		t.Fatalf("chat tool_choice.function = %#v, want start_worker_delegation", chatChoice["function"])
+	if !ok || fn["name"] != "request_super_execution" {
+		t.Fatalf("chat tool_choice.function = %#v, want request_super_execution", chatChoice["function"])
 	}
 
 	responsesBody, err := json.Marshal(openAIRequest{
 		Model:      "gpt-5.5",
 		Input:      []openAIItem{{Role: "user", Content: "start"}},
-		ToolChoice: openAIResponsesToolChoice("function:start_worker_delegation"),
+		ToolChoice: openAIResponsesToolChoice("function:request_super_execution"),
 		Store:      false,
 	})
 	if err != nil {
@@ -3372,7 +3372,7 @@ func TestOpenAICompatibleExactToolChoiceSerialization(t *testing.T) {
 	if !ok {
 		t.Fatalf("responses tool_choice = %#v, want object", responsesRaw["tool_choice"])
 	}
-	if responsesChoice["type"] != "function" || responsesChoice["name"] != "start_worker_delegation" {
+	if responsesChoice["type"] != "function" || responsesChoice["name"] != "request_super_execution" {
 		t.Fatalf("responses tool_choice = %#v, want exact function", responsesChoice)
 	}
 }

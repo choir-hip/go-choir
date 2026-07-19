@@ -123,7 +123,7 @@ func newUpdateCoagentTool(rt *Runtime) toolregistry.Tool {
 					"type": "object",
 					"properties": map[string]any{
 						"action_id": map[string]any{"type": "string"},
-						"type":      map[string]any{"type": "string", "enum": []string{"run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "request_worker", "import_source", "revise_texture"}},
+						"type":      map[string]any{"type": "string", "enum": []string{"run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "request_super_execution", "import_source", "revise_texture"}},
 						"objective": map[string]any{"type": "string"},
 						"inputs":    map[string]any{"type": "object"},
 						"expected_sources": map[string]any{
@@ -763,7 +763,7 @@ func validCoagentSourceEvidenceConfidence(confidence string) bool {
 
 func validCoagentActionType(actionType string) bool {
 	switch strings.TrimSpace(actionType) {
-	case "run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "request_worker", "import_source", "revise_texture":
+	case "run_command", "inspect_file", "produce_diff", "run_tests", "open_browser", "request_super_execution", "import_source", "revise_texture":
 		return true
 	default:
 		return false

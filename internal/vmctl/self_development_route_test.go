@@ -139,6 +139,9 @@ func TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate(t *testi
 	ownership := &VMOwnership{VMID: "vm-realization", ComputerID: checkpointRequest.ComputerID, UserID: "owner", DesktopID: "primary", State: VMStateActive}
 	registry.ownerships[ownershipKey("owner", "primary")] = ownership
 	registry.vmByID[ownership.VMID] = ownership
+	if got := stableComputerID(ownership.UserID, ownership.DesktopID, ownership.ComputerID); got != projection.ComputerID {
+		t.Fatalf("stable route computer identity = %q, want %q", got, projection.ComputerID)
+	}
 	request := selfdevprotocol.ApplyRouteProjectionRequest{Projection: projection, Authorization: selfdevprotocol.RouteProjectionResponse{Certificate: certificate, Receipt: certificateReceipt}}
 	resolution, err := authority.ApplySelfDevelopmentProjection(t.Context(), registry, request, now)
 	if err != nil || resolution.Slot.Current != newVersion || resolution.Slot.Generation != slot.Generation+1 {

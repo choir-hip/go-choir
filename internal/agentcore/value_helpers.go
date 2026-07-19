@@ -228,8 +228,8 @@ func normalizeWorkerUpdateRefKey(key string) string {
 		return "patch"
 	case "test", "tests", "test_run", "test_result":
 		return "test_run"
-	case "app_change_package", "change_package", "package":
-		return "app_change_package"
+	case "capsule_bundle", "bundle", "package":
+		return "capsule_bundle"
 	case "screenshot", "image_artifact":
 		return "screenshot"
 	case "video_artifact", "video_proof":
@@ -245,7 +245,7 @@ func normalizeWorkerUpdateRefKey(key string) string {
 
 func executionTargetKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
+	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
 		return true
 	default:
 		return false

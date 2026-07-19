@@ -28,34 +28,6 @@ func NewHandler(s *store.Store, bus *events.EventBus) *Handler {
 	return &Handler{store: s, bus: bus}
 }
 
-// CloneState copies one owner-scoped desktop state into a new desktop identity.
-// VM lifecycle callers own the machine fork; desktopstate remains the sole
-// authority for loading and persisting the corresponding product state.
-func (h *Handler) CloneState(ctx context.Context, ownerID, sourceDesktopID, targetDesktopID string) (types.DesktopState, error) {
-	if h == nil || h.store == nil {
-		return types.DesktopState{}, fmt.Errorf("desktop state store unavailable")
-	}
-	sourceState, err := h.store.GetDesktopStateForDesktop(ctx, ownerID, sourceDesktopID)
-	if err != nil {
-		return types.DesktopState{}, fmt.Errorf("fork_desktop load source state: %w", err)
-	}
-	raw, err := json.Marshal(sourceState)
-	if err != nil {
-		return types.DesktopState{}, fmt.Errorf("fork_desktop clone source state: %w", err)
-	}
-	var clonedState types.DesktopState
-	if err := json.Unmarshal(raw, &clonedState); err != nil {
-		return types.DesktopState{}, fmt.Errorf("fork_desktop clone source state: %w", err)
-	}
-	clonedState.OwnerID = ownerID
-	clonedState.DesktopID = targetDesktopID
-	clonedState.UpdatedAt = time.Now().UTC()
-	if err := h.store.SaveDesktopStateForDesktop(ctx, clonedState); err != nil {
-		return types.DesktopState{}, fmt.Errorf("fork_desktop save cloned state: %w", err)
-	}
-	return clonedState, nil
-}
-
 func (h *Handler) emitProductEvent(ctx context.Context, ownerID, desktopID string, kind types.EventKind, payload map[string]any) (types.EventRecord, error) {
 	if h == nil || h.store == nil {
 		return types.EventRecord{}, fmt.Errorf("runtime store unavailable")

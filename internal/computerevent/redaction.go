@@ -21,8 +21,9 @@ type secretPattern struct {
 
 var privateSecretPatterns = []secretPattern{
 	{kind: "private_key", expression: regexp.MustCompile(`(?s)-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----.*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----`)},
+	{kind: "private_key_header", expression: regexp.MustCompile(`-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----`)},
 	{kind: "authorization_bearer", expression: regexp.MustCompile(`(?i)Bearer[ \t]+[A-Za-z0-9._~+/=-]{12,}`)},
-	{kind: "credential_assignment", expression: regexp.MustCompile(`(?i)(?:api[_-]?key|access[_-]?token|auth[_-]?token|secret|password)[ \t]*[:=][ \t]*[^\s,;"']{8,}`)},
+	{kind: "credential_assignment", expression: regexp.MustCompile(`(?i)(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|secret|password)[\"']?[ \t]*[:=][ \t]*[\"']?[^\s,;\"']{8,}`)},
 	{kind: "openai_key", expression: regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{16,}\b`)},
 	{kind: "github_token", expression: regexp.MustCompile(`\b(?:ghp_|github_pat_)[A-Za-z0-9_]{16,}\b`)},
 	{kind: "google_api_key", expression: regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{20,}\b`)},

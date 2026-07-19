@@ -23,7 +23,7 @@ const (
 	SourceKindDiffHunk             = "diff_hunk"
 	SourceKindPatch                = "patch"
 	SourceKindTestRun              = "test_run"
-	SourceKindAppChangePackage     = "app_change_package"
+	SourceKindCapsuleBundle        = "capsule_bundle"
 	SourceKindScreenshot           = "screenshot"
 	SourceKindVideoArtifact        = "video_artifact"
 	SourceKindBenchmarkLog         = "benchmark_log"

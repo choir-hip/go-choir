@@ -150,7 +150,7 @@ func sourceEntityFromWorkerUpdateRef(ctx context.Context, rt *Handler, ownerID, 
 			return textureSourceEntity{}
 		}
 		return evidenceRecordToSourceEntity(rec)
-	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
+	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
 		return executionEvidenceSourceEntity(key, value, value, "coagent")
 	default:
 		return textureSourceEntity{}
@@ -669,8 +669,8 @@ func normalizeWorkerUpdateRefKey(key string) string {
 		return "patch"
 	case "test", "tests", "test_run", "test_result":
 		return "test_run"
-	case "app_change_package", "change_package", "package":
-		return "app_change_package"
+	case "capsule_bundle", "bundle", "package":
+		return "capsule_bundle"
 	case "screenshot", "image_artifact":
 		return "screenshot"
 	case "video_artifact", "video_proof":
@@ -704,7 +704,7 @@ func executionEvidenceTarget(rec types.EvidenceRecord) (string, string) {
 
 func executionTargetKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "app_change_package", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
+	case "command_output", "shell_session", "diff_hunk", "patch", "test_run", "capsule_bundle", "screenshot", "video_artifact", "benchmark_log", "file_artifact":
 		return true
 	default:
 		return false
@@ -775,8 +775,8 @@ func executionSourceDefaultLabel(kind string) string {
 		return "Patch"
 	case "test_run":
 		return "Test run"
-	case "app_change_package":
-		return "AppChangePackage"
+	case "capsule_bundle":
+		return "Capsule bundle"
 	case "screenshot":
 		return "Screenshot"
 	case "video_artifact":

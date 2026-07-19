@@ -186,12 +186,12 @@ func TestRunListAndCancelRoutesAreWiredAndOwnerScoped(t *testing.T) {
 		t.Fatalf("owner-scoped run list = %+v, want only %s", listResp.Runs, alice.RunID)
 	}
 
-	foreignW := runtimeHandlerRequest(t, handler.HandleCancel, http.MethodPost, "/api/agent/cancel", `{"loop_id":"`+bob.RunID+`"}`, "user-alice")
+	foreignW := runtimeHandlerRequest(t, handler.HandleRunResource, http.MethodPost, "/api/runs/"+bob.RunID+"/cancel", ``, "user-alice")
 	if foreignW.Code != http.StatusNotFound {
 		t.Fatalf("foreign cancel status = %d, want 404; body=%s", foreignW.Code, foreignW.Body.String())
 	}
 
-	cancelW := runtimeHandlerRequest(t, handler.HandleCancel, http.MethodPost, "/api/agent/cancel", `{"loop_id":"`+alice.RunID+`"}`, "user-alice")
+	cancelW := runtimeHandlerRequest(t, handler.HandleRunResource, http.MethodPost, "/api/runs/"+alice.RunID+"/cancel", ``, "user-alice")
 	if cancelW.Code != http.StatusOK {
 		t.Fatalf("owner cancel status = %d, want 200; body=%s", cancelW.Code, cancelW.Body.String())
 	}

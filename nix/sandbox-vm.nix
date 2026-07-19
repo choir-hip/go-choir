@@ -305,6 +305,7 @@ EOF
   systemd.tmpfiles.rules = [
     "d /mnt/persistent/choir-updater 0700 root root -"
     "d /run/choir-updater-control 0700 root root -"
+    "d /run/choir-updater-handoff 0700 root root -"
     "d /run/choir 0700 root root -"
   ];
 
@@ -330,8 +331,8 @@ EOF
 
   systemd.services.go-choir-kernel-capability-probe = {
     description = "Probe mandatory guest kernel isolation capabilities";
-    before = [ "go-choir-updater.service" ];
-    requiredBy = [ "go-choir-updater.service" ];
+    before = [ "go-choir-updater.service" "go-choir-sandbox.service" ];
+    requiredBy = [ "go-choir-updater.service" "go-choir-sandbox.service" ];
     environment.CHOIR_KERNEL_CAPABILITY_PROBE_OUTPUT = "/run/choir/kernel-capabilities.json";
     serviceConfig = {
       Type = "oneshot";
@@ -377,7 +378,7 @@ EOF
       Type = "simple";
       User = "root";
       Group = "root";
-      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --health-url http://127.0.0.1:8085/health --signing-key /mnt/persistent/choir-updater/keys/guest-core.ed25519 --verifier-signing-key /mnt/persistent/choir-updater/keys/verifier.ed25519 --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
+      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --restart-prepare-url http://127.0.0.1:8085/internal/self-development/restart-handoff --restart-handoff /run/choir-updater-handoff/restart-capability --health-url http://127.0.0.1:8085/health --signing-key /mnt/persistent/choir-updater/keys/guest-core.ed25519 --verifier-signing-key /mnt/persistent/choir-updater/keys/verifier.ed25519 --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
       Restart = "on-failure";
       RestartSec = 1;
       UMask = "0077";
@@ -394,8 +395,8 @@ EOF
       ProtectHome = true;
       ProtectSystem = "strict";
       ProtectControlGroups = true;
-      ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" "/run/choir-bootstrap" ];
-      InaccessiblePaths = [ "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" "/run/choir-updater-handoff" ];
+      InaccessiblePaths = [ "/run/choir-bootstrap" "/run/go-choir-sandbox.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
@@ -414,8 +415,8 @@ EOF
     requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" ];
     environment = {
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
-      CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-bootstrap/restart-capability";
-      CHOIR_PRIVATE_ARTIFACT_KEYRING = "/mnt/persistent/private-artifact-keys";
+      CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-updater-handoff/restart-capability";
+      CHOIR_KERNEL_CAPABILITY_PROBE = "/run/choir/kernel-capabilities.json";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         bash
         coreutils
@@ -496,13 +497,13 @@ EOF
       ExecStart = "${sandboxRuntimeExec}";
       Restart = "on-failure";
       RestartSec = 1;
-      # App adoption builds run as sandbox child processes. If a child build
-      # exceeds the guest memory envelope, keep the runtime alive so it can
-      # persist a blocked verifier result instead of losing terminal evidence.
+      # Updater and capsule-adjacent child work can approach the guest memory
+      # envelope. Keep the runtime alive so it can persist terminal evidence.
       OOMPolicy = "continue";
       StandardOutput = "journal+console";
       StandardError = "journal+console";
       EnvironmentFile = [ "-/run/go-choir-sandbox.env" ];
+      ReadWritePaths = [ "/mnt/persistent" "/run/choir" "/run/choir-updater-handoff" ];
     };
   };
 

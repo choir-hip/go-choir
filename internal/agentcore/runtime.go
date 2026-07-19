@@ -13,14 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yusefmosiah/go-choir/internal/candidatepackage"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
-	"github.com/yusefmosiah/go-choir/internal/promotion"
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
@@ -93,28 +91,26 @@ type Runtime struct {
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 
-	promotion             *promotion.Service
-	candidatePackages     *candidatepackage.Service
-	desktopState          *desktopstate.Handler
-	content               *contentowner.Service
-	capsuleExecutor       *capsule.Executor
-	capsuleBuilder        *transaction.TransactionBuilder
-	eventAppender         *computerevent.ComputerEventAppender
-	selfdevOperations     *selfdev.Store
-	privateArtifactCipher *computerevent.PrivateArtifactCipher
-	selfdevUpdater        *updater.Client
-	selfdevControl        *selfdev.GuestCredentials
-	selfdevRoute          *vmctl.Client
-	selfdevRouteOwnerID   string
-	selfdevRouteDesktopID string
-	selfdevUpdaterRoot    string
-	selfdevComputerID     string
-	selfdevRealizationID  string
+	desktopState                *desktopstate.Handler
+	content                     *contentowner.Service
+	capsuleExecutor             *capsule.Executor
+	capsuleBuilder              *transaction.TransactionBuilder
+	eventAppender               *computerevent.ComputerEventAppender
+	selfdevOperations           *selfdev.Store
+	privateArtifactCipher       *computerevent.PrivateArtifactCipher
+	selfdevUpdater              *updater.Client
+	selfdevControl              *selfdev.GuestCredentials
+	selfdevRoute                *vmctl.Client
+	selfdevRouteOwnerID         string
+	selfdevRouteDesktopID       string
+	selfdevUpdaterRoot          string
+	selfdevComputerID           string
+	selfdevRealizationID        string
 	selfdevStartupMarker        string
 	selfdevStartupReleaseDigest string
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
-	selfdevMaterializeMu  sync.Mutex
+	selfdevMaterializeMu        sync.Mutex
 }
 
 type textureWakeTimer interface {
@@ -141,18 +137,7 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 			ProviderConfig: cfg,
 			Provider:       provider,
 		}),
-		promotion: promotion.NewService(s, promotion.Config{
-			SourceLedgerRepo:                cfg.SourceLedgerRepo,
-			PromotionSourceRepo:             cfg.PromotionSourceRepo,
-			PromotionWorkspaceRoot:          cfg.PromotionWorkspaceRoot,
-			AppPromotionBuildTimeout:        cfg.AppPromotionBuildTimeout,
-			AppPromotionRuntimeBuildCommand: cfg.AppPromotionRuntimeBuildCommand,
-			AppPromotionRuntimeArtifactPath: cfg.AppPromotionRuntimeArtifactPath,
-			AppPromotionUIBuildCommand:      cfg.AppPromotionUIBuildCommand,
-			AppPromotionUIArtifactPath:      cfg.AppPromotionUIArtifactPath,
-		}),
 	}
-	rt.candidatePackages = candidatepackage.NewService(s, rt.promotion)
 	for _, opt := range opts {
 		opt(rt)
 	}

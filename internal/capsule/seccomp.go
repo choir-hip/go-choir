@@ -9,117 +9,61 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// denyEPERM is the seccomp action that denies a syscall with EPERM.
-// SECCOMP_RET_ERRNO uses the low 16 bits as the errno value, so we must
-// OR in unix.EPERM. Without this, denied syscalls would return errno=0
-// (success) — a security-critical bug caught in v13 consensus.
 var denyEPERM = seccomp.ActionErrno | seccomp.Action(unix.EPERM)
 
-// WorkloadSeccompFilter returns the seccomp filter for capsule workloads.
-// Default-allow with targeted denylist + socket family filtering.
-// AF_UNIX (1) is allowed for broker control plane.
-// AF_INET (2), AF_INET6 (10), AF_NETLINK (16), AF_VSOCK (40) are denied.
-//
-// Each denied socket family is its own SyscallGroup with NamesWithCondtions
-// (note: library has typo "Condtions"). Separate groups are ORed at the
-// BPF filter level. Rules within a single Conditions slice are ANDed.
+var capsuleAllowedSyscalls = []string{
+	"read", "write", "readv", "writev", "pread64", "pwrite64", "close", "close_range",
+	"open", "openat", "openat2", "creat", "stat", "fstat", "lstat", "newfstatat", "statx",
+	"access", "faccessat", "faccessat2", "lseek", "getdents", "getdents64", "getcwd", "chdir", "fchdir",
+	"mkdir", "mkdirat", "rmdir", "rename", "renameat", "renameat2", "link", "linkat", "unlink", "unlinkat",
+	"symlink", "symlinkat", "readlink", "readlinkat", "chmod", "fchmod", "fchmodat", "chown", "fchown", "lchown", "fchownat",
+	"truncate", "ftruncate", "umask", "utime", "utimes", "futimesat", "utimensat", "fsync", "fdatasync", "syncfs",
+	"mmap", "mprotect", "munmap", "mremap", "madvise", "brk", "mlock", "munlock", "mincore",
+	"rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "sigaltstack", "restart_syscall",
+	"ioctl", "fcntl", "flock", "dup", "dup2", "dup3", "pipe", "pipe2", "poll", "ppoll", "select", "pselect6",
+	"epoll_create", "epoll_create1", "epoll_ctl", "epoll_wait", "epoll_pwait", "eventfd", "eventfd2",
+	"inotify_init", "inotify_init1", "inotify_add_watch", "inotify_rm_watch",
+	"socketpair", "connect", "bind", "listen", "accept", "accept4", "shutdown", "sendto", "recvfrom", "sendmsg", "recvmsg",
+	"getsockname", "getpeername", "setsockopt", "getsockopt",
+	"clone", "clone3", "fork", "vfork", "execve", "execveat", "exit", "exit_group", "wait4", "waitid",
+	"getpid", "getppid", "gettid", "getuid", "geteuid", "getgid", "getegid", "getresuid", "getresgid", "getgroups",
+	"setuid", "setgid", "setreuid", "setregid", "setresuid", "setresgid", "setgroups", "setfsuid", "setfsgid",
+	"kill", "tkill", "tgkill", "prctl", "capget", "capset", "set_tid_address", "set_robust_list", "rseq",
+	"futex", "sched_yield", "sched_getaffinity", "sched_setaffinity", "nanosleep", "clock_nanosleep",
+	"clock_gettime", "clock_getres", "gettimeofday", "time", "times", "getitimer", "setitimer", "alarm",
+	"getrlimit", "setrlimit", "prlimit64", "getrusage", "sysinfo", "uname", "getrandom",
+	"sendfile", "copy_file_range", "splice", "tee", "vmsplice", "memfd_create", "arch_prctl",
+}
+
+// WorkloadSeccompFilter is default-deny. It admits the file/process/memory
+// substrate needed by the broker and offline build tools plus AF_UNIX only.
 func WorkloadSeccompFilter() seccomp.Filter {
 	return seccomp.Filter{
 		NoNewPrivs: true,
 		Flag:       seccomp.FilterFlagTSync,
 		Policy: seccomp.Policy{
-			DefaultAction: seccomp.ActionAllow,
+			DefaultAction: denyEPERM,
 			Syscalls: []seccomp.SyscallGroup{
-				// Targeted denylist: kernel keyring, ptrace, mount, modules,
-				// namespace escape, perf, bpf.
-				{
-					Action: denyEPERM,
-					Names: []string{
-						"keyctl", "add_key", "request_key",
-						"ptrace", "process_vm_readv", "process_vm_writev",
-						"mount", "umount2", "pivot_root", "swapon", "swapoff",
-						"reboot", "init_module", "finit_module", "delete_module",
-						"kexec_load", "kexec_file_load",
-						"perf_event_open", "fanotify_init",
-						"bpf", "lookup_bpf_cookie",
-						"unshare", "setns", // prevent namespace escape
-					},
-				},
-				// Block socket(AF_INET, ...) — IPv4 networking.
-				{
-					Action: denyEPERM,
-					NamesWithCondtions: []seccomp.NameWithConditions{{
-						Name: "socket",
-						Conditions: seccomp.ArgumentConditions{{
-							Argument:  0, // socket(domain, type, protocol) — filter on domain
-							Operation: seccomp.Equal,
-							Value:     uint64(unix.AF_INET), // 2
-						}},
-					}},
-				},
-				// Block socket(AF_INET6, ...) — IPv6 networking.
-				{
-					Action: denyEPERM,
-					NamesWithCondtions: []seccomp.NameWithConditions{{
-						Name: "socket",
-						Conditions: seccomp.ArgumentConditions{{
-							Argument:  0,
-							Operation: seccomp.Equal,
-							Value:     uint64(unix.AF_INET6), // 10
-						}},
-					}},
-				},
-				// Block socket(AF_NETLINK, ...) — netlink (route discovery, etc).
-				{
-					Action: denyEPERM,
-					NamesWithCondtions: []seccomp.NameWithConditions{{
-						Name: "socket",
-						Conditions: seccomp.ArgumentConditions{{
-							Argument:  0,
-							Operation: seccomp.Equal,
-							Value:     uint64(unix.AF_NETLINK), // 16
-						}},
-					}},
-				},
-				// Block socket(AF_VSOCK, ...) — vsock to host (v8 security fix).
-				// Prevents broker/workload from directly reaching HostAuthority.
-				{
-					Action: denyEPERM,
-					NamesWithCondtions: []seccomp.NameWithConditions{{
-						Name: "socket",
-						Conditions: seccomp.ArgumentConditions{{
-							Argument:  0,
-							Operation: seccomp.Equal,
-							Value:     uint64(unix.AF_VSOCK), // 40
-						}},
-					}},
-				},
+				{Action: seccomp.ActionAllow, Names: capsuleAllowedSyscalls},
+				{Action: seccomp.ActionAllow, NamesWithCondtions: []seccomp.NameWithConditions{{
+					Name: "socket", Conditions: seccomp.ArgumentConditions{{Argument: 0, Operation: seccomp.Equal, Value: uint64(unix.AF_UNIX)}},
+				}}},
 			},
 		},
 	}
 }
 
-// BrokerSeccompFilter applies the same network, namespace, mount, ptrace,
-// module, BPF, keyring, and host-vsock denial floor inherited by workloads.
-func BrokerSeccompFilter() seccomp.Filter {
-	return WorkloadSeccompFilter()
-}
+func BrokerSeccompFilter() seccomp.Filter { return WorkloadSeccompFilter() }
 
-// LoadWorkloadFilter loads the workload seccomp filter into the kernel.
-// Must be called after fork, before exec of the workload process.
 func LoadWorkloadFilter() error {
-	filter := WorkloadSeccompFilter()
-	if err := seccomp.LoadFilter(filter); err != nil {
+	if err := seccomp.LoadFilter(WorkloadSeccompFilter()); err != nil {
 		return fmt.Errorf("failed to load workload seccomp filter: %w", err)
 	}
 	return nil
 }
 
-// LoadBrokerFilter loads the broker seccomp filter into the kernel.
-// Must be called after fork, before exec of the broker process.
 func LoadBrokerFilter() error {
-	filter := BrokerSeccompFilter()
-	if err := seccomp.LoadFilter(filter); err != nil {
+	if err := seccomp.LoadFilter(BrokerSeccompFilter()); err != nil {
 		return fmt.Errorf("failed to load broker seccomp filter: %w", err)
 	}
 	return nil

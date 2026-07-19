@@ -5,9 +5,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -252,11 +252,7 @@ func TestAppenderAppendNewPrivatePayloadEncryptsAndBindsEnvelope(t *testing.T) {
 	if _, err := appender.AppendNew(context.Background(), genesis, TransitionInput{TargetStateCommitment: testDigestA}, nil); err != nil {
 		t.Fatal(err)
 	}
-	keyring, err := NewFilePrivacyKeyring(filepath.Join(t.TempDir(), "keys"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cipher, err := NewPrivateArtifactCipher(keyring)
+	cipher, err := NewPrivateArtifactCipherFromExternalKey(testComputerID, base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0x33}, 32)))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,10 +26,14 @@ func TestStartExistingVMBindsCredentialToStableComputerAndRealization(t *testing
 	registry.SetCorpusdURL(corpusd.URL)
 	manager := &mockVMManager{resumeError: errors.New("not running")}
 	ownership := &VMOwnership{VMID: "vm-realization", ComputerID: "computer-stable", DesktopID: "primary", UserID: "owner-1", Epoch: 7}
+	expectedComputerID := ownership.ComputerID
+	if got := stableComputerID(ownership.UserID, ownership.DesktopID, ownership.ComputerID); got != expectedComputerID {
+		t.Fatalf("stable computer identity = %q, want %q", got, expectedComputerID)
+	}
 	if _, err := registry.startExistingVM(ownership, manager); err != nil {
 		t.Fatal(err)
 	}
-	if issued["computer_id"] != ownership.ComputerID || issued["realization_id"] != "vm-realization-epoch-8" || issued["idempotency_key"] != "guest-credential:vm-realization-epoch-8:8" {
+	if issued["computer_id"] != expectedComputerID || issued["realization_id"] != "vm-realization-epoch-8" || issued["idempotency_key"] != "guest-credential:vm-realization-epoch-8:8" {
 		t.Fatalf("issued credential identity = %#v", issued)
 	}
 	if len(manager.boots) != 1 || manager.boots[0].ComputerCredentialEnvelope == "" || manager.boots[0].DesktopID != ownership.DesktopID {

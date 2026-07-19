@@ -3,20 +3,21 @@ package computerevent
 import (
 	"bytes"
 	"context"
-	"os"
-	"path/filepath"
+	"encoding/base64"
 	"testing"
 )
 
+func externalTestCipher(t *testing.T, fill byte) *PrivateArtifactCipher {
+	t.Helper()
+	cipher, err := NewPrivateArtifactCipherFromExternalKey("computer-test", base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{fill}, 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cipher
+}
+
 func TestPrivateArtifactCipherUsesFreshNonceAndAuthenticatesMetadata(t *testing.T) {
-	keyring, err := NewFilePrivacyKeyring(filepath.Join(t.TempDir(), "keys"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cipher, err := NewPrivateArtifactCipher(keyring)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cipher := externalTestCipher(t, 0x11)
 	plaintext := []byte("private model response")
 	first, firstMetadata, err := cipher.Encrypt(context.Background(), "computer-test", "event-test", "text/plain", "private", plaintext)
 	if err != nil {
@@ -47,14 +48,7 @@ func TestPrivateArtifactCipherUsesFreshNonceAndAuthenticatesMetadata(t *testing.
 }
 
 func TestPrivateArtifactCipherRedactsSecretsBeforeImmutableEncryption(t *testing.T) {
-	keyring, err := NewFilePrivacyKeyring(filepath.Join(t.TempDir(), "keys"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cipher, err := NewPrivateArtifactCipher(keyring)
-	if err != nil {
-		t.Fatal(err)
-	}
+	cipher := externalTestCipher(t, 0x22)
 	secret := []byte("Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456")
 	envelope, metadata, err := cipher.Encrypt(context.Background(), "computer-test", "event-secret", "text/plain", "private", secret)
 	if err != nil {
@@ -75,12 +69,25 @@ func TestPrivateArtifactCipherRedactsSecretsBeforeImmutableEncryption(t *testing
 	}
 }
 
-func TestFilePrivacyKeyringRefusesGroupReadableRoot(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "keys")
-	if err := os.Mkdir(root, 0o755); err != nil {
+func TestExternalPrivacyKeyringSurvivesTrustedCoreReconstructionWithoutFilesystemState(t *testing.T) {
+	encoded := base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0x5a}, 32))
+	first, err := NewPrivateArtifactCipherFromExternalKey("computer-test", encoded)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewFilePrivacyKeyring(root); err == nil {
-		t.Fatal("group-readable keyring root was accepted")
+	envelope, metadata, err := first.Encrypt(context.Background(), "computer-test", "event-restart", "text/plain", "private", []byte("restart durable"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reconstructed, err := NewPrivateArtifactCipherFromExternalKey("computer-test", encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plaintext, recoveredMetadata, err := reconstructed.Decrypt(context.Background(), envelope, "computer-test", "event-restart")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(plaintext) != "restart durable" || recoveredMetadata.KeyVersionDigest != metadata.KeyVersionDigest {
+		t.Fatalf("reconstructed private artifact = %q %+v", plaintext, recoveredMetadata)
 	}
 }

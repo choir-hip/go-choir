@@ -75,8 +75,6 @@ func DefaultRegistry() *Registry {
 		{Kind: "choir.content_item", Store: StoreTypeDolt, IdentityMode: IdentityContentHash},
 		{Kind: "choir.podcast_subscription", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 		{Kind: "choir.browser_session", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
-		{Kind: "choir.app_change_package", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
-		{Kind: "choir.app_adoption", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 		{Kind: "choir.desktop_session", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 		{Kind: "choir.desktop_app_instance", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},
 		{Kind: "choir.worker_update", Store: StoreTypeDolt, IdentityMode: IdentityExternalKey},

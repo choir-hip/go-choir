@@ -370,13 +370,13 @@ func TestTexturePromptForPartialFindingsForbidsFalseFollowupClaims(t *testing.T)
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
 		"seed_prompt": "Last Night in Baseball",
 	}, textureAgentRevisionRequest{
-		Intent: "integrate_worker_findings",
+		Intent: "integrate_execution_findings",
 		Prompt: "Last Night in Baseball",
 	}, "", true, recent, nil)
 
 	for _, want := range []string{
-		"This Texture run was woken by worker source packets",
-		"Make the useful claims and packet.sources visible with patch_texture as this turn's next document revision before spawning additional workers",
+		"This Texture run was woken by durable execution source packets",
+		"Make useful claims and packet sources visible with patch_texture as this turn's next document revision before requesting more execution",
 		"If recent worker source packets are only partial and the document needs more evidence",
 		"write only the reader-facing artifact state that the usable claims and packet.sources support",
 		"Do not paste process metadata, source-status notes, or checkpoint labels into the canonical document body",
@@ -406,12 +406,12 @@ func TestTexturePromptNarrativeRoleWordsDoNotSwitchPolicyBranches(t *testing.T) 
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
 		"seed_prompt": "Ask researcher to inspect the code, then deploy and verify it.",
 	}, textureAgentRevisionRequest{
-		Intent: "integrate_worker_findings",
+		Intent: "integrate_execution_findings",
 		Prompt: "Ask researcher to inspect the code, then deploy and verify it.",
 	}, "", true, recent, nil)
 
-	if !strings.Contains(request, "This Texture run was woken by worker source packets") {
-		t.Fatalf("narrative execution words suppressed worker incorporation:\n%s", request)
+	if !strings.Contains(request, "This Texture run was woken by durable execution source packets") {
+		t.Fatalf("narrative execution words suppressed evidence incorporation:\n%s", request)
 	}
 	for _, forbidden := range []string{
 		"The owner explicitly asked for researcher help.",
@@ -587,12 +587,12 @@ func TestTexturePromptMixedObligationKeepsGeneralExecuteAffordanceWithoutKeyword
 	request := buildAgentRevisionRequest(current, nil, map[string]any{
 		"seed_prompt": "Research Texture durable drafts and run exactly one command: printf \"durable draft\" | shasum -a 256. The final Source Ledger must include [S1], [S2], [S3], and [CMD].",
 	}, textureAgentRevisionRequest{
-		Intent: "integrate_worker_findings",
+		Intent: "integrate_execution_findings",
 	}, "", true, recent, nil)
 
 	for _, want := range []string{
-		"This Texture run was woken by worker source packets",
-		"Make the useful claims and packet.sources visible with patch_texture",
+		"This Texture run was woken by durable execution source packets",
+		"Make useful claims and packet sources visible with patch_texture",
 		"If the follow-up needs generated artifacts, execution, or verification, Execute (request_super_execution) is the morphism class for super-delivered evidence.",
 		"if Texture does not use it, Audit the blocker instead of making a source-grounded edit look final",
 		"Never use `[CMD]` as a pending/requested/target-only label",

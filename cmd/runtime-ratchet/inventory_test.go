@@ -252,10 +252,6 @@ func (*Store) PatchRevisionMetadata() {}
 func (*Store) ClaimCoSuperSlot() {}
 func (*Store) ReleaseCoSuperSlotClaim() {}
 func (*Store) CancelAgentMutation() {}
-func (*Store) UpsertAppAdoption() {}
-func (*Store) UpsertComputerSourceLineage() {}
-func (*Store) UpsertAppChangePackage() {}
-func (*Store) UpdateAppAdoptionIfCurrent() {}
 `)
 	writeFixture(t, root, "internal/agentcore/writers.go", `package runtime
 
@@ -271,27 +267,19 @@ func writeState(value *store.Store) {
 	value.ClaimCoSuperSlot()
 	value.ReleaseCoSuperSlotClaim()
 	value.CancelAgentMutation()
-	value.UpsertAppAdoption()
-	value.UpsertComputerSourceLineage()
-	value.UpsertAppChangePackage()
-	value.UpdateAppAdoptionIfCurrent()
 }
 `)
 	inventory := mustScan(t, root)
 	required := map[string]string{
-		"CreateDocument":              "wire",
-		"CreateRevision":              "wire",
-		"UpdateDocument":              "wire",
-		"CreateWorkItem":              "wire",
-		"UpdateTrajectoryStatus":      "wire",
-		"PatchRevisionMetadata":       "wire",
-		"ClaimCoSuperSlot":            "lifecycle",
-		"ReleaseCoSuperSlotClaim":     "lifecycle",
-		"CancelAgentMutation":         "lifecycle",
-		"UpsertAppAdoption":           "promotion",
-		"UpsertComputerSourceLineage": "promotion",
-		"UpsertAppChangePackage":      "promotion",
-		"UpdateAppAdoptionIfCurrent":  "promotion",
+		"CreateDocument":          "wire",
+		"CreateRevision":          "wire",
+		"UpdateDocument":          "wire",
+		"CreateWorkItem":          "wire",
+		"UpdateTrajectoryStatus":  "wire",
+		"PatchRevisionMetadata":   "wire",
+		"ClaimCoSuperSlot":        "lifecycle",
+		"ReleaseCoSuperSlotClaim": "lifecycle",
+		"CancelAgentMutation":     "lifecycle",
 	}
 	for index := range inventory.StoreCalls {
 		call := &inventory.StoreCalls[index]
@@ -319,7 +307,7 @@ func TestNewStoreWriterRequiresBaselineDisposition(t *testing.T) {
 	writeFixture(t, root, "internal/store/store.go", `package store
 
 type Store struct{}
-func (*Store) UpsertAppAdoption() {}
+func (*Store) UpsertLegacyPromotion() {}
 `)
 	writeFixture(t, root, "internal/agentcore/writer.go", `package runtime
 
@@ -331,11 +319,11 @@ var stateStore *store.Store
 
 import "github.com/yusefmosiah/go-choir/internal/store"
 var stateStore *store.Store
-func writePromotion() { stateStore.UpsertAppAdoption() }
+func writePromotion() { stateStore.UpsertLegacyPromotion() }
 `)
 	err := compareInventory(baseline, mustScan(t, root))
 	assertDiagnostic(t, err, "store_calls: added item")
-	assertDiagnostic(t, err, "UpsertAppAdoption")
+	assertDiagnostic(t, err, "UpsertLegacyPromotion")
 }
 func TestNewPatchWriterRequiresBaselineDisposition(t *testing.T) {
 	root := fixtureRepository(t)

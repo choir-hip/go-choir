@@ -24,6 +24,7 @@ type restartCredentialHandoff struct {
 	ExpiresAt  string `json:"expires_at"`
 	KeyID      string `json:"key_id"`
 	PublicKey  string `json:"public_key"`
+	PrivacyKey string `json:"privacy_key"`
 }
 
 func (g *GuestCredentials) WriteRestartHandoff(ctx context.Context, path string) error {
@@ -37,7 +38,7 @@ func (g *GuestCredentials) WriteRestartHandoff(ctx context.Context, path string)
 	handoff := restartCredentialHandoff{
 		Version: 1, BaseURL: g.baseURL, ComputerID: g.computerID, Capability: g.token,
 		ExpiresAt: g.expiresAt.UTC().Format(time.RFC3339Nano), KeyID: g.keyID,
-		PublicKey: base64.RawStdEncoding.EncodeToString(g.publicKey),
+		PublicKey: base64.RawStdEncoding.EncodeToString(g.publicKey), PrivacyKey: g.privacyKey,
 	}
 	g.mu.Unlock()
 	canonical, err := computerevent.CanonicalJSON(handoff)
@@ -95,11 +96,12 @@ func RestoreGuestCredentials(path, baseURL, computerID string) (*GuestCredential
 	expiresAt, err := time.Parse(time.RFC3339Nano, handoff.ExpiresAt)
 	publicKey, keyErr := base64.RawStdEncoding.DecodeString(handoff.PublicKey)
 	capabilityExpires, capabilityErr := capabilityExpiry(handoff.Capability)
-	if err != nil || keyErr != nil || capabilityErr != nil || len(publicKey) != ed25519.PublicKeySize || !expiresAt.Equal(capabilityExpires) || !time.Now().UTC().Before(expiresAt) || handoff.KeyID == "" {
+	privacyKey, privacyErr := base64.RawStdEncoding.DecodeString(handoff.PrivacyKey)
+	if err != nil || keyErr != nil || privacyErr != nil || capabilityErr != nil || len(publicKey) != ed25519.PublicKeySize || len(privacyKey) != 32 || !expiresAt.Equal(capabilityExpires) || !time.Now().UTC().Before(expiresAt) || handoff.KeyID == "" {
 		return nil, fmt.Errorf("guest credential: restart handoff expired or invalid")
 	}
 	return &GuestCredentials{
 		baseURL: handoff.BaseURL, computerID: handoff.ComputerID, http: &http.Client{Timeout: 15 * time.Second},
-		token: handoff.Capability, expiresAt: expiresAt, keyID: handoff.KeyID, publicKey: ed25519.PublicKey(publicKey),
+		token: handoff.Capability, expiresAt: expiresAt, keyID: handoff.KeyID, publicKey: ed25519.PublicKey(publicKey), privacyKey: handoff.PrivacyKey,
 	}, nil
 }

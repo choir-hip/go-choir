@@ -59,6 +59,22 @@ type selfDevelopmentRollbackRequest struct {
 	IdempotencyKey          string `json:"idempotency_key"`
 }
 
+// HandleComputersRouter serves the public computer-scoped self-development API.
+func (h *APIHandler) HandleComputersRouter(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	suffix := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/computers/"), "/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) < 3 || strings.TrimSpace(parts[0]) == "" || parts[1] != "self-development" {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer route not found"})
+		return
+	}
+	h.handleSelfDevelopmentRoute(w, r, ownerID, strings.TrimSpace(parts[0]), parts)
+}
+
 func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.Request, ownerID, computerID string, parts []string) {
 	if strings.TrimSpace(r.Header.Get("X-Authenticated-Computer")) != computerID {
 		writeAPIJSON(w, http.StatusForbidden, apiError{Error: "authenticated computer binding required"})
@@ -502,6 +518,15 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		nextState = selfdev.StateAccepted
 		expectedKind = computerevent.EventEffectAccepted
 	}
+	modeReceiptDigest := ""
+	if request.ModeReceipt != nil {
+		modeBytes, modeErr := request.ModeReceipt.CanonicalBytes()
+		if modeErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "mode receipt encoding failed"})
+			return
+		}
+		modeReceiptDigest = computerevent.DigestBytes(modeBytes)
+	}
 	if operation.State == nextState && found {
 		eventDigest, digestErr := event.Digest()
 		if digestErr == nil && operation.DecisionEvent == eventDigest && event.DecisionRef == decisionRef {
@@ -544,6 +569,9 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			PayloadCommitment:                computerevent.ZeroHead, ProposedEffectRef: operation.BundleDigest, DecisionRef: decisionRef,
 			VerifierRefs: []string{request.VerifierRef}, ReducerVersion: computerevent.ReducerVersionV1,
 		}
+		if modeReceiptDigest != "" {
+			event.InputArtifactRefs = []string{modeReceiptDigest}
+		}
 		input := computerevent.TransitionInput{}
 		if request.Decision == "approve" {
 			target, targetErr := computerevent.CanonicalJSON(map[string]string{"base_head": operation.BaseHead, "bundle_digest": operation.BundleDigest})
@@ -574,23 +602,14 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable decision event binding mismatch"})
 		return
 	}
-	head, err := h.rt.store.Head(r.Context(), computerID)
-	if err != nil || head == nil {
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "decision head projection unavailable"})
+	transition, transitionFound, transitionErr := h.rt.store.FinalizedDecisionForOperation(r.Context(), computerID, operation.TrajectoryID, operation.CapsuleID)
+	if transitionErr != nil || !transitionFound || transition.Request.EventDigest != eventDigest {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "exact decision transition projection unavailable"})
 		return
-	}
-	modeReceiptDigest := ""
-	if request.ModeReceipt != nil {
-		modeBytes, modeErr := request.ModeReceipt.CanonicalBytes()
-		if modeErr != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "mode receipt encoding failed"})
-			return
-		}
-		modeReceiptDigest = computerevent.DigestBytes(modeBytes)
 	}
 	operation, err = h.rt.selfdevOperations.Transition(r.Context(), computerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
 		next.DecisionEvent = eventDigest
-		next.DesiredHead, next.EffectiveHead = head.DesiredEventHead, head.EffectiveEventHead
+		next.DesiredHead, next.EffectiveHead = transition.Request.Next.DesiredEventHead, transition.Request.Next.EffectiveEventHead
 		next.ModeReceipt = modeReceiptDigest
 		return nil
 	})
@@ -617,7 +636,7 @@ func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, o
 		value, _ := receipt.KindFields[name].(string)
 		return value
 	}
-	if field("old_mode") != "accept_once" || field("new_mode") != "off" ||
+	if field("old_mode") != "accept_once" || field("new_mode") != "propose_only" ||
 		field("consumed_operation_id") != operationID || field("consumed_bundle_digest") != request.BundleDigest ||
 		field("consumed_desired_event_head") != request.ExpectedDesiredEventHead ||
 		field("consumed_effective_event_head") != request.ExpectedEffectiveEventHead ||

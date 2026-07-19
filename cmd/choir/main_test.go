@@ -536,18 +536,18 @@ func TestRunStartRequiresText(t *testing.T) {
 	}
 }
 
-// TestRunStatusHitsSubmissionEndpoint asserts the run status command GETs the
-// submission status endpoint.
-func TestRunStatusHitsSubmissionEndpoint(t *testing.T) {
+// TestRunStatusHitsRunResource asserts the run status command GETs the
+// canonical run resource.
+func TestRunStatusHitsRunResource(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/prompt-bar/submissions/sub-123" {
-			t.Errorf("path = %q, want /api/prompt-bar/submissions/sub-123", r.URL.Path)
+		if r.URL.Path != "/api/runs/sub-123" {
+			t.Errorf("path = %q, want /api/runs/sub-123", r.URL.Path)
 		}
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %q, want GET", r.Method)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"submission_id":"sub-123","state":"completed","created_at":"2026-07-06T00:00:00.000Z","updated_at":"2026-07-06T00:01:00.000Z"}`)
+		_, _ = io.WriteString(w, `{"run_id":"sub-123","state":"completed","created_at":"2026-07-06T00:00:00.000Z","updated_at":"2026-07-06T00:01:00.000Z"}`)
 	}))
 	defer stub.Close()
 
@@ -565,10 +565,10 @@ func TestRunStatusHitsSubmissionEndpoint(t *testing.T) {
 	}
 }
 
-func TestRunListHitsAgentLoopsEndpoint(t *testing.T) {
+func TestRunListHitsRunsEndpoint(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/agent/loops" {
-			t.Errorf("path = %q, want /api/agent/loops", r.URL.Path)
+		if r.URL.Path != "/api/runs" {
+			t.Errorf("path = %q, want /api/runs", r.URL.Path)
 		}
 		if r.Method != http.MethodGet {
 			t.Errorf("method = %q, want GET", r.Method)
@@ -576,7 +576,7 @@ func TestRunListHitsAgentLoopsEndpoint(t *testing.T) {
 		if got := r.URL.Query().Get("limit"); got != "7" {
 			t.Errorf("limit = %q, want 7", got)
 		}
-		_, _ = io.WriteString(w, `{"runs":[{"loop_id":"run-123","state":"running"}]}`)
+		_, _ = io.WriteString(w, `{"runs":[{"run_id":"run-123","state":"running"}]}`)
 	}))
 	defer stub.Close()
 
@@ -594,22 +594,15 @@ func TestRunListHitsAgentLoopsEndpoint(t *testing.T) {
 	}
 }
 
-func TestRunCancelPostsAgentCancelRequest(t *testing.T) {
+func TestRunCancelPostsRunResource(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/agent/cancel" {
-			t.Errorf("path = %q, want /api/agent/cancel", r.URL.Path)
+		if r.URL.Path != "/api/runs/run-123/cancel" {
+			t.Errorf("path = %q, want /api/runs/run-123/cancel", r.URL.Path)
 		}
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
 		}
-		var body map[string]string
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if body["loop_id"] != "run-123" {
-			t.Fatalf("loop_id = %q, want run-123", body["loop_id"])
-		}
-		_, _ = io.WriteString(w, `{"loop_id":"run-123","state":"cancelled"}`)
+		_, _ = io.WriteString(w, `{"run_id":"run-123","state":"cancelled"}`)
 	}))
 	defer stub.Close()
 

@@ -145,9 +145,9 @@
       "aliases": ["test", "tests", "test_result"],
       "label": "Test run"
     },
-    "app_change_package": {
-      "aliases": ["change_package", "package"],
-      "label": "AppChangePackage"
+    "capsule_bundle": {
+      "aliases": ["bundle", "frozen_bundle"],
+      "label": "Capsule bundle"
     },
     "screenshot": {
       "aliases": ["image_artifact"],

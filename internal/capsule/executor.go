@@ -547,7 +547,7 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 	if err != nil {
 		return nil, "", err
 	}
-	const releasePrefix = "/var/lib/artifact/release/"
+	const releasePrefix = "var/lib/artifact/release/"
 	temporary, err := os.MkdirTemp(incomingRoot, ".freeze-")
 	if err != nil {
 		return nil, "", err
@@ -584,7 +584,9 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 		}
 		base := strings.ToLower(filepath.Base(clean))
 		extension := strings.ToLower(filepath.Ext(base))
-		if base == ".env" || strings.HasPrefix(base, ".env.") || extension == ".pem" || extension == ".key" || extension == ".p12" || extension == ".pfx" {
+		if base == ".env" || strings.HasPrefix(base, ".env.") || base == ".npmrc" || base == ".netrc" ||
+			base == "credentials.json" || base == "auth.json" || base == "id_rsa" || base == "id_ed25519" ||
+			extension == ".pem" || extension == ".key" || extension == ".p12" || extension == ".pfx" {
 			return nil, "", fmt.Errorf("capsule release refuses secret-bearing path %q", change.Path)
 		}
 		input, err := os.Open(source)

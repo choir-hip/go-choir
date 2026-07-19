@@ -26,7 +26,7 @@ func testCoagentUpdatePacket(kind, summary string) types.CoagentSourcePacketPayl
 
 func testSuperExecutionRequestPacket(summary string) types.CoagentSourcePacketPayload {
 	return newCoagentPacket("execution_request", summary, nil, nil, []types.CoagentPacketAction{
-		coagentAction("request_worker", summary, nil, nil, types.CoagentPacketActionSafety{
+		coagentAction("request_super_execution", summary, nil, nil, types.CoagentPacketActionSafety{
 			MutationClass: "red",
 			Network:       "allowed",
 			FileMutation:  "allowed",
@@ -327,7 +327,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 			"current_revision_id":     "rev-passivated-spawn",
 			"conductor_loop_id":       trajectoryID,
 			"scheduled_message_seq":   2,
-			"request_intent":          "integrate_worker_findings",
+			"request_intent":          "integrate_execution_findings",
 			"texture_context_mode":    "current_head_plus_user_edit_diff",
 			"texture_prompt_chars":    9125,
 			"worker_updates_consumed": []any{},

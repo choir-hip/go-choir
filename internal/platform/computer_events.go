@@ -97,6 +97,15 @@ CREATE TABLE IF NOT EXISTS computer_self_development_modes (
   PRIMARY KEY (computer_id),
   KEY computer_self_development_modes_expiry_idx (mode, expires_at)
 );
+CREATE TABLE IF NOT EXISTS computer_privacy_keys (
+  computer_id VARCHAR(128) NOT NULL,
+  key_version_digest CHAR(64) NOT NULL,
+  key_material VARCHAR(64) NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (computer_id),
+  UNIQUE KEY computer_privacy_key_digest_uq (key_version_digest)
+);
+
 CREATE TABLE IF NOT EXISTS computer_lifecycle_receipts (
   computer_id VARCHAR(128) NOT NULL,
   idempotency_key VARCHAR(255) NOT NULL,

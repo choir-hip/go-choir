@@ -154,3 +154,114 @@ func TestSelfDevelopmentRollbackCreatesOneHeadBoundPendingOperation(t *testing.T
 		t.Fatalf("rollback replay status=%d operation=%+v", replay.Code, replayed)
 	}
 }
+
+func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProjection(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-decision-recovery"
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "recovery-test"}, PrivateKey: privateKey}
+	appender, err := computerevent.NewComputerEventAppender(computerID, rollbackTestPinner{signingKey}, productStore, rollbackTestCAS{key: signingKey, projection: productStore}, rollbackTestReceiptVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesisID, _ := computerevent.NewEventID()
+	genesis := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: genesisID, ComputerID: computerID,
+		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "recovery-genesis", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
+		PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64),
+		ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := operations.Start(ctx, selfdev.StartRequest{
+		ComputerID: computerID, IdempotencyKey: "recovery-operation",
+		PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundleDigest := strings.Repeat("d", 64)
+	operation, err = operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateRequested, selfdev.StateExecuting, func(next *selfdev.Operation) error {
+		next.CapsuleID = "capsule-recovery"
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err = operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
+		next.BundleDigest = bundleDigest
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err = operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateVerified, func(next *selfdev.Operation) error {
+		next.VerifierRefs = []string{strings.Repeat("e", 64)}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err = operations.Transition(ctx, computerID, operation.OperationID, selfdev.StateVerified, selfdev.StateAwaitingApproval, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := productStore.Head(ctx, computerID)
+	if err != nil || head == nil {
+		t.Fatal("decision recovery head unavailable")
+	}
+	decisionID, _ := computerevent.NewEventID()
+	decision := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: decisionID, ComputerID: computerID,
+		EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "recovery-decision", RequestCommitment: computerevent.ZeroHead,
+		TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, PreviousHead: head.CanonicalEventHead,
+		ActorProfile: "super", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
+		ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
+		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
+		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: bundleDigest,
+		DecisionRef: "decision:recovery", VerifierRefs: []string{strings.Repeat("e", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	target, err := computerevent.CanonicalJSON(map[string]string{"base_head": operation.BaseHead, "bundle_digest": bundleDigest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := appender.AppendNew(ctx, decision, computerevent.TransitionInput{TargetStateCommitment: computerevent.DigestBytes(target)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	stale, err := operations.Get(ctx, computerID, operation.OperationID)
+	if err != nil || stale.State != selfdev.StateAwaitingApproval || stale.DecisionEvent != "" {
+		t.Fatalf("crash window was not reproduced: %+v err=%v", stale, err)
+	}
+	runtime := &Runtime{store: productStore, selfdevOperations: operations}
+	recovered, found, err := runtime.recoverSelfDevelopmentDecision(ctx, stale)
+	if err != nil || !found {
+		t.Fatalf("recover decision: found=%v err=%v", found, err)
+	}
+	storedDecision, found, err := productStore.EventByIdempotency(ctx, computerID, decision.IdempotencyKey)
+	if err != nil || !found {
+		t.Fatalf("stored decision unavailable: found=%v err=%v", found, err)
+	}
+	decisionDigest, _ := storedDecision.Digest()
+	if recovered.State != selfdev.StateAccepted || recovered.DecisionEvent != decisionDigest || recovered.DecisionActor != "owner" {
+		t.Fatalf("recovered operation = %+v", recovered)
+	}
+	replayed, found, err := runtime.recoverSelfDevelopmentDecision(ctx, recovered)
+	if err != nil || !found || replayed.DecisionEvent != decisionDigest {
+		t.Fatalf("idempotent recovery = %+v found=%v err=%v", replayed, found, err)
+	}
+}

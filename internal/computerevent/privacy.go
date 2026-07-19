@@ -4,19 +4,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 
 	"golang.org/x/crypto/chacha20poly1305"
-	"syscall"
 )
 
 const (
@@ -52,15 +45,48 @@ type privateKeyring interface {
 	resolve(context.Context, string, string) (privateKeyMaterial, error)
 }
 
-type PrivateArtifactCipher struct {
-	keys privateKeyring
+type ExternalPrivacyKeyring struct {
+	computerID string
+	material   privateKeyMaterial
 }
 
-func NewPrivateArtifactCipher(keys *FilePrivacyKeyring) (*PrivateArtifactCipher, error) {
-	if keys == nil {
-		return nil, fmt.Errorf("private artifact cipher: keyring is required")
+func NewExternalPrivacyKeyring(computerID, encodedKey string) (*ExternalPrivacyKeyring, error) {
+	raw, err := base64.RawStdEncoding.DecodeString(strings.TrimSpace(encodedKey))
+	if err != nil || len(raw) != chacha20poly1305.KeySize || strings.TrimSpace(computerID) == "" {
+		return nil, fmt.Errorf("privacy keyring: invalid external key")
 	}
-	return &PrivateArtifactCipher{keys: keys}, nil
+	var key [chacha20poly1305.KeySize]byte
+	copy(key[:], raw)
+	return &ExternalPrivacyKeyring{
+		computerID: computerID,
+		material:   privateKeyMaterial{digest: DigestBytes(raw), key: key},
+	}, nil
+}
+
+func (k *ExternalPrivacyKeyring) current(_ context.Context, computerID string) (privateKeyMaterial, error) {
+	if k == nil || computerID != k.computerID {
+		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: computer binding mismatch")
+	}
+	return k.material, nil
+}
+
+func (k *ExternalPrivacyKeyring) resolve(_ context.Context, computerID, digest string) (privateKeyMaterial, error) {
+	if k == nil || computerID != k.computerID || digest != k.material.digest {
+		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: key version unavailable")
+	}
+	return k.material, nil
+}
+
+func NewPrivateArtifactCipherFromExternalKey(computerID, encodedKey string) (*PrivateArtifactCipher, error) {
+	keyring, err := NewExternalPrivacyKeyring(computerID, encodedKey)
+	if err != nil {
+		return nil, err
+	}
+	return &PrivateArtifactCipher{keys: keyring}, nil
+}
+
+type PrivateArtifactCipher struct {
+	keys privateKeyring
 }
 
 func (c *PrivateArtifactCipher) Encrypt(ctx context.Context, computerID, eventID, mediaType, privacyClass string, plaintext []byte) ([]byte, PrivateArtifactMetadata, error) {
@@ -176,162 +202,4 @@ func decodePrivateArtifactEnvelope(envelopeJSON []byte) (privateArtifactEnvelope
 		return privateArtifactEnvelope{}, nil, nil, fmt.Errorf("private artifact cipher: invalid ciphertext")
 	}
 	return envelope, nonce, ciphertext, nil
-}
-
-type FilePrivacyKeyring struct {
-	root string
-	mu   sync.Mutex
-}
-
-func NewFilePrivacyKeyring(root string) (*FilePrivacyKeyring, error) {
-	root = filepath.Clean(root)
-	if root == "" || root == "." || !filepath.IsAbs(root) {
-		return nil, fmt.Errorf("privacy keyring: absolute root is required")
-	}
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return nil, fmt.Errorf("privacy keyring: create root: %w", err)
-	}
-	if err := requirePrivateDirectory(root); err != nil {
-		return nil, err
-	}
-	return &FilePrivacyKeyring{root: root}, nil
-}
-
-func (k *FilePrivacyKeyring) current(_ context.Context, computerID string) (privateKeyMaterial, error) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	directory, err := k.computerDirectory(computerID)
-	if err != nil {
-		return privateKeyMaterial{}, err
-	}
-	currentPath := filepath.Join(directory, "current")
-	digestBytes, err := readPrivateRegularFile(currentPath)
-	if err == nil {
-		return k.readKey(directory, strings.TrimSpace(string(digestBytes)))
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: read current key: %w", err)
-	}
-	var key [chacha20poly1305.KeySize]byte
-	if _, err := rand.Read(key[:]); err != nil {
-		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: generate key: %w", err)
-	}
-	digest := sha256.Sum256(key[:])
-	digestText := hex.EncodeToString(digest[:])
-	if err := writePrivateFile(filepath.Join(directory, digestText+".key"), key[:]); err != nil {
-		return privateKeyMaterial{}, err
-	}
-	if err := writePrivateFile(currentPath, []byte(digestText+"\n")); err != nil {
-		return privateKeyMaterial{}, err
-	}
-	return privateKeyMaterial{digest: digestText, key: key}, nil
-}
-
-func (k *FilePrivacyKeyring) resolve(_ context.Context, computerID, digest string) (privateKeyMaterial, error) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if !IsSHA256(digest) {
-		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: invalid key digest")
-	}
-	directory, err := k.computerDirectory(computerID)
-	if err != nil {
-		return privateKeyMaterial{}, err
-	}
-	return k.readKey(directory, digest)
-}
-
-func (k *FilePrivacyKeyring) computerDirectory(computerID string) (string, error) {
-	if computerID == "" || strings.ContainsAny(computerID, `/\\`) || computerID == "." || computerID == ".." {
-		return "", fmt.Errorf("privacy keyring: invalid computer ID")
-	}
-	directory := filepath.Join(k.root, computerID)
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return "", fmt.Errorf("privacy keyring: create computer directory: %w", err)
-	}
-	if err := requirePrivateDirectory(directory); err != nil {
-		return "", err
-	}
-	return directory, nil
-}
-
-func (k *FilePrivacyKeyring) readKey(directory, digest string) (privateKeyMaterial, error) {
-	if !IsSHA256(digest) {
-		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: invalid current key digest")
-	}
-	path := filepath.Join(directory, digest+".key")
-	raw, err := readPrivateRegularFile(path)
-	if err != nil || len(raw) != chacha20poly1305.KeySize {
-		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: read key")
-	}
-	actual := sha256.Sum256(raw)
-	if hex.EncodeToString(actual[:]) != digest {
-		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: key digest mismatch")
-	}
-	var key [chacha20poly1305.KeySize]byte
-	copy(key[:], raw)
-	return privateKeyMaterial{digest: digest, key: key}, nil
-}
-
-func requirePrivateDirectory(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return fmt.Errorf("privacy keyring: inspect directory: %w", err)
-	}
-	if !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !ownedByEffectiveUser(info) {
-		return fmt.Errorf("privacy keyring: directory permissions are not private")
-	}
-	return nil
-}
-
-func readPrivateRegularFile(path string) ([]byte, error) {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || !ownedByEffectiveUser(info) {
-		return nil, fmt.Errorf("privacy keyring: file permissions are not private")
-	}
-	return os.ReadFile(path)
-}
-
-func ownedByEffectiveUser(info os.FileInfo) bool {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	return ok && int(stat.Uid) == os.Geteuid()
-}
-
-func writePrivateFile(path string, content []byte) error {
-	if _, err := os.Lstat(path); err == nil {
-		existing, err := readPrivateRegularFile(path)
-		if err != nil || !bytes.Equal(existing, content) {
-			return fmt.Errorf("privacy keyring: immutable file differs")
-		}
-		return nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".private-*")
-	if err != nil {
-		return fmt.Errorf("privacy keyring: create temporary file: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o400); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("privacy keyring: protect temporary file: %w", err)
-	}
-	if _, err := temporary.Write(content); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("privacy keyring: write temporary file: %w", err)
-	}
-	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("privacy keyring: sync temporary file: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("privacy keyring: close temporary file: %w", err)
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return fmt.Errorf("privacy keyring: install file: %w", err)
-	}
-	return nil
 }

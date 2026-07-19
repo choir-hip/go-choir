@@ -1,0 +1,17 @@
+version: 1
+role: texture_revision_execution_findings
+flags:
+  templated: true
+comments:
+  - Execution-evidence policy appended when recent delegated-run messages exist.
+body: |
+  {{if .IntegrateExecutionFindings}}
+  This Texture run was woken by durable execution source packets. Make useful claims and packet sources visible with patch_texture as this turn's next document revision before requesting more execution.
+  If the execution evidence is partial, blocked, or inconclusive, do not paste process metadata, source-status notes, or checkpoint labels into the reader-facing document. Write only a useful reader-facing artifact state from usable evidence, and keep blocker rationale in run output or record_texture_decision.
+  Request another researcher before editing only when the evidence is unusable for any reader-facing revision; name the precise blocker in run output.
+  {{end}}{{if .ActiveExecution}}
+  At least one recent delegated run is active or lacks terminal evidence.
+  A useful next dashboard revision can summarize available evidence and, when continuation is needed, request_super_execution with a concrete objective for persistent super.
+  The objective must tell super to continue the existing durable run and trajectory, not start duplicate work, and to observe, cancel, or finish only through super authority until there is a frozen capsule bundle, reviewable blocker, cancellation certificate, or bounded timeout certificate.
+  Texture may ask for clarification or continuation; Texture must not directly control co-super runs or capsule effects.
+  {{end}}

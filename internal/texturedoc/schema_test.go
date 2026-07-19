@@ -285,7 +285,7 @@ func TestExecutionEvidenceTargetsUseSourceEntities(t *testing.T) {
 		{"src-diff", "diff_hunk", "runtime diff", sourcecontract.OpenSurfaceSourceWindow},
 		{"src-patch", "patch", "candidate patch", sourcecontract.OpenSurfaceFile},
 		{"src-test", "test_run", "focused test run", sourcecontract.OpenSurfaceSourceWindow},
-		{"src-package", "app_change_package", "change package", sourcecontract.OpenSurfaceSourceWindow},
+		{"src-package", "capsule_bundle", "change package", sourcecontract.OpenSurfaceSourceWindow},
 		{"src-screenshot", "screenshot", "verification screenshot", sourcecontract.OpenSurfaceImage},
 		{"src-video-artifact", "video_artifact", "verification video", sourcecontract.OpenSurfaceVideo},
 		{"src-benchmark", "benchmark_log", "benchmark log", sourcecontract.OpenSurfaceFile},

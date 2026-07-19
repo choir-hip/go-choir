@@ -140,8 +140,8 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 				return
 			}
 			operationID := strings.TrimSuffix(strings.TrimPrefix(suffix, "/self-development/operations/"), "/decision")
-			requiresConsumption := mode.Mode == "accept_once"
-			if mode.Mode == "off" && consumedModeReceiptMatches(mode.Receipt, operationID, decision) {
+			requiresConsumption := mode.Mode == "accept_once" && decision.Decision == "approve"
+			if mode.Mode == "propose_only" && decision.Decision == "approve" && consumedModeReceiptMatches(mode.Receipt, operationID, decision) {
 				decision.ModeReceipt = mode.Receipt
 			} else {
 				if decision.Decision == "approve" {
@@ -149,7 +149,7 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 						writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once mode does not bind this exact approval"})
 						return
 					}
-				} else if decision.Decision != "reject" || (mode.Mode != "propose_only" && !requiresConsumption) {
+				} else if decision.Decision != "reject" || mode.Mode != "propose_only" {
 					writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development decision mode is not enabled"})
 					return
 				}
@@ -266,8 +266,7 @@ func (h *Handler) consumeSelfDevelopmentMode(ctx context.Context, computerID, us
 	query.Set("computer_id", computerID)
 	u.RawQuery = query.Encode()
 	body, err := json.Marshal(map[string]any{
-		"mode": "off", "expected_generation": current.Generation,
-		"idempotency_key": consumedModeIdempotency(current.OperationID, current.Generation, decision.IdempotencyKey),
+		"mode": "propose_only", "expected_generation": current.Generation,
 	})
 	if err != nil {
 		return computerevent.Receipt{}, err
@@ -310,7 +309,7 @@ func consumedModeReceiptMatches(receipt *computerevent.Receipt, operationID stri
 		value, _ := receipt.KindFields[name].(string)
 		return value
 	}
-	return field("old_mode") == "accept_once" && field("new_mode") == "off" &&
+	return field("old_mode") == "accept_once" && field("new_mode") == "propose_only" &&
 		field("consumed_operation_id") == operationID && field("consumed_bundle_digest") == decision.BundleDigest &&
 		field("consumed_desired_event_head") == decision.ExpectedDesiredEventHead &&
 		field("consumed_effective_event_head") == decision.ExpectedEffectiveEventHead &&

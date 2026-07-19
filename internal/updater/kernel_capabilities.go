@@ -195,6 +195,43 @@ func ReadKernelCapabilityProbe(path string) (KernelCapabilityProbe, error) {
 	return probe, nil
 }
 
+func VerifyKernelCapabilityProbe(probe KernelCapabilityProbe, computerID, realizationID string, now time.Time) error {
+	if strings.TrimSpace(computerID) == "" || strings.TrimSpace(realizationID) == "" ||
+		strings.TrimSpace(probe.KernelRelease) == "" || strings.TrimSpace(probe.BootID) == "" ||
+		probe.CgroupFilesystem != "cgroup2" || !computerevent.IsSHA256(probe.OverlayModuleDigest) ||
+		!computerevent.IsSHA256(probe.ContractDigest) || len(probe.Capabilities) != len(mandatoryKernelCapabilities) {
+		return fmt.Errorf("kernel capability probe: incomplete admission evidence")
+	}
+	observedAt, err := time.Parse(time.RFC3339Nano, probe.ObservedAt)
+	if err != nil || observedAt.After(now.UTC()) || now.UTC().Sub(observedAt) >= 10*time.Minute {
+		return fmt.Errorf("kernel capability probe: stale admission evidence")
+	}
+	parameters := strings.Fields(probe.BootParameters)
+	requiredParameters := map[string]bool{
+		"choir.computer_id=" + computerID:       false,
+		"choir.realization_id=" + realizationID: false,
+	}
+	for _, parameter := range parameters {
+		if _, required := requiredParameters[parameter]; required {
+			requiredParameters[parameter] = true
+		}
+	}
+	for parameter, found := range requiredParameters {
+		if !found {
+			return fmt.Errorf("kernel capability probe: missing boot identity %s", parameter)
+		}
+	}
+	for _, name := range mandatoryKernelCapabilities {
+		observation, found := probe.Capabilities[name]
+		if !found || !observation.Supported || !observation.Enforced ||
+			!strings.HasPrefix(observation.ObservationRef, "sha256:") ||
+			!computerevent.IsSHA256(strings.TrimPrefix(observation.ObservationRef, "sha256:")) {
+			return fmt.Errorf("kernel capability probe: mandatory capability %s is not enforced", name)
+		}
+	}
+	return nil
+}
+
 func DigestFile(path string) (string, error) {
 	return fileSHA256(path)
 }

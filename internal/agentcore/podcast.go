@@ -36,6 +36,18 @@ type podcastSearchResponse struct {
 	Warnings       []string              `json:"warnings,omitempty"`
 }
 
+func apiLimit(r *http.Request, fallback int) int {
+	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if raw == "" {
+		return fallback
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit <= 0 {
+		return fallback
+	}
+	return limit
+}
+
 type podcastSubscriptionRequest struct {
 	FeedURL    string `json:"feed_url"`
 	Title      string `json:"title,omitempty"`

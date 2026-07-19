@@ -119,7 +119,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "publish_app_change_package", "update_coagent", "save_evidence":
+	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "update_coagent", "save_evidence":
 		return true
 	default:
 		return false
@@ -180,7 +180,6 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip func(index int, reason string)) {
 	seenSuperSpawn := map[string]int{}
 	seenCoagentUpdate := map[string]int{}
-	seenExport := map[string]int{}
 	seenBash := map[string]int{}
 	seenTextureResearcherSpawn := map[string]int{}
 
@@ -208,7 +207,7 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 					continue
 				}
 				if previous, exists := seenTextureResearcherSpawn[key]; exists {
-					setSkip(i, fmt.Sprintf("tool_notice: duplicate texture researcher spawn for %s already planned in this turn at call %s; one worker for this exact objective is enough", key, calls[previous].ID))
+					setSkip(i, fmt.Sprintf("tool_notice: duplicate texture researcher spawn for %s already planned in this turn at call %s; one researcher for this exact objective is enough", key, calls[previous].ID))
 					continue
 				}
 				seenTextureResearcherSpawn[key] = i
@@ -223,19 +222,6 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				}
 				seenSuperSpawn[key] = i
 			}
-		case "publish_app_change_package":
-			if profile != agentprofile.Super && profile != agentprofile.CoSuper {
-				continue
-			}
-			key := normalizedToolCallArgs(call)
-			if key == "" {
-				continue
-			}
-			if previous, exists := seenExport[key]; exists {
-				setSkip(i, fmt.Sprintf("tool_error: duplicate publish_app_change_package payload already planned in this turn at call %s; one package publication attempt per candidate state is allowed", calls[previous].ID))
-				continue
-			}
-			seenExport[key] = i
 		case "update_coagent":
 			key := normalizedToolCallArgs(call)
 			if key == "" {

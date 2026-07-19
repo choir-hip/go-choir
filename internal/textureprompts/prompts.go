@@ -28,15 +28,15 @@ func RunOverlay() string {
 	return mustRenderOverlay("run_system", nil)
 }
 
-// RevisionWorkerFindingsOptions selects worker-findings overlay text for revision requests.
-type RevisionWorkerFindingsOptions struct {
-	IntegrateWorkerFindings bool
-	ActiveWorkerDelegation  bool
+// RevisionExecutionFindingsOptions selects execution-evidence policy.
+type RevisionExecutionFindingsOptions struct {
+	IntegrateExecutionFindings bool
+	ActiveExecution            bool
 }
 
-// RevisionWorkerFindingsOverlay returns worker-message policy appended to revision requests.
-func RevisionWorkerFindingsOverlay(opts RevisionWorkerFindingsOptions) string {
-	return mustRenderOverlay("revision_worker_findings", opts)
+// RevisionExecutionFindingsOverlay returns execution-evidence revision policy.
+func RevisionExecutionFindingsOverlay(opts RevisionExecutionFindingsOptions) string {
+	return mustRenderOverlay("revision_execution_findings", opts)
 }
 
 // RevisionSourceEntitiesIntro returns the static intro for detected source entities.

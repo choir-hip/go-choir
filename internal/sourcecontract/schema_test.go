@@ -54,7 +54,7 @@ func TestSourceContractSchemaMatchesGoConstants(t *testing.T) {
 		SourceKindDiffHunk,
 		SourceKindPatch,
 		SourceKindTestRun,
-		SourceKindAppChangePackage,
+		SourceKindCapsuleBundle,
 		SourceKindScreenshot,
 		SourceKindVideoArtifact,
 		SourceKindBenchmarkLog,

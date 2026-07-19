@@ -39,11 +39,21 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 	}
 	rt.selfdevMaterializeMu.Lock()
 	defer rt.selfdevMaterializeMu.Unlock()
-	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
+	operations, err := rt.selfdevOperations.ListByStates(ctx, rt.selfdevComputerID, selfdev.StateAwaitingApproval, selfdev.StateAccepted, selfdev.StateMaterializing, selfdev.StateRollbackPending)
 	if err != nil {
 		return
 	}
 	for _, operation := range operations {
+		if operation.State == selfdev.StateAwaitingApproval {
+			recovered, found, recoveryErr := rt.recoverSelfDevelopmentDecision(ctx, operation)
+			if recoveryErr != nil || !found {
+				continue
+			}
+			operation = recovered
+			if operation.State == selfdev.StateRejected {
+				continue
+			}
+		}
 		var operationErr error
 		if operation.State == selfdev.StateRollbackPending {
 			operationErr = rt.rollbackSelfDevelopmentOperation(ctx, operation)
@@ -56,6 +66,40 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 			continue
 		}
 	}
+}
+func (rt *Runtime) recoverSelfDevelopmentDecision(ctx context.Context, operation selfdev.Operation) (selfdev.Operation, bool, error) {
+	transition, found, err := rt.store.FinalizedDecisionForOperation(ctx, operation.ComputerID, operation.TrajectoryID, operation.CapsuleID)
+	if err != nil || !found {
+		return operation, found, err
+	}
+	event := transition.Request.Event
+	if event.ProposedEffectRef != operation.BundleDigest || (event.EventKind != computerevent.EventEffectAccepted && event.EventKind != computerevent.EventEffectRejected) {
+		return operation, false, fmt.Errorf("decision recovery: event binding mismatch")
+	}
+	nextState := selfdev.StateRejected
+	if event.EventKind == computerevent.EventEffectAccepted {
+		nextState = selfdev.StateAccepted
+	}
+	modeReceipt := ""
+	if len(event.InputArtifactRefs) == 1 {
+		modeReceipt = event.InputArtifactRefs[0]
+	}
+	recovered, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
+		next.DecisionEvent = transition.Request.EventDigest
+		next.DecisionActor = strings.TrimPrefix(event.AuthorityRef, "external-owner:")
+		next.DesiredHead = transition.Request.Next.DesiredEventHead
+		next.EffectiveHead = transition.Request.Next.EffectiveEventHead
+		next.ModeReceipt = modeReceipt
+		return nil
+	})
+	if err != nil {
+		current, getErr := rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
+		if getErr == nil && current.DecisionEvent == transition.Request.EventDigest {
+			return current, true, nil
+		}
+		return operation, false, err
+	}
+	return recovered, true, nil
 }
 
 func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation) error {

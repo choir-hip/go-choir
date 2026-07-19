@@ -375,6 +375,9 @@ func (r *OwnershipRegistry) loadLocked() error {
 		own.UserID = strings.TrimSpace(own.UserID)
 		own.VMID = strings.TrimSpace(own.VMID)
 		own.DesktopID = normalizeDesktopID(own.DesktopID)
+		if own.ComputerID == own.VMID || own.ComputerID == own.DesktopID {
+			own.ComputerID = ""
+		}
 		own.ComputerID = stableComputerID(own.UserID, own.DesktopID, own.ComputerID)
 		if own.Kind == "" {
 			own.Kind = VMKindInteractive
@@ -2077,7 +2080,9 @@ func generateVMID() string {
 }
 
 func stableComputerID(userID, desktopID, existing string) string {
-	if existing = strings.TrimSpace(existing); existing != "" {
+	existing = strings.TrimSpace(existing)
+	if strings.HasPrefix(existing, "computer-") && len(existing) >= len("computer-")+6 && len(existing) <= 80 &&
+		!strings.ContainsAny(existing, "/\\ \t\r\n\x00") && existing != normalizeDesktopID(desktopID) {
 		return existing
 	}
 	return "computer-" + computerevent.DigestBytes([]byte(strings.TrimSpace(userID) + "\x00" + normalizeDesktopID(desktopID)))[:32]

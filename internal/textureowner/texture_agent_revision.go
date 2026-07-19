@@ -682,9 +682,9 @@ func buildAgentRevisionRequest(current types.Revision, previous *types.Revision,
 			b.WriteString(truncatePromptSnippet(message.Content, 800))
 			b.WriteString("\n")
 		}
-		b.WriteString(textureprompts.RevisionWorkerFindingsOverlay(textureprompts.RevisionWorkerFindingsOptions{
-			IntegrateWorkerFindings: strings.EqualFold(intent, "integrate_worker_findings"),
-			ActiveWorkerDelegation:  workerMessagesContainActiveDelegation(recentWorkerMessages),
+		b.WriteString(textureprompts.RevisionExecutionFindingsOverlay(textureprompts.RevisionExecutionFindingsOptions{
+			IntegrateExecutionFindings: strings.EqualFold(intent, "integrate_execution_findings"),
+			ActiveExecution:            workerMessagesContainActiveDelegation(recentWorkerMessages),
 		}))
 	}
 	if textureUseFocusedUserEditContext(current, previous) {

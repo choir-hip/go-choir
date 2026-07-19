@@ -19,7 +19,7 @@ func TestSelfDevelopmentRolesExposeOnlyCapsuleEffects(t *testing.T) {
 			t.Errorf("super missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{"bash", "write_file", "edit_file", "publish_app_change_package", "fork_desktop", "publish_desktop", "request_worker_vm", "start_worker_delegation", "capsule_exec", "capsule_write_file", "commit_transaction", "record_self_development_verification"} {
+	for _, forbidden := range []string{"bash", "write_file", "edit_file", "capsule_exec", "capsule_write_file", "commit_transaction", "record_self_development_verification"} {
 		if _, ok := super.Lookup(forbidden); ok {
 			t.Errorf("super exposes forbidden effect tool %q", forbidden)
 		}
@@ -31,7 +31,7 @@ func TestSelfDevelopmentRolesExposeOnlyCapsuleEffects(t *testing.T) {
 			t.Errorf("co-super missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{"bash", "read_file", "write_file", "spawn_agent", "save_evidence", "publish_app_change_package", "spawn_capsule", "destroy_capsule", "request_worker_vm"} {
+	for _, forbidden := range []string{"bash", "read_file", "write_file", "spawn_agent", "save_evidence", "spawn_capsule", "destroy_capsule"} {
 		if _, ok := coSuper.Lookup(forbidden); ok {
 			t.Errorf("co-super exposes forbidden direct tool %q", forbidden)
 		}

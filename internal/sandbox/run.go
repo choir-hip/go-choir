@@ -61,8 +61,15 @@ func Run() {
 
 	filesRoot := provideriface.ResolveFilesRoot(os.Getenv("SANDBOX_FILES_ROOT"))
 	log.Printf("sandbox: startup phase=source-workspace-bootstrap status=starting")
+	sourceComputerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
+	if sourceComputerID == "" {
+		if strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")) != "" {
+			log.Fatal("sandbox: stable ComputerID is required in guest mode")
+		}
+		sourceComputerID = "computer-local-development"
+	}
 	if _, err := BootstrapSourceWorkspace(filesRoot, SourceWorkspaceOptions{
-		ComputerID: cfg.SandboxID,
+		ComputerID: sourceComputerID,
 	}); err != nil {
 		log.Fatalf("sandbox: bootstrap source workspace: %v", err)
 	}
@@ -153,6 +160,11 @@ func Run() {
 		coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentUpdater(updaterClient, updaterRoot, os.Getenv("CHOIR_COMPUTER_ID"), os.Getenv("CHOIR_REALIZATION_ID")))
 	}
 	if brokerPath := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_BROKER_PATH")); brokerPath != "" {
+		probePath := strings.TrimSpace(os.Getenv("CHOIR_KERNEL_CAPABILITY_PROBE"))
+		probe, probeErr := updater.ReadKernelCapabilityProbe(probePath)
+		if probeErr != nil || updater.VerifyKernelCapabilityProbe(probe, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")), strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID")), time.Now().UTC()) != nil {
+			log.Fatalf("sandbox: capsule admission refused: exact kernel capability probe unavailable")
+		}
 		stateDir := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_STATE_DIR"))
 		lowerRoot := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_LOWER_ROOT"))
 		sourceRoot := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_SOURCE_ROOT"))
@@ -188,13 +200,7 @@ func Run() {
 			cancel()
 			log.Fatalf("sandbox: configure computer event client: %v", err)
 		}
-		privacyRoot := strings.TrimSpace(os.Getenv("CHOIR_PRIVATE_ARTIFACT_KEYRING"))
-		keyring, err := computerevent.NewFilePrivacyKeyring(privacyRoot)
-		if err != nil {
-			cancel()
-			log.Fatalf("sandbox: configure private artifact keyring: %v", err)
-		}
-		privateCipher, err := computerevent.NewPrivateArtifactCipher(keyring)
+		privateCipher, err := computerevent.NewPrivateArtifactCipherFromExternalKey(computerID, credentials.PrivacyKey())
 		if err != nil {
 			cancel()
 			log.Fatalf("sandbox: configure private artifact cipher: %v", err)

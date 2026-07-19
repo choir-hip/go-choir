@@ -133,7 +133,7 @@ func (rt *Handler) ReconcileAgentWake(ctx context.Context, ownerID, docID string
 		return rec, nil
 	}
 	rec, err := rt.submitTextureAgentRevisionRun(ctx, doc, ownerID, textureAgentRevisionRequest{
-		Intent: "integrate_worker_findings",
+		Intent: "integrate_execution_findings",
 	}, scheduledSeq)
 	if err != nil {
 		return nil, fmt.Errorf("start reconciled Texture revision: %w", err)
@@ -172,7 +172,7 @@ func (rt *Handler) reactivatePassivatedTextureRun(ctx context.Context, doc types
 	}
 	rec.Metadata = cloneMetadata(rec.Metadata)
 	rec.Metadata["request_source"] = "update_coagent"
-	rec.Metadata["request_intent"] = "integrate_worker_findings"
+	rec.Metadata["request_intent"] = "integrate_execution_findings"
 	rec.Metadata["scheduled_message_seq"] = scheduledSeq
 	rec.Metadata["actor_reactivate_existing_memory"] = true
 	rec.Metadata["actor_reactivated_from_passivated"] = true

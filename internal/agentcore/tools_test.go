@@ -1123,7 +1123,6 @@ func TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	}
 	registerCountingTool("spawn_agent")
 	registerCountingTool("update_coagent")
-	registerCountingTool("publish_app_change_package")
 
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "vsuper-run",
@@ -1136,28 +1135,25 @@ func TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		{ID: "spawn-verifier", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"verifier","channel_id":"doc-1","objective":"verify"}`)},
 		{ID: "cast-1", Name: "update_coagent", Arguments: json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"proceed with exact evidence","agent_id":"agent-impl","claims":[{"text":"proceed with exact evidence"}]}`)},
 		{ID: "cast-2", Name: "update_coagent", Arguments: json.RawMessage(`{"schema_version":"coagent_source_packet.v1","kind":"evidence_update","summary":"proceed with exact evidence","agent_id":"agent-impl","claims":[{"text":"proceed with exact evidence"}]}`)},
-		{ID: "export-1", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
-		{ID: "export-2", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
 	}
 
 	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
 
 	mu.Lock()
 	gotCounts := map[string]int{
-		"spawn_agent":                counts["spawn_agent"],
-		"update_coagent":             counts["update_coagent"],
-		"publish_app_change_package": counts["publish_app_change_package"],
+		"spawn_agent":    counts["spawn_agent"],
+		"update_coagent": counts["update_coagent"],
 	}
 	mu.Unlock()
-	if gotCounts["spawn_agent"] != 2 || gotCounts["update_coagent"] != 1 || gotCounts["publish_app_change_package"] != 1 {
-		t.Fatalf("executed counts = %+v, want spawn=2 cast=1 export=1", gotCounts)
+	if gotCounts["spawn_agent"] != 2 || gotCounts["update_coagent"] != 1 {
+		t.Fatalf("executed counts = %+v, want spawn=2 cast=1", gotCounts)
 	}
-	for _, idx := range []int{1, 4, 6} {
+	for _, idx := range []int{1, 4} {
 		if !results[idx].IsError || !strings.Contains(results[idx].Output, "duplicate") {
 			t.Fatalf("result[%d] = %#v, want duplicate skip error", idx, results[idx])
 		}
 	}
-	for _, idx := range []int{0, 2, 3, 5} {
+	for _, idx := range []int{0, 2, 3} {
 		if results[idx].IsError {
 			t.Fatalf("result[%d] = %#v, want successful execution", idx, results[idx])
 		}

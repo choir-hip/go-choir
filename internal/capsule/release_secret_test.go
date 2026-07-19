@@ -58,3 +58,46 @@ func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
 		})
 	}
 }
+
+func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
+	merged := t.TempDir()
+	upper := t.TempDir()
+	for _, root := range []string{merged, upper} {
+		path := filepath.Join(root, "var/lib/artifact/release/bin/sandbox")
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("sandbox"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := &Capability{
+		CapabilityID: "cap-success", Handle: "grant-success", CapsuleID: "capsule-success",
+		TargetCapsule: "capsule-success", AgentRunID: "cosuper-success", AgentRole: RoleCoSuper,
+		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
+		t.Fatal(err)
+	}
+	executor := &Executor{
+		capsules: map[string]*Capsule{"capsule-success": {
+			ID: "capsule-success", UpperDir: upper, MergedDir: merged, MemoryMax: 16 << 20,
+		}},
+		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-success", Handle: "grant-success"}: capability},
+		revokedCaps: map[string]bool{}, publicKey: publicKey,
+	}
+	files, staged, err := executor.StageGrantedRelease("cosuper-success", "grant-success", t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0].Path != "bin/sandbox" || staged == "" {
+		t.Fatalf("staged release files=%+v path=%q", files, staged)
+	}
+	if content, err := os.ReadFile(filepath.Join(staged, "bin/sandbox")); err != nil || string(content) != "sandbox" {
+		t.Fatalf("staged sandbox = %q, %v", content, err)
+	}
+}

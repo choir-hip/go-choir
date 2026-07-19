@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,26 +38,36 @@ func (m RestartRequestManager) Restart(ctx context.Context) error {
 		if !filepath.IsAbs(handoffPath) || filepath.Base(handoffPath) != "restart-capability" {
 			return fmt.Errorf("updater: invalid restart handoff path")
 		}
-		if _, err := os.Stat(handoffPath); os.IsNotExist(err) {
-			request, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, m.PrepareURL, nil)
-			if requestErr != nil {
-				return requestErr
-			}
-			request.Header.Set("X-Internal-Updater", "true")
-			client := m.Client
-			if client == nil {
-				client = &http.Client{Timeout: 10 * time.Second}
-			}
-			response, requestErr := client.Do(request)
-			if requestErr != nil {
-				return fmt.Errorf("updater: prepare restart credential: %w", requestErr)
-			}
-			_ = response.Body.Close()
-			if response.StatusCode != http.StatusNoContent {
-				return fmt.Errorf("updater: prepare restart credential status %d", response.StatusCode)
-			}
-		} else if err != nil {
+		prepareURL, err := url.Parse(m.PrepareURL)
+		if err != nil || prepareURL.Scheme != "http" || prepareURL.User != nil || prepareURL.RawQuery != "" || prepareURL.Fragment != "" ||
+			prepareURL.Path != "/internal/self-development/restart-handoff" {
+			return fmt.Errorf("updater: restart preparation must use the fixed loopback endpoint")
+		}
+		address := net.ParseIP(prepareURL.Hostname())
+		if address == nil || !address.IsLoopback() {
+			return fmt.Errorf("updater: restart preparation must use loopback")
+		}
+		if err := os.Remove(handoffPath); err != nil && !os.IsNotExist(err) {
 			return err
+		}
+		request, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, prepareURL.String(), nil)
+		if requestErr != nil {
+			return requestErr
+		}
+		request.Header.Set("X-Internal-Updater", "true")
+		client := m.Client
+		if client == nil {
+			client = &http.Client{Timeout: 10 * time.Second}
+		}
+		clientCopy := *client
+		clientCopy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		response, requestErr := clientCopy.Do(request)
+		if requestErr != nil {
+			return fmt.Errorf("updater: prepare restart credential: %w", requestErr)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusNoContent {
+			return fmt.Errorf("updater: prepare restart credential status %d", response.StatusCode)
 		}
 	}
 	file, err := os.CreateTemp(filepath.Dir(path), ".restart-")

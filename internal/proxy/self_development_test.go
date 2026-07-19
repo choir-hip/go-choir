@@ -91,7 +91,7 @@ func TestConsumedModeReceiptAuthorizesOnlyExactCrashedDecisionRetry(t *testing.T
 		ExpectedDesiredStateCommitment: digest('d'), ExpectedEffectiveStateCommitment: digest('e'),
 	}
 	receipt := &computerevent.Receipt{ReceiptKind: "ModeReceipt", KindFields: map[string]any{
-		"old_mode": "accept_once", "new_mode": "off", "consumed_operation_id": "operation-1",
+		"old_mode": "accept_once", "new_mode": "propose_only", "consumed_operation_id": "operation-1",
 		"consumed_bundle_digest":              decision.BundleDigest,
 		"consumed_desired_event_head":         decision.ExpectedDesiredEventHead,
 		"consumed_effective_event_head":       decision.ExpectedEffectiveEventHead,

@@ -32,8 +32,6 @@ const (
 	ogKindPodcastSub   = objectgraph.ObjectKind("choir.podcast_subscription")
 	ogKindBrowserSess  = objectgraph.ObjectKind("choir.browser_session")
 	ogKindCoagentMail  = objectgraph.ObjectKind("choir.coagent_mailbox")
-	ogKindAppPackage   = objectgraph.ObjectKind("choir.app_change_package")
-	ogKindAppAdoption  = objectgraph.ObjectKind("choir.app_adoption")
 	ogKindDesktopSess  = objectgraph.ObjectKind("choir.desktop_session")
 	ogKindDesktopApp   = objectgraph.ObjectKind("choir.desktop_app_instance")
 )
@@ -57,9 +55,6 @@ const (
 	ogEdgeEvidenceAgent  = objectgraph.EdgeKind("evidence_agent")
 	ogEdgeSubContent     = objectgraph.EdgeKind("subscription_content")
 	ogEdgeBrowserRun     = objectgraph.EdgeKind("browser_session_run")
-	ogEdgePackageLineage = objectgraph.EdgeKind("package_source_computer")
-	ogEdgeAdoptionPkg    = objectgraph.EdgeKind("adoption_package")
-	ogEdgeAdoptionTarget = objectgraph.EdgeKind("adoption_target_computer")
 	ogEdgeSessionDesktop = objectgraph.EdgeKind("session_desktop")
 	ogEdgeAppDesktop     = objectgraph.EdgeKind("app_instance_desktop")
 	ogEdgeDocRevision    = objectgraph.EdgeKind("document_revision")
@@ -2133,156 +2128,6 @@ func (s *Store) ListBrowserSessionsByOwnerOG(ctx context.Context, ownerID string
 		sessions = append(sessions, rec)
 	}
 	return sessions, nil
-}
-
-// =========================================================================
-// App Change Packages — object graph implementation
-// =========================================================================
-
-// CreateAppChangePackageOG stores an app change package.
-// Packages use external-key identity (package_id).
-func (s *Store) CreateAppChangePackageOG(ctx context.Context, rec types.AppChangePackageRecord) error {
-	now := rec.CreatedAt
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	metadata := map[string]any{
-		"package_id":              rec.PackageID,
-		"app_id":                  rec.AppID,
-		"status":                  string(rec.Status),
-		"visibility":              rec.Visibility,
-		"source_computer_id":      rec.SourceComputerID,
-		"source_candidate_id":     rec.SourceCandidateID,
-		"source_active_ref":       rec.SourceActiveRef,
-		"candidate_source_ref":    rec.CandidateSourceRef,
-		"package_manifest_sha256": rec.PackageManifestSHA256,
-		"trace_id":                rec.TraceID,
-		"created_at":              rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":              rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	}
-
-	_, err := s.ogPut(ctx, ogKindAppPackage, rec.OwnerID, rec.PackageID, rec, metadata, now)
-	return err
-}
-
-// GetAppChangePackageOG retrieves an app change package by ID.
-func (s *Store) GetAppChangePackageOG(ctx context.Context, ownerID, packageID string) (types.AppChangePackageRecord, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindAppPackage, "package_id", packageID)
-	if err != nil {
-		return types.AppChangePackageRecord{}, err
-	}
-	var rec types.AppChangePackageRecord
-	if err := ogDecode(obj, &rec); err != nil {
-		return types.AppChangePackageRecord{}, err
-	}
-	if rec.OwnerID != ownerID {
-		return types.AppChangePackageRecord{}, ErrNotFound
-	}
-	return rec, nil
-}
-
-// ListAppChangePackagesByOwnerOG lists packages by owner.
-func (s *Store) ListAppChangePackagesByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.AppChangePackageRecord, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:    ogKindAppPackage,
-		OwnerID: ownerID,
-		Limit:   limit,
-	})
-	if err != nil {
-		return nil, err
-	}
-	packages := make([]types.AppChangePackageRecord, 0, len(objs))
-	for _, obj := range objs {
-		var rec types.AppChangePackageRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		packages = append(packages, rec)
-	}
-	return packages, nil
-}
-
-// =========================================================================
-// App Adoptions — object graph implementation
-// =========================================================================
-
-// CreateAppAdoptionOG stores an app adoption record.
-// Adoptions use external-key identity (adoption_id).
-func (s *Store) CreateAppAdoptionOG(ctx context.Context, rec types.AppAdoptionRecord) error {
-	now := rec.CreatedAt
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	metadata := map[string]any{
-		"adoption_id":          rec.AdoptionID,
-		"package_id":           rec.PackageID,
-		"app_id":               rec.AppID,
-		"target_computer_id":   rec.TargetComputerID,
-		"target_computer_kind": rec.TargetComputerKind,
-		"target_candidate_id":  rec.TargetCandidateID,
-		"status":               string(rec.Status),
-		"candidate_source_ref": rec.CandidateSourceRef,
-		"route_profile":        rec.RouteProfile,
-		"trace_id":             rec.TraceID,
-		"created_at":           rec.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":           rec.UpdatedAt.UTC().Format(time.RFC3339Nano),
-	}
-
-	obj, err := s.ogPut(ctx, ogKindAppAdoption, rec.OwnerID, rec.AdoptionID, rec, metadata, now)
-	if err != nil {
-		return err
-	}
-
-	// Write edge to package.
-	if rec.PackageID != "" {
-		pkgSuffix := objectgraph.StableSuffixFromKey(rec.PackageID)
-		pkgID, _ := objectgraph.BuildCanonicalID(ogKindAppPackage, rec.OwnerID, pkgSuffix)
-		_ = s.ogPutEdge(ctx, obj.CanonicalID, pkgID, ogEdgeAdoptionPkg, nil)
-	}
-	return nil
-}
-
-// GetAppAdoptionOG retrieves an app adoption by ID.
-func (s *Store) GetAppAdoptionOG(ctx context.Context, ownerID, adoptionID string) (types.AppAdoptionRecord, error) {
-	obj, err := s.ogGetByKey(ctx, ogKindAppAdoption, "adoption_id", adoptionID)
-	if err != nil {
-		return types.AppAdoptionRecord{}, err
-	}
-	var rec types.AppAdoptionRecord
-	if err := ogDecode(obj, &rec); err != nil {
-		return types.AppAdoptionRecord{}, err
-	}
-	if rec.OwnerID != ownerID {
-		return types.AppAdoptionRecord{}, ErrNotFound
-	}
-	return rec, nil
-}
-
-// ListAppAdoptionsByOwnerOG lists adoptions by owner.
-func (s *Store) ListAppAdoptionsByOwnerOG(ctx context.Context, ownerID string, limit int) ([]types.AppAdoptionRecord, error) {
-	if limit <= 0 {
-		limit = 100
-	}
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:    ogKindAppAdoption,
-		OwnerID: ownerID,
-		Limit:   limit,
-	})
-	if err != nil {
-		return nil, err
-	}
-	adoptions := make([]types.AppAdoptionRecord, 0, len(objs))
-	for _, obj := range objs {
-		var rec types.AppAdoptionRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		adoptions = append(adoptions, rec)
-	}
-	return adoptions, nil
 }
 
 // =========================================================================

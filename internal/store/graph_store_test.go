@@ -1297,85 +1297,9 @@ func TestOGListBrowserSessionsByOwner(t *testing.T) {
 // App Change Package tests
 // =========================================================================
 
-func TestOGCreateAndGetAppChangePackage(t *testing.T) {
-	s := openTestStore(t)
-	ctx := context.Background()
-
-	rec := types.AppChangePackageRecord{
-		PackageID:             "pkg-og-1",
-		OwnerID:               "owner-og",
-		AppID:                 "app-1",
-		Status:                types.AppChangePackageDraft,
-		Visibility:            "private",
-		SourceComputerID:      "comp-1",
-		PackageManifestSHA256: "sha256:abc",
-		CreatedAt:             time.Now().UTC(),
-		UpdatedAt:             time.Now().UTC(),
-	}
-	if err := s.CreateAppChangePackageOG(ctx, rec); err != nil {
-		t.Fatalf("create package: %v", err)
-	}
-
-	got, err := s.GetAppChangePackageOG(ctx, "owner-og", "pkg-og-1")
-	if err != nil {
-		t.Fatalf("get package: %v", err)
-	}
-	if got.PackageID != rec.PackageID {
-		t.Errorf("package_id: got %q", got.PackageID)
-	}
-	if got.AppID != rec.AppID {
-		t.Errorf("app_id: got %q", got.AppID)
-	}
-}
-
 // =========================================================================
 // App Adoption tests
 // =========================================================================
-
-func TestOGCreateAndGetAppAdoption(t *testing.T) {
-	s := openTestStore(t)
-	ctx := context.Background()
-
-	// Create a package first.
-	pkg := types.AppChangePackageRecord{
-		PackageID:             "pkg-og-adoption",
-		OwnerID:               "owner-og",
-		AppID:                 "app-1",
-		Status:                types.AppChangePackageDraft,
-		PackageManifestSHA256: "sha256:abc",
-		CreatedAt:             time.Now().UTC(),
-		UpdatedAt:             time.Now().UTC(),
-	}
-	if err := s.CreateAppChangePackageOG(ctx, pkg); err != nil {
-		t.Fatalf("create package: %v", err)
-	}
-
-	rec := types.AppAdoptionRecord{
-		AdoptionID:         "adopt-og-1",
-		OwnerID:            "owner-og",
-		PackageID:          "pkg-og-adoption",
-		AppID:              "app-1",
-		TargetComputerID:   "comp-2",
-		TargetComputerKind: "user",
-		Status:             types.AppAdoptionProposed,
-		CreatedAt:          time.Now().UTC(),
-		UpdatedAt:          time.Now().UTC(),
-	}
-	if err := s.CreateAppAdoptionOG(ctx, rec); err != nil {
-		t.Fatalf("create adoption: %v", err)
-	}
-
-	got, err := s.GetAppAdoptionOG(ctx, "owner-og", "adopt-og-1")
-	if err != nil {
-		t.Fatalf("get adoption: %v", err)
-	}
-	if got.AdoptionID != rec.AdoptionID {
-		t.Errorf("adoption_id: got %q", got.AdoptionID)
-	}
-	if got.PackageID != rec.PackageID {
-		t.Errorf("package_id: got %q", got.PackageID)
-	}
-}
 
 // =========================================================================
 // Desktop State tests

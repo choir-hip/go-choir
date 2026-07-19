@@ -1010,13 +1010,13 @@ func runRunStatus(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	rest := fs.Args()
-	if len(rest) == 0 || strings.TrimSpace(rest[0]) == "" {
-		fmt.Fprintln(stderr, "choir run status: submission id required")
+	if len(rest) != 1 || strings.TrimSpace(rest[0]) == "" {
+		fmt.Fprintln(stderr, "choir run status: run id required")
 		return 2
 	}
 	id := strings.TrimSpace(rest[0])
 	var resp json.RawMessage
-	if err := c.do(http.MethodGet, "/api/prompt-bar/submissions/"+id, nil, &resp); err != nil {
+	if err := c.do(http.MethodGet, "/api/runs/"+url.PathEscape(id), nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir run status %s: %v\n", id, err)
 		return 1
 	}
@@ -1041,7 +1041,7 @@ func runRunList(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	var resp json.RawMessage
-	path := fmt.Sprintf("/api/agent/loops?limit=%d", *limit)
+	path := fmt.Sprintf("/api/runs?limit=%d", *limit)
 	if err := c.do(http.MethodGet, path, nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir run list: %v\n", err)
 		return 1
@@ -1064,7 +1064,7 @@ func runRunCancel(args []string, stdout, stderr io.Writer) int {
 	}
 	id := strings.TrimSpace(rest[0])
 	var resp json.RawMessage
-	if err := c.do(http.MethodPost, "/api/agent/cancel", map[string]string{"loop_id": id}, &resp); err != nil {
+	if err := c.do(http.MethodPost, "/api/runs/"+url.PathEscape(id)+"/cancel", nil, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir run cancel %s: %v\n", id, err)
 		return 1
 	}

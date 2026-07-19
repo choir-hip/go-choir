@@ -42,6 +42,8 @@ type CredentialExchangeResult struct {
 	Capability string                `json:"capability"`
 	Receipt    computerevent.Receipt `json:"lifecycle_receipt"`
 	ExpiresAt  string                `json:"expires_at"`
+
+	PrivacyKey string `json:"privacy_key,omitempty"`
 }
 
 func (e ComputerCredentialEnvelope) VerifyBootstrap(computerID, realizationID string, now time.Time) (ed25519.PublicKey, error) {
@@ -182,7 +184,11 @@ func (s *Service) exchangeComputerCredentialEnvelope(ctx context.Context, encode
 	if err := s.insertCredentialLifecycleReceipt(ctx, envelope.ComputerID, consumeKey, envelope.RequestCommitment, "credential_envelope_consumed", "issued", "consumed", envelope.RevocationEpoch, now, receipt); err != nil {
 		return CredentialExchangeResult{}, err
 	}
-	return CredentialExchangeResult{Capability: token, Receipt: receipt, ExpiresAt: envelope.ExpiresAt}, nil
+	privacyKey, err := s.computerPrivacyKey(ctx, envelope.ComputerID)
+	if err != nil {
+		return CredentialExchangeResult{}, err
+	}
+	return CredentialExchangeResult{Capability: token, Receipt: receipt, ExpiresAt: envelope.ExpiresAt, PrivacyKey: privacyKey}, nil
 }
 func (s *Service) RenewComputerCapability(ctx context.Context, computerID string) (CredentialExchangeResult, error) {
 	if s == nil || s.store == nil || s.signingKey == nil || computerID == "" {
@@ -211,6 +217,36 @@ func (s *Service) RenewComputerCapability(ctx context.Context, computerID string
 		return CredentialExchangeResult{}, err
 	}
 	return CredentialExchangeResult{Capability: token, ExpiresAt: expiresAt.Format(time.RFC3339Nano)}, nil
+}
+
+func (s *Service) computerPrivacyKey(ctx context.Context, computerID string) (string, error) {
+	var encoded, digest string
+	read := func() error {
+		return s.store.db.QueryRowContext(ctx, `SELECT key_material, key_version_digest FROM computer_privacy_keys WHERE computer_id=?`, computerID).Scan(&encoded, &digest)
+	}
+	if err := read(); err == nil {
+		raw, decodeErr := base64.RawStdEncoding.DecodeString(encoded)
+		if decodeErr != nil || len(raw) != 32 || computerevent.DigestBytes(raw) != digest {
+			return "", fmt.Errorf("computer privacy key: stored key is invalid")
+		}
+		return encoded, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	encoded = base64.RawStdEncoding.EncodeToString(raw)
+	digest = computerevent.DigestBytes(raw)
+	_, err := s.store.db.ExecContext(ctx, `INSERT INTO computer_privacy_keys (computer_id, key_version_digest, key_material, created_at) VALUES (?, ?, ?, ?)`, computerID, digest, encoded, time.Now().UTC().Truncate(time.Microsecond))
+	if err != nil {
+		if readErr := read(); readErr == nil {
+			return encoded, nil
+		}
+		return "", err
+	}
+	return encoded, nil
 }
 
 func (s *Service) buildCredentialEnvelope(computerID, realizationID, idempotencyKey, requestCommitment string, epoch uint64, issuedAt, expiresAt time.Time) (ComputerCredentialEnvelope, error) {

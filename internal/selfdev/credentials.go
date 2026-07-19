@@ -30,6 +30,7 @@ type GuestCredentials struct {
 	expiresAt  time.Time
 	keyID      string
 	publicKey  ed25519.PublicKey
+	privacyKey string
 }
 
 func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, computerID, realizationID string) (*GuestCredentials, error) {
@@ -77,7 +78,10 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 	if err != nil {
 		return nil, err
 	}
-	manager.token, manager.expiresAt = result.Capability, expiresAt
+	manager.token, manager.expiresAt, manager.privacyKey = result.Capability, expiresAt, result.PrivacyKey
+	if _, err := computerevent.NewExternalPrivacyKeyring(computerID, manager.privacyKey); err != nil {
+		return nil, fmt.Errorf("guest credential: external privacy key refused")
+	}
 	return manager, nil
 }
 
@@ -196,6 +200,12 @@ func (g *GuestCredentials) PublishRouteProjection(ctx context.Context, projectio
 		return selfdevprotocol.RouteProjectionResponse{}, fmt.Errorf("guest credential: route projection receipt binding failed")
 	}
 	return result, nil
+}
+
+func (g *GuestCredentials) PrivacyKey() string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.privacyKey
 }
 
 func (g *GuestCredentials) PublicKey() ed25519.PublicKey {

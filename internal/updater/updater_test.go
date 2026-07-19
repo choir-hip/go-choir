@@ -5,7 +5,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -77,6 +79,85 @@ func TestUpdaterAppliesIdempotentlyAndRestoresPriorHealthyRelease(t *testing.T) 
 	}
 	if service.restarts != 3 || service.cleanups != 2 {
 		t.Fatalf("failure and restore restart/cleanup count = %d/%d, want 3/2", service.restarts, service.cleanups)
+	}
+}
+
+type processRestartManager struct {
+	root    string
+	output  string
+	process *os.Process
+}
+
+func (m *processRestartManager) Restart(context.Context) error {
+	if m.process != nil {
+		_ = m.process.Kill()
+		_, _ = m.process.Wait()
+	}
+	command := exec.Command("/bin/sh", filepath.Join(m.root, "current", "bin", "choir"))
+	command.Env = append(os.Environ(), "CHOIR_TEST_OUTPUT="+m.output)
+	if err := command.Start(); err != nil {
+		return err
+	}
+	m.process = command.Process
+	return nil
+}
+
+func (m *processRestartManager) CleanupRestartHandoff() error { return nil }
+
+type processHealthProber struct{ output string }
+
+func (p processHealthProber) Probe(ctx context.Context, _ string, manifest ReleaseManifest) ([]string, error) {
+	for {
+		raw, err := os.ReadFile(p.output)
+		if err == nil && strings.TrimSpace(string(raw)) == manifest.Marker {
+			return []string{computerevent.DigestBytes(raw)}, nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+func TestUpdaterRestartsRealReleaseProcessAcrossPointerSwap(t *testing.T) {
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "updater")
+	t.Cleanup(func() { makeTreeWritable(root) })
+	manager := &processRestartManager{root: root, output: filepath.Join(t.TempDir(), "running-release")}
+	t.Cleanup(func() {
+		if manager.process != nil {
+			_ = manager.process.Kill()
+			_, _ = manager.process.Wait()
+		}
+	})
+	engine, err := New(root, "computer-test", "realization-test", manager, processHealthProber{output: manager.output}, computerevent.SigningKey{
+		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "process-restart-test"}, PrivateKey: privateKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := func(marker string) string {
+		return fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' %q > \"$CHOIR_TEST_OUTPUT\"\nexec sleep 30\n", marker)
+	}
+	first := updaterRequestFixture(t, root, "computer-test", "realization-test", "process-v1", "process-idem-v1", script("process-v1"))
+	if result, err := engine.Apply(t.Context(), first); err != nil || result.Outcome != "applied" {
+		t.Fatalf("first process apply = %+v, %v", result, err)
+	}
+	firstPID := manager.process.Pid
+	second := updaterRequestFixture(t, root, "computer-test", "realization-test", "process-v2", "process-idem-v2", script("process-v2"))
+	if result, err := engine.Apply(t.Context(), second); err != nil || result.Outcome != "applied" {
+		t.Fatalf("second process apply = %+v, %v", result, err)
+	}
+	if manager.process.Pid == firstPID {
+		t.Fatalf("release process PID did not change: %d", firstPID)
+	}
+	raw, err := os.ReadFile(manager.output)
+	if err != nil || strings.TrimSpace(string(raw)) != "process-v2" {
+		t.Fatalf("running release marker = %q, %v", raw, err)
 	}
 }
 

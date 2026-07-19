@@ -153,23 +153,15 @@ type runAcceptanceListResponse struct {
 	Acceptances []types.RunAcceptanceRecord `json:"acceptances"`
 }
 
-// cancelRequest is the JSON payload for POST /api/agent/cancel.
-// It cancels a running or pending run (VAL-CHOIR-010).
-type cancelRequest struct {
-	RunID string `json:"loop_id"`
-}
-
-// cancelResponse is the JSON response for POST /api/agent/cancel.
 type cancelResponse struct {
-	RunID string         `json:"loop_id"`
+	RunID string         `json:"run_id"`
 	State types.RunState `json:"state"`
 }
 
-// runStatusResponse is the shared JSON projection used by the registered run
-// list and cancel surfaces.
+// runStatusResponse is the public /api/runs projection.
 type runStatusResponse struct {
 	AgentID             string                                `json:"agent_id"`
-	RunID               string                                `json:"loop_id"`
+	RunID               string                                `json:"run_id"`
 	ChannelID           string                                `json:"channel_id,omitempty"`
 	RequestedByRunID    string                                `json:"requested_by_run_id,omitempty"`
 	AgentProfile        string                                `json:"agent_profile,omitempty"`
@@ -888,55 +880,7 @@ func internalRuntimeRunIDFromPath(path string) string {
 	return runID
 }
 
-// HandleCancel handles POST /api/agent/cancel.
-// It cancels a running or pending run, transitioning it to cancelled state.
-// The cancel endpoint is owner-scoped — a request for a run owned by a
-// different user returns 404 to prevent IDOR probing (VAL-CHOIR-010).
-func (h *APIHandler) HandleCancel(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-
-	var req cancelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid request body"})
-		return
-	}
-
-	if strings.TrimSpace(req.RunID) == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "loop_id is required"})
-		return
-	}
-
-	err = h.rt.CancelRun(r.Context(), req.RunID, ownerID)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
-			return
-		}
-		if strings.Contains(err.Error(), "cannot cancel") {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-			return
-		}
-		log.Printf("runtime api: cancel run: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to cancel run"})
-		return
-	}
-
-	writeAPIJSON(w, http.StatusOK, cancelResponse{
-		RunID: req.RunID,
-		State: types.RunCancelled,
-	})
-}
-
-// HandleRunList handles GET /api/agent/loops.
+// HandleRunList handles GET /api/runs.
 // It returns recent owner-scoped runs in reverse chronological order so
 // debugging and orchestration surfaces can inspect current work and run
 // families without polling individual IDs one by one.
@@ -1000,6 +944,42 @@ func (h *APIHandler) HandleRunList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeAPIJSON(w, http.StatusOK, resp)
+}
+func (h *APIHandler) HandleRunResource(w http.ResponseWriter, r *http.Request) {
+	ownerID, err := authenticateUser(r)
+	if err != nil {
+		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
+		return
+	}
+	suffix := strings.TrimPrefix(r.URL.Path, "/api/runs/")
+	parts := strings.Split(suffix, "/")
+	if len(parts) == 0 || strings.TrimSpace(parts[0]) == "" || len(parts) > 2 {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+		return
+	}
+	runID := strings.TrimSpace(parts[0])
+	if len(parts) == 1 && r.Method == http.MethodGet {
+		run, getErr := h.rt.GetRun(r.Context(), runID, ownerID)
+		if getErr != nil {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, run)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "cancel" && r.Method == http.MethodPost {
+		if cancelErr := h.rt.CancelRun(r.Context(), runID, ownerID); cancelErr != nil {
+			if strings.Contains(cancelErr.Error(), "not found") {
+				writeAPIJSON(w, http.StatusNotFound, apiError{Error: "run not found"})
+				return
+			}
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: cancelErr.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, cancelResponse{RunID: runID, State: types.RunCancelled})
+		return
+	}
+	writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
 }
 
 // HandleHealth handles GET /health for the runtime service.

@@ -871,7 +871,7 @@ func TestCancellation_CancelViaAPI(t *testing.T) {
 		t.Fatalf("spawn cancellable child: %v", err)
 	}
 
-	w := runtimeHandlerRequest(t, handler.HandleCancel, http.MethodPost, "/api/agent/cancel", fmt.Sprintf(`{"loop_id":"%s"}`, child.RunID), "user-alice")
+	w := runtimeHandlerRequest(t, handler.HandleRunResource, http.MethodPost, "/api/runs/"+child.RunID+"/cancel", ``, "user-alice")
 	if w.Code != http.StatusOK {
 		t.Fatalf("cancel API status: got %d, want 200; body: %s", w.Code, w.Body.String())
 	}

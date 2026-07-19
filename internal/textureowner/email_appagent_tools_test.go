@@ -404,7 +404,7 @@ func TestGroundedEmailArtifactDoesNotForceEmailAppagentContinuation(t *testing.T
 			"type":                  "texture_agent_revision",
 			"doc_id":                doc.DocID,
 			"current_revision_id":   initialRev.RevisionID,
-			"request_intent":        "integrate_worker_findings",
+			"request_intent":        "integrate_execution_findings",
 			"original_prompt":       "Look up the official title of https://example.com, then create an Email appagent draft to yusefnathanson@me.com with subject: Choir Email researched result proof. Body: a short plain-language summary of what you found. Draft only; do not send.",
 			runMetadataAgentID:      "texture:" + doc.DocID,
 			runMetadataChannelID:    doc.DocID,

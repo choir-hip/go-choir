@@ -31,7 +31,7 @@
     { "raw": "terminal session", "want": "shell_session" },
     { "raw": "diff", "want": "diff_hunk" },
     { "raw": "test-result", "want": "test_run" },
-    { "raw": "change-package", "want": "app_change_package" },
+    { "raw": "frozen-bundle", "want": "capsule_bundle" },
     { "raw": "video-proof", "want": "video_artifact" },
     { "raw": "unknown source", "want": "unknown_source" }
   ],

@@ -500,7 +500,7 @@ func runtimeSourceEntityFromStructured(entity texturedoc.SourceEntity) textureSo
 		runtimeEntity.Target.ContentID = targetID
 	case "file_artifact", "patch", "screenshot", "video_artifact", "benchmark_log":
 		runtimeEntity.Target.FilePath = targetID
-	case "command_output", "shell_session", "diff_hunk", "test_run", "app_change_package":
+	case "command_output", "shell_session", "diff_hunk", "test_run", "capsule_bundle":
 		runtimeEntity.Target.PublicRecordID = targetID
 	case "texture", "texture_revision", "texture_span":
 		runtimeEntity.Target.DocID = targetID
