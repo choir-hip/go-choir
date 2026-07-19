@@ -27,13 +27,20 @@ func TestSelfDevelopmentEffectsOffGuestHarness(t *testing.T) {
 		t.Fatal("G1 Linux harness requires root for KVM, tap, mount, and cleanup")
 	}
 
-	const (
-		vmID          = "vm-selfdev-g1-harness"
-		computerID    = "computer-selfdev-g1-harness"
-		ownerID       = "owner-selfdev-g1-harness"
-		desktopID     = "g1-harness"
-		realizationID = vmID + "-epoch-1"
-	)
+	runID := strings.TrimSpace(os.Getenv("CHOIR_G1_RUN_ID"))
+	if runID == "" || len(runID) > 32 {
+		t.Fatal("CHOIR_G1_RUN_ID must be a unique 1-32 character lowercase run identity")
+	}
+	for _, ch := range runID {
+		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '-' {
+			t.Fatal("CHOIR_G1_RUN_ID must contain only lowercase ASCII letters, digits, and hyphens")
+		}
+	}
+	vmID := "vm-selfdev-g1-" + runID
+	computerID := "computer-selfdev-g1-" + runID
+	ownerID := "owner-selfdev-g1-harness"
+	desktopID := "g1-harness"
+	realizationID := vmID + "-epoch-1"
 
 	stateDir := t.TempDir()
 	cfg := DefaultManagerConfig()
