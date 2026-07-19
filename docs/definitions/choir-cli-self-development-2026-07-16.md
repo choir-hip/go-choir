@@ -586,15 +586,15 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-9
-    state: rejected_G1_blocked_incomplete
-    ref: ae881720132809d6d6092b4a739e43a311489000
+    id: self-development-B-disabled-cutover-round-10
+    state: rejected_G1_repairing
+    ref: d5f3b4778439bb71745e951712a229993300d51d
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Effects-OFF B cutover after nine G1 candidates. Round-9 review confirmed six new source/authority blockers: proposal start passes a raw envelope digest where Store.Start requires `artifact:sha256:`; public exact start retry is still mode-gated at proxy after mode advances; exact approval replay recognizes only mutable `accepted` state and omits terminal operation head/receipt joins after materialization; startup decision recovery bypasses the hardened public join; child UID 0 cannot create its socket in the parent-root mode-0700 broker directory; and several current authority/CLI documents still describe deleted worker/VM/package paths or obsolete plaintext API-key/verb behavior."
-    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92]
-    verification: "Four of six substantive round-9 reviewers rejected. Local inspection confirms every blocking class: private event output refs are raw SHA-256 while selfdev.Store requires an artifact URI; proxy start mode checks precede guest idempotency; accepted operations advance to materializing/applied; recoverSelfDevelopmentDecision validates only event kind/proposed effect before mutation; `/run/capsule` is parent-root mode 0700 with no ownership handoff to mapped host UID 65534; and the cited current AGENTS/runtime/computer-ontology/README/CLI-skill statements remain live. These are not deployed-only gaps."
-    disposition: "Rejected at G1 and blocked_incomplete under AGENTS.md Dead-End Escalation after nine non-convergent repair iterations. Effects remain OFF; do not deploy and do not make another incremental repair without explicit owner direction on the structural route."
+    scope: "Effects-OFF B cutover after structural owner decisions and the accepted exact Linux boot harness. Round-10 review confirms five previously documented source blockers were never connected to those settled decisions: proposal start still passes a raw encrypted-envelope digest where Store.Start requires `artifact:sha256:`; proxy exact start retry remains mode-gated; exact approval replay excludes legal post-decision descendants; startup decision recovery bypasses the shared complete join; and the mapped-UID broker child still creates a pathname socket inside the parent-root mode-0700 directory instead of receiving a parent-owned listener FD."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000]
+    verification: "Six of seven reviewers completed; Cursor, Codex, Devin, and omp-gpt55 rejected while OpenCode and Gemini accepted and GLM failed before review. Local source inspection confirms all five blocker classes at the cited paths. These are the same round-9 symptoms for which the owner subsequently settled typed artifact refs, any-mode exact replay, one shared decision-binding verifier, parent-owned inherited broker listener, and Node A Linux proof; the harness substrate was repaired, but the product callsites were not."
+    disposition: "Rejected at G1. Effects remain OFF and no deployment is authorized. The owner's structural recovery decision authorizes one coherent repair connecting the five exact settled semantics, followed by an Executor.Spawn Linux proof and a newly frozen G1 panel."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -604,9 +604,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, ae881720132809d6d6092b4a739e43a311489000, /tmp/choir-selfdev-g1-round9-panel/manifest.tsv]
-  blocker_or_risk: "The blocker cluster is substrate-level, not six independent local defects: source review and Darwin/unit evidence are standing in for one executable Linux effects-OFF lifecycle contract, while decision identity is duplicated across proxy, guest handler, recovery reconciler, operation projection, and materializer. Repeated local patches move one mirror without closing the others. The candidate also lacks a single generated current-authority inventory, so stale positive guidance reappears outside the manually edited set."
-  next_action: "Update clean Node A from lagging source/config to current origin/main, preserve its existing state and rollback generation, then use it as the x86_64-linux effects-OFF G1 lifecycle harness. Before product repairs, settle approval retry, decision-binding authority, capsule socket ownership, and artifact-reference representation through a diverse agentic-consensus panel and owner-readable synthesis."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, d5f3b4778439bb71745e951712a229993300d51d, /tmp/choir-selfdev-g1-final-panel/manifest.tsv]
+  blocker_or_risk: "The exact Linux boot harness now exists and passes; the remaining blocker is incomplete connection of the four settled shared-authority decisions into product callsites. Until typed prompt refs, any-mode start/decision replay, shared recovery verification, and parent-owned broker FD transfer are exercised end to end, unit and boot evidence can still pass while proposal/capsule execution is impossible."
+  next_action: "Implement the five settled connections as one coherent substrate repair, add focused proposal/replay/recovery tests and a real Node A Executor.Spawn broker-FD proof, then freeze a new candidate and rerun the diverse G1 panel."
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
@@ -832,6 +832,17 @@ review_receipts:
     verdicts: [codex:REJECT_G1, devin:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1, omp-glm52:FAILED]
     outcome: blocked_incomplete_structural_escalation
     adjudication: "Four independent reviewers rejected. Local inspection confirms Cursor's non-executable raw prompt artifact join, omp-gpt55's public start replay ordering, Devin's weak startup decision recovery, and Codex's post-materialization terminal replay, broker-directory ownership, and stale-current-authority findings. These cluster at missing executable Linux lifecycle and duplicated binding-authority substrates. AGENTS.md Dead-End Escalation now prohibits another incremental patch without explicit owner direction."
+
+  - id: G1-disabled-cutover-round-10-2026-07-19
+    reviewed_at: 2026-07-19T22:26:16Z
+    candidate_ref: d5f3b4778439bb71745e951712a229993300d51d
+    authority_ref: d5f3b4778439bb71745e951712a229993300d51d
+    manifest: /tmp/choir-selfdev-g1-final-panel/manifest.tsv
+    panel: [codex, devin, cursor, opencode, omp-gpt55, omp-gemini35, omp-glm52]
+    health: "Codex, Devin, Cursor, OpenCode, omp-gpt55, and omp-gemini35 completed; omp-glm52 failed before review."
+    verdicts: [codex:REJECT_G1, devin:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1, omp-glm52:FAILED]
+    outcome: repair
+    adjudication: "Four independent reviewers rejected. Local inspection confirms raw prompt artifact refs, proxy-first mode gating on exact start retry, decision replay limited to accepted/rejected states, weak duplicated startup recovery validation, and child-created broker socket custody. The two accepting reviews did not rebut these source paths. The owner has already settled the corresponding structural semantics, so this receipt documents the still-unwired connections before one coherent repair; effects remain OFF and C is blocked."
 
 view:
   path: none
