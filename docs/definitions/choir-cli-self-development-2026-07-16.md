@@ -387,7 +387,63 @@ now:
     partial_repair_state: "Run-bound CoSuper capability transfer, immutable release staging, private prompt/decision events, public CLI routing, operation/event recovery lookups, and updater apply reconciliation are implemented in the uncommitted candidate. They are not accepted evidence and may be revised."
     remaining_error: "Checkpoint issuance, certificate-only vmctl projection, rollback selection/rematerialization, exact verifier certificate semantics, deterministic failure injection, and end-to-end product-path tests remain incomplete. No G1 review, deployment, genesis, or effect activation is admissible."
     rollback: "Before deployment, discard the unlanded B candidate and retain R0. No platform schema, staging computer, event head, route, or effective guest state has changed."
-    heresy_delta: {discovered: 5, introduced: 0, repaired: 0}
+    heresy_delta:
+      discovered: 5
+      introduced: 0
+      repaired: 0
+  rollback_substrate_repair:
+    observed_at: 2026-07-19T06:15:00Z
+    class: substrate
+    mutation_class: red
+    status: "documented before the first B behavior commit; implemented only in the uncommitted candidate; G1 remains blocked"
+    problem: "The public CLI exposed `self-dev rollback`, but no public handler created RollbackRequested, no reconciler rematerialized a selected applied head, and applied operations retained neither their updater release digest nor route transition receipt. GenesisImported accepted only two hashes and did not pin the running immutable release or publish a baseline checkpoint, so the mission's first post-genesis rollback had no materializable prior release or vmctl rollback target. Appending a rollback request before validating those inputs would leave the canonical head permanently pending."
+    source_refs: [cmd/choir/main.go, internal/agentcore/api_self_development.go, internal/agentcore/self_development_materializer.go, internal/selfdev/operations.go, internal/updater/updater.go, internal/vmctl/route_client.go]
+    existing_replacement_check: "The updater release store, routeledger receipt history, vmctl immutable-input catalog, ComputerVersion route resolver, corpusd checkpoint authority, and event reducer already implement the intended authorities. The repair connects them; it creates no third semantic store and no host-local rollback path."
+    repair: "The candidate now imports the immutable Nix baseline into the root updater once, publishes and records a genesis checkpoint/baseline operation, persists release/ComputerVersion/route receipt joins on every applied operation, resolves prior immutable inputs through a typed internal vmctl endpoint, validates all prior receipts and CAS heads before RollbackRequested, and idempotently applies the pinned prior release through RollbackApplied, checkpoint publication, certificate-only vmctl rollback CAS, and terminal `rolled_back` state."
+    evidence: "`go test ./internal/updater -run TestUpdaterImportsImmutableBaselineOnce -count=1 -v`; `go test ./internal/vmctl -run 'TestClientPinsInputsAndTransitionsRoute|TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate' -count=1 -v`; `go test ./internal/selfdev -run TestRollbackStartBindsPriorAppliedReceiptsAndReplays -count=1 -v`; `go test ./cmd/choir -run TestSelfDevelopmentCLIUsesExplicitTargetAndImmutableBindings -count=1 -v`; and full affected Go package suites passed. `nix eval --raw .#nixosConfigurations.go-choir-sandbox-vm.config.systemd.services.go-choir-sandbox.environment.CHOIR_BASELINE_RELEASE_ROOT` resolved the immutable sandbox package path."
+    admissible_evidence_class: "focused deterministic source tests and Nix evaluation only; no deployed rollback, restart, route, or genesis claim"
+    rollback: "Before deployment, discard the unlanded candidate and retain R0. No platform row, updater pointer, ComputerID event head, checkpoint, or route changed."
+    protected_surfaces: [GenesisImported, computer_event_head_CAS, guest_updater, ComputerVersion_checkpoint, vmctl_route_projection, rollback_receipts, additive_Dolt_schema]
+    heresy_delta:
+      discovered: 1
+      introduced: 0
+      repaired: 1
+    conjecture_delta: "The two-store/single-appender/vmctl-actuator topology is unchanged. The new evidence rejects the conjecture that CLI grammar plus reducer cases constituted rollback; durable pinned release and route-receipt custody are required."
+    remaining_error: "The genesis verifier evidence is still represented only by a digest rather than an independently verifiable certificate, deterministic rollback failure injection and a complete API-to-updater-to-vmctl product-path test remain absent, and no frozen whole-candidate G1 review has occurred."
+  g1_candidate_rejection:
+    observed_at: 2026-07-19T07:10:00Z
+    class: substrate
+    mutation_class: red
+    status: "documented before any B behavior commit; frozen tree b2daf1c64dc56d43405b7c72bf026d7ffc3f52e4 is rejected and must not land"
+    problem: "The first G1 source freeze retained dormant but callable raw writable/coding registries and live vmctl fork-desktop, publish-desktop, request-worker, and hibernate-worker handlers/clients/ownership paths. The live Texture prompt and run-acceptance interpreter still taught and credited worker-VM/AppChangePackage execution. This violates the owner-settled complete deletion of worker/candidate VM concepts and allows internal callers to bypass the new durable agent/capsule model even though Super's default registry no longer exposed the tools."
+    evidence: "Local verification of the panel's low-severity dead-authority finding found a broader substrate blocker: `internal/agentcore/tools_coding.go` still constructed write/edit/bash tools behind latent policy booleans; `internal/agentcore/tools_vmctl.go` retained fork/publish tools; `internal/vmctl/handlers.go` still registered fork/publish/request-worker/hibernate-worker endpoints; `internal/vmctl/client.go`, `internal/vmctl/ownership.go`, `internal/vmmanager`, `internal/agentcore/run_acceptance.go`, and `internal/textureprompts/overlays/run_system.yaml` still carried the obsolete topology. The 1/7 healthy G1 panel member accepted the frozen tree only after classifying this as non-blocking; owner-settled deletion semantics override that classification."
+    existing_replacement_check: "Durable CoSuper/Researcher runs, guest-local capsules, the run-bound capsule capability, ComputerEventAppender, and the public self-development operation replace the worker/candidate VM topology. The repair deletes latent registries, handlers, clients, prompts, acceptance credit, configuration, and comprehensive legacy tests rather than disabling or aliasing them."
+    admissible_evidence_class: "a new frozen source tree, negative symbol/route inventory, focused deterministic tests, complete Go compilation, Nix evaluation, and a healthy diverse G1 review; no deploy is admissible before acceptance"
+    rollback: "Discard the unlanded rejected tree and retain R0. No staging route, ComputerID event head, updater release, checkpoint, or effective state changed."
+    heresy_delta:
+      discovered: 1
+      introduced: 0
+      repaired: 0
+    remaining_error: "Complete the cross-repository deletion, migrate live prompts and run acceptance to durable agent/capsule evidence, rerun deterministic suites, and freeze a new tree. The prior b2daf1c6 review is stale."
+  g1_pre_freeze_recovery_audit:
+    observed_at: 2026-07-19T09:09:34Z
+    class: substrate
+    mutation_class: red
+    status: "documented before the B repair commit; repairs exist only in the uncommitted candidate; G1 remains blocked"
+    problem: "Focused pre-freeze execution review found seven coupled custody failures: the capsule masked the persistent source path named by CoSuper and had no immutable tracked source lower; accept_once remained effective after expiry and approval omitted desired/effective state commitments; vmctl issued the guest credential to the realization VMID while public operations target the stable ComputerID and the materializer scanned operations under SandboxID; explicit rollback passed a retained release directory to an updater that accepted only incoming directories; verifier certificates changed identity on every retry and checkpoint/route requests rebound to later causal heads, making restart reconciliation conflict with their own idempotency keys; the capsule admission cleanup used a non-recursive unmount; and the guest Nix evaluation referenced a nonexistent standalone `npm` package."
+    source_refs: [internal/capsule/executor.go, internal/capsule/source_snapshot.go, internal/platform/self_development_modes.go, internal/proxy/self_development_operations.go, internal/agentcore/api_self_development.go, internal/vmctl/ownership.go, nix/sandbox-vm.nix, internal/agentcore/self_development_materializer.go, internal/updater/updater.go, internal/updater/verifier_certificate.go]
+    existing_replacement_check: "The existing stable desktop selector, route/event state commitments, updater retained release store, updater operation journal, corpusd idempotent checkpoint authority, and capsule overlay substrate are the intended replacements. The repair binds and reuses them; it adds no semantic store, worker VM, host mutation route, SSH path, or mutable branch."
+    repair: "The uncommitted candidate snapshots only clean Git-tracked source into an immutable capsule lower at `/workspace/platform` and exposes its digest; durably expires accept_once and binds both state commitments at CLI, proxy, and guest; propagates stable DesktopID as ComputerID while retaining VMID solely as realization; admits exact read-only retained releases for rollback; journals verifier certificates and derives checkpoint/route joins from their exact event receipts with renewable short-lived route authorizations; recursively detaches failed capsule mount trees; and restores evaluable Nix package composition."
+    evidence: "`go test ./internal/capsule ./internal/platform ./internal/proxy ./internal/agentcore ./internal/updater ./internal/vmctl ./cmd/choir` passed after the repairs. `go test ./...` passed every package except live provider/search integration tests whose upstream accounts returned exhausted quota (Tavily 432, Serper 400, SerpAPI 429, ZAI 429). Linux capsule tests compile with `CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go test -c`. Nix parse and guest service evaluation now resolve kernel config and `/mnt/persistent/files/Source/platform` without an evaluation error."
+    admissible_evidence_class: "focused deterministic source tests, complete offline package compilation excluding externally quota-bound integration calls, Linux cross-compilation, and Nix evaluation; no deployed kernel, rollback, restart, route, capsule, or product-path claim"
+    protected_surfaces: [stable_ComputerID, realization_credential, accept_once_mode, guest_capsule_source, verifier_certificate, checkpoint_event_join, vmctl_route_projection, updater_rollback, restart_reconciliation]
+    rollback: "Before deployment, discard the unlanded candidate and retain R0. No staging mode, credential, capsule, event head, updater pointer, checkpoint, route, or effective release changed."
+    heresy_delta:
+      discovered: 7
+      introduced: 0
+      repaired: 0
+    conjecture_delta: "The topology remains two Dolt stores, one canonical event appender, guest-local capsule/updater effects, and vmctl-only route CAS. The audit rejects the conjecture that locally idempotent components imply restart durability; every cross-component request must bind a stable event receipt or retain its first signed response."
+    remaining_error: "Commit this problem checkpoint separately, then commit the coherent repair, rerun frozen-tree verification and negative inventories, and obtain a healthy diverse G1 review. No deployment or mode activation is admissible."
   discovered_blocker:
     observed_at: 2026-07-18T23:58:00Z
     class: substrate
@@ -403,7 +459,10 @@ now:
       result: "Implemented a directed commitment graph: immutable pin intent -> payload PinReceipt digests -> final request commitment -> event PinReceipt/head CAS. `TestPrivatePayloadAppendCompletesDirectedCommitmentGraph` exercises real XChaCha20 private-envelope pinning through corpusd CAS and embedded finalization."
       evidence: "`go test ./internal/platform -run TestPrivatePayloadAppendCompletesDirectedCommitmentGraph -count=1 -v` passed; full affected packages remain required after G0 refreeze."
       rollback: "Before deployment, revert the unlanded candidate. No schema or deployed state changed."
-      heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+      heresy_delta:
+        discovered: 1
+        introduced: 0
+        repaired: 1
       conjecture_delta: "The single-appender/two-store architecture is retained; only the non-executable cyclic commitment edge is replaced."
       gate: "Independent G0 review of this exact repaired contract and implementation evidence remains mandatory before B resumes."
       first_panel:
@@ -423,7 +482,10 @@ now:
           result: "Replaced encrypt-and-pin with public `PreparePrivatePayload` then `PinPrivatePayload` over the exact frozen envelope; append validation now rejects private envelope metadata whose ComputerID or EventID differs from the appended event."
           evidence: "`TestPrivatePayloadAppendCompletesDirectedCommitmentGraph` now uses the authenticated HTTP client/handler for payload pin, event pin, head CAS, receipt verification, and head read, and separately proves a cross-event envelope refusal. Focused test passed."
           rollback: "Before deployment, revert the unlanded candidate. No deployed schema or state changed."
-          heresy_delta: {discovered: 2, introduced: 0, repaired: 2}
+          heresy_delta:
+            discovered: 2
+            introduced: 0
+            repaired: 2
           gate: "A fresh frozen G0 panel must verify both repairs; the second panel remains rejected."
       third_panel:
         frozen_candidate_sha256: 4316ced83fd43d23288009674a362232936a29ba88c255017a5f11f02df0cf39
@@ -436,7 +498,10 @@ now:
           result: "`PinPrivatePayload` now requires the guest `PrivateArtifactCipher` and successfully AEAD-decrypts the exact envelope against expected ComputerID/EventID before sending any pin request. corpusd remains structurally validating and keyless."
           evidence: "The authenticated HTTP product-path test now mutates canonical metadata and ciphertext independently; both refuse before pin. The valid private envelope still completes payload pin, event pin, corpusd CAS, EventHeadReceipt verification, embedded finalization, and head read."
           rollback: "Before deployment, revert the unlanded candidate. No deployed schema or state changed."
-          heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+          heresy_delta:
+            discovered: 1
+            introduced: 0
+            repaired: 1
           gate: "A fresh frozen G0 panel must verify the AEAD-authenticated product path; the third panel remains rejected."
       fourth_panel:
         frozen_candidate_sha256: 5ea756814a3ca1ef9551c3f5d3864e985370848e69f0355e7c3378c5caf4c330
@@ -450,7 +515,10 @@ now:
           result: "Removed the envelope from Firecracker kernel arguments and the shared runtime environment. vmmanager now formats a dedicated realization-local ext4 credential drive; the guest mounts it outside the updater namespace, trusted core enforces root/mode/regular-file bounds and unlinks before exchange, and consumed exchange replay refuses without a bearer."
           evidence: "`TestComputerCredentialUsesDedicatedDiskNotKernelArguments`, `TestConsumeComputerCredentialEnvelopeErasesSingleUseFile`, `TestConsumeComputerCredentialEnvelopeRejectsLooseMode`, and `TestCredentialEnvelopeExchangeRefusesReplay` pass. Six affected Go package suites pass; NixOS guest toplevel evaluation succeeds."
           rollback: "Before deployment, revert the unlanded candidate and retain pre-genesis R0. No deployed credential or event state changed."
-          heresy_delta: {discovered: 2, introduced: 0, repaired: 2}
+          heresy_delta:
+            discovered: 2
+            introduced: 0
+            repaired: 2
           gate: "A fresh frozen G0 panel must verify the appender-only credential boundary; the fourth panel remains rejected."
       fifth_panel:
         frozen_candidate_sha256: 1229c61e177f155c65be0d8475635474fe9ebe4f167a2eb320dc2c55af4eb5ee
@@ -464,7 +532,10 @@ now:
           result: "The root updater now runs in a private PID namespace with empty capability/ambient sets, invisible PID-scoped procfs, and `~@debug` syscall filtering. It cannot inspect trusted-core memory. Its only environment file contains nonsecret ComputerID/realization identity; credential mount, gateway token, and append bearer remain absent."
           evidence: "Nix evaluation of the generated updater serviceConfig proves `PrivatePIDs=true`, `ProtectProc=invisible`, `ProcSubset=pid`, empty `CapabilityBoundingSet`/`AmbientCapabilities`, `SystemCallFilter=[~@debug]`, credential `InaccessiblePaths`, and the identity-only environment file."
           rollback: "Before deployment, revert the unlanded candidate. No deployed service namespace or credential changed."
-          heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+          heresy_delta:
+            discovered: 1
+            introduced: 0
+            repaired: 1
           gate: "A fresh frozen G0 panel must verify updater cannot recover the appender bearer; the fifth panel remains rejected."
       sixth_panel:
         frozen_candidate_sha256: b4f3a3b28943fe58ba04ca0df39cd01ef93d0af9e5e2ca93e9f0eb180924880a
@@ -478,7 +549,10 @@ now:
           result: "Updater now atomically writes only `/run/choir-updater-control/restart`. A root-owned Nix-store path unit removes the trigger and restarts exactly `go-choir-sandbox.service`. Updater masks systemd/dbus control sockets and retains its empty capabilities/private PID/debug restrictions."
           evidence: "`TestRestartRequestManagerPublishesOnlyFixedTrigger` proves the fixed trigger and arbitrary-target refusal; updater package/binary compile, NixOS toplevel evaluation, and generated path-unit evaluation pass."
           rollback: "Before deployment, revert the unlanded candidate. No deployed service control path changed."
-          heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+          heresy_delta:
+            discovered: 1
+            introduced: 0
+            repaired: 1
           gate: "A fresh frozen G0 panel must verify no general PID 1 escape; the sixth panel remains rejected."
       seventh_panel:
         frozen_candidate_sha256: ec65831c1df8abf7b068e49bc6e7a1c2640a1aa327d5d1c494f065f654d2c203
