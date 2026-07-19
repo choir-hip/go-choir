@@ -127,10 +127,10 @@ type VMConfig struct {
 
 	// ComputerKind and related identity fields are product-level metadata for
 	// the guest's source-lineage projection. They are not secrets.
-	ComputerKind string
-	OwnerID      string
-	DesktopID    string
-	ComputerID   string
+	ComputerKind  string
+	OwnerID       string
+	DesktopID     string
+	ComputerID    string
 	RealizationID string
 	// ComputerCredentialEnvelope is a short-lived signed bootstrap envelope
 	// for guest-to-corpusd event capability exchange. It is scoped to VMID and
@@ -1316,6 +1316,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
 			fmt.Sprintf("choir.wire_publish_url=http://%s:8082", hostIP),
+			fmt.Sprintf("choir.platform_url=http://%s:8086", hostIP),
 			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
 			fmt.Sprintf("choir.source_service_runtime_url=http://127.0.0.1:%d", cfg.GuestPort),
 			fmt.Sprintf("choir.source_service_runtime_owner_id=%s", kernelParamValue(sourceServiceRuntimeOwnerID(cfg))),
@@ -1344,6 +1345,7 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 			fmt.Sprintf("choir.vmctl_url=http://%s:8083", hostIP),
 			fmt.Sprintf("choir.maild_url=http://%s:8087", hostIP),
 			fmt.Sprintf("choir.wire_publish_url=http://%s:8082", hostIP),
+			fmt.Sprintf("choir.platform_url=http://%s:8086", hostIP),
 			fmt.Sprintf("choir.source_service_url=http://%s:8787", hostIP),
 			fmt.Sprintf("choir.source_service_runtime_url=http://127.0.0.1:%d", cfg.GuestPort),
 			fmt.Sprintf("choir.source_service_runtime_owner_id=%s", kernelParamValue(sourceServiceRuntimeOwnerID(cfg))),

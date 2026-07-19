@@ -252,7 +252,9 @@ EOF
             ;;
           choir.wire_publish_url=*)
             echo "RUNTIME_WIRE_PUBLISH_URL=''${param#choir.wire_publish_url=}" >> "$ENV_FILE"
-            echo "CHOIR_PLATFORM_URL=''${param#choir.wire_publish_url=}" >> "$ENV_FILE"
+            ;;
+          choir.platform_url=*)
+            echo "CHOIR_PLATFORM_URL=''${param#choir.platform_url=}" >> "$ENV_FILE"
             ;;
           choir.source_service_url=*)
             echo "SOURCE_SERVICE_BASE_URL=''${param#choir.source_service_url=}" >> "$ENV_FILE"

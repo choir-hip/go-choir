@@ -586,7 +586,6 @@ func TestIsFirecrackerAvailable(t *testing.T) {
 	_ = IsFirecrackerAvailable()
 }
 
-
 func TestManagerPersistentDirCreation(t *testing.T) {
 	// Verify that BootVM creates the persistent directory.
 	tmpDir := t.TempDir()
@@ -1158,6 +1157,7 @@ func TestBuildFirecrackerConfig_LegacyBootIncludesRuntimeServiceURLs(t *testing.
 		"choir.vmctl_url=http://10.200.0.1:8083",
 		"choir.maild_url=http://10.200.0.1:8087",
 		"choir.wire_publish_url=http://10.200.0.1:8082",
+		"choir.platform_url=http://10.200.0.1:8086",
 		"choir.source_service_url=http://10.200.0.1:8787",
 		"choir.source_service_runtime_url=http://127.0.0.1:8085",
 		"choir.source_service_runtime_owner_id=universal-wire-platform",
@@ -1227,6 +1227,7 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"choir.vmctl_url=http://10.200.0.1:8083",
 		"choir.maild_url=http://10.200.0.1:8087",
 		"choir.wire_publish_url=http://10.200.0.1:8082",
+		"choir.platform_url=http://10.200.0.1:8086",
 		"choir.source_service_url=http://10.200.0.1:8787",
 		"choir.source_service_runtime_url=http://127.0.0.1:8085",
 		"choir.source_service_runtime_owner_id=owner@example.com",
