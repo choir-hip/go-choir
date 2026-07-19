@@ -586,15 +586,15 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-7
-    state: rejected_G1_repairing
-    ref: 153c68668a8b16f47ff5fba17a983d2d37339cbb
+    id: self-development-B-disabled-cutover-round-8
+    state: frozen_pending_G1
+    ref: 18e4f9dbfb37eb7d518103a8315542bc11f02f92
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Effects-OFF B cutover with all round-6 repairs, but round-7 G1 found three remaining clean-cutover blockers: the public proxy rejects exact terminal decision replay after mode advances before the guest can recognize it; the guest start authority can create proposals while mode is off because only the proxy gates starts; and top-level AGENTS/README guidance still directs self-development through deleted candidate-computer/promotion/lineage concepts."
-    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3]
-    verification: "All prior focused tests, runtime shards, native compile, and Nix evaluation pass. Round-7 diverse review split three rejects and three accepts; local source inspection confirms the public-proxy replay ordering, missing guest start mode gate, and stale top-level candidate-computer guidance. The accepting reviews did not rebut these paths."
-    disposition: "Rejected at G1. Effects remain OFF; do not deploy. Documented before repair-code mutation. Repair all three confirmed blockers, freeze an exact successor, and rerun a fresh diverse panel."
+    scope: "Effects-OFF B clean cutover plus all documented G1 repairs. Public decisions now resolve the owned active guest and verify exact terminal operation/event/request identity before reading later mode; exact replays return the original operation and changed terminal requests conflict. The canonical decision identity excludes the proxy-injected authorization receipt while all new decisions still require the exact signed current/consumed receipt. Public proposal starts inject the current ModeReceipt; guest-core independently verifies an exact signed propose_only receipt before any event, operation, or run effect, while an existing exact operation can be read under off without resuming effects. Top-level AGENTS and README guidance now names stable computers, guest-local capsules, accepted events/checkpoints, reconstruction, and rollback, and explicitly forbids candidate/worker computers or VMs."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb]
+    verification: "Full agentcore and proxy packages pass. Focused regressions prove public exact terminal replay bypasses unavailable later mode without a mutation POST, changed terminal input conflicts, public starts inject current mode receipts, and guest starts with absent mode create neither operation nor event. All runtime shards pass, complete native source compiles across 76 packages, diff checks pass, and Nix evaluates the dirty exact guest system to `/nix/store/qbjlb123cnh6mvsvn6xnpmbl1bgla7g3-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`."
+    disposition: "Frozen for fresh diverse G1 review. Effects remain OFF; do not deploy unless G1 accepts this exact SHA."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -604,9 +604,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 153c68668a8b16f47ff5fba17a983d2d37339cbb, /tmp/choir-selfdev-g1-round7-panel/manifest.tsv]
-  blocker_or_risk: "B remains blocked. Public exact terminal replay is not end-to-end canonical because the proxy validates the later mode first. Guest direct/public authority can start proposal effects under off/absent mode because only the proxy checks propose_only. AGENTS.md and README.md still instruct risky/personal computer change through candidate computers, promotion, and lineage despite the owner-settled stable-computer capsule/checkpoint/event path. Later deployed gates remain correctly deferred."
-  next_action: "Move exact terminal replay recognition ahead of proxy current-mode validation without weakening changed-request conflicts; enforce signed current propose_only mode in the guest start authority; replace top-level candidate-computer/promotion/lineage guidance with stable-computer capsule/checkpoint/event semantics; add end-to-end proxy and guest mode-off regression tests; freeze and re-review."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, /tmp/choir-selfdev-g1-round7-panel/manifest.tsv]
+  blocker_or_risk: "No known source blocker after round-8 repair. Full Linux/Nix realization, exact-image runtime capability receipt, deployment identity, mode-off staging behavior, and all C–F product transitions remain intentionally unproved deployed gates; none may be replaced with local evidence."
+  next_action: "Run a fresh diverse G1 panel against exact code candidate 18e4f9dbfb37eb7d518103a8315542bc11f02f92 and this authority card; accept only if no reproducible source blocker remains."
 
 successor:
   status: selected_draft_non_executable
