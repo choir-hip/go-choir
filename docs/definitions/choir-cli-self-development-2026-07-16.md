@@ -666,17 +666,17 @@ now:
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
   node_a_exact_guest_receipt:
-    observed_at: 2026-07-19T21:07:25Z
-    status: rejected_kernel_probe_namespace_stage
-    source_identity: 78aea4d9986c4fdd7d92b6d6177a8c664d5e90d7
-    guest_image_ref: /tmp/g1-overlay-guest
+    observed_at: 2026-07-19T21:19:28Z
+    status: rejected_kernel_probe_landlock_stage
+    source_identity: 1f9afdfa503f60257ecfd5a07b9a293c9a14075d
+    guest_image_ref: /tmp/g1-namespace-diagnostic
     managed_guest_rollback: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
     pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
-    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=overlay78a CHOIR_G1_EXPECTED_COMMIT=78aea4d9986c4fdd7d92b6d6177a8c664d5e90d7 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-overlay-guest/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
-    evidence: "The first serial-enabled exact guest identified `overlay module is not loaded`; commit 78aea4d9 added boot.kernelModules=[overlay]. The next exact image passed overlay discovery and then failed the combined user/PID/mount/network/UTS/IPC helper with `fork/exec ... choir-updater: operation not permitted`. In both runs the boot gate kept sandbox/updater down and the harness removed only its disposable VM/tap/state."
-    problem: "The probe service sets `RestrictSUIDSGID=true` while deliberately creating a child user namespace with UID/GID maps. That systemd seccomp hardening can deny the set-ID setup required by Go's namespace child before the helper executes. The namespace capability itself is not yet falsified; the service sandbox conflicts with the operation it is measuring."
-    next_probe: "Remove only RestrictSUIDSGID from this root one-shot probe, retaining the narrow capability bounding set, private devices/tmp, strict filesystem, AF_UNIX restriction, and fail-closed dependencies. Rebuild and rerun; no namespace or capability downgrade is authorized."
-    heresy_delta: {discovered: "Static positive kernel/config claims did not prove the boot-time enforcing probe; the probe's own systemd hardening conflicts with its UID/GID namespace measurement.", introduced: none, repaired: "Exact guest deployment and boot-loaded overlay are repaired; remaining mandatory probes are still open."}
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=nsdiag1f9 CHOIR_G1_EXPECTED_COMMIT=1f9afdfa503f60257ecfd5a07b9a293c9a14075d CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-namespace-diagnostic/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "After removing RestrictSUIDSGID and adding per-namespace failure diagnostics, the exact guest reached a later failure: `kernel capability probe: landlock_enforcing: exit status 1`. The probe currently iterates a Go map, so reaching Landlock does not prove all earlier checks passed, and child stderr is discarded; the exact Landlock syscall/policy error is not yet visible. The fail-closed boot and disposable cleanup remained correct."
+    problem: "Kernel capability checks execute in nondeterministic map order and helper stderr is discarded. A first failure therefore cannot establish an ordered completed prefix or expose the enforcement error. The previous RestrictSUIDSGID hypothesis remains unproved rather than accepted."
+    next_probe: "Make the mandatory probe order explicit and propagate helper stderr in the parent error. Rebuild and rerun the exact guest; repair only the first deterministic kernel/runtime failure and do not downgrade Landlock or any namespace requirement."
+    heresy_delta: {discovered: "Static positive kernel/config claims did not prove the boot-time enforcing probe; nondeterministic probe ordering and discarded child errors made the receipt ambiguous.", introduced: none, repaired: "Exact guest deployment and boot-loaded overlay are repaired; remaining mandatory probes are still open."}
 
 successor:
   status: selected_draft_non_executable
