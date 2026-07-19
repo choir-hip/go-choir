@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 // TestSelfDevelopmentEffectsOffGuestHarness boots the exact installed Nix guest
@@ -173,7 +175,15 @@ func issueHarnessCredential(t *testing.T, computerID, realizationID string) stri
 	if err := json.Unmarshal(response.Body, &result); err != nil || len(result.Envelope) == 0 {
 		t.Fatalf("decode harness credential: %v body=%s", err, response.Body)
 	}
-	return base64.RawURLEncoding.EncodeToString(result.Envelope)
+	var envelope any
+	if err := json.Unmarshal(result.Envelope, &envelope); err != nil {
+		t.Fatalf("decode harness credential envelope: %v body=%s", err, response.Body)
+	}
+	canonical, err := computerevent.CanonicalJSON(envelope)
+	if err != nil {
+		t.Fatalf("canonicalize harness credential envelope: %v", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(canonical)
 }
 
 func harnessPath(t *testing.T, envName, fallback string) string {
