@@ -622,6 +622,20 @@ now:
     selected: "Use Node A (`ssh node-a`) as the x86_64-linux harness. It is a lagging Choir mirror; first fast-forward its clean checkout and deploy the current Node A code/config with rollback preserved. Run agentic consensus on approval retry semantics, canonical decision-binding authority, capsule broker socket ownership, and standardized artifact references before further product repair."
     boundary: "Node A is harness infrastructure, not staging/product acceptance. SSH may administer the harness but is not admissible proof for the public no-SSH self-development product path. Effects remain OFF and G1 remains rejected."
 
+  node_a_update_receipt:
+    observed_at: 2026-07-19T20:00:00Z
+    status: blocked_build
+    source_identity: e53a30b1
+    prior_source_identity: fb2b54aa1142bdb1eb84eeaf277063e4e90c4b8c
+    prior_system_rollback: /nix/store/r82nwfx6yxg0si317call636713pcpix-nixos-system-go-choir-a-26.05.20260409.4c1018d
+    evidence_class: "Exact x86_64-linux `nixos-rebuild build --flake /opt/go-choir#go-choir-a` on Node A."
+    problem: "The clean fast-forward succeeded, but the current host realization cannot build: commonGoArgs.vendorHash is stale. Nix expected sha256-JxOGfaZ3J71NVicFEhn1Vsgy5nOa1Sk74gQ0oroAhLA= and computed sha256-NQ3VEnZ8q5Lo1uat8z9lV7YCM4auEkQu6uiI1TcIEvs=. No activation occurred; the prior generation remains running and healthy."
+    mutation_class: red
+    protected_surfaces: [deployment_configuration, Node_A_harness]
+    rollback_path: "The running system remains `/nix/store/r82nwfx6yxg0si317call636713pcpix-nixos-system-go-choir-a-26.05.20260409.4c1018d`; reset the clean Node A checkout to fb2b54aa only if the harness update must be abandoned."
+    heresy_delta: {discovered: "Pinned Go dependency hash did not match the current module graph.", introduced: none, repaired: none}
+    conjecture_delta: "Node A is reachable, clean, healthy, and can evaluate/build current Nix inputs; the first exact build falsified the assumption that the current source candidate is a realizable host configuration. Repair the deterministic dependency hash, rebuild without activation, then inspect the exact system diff."
+
 successor:
   status: selected_draft_non_executable
   candidate_goal: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
