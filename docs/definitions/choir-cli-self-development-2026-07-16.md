@@ -623,18 +623,20 @@ now:
     boundary: "Node A is harness infrastructure, not staging/product acceptance. SSH may administer the harness but is not admissible proof for the public no-SSH self-development product path. Effects remain OFF and G1 remains rejected."
 
   node_a_update_receipt:
-    observed_at: 2026-07-19T20:00:00Z
-    status: blocked_build
-    source_identity: e53a30b1
+    observed_at: 2026-07-19T20:16:00Z
+    status: updated_healthy
+    source_identity: dfb87d1f7d7e4be0a83c6cf32586e4c1af2d5818
     prior_source_identity: fb2b54aa1142bdb1eb84eeaf277063e4e90c4b8c
+    active_system: /nix/store/na5g9yjsja4gqnl7q8iqc5w8h1h6vid9-nixos-system-go-choir-a-26.05.20260409.4c1018d
     prior_system_rollback: /nix/store/r82nwfx6yxg0si317call636713pcpix-nixos-system-go-choir-a-26.05.20260409.4c1018d
-    evidence_class: "Exact x86_64-linux `nixos-rebuild build --flake /opt/go-choir#go-choir-a` on Node A."
-    problem: "The clean fast-forward succeeded, but the current host realization cannot build: commonGoArgs.vendorHash is stale. Nix expected sha256-JxOGfaZ3J71NVicFEhn1Vsgy5nOa1Sk74gQ0oroAhLA= and computed sha256-NQ3VEnZ8q5Lo1uat8z9lV7YCM4auEkQu6uiI1TcIEvs=. No activation occurred; the prior generation remains running and healthy."
+    evidence_class: "Exact x86_64-linux Nix host build, dry activation, activation, systemd health, loopback API health, and public build-identity readback on Node A."
+    initial_problem: "The first build found commonGoArgs.vendorHash stale: Nix expected sha256-JxOGfaZ3J71NVicFEhn1Vsgy5nOa1Sk74gQ0oroAhLA= and computed sha256-NQ3VEnZ8q5Lo1uat8z9lV7YCM4auEkQu6uiI1TcIEvs=."
+    resolution: "Commit dfb87d1f refreshed the deterministic Go module hash. The exact Node A realization then built and switched. `systemctl is-system-running` returned running, no failed units were listed, and both loopback and https://choir-ip.com/health reported healthy proxy/vmctl with build commit dfb87d1f7d7e4be0a83c6cf32586e4c1af2d5818."
     mutation_class: red
     protected_surfaces: [deployment_configuration, Node_A_harness]
-    rollback_path: "The running system remains `/nix/store/r82nwfx6yxg0si317call636713pcpix-nixos-system-go-choir-a-26.05.20260409.4c1018d`; reset the clean Node A checkout to fb2b54aa only if the harness update must be abandoned."
-    heresy_delta: {discovered: "Pinned Go dependency hash did not match the current module graph.", introduced: none, repaired: none}
-    conjecture_delta: "Node A is reachable, clean, healthy, and can evaluate/build current Nix inputs; the first exact build falsified the assumption that the current source candidate is a realizable host configuration. Repair the deterministic dependency hash, rebuild without activation, then inspect the exact system diff."
+    rollback_path: "Switch to `/nix/store/r82nwfx6yxg0si317call636713pcpix-nixos-system-go-choir-a-26.05.20260409.4c1018d` and reset the clean Node A checkout to fb2b54aa if the harness update must be abandoned."
+    heresy_delta: {discovered: "Pinned Go dependency hash did not match the current module graph.", introduced: none, repaired: "The pinned hash now matches the exact current module graph and the host realization builds."}
+    conjecture_delta: "Node A is now a current, healthy x86_64-linux host with exact guest image artifacts installed under `/var/lib/go-choir/guest`; this establishes the harness substrate but does not yet prove the self-development lifecycle or G1."
 
 successor:
   status: selected_draft_non_executable
