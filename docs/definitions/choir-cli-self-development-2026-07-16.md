@@ -586,14 +586,15 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-5
-    state: rejected_G1_repairing
-    ref: 32b315971dc4939ccf8499d7740336300d5da81a
+    id: self-development-B-disabled-cutover-round-6
+    state: frozen_pending_G1
+    ref: fb0e56e33de17fbf7cf7326b345fa701d6a241a3
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Effects-OFF B cutover with round-4 repairs, but round-5 G1 found signer cross-principal socket authority, pre-genesis and crash-window credential-revocation stranding, canonical accept_once rejection enforcement missing in guest authority, and surviving current candidate/adoption UI and doctrine."
-    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e]
-    disposition: "Rejected at G1. Effects remain OFF; do not deploy. Repair every confirmed round-5 blocker, freeze a new exact candidate, and rerun a fresh diverse panel."
+    scope: "Effects-OFF B clean cutover plus all documented G1 repairs. Guest-core and verifier signers have disjoint users, groups, sockets, writable roots, and inaccessible sibling roots. Credential exchange is pre-genesis-safe; current and next-epoch capabilities and pending lifecycle receipts survive restart/revocation crash windows in a root-only runtime channel inaccessible to the updater. Canonical guest authority rejects accept_once rejection, verifies current/consumed ModeReceipt bindings, and mode reads use the scoped guest bearer. Compute Monitor and current doctrine/state docs no longer expose deleted candidate/package/adoption surfaces as live product paths."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a]
+    verification: "Focused tests pass for credential exchange/replay, paired renewal, restart handoff, crash-window post-revocation recovery, accept_once decision binding, and changed packages. `scripts/go-test-runtime-shards` passed all four agentcore and textureowner shards. Frontend production build passed with pre-existing warnings. Guest NixOS toplevel evaluated to `/nix/store/1a5z9s919hw8l2cjb0amm8jf4q7wi8q6-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`. Linux cross-build remains unavailable on arm64 with `CGO_ENABLED=0` because the updater's existing computerversion/Dolt dependency requires cgo; this is not substituted for the later exact Nix build/deploy gate."
+    disposition: "Frozen for fresh diverse G1 review. Effects remain OFF; do not deploy unless G1 accepts this exact SHA."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -603,9 +604,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 32b315971dc4939ccf8499d7740336300d5da81a, /tmp/choir-selfdev-g1-round4-panel/manifest.tsv]
-  blocker_or_risk: "G0 remains accepted; B remains blocked. Both signer principals share one socket-access group and can invoke each other's typed service. Credential consumption tries to append key_revoked before GenesisImported when no event head exists, and the later append-then-memory-token-swap window can advance the canonical epoch before the next capability is durable. The canonical guest decision handler can append rejection under accept_once when bypassing the proxy. Compute Monitor and current platform state/doctrine/NOW/architecture still present deleted candidate and AppChangePackage/AppAdoption surfaces as live. These are source blockers, not deployed-only gates."
-  next_action: "Split signer socket authorization by principal; make credential consumption pre-genesis-safe and post-genesis revocation crash-durable; enforce accept_once rejection refusal in canonical guest authority; delete or migrate all current candidate/adoption UI and doctrine; freeze and re-review."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, /tmp/choir-selfdev-g1-round5-panel/manifest.tsv]
+  blocker_or_risk: "No known source blocker after round-6 repair. The full Linux/Nix guest realization, immutable-image runtime capability receipt, deployment identity, mode-off staging behavior, and all C–F product transitions remain intentionally unproved deployed gates; none may be replaced with local evidence."
+  next_action: "Run a fresh diverse G1 panel against exact code candidate fb0e56e33de17fbf7cf7326b345fa701d6a241a3 and this authority card; accept only if no reproducible source blocker remains."
 
 successor:
   status: selected_draft_non_executable
