@@ -665,6 +665,18 @@ now:
     rollback_path: "No harness VM or state remains. The active host system and retained pre-existing Firecracker process were not replaced. Any guest-image pointer cutover must preserve the current unmanaged directory as an explicit rollback ref."
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
+  node_a_exact_guest_receipt:
+    observed_at: 2026-07-19T20:53:22Z
+    status: rejected_kernel_probe
+    source_identity: cf1921a0ac6894655ea4702c2ffeea9cea53444c
+    guest_image_ref: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
+    pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=cf1921a0a CHOIR_G1_EXPECTED_COMMIT=cf1921a0ac6894655ea4702c2ffeea9cea53444c go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "The managed exact guest found and mounted the realization-bound CHOIR_CRED disk, started isolated guest-core and verifier signers, and began the mandatory boot-time capability probe. `go-choir-kernel-capability-probe.service` failed; sandbox/updater correctly stayed down, `/health` never opened, and BootVM failed after the two-minute fail-closed timeout. The disposable VM, tap, and temporary state were removed."
+    problem: "G0 static kernel/config inspection was insufficient: the exact runtime probe rejects the current guest before self-development starts. The probe's stderr is journal-only, so the Firecracker harness receipt does not yet identify which mandatory capability failed."
+    next_probe: "Route the probe's stdout/stderr to the serial console, rebuild the same immutable guest, and rerun the disposable harness. Repair or blocked_incomplete follows the exact runtime error; no capability downgrade is authorized."
+    heresy_delta: {discovered: "Static positive kernel/config claims did not prove the boot-time enforcing probe.", introduced: none, repaired: "The guest image deployment identity gap is repaired by cf1921a0; the mandatory capability failure remains open."}
+
 successor:
   status: selected_draft_non_executable
   candidate_goal: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
