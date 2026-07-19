@@ -135,22 +135,53 @@ func runKernelProbeHelper(ctx context.Context, helper string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, executable)
-	cmd.Env = append(os.Environ(), kernelProbeHelperEnv+"="+helper)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	command := func(flags uintptr, mapRoot bool) *exec.Cmd {
+		cmd := exec.CommandContext(ctx, executable)
+		cmd.Env = append(os.Environ(), kernelProbeHelperEnv+"="+helper)
+		if flags != 0 {
+			attr := &syscall.SysProcAttr{Cloneflags: flags}
+			if mapRoot {
+				attr.UidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Geteuid(), Size: 1}}
+				attr.GidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getegid(), Size: 1}}
+				attr.GidMappingsEnableSetgroups = false
+			}
+			cmd.SysProcAttr = attr
+		}
+		return cmd
+	}
 	switch helper {
 	case "namespaces":
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNS | unix.CLONE_NEWNET | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC,
-			UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Geteuid(), Size: 1}},
-			GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getegid(), Size: 1}},
-			GidMappingsEnableSetgroups: false,
+		combined := uintptr(unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNS | unix.CLONE_NEWNET | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC)
+		if err := command(combined, true).Run(); err != nil {
+			probes := []struct {
+				name    string
+				flag    uintptr
+				mapRoot bool
+			}{
+				{name: "user", flag: unix.CLONE_NEWUSER, mapRoot: true},
+				{name: "pid", flag: unix.CLONE_NEWPID},
+				{name: "mount", flag: unix.CLONE_NEWNS},
+				{name: "network", flag: unix.CLONE_NEWNET},
+				{name: "uts", flag: unix.CLONE_NEWUTS},
+				{name: "ipc", flag: unix.CLONE_NEWIPC},
+			}
+			results := make([]string, 0, len(probes))
+			for _, probe := range probes {
+				probeErr := command(probe.flag, probe.mapRoot).Run()
+				if probeErr == nil {
+					results = append(results, probe.name+"=ok")
+				} else {
+					results = append(results, probe.name+"="+probeErr.Error())
+				}
+			}
+			return fmt.Errorf("combined namespaces: %w (individual: %s)", err, strings.Join(results, ", "))
 		}
+		return nil
 	case "overlay":
-		cmd.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWNS}
+		return command(unix.CLONE_NEWNS, false).Run()
+	default:
+		return command(0, false).Run()
 	}
-	return cmd.Run()
 }
 
 func probeCgroupController() error {
