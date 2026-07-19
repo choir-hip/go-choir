@@ -666,17 +666,17 @@ now:
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
   node_a_exact_guest_receipt:
-    observed_at: 2026-07-19T21:26:31Z
-    status: rejected_kernel_probe_user_namespace_capset
-    source_identity: 3ebef8fed3bdb72b710092132a25b9c5d42bad76
-    guest_image_ref: /tmp/g1-deterministic-probe
+    observed_at: 2026-07-19T21:33:54Z
+    status: rejected_kernel_probe_overlay_mount
+    source_identity: e0b98598d2f5f6814dc573aeab3531f2814dc89f
+    guest_image_ref: /tmp/g1-capset-probe
     managed_guest_rollback: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
     pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
-    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=det3ebef8 CHOIR_G1_EXPECTED_COMMIT=3ebef8fed3bdb72b710092132a25b9c5d42bad76 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-deterministic-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
-    evidence: "The ordered probe reported `combined namespaces ... operation not permitted` with `individual: user=... operation not permitted, pid=ok, mount=ok, network=ok, uts=ok, ipc=ok`. This supersedes the ambiguous Landlock-first receipt; Landlock has not yet been reached in deterministic order. Fail-closed boot and disposable cleanup remained correct."
-    problem: "The probe maps child UID 0 to parent UID 0 but its systemd CapabilityBoundingSet/AmbientCapabilities omit CAP_SETFCAP. Since Linux 5.12, creating that UID-0 mapping requires CAP_SETFCAP in the parent namespace. The exact kernel supports every namespace; the one-shot probe lacks the capability needed to establish its mapping."
-    next_probe: "Add only CAP_SETFCAP to the root one-shot probe's bounded and ambient capabilities, rebuild, and rerun the deterministic exact guest. No namespace requirement or service fail-closed dependency changes."
-    heresy_delta: {discovered: "The mandatory probe's bounded capability set omitted CAP_SETFCAP required by modern kernels for a UID-0 user-namespace mapping.", introduced: none, repaired: "Exact guest deployment, boot-loaded overlay, deterministic probe order, and detailed helper errors are repaired; later mandatory probes remain open."}
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=capsete0b CHOIR_G1_EXPECTED_COMMIT=e0b98598d2f5f6814dc573aeab3531f2814dc89f CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-capset-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "With CAP_SETFCAP, the deterministic namespace stage completed and the next stage failed `kernel capability probe: overlayfs_loaded_and_mountable: exit status 1: permission denied`. The module is loaded; the mount helper is denied. Fail-closed boot and disposable cleanup remained correct."
+    problem: "The overlay probe enters only a new mount namespace before exec, unlike the capsule path and namespace probe which pair a mapped user namespace with the mount namespace. The receipt also does not identify whether private-root propagation or the overlay mount returned EPERM. The current helper therefore does not yet prove mountability under the actual capsule authority model."
+    next_probe: "Run the overlay helper inside a mapped user+mount namespace, matching the guest capsule authority boundary, and add operation context to both mount failures. Rebuild and rerun in deterministic order; do not weaken overlay enforcement."
+    heresy_delta: {discovered: "The mandatory overlay probe did not execute under the same mapped user+mount namespace authority used by capsules.", introduced: none, repaired: "Exact guest deployment, boot-loaded overlay, deterministic probe order/errors, and UID-0 namespace mapping are repaired; later mandatory probes remain open."}
 
 successor:
   status: selected_draft_non_executable
