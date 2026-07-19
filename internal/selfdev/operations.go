@@ -123,6 +123,28 @@ func NewStore(db DBProvider, heads HeadReader) (*Store, error) {
 	return &Store{db: db.DB(), heads: heads, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
+func (s *Store) BindStartIntent(ctx context.Context, computerID, idempotencyKey, requestCommitment string) error {
+	computerID = strings.TrimSpace(computerID)
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	requestCommitment = strings.TrimSpace(requestCommitment)
+	if computerID == "" || idempotencyKey == "" || !computerevent.IsSHA256(requestCommitment) {
+		return fmt.Errorf("self-development start intent: complete canonical binding is required")
+	}
+	now := s.now().UTC().Truncate(time.Microsecond)
+	_, insertErr := s.db.ExecContext(ctx, `INSERT INTO self_development_start_intents (computer_id, idempotency_key, request_commitment, created_at) VALUES (?, ?, ?, ?)`, computerID, idempotencyKey, requestCommitment, now)
+	var stored string
+	if err := s.db.QueryRowContext(ctx, `SELECT request_commitment FROM self_development_start_intents WHERE computer_id=? AND idempotency_key=?`, computerID, idempotencyKey).Scan(&stored); err != nil {
+		if insertErr != nil {
+			return fmt.Errorf("self-development start intent: persist: %w", insertErr)
+		}
+		return fmt.Errorf("self-development start intent: read: %w", err)
+	}
+	if stored != requestCommitment {
+		return fmt.Errorf("%w: start request commitment changed", ErrConflict)
+	}
+	return nil
+}
+
 func (s *Store) Start(ctx context.Context, request StartRequest) (Operation, error) {
 	request.ComputerID = strings.TrimSpace(request.ComputerID)
 	request.IdempotencyKey = strings.TrimSpace(request.IdempotencyKey)

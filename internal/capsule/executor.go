@@ -26,6 +26,8 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
+const capsuleNamespaceHostID = 65534
+
 // Executor is the guest-core authority for ephemeral capsule lifecycle and
 // opaque, run-bound capabilities. All authority is process-local and is lost
 // when the guest runtime restarts; no host daemon or vsock authority exists.
@@ -193,14 +195,14 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	hostSocket := filepath.Join(caps.MergedDir, "run", "capsule", "broker.sock")
 	_ = os.Remove(hostSocket)
-	args := []string{"--socket", "/run/capsule/broker.sock", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/"}
+	args := []string{"--socket", "/run/capsule/broker.sock", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/", "--authorized-peer-uid", fmt.Sprint(capsuleNamespaceHostID)}
 	cmd := exec.Command("/run/capsule/broker", args...)
 	cmd.Env = []string{"PATH=/bin:/usr/bin:/run/current-system/sw/bin", "HOME=/root", "TMPDIR=/tmp"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Chroot:                     caps.MergedDir,
 		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNS | unix.CLONE_NEWNET | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP,
-		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 65534, Size: 1}},
-		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 65534, Size: 1}},
+		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: capsuleNamespaceHostID, Size: 1}},
+		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: capsuleNamespaceHostID, Size: 1}},
 		GidMappingsEnableSetgroups: false,
 		Pdeathsig:                  syscall.SIGKILL,
 	}
@@ -213,12 +215,23 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	if err := caps.Cgroup.AddPID(caps.PID); err != nil {
 		return fmt.Errorf("capsule admit broker to cgroup: %w", err)
 	}
-	client := NewBrokerClient(hostSocket, e.publicKey)
+	readinessCapability := &Capability{
+		CapabilityID: "broker-readiness-" + caps.ID, Handle: "broker-readiness", CapsuleID: caps.ID,
+		AgentRunID: "guest-core-readiness", AgentRole: RoleResearcher, TargetCapsule: caps.ID,
+		Verbs: RoleVerbSets[RoleResearcher], ExpiresAt: time.Now().UTC().Add(time.Minute),
+	}
+	if err := SignCapability(readinessCapability, e.privateKey, "guest-ephemeral"); err != nil {
+		return fmt.Errorf("capsule sign broker readiness capability: %w", err)
+	}
 	deadline := time.Now().Add(10 * time.Second)
 	for {
+		client := NewBrokerClient(hostSocket, e.publicKey)
 		if err := client.Connect(ctx); err == nil {
-			caps.broker = client
-			return nil
+			if _, probeErr := client.Stat(ctx, readinessCapability, "."); probeErr == nil {
+				caps.broker = client
+				return nil
+			}
+			_ = client.Close()
 		}
 		if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
 			return fmt.Errorf("capsule broker exited before readiness")

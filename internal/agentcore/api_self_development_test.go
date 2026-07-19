@@ -325,19 +325,31 @@ func TestExactTerminalDecisionReplayDoesNotDependOnLaterCurrentMode(t *testing.T
 		ExpectedDesiredEventHead: strings.Repeat("a", 64), ExpectedEffectiveEventHead: strings.Repeat("b", 64),
 		ExpectedDesiredStateCommitment: strings.Repeat("c", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
 		RequireExpectedHead: true, PayloadCommitment: strings.Repeat("e", 64),
-		ProposedEffectRef: strings.Repeat("f", 64), DecisionRef: decisionRef,
+		ProposedEffectRef: publicDecision.BundleDigest, DecisionRef: decisionRef,
 		VerifierRefs: []string{strings.Repeat("1", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
 	}
 	digest, err := event.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
-	operation := selfdev.Operation{State: selfdev.StateRejected, DecisionEvent: digest}
-	if !exactTerminalDecisionReplay(operation, event, true, selfdev.StateRejected, decisionRef) {
+	operation := selfdev.Operation{
+		OperationID: "operation-replay", ComputerID: "computer-replay", TrajectoryID: event.TrajectoryID,
+		CapsuleID: event.CapsuleID, BundleDigest: publicDecision.BundleDigest,
+		VerifierRefs: []string{publicDecision.VerifierRef}, State: selfdev.StateRejected, DecisionEvent: digest,
+	}
+	if !exactTerminalDecisionReplay(operation, event, true, operation.ComputerID, operation.OperationID, "owner", selfdev.StateRejected, computerevent.EventEffectRejected, decisionRef, publicDecision) {
 		t.Fatal("exact terminal retry was not recognized before current-mode authorization")
 	}
-	if exactTerminalDecisionReplay(operation, event, true, selfdev.StateRejected, strings.Repeat("2", 64)) {
-		t.Fatal("changed terminal retry was accepted")
+	inconsistent := event
+	inconsistent.ProposedEffectRef = strings.Repeat("2", 64)
+	inconsistentDigest, err := inconsistent.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inconsistentOperation := operation
+	inconsistentOperation.DecisionEvent = inconsistentDigest
+	if exactTerminalDecisionReplay(inconsistentOperation, inconsistent, true, operation.ComputerID, operation.OperationID, "owner", selfdev.StateRejected, computerevent.EventEffectRejected, decisionRef, publicDecision) {
+		t.Fatal("semantically inconsistent terminal projection was accepted")
 	}
 }
 
@@ -372,5 +384,23 @@ func TestGuestStartRefusesAbsentModeBeforeAnyEffect(t *testing.T) {
 	}
 	if event, found, err := productStore.EventByIdempotency(context.Background(), computerID, "selfdev-start-"+computerevent.DigestBytes([]byte(computerID+"\x00mode-off-start"))); err != nil || found {
 		t.Fatalf("absent-mode start appended event: event=%+v found=%v err=%v", event, found, err)
+	}
+}
+
+func TestRecoveredStartEventRequiresExactCausalBinding(t *testing.T) {
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, ComputerID: "computer-crash",
+		EventKind: computerevent.EventTrajectoryStarted, TrajectoryID: "trajectory-crash",
+		IdempotencyKey: "selfdev-start-crash", RequestCommitment: strings.Repeat("a", 64),
+		AuthorityRef: "public-self-development-api:owner", PrivacyClass: "private",
+		OutputArtifactRefs: []string{strings.Repeat("b", 64)},
+	}
+	ref, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner")
+	if err != nil || ref != event.OutputArtifactRefs[0] {
+		t.Fatalf("exact recovered event ref=%q err=%v", ref, err)
+	}
+	event.AuthorityRef = "public-self-development-api:other"
+	if _, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner"); err == nil {
+		t.Fatal("changed trajectory authority recovered the old event")
 	}
 }

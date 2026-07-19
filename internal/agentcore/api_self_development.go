@@ -207,6 +207,10 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current signed mode does not authorize proposal"})
 		return
 	}
+	if err := h.rt.selfdevOperations.BindStartIntent(r.Context(), computerID, request.IdempotencyKey, requestCommitment); err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
 	if h.rt.eventAppender == nil || h.rt.privateArtifactCipher == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer event authority unavailable"})
 		return
@@ -248,12 +252,11 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "trajectory event projection unavailable"})
 			return
 		}
-	} else {
-		if event.TrajectoryID != trajectoryID || len(event.OutputArtifactRefs) != 1 {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable trajectory event binding mismatch"})
-			return
-		}
-		promptDigest = event.OutputArtifactRefs[0]
+	}
+	promptDigest, err = recoveredStartPromptRef(event, computerID, trajectoryID, eventIdempotency, ownerID)
+	if err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
 	}
 
 	operation, err := h.rt.selfdevOperations.Start(r.Context(), selfdev.StartRequest{
@@ -274,6 +277,17 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 		return
 	}
 	writeAPIJSON(w, http.StatusCreated, operation)
+}
+
+func recoveredStartPromptRef(event computerevent.Event, computerID, trajectoryID, eventIdempotency, ownerID string) (string, error) {
+	if event.SchemaVersion != computerevent.SchemaVersionV1 || event.ComputerID != computerID ||
+		event.EventKind != computerevent.EventTrajectoryStarted || event.TrajectoryID != trajectoryID ||
+		event.IdempotencyKey != eventIdempotency ||
+		event.AuthorityRef != "public-self-development-api:"+ownerID || event.PrivacyClass != "private" ||
+		len(event.OutputArtifactRefs) != 1 || !computerevent.IsSHA256(event.OutputArtifactRefs[0]) {
+		return "", fmt.Errorf("durable trajectory event binding mismatch")
+	}
+	return event.OutputArtifactRefs[0], nil
 }
 
 func operationReceiptProjection(operation selfdev.Operation) map[string]any {
@@ -616,7 +630,7 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		}
 		modeReceiptDigest = computerevent.DigestBytes(modeBytes)
 	}
-	if exactTerminalDecisionReplay(operation, event, found, nextState, decisionRef) {
+	if exactTerminalDecisionReplay(operation, event, found, computerID, operationID, ownerID, nextState, expectedKind, decisionRef, request) {
 		writeAPIJSON(w, http.StatusOK, operation)
 		return
 	}
@@ -731,8 +745,28 @@ func selfDevelopmentDecisionRef(request selfDevelopmentDecisionRequest) (string,
 	return computerevent.DigestBytes(requestBytes), nil
 }
 
-func exactTerminalDecisionReplay(operation selfdev.Operation, event computerevent.Event, found bool, nextState, decisionRef string) bool {
-	if !found || operation.State != nextState || event.DecisionRef != decisionRef {
+func exactTerminalDecisionReplay(operation selfdev.Operation, event computerevent.Event, found bool, computerID, operationID, ownerID, nextState string, expectedKind computerevent.EventKind, decisionRef string, request selfDevelopmentDecisionRequest) bool {
+	expectedPending := ""
+	if request.ExpectedPendingTransitionRef != nil {
+		expectedPending = strings.TrimSpace(*request.ExpectedPendingTransitionRef)
+	}
+	if !found || operation.ComputerID != computerID || operation.OperationID != operationID ||
+		operation.State != nextState || operation.BundleDigest != request.BundleDigest ||
+		operation.TrajectoryID == "" || operation.CapsuleID == "" ||
+		!selfDevelopmentContainsString(operation.VerifierRefs, request.VerifierRef) ||
+		event.SchemaVersion != computerevent.SchemaVersionV1 || event.ComputerID != computerID ||
+		event.EventKind != expectedKind || event.TrajectoryID != operation.TrajectoryID ||
+		event.CapsuleID != operation.CapsuleID || event.ParentEventID != operationID ||
+		event.ActorProfile != agentprofile.Super || event.AuthorityRef != "external-owner:"+ownerID ||
+		event.PrivacyClass != "owner" || event.ReducerVersion != computerevent.ReducerVersionV1 ||
+		event.RequestCommitment != computerevent.ZeroHead ||
+		event.ProposedEffectRef != request.BundleDigest || event.DecisionRef != decisionRef ||
+		len(event.VerifierRefs) != 1 || event.VerifierRefs[0] != request.VerifierRef ||
+		event.ExpectedDesiredEventHead != request.ExpectedDesiredEventHead ||
+		event.ExpectedEffectiveEventHead != request.ExpectedEffectiveEventHead ||
+		event.ExpectedPendingTransitionRef != expectedPending ||
+		event.ExpectedDesiredStateCommitment != request.ExpectedDesiredStateCommitment ||
+		event.ExpectedEffectiveStateCommitment != request.ExpectedEffectiveStateCommitment {
 		return false
 	}
 	eventDigest, err := event.Digest()

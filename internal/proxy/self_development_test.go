@@ -231,7 +231,7 @@ func TestPublicTerminalDecisionReplayPrecedesLaterModeAuthority(t *testing.T) {
 		Sequence: 1, PreviousHead: computerevent.ZeroHead, EventKind: computerevent.EventEffectRejected,
 		OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "event-replay", RequestCommitment: computerevent.ZeroHead,
 		TrajectoryID: "trajectory-replay", CapsuleID: "capsule-replay", ParentEventID: "operation-replay",
-		ActorProfile: "super", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
+		ActorProfile: "super", AuthorityRef: "external-owner:owner-replay", PrivacyClass: "owner",
 		ExpectedDesiredEventHead: decision.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: decision.ExpectedEffectiveEventHead,
 		ExpectedDesiredStateCommitment: decision.ExpectedDesiredStateCommitment, ExpectedEffectiveStateCommitment: decision.ExpectedEffectiveStateCommitment,
 		RequireExpectedHead: true, PayloadCommitment: digest('1'), ProposedEffectRef: decision.BundleDigest,
@@ -242,7 +242,8 @@ func TestPublicTerminalDecisionReplayPrecedesLaterModeAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	operation := selfdev.Operation{
-		OperationID: "operation-replay", ComputerID: "computer-replay", BundleDigest: decision.BundleDigest,
+		OperationID: "operation-replay", ComputerID: "computer-replay",
+		TrajectoryID: event.TrajectoryID, CapsuleID: event.CapsuleID, BundleDigest: decision.BundleDigest,
 		VerifierRefs: []string{decision.VerifierRef}, DecisionEvent: eventDigest, State: selfdev.StateRejected,
 	}
 	var decisionPosts int
@@ -276,23 +277,15 @@ func TestPublicTerminalDecisionReplayPrecedesLaterModeAuthority(t *testing.T) {
 		http.Error(w, "later mode unavailable", http.StatusServiceUnavailable)
 	}))
 	defer corpusd.Close()
-	handler, _, _, store := testProxyEnvWithAuthStore(t)
+	handler, privateKey, _, _ := testProxyEnvWithAuthStore(t)
 	handler.vmctlClient = vmctl.NewClient(ownership.URL)
 	handler.cfg.CorpusdURL = corpusd.URL
-	user, err := store.CreateUser("owner-replay", "owner-replay@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "selfdev-replay", []string{"computer:self_development:approve"}, "computer-replay", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	body, err := json.Marshal(decision)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-replay/self-development/operations/operation-replay/decision", strings.NewReader(string(body)))
-	request.Header.Set("Authorization", "Bearer "+secret)
+	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-replay")})
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
 	if response.Code != http.StatusOK || modeReads != 0 || decisionPosts != 0 {
@@ -309,7 +302,7 @@ func TestPublicTerminalDecisionReplayPrecedesLaterModeAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	changedRequest := httptest.NewRequest(http.MethodPost, "/api/computers/computer-replay/self-development/operations/operation-replay/decision", strings.NewReader(string(changedBody)))
-	changedRequest.Header.Set("Authorization", "Bearer "+secret)
+	changedRequest.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-replay")})
 	changedResponse := httptest.NewRecorder()
 	handler.HandleAPI(changedResponse, changedRequest)
 	if changedResponse.Code != http.StatusConflict || modeReads != 0 || decisionPosts != 0 {

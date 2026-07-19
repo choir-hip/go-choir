@@ -578,6 +578,14 @@ CREATE TABLE IF NOT EXISTS computer_effective_state (
 	updated_at                     DATETIME(6) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS self_development_start_intents (
+	computer_id        VARCHAR(128) NOT NULL,
+	idempotency_key    VARCHAR(255) NOT NULL,
+	request_commitment CHAR(64) NOT NULL,
+	created_at         DATETIME(6) NOT NULL,
+	PRIMARY KEY(computer_id, idempotency_key)
+);
+
 CREATE TABLE IF NOT EXISTS self_development_operations (
 	operation_id                   VARCHAR(255) PRIMARY KEY,
 	computer_id                    VARCHAR(128) NOT NULL,

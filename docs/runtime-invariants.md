@@ -272,9 +272,10 @@ Acceptance levels are explicit:
 
 Do not claim doctrine-level `promotion-level` without verifier contract
 evidence, owner review, an observed served route/build cutover, and rollback
-proof. The current API may synthesize a package/adoption `promotion-level` from
-a promotion event plus a recorded rollback reference; that is protocol evidence
-only until the served computer and rollback behavior are observed. Do not claim `continuation-level`
+proof. Self-development never synthesizes package/adoption acceptance: its
+admissible evidence joins the accepted ComputerEvent, immutable checkpoint,
+served route projection, reconstruction, and observed rollback. Do not claim
+`continuation-level`
 without run-memory/compaction and bounded continuation evidence.
 `continuation-level` remains transitional residue, not a target permanent
 acceptance class.

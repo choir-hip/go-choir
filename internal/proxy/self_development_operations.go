@@ -346,15 +346,25 @@ func (h *Handler) readTerminalDecisionReplay(ctx context.Context, sandboxURL, us
 	if status != http.StatusOK {
 		return nil, false, false, fmt.Errorf("operation read status %d", status)
 	}
-	nextState := selfdev.StateRejected
+	nextState, expectedKind := selfdev.StateRejected, computerevent.EventEffectRejected
 	if decision.Decision == "approve" {
-		nextState = selfdev.StateAccepted
+		nextState, expectedKind = selfdev.StateAccepted, computerevent.EventEffectAccepted
 	}
 	terminal := operation.State == selfdev.StateAccepted || operation.State == selfdev.StateRejected
 	if !terminal {
 		return nil, false, false, nil
 	}
-	if operation.State != nextState || !computerevent.IsSHA256(operation.DecisionEvent) {
+	verifierBound := false
+	for _, verifierRef := range operation.VerifierRefs {
+		if verifierRef == decision.VerifierRef {
+			verifierBound = true
+			break
+		}
+	}
+	if operation.ComputerID != computerID || operation.OperationID != operationID ||
+		operation.State != nextState || operation.BundleDigest != decision.BundleDigest ||
+		!verifierBound || operation.TrajectoryID == "" || operation.CapsuleID == "" ||
+		!computerevent.IsSHA256(operation.DecisionEvent) {
 		return operationBody, false, true, nil
 	}
 	eventPath := "/api/computers/" + url.PathEscape(computerID) + "/events/" + operation.DecisionEvent
@@ -373,7 +383,25 @@ func (h *Handler) readTerminalDecisionReplay(ctx context.Context, sandboxURL, us
 	if err != nil {
 		return nil, false, true, err
 	}
-	exact := eventDigest == operation.DecisionEvent && event.DecisionRef == computerevent.DigestBytes(requestBytes)
+	expectedPending := ""
+	if decision.ExpectedPendingTransitionRef != nil {
+		expectedPending = strings.TrimSpace(*decision.ExpectedPendingTransitionRef)
+	}
+	exact := eventDigest == operation.DecisionEvent &&
+		event.SchemaVersion == computerevent.SchemaVersionV1 && event.ComputerID == computerID &&
+		event.EventKind == expectedKind && event.TrajectoryID == operation.TrajectoryID &&
+		event.CapsuleID == operation.CapsuleID && event.ParentEventID == operationID &&
+		event.ActorProfile == "super" && event.AuthorityRef == "external-owner:"+userID &&
+		event.PrivacyClass == "owner" && event.ReducerVersion == computerevent.ReducerVersionV1 &&
+		event.RequestCommitment == computerevent.ZeroHead &&
+		event.ProposedEffectRef == decision.BundleDigest &&
+		event.DecisionRef == computerevent.DigestBytes(requestBytes) &&
+		len(event.VerifierRefs) == 1 && event.VerifierRefs[0] == decision.VerifierRef &&
+		event.ExpectedDesiredEventHead == decision.ExpectedDesiredEventHead &&
+		event.ExpectedEffectiveEventHead == decision.ExpectedEffectiveEventHead &&
+		event.ExpectedPendingTransitionRef == expectedPending &&
+		event.ExpectedDesiredStateCommitment == decision.ExpectedDesiredStateCommitment &&
+		event.ExpectedEffectiveStateCommitment == decision.ExpectedEffectiveStateCommitment
 	return operationBody, exact, true, nil
 }
 

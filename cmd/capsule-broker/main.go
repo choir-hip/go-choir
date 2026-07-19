@@ -32,14 +32,15 @@ import (
 // The broker is bind-mounted from a content-addressed host store (v2 decision).
 // Its binary hash is verified at spawn time.
 type Broker struct {
-	mu          sync.RWMutex
-	socketPath  string
-	capsuleID   string            // this broker's capsule ID (binding check)
-	publicKey   ed25519.PublicKey // injected by Executor at spawn
-	mergedDir   string            // capsule's merged overlayfs mount
-	sessions    map[string]*Session
-	revokedCaps map[string]bool
-	listener    net.Listener
+	mu                sync.RWMutex
+	socketPath        string
+	capsuleID         string            // this broker's capsule ID (binding check)
+	publicKey         ed25519.PublicKey // injected by Executor at spawn
+	mergedDir         string            // capsule's merged overlayfs mount
+	sessions          map[string]*Session
+	revokedCaps       map[string]bool
+	authorizedPeerUID uint32
+	listener          net.Listener
 }
 
 // Session represents a long-lived shell session.
@@ -69,17 +70,22 @@ type BrokerRPCResponse struct {
 
 func main() {
 	var (
-		socketPath string
-		capsuleID  string
-		pubKeyHex  string
-		mergedDir  string
+		socketPath        string
+		capsuleID         string
+		pubKeyHex         string
+		mergedDir         string
+		authorizedPeerUID uint
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
 	flag.StringVar(&capsuleID, "capsule-id", "", "Capsule ID this broker serves (binding check)")
 	flag.StringVar(&pubKeyHex, "pubkey", "", "Ed25519 public key (hex)")
 	flag.StringVar(&mergedDir, "merged", "/mnt/merged", "Merged overlayfs mount point")
+	flag.UintVar(&authorizedPeerUID, "authorized-peer-uid", 65534, "UID guest-core presents inside the broker user namespace")
 	flag.Parse()
+	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
+		log.Fatal("--authorized-peer-uid exceeds uint32")
+	}
 
 	if pubKeyHex == "" {
 		log.Fatal("--pubkey is required (Ed25519 public key in hex)")
@@ -120,12 +126,13 @@ func main() {
 	}
 
 	broker := &Broker{
-		socketPath:  socketPath,
-		capsuleID:   capsuleID,
-		publicKey:   ed25519.PublicKey(pubKeyBytes),
-		mergedDir:   mergedDir,
-		sessions:    make(map[string]*Session),
-		revokedCaps: make(map[string]bool),
+		socketPath:        socketPath,
+		capsuleID:         capsuleID,
+		publicKey:         ed25519.PublicKey(pubKeyBytes),
+		mergedDir:         mergedDir,
+		authorizedPeerUID: uint32(authorizedPeerUID),
+		sessions:          make(map[string]*Session),
+		revokedCaps:       make(map[string]bool),
 	}
 
 	// Remove stale socket if it exists.
@@ -178,8 +185,11 @@ func resolveWithin(base, rel string) (string, error) {
 	return cleaned, nil
 }
 
-// handleConnection accepts only guest-core peers. A process inside the user
-// namespace maps to host UID 65534 and cannot impersonate guest core UID 0.
+// handleConnection accepts only guest-core peers. The broker runs as child UID
+// 0 mapped to host UID 65534; parent guest-core UID 0 is unmapped in the child
+// namespace and therefore presents as overflow UID 65534. Requiring that
+// overflow identity rejects capsule-internal child UID 0 before capability
+// verification.
 func (b *Broker) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	unixConn, ok := conn.(*net.UnixConn)
@@ -194,7 +204,7 @@ func (b *Broker) handleConnection(conn net.Conn) {
 	var controlErr error
 	if err := raw.Control(func(fd uintptr) {
 		credential, controlErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
-	}); err != nil || controlErr != nil || credential == nil || credential.Uid != 0 {
+	}); err != nil || controlErr != nil || credential == nil || credential.Uid != b.authorizedPeerUID {
 		return
 	}
 	decoder := json.NewDecoder(conn)

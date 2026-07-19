@@ -27,6 +27,15 @@ func TestOperationStartIsDurableIdempotentAndHeadBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	operations.now = func() time.Time { return now }
+	if err := operations.BindStartIntent(context.Background(), "computer-test", "start-intent", strings.Repeat("1", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if err := operations.BindStartIntent(context.Background(), "computer-test", "start-intent", strings.Repeat("1", 64)); err != nil {
+		t.Fatalf("exact start intent retry: %v", err)
+	}
+	if err := operations.BindStartIntent(context.Background(), "computer-test", "start-intent", strings.Repeat("2", 64)); !errors.Is(err, ErrConflict) {
+		t.Fatalf("changed start intent error = %v", err)
+	}
 	request := StartRequest{ComputerID: "computer-test", IdempotencyKey: "start-1", PromptArtifactRef: "artifact:sha256:" + strings.Repeat("c", 64)}
 	first, err := operations.Start(context.Background(), request)
 	if err != nil {
