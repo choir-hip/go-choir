@@ -640,7 +640,7 @@ now:
 
   node_a_update_receipt:
     observed_at: 2026-07-19T20:16:00Z
-    status: updated_harness_ready_product_route_degraded
+    status: updated_host_guest_image_deploy_blocked
     source_identity: dfb87d1f7d7e4be0a83c6cf32586e4c1af2d5818
     prior_source_identity: fb2b54aa1142bdb1eb84eeaf277063e4e90c4b8c
     active_system: /nix/store/na5g9yjsja4gqnl7q8iqc5w8h1h6vid9-nixos-system-go-choir-a-26.05.20260409.4c1018d
@@ -652,7 +652,18 @@ now:
     protected_surfaces: [deployment_configuration, Node_A_harness]
     rollback_path: "Switch to `/nix/store/r82nwfx6yxg0si317call636713pcpix-nixos-system-go-choir-a-26.05.20260409.4c1018d` and reset the clean Node A checkout to fb2b54aa if the harness update must be abandoned."
     heresy_delta: {discovered: "Pinned Go dependency hash did not match the current module graph; service-level health did not surface a missing canonical route for the retained platform computer.", introduced: none, repaired: "The pinned hash now matches the exact current module graph and the host realization builds; route migration remains open."}
-    conjecture_delta: "Node A is now a current x86_64-linux host with exact guest image artifacts installed under `/var/lib/go-choir/guest`, establishing the harness substrate. It is not product-healthy: the pre-existing Firecracker process remains running, but current vmctl correctly refuses to adopt it without a canonical ComputerVersion route. Do not invent that route or delete the retained computer; use a distinct disposable harness identity and separately resolve the platform route through authorized bootstrap evidence."
+    conjecture_delta: "Node A is a current x86_64-linux host, but the first exact harness boot disproved the belief that its installed guest image was current. The host package pointer updated while `/var/lib/go-choir/guest` remained an older unmanaged image. The pre-existing Firecracker process remains running but current vmctl correctly refuses to adopt it without a canonical ComputerVersion route. Do not invent that route or delete the retained computer; use the distinct disposable harness identity."
+
+  node_a_linux_harness_receipt:
+    observed_at: 2026-07-19T20:35:26Z
+    status: rejected_stale_guest_image
+    source_identity: 890bf117
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_EXPECTED_COMMIT=dfb87d1f7d7e4be0a83c6cf32586e4c1af2d5818 go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "Node A launched a disposable Firecracker VM from `/var/lib/go-choir/guest`, isolated it on 10.200.1.0/30 beside the retained VM, booted NixOS, served `/health` from the current dynamically injected sandbox binary, then returned 503 `self-development mode authority unavailable` instead of the required effects-OFF 409. Cleanup killed only `vm-selfdev-g1-harness` and removed its temporary state."
+    root_cause: "The flake already builds the exact `guest-image` package and passes an unused `guestRunner` specialArg, but `nix/node-b.nix` only creates `/var/lib/go-choir/guest`; no activation path installs or atomically advances the built image. Host code can therefore report the current commit while booting stale guest configuration. This is a substrate/deploy-identity defect, not a mode-handler defect."
+    existing_fix_connection: "Connect the existing immutable `guest-image` output to Node A/B activation with an atomic versioned pointer and preserved pre-managed rollback directory. Do not patch the guest handler around missing authority."
+    rollback_path: "No harness VM or state remains. The active host system and retained pre-existing Firecracker process were not replaced. Any guest-image pointer cutover must preserve the current unmanaged directory as an explicit rollback ref."
+    heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
 successor:
   status: selected_draft_non_executable
