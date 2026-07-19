@@ -586,13 +586,13 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-3
-    state: frozen_ready_G1
+    state: rejected_G1_repairing
     ref: f9cc324633fc64a40c407aa8abd328f9b257127a
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete effects-OFF B cutover plus G1 substrate repairs: old app-adoption/package and worker/candidate-VM surfaces deleted; stable ComputerID/realization bindings, relative release staging, event-derived crash recovery, exact accept_once consumption, external privacy keys, restart handoff, real process pointer-swap proof, public /api/runs and self-development API/CLI."
+    scope: "Effects-OFF B cutover candidate with substantial G1 repairs, but the healthy round-3 panel found surviving event-projection, accept_once, cross-owner authorization, public-route, obsolete-client, and privacy-key custody blockers."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135]
-    disposition: "Frozen for G1 only. Effects remain OFF; do not land or deploy before an accepting G1 receipt."
+    disposition: "Rejected at G1. Effects remain OFF; do not land or deploy. Repair every confirmed blocker in one new immutable candidate and rerun deterministic evidence plus a fresh diverse G1 panel."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -602,9 +602,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, f9cc324633fc64a40c407aa8abd328f9b257127a, /tmp/choir-selfdev-g1-final-panel/manifest.tsv, /tmp/choir-selfdev-g1-final-panel/codex.out, /tmp/choir-selfdev-g1-final-panel/cursor.out, /tmp/choir-selfdev-g1-final-panel/omp-gpt55.out]
-  blocker_or_risk: "G0 remains accepted. B is frozen at f9cc324633fc64a40c407aa8abd328f9b257127a with effects OFF. The prior G1 substrate blockers are repaired and locally verified: real updater process replacement across the immutable pointer swap; exact decision-event recovery after the append/projection crash window; accept_once CAS back to propose_only; platform-owned per-computer AEAD keys delivered only to trusted guest-core memory/restart tmpfs; relative upperdir release staging with Linux compile proof; stable ComputerID/realization binding; old AppChangePackage/AppAdoption and worker/candidate-VM runtime surfaces deleted. `scripts/go-test-runtime-shards` passed. `go test ./... -count=1` passed every package except live provider/search integration calls refused by external quota/timeouts (Tavily 432, Brave timeout, Serper 400, SerpAPI 429, ZAI 429). `nix-instantiate --parse nix/sandbox-vm.nix` and a CGO-disabled Linux capsule test compile passed. G1 independent review remains the sole blocker."
-  next_action: "Run a healthy diverse G1 panel against exact immutable candidate f9cc324633fc64a40c407aa8abd328f9b257127a and this authority card; accept only if no reproducible blocker survives."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, f9cc324633fc64a40c407aa8abd328f9b257127a, /tmp/choir-selfdev-g1-f9cc-panel/manifest.tsv, /tmp/choir-selfdev-g1-f9cc-panel/codex.out, /tmp/choir-selfdev-g1-f9cc-panel/cursor.out, /tmp/choir-selfdev-g1-f9cc-panel/omp-gpt55.out, /tmp/choir-selfdev-g1-f9cc-panel/omp-gemini35.out]
+  blocker_or_risk: "G0 remains accepted; B remains blocked. Confirmed round-3 blockers are: embedded event finalization drops reducer/revocation projection fields; proxy accept_once consumption omits its required deterministic idempotency key; cookie-authenticated mode control omits target ownership; exact PUT mode and target-scoped lifecycle public contracts are absent; product-visible AppChangePackage/AppAdoption clients, notifications, registry entries, and worker-VM browser tests survive; the platform/corpusd privacy-key table and updater-readable restart handoff violate the keyless-corpusd/root-guest-keyring and appender-only boundaries. The round-2 claim that obsolete surfaces were deleted is therefore false for f9cc3246 and is corrected here before repair."
+  next_action: "Repair the documented round-3 blockers, including deletion of surviving obsolete product clients/tests, preserve corpusd keylessness and updater inability to read append/privacy credentials, add end-to-end negative/transition tests, freeze one exact candidate, and rerun a healthy diverse G1 panel."
 
 successor:
   status: selected_draft_non_executable
@@ -682,6 +682,17 @@ review_receipts:
     verdicts: [codex:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1]
     outcome: repair
     adjudication: "Minority rule is not needed: three independent reviewers supplied reproducible source blockers. Exact candidate identity is corrected in now; all substantive confirmed blockers are documented there before repair. Claims that conflict with the settled topology are adjudicated during implementation: old app-adoption/promotion and public agent-loop paths are not separately retained product features under the owner clean-cutover decision; accept_once returns to propose_only; capsule admission and production vmctl must fail closed."
+
+  - id: G1-disabled-cutover-round-3-2026-07-19
+    reviewed_at: 2026-07-19T14:25:05Z
+    candidate_ref: f9cc324633fc64a40c407aa8abd328f9b257127a
+    authority_ref: 236dec0317e8ca2a2b071cbcd2ca2fcac580f8a2
+    manifest: /tmp/choir-selfdev-g1-f9cc-panel/manifest.tsv
+    panel: [codex, cursor, opencode, omp-gpt55, omp-gemini35]
+    health: "All five configured reviewers exited successfully. Codex, Cursor, omp-gpt55, and omp-gemini35 returned substantive candidate reviews; OpenCode did not reach its required verdict after its read-only worktree request was denied and is excluded from adjudication."
+    verdicts: [codex:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, omp-gemini35:ACCEPT_G1, opencode:INCOMPLETE_NO_VERDICT]
+    outcome: repair
+    adjudication: "Three independent reviewers reproduced source blockers, so G1 rejects without minority-rule ambiguity. Codex and omp-gpt55 independently found broken accept_once consumption, missing cross-owner cookie authorization, and surviving AppChangePackage/AppAdoption product surfaces. Codex additionally found embedded security projection loss; omp-gpt55 found missing exact public routes and corpusd private-key custody. Cursor independently showed the updater-readable restart handoff re-exposes the appender bearer and privacy key. Gemini accepted but did not rebut these concrete paths. This receipt documents the problems before any repair-code commit."
 
 view:
   path: none
