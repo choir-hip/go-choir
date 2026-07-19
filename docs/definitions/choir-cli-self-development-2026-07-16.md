@@ -666,17 +666,17 @@ now:
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
   node_a_exact_guest_receipt:
-    observed_at: 2026-07-19T22:00:25Z
-    status: rejected_guest_credential_exchange_route
-    source_identity: 434879ff14cc92cb5755d7734bb78ad0a7c27db2
-    guest_image_ref: /tmp/g1-landlock-probe@9b41218dccc39815fb641e5127c6d604fc06ec12
+    observed_at: 2026-07-19T22:08:52Z
+    status: accepted_g1_linux_harness
+    source_identity: 967e3b01600be32a5db3352a3b1546a921619c2a
+    guest_image_ref: /tmp/g1-platform-route@fcdef13e088aa7d388a1fd2e08df9e8fb15e58ed
     managed_guest_rollback: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
     pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
-    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=cred434 CHOIR_G1_EXPECTED_COMMIT=9b41218dccc39815fb641e5127c6d604fc06ec12 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-landlock-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
-    evidence: "Canonical harness encoding passed guest bootstrap verification; the next call failed `guest credential: exchange refused`. Node A maps 8082 to proxy and 8086 to corpusd. Guest Nix derives CHOIR_PLATFORM_URL from `choir.wire_publish_url` (8082), while the credential was issued by corpusd and proxy registers no `/internal/computers/credentials/exchange` passthrough. All kernel probes still passed; cleanup remained correct."
-    problem: "VM boot configuration conflates the wire/public proxy endpoint with the capability-authenticated guest event authority. Credential exchange/consume/renew and signed event operations must reach corpusd, but the guest is given only the proxy URL."
-    next_probe: "Add an explicit `choir.platform_url=http://<tap-host>:8086` boot parameter, map it to CHOIR_PLATFORM_URL, and stop deriving that variable from the 8082 wire URL. Preserve RUNTIME_WIRE_PUBLISH_URL at 8082. Add boot-argument/env extraction tests, rebuild the exact guest, and rerun."
-    heresy_delta: {discovered: "Guest credential authority was misrouted to the wire proxy because two distinct host services shared one environment variable.", introduced: none, repaired: "Harness canonicalization and all mandatory kernel/isolation probes are repaired; authenticated guest event authority startup remains open."}
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=bound967 CHOIR_G1_EXPECTED_COMMIT=fcdef13e088aa7d388a1fd2e08df9e8fb15e58ed CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-platform-route/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "PASS in 8.54s on Node A. The exact x86_64 Firecracker guest completed user/PID/mount/network/UTS/IPC, cgroup v2, loaded+mounted overlayfs, enforced seccomp, and enforced Landlock probes; exchanged and consumed the one-time canonical credential directly with corpusd; reconstructed computer event authority; configured guest-local capsule authority; served health with exact guest build fcdef13e; and refused a new effects-OFF proposal with 409. The unrouted disposable harness correctly refused a public KernelCapabilityReceipt with 503 `computer route identity unavailable`; C must obtain 200 only after an authorized serving route binds the exact deployed ComputerVersion. The disposable VM/tap/state were removed."
+    problem: none
+    next_probe: "Freeze the exact source candidate and rerun full deterministic/Nix verification plus a diverse G1 panel. If accepted, C deploys effects OFF and requires the route-bound public signed KernelCapabilityReceipt before D."
+    heresy_delta: {discovered: none, introduced: none, repaired: "Managed exact guest deployment, all mandatory kernel/isolation probes, canonical credential delivery, direct guest event-authority routing, and explicit unrouted receipt refusal are repaired and runtime-proven."}
 
 successor:
   status: selected_draft_non_executable
