@@ -666,17 +666,17 @@ now:
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
   node_a_exact_guest_receipt:
-    observed_at: 2026-07-19T21:48:28Z
-    status: rejected_kernel_probe_landlock_rule_shape
-    source_identity: a84b20121e74caac6e54b6184a1b9028bc965420
-    guest_image_ref: /tmp/g1-seccomp-probe
+    observed_at: 2026-07-19T21:56:39Z
+    status: rejected_harness_noncanonical_credential
+    source_identity: 9b41218dccc39815fb641e5127c6d604fc06ec12
+    guest_image_ref: /tmp/g1-landlock-probe
     managed_guest_rollback: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
     pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
-    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=seccompa84 CHOIR_G1_EXPECTED_COMMIT=a84b20121e74caac6e54b6184a1b9028bc965420 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-seccomp-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
-    evidence: "The focused Node A Linux seccomp regression passed, then the exact guest completed namespace, overlay, and seccomp stages. Landlock failed with `populating ruleset for /dev/null ... inconsistent access rights (using directory access rights on a regular file?)`. Fail-closed boot and disposable cleanup remained correct."
-    problem: "LandlockRestrictor applies one access set containing directory-only rights such as read_dir/make_dir to both directories and individual device files. Landlock V5 correctly rejects those rights on /dev/null before the ruleset can enforce."
-    next_probe: "Partition existing allow paths by file type during Apply: directories retain the complete filesystem access set; regular/device files receive only execute/read/write/truncate rights. Add a Linux helper-process test proving policy application and an outside-path denial, then rebuild and rerun. Do not add allowed paths."
-    heresy_delta: {discovered: "The capsule Landlock policy assigned directory-only rights to file rules and could not populate its ruleset.", introduced: none, repaired: "Exact guest deployment, overlay, deterministic probes, UID mapping, and seccomp enforcement are repaired; Landlock and later guest startup remain open."}
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=landlock9b4 CHOIR_G1_EXPECTED_COMMIT=9b41218dccc39815fb641e5127c6d604fc06ec12 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-landlock-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "Both focused Node A isolation regressions passed. The exact guest completed every mandatory kernel probe, started guest-core/verifier signers and guest-local capsule authority, then restart-looped on `guest credential: non-canonical bootstrap envelope`. Kernel/config capability gate A is now runtime-proven for this exact image. The harness cleaned up its disposable VM."
+    problem: "The harness base64-encodes corpusd's raw JSON response member directly. Production vmctl first decodes the member, canonicalizes it with computerevent.CanonicalJSON, and only then base64url-encodes it. The harness therefore sends a representation production never sends; the guest correctly rejects it."
+    next_probe: "Make issueHarnessCredential use the production canonicalization sequence, rerun against the same exact guest image, and require healthy effects-OFF 409 plus public signed kernel receipt. No product credential parser change."
+    heresy_delta: {discovered: "The Linux harness diverged from production credential canonicalization and generated an invalid bootstrap envelope.", introduced: none, repaired: "All mandatory exact guest kernel capabilities, seccomp, and Landlock are now runtime-proven; guest effects-OFF startup remains open."}
 
 successor:
   status: selected_draft_non_executable
