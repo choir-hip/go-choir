@@ -666,17 +666,17 @@ now:
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
   node_a_exact_guest_receipt:
-    observed_at: 2026-07-19T21:41:03Z
-    status: rejected_kernel_probe_seccomp_policy
-    source_identity: c97e01044b35da53f9dd6d7cf3ca0fe87610348b
-    guest_image_ref: /tmp/g1-overlay-probe
+    observed_at: 2026-07-19T21:48:28Z
+    status: rejected_kernel_probe_landlock_rule_shape
+    source_identity: a84b20121e74caac6e54b6184a1b9028bc965420
+    guest_image_ref: /tmp/g1-seccomp-probe
     managed_guest_rollback: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
     pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
-    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=overlayc97 CHOIR_G1_EXPECTED_COMMIT=c97e01044b35da53f9dd6d7cf3ca0fe87610348b CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-overlay-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
-    evidence: "The deterministic namespace and mapped user+mount overlay stages completed. Seccomp then failed before load with `failed to assemble policy: invalid default_action value 327681`. Fail-closed boot and disposable cleanup remained correct."
-    problem: "internal/capsule/seccomp.go manually ORs EPERM into elastic/go-seccomp-bpf ActionErrno. That library validates policy actions against bare enum values and its assembler already adds EPERM for ActionErrno, so the encoded 327681 default is invalid and the production capsule filter has never been loadable."
-    next_probe: "Use the library's bare ActionErrno default, add a Linux test that assembles and loads the filter then observes AF_INET=EPERM, rebuild, and rerun the exact guest. Do not broaden the allowlist."
-    heresy_delta: {discovered: "The capsule seccomp policy encoded errno twice and could not assemble.", introduced: none, repaired: "Exact guest deployment, boot-loaded overlay, deterministic probe receipts, UID-0 mapping, and capsule-scoped overlay probing are repaired; seccomp and later mandatory probes remain open."}
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=seccompa84 CHOIR_G1_EXPECTED_COMMIT=a84b20121e74caac6e54b6184a1b9028bc965420 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-seccomp-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "The focused Node A Linux seccomp regression passed, then the exact guest completed namespace, overlay, and seccomp stages. Landlock failed with `populating ruleset for /dev/null ... inconsistent access rights (using directory access rights on a regular file?)`. Fail-closed boot and disposable cleanup remained correct."
+    problem: "LandlockRestrictor applies one access set containing directory-only rights such as read_dir/make_dir to both directories and individual device files. Landlock V5 correctly rejects those rights on /dev/null before the ruleset can enforce."
+    next_probe: "Partition existing allow paths by file type during Apply: directories retain the complete filesystem access set; regular/device files receive only execute/read/write/truncate rights. Add a Linux helper-process test proving policy application and an outside-path denial, then rebuild and rerun. Do not add allowed paths."
+    heresy_delta: {discovered: "The capsule Landlock policy assigned directory-only rights to file rules and could not populate its ruleset.", introduced: none, repaired: "Exact guest deployment, overlay, deterministic probes, UID mapping, and seccomp enforcement are repaired; Landlock and later guest startup remain open."}
 
 successor:
   status: selected_draft_non_executable
