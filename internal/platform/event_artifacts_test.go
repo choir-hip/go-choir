@@ -154,7 +154,7 @@ func TestPrivatePayloadAppendCompletesDirectedCommitmentGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer projection.Close()
-	cipher, err := computerevent.NewPrivateArtifactCipherFromExternalKey("computer-private", base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0x44}, 32)))
+	cipher, err := computerevent.LoadGuestPrivateArtifactCipher(filepath.Join(t.TempDir(), "privacy-key"), "computer-private", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -491,9 +491,8 @@ func TestCredentialEnvelopeExchangeRefusesReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first exchange refused: %v", err)
 	}
-	privacyKey, err := base64.RawStdEncoding.DecodeString(result.PrivacyKey)
-	if err != nil || len(privacyKey) != 32 {
-		t.Fatalf("external privacy key = %q, %v", result.PrivacyKey, err)
+	if result.Capability == "" {
+		t.Fatal("first credential exchange omitted the appender capability")
 	}
 	if replay, err := service.exchangeComputerCredentialEnvelope(context.Background(), raw); err == nil || replay.Capability != "" {
 		t.Fatalf("consumed envelope replay = %#v, %v; want refusal without bearer", replay, err)

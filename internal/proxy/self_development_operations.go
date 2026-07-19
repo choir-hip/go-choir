@@ -26,6 +26,7 @@ type selfDevelopmentModeProjection struct {
 	BundleDigest                     string                 `json:"bundle_digest,omitempty"`
 	ExpectedDesiredEventHead         string                 `json:"expected_desired_event_head,omitempty"`
 	ExpectedEffectiveEventHead       string                 `json:"expected_effective_event_head,omitempty"`
+	ExpectedPendingTransitionRef     string                 `json:"expected_pending_transition_ref,omitempty"`
 	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment,omitempty"`
 	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment,omitempty"`
 	Receipt                          *computerevent.Receipt `json:"receipt,omitempty"`
@@ -39,6 +40,7 @@ type proxiedSelfDevelopmentDecision struct {
 	Reason                           string                 `json:"reason,omitempty"`
 	ExpectedDesiredEventHead         string                 `json:"expected_desired_event_head"`
 	ExpectedEffectiveEventHead       string                 `json:"expected_effective_event_head"`
+	ExpectedPendingTransitionRef     *string                `json:"expected_pending_transition_ref"`
 	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment"`
 	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment"`
 	ModeReceipt                      *computerevent.Receipt `json:"mode_receipt,omitempty"`
@@ -100,6 +102,17 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
+	if authResult.AuthMethod != "api_key" {
+		if h.vmctlClient == nil {
+			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
+			return
+		}
+		ownership, ownershipErr := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, target.ComputerID)
+		if ownershipErr != nil || ownership == nil || ownership.ComputerID != target.ComputerID {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "computer ownership required"})
+			return
+		}
+	}
 	if authResult.AuthMethod == "api_key" {
 		if authResult.ComputerID != target.ComputerID {
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key is bound to another computer"})
@@ -121,7 +134,7 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/computers/"+url.PathEscape(target.ComputerID))
 	var mode selfDevelopmentModeProjection
 	var decision proxiedSelfDevelopmentDecision
-	modeGuarded := suffix == "/self-development/operations" || strings.HasSuffix(suffix, "/decision")
+	modeGuarded := suffix == "/self-development/operations" || suffix == "/self-development/genesis" || strings.HasSuffix(suffix, "/decision")
 	if modeGuarded {
 		mode, err = h.readSelfDevelopmentMode(r.Context(), target.ComputerID, authResult.UserID)
 		if err != nil {
@@ -129,6 +142,13 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 			return
 		}
 		switch {
+		case suffix == "/self-development/genesis":
+			if mode.Mode != "off" || mode.Generation != 0 ||
+				strings.TrimSpace(h.cfg.SelfDevelopmentDisposableComputerID) == "" ||
+				target.ComputerID != strings.TrimSpace(h.cfg.SelfDevelopmentDisposableComputerID) {
+				writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development genesis requires the configured disposable computer with absent mode state"})
+				return
+			}
 		case suffix == "/self-development/operations" && mode.Mode != "propose_only":
 			writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development proposal mode is not enabled"})
 			return
@@ -140,16 +160,26 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 				return
 			}
 			operationID := strings.TrimSuffix(strings.TrimPrefix(suffix, "/self-development/operations/"), "/decision")
-			requiresConsumption := mode.Mode == "accept_once" && decision.Decision == "approve"
-			if mode.Mode == "propose_only" && decision.Decision == "approve" && consumedModeReceiptMatches(mode.Receipt, operationID, decision) {
+			requiresConsumption := mode.Mode == "accept_once"
+			if mode.Mode == "propose_only" && consumedModeReceiptMatches(mode.Receipt, operationID, decision) {
 				decision.ModeReceipt = mode.Receipt
 			} else {
-				if decision.Decision == "approve" {
-					if !requiresConsumption || !modeProjectionMatchesDecision(mode, operationID, decision) {
+				if decision.Decision != "approve" && decision.Decision != "reject" {
+					writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development decision mode is not enabled"})
+					return
+				}
+				switch mode.Mode {
+				case "accept_once":
+					if !modeProjectionMatchesDecision(mode, operationID, decision) {
+						writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once mode does not bind this exact decision"})
+						return
+					}
+				case "propose_only":
+					if decision.Decision != "reject" {
 						writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once mode does not bind this exact approval"})
 						return
 					}
-				} else if decision.Decision != "reject" || mode.Mode != "propose_only" {
+				default:
 					writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development decision mode is not enabled"})
 					return
 				}
@@ -199,6 +229,10 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 	upstream.Header.Set("X-Internal-Caller", "true")
 	upstream.Header.Set("X-Authenticated-User", authResult.UserID)
 	upstream.Header.Set("X-Authenticated-Computer", target.ComputerID)
+	if suffix == "/self-development/genesis" {
+		upstream.Header.Set("X-Self-Development-Disposable", "true")
+		upstream.Header.Set("X-Self-Development-Mode-Generation", "0")
+	}
 	if r.Method == http.MethodPost {
 		upstream.Header.Set("Content-Type", "application/json")
 	}
@@ -267,6 +301,7 @@ func (h *Handler) consumeSelfDevelopmentMode(ctx context.Context, computerID, us
 	u.RawQuery = query.Encode()
 	body, err := json.Marshal(map[string]any{
 		"mode": "propose_only", "expected_generation": current.Generation,
+		"idempotency_key": consumedModeIdempotency(decisionOperationID(current), current.Generation, decision.IdempotencyKey),
 	})
 	if err != nil {
 		return computerevent.Receipt{}, err
@@ -290,9 +325,15 @@ func (h *Handler) consumeSelfDevelopmentMode(ctx context.Context, computerID, us
 	return *consumed.Receipt, nil
 }
 
+func decisionOperationID(mode selfDevelopmentModeProjection) string {
+	return strings.TrimSpace(mode.OperationID)
+}
+
 func modeProjectionMatchesDecision(mode selfDevelopmentModeProjection, operationID string, decision proxiedSelfDevelopmentDecision) bool {
-	return mode.OperationID == operationID && mode.BundleDigest == decision.BundleDigest &&
+	return decision.ExpectedPendingTransitionRef != nil &&
+		mode.OperationID == operationID && mode.BundleDigest == decision.BundleDigest &&
 		mode.ExpectedDesiredEventHead == decision.ExpectedDesiredEventHead && mode.ExpectedEffectiveEventHead == decision.ExpectedEffectiveEventHead &&
+		mode.ExpectedPendingTransitionRef == strings.TrimSpace(*decision.ExpectedPendingTransitionRef) &&
 		mode.ExpectedDesiredStateCommitment == decision.ExpectedDesiredStateCommitment &&
 		mode.ExpectedEffectiveStateCommitment == decision.ExpectedEffectiveStateCommitment
 }
@@ -302,7 +343,7 @@ func consumedModeIdempotency(operationID string, generation uint64, decisionID s
 }
 
 func consumedModeReceiptMatches(receipt *computerevent.Receipt, operationID string, decision proxiedSelfDevelopmentDecision) bool {
-	if receipt == nil || receipt.ReceiptKind != "ModeReceipt" {
+	if receipt == nil || receipt.ReceiptKind != "ModeReceipt" || decision.ExpectedPendingTransitionRef == nil {
 		return false
 	}
 	field := func(name string) string {
@@ -313,6 +354,7 @@ func consumedModeReceiptMatches(receipt *computerevent.Receipt, operationID stri
 		field("consumed_operation_id") == operationID && field("consumed_bundle_digest") == decision.BundleDigest &&
 		field("consumed_desired_event_head") == decision.ExpectedDesiredEventHead &&
 		field("consumed_effective_event_head") == decision.ExpectedEffectiveEventHead &&
+		field("consumed_pending_transition_ref") == strings.TrimSpace(*decision.ExpectedPendingTransitionRef) &&
 		field("consumed_desired_state_commitment") == decision.ExpectedDesiredStateCommitment &&
 		field("consumed_effective_state_commitment") == decision.ExpectedEffectiveStateCommitment &&
 		strings.HasSuffix(field("idempotency_key"), ":"+decision.IdempotencyKey)

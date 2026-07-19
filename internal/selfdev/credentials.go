@@ -22,15 +22,16 @@ import (
 // memory. It renews before expiry and never exposes the token to agents,
 // capsules, logs, durable state, or command arguments.
 type GuestCredentials struct {
-	mu         sync.Mutex
-	baseURL    string
-	computerID string
-	http       *http.Client
-	token      string
-	expiresAt  time.Time
-	keyID      string
-	publicKey  ed25519.PublicKey
-	privacyKey string
+	mu               sync.Mutex
+	baseURL          string
+	computerID       string
+	realizationID    string
+	http             *http.Client
+	token            string
+	expiresAt        time.Time
+	keyID            string
+	publicKey        ed25519.PublicKey
+	pendingLifecycle []computerevent.Receipt
 }
 
 func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, computerID, realizationID string) (*GuestCredentials, error) {
@@ -53,7 +54,7 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 		return nil, err
 	}
 	manager := &GuestCredentials{
-		baseURL: strings.TrimRight(baseURL, "/"), computerID: computerID,
+		baseURL: strings.TrimRight(baseURL, "/"), computerID: computerID, realizationID: realizationID,
 		http: &http.Client{Timeout: 15 * time.Second}, publicKey: publicKey,
 		keyID: envelope.SigningKeyID,
 	}
@@ -78,10 +79,8 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 	if err != nil {
 		return nil, err
 	}
-	manager.token, manager.expiresAt, manager.privacyKey = result.Capability, expiresAt, result.PrivacyKey
-	if _, err := computerevent.NewExternalPrivacyKeyring(computerID, manager.privacyKey); err != nil {
-		return nil, fmt.Errorf("guest credential: external privacy key refused")
-	}
+	manager.token, manager.expiresAt = result.Capability, expiresAt
+	manager.pendingLifecycle = append([]computerevent.Receipt(nil), result.PendingLifecycleReceipts...)
 	return manager, nil
 }
 
@@ -202,18 +201,17 @@ func (g *GuestCredentials) PublishRouteProjection(ctx context.Context, projectio
 	return result, nil
 }
 
-func (g *GuestCredentials) PrivacyKey() string {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.privacyKey
-}
-
 func (g *GuestCredentials) PublicKey() ed25519.PublicKey {
 	return append(ed25519.PublicKey(nil), g.publicKey...)
 }
 
 func (g *GuestCredentials) KeyResolver() PlatformKeyResolver {
 	return PlatformKeyResolver{ComputerID: g.computerID, KeyID: g.keyID, PublicKey: g.PublicKey()}
+}
+func (g *GuestCredentials) PendingLifecycleReceipts() []computerevent.Receipt {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]computerevent.Receipt(nil), g.pendingLifecycle...)
 }
 
 func capabilityExpiry(token string) (time.Time, error) {

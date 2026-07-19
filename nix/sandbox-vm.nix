@@ -291,11 +291,6 @@ EOF
         fi
       fi
 
-      # Back-compat fallback for older bootstraps that wrote only the host-side
-      # token file expectation. Kernel cmdline now provides first-boot truth.
-      if [ -f /mnt/persistent/gateway-token ]; then
-        printf 'RUNTIME_GATEWAY_TOKEN=%s\n' "$(cat /mnt/persistent/gateway-token)" >> "$ENV_FILE"
-      fi
 
       chmod 0640 "$ENV_FILE"
       chmod 0644 "$UPDATER_ENV_FILE"
@@ -305,7 +300,7 @@ EOF
   systemd.tmpfiles.rules = [
     "d /mnt/persistent/choir-updater 0700 root root -"
     "d /run/choir-updater-control 0700 root root -"
-    "d /run/choir-updater-handoff 0700 root root -"
+    "d /run/choir-runtime-handoff 0700 root root -"
     "d /run/choir 0700 root root -"
   ];
 
@@ -324,7 +319,44 @@ EOF
       ExecStart = pkgs.writeShellScript "go-choir-sandbox-restart" ''
         set -euo pipefail
         rm -f /run/choir-updater-control/restart
+        install -m 0400 /run/choir-runtime-handoff/restart-capability /run/choir-runtime-handoff/recovery-capability
         exec ${pkgs.systemd}/bin/systemctl restart go-choir-sandbox.service
+      '';
+    };
+  };
+
+  systemd.paths.go-choir-sandbox-recovery = {
+    description = "Watch for a verified Choir recovery restart request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathExists = "/run/choir-updater-control/recover";
+  };
+
+  systemd.services.go-choir-sandbox-recovery = {
+    description = "Restore the prior Choir release with reserved transient credentials";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "go-choir-sandbox-recovery" ''
+        set -euo pipefail
+        rm -f /run/choir-updater-control/recover
+        install -m 0400 /run/choir-runtime-handoff/recovery-capability /run/choir-runtime-handoff/restart-capability
+        exec ${pkgs.systemd}/bin/systemctl restart go-choir-sandbox.service
+      '';
+    };
+  };
+
+  systemd.paths.go-choir-sandbox-recovery-cleanup = {
+    description = "Watch for recovery credential cleanup";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathExists = "/run/choir-updater-control/cleanup";
+  };
+
+  systemd.services.go-choir-sandbox-recovery-cleanup = {
+    description = "Delete the reserved credential after observed healthy startup";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "go-choir-sandbox-recovery-cleanup" ''
+        set -euo pipefail
+        rm -f /run/choir-updater-control/cleanup /run/choir-runtime-handoff/recovery-capability
       '';
     };
   };
@@ -378,7 +410,7 @@ EOF
       Type = "simple";
       User = "root";
       Group = "root";
-      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --restart-prepare-url http://127.0.0.1:8085/internal/self-development/restart-handoff --restart-handoff /run/choir-updater-handoff/restart-capability --health-url http://127.0.0.1:8085/health --signing-key /mnt/persistent/choir-updater/keys/guest-core.ed25519 --verifier-signing-key /mnt/persistent/choir-updater/keys/verifier.ed25519 --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
+      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --recovery-restart-request /run/choir-updater-control/recover --recovery-cleanup-request /run/choir-updater-control/cleanup --restart-prepare-url http://127.0.0.1:8085/internal/self-development/restart-handoff --health-url http://127.0.0.1:8085/health --signing-key /mnt/persistent/choir-updater/keys/guest-core.ed25519 --verifier-signing-key /mnt/persistent/choir-updater/keys/verifier.ed25519 --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
       Restart = "on-failure";
       RestartSec = 1;
       UMask = "0077";
@@ -395,8 +427,8 @@ EOF
       ProtectHome = true;
       ProtectSystem = "strict";
       ProtectControlGroups = true;
-      ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" "/run/choir-updater-handoff" ];
-      InaccessiblePaths = [ "/run/choir-bootstrap" "/run/go-choir-sandbox.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-credentials" "/run/choir-bootstrap" "/run/choir-runtime-handoff" "/run/go-choir-sandbox.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
@@ -415,7 +447,8 @@ EOF
     requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" ];
     environment = {
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
-      CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-updater-handoff/restart-capability";
+      CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/restart-capability";
+      CHOIR_PRIVACY_KEY_FILE = "/mnt/persistent/choir-credentials/privacy-key";
       CHOIR_KERNEL_CAPABILITY_PROBE = "/run/choir/kernel-capabilities.json";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         bash
@@ -503,7 +536,8 @@ EOF
       StandardOutput = "journal+console";
       StandardError = "journal+console";
       EnvironmentFile = [ "-/run/go-choir-sandbox.env" ];
-      ReadWritePaths = [ "/mnt/persistent" "/run/choir" "/run/choir-updater-handoff" ];
+      ReadWritePaths = [ "/mnt/persistent" "/run/choir" "/run/choir-runtime-handoff" ];
+      InaccessiblePaths = [ "/run/choir-updater-control" ];
     };
   };
 

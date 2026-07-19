@@ -31,6 +31,7 @@ type SelfDevelopmentMode struct {
 	BundleDigest                     string                 `json:"bundle_digest,omitempty"`
 	ExpectedDesiredEventHead         string                 `json:"expected_desired_event_head,omitempty"`
 	ExpectedEffectiveEventHead       string                 `json:"expected_effective_event_head,omitempty"`
+	ExpectedPendingTransitionRef     string                 `json:"expected_pending_transition_ref,omitempty"`
 	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment,omitempty"`
 	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment,omitempty"`
 	ExpiresAt                        string                 `json:"expires_at,omitempty"`
@@ -38,16 +39,17 @@ type SelfDevelopmentMode struct {
 }
 
 type SetSelfDevelopmentModeRequest struct {
-	Mode                             string `json:"mode"`
-	ExpectedGeneration               uint64 `json:"expected_generation"`
-	OperationID                      string `json:"operation_id,omitempty"`
-	BundleDigest                     string `json:"bundle_digest,omitempty"`
-	ExpectedDesiredEventHead         string `json:"expected_desired_event_head,omitempty"`
-	ExpectedEffectiveEventHead       string `json:"expected_effective_event_head,omitempty"`
-	ExpectedDesiredStateCommitment   string `json:"expected_desired_state_commitment,omitempty"`
-	ExpectedEffectiveStateCommitment string `json:"expected_effective_state_commitment,omitempty"`
-	ExpiresAt                        string `json:"expires_at,omitempty"`
-	IdempotencyKey                   string `json:"idempotency_key"`
+	Mode                             string  `json:"mode"`
+	ExpectedGeneration               uint64  `json:"expected_generation"`
+	OperationID                      string  `json:"operation_id,omitempty"`
+	BundleDigest                     string  `json:"bundle_digest,omitempty"`
+	ExpectedDesiredEventHead         string  `json:"expected_desired_event_head,omitempty"`
+	ExpectedEffectiveEventHead       string  `json:"expected_effective_event_head,omitempty"`
+	ExpectedPendingTransitionRef     *string `json:"expected_pending_transition_ref,omitempty"`
+	ExpectedDesiredStateCommitment   string  `json:"expected_desired_state_commitment,omitempty"`
+	ExpectedEffectiveStateCommitment string  `json:"expected_effective_state_commitment,omitempty"`
+	ExpiresAt                        string  `json:"expires_at,omitempty"`
+	IdempotencyKey                   string  `json:"idempotency_key"`
 }
 
 type SelfDevelopmentModeCAS struct {
@@ -160,7 +162,7 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 		"operation_id": next.OperationID, "base_event_head": next.ExpectedDesiredEventHead,
 		"expected_desired_event_head":         next.ExpectedDesiredEventHead,
 		"expected_effective_event_head":       next.ExpectedEffectiveEventHead,
-		"expected_pending_transition_ref":     "",
+		"expected_pending_transition_ref":     next.ExpectedPendingTransitionRef,
 		"expected_desired_state_commitment":   next.ExpectedDesiredStateCommitment,
 		"expected_effective_state_commitment": next.ExpectedEffectiveStateCommitment,
 		"bundle_digest":                       next.BundleDigest, "expires_at": next.ExpiresAt,
@@ -168,6 +170,8 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 		"consumed_bundle_digest":              current.BundleDigest,
 		"consumed_desired_event_head":         current.ExpectedDesiredEventHead,
 		"consumed_effective_event_head":       current.ExpectedEffectiveEventHead,
+		"consumed_pending_transition_ref":     current.ExpectedPendingTransitionRef,
+		"consumed_expires_at":                 current.ExpiresAt,
 		"consumed_desired_state_commitment":   current.ExpectedDesiredStateCommitment,
 		"consumed_effective_state_commitment": current.ExpectedEffectiveStateCommitment,
 		"idempotency_key":                     request.IdempotencyKey, "request_commitment": requestCommitment,
@@ -181,9 +185,9 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 		return SelfDevelopmentMode{}, err
 	}
 	next.Receipt = &receipt
-	values := []any{next.Mode, next.Generation, nullableString(next.OperationID), nullableString(next.BundleDigest), nullableString(next.ExpectedDesiredEventHead), nullableString(next.ExpectedEffectiveEventHead), nullableString(next.ExpectedDesiredStateCommitment), nullableString(next.ExpectedEffectiveStateCommitment), expiry, request.IdempotencyKey, requestCommitment, string(receiptJSON), computerevent.DigestBytes(receiptJSON), now}
+	values := []any{next.Mode, next.Generation, nullableString(next.OperationID), nullableString(next.BundleDigest), nullableString(next.ExpectedDesiredEventHead), nullableString(next.ExpectedEffectiveEventHead), nullableString(next.ExpectedPendingTransitionRef), nullableString(next.ExpectedDesiredStateCommitment), nullableString(next.ExpectedEffectiveStateCommitment), expiry, request.IdempotencyKey, requestCommitment, string(receiptJSON), computerevent.DigestBytes(receiptJSON), now}
 	if found {
-		result, execErr := tx.ExecContext(ctx, `UPDATE computer_self_development_modes SET mode=?, generation=?, operation_id=?, bundle_digest=?, expected_desired_event_head=?, expected_effective_event_head=?, expected_desired_state_commitment=?, expected_effective_state_commitment=?, expires_at=?, last_idempotency_key=?, last_request_commitment=?, mode_receipt_json=?, mode_receipt_digest=?, updated_at=? WHERE computer_id=? AND generation=?`, append(values, computerID, current.Generation)...)
+		result, execErr := tx.ExecContext(ctx, `UPDATE computer_self_development_modes SET mode=?, generation=?, operation_id=?, bundle_digest=?, expected_desired_event_head=?, expected_effective_event_head=?, expected_pending_transition_ref=?, expected_desired_state_commitment=?, expected_effective_state_commitment=?, expires_at=?, last_idempotency_key=?, last_request_commitment=?, mode_receipt_json=?, mode_receipt_digest=?, updated_at=? WHERE computer_id=? AND generation=?`, append(values, computerID, current.Generation)...)
 		if execErr != nil {
 			return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: update: %w", execErr)
 		}
@@ -191,7 +195,7 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 			return SelfDevelopmentMode{}, ErrSelfDevelopmentModeConflict
 		}
 	} else {
-		_, err = tx.ExecContext(ctx, `INSERT INTO computer_self_development_modes (computer_id, mode, generation, operation_id, bundle_digest, expected_desired_event_head, expected_effective_event_head, expected_desired_state_commitment, expected_effective_state_commitment, expires_at, last_idempotency_key, last_request_commitment, mode_receipt_json, mode_receipt_digest, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{computerID}, values...)...)
+		_, err = tx.ExecContext(ctx, `INSERT INTO computer_self_development_modes (computer_id, mode, generation, operation_id, bundle_digest, expected_desired_event_head, expected_effective_event_head, expected_pending_transition_ref, expected_desired_state_commitment, expected_effective_state_commitment, expires_at, last_idempotency_key, last_request_commitment, mode_receipt_json, mode_receipt_digest, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, append([]any{computerID}, values...)...)
 		if err != nil {
 			return SelfDevelopmentMode{}, fmt.Errorf("self-development mode: insert: %w", err)
 		}
@@ -210,6 +214,9 @@ func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request 
 	ordinaryBindings := []string{request.OperationID, request.BundleDigest, request.ExpectedDesiredEventHead, request.ExpectedEffectiveEventHead, request.ExpectedDesiredStateCommitment, request.ExpectedEffectiveStateCommitment, request.ExpiresAt}
 	switch request.Mode {
 	case SelfDevelopmentModeOff, SelfDevelopmentModeAuditOnly, SelfDevelopmentModeProposeOnly:
+		if request.ExpectedPendingTransitionRef != nil {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: bindings are forbidden for %s", request.Mode)
+		}
 		for _, value := range ordinaryBindings {
 			if strings.TrimSpace(value) != "" {
 				return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: bindings are forbidden for %s", request.Mode)
@@ -217,8 +224,8 @@ func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request 
 		}
 		return next, nil, nil
 	case SelfDevelopmentModeAcceptOnce:
-		if strings.TrimSpace(request.OperationID) == "" || !computerevent.IsSHA256(request.BundleDigest) || !computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) || !computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) {
-			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: accept_once requires exact operation, bundle, heads, and commitments")
+		if request.ExpectedPendingTransitionRef == nil || strings.TrimSpace(request.OperationID) == "" || !computerevent.IsSHA256(request.BundleDigest) || !computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) || !computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) {
+			return SelfDevelopmentMode{}, nil, fmt.Errorf("self-development mode: accept_once requires exact operation, bundle, heads, pending transition, and commitments")
 		}
 		expiresAt, err := time.Parse(time.RFC3339Nano, request.ExpiresAt)
 		if err != nil || expiresAt.Location() != time.UTC || expiresAt.Format(time.RFC3339Nano) != request.ExpiresAt || !expiresAt.After(now.UTC()) {
@@ -228,6 +235,7 @@ func validateSelfDevelopmentModeTransition(current SelfDevelopmentMode, request 
 		next.BundleDigest = request.BundleDigest
 		next.ExpectedDesiredEventHead = request.ExpectedDesiredEventHead
 		next.ExpectedEffectiveEventHead = request.ExpectedEffectiveEventHead
+		next.ExpectedPendingTransitionRef = strings.TrimSpace(*request.ExpectedPendingTransitionRef)
 		next.ExpectedDesiredStateCommitment = request.ExpectedDesiredStateCommitment
 		next.ExpectedEffectiveStateCommitment = request.ExpectedEffectiveStateCommitment
 		next.ExpiresAt = request.ExpiresAt
@@ -250,14 +258,14 @@ func selfDevelopmentModeRequestCommitment(computerID string, request SetSelfDeve
 }
 
 func readSelfDevelopmentMode(ctx context.Context, db queryRower, computerID string, forUpdate bool) (SelfDevelopmentMode, bool, error) {
-	query := `SELECT mode, generation, COALESCE(operation_id, ''), COALESCE(bundle_digest, ''), COALESCE(expected_desired_event_head, ''), COALESCE(expected_effective_event_head, ''), COALESCE(expected_desired_state_commitment, ''), COALESCE(expected_effective_state_commitment, ''), expires_at, mode_receipt_json FROM computer_self_development_modes WHERE computer_id=?`
+	query := `SELECT mode, generation, COALESCE(operation_id, ''), COALESCE(bundle_digest, ''), COALESCE(expected_desired_event_head, ''), COALESCE(expected_effective_event_head, ''), COALESCE(expected_pending_transition_ref, ''), COALESCE(expected_desired_state_commitment, ''), COALESCE(expected_effective_state_commitment, ''), expires_at, mode_receipt_json FROM computer_self_development_modes WHERE computer_id=?`
 	if forUpdate {
 		query += " FOR UPDATE"
 	}
 	var mode SelfDevelopmentMode
 	var expiresAt sql.NullTime
 	var receiptJSON string
-	err := db.QueryRowContext(ctx, query, computerID).Scan(&mode.Mode, &mode.Generation, &mode.OperationID, &mode.BundleDigest, &mode.ExpectedDesiredEventHead, &mode.ExpectedEffectiveEventHead, &mode.ExpectedDesiredStateCommitment, &mode.ExpectedEffectiveStateCommitment, &expiresAt, &receiptJSON)
+	err := db.QueryRowContext(ctx, query, computerID).Scan(&mode.Mode, &mode.Generation, &mode.OperationID, &mode.BundleDigest, &mode.ExpectedDesiredEventHead, &mode.ExpectedEffectiveEventHead, &mode.ExpectedPendingTransitionRef, &mode.ExpectedDesiredStateCommitment, &mode.ExpectedEffectiveStateCommitment, &expiresAt, &receiptJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SelfDevelopmentMode{}, false, nil
 	}

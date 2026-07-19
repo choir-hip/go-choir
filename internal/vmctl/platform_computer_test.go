@@ -221,7 +221,7 @@ func TestSandboxProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
 	defer runtime.Close()
 
 	mgr := &mockVMManager{
-		resumeResponse: &VMInstanceInfo{
+		bootResponse: &VMInstanceInfo{
 			HostURL: runtime.URL,
 			Epoch:   59,
 			Healthy: true,
@@ -253,8 +253,8 @@ func TestSandboxProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if len(mgr.resumes) != 1 || mgr.resumes[0] != UniversalWirePlatformVMID {
-		t.Fatalf("expected platform resume before proxy, got %#v", mgr.resumes)
+	if len(mgr.boots) != 1 || mgr.boots[0].VMID != UniversalWirePlatformVMID {
+		t.Fatalf("expected fresh platform boot before proxy, got %#v", mgr.boots)
 	}
 	own := reg.ownerships[key]
 	if own.State != VMStateActive || own.SandboxURL != runtime.URL {

@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-// TestRoutingSemanticDedupAndVMRouting validates that Qdrant similarity search
-// can route source captures to worker VMs and perform semantic dedup.
+// TestRoutingSemanticDedupAndAgentRouting validates that Qdrant similarity
+// search can route source captures to durable agents and perform semantic dedup.
 //
 // Prerequisites:
 //   - Qdrant running (default http://localhost:6333 or QDRANT_URL env)
 //   - Ollama running with batiai/qwen3-embedding:0.6b pulled
 //   - QDRANT_TEST=1 env var set to enable this integration test
-func TestRoutingSemanticDedupAndVMRouting(t *testing.T) {
+func TestRoutingSemanticDedupAndAgentRouting(t *testing.T) {
 	if os.Getenv("QDRANT_TEST") == "" {
 		t.Skip("skipping routing test; set QDRANT_TEST=1 to run")
 	}

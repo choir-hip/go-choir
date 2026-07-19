@@ -230,7 +230,8 @@ func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProje
 		EventKind: computerevent.EventEffectAccepted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 		IdempotencyKey: "recovery-decision", RequestCommitment: computerevent.ZeroHead,
 		TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID, PreviousHead: head.CanonicalEventHead,
-		ActorProfile: "super", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
+		ParentEventID: operation.OperationID,
+		ActorProfile:  "super", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
 		ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
 		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: bundleDigest,
@@ -257,7 +258,7 @@ func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProje
 		t.Fatalf("stored decision unavailable: found=%v err=%v", found, err)
 	}
 	decisionDigest, _ := storedDecision.Digest()
-	if recovered.State != selfdev.StateAccepted || recovered.DecisionEvent != decisionDigest || recovered.DecisionActor != "owner" {
+	if recovered.State != selfdev.StateAccepted || recovered.DecisionEvent != decisionDigest || recovered.DecisionActor != "owner" || recovered.DecisionReceipt == "" {
 		t.Fatalf("recovered operation = %+v", recovered)
 	}
 	replayed, found, err := runtime.recoverSelfDevelopmentDecision(ctx, recovered)

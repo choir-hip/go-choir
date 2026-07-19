@@ -15,7 +15,7 @@ import (
 
 var itemDispositions = map[string]bool{
 	"delete": true, "core": true,
-	"api": true, "browser": true, "candidate_package": true, "content": true,
+	"api": true, "browser": true, "content": true,
 	"desktop": true, "evidence": true, "lifecycle": true, "media": true,
 	"model": true, "podcast": true, "promotion": true, "research": true,
 	"texture": true, "tools": true, "wire": true,

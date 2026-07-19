@@ -19,10 +19,11 @@ import (
 // Choir. The updater never receives access to PID 1 or a general service
 // manager socket.
 type RestartRequestManager struct {
-	Path        string
-	PrepareURL  string
-	HandoffPath string
-	Client      *http.Client
+	Path         string
+	PrepareURL   string
+	RecoveryPath string
+	CleanupPath  string
+	Client       *http.Client
 }
 
 func (m RestartRequestManager) Restart(ctx context.Context) error {
@@ -33,11 +34,7 @@ func (m RestartRequestManager) Restart(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	handoffPath := filepath.Clean(strings.TrimSpace(m.HandoffPath))
 	if m.PrepareURL != "" {
-		if !filepath.IsAbs(handoffPath) || filepath.Base(handoffPath) != "restart-capability" {
-			return fmt.Errorf("updater: invalid restart handoff path")
-		}
 		prepareURL, err := url.Parse(m.PrepareURL)
 		if err != nil || prepareURL.Scheme != "http" || prepareURL.User != nil || prepareURL.RawQuery != "" || prepareURL.Fragment != "" ||
 			prepareURL.Path != "/internal/self-development/restart-handoff" {
@@ -47,9 +44,7 @@ func (m RestartRequestManager) Restart(ctx context.Context) error {
 		if address == nil || !address.IsLoopback() {
 			return fmt.Errorf("updater: restart preparation must use loopback")
 		}
-		if err := os.Remove(handoffPath); err != nil && !os.IsNotExist(err) {
-			return err
-		}
+
 		request, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, prepareURL.String(), nil)
 		if requestErr != nil {
 			return requestErr
@@ -70,13 +65,36 @@ func (m RestartRequestManager) Restart(ctx context.Context) error {
 			return fmt.Errorf("updater: prepare restart credential status %d", response.StatusCode)
 		}
 	}
+	return publishRestartControlRequest(ctx, path, "restart")
+}
+
+func (m RestartRequestManager) RecoveryRestart(ctx context.Context) error {
+	path := filepath.Clean(strings.TrimSpace(m.RecoveryPath))
+	if !filepath.IsAbs(path) || filepath.Base(path) != "recover" {
+		return fmt.Errorf("updater: invalid recovery restart request path")
+	}
+	return publishRestartControlRequest(ctx, path, "recover")
+}
+
+func (m RestartRequestManager) CleanupRecoveryCredential(ctx context.Context) error {
+	path := filepath.Clean(strings.TrimSpace(m.CleanupPath))
+	if !filepath.IsAbs(path) || filepath.Base(path) != "cleanup" {
+		return fmt.Errorf("updater: invalid recovery cleanup request path")
+	}
+	return publishRestartControlRequest(ctx, path, "cleanup")
+}
+
+func publishRestartControlRequest(ctx context.Context, path, action string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	file, err := os.CreateTemp(filepath.Dir(path), ".restart-")
 	if err != nil {
 		return fmt.Errorf("updater: create restart request: %w", err)
 	}
 	temporary := file.Name()
 	defer os.Remove(temporary)
-	if _, err := file.WriteString("restart\n"); err != nil {
+	if _, err := file.WriteString(action + "\n"); err != nil {
 		_ = file.Close()
 		return err
 	}
@@ -89,20 +107,6 @@ func (m RestartRequestManager) Restart(ctx context.Context) error {
 	}
 	if err := os.Rename(temporary, path); err != nil {
 		return fmt.Errorf("updater: publish restart request: %w", err)
-	}
-	return nil
-}
-
-func (m RestartRequestManager) CleanupRestartHandoff() error {
-	path := filepath.Clean(strings.TrimSpace(m.HandoffPath))
-	if m.PrepareURL == "" {
-		return nil
-	}
-	if !filepath.IsAbs(path) || filepath.Base(path) != "restart-capability" {
-		return fmt.Errorf("updater: invalid restart handoff path")
-	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		return err
 	}
 	return nil
 }

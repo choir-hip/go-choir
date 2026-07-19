@@ -48,6 +48,9 @@ func (e *Executor) ResolveGrantedCapsuleID(string, string) (string, error) {
 func (e *Executor) ResolveGrantedSourceSnapshotDigest(string, string) (string, error) {
 	return "", stubErr("resolve")
 }
+func (e *Executor) ResolveGrantedFreezeBindings(string, string) (string, string, error) {
+	return "", "", stubErr("resolve")
+}
 func (e *Executor) StageGrantedRelease(string, string, string) ([]FrozenReleaseFile, string, error) {
 	return nil, "", stubErr("stage")
 }
@@ -62,6 +65,12 @@ func (e *Executor) RevokeCapability(string, string) error       { return stubErr
 func (e *Executor) ResolveTarget(*Capability) ([]string, error) { return nil, stubErr("resolve") }
 func (e *Executor) Exec(context.Context, string, string, ExecRequest) (ExecResult, error) {
 	return ExecResult{}, stubErr("exec")
+}
+func (e *Executor) ResolveGrantedExecutionReceipts(context.Context, string, string, []string) ([]ExecutionReceipt, error) {
+	return nil, stubErr("execution receipts")
+}
+func (e *Executor) ResolveExecutionReceipts([]string) ([]ExecutionReceipt, error) {
+	return nil, stubErr("execution receipts")
 }
 func (e *Executor) ReadFile(context.Context, string, string, string) ([]byte, error) {
 	return nil, stubErr("read")

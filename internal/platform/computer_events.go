@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS computer_self_development_modes (
   bundle_digest CHAR(64) NULL,
   expected_desired_event_head CHAR(64) NULL,
   expected_effective_event_head CHAR(64) NULL,
+  expected_pending_transition_ref VARCHAR(255) NULL,
   expected_desired_state_commitment CHAR(64) NULL,
   expected_effective_state_commitment CHAR(64) NULL,
   expires_at DATETIME(6) NULL,
@@ -97,15 +98,18 @@ CREATE TABLE IF NOT EXISTS computer_self_development_modes (
   PRIMARY KEY (computer_id),
   KEY computer_self_development_modes_expiry_idx (mode, expires_at)
 );
-CREATE TABLE IF NOT EXISTS computer_privacy_keys (
+CREATE TABLE IF NOT EXISTS computer_lifecycle_operations (
   computer_id VARCHAR(128) NOT NULL,
-  key_version_digest CHAR(64) NOT NULL,
-  key_material VARCHAR(64) NOT NULL,
+  idempotency_key VARCHAR(255) NOT NULL,
+  request_commitment CHAR(64) NOT NULL,
+  action VARCHAR(32) NOT NULL,
+  prior_lifecycle_state VARCHAR(32) NOT NULL,
+  prior_realization_epoch BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(32) NOT NULL,
   created_at DATETIME(6) NOT NULL,
-  PRIMARY KEY (computer_id),
-  UNIQUE KEY computer_privacy_key_digest_uq (key_version_digest)
+  completed_at DATETIME(6) NULL,
+  PRIMARY KEY (computer_id, idempotency_key)
 );
-
 CREATE TABLE IF NOT EXISTS computer_lifecycle_receipts (
   computer_id VARCHAR(128) NOT NULL,
   idempotency_key VARCHAR(255) NOT NULL,
@@ -255,6 +259,15 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	_, err = tx.ExecContext(ctx, `INSERT INTO computer_event_append_receipts (computer_id, idempotency_key, request_commitment, sequence, previous_head, event_kind, event_digest, event_artifact_ref, event_pin_receipt_digest, pin_receipt_digests_json, event_head_receipt_id, event_head_receipt_json, event_head_receipt_digest, desired_event_head, effective_event_head, desired_state_commitment, effective_state_commitment, pending_transition_ref, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, request.Event.ComputerID, request.Event.IdempotencyKey, request.Event.RequestCommitment, request.Event.Sequence, request.Event.PreviousHead, request.Event.EventKind, request.EventDigest, request.EventArtifactDigest, request.EventPinReceiptDigest, string(pinsJSON), receipt.ReceiptID, string(receiptJSON), receiptDigest, next.DesiredEventHead, next.EffectiveEventHead, next.DesiredStateCommitment, next.EffectiveStateCommitment, pending, now)
 	if err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: insert receipt: %w", err)
+	}
+	if request.Event.EventKind == computerevent.EventLifecycleObserved {
+		result, joinErr := tx.ExecContext(ctx, `UPDATE computer_lifecycle_receipts SET joined_event_digest=? WHERE computer_id=? AND receipt_digest=? AND action IN ('start','stop','restart') AND joined_event_digest IS NULL`, request.EventDigest, request.Event.ComputerID, request.Event.ProposedEffectRef)
+		if joinErr != nil {
+			return computerevent.Receipt{}, fmt.Errorf("computer event CAS: join lifecycle receipt: %w", joinErr)
+		}
+		if rows, rowsErr := result.RowsAffected(); rowsErr != nil || rows != 1 {
+			return computerevent.Receipt{}, fmt.Errorf("computer event CAS: lifecycle receipt join unavailable")
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: commit: %w", err)

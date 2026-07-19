@@ -30,21 +30,22 @@ import (
 // opaque, run-bound capabilities. All authority is process-local and is lost
 // when the guest runtime restarts; no host daemon or vsock authority exists.
 type Executor struct {
-	mu             sync.RWMutex
-	capsules       map[string]*Capsule
-	capabilities   map[capKey]*Capability
-	controlHandles map[capKey]string
-	revokedCaps    map[string]bool
-	stateDir       string
-	lowerDir       string
-	sourceDir      string
-	brokerPath     string
-	brokerDigest   [sha256.Size]byte
-	publicKey      ed25519.PublicKey
-	privateKey     ed25519.PrivateKey
-	initErr        error
-	vmMemoryTotal  int64
-	vmMemoryUsed   int64
+	mu                sync.RWMutex
+	capsules          map[string]*Capsule
+	capabilities      map[capKey]*Capability
+	controlHandles    map[capKey]string
+	revokedCaps       map[string]bool
+	executionReceipts map[string]ExecutionReceipt
+	stateDir          string
+	lowerDir          string
+	sourceDir         string
+	brokerPath        string
+	brokerDigest      [sha256.Size]byte
+	publicKey         ed25519.PublicKey
+	privateKey        ed25519.PrivateKey
+	initErr           error
+	vmMemoryTotal     int64
+	vmMemoryUsed      int64
 }
 
 // NewExecutor constructs guest-local capsule authority. brokerPath must name a
@@ -56,15 +57,16 @@ func NewExecutor(stateDir, lowerDir, brokerPath string, vmMemoryTotal int64) *Ex
 
 func NewExecutorWithSource(stateDir, lowerDir, sourceDir, brokerPath string, vmMemoryTotal int64) *Executor {
 	e := &Executor{
-		capsules:       make(map[string]*Capsule),
-		capabilities:   make(map[capKey]*Capability),
-		controlHandles: make(map[capKey]string),
-		revokedCaps:    make(map[string]bool),
-		stateDir:       filepath.Clean(stateDir),
-		lowerDir:       filepath.Clean(lowerDir),
-		sourceDir:      filepath.Clean(sourceDir),
-		brokerPath:     filepath.Clean(brokerPath),
-		vmMemoryTotal:  vmMemoryTotal,
+		capsules:          make(map[string]*Capsule),
+		capabilities:      make(map[capKey]*Capability),
+		controlHandles:    make(map[capKey]string),
+		revokedCaps:       make(map[string]bool),
+		executionReceipts: make(map[string]ExecutionReceipt),
+		stateDir:          filepath.Clean(stateDir),
+		lowerDir:          filepath.Clean(lowerDir),
+		sourceDir:         filepath.Clean(sourceDir),
+		brokerPath:        filepath.Clean(brokerPath),
+		vmMemoryTotal:     vmMemoryTotal,
 	}
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -396,7 +398,128 @@ func (e *Executor) Exec(ctx context.Context, agentRunID, handle string, request 
 	if err != nil {
 		return ExecResult{}, err
 	}
-	return caps.Exec(ctx, capability, request)
+	result, err := caps.Exec(ctx, capability, request)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	if len(computerevent.DetectPrivateSecrets([]byte(request.Command))) != 0 {
+		return ExecResult{}, fmt.Errorf("capsule: secret-bearing command cannot produce auditable execution evidence")
+	}
+	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	receipt := ExecutionReceipt{
+		CapsuleID: caps.ID, Command: request.Command, Cwd: request.Cwd, ExitCode: result.ExitCode,
+		StdoutDigest: computerevent.DigestBytes([]byte(result.Stdout)), StderrDigest: computerevent.DigestBytes([]byte(result.Stderr)),
+		WorktreeDigest: worktreeDigest, SourceTreeDigest: caps.SourceSnapshotDigest, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	canonical, err := computerevent.CanonicalJSON(receipt)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	receipt.ReceiptRef = "capsule-exec:sha256:" + computerevent.DigestBytes(canonical)
+	e.mu.Lock()
+	e.executionReceipts[receipt.ReceiptRef] = receipt
+	e.mu.Unlock()
+	result.ReceiptRef = receipt.ReceiptRef
+	return result, nil
+}
+
+func digestCapsuleWorktree(ctx context.Context, caps *Capsule) (string, error) {
+	changes, err := caps.Diff(ctx)
+	if err != nil {
+		return "", err
+	}
+	sort.Slice(changes, func(i, j int) bool { return changes[i].Path < changes[j].Path })
+	type entry struct {
+		Path          string `json:"path"`
+		Kind          string `json:"kind"`
+		Mode          uint32 `json:"mode"`
+		ContentDigest string `json:"content_digest,omitempty"`
+	}
+	entries := make([]entry, 0, len(changes))
+	for _, change := range changes {
+		item := entry{Path: change.Path, Kind: change.Kind.String(), Mode: uint32(change.Mode.Perm())}
+		if change.Kind != ChangeDeleted {
+			path := filepath.Join(caps.MergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
+			info, statErr := os.Lstat(path)
+			if statErr != nil {
+				return "", statErr
+			}
+			switch {
+			case info.Mode().IsRegular():
+				input, openErr := os.Open(path)
+				if openErr != nil {
+					return "", openErr
+				}
+				hash := sha256.New()
+				_, copyErr := io.Copy(hash, input)
+				closeErr := input.Close()
+				if copyErr != nil || closeErr != nil {
+					return "", errors.Join(copyErr, closeErr)
+				}
+				item.ContentDigest = hex.EncodeToString(hash.Sum(nil))
+			case info.Mode()&os.ModeSymlink != 0:
+				target, linkErr := os.Readlink(path)
+				if linkErr != nil {
+					return "", linkErr
+				}
+				item.ContentDigest = computerevent.DigestBytes([]byte(target))
+			}
+		}
+		entries = append(entries, item)
+	}
+	canonical, err := computerevent.CanonicalJSON(entries)
+	if err != nil {
+		return "", err
+	}
+	return computerevent.DigestBytes(canonical), nil
+}
+
+func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRunID, handle string, refs []string) ([]ExecutionReceipt, error) {
+	capability, caps, err := e.resolveOne(agentRunID, handle, "exec")
+	if err != nil || capability.AgentRole != RoleCoSuper {
+		return nil, fmt.Errorf("capsule execution evidence unavailable")
+	}
+	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
+	if err != nil {
+		return nil, err
+	}
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	receipts := make([]ExecutionReceipt, 0, len(refs))
+	seen := make(map[string]struct{}, len(refs))
+	for _, ref := range refs {
+		if _, duplicate := seen[ref]; duplicate {
+			continue
+		}
+		receipt, found := e.executionReceipts[ref]
+		if !found || receipt.CapsuleID != caps.ID || receipt.ExitCode != 0 || receipt.WorktreeDigest != worktreeDigest ||
+			receipt.SourceTreeDigest != caps.SourceSnapshotDigest {
+			return nil, fmt.Errorf("capsule execution evidence does not bind the final successful worktree")
+		}
+		seen[ref] = struct{}{}
+		receipts = append(receipts, receipt)
+	}
+	if len(receipts) == 0 {
+		return nil, fmt.Errorf("capsule execution evidence is required")
+	}
+	return receipts, nil
+}
+
+func (e *Executor) ResolveExecutionReceipts(refs []string) ([]ExecutionReceipt, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	receipts := make([]ExecutionReceipt, 0, len(refs))
+	for _, ref := range refs {
+		receipt, found := e.executionReceipts[ref]
+		if !found {
+			return nil, fmt.Errorf("capsule execution receipt unavailable")
+		}
+		receipts = append(receipts, receipt)
+	}
+	return receipts, nil
 }
 
 func (e *Executor) ReadFile(ctx context.Context, agentRunID, handle, path string) ([]byte, error) {
@@ -520,6 +643,28 @@ func (e *Executor) ResolveGrantedSourceSnapshotDigest(agentRunID, handle string)
 		return "", fmt.Errorf("capsule granted source snapshot unavailable")
 	}
 	return capsule.SourceSnapshotDigest, nil
+}
+
+func (e *Executor) ResolveGrantedFreezeBindings(agentRunID, handle string) (string, string, error) {
+	capability, err := e.ResolveCapability(agentRunID, handle)
+	if err != nil || capability.AgentRole != RoleCoSuper {
+		return "", "", fmt.Errorf("capsule freeze bindings unavailable")
+	}
+	e.mu.RLock()
+	capsule := e.capsules[capability.TargetCapsule]
+	e.mu.RUnlock()
+	if capsule == nil {
+		return "", "", fmt.Errorf("capsule freeze bindings unavailable")
+	}
+	capabilityBytes, err := computerevent.CanonicalJSON(capability)
+	if err != nil {
+		return "", "", err
+	}
+	resourceBytes, err := computerevent.CanonicalJSON(capsule.Spec)
+	if err != nil {
+		return "", "", err
+	}
+	return computerevent.DigestBytes(capabilityBytes), "resource:sha256:" + computerevent.DigestBytes(resourceBytes), nil
 }
 
 func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) ([]FrozenReleaseFile, string, error) {

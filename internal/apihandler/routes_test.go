@@ -53,7 +53,6 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/run-acceptances/acceptance-1",
 		"/api/evals/texture-prompt",
 		"/internal/runtime/channel-casts",
-		"/internal/runtime/refresh",
 		"/internal/runtime/runs",
 		"/internal/runtime/runs/run-1",
 		"/internal/texture/documents/document-1",

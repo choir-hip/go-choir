@@ -75,10 +75,8 @@ type ApplyResult struct {
 
 type ServiceManager interface {
 	Restart(context.Context) error
-}
-
-type restartHandoffCleaner interface {
-	CleanupRestartHandoff() error
+	RecoveryRestart(context.Context) error
+	CleanupRecoveryCredential(context.Context) error
 }
 
 type HealthProber interface {
@@ -178,14 +176,12 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			return ApplyResult{}, err
 		}
 	}
+	completedAt := u.now().UTC().Truncate(time.Microsecond)
 	if journal.Phase == "restart_requested" {
 		observations, probeErr := u.health.Probe(ctx, releaseDigest, request.Manifest)
 		if probeErr == nil {
-			completedAt := u.now().UTC().Truncate(time.Microsecond)
-			if cleaner, ok := u.service.(restartHandoffCleaner); ok {
-				if cleanupErr := cleaner.CleanupRestartHandoff(); cleanupErr != nil {
-					return ApplyResult{}, cleanupErr
-				}
+			if cleanupErr := u.service.CleanupRecoveryCredential(ctx); cleanupErr != nil {
+				return ApplyResult{}, fmt.Errorf("updater: cleanup recovery credential: %w", cleanupErr)
 			}
 			healthReceipt, receiptErr := u.signHealthReceipt(request, releaseDigest, journal.StartedAt, completedAt, observations, "healthy")
 			if receiptErr != nil {
@@ -222,16 +218,10 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		return ApplyResult{}, fmt.Errorf("updater: invalid operation journal phase %q", journal.Phase)
 	}
 	failure := errors.New(journal.Failure)
-	completedAt := u.now().UTC().Truncate(time.Microsecond)
 	recoveryReceipt, recoveryErr := u.restorePrior(ctx, request, journal.PriorReleaseTarget, journal.PriorReleaseDigest, releaseDigest, failure, completedAt)
 	result := ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: journal.PriorReleaseDigest, Outcome: "failed", RecoveryReceipt: recoveryReceipt}
 	if recoveryErr != nil {
 		return result, errors.Join(failure, recoveryErr)
-	}
-	if cleaner, ok := u.service.(restartHandoffCleaner); ok {
-		if cleanupErr := cleaner.CleanupRestartHandoff(); cleanupErr != nil {
-			return result, cleanupErr
-		}
 	}
 	journal.Result = result
 	journal.Phase = "completed"
@@ -561,7 +551,7 @@ func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorT
 	if err := u.swapCurrent(priorTarget); err != nil {
 		return nil, fmt.Errorf("updater: restore prior pointer: %w", err)
 	}
-	if err := u.service.Restart(ctx); err != nil {
+	if err := u.service.RecoveryRestart(ctx); err != nil {
 		return nil, fmt.Errorf("updater: restart restored release: %w", err)
 	}
 	priorManifest, err := readReleaseManifest(priorTarget)
@@ -571,6 +561,9 @@ func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorT
 	observations, err := u.health.Probe(ctx, priorDigest, priorManifest)
 	if err != nil {
 		return nil, fmt.Errorf("updater: restored release unhealthy: %w", err)
+	}
+	if err := u.service.CleanupRecoveryCredential(ctx); err != nil {
+		return nil, fmt.Errorf("updater: cleanup recovery credential after restore: %w", err)
 	}
 	receipt, err := computerevent.NewSignedReceipt("UpdaterRecoveryReceipt", "choir-updater", map[string]any{
 		"computer_id": request.ComputerID, "realization_id": request.RealizationID,

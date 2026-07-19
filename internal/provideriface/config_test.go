@@ -82,43 +82,6 @@ func TestLoadConfigReadsEnableTestAPIs(t *testing.T) {
 	}
 }
 
-func TestLoadConfigPromotionBuildTimeout(t *testing.T) {
-	t.Run("default accommodates a cold recipient build", func(t *testing.T) {
-		t.Setenv("RUNTIME_APP_PROMOTION_BUILD_TIMEOUT", "")
-		cfg := LoadConfig()
-		if cfg.AppPromotionBuildTimeout != 30*time.Minute {
-			t.Fatalf("app promotion build timeout = %s, want 30m", cfg.AppPromotionBuildTimeout)
-		}
-	})
-	t.Run("explicit override wins", func(t *testing.T) {
-		t.Setenv("RUNTIME_APP_PROMOTION_BUILD_TIMEOUT", "45m")
-		cfg := LoadConfig()
-		if cfg.AppPromotionBuildTimeout != 45*time.Minute {
-			t.Fatalf("app promotion build timeout = %s, want 45m", cfg.AppPromotionBuildTimeout)
-		}
-	})
-}
-
-func TestLoadConfigDefaultsPromotionSourceRepoOutsideGitWorktree(t *testing.T) {
-	t.Setenv("RUNTIME_PROMOTION_SOURCE_REPO", "")
-	t.Setenv("RUNTIME_WORKER_REPO_REMOTE", "")
-	oldWD, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	if err := os.Chdir(t.TempDir()); err != nil {
-		t.Fatalf("chdir temp: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = os.Chdir(oldWD)
-	})
-
-	cfg := LoadConfig()
-	if cfg.PromotionSourceRepo != DefaultPromotionSourceRepo {
-		t.Fatalf("promotion source repo = %q, want %q", cfg.PromotionSourceRepo, DefaultPromotionSourceRepo)
-	}
-}
-
 func TestLoadConfigReadsObscuraCDPScreenshots(t *testing.T) {
 	t.Setenv("CHOIR_OBSCURA_CDP_SCREENSHOTS", "true")
 
@@ -132,15 +95,11 @@ func TestNormalizeConfigPreservesExplicitZeroAndDerivesDefaults(t *testing.T) {
 	storePath := filepath.Join(t.TempDir(), "runtime.db")
 	cfg := NormalizeConfig(Config{
 		StorePath:            storePath,
-		PromotionSourceRepo:  "https://example.com/source.git",
 		QdrantDedupThreshold: 0,
 	})
 
 	if cfg.PromptRoot != filepath.Join(filepath.Dir(storePath), "prompts") {
 		t.Fatalf("prompt_root = %q", cfg.PromptRoot)
-	}
-	if cfg.PromotionWorkspaceRoot != filepath.Join(filepath.Dir(storePath), "promotion-workspaces") {
-		t.Fatalf("promotion_workspace_root = %q", cfg.PromotionWorkspaceRoot)
 	}
 	if cfg.ActivationBudget != DefaultActivationBudget {
 		t.Fatalf("activation_budget = %s, want %s", cfg.ActivationBudget, DefaultActivationBudget)

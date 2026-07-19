@@ -17,14 +17,14 @@ import (
 )
 
 type restartCredentialHandoff struct {
-	Version    int    `json:"version"`
-	BaseURL    string `json:"base_url"`
-	ComputerID string `json:"computer_id"`
-	Capability string `json:"capability"`
-	ExpiresAt  string `json:"expires_at"`
-	KeyID      string `json:"key_id"`
-	PublicKey  string `json:"public_key"`
-	PrivacyKey string `json:"privacy_key"`
+	Version       int    `json:"version"`
+	BaseURL       string `json:"base_url"`
+	ComputerID    string `json:"computer_id"`
+	RealizationID string `json:"realization_id"`
+	Capability    string `json:"capability"`
+	ExpiresAt     string `json:"expires_at"`
+	KeyID         string `json:"key_id"`
+	PublicKey     string `json:"public_key"`
 }
 
 func (g *GuestCredentials) WriteRestartHandoff(ctx context.Context, path string) error {
@@ -36,9 +36,9 @@ func (g *GuestCredentials) WriteRestartHandoff(ctx context.Context, path string)
 	}
 	g.mu.Lock()
 	handoff := restartCredentialHandoff{
-		Version: 1, BaseURL: g.baseURL, ComputerID: g.computerID, Capability: g.token,
-		ExpiresAt: g.expiresAt.UTC().Format(time.RFC3339Nano), KeyID: g.keyID,
-		PublicKey: base64.RawStdEncoding.EncodeToString(g.publicKey), PrivacyKey: g.privacyKey,
+		Version: 1, BaseURL: g.baseURL, ComputerID: g.computerID, RealizationID: g.realizationID,
+		Capability: g.token, ExpiresAt: g.expiresAt.UTC().Format(time.RFC3339Nano), KeyID: g.keyID,
+		PublicKey: base64.RawStdEncoding.EncodeToString(g.publicKey),
 	}
 	g.mu.Unlock()
 	canonical, err := computerevent.CanonicalJSON(handoff)
@@ -73,7 +73,7 @@ func (g *GuestCredentials) WriteRestartHandoff(ctx context.Context, path string)
 	return os.Rename(temporaryPath, path)
 }
 
-func RestoreGuestCredentials(path, baseURL, computerID string) (*GuestCredentials, error) {
+func RestoreGuestCredentials(path, baseURL, computerID, realizationID string) (*GuestCredentials, error) {
 	path = filepath.Clean(path)
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o400 {
@@ -90,18 +90,23 @@ func RestoreGuestCredentials(path, baseURL, computerID string) (*GuestCredential
 		return nil, fmt.Errorf("guest credential: invalid restart handoff")
 	}
 	canonical, err := computerevent.CanonicalJSON(handoff)
-	if err != nil || !bytes.Equal(canonical, raw) || handoff.Version != 1 || handoff.BaseURL != strings.TrimRight(baseURL, "/") || handoff.ComputerID != computerID {
+	if err != nil || !bytes.Equal(canonical, raw) || handoff.Version != 1 ||
+		handoff.BaseURL != strings.TrimRight(baseURL, "/") || handoff.ComputerID != computerID || handoff.RealizationID != realizationID {
 		return nil, fmt.Errorf("guest credential: restart handoff binding mismatch")
 	}
 	expiresAt, err := time.Parse(time.RFC3339Nano, handoff.ExpiresAt)
 	publicKey, keyErr := base64.RawStdEncoding.DecodeString(handoff.PublicKey)
 	capabilityExpires, capabilityErr := capabilityExpiry(handoff.Capability)
-	privacyKey, privacyErr := base64.RawStdEncoding.DecodeString(handoff.PrivacyKey)
-	if err != nil || keyErr != nil || privacyErr != nil || capabilityErr != nil || len(publicKey) != ed25519.PublicKeySize || len(privacyKey) != 32 || !expiresAt.Equal(capabilityExpires) || !time.Now().UTC().Before(expiresAt) || handoff.KeyID == "" {
+	if err != nil || keyErr != nil || capabilityErr != nil || len(publicKey) != ed25519.PublicKeySize || !expiresAt.Equal(capabilityExpires) || !time.Now().UTC().Before(expiresAt) || handoff.KeyID == "" {
 		return nil, fmt.Errorf("guest credential: restart handoff expired or invalid")
 	}
-	return &GuestCredentials{
-		baseURL: handoff.BaseURL, computerID: handoff.ComputerID, http: &http.Client{Timeout: 15 * time.Second},
-		token: handoff.Capability, expiresAt: expiresAt, keyID: handoff.KeyID, publicKey: ed25519.PublicKey(publicKey), privacyKey: handoff.PrivacyKey,
-	}, nil
+	credentials := &GuestCredentials{
+		baseURL: handoff.BaseURL, computerID: handoff.ComputerID, realizationID: handoff.RealizationID,
+		http: &http.Client{Timeout: 15 * time.Second}, token: handoff.Capability, expiresAt: expiresAt,
+		keyID: handoff.KeyID, publicKey: ed25519.PublicKey(publicKey),
+	}
+	if err := os.Remove(path); err != nil {
+		return nil, fmt.Errorf("guest credential: consume restart handoff: %w", err)
+	}
+	return credentials, nil
 }

@@ -68,7 +68,7 @@ func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) 
 	}
 }
 func (rt *Runtime) recoverSelfDevelopmentDecision(ctx context.Context, operation selfdev.Operation) (selfdev.Operation, bool, error) {
-	transition, found, err := rt.store.FinalizedDecisionForOperation(ctx, operation.ComputerID, operation.TrajectoryID, operation.CapsuleID)
+	transition, found, err := rt.store.FinalizedDecisionForOperation(ctx, operation.ComputerID, operation.OperationID, operation.TrajectoryID, operation.CapsuleID)
 	if err != nil || !found {
 		return operation, found, err
 	}
@@ -86,6 +86,7 @@ func (rt *Runtime) recoverSelfDevelopmentDecision(ctx context.Context, operation
 	}
 	recovered, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
 		next.DecisionEvent = transition.Request.EventDigest
+		next.DecisionReceipt = transition.Receipt.ReceiptID
 		next.DecisionActor = strings.TrimPrefix(event.AuthorityRef, "external-owner:")
 		next.DesiredHead = transition.Request.Next.DesiredEventHead
 		next.EffectiveHead = transition.Request.Next.EffectiveEventHead
@@ -108,10 +109,11 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	if err != nil || computerevent.DigestBytes(rawBundle) != operation.BundleDigest {
 		return fmt.Errorf("materializer: frozen bundle unavailable")
 	}
-	var bundle transaction.TransactionRecord
+	var bundle transaction.CapsuleEffectBundle
 	decoder := json.NewDecoder(strings.NewReader(string(rawBundle)))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&bundle); err != nil || bundle.Rejected || !computerevent.IsSHA256(bundle.RuntimeArtifactDigest) || bundle.BaseEffectiveEventHead != operation.EffectiveHead || len(bundle.RuntimeFiles) == 0 {
+	if err := decoder.Decode(&bundle); err != nil || bundle.Validate(true) != nil || bundle.BaseEventHead != operation.BaseHead ||
+		len(operation.VerifierRefs) == 0 || !selfDevelopmentContainsString(bundle.VerifierReceipts, operation.VerifierRefs[0]) {
 		return fmt.Errorf("materializer: invalid frozen bundle")
 	}
 	if operation.State == selfdev.StateAccepted {
@@ -148,15 +150,20 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 		}
 	}
 	bundleURI := "artifact+sha256://" + operation.BundleDigest + "/sha256/computer-event-payload/" + operation.BundleDigest
-	closure, err := computerversion.NewCodeClosure(bundle.SourceTreeDigest, []computerversion.CodeArtifact{{
+	frozenAt, err := time.Parse(time.RFC3339Nano, operation.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("materializer: invalid frozen operation time")
+	}
+	sourceTreeDigest := strings.TrimPrefix(bundle.SourceTreeRef, "source-tree:sha256:")
+	closure, err := computerversion.NewCodeClosure(sourceTreeDigest, []computerversion.CodeArtifact{{
 		Name: "capsule-effect-bundle.json", SHA256: operation.BundleDigest, URI: bundleURI,
-	}}, bundle.Timestamp.UTC())
+	}}, frozenAt.UTC())
 	if err != nil {
 		return err
 	}
 	program, err := computerversion.NewArtifactProgram([]computerversion.ArtifactProgramEntry{{
 		Kind: "capsule_effect_bundle", ContentSHA256: operation.BundleDigest, ArtifactURI: bundleURI,
-	}}, bundle.Timestamp.UTC())
+	}}, frozenAt.UTC())
 	if err != nil {
 		return err
 	}

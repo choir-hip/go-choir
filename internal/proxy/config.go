@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -41,6 +42,9 @@ type Config struct {
 	// CorpusdURL is the internal platform service URL. The proxy uses it
 	// for controlled private-computer to platform-publication transitions.
 	CorpusdURL string
+	// SelfDevelopmentDisposableComputerID is the sole explicitly disposable
+	// computer allowed to import self-development genesis. Empty refuses genesis.
+	SelfDevelopmentDisposableComputerID string
 
 	// MaildURL is the internal mail service URL. The proxy uses it for
 	// authenticated mailbox APIs and proxy-owned mail source handoff.
@@ -90,14 +94,15 @@ const (
 // under /tmp/go-choir-m2.
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		Port:              envOr("PROXY_PORT", DefaultProxyPort),
-		SandboxURL:        envOr("PROXY_SANDBOX_URL", DefaultSandboxURL),
-		AuthPublicKeyPath: defaultAuthPublicKeyPath(),
-		VmctlURL:          os.Getenv("PROXY_VMCTL_URL"),
-		VmctlTimeout:      durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
-		CorpusdURL:        envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
-		MaildURL:          envOr("PROXY_MAILD_URL", DefaultMaildURL),
-		AuthDBPath:        os.Getenv("PROXY_AUTH_DB_PATH"),
+		Port:                                envOr("PROXY_PORT", DefaultProxyPort),
+		SandboxURL:                          envOr("PROXY_SANDBOX_URL", DefaultSandboxURL),
+		AuthPublicKeyPath:                   defaultAuthPublicKeyPath(),
+		VmctlURL:                            os.Getenv("PROXY_VMCTL_URL"),
+		VmctlTimeout:                        durationEnvOr("PROXY_VMCTL_TIMEOUT", DefaultVmctlTimeout),
+		CorpusdURL:                          envOr("PROXY_CORPUSD_URL", DefaultCorpusdURL),
+		SelfDevelopmentDisposableComputerID: strings.TrimSpace(os.Getenv("PROXY_SELF_DEVELOPMENT_DISPOSABLE_COMPUTER_ID")),
+		MaildURL:                            envOr("PROXY_MAILD_URL", DefaultMaildURL),
+		AuthDBPath:                          os.Getenv("PROXY_AUTH_DB_PATH"),
 	}
 
 	if err := cfg.validate(); err != nil {

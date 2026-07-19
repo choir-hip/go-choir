@@ -594,6 +594,7 @@ CREATE TABLE IF NOT EXISTS self_development_operations (
 	verifier_refs_json             LONGTEXT NOT NULL DEFAULT '[]',
 	decision_actor                 VARCHAR(255) NOT NULL DEFAULT '',
 	decision_event                 CHAR(64) NOT NULL DEFAULT '',
+	decision_receipt               VARCHAR(255) NOT NULL DEFAULT '',
 	desired_head                   CHAR(64) NOT NULL,
 	effective_head                 CHAR(64) NOT NULL,
 	materialization_receipt        LONGTEXT NOT NULL DEFAULT '',
@@ -740,6 +741,7 @@ func (s *Store) bootstrap() error {
 		{"self_development_operations", "release_digest", "CHAR(64) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "code_ref", "VARCHAR(96) NOT NULL DEFAULT ''"},
 		{"self_development_operations", "artifact_program_ref", "VARCHAR(128) NOT NULL DEFAULT ''"},
+		{"self_development_operations", "decision_receipt", "VARCHAR(255) NOT NULL DEFAULT ''"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err

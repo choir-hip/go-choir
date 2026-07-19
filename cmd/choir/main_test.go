@@ -620,45 +620,49 @@ func TestRunCancelPostsRunResource(t *testing.T) {
 	}
 }
 
-func TestComputerLifecycleCommandsUseProductComputeAPI(t *testing.T) {
+func TestComputerLifecycleCommandsUseTargetedProductAPI(t *testing.T) {
 	var requests []struct {
-		method string
-		path   string
-		action string
+		method         string
+		path           string
+		idempotencyKey string
 	}
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		action := ""
+		idempotencyKey := ""
 		if r.Method == http.MethodPost {
 			var body map[string]string
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatalf("decode lifecycle body: %v", err)
 			}
-			action = body["action"]
+			idempotencyKey = body["idempotency_key"]
 		}
 		requests = append(requests, struct {
-			method string
-			path   string
-			action string
-		}{method: r.Method, path: r.URL.Path, action: action})
-		_, _ = io.WriteString(w, `{"ok":true,"status":"ok","current_computer":{"state":"stopped"}}`)
+			method         string
+			path           string
+			idempotencyKey string
+		}{method: r.Method, path: r.URL.Path, idempotencyKey: idempotencyKey})
+		_, _ = io.WriteString(w, `{"computer_id":"computer-1","state":"active"}`)
 	}))
 	defer stub.Close()
 
-	for _, command := range []string{"status", "stop", "start"} {
+	for _, command := range []string{"status", "stop", "start", "restart"} {
+		args := []string{"computer", command, "--host=" + stub.URL, "--computer=computer-1"}
+		if command != "status" {
+			args = append(args, "--idempotency-key="+command+"-1")
+		}
 		var out, errOut bytes.Buffer
-		code := run([]string{"computer", command, "--host=" + stub.URL}, &out, &errOut)
-		if code != 0 {
+		if code := run(args, &out, &errOut); code != 0 {
 			t.Fatalf("computer %s code = %d, stderr=%s", command, code, errOut.String())
 		}
 	}
 	want := []struct {
-		method string
-		path   string
-		action string
+		method         string
+		path           string
+		idempotencyKey string
 	}{
-		{method: http.MethodGet, path: "/api/compute/status"},
-		{method: http.MethodPost, path: "/api/compute/recovery", action: "stop_current_computer"},
-		{method: http.MethodPost, path: "/api/compute/recovery", action: "wake_current_computer"},
+		{method: http.MethodGet, path: "/api/computers/computer-1/lifecycle/status"},
+		{method: http.MethodPost, path: "/api/computers/computer-1/lifecycle/stop", idempotencyKey: "stop-1"},
+		{method: http.MethodPost, path: "/api/computers/computer-1/lifecycle/start", idempotencyKey: "start-1"},
+		{method: http.MethodPost, path: "/api/computers/computer-1/lifecycle/restart", idempotencyKey: "restart-1"},
 	}
 	if !reflect.DeepEqual(requests, want) {
 		t.Fatalf("lifecycle requests = %+v, want %+v", requests, want)
@@ -764,7 +768,7 @@ func TestAPIKeyRevokeDeletesKey(t *testing.T) {
 
 func TestSelfDevelopmentModeCLIUsesExplicitComputerAndCASBody(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/api/computers/computer-exact/self-development/mode" {
+		if r.Method != http.MethodPut || r.URL.Path != "/api/computers/computer-exact/self-development/mode" {
 			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
 		}
 		var body map[string]any

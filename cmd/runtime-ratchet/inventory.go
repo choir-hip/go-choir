@@ -918,7 +918,6 @@ func domainDisposition(path string) string {
 		domain string
 		terms  []string
 	}{
-		{"candidate_package", []string{"candidate_package"}},
 		{"promotion", []string{"promotion", "computer_version"}},
 		{"wire", []string{"wire"}},
 		{"texture", []string{"texture"}},

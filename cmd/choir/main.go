@@ -616,6 +616,9 @@ func runSelfDevelopmentStatus(command string, args []string, stdout, stderr io.W
 	}
 	var response json.RawMessage
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations/" + url.PathEscape(strings.TrimSpace(fs.Args()[0]))
+	if command == "inspect" {
+		path += "/receipts"
+	}
 	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
 		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
 		return 1
@@ -630,6 +633,7 @@ func runSelfDevelopmentDecision(command string, args []string, stdout, stderr io
 	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
 	desiredHead := fs.String("expected-desired-head", "", "Expected desired event head")
 	effectiveHead := fs.String("expected-effective-head", "", "Expected effective event head")
+	pendingRef := fs.String("expected-pending-ref", "", "Expected pending transition reference (empty when absent)")
 	desiredCommitment := fs.String("expected-desired-commitment", "", "Expected desired state commitment")
 	effectiveCommitment := fs.String("expected-effective-commitment", "", "Expected effective state commitment")
 	bundle := fs.String("bundle", "", "Exact frozen bundle digest")
@@ -650,6 +654,7 @@ func runSelfDevelopmentDecision(command string, args []string, stdout, stderr io
 		"decision": command, "idempotency_key": strings.TrimSpace(*idempotencyKey), "bundle_digest": strings.TrimSpace(*bundle),
 		"verifier_ref": strings.TrimSpace(*verifier), "expected_desired_event_head": strings.TrimSpace(*desiredHead),
 		"expected_effective_event_head":       strings.TrimSpace(*effectiveHead),
+		"expected_pending_transition_ref":     strings.TrimSpace(*pendingRef),
 		"expected_desired_state_commitment":   strings.TrimSpace(*desiredCommitment),
 		"expected_effective_state_commitment": strings.TrimSpace(*effectiveCommitment),
 	}
@@ -718,16 +723,25 @@ func runSelfDevelopmentGenesis(args []string, stdout, stderr io.Writer) int {
 	baselineState := fs.String("baseline-state", "", "Baseline effective state digest")
 	expectedAbsent := fs.Bool("expected-absent", false, "Require absent event head")
 	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
+	g0Receipt := fs.String("g0-receipt", "", "Frozen G0 conformance receipt")
+	g1Receipt := fs.String("g1-receipt", "", "Frozen accepted G1 gate receipt")
+	candidateRef := fs.String("candidate-ref", "", "Exact deployed G1 candidate commit")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir self-dev genesis: %v\n", err)
 		return 2
 	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*baselineVersion) == "" || strings.TrimSpace(*baselineState) == "" || strings.TrimSpace(*idempotencyKey) == "" || !*expectedAbsent || len(fs.Args()) != 0 {
+	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*baselineVersion) == "" || strings.TrimSpace(*baselineState) == "" ||
+		strings.TrimSpace(*idempotencyKey) == "" || strings.TrimSpace(*g0Receipt) == "" || strings.TrimSpace(*g1Receipt) == "" ||
+		strings.TrimSpace(*candidateRef) == "" || !*expectedAbsent || len(fs.Args()) != 0 {
 		fmt.Fprintln(stderr, "choir self-dev genesis: --computer, --baseline-version, --baseline-state, --expected-absent, and --idempotency-key are required")
 		return 2
 	}
-	body := map[string]any{"baseline_version": strings.TrimSpace(*baselineVersion), "baseline_state": strings.TrimSpace(*baselineState), "expected_absent": true, "idempotency_key": strings.TrimSpace(*idempotencyKey)}
+	body := map[string]any{
+		"baseline_version": strings.TrimSpace(*baselineVersion), "baseline_state": strings.TrimSpace(*baselineState),
+		"expected_absent": true, "idempotency_key": strings.TrimSpace(*idempotencyKey),
+		"g0_receipt": strings.TrimSpace(*g0Receipt), "g1_receipt": strings.TrimSpace(*g1Receipt), "candidate_ref": strings.TrimSpace(*candidateRef),
+	}
 	var response json.RawMessage
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/genesis"
 	if err := c.do(http.MethodPost, path, body, &response); err != nil {
@@ -863,6 +877,7 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 	operationID := fs.String("operation", "", "Exact operation ID for accept_once")
 	desiredHead := fs.String("expected-desired-head", "", "Expected desired event head for accept_once")
 	effectiveHead := fs.String("expected-effective-head", "", "Expected effective event head for accept_once")
+	pendingRef := fs.String("expected-pending-ref", "", "Expected pending transition reference (empty when absent)")
 	desiredCommitment := fs.String("expected-desired-commitment", "", "Expected desired state commitment for accept_once")
 	effectiveCommitment := fs.String("expected-effective-commitment", "", "Expected effective state commitment for accept_once")
 	bundle := fs.String("bundle", "", "Exact bundle digest for accept_once")
@@ -883,13 +898,14 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 		body["operation_id"] = *operationID
 		body["expected_desired_event_head"] = *desiredHead
 		body["expected_effective_event_head"] = *effectiveHead
+		body["expected_pending_transition_ref"] = strings.TrimSpace(*pendingRef)
 		body["expected_desired_state_commitment"] = *desiredCommitment
 		body["expected_effective_state_commitment"] = *effectiveCommitment
 		body["bundle_digest"] = *bundle
 	}
 	var response json.RawMessage
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/mode"
-	if err := c.do(http.MethodPost, path, body, &response); err != nil {
+	if err := c.do(http.MethodPut, path, body, &response); err != nil {
 		fmt.Fprintf(stderr, "choir self-dev mode set: %v\n", err)
 		return 1
 	}
@@ -900,16 +916,14 @@ func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
 
 func runComputer(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir computer: subcommand required (status|stop|start)")
+		fmt.Fprintln(stderr, "choir computer: subcommand required (status|stop|start|restart)")
 		return 2
 	}
 	switch args[0] {
 	case "status":
 		return runComputerStatus(args[1:], stdout, stderr)
-	case "stop":
-		return runComputerAction(args[1:], "stop_current_computer", "stop", stdout, stderr)
-	case "start":
-		return runComputerAction(args[1:], "wake_current_computer", "start", stdout, stderr)
+	case "stop", "start", "restart":
+		return runComputerAction(args[1:], args[0], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "choir computer: unknown subcommand %q\n", args[0])
 		return 2
@@ -919,41 +933,46 @@ func runComputer(args []string, stdout, stderr io.Writer) int {
 func runComputerStatus(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir computer status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir computer status: %v\n", err)
 		return 2
 	}
-	if len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir computer status: unexpected positional arguments")
+	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir computer status: --computer is required")
 		return 2
 	}
-	var resp json.RawMessage
-	if err := c.do(http.MethodGet, "/api/compute/status", nil, &resp); err != nil {
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/status"
+	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
 		fmt.Fprintf(stderr, "choir computer status: %v\n", err)
 		return 1
 	}
-	return writeJSON(stdout, resp)
+	return writeJSON(stdout, response)
 }
 
-func runComputerAction(args []string, action, command string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir computer "+command, flag.ContinueOnError)
+func runComputerAction(args []string, action string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir computer "+action, flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
-		fmt.Fprintf(stderr, "choir computer %s: %v\n", command, err)
+		fmt.Fprintf(stderr, "choir computer %s: %v\n", action, err)
 		return 2
 	}
-	if len(fs.Args()) != 0 {
-		fmt.Fprintf(stderr, "choir computer %s: unexpected positional arguments\n", command)
+	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*idempotencyKey) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintf(stderr, "choir computer %s: --computer and --idempotency-key are required\n", action)
 		return 2
 	}
-	var resp json.RawMessage
-	if err := c.do(http.MethodPost, "/api/compute/recovery", map[string]string{"action": action}, &resp); err != nil {
-		fmt.Fprintf(stderr, "choir computer %s: %v\n", command, err)
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/lifecycle/" + action
+	if err := c.do(http.MethodPost, path, map[string]string{"idempotency_key": strings.TrimSpace(*idempotencyKey)}, &response); err != nil {
+		fmt.Fprintf(stderr, "choir computer %s: %v\n", action, err)
 		return 1
 	}
-	return writeJSON(stdout, resp)
+	return writeJSON(stdout, response)
 }
 
 // ---- run ----

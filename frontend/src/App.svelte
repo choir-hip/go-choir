@@ -262,22 +262,6 @@
         },
       };
     }
-    if (appId === 'candidate-review') {
-      const intakeID = (params.get('intake') || params.get('intake_id') || '').trim();
-      const adoptionID = (params.get('adoption') || params.get('adoption_id') || '').trim();
-      return {
-        kind: 'app_launch',
-        source: 'url',
-        appId: 'candidate-review',
-        appName: 'Candidate Review',
-        icon: 'CR',
-        appContext: {
-          intakeID,
-          adoptionID,
-          windowTitle: 'Candidate Review',
-        },
-      };
-    }
     if (appId) {
       clearConsumedAppIntentFromURL();
     }

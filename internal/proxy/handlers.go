@@ -629,6 +629,9 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/compute/recovery":
 		h.HandleComputeRecovery(w, r)
 		return
+	case isComputerLifecyclePath(path):
+		h.HandleComputerLifecycle(w, r)
+		return
 	case isSelfDevelopmentModePath(path):
 		h.HandleSelfDevelopmentMode(w, r)
 		return

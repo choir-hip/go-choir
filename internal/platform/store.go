@@ -430,7 +430,33 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if err := s.ensurePlatformTextureRevisionColumn(ctx, "source_entities", "ALTER TABLE platform_texture_revisions ADD COLUMN source_entities LONGTEXT NOT NULL DEFAULT '' AFTER body_doc"); err != nil {
 		return fmt.Errorf("platform store: bootstrap source_entities migration: %w", err)
 	}
+	if err := s.ensureColumn(ctx, "computer_self_development_modes", "expected_pending_transition_ref", "ALTER TABLE computer_self_development_modes ADD COLUMN expected_pending_transition_ref VARCHAR(255) NULL AFTER expected_effective_event_head"); err != nil {
+		return fmt.Errorf("platform store: bootstrap self-development pending transition migration: %w", err)
+	}
 	return nil
+}
+
+func (s *Store) ensureColumn(ctx context.Context, table, name, ddl string) error {
+	for _, value := range []string{table, name} {
+		if value == "" || strings.IndexFunc(value, func(r rune) bool {
+			return r != '_' && (r < 'a' || r > 'z')
+		}) >= 0 {
+			return fmt.Errorf("unsupported schema identifier %q", value)
+		}
+	}
+	rows, err := s.db.QueryContext(ctx, "SHOW COLUMNS FROM "+table+" LIKE '"+name+"'")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return rows.Err()
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, ddl)
+	return err
 }
 
 func (s *Store) ensurePlatformTextureRevisionColumn(ctx context.Context, name, ddl string) error {

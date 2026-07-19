@@ -17,12 +17,17 @@ import (
 )
 
 type fakeServiceManager struct {
-	restarts int
-	cleanups int
+	restarts   int
+	recoveries int
+	cleanups   int
 }
 
-func (s *fakeServiceManager) Restart(context.Context) error { s.restarts++; return nil }
-func (s *fakeServiceManager) CleanupRestartHandoff() error  { s.cleanups++; return nil }
+func (s *fakeServiceManager) Restart(context.Context) error         { s.restarts++; return nil }
+func (s *fakeServiceManager) RecoveryRestart(context.Context) error { s.recoveries++; return nil }
+func (s *fakeServiceManager) CleanupRecoveryCredential(context.Context) error {
+	s.cleanups++
+	return nil
+}
 
 type fakeHealthProber struct{ failDigest string }
 
@@ -77,8 +82,8 @@ func TestUpdaterAppliesIdempotentlyAndRestoresPriorHealthyRelease(t *testing.T) 
 	if err != nil || currentDigest != first.Manifest.ContentDigest {
 		t.Fatalf("current release after recovery = %q, %v; want %q", currentDigest, err, first.Manifest.ContentDigest)
 	}
-	if service.restarts != 3 || service.cleanups != 2 {
-		t.Fatalf("failure and restore restart/cleanup count = %d/%d, want 3/2", service.restarts, service.cleanups)
+	if service.restarts != 2 || service.recoveries != 1 || service.cleanups != 2 {
+		t.Fatalf("failure recovery counts restart=%d recovery=%d cleanup=%d", service.restarts, service.recoveries, service.cleanups)
 	}
 }
 
@@ -101,8 +106,8 @@ func (m *processRestartManager) Restart(context.Context) error {
 	m.process = command.Process
 	return nil
 }
-
-func (m *processRestartManager) CleanupRestartHandoff() error { return nil }
+func (m *processRestartManager) RecoveryRestart(ctx context.Context) error       { return m.Restart(ctx) }
+func (m *processRestartManager) CleanupRecoveryCredential(context.Context) error { return nil }
 
 type processHealthProber struct{ output string }
 
@@ -211,6 +216,21 @@ func TestRestartRequestManagerPublishesOnlyFixedTrigger(t *testing.T) {
 	info, err := os.Stat(path)
 	if err != nil || string(raw) != "restart\n" || info.Mode().Perm() != 0o600 {
 		t.Fatalf("restart request = %q, %#v, %v", raw, info, err)
+	}
+	recoveryPath := filepath.Join(filepath.Dir(path), "recover")
+	cleanupPath := filepath.Join(filepath.Dir(path), "cleanup")
+	manager.RecoveryPath, manager.CleanupPath = recoveryPath, cleanupPath
+	if err := manager.RecoveryRestart(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(recoveryPath); err != nil || string(raw) != "recover\n" {
+		t.Fatalf("recovery request = %q, %v", raw, err)
+	}
+	if err := manager.CleanupRecoveryCredential(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(cleanupPath); err != nil || string(raw) != "cleanup\n" {
+		t.Fatalf("cleanup request = %q, %v", raw, err)
 	}
 	if err := (RestartRequestManager{Path: filepath.Join(filepath.Dir(path), "arbitrary-unit")}).Restart(context.Background()); err == nil {
 		t.Fatal("arbitrary restart target was accepted")

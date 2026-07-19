@@ -16,10 +16,12 @@ import (
 func TestValidateSelfDevelopmentModeTransitionRequiresExactAcceptOnceBindings(t *testing.T) {
 	now := time.Date(2026, 7, 18, 23, 0, 0, 0, time.UTC)
 	current := SelfDevelopmentMode{ComputerID: "computer-test", Mode: SelfDevelopmentModeProposeOnly, Generation: 4}
+	pending := ""
 	valid := SetSelfDevelopmentModeRequest{
 		Mode: SelfDevelopmentModeAcceptOnce, OperationID: "operation-1",
 		BundleDigest: strings.Repeat("a", 64), ExpectedDesiredEventHead: strings.Repeat("b", 64),
 		ExpectedEffectiveEventHead: strings.Repeat("c", 64), ExpectedDesiredStateCommitment: strings.Repeat("d", 64),
+		ExpectedPendingTransitionRef:     &pending,
 		ExpectedEffectiveStateCommitment: strings.Repeat("e", 64), ExpiresAt: now.Add(time.Minute).Format(time.RFC3339Nano),
 	}
 	next, expiry, err := validateSelfDevelopmentModeTransition(current, valid, now)
@@ -33,6 +35,7 @@ func TestValidateSelfDevelopmentModeTransitionRequiresExactAcceptOnceBindings(t 
 		"operation":            func(r *SetSelfDevelopmentModeRequest) { r.OperationID = "" },
 		"bundle":               func(r *SetSelfDevelopmentModeRequest) { r.BundleDigest = "bad" },
 		"desired head":         func(r *SetSelfDevelopmentModeRequest) { r.ExpectedDesiredEventHead = "" },
+		"pending transition":   func(r *SetSelfDevelopmentModeRequest) { r.ExpectedPendingTransitionRef = nil },
 		"effective commitment": func(r *SetSelfDevelopmentModeRequest) { r.ExpectedEffectiveStateCommitment = "" },
 		"expiry":               func(r *SetSelfDevelopmentModeRequest) { r.ExpiresAt = now.Format(time.RFC3339Nano) },
 	} {
@@ -112,5 +115,24 @@ func TestSelfDevelopmentModeCASPersistsGenerationAndIdempotentReceipt(t *testing
 	conflict.Mode = SelfDevelopmentModeOff
 	if _, err := authority.Set(context.Background(), "computer-mode-test", conflict); !errors.Is(err, ErrSelfDevelopmentModeConflict) {
 		t.Fatalf("changed idempotent request error = %v", err)
+	}
+}
+
+func TestBootstrapMigratesExistingSelfDevelopmentModeTable(t *testing.T) {
+	store, _ := openTestPlatformStore(t)
+	defer store.Close()
+	if _, err := store.db.ExecContext(context.Background(), `ALTER TABLE computer_self_development_modes DROP COLUMN expected_pending_transition_ref`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Bootstrap(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := store.db.QueryContext(context.Background(), `SHOW COLUMNS FROM computer_self_development_modes LIKE 'expected_pending_transition_ref'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatal("expected_pending_transition_ref migration was not applied")
 	}
 }

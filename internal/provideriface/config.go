@@ -54,22 +54,6 @@ const (
 	// conversation retained after a compaction checkpoint.
 	DefaultRunMemoryKeepRecentTokens = 20000
 
-	// DefaultPromotionSourceRepo is the canonical platform source repository
-	// used when an existing user computer predates promotion env wiring.
-	DefaultPromotionSourceRepo = "https://github.com/yusefmosiah/go-choir.git"
-
-	// DefaultSourceLedgerRepo is the private source-lineage remote used for
-	// product-visible computer/package source refs. Runtime clones for
-	// integration builds still use PromotionSourceRepo unless explicitly
-	// configured otherwise.
-	DefaultSourceLedgerRepo = "https://github.com/yusefmosiah/choir-source-ledger.git"
-
-	DefaultAppPromotionRuntimeBuildCommand = "mkdir -p .choir-promotion-artifacts/runtime && GOMAXPROCS=1 GOMEMLIMIT=1024MiB GOFLAGS=-p=1 go build -p 1 -o .choir-promotion-artifacts/runtime/sandbox ./cmd/sandbox"
-	DefaultAppPromotionRuntimeArtifactPath = ".choir-promotion-artifacts/runtime/sandbox"
-	DefaultAppPromotionUIBuildCommand      = "npm --prefix frontend ci --no-audit --no-fund && NODE_OPTIONS=--max-old-space-size=768 npm --prefix frontend run build"
-	DefaultAppPromotionUIArtifactPath      = "frontend/dist"
-	DefaultAppPromotionBuildTimeout        = 30 * time.Minute
-
 	// DefaultQdrantURL is the node-b Qdrant instance URL.
 	DefaultQdrantURL = "http://127.0.0.1:6333"
 
@@ -155,29 +139,6 @@ func LoadConfig() Config {
 			"RUNTIME_RUN_MEMORY_KEEP_RECENT_TOKENS",
 			DefaultRunMemoryKeepRecentTokens,
 		),
-		PromotionSourceRepo:    os.Getenv("RUNTIME_PROMOTION_SOURCE_REPO"),
-		SourceLedgerRepo:       envOr("RUNTIME_SOURCE_LEDGER_REPO", DefaultSourceLedgerRepo),
-		PromotionWorkspaceRoot: os.Getenv("RUNTIME_PROMOTION_WORKSPACE_ROOT"),
-		AppPromotionRuntimeBuildCommand: envOr(
-			"RUNTIME_APP_PROMOTION_RUNTIME_BUILD_COMMAND",
-			DefaultAppPromotionRuntimeBuildCommand,
-		),
-		AppPromotionRuntimeArtifactPath: envOr(
-			"RUNTIME_APP_PROMOTION_RUNTIME_ARTIFACT_PATH",
-			DefaultAppPromotionRuntimeArtifactPath,
-		),
-		AppPromotionUIBuildCommand: envOr(
-			"RUNTIME_APP_PROMOTION_UI_BUILD_COMMAND",
-			DefaultAppPromotionUIBuildCommand,
-		),
-		AppPromotionUIArtifactPath: envOr(
-			"RUNTIME_APP_PROMOTION_UI_ARTIFACT_PATH",
-			DefaultAppPromotionUIArtifactPath,
-		),
-		AppPromotionBuildTimeout: durationOr(
-			"RUNTIME_APP_PROMOTION_BUILD_TIMEOUT",
-			DefaultAppPromotionBuildTimeout,
-		),
 		QdrantURL:               envOr("QDRANT_URL", DefaultQdrantURL),
 		OllamaURL:               envOr("OLLAMA_URL", DefaultOllamaURL),
 		OllamaEmbeddingModel:    envOr("OLLAMA_EMBEDDING_MODEL", DefaultOllamaEmbeddingModel),
@@ -205,37 +166,6 @@ func NormalizeConfig(cfg Config) Config {
 	}
 	if cfg.RunMemoryKeepRecentTokens <= 0 {
 		cfg.RunMemoryKeepRecentTokens = DefaultRunMemoryKeepRecentTokens
-	}
-	if strings.TrimSpace(cfg.PromotionWorkspaceRoot) == "" {
-		cfg.PromotionWorkspaceRoot = filepath.Join(filepath.Dir(cfg.StorePath), "promotion-workspaces")
-	}
-	if strings.TrimSpace(cfg.SourceLedgerRepo) == "" {
-		cfg.SourceLedgerRepo = DefaultSourceLedgerRepo
-	}
-	if strings.TrimSpace(cfg.PromotionSourceRepo) == "" {
-		if wd, err := os.Getwd(); err == nil {
-			if _, statErr := os.Stat(filepath.Join(wd, ".git")); statErr == nil {
-				cfg.PromotionSourceRepo = wd
-			}
-		}
-	}
-	if strings.TrimSpace(cfg.PromotionSourceRepo) == "" {
-		cfg.PromotionSourceRepo = DefaultPromotionSourceRepo
-	}
-	if strings.TrimSpace(cfg.AppPromotionRuntimeBuildCommand) == "" {
-		cfg.AppPromotionRuntimeBuildCommand = DefaultAppPromotionRuntimeBuildCommand
-	}
-	if strings.TrimSpace(cfg.AppPromotionRuntimeArtifactPath) == "" {
-		cfg.AppPromotionRuntimeArtifactPath = DefaultAppPromotionRuntimeArtifactPath
-	}
-	if strings.TrimSpace(cfg.AppPromotionUIBuildCommand) == "" {
-		cfg.AppPromotionUIBuildCommand = DefaultAppPromotionUIBuildCommand
-	}
-	if strings.TrimSpace(cfg.AppPromotionUIArtifactPath) == "" {
-		cfg.AppPromotionUIArtifactPath = DefaultAppPromotionUIArtifactPath
-	}
-	if cfg.AppPromotionBuildTimeout <= 0 {
-		cfg.AppPromotionBuildTimeout = DefaultAppPromotionBuildTimeout
 	}
 	if strings.TrimSpace(cfg.QdrantURL) == "" {
 		cfg.QdrantURL = DefaultQdrantURL

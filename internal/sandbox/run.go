@@ -60,20 +60,6 @@ func Run() {
 	RegisterRoutes(s, h)
 
 	filesRoot := provideriface.ResolveFilesRoot(os.Getenv("SANDBOX_FILES_ROOT"))
-	log.Printf("sandbox: startup phase=source-workspace-bootstrap status=starting")
-	sourceComputerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
-	if sourceComputerID == "" {
-		if strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")) != "" {
-			log.Fatal("sandbox: stable ComputerID is required in guest mode")
-		}
-		sourceComputerID = "computer-local-development"
-	}
-	if _, err := BootstrapSourceWorkspace(filesRoot, SourceWorkspaceOptions{
-		ComputerID: sourceComputerID,
-	}); err != nil {
-		log.Fatalf("sandbox: bootstrap source workspace: %v", err)
-	}
-	log.Printf("sandbox: startup phase=source-workspace-bootstrap status=complete")
 
 	// Initialize the singleton Super Console PTY handler. The PTY process is
 	// zot, not an interactive shell.
@@ -187,7 +173,7 @@ func Run() {
 			}
 		} else if os.IsNotExist(statErr) {
 			handoffPath := strings.TrimSpace(os.Getenv("CHOIR_RESTART_CREDENTIAL_HANDOFF"))
-			credentials, err = selfdev.RestoreGuestCredentials(handoffPath, platformURL, computerID)
+			credentials, err = selfdev.RestoreGuestCredentials(handoffPath, platformURL, computerID, realizationID)
 		} else {
 			err = statErr
 		}
@@ -200,10 +186,16 @@ func Run() {
 			cancel()
 			log.Fatalf("sandbox: configure computer event client: %v", err)
 		}
-		privateCipher, err := computerevent.NewPrivateArtifactCipherFromExternalKey(computerID, credentials.PrivacyKey())
+		canonicalHead, err := eventClient.Head(bootstrapCtx, computerID)
 		if err != nil {
 			cancel()
-			log.Fatalf("sandbox: configure private artifact cipher: %v", err)
+			log.Fatalf("sandbox: resolve canonical event head before keyring: %v", err)
+		}
+		privacyKeyPath := strings.TrimSpace(os.Getenv("CHOIR_PRIVACY_KEY_FILE"))
+		privateCipher, err := computerevent.LoadGuestPrivateArtifactCipher(privacyKeyPath, computerID, canonicalHead == nil)
+		if err != nil {
+			cancel()
+			log.Fatalf("sandbox: configure guest-owned private artifact cipher: %v", err)
 		}
 		appender, err := computerevent.NewComputerEventAppender(
 			computerID, eventClient, db, eventClient,
@@ -211,6 +203,34 @@ func Run() {
 		)
 		if err == nil {
 			err = appender.Reconstruct(bootstrapCtx, eventClient)
+		}
+		if err == nil {
+			for _, lifecycleReceipt := range credentials.PendingLifecycleReceipts() {
+				payload, payloadErr := lifecycleReceipt.CanonicalBytes()
+				computerField, _ := lifecycleReceipt.KindFields["computer_id"].(string)
+				actionField, _ := lifecycleReceipt.KindFields["action"].(string)
+				if payloadErr != nil || lifecycleReceipt.ReceiptKind != "LifecycleReceipt" || lifecycleReceipt.Verify(credentials.KeyResolver()) != nil ||
+					computerField != computerID || (actionField != "start" && actionField != "stop" && actionField != "restart") {
+					err = fmt.Errorf("sandbox: pending lifecycle receipt binding refused")
+					break
+				}
+				eventID, eventErr := computerevent.NewEventID()
+				if eventErr != nil {
+					err = eventErr
+					break
+				}
+				event := computerevent.Event{
+					SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
+					EventKind: computerevent.EventLifecycleObserved, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+					IdempotencyKey: "lifecycle-observed:" + lifecycleReceipt.ReceiptID,
+					ActorProfile:   agentprofile.Super, AuthorityRef: "platform-control:lifecycle",
+					PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
+				}
+				if _, _, appendErr := appender.AppendNewPayload(bootstrapCtx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.lifecycle-receipt+json", "public"); appendErr != nil {
+					err = appendErr
+					break
+				}
+			}
 		}
 		cancel()
 		if err != nil {
@@ -383,14 +403,6 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		EnableTestAPIs:                  rtRuntimeCfg.EnableTestAPIs,
 		RunMemoryContextThresholdTokens: rtRuntimeCfg.RunMemoryContextThresholdTokens,
 		RunMemoryKeepRecentTokens:       rtRuntimeCfg.RunMemoryKeepRecentTokens,
-		PromotionSourceRepo:             rtRuntimeCfg.PromotionSourceRepo,
-		SourceLedgerRepo:                rtRuntimeCfg.SourceLedgerRepo,
-		PromotionWorkspaceRoot:          rtRuntimeCfg.PromotionWorkspaceRoot,
-		AppPromotionRuntimeBuildCommand: rtRuntimeCfg.AppPromotionRuntimeBuildCommand,
-		AppPromotionRuntimeArtifactPath: rtRuntimeCfg.AppPromotionRuntimeArtifactPath,
-		AppPromotionUIBuildCommand:      rtRuntimeCfg.AppPromotionUIBuildCommand,
-		AppPromotionUIArtifactPath:      rtRuntimeCfg.AppPromotionUIArtifactPath,
-		AppPromotionBuildTimeout:        rtRuntimeCfg.AppPromotionBuildTimeout,
 		TracePersistenceEnabled:         rtRuntimeCfg.TracePersistenceEnabled,
 	}
 	if rtCfg.StorePath == "" {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
@@ -37,6 +38,7 @@ type selfDevelopmentDecisionRequest struct {
 	Reason                           string                 `json:"reason,omitempty"`
 	ExpectedDesiredEventHead         string                 `json:"expected_desired_event_head"`
 	ExpectedEffectiveEventHead       string                 `json:"expected_effective_event_head"`
+	ExpectedPendingTransitionRef     *string                `json:"expected_pending_transition_ref"`
 	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment"`
 	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment"`
 	ModeReceipt                      *computerevent.Receipt `json:"mode_receipt,omitempty"`
@@ -47,6 +49,9 @@ type selfDevelopmentGenesisRequest struct {
 	BaselineState   string `json:"baseline_state"`
 	ExpectedAbsent  bool   `json:"expected_absent"`
 	IdempotencyKey  string `json:"idempotency_key"`
+	G0Receipt       string `json:"g0_receipt"`
+	G1Receipt       string `json:"g1_receipt"`
+	CandidateRef    string `json:"candidate_ref"`
 }
 
 type selfDevelopmentRollbackRequest struct {
@@ -68,7 +73,7 @@ func (h *APIHandler) HandleComputersRouter(w http.ResponseWriter, r *http.Reques
 	}
 	suffix := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/computers/"), "/")
 	parts := strings.Split(suffix, "/")
-	if len(parts) < 3 || strings.TrimSpace(parts[0]) == "" || parts[1] != "self-development" {
+	if len(parts) < 3 || strings.TrimSpace(parts[0]) == "" {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer route not found"})
 		return
 	}
@@ -115,6 +120,17 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		h.decideSelfDevelopmentOperation(w, r, ownerID, computerID, strings.TrimSpace(parts[3]))
+	case len(parts) == 5 && parts[1] == "self-development" && parts[2] == "operations" && parts[4] == "receipts":
+		if r.Method != http.MethodGet {
+			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+			return
+		}
+		operation, err := h.rt.selfdevOperations.Get(r.Context(), computerID, strings.TrimSpace(parts[3]))
+		if err != nil {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "self-development operation not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, operationReceiptProjection(operation))
 	case len(parts) == 4 && parts[1] == "self-development" && parts[2] == "operations":
 		if r.Method != http.MethodGet {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -126,6 +142,17 @@ func (h *APIHandler) handleSelfDevelopmentRoute(w http.ResponseWriter, r *http.R
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, operation)
+	case len(parts) == 3 && parts[1] == "events":
+		if r.Method != http.MethodGet || !computerevent.IsSHA256(strings.TrimSpace(parts[2])) {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer event not found"})
+			return
+		}
+		event, found, err := h.rt.store.EventByDigest(r.Context(), computerID, strings.TrimSpace(parts[2]))
+		if err != nil || !found {
+			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer event not found"})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, event)
 	default:
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "computer route not found"})
 	}
@@ -228,6 +255,20 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 	writeAPIJSON(w, http.StatusCreated, operation)
 }
 
+func operationReceiptProjection(operation selfdev.Operation) map[string]any {
+	return map[string]any{
+		"operation_id": operation.OperationID, "request_commitment": operation.RequestCommitment,
+		"computer_id": operation.ComputerID, "trajectory_id": operation.TrajectoryID, "capsule_id": operation.CapsuleID,
+		"base_head": operation.BaseHead, "bundle_digest": operation.BundleDigest, "verifier_refs": operation.VerifierRefs,
+		"decision_actor": operation.DecisionActor, "decision_event": operation.DecisionEvent, "decision_receipt": operation.DecisionReceipt,
+		"desired_head": operation.DesiredHead, "effective_head": operation.EffectiveHead,
+		"materialization_receipt": operation.MaterializationReceipt, "checkpoint_ref": operation.CheckpointRef,
+		"route_certificate": operation.RouteCertificate, "route_generation": operation.RouteGeneration,
+		"mode_receipt": operation.ModeReceipt, "lifecycle_receipt": operation.LifecycleReceipt,
+		"terminal_state": operation.State, "error": operation.TerminalError,
+	}
+}
+
 func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http.Request, ownerID, computerID string) {
 	var request selfDevelopmentGenesisRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10))
@@ -237,8 +278,17 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		return
 	}
 	request.BaselineVersion, request.BaselineState, request.IdempotencyKey = strings.TrimSpace(request.BaselineVersion), strings.TrimSpace(request.BaselineState), strings.TrimSpace(request.IdempotencyKey)
+	request.G0Receipt, request.G1Receipt, request.CandidateRef = strings.TrimSpace(request.G0Receipt), strings.TrimSpace(request.G1Receipt), strings.TrimSpace(request.CandidateRef)
 	if !request.ExpectedAbsent || !computerevent.IsSHA256(request.BaselineVersion) || !computerevent.IsSHA256(request.BaselineState) || request.IdempotencyKey == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "exact absent baseline version, state, and idempotency binding are required"})
+		return
+	}
+	expectedG0 := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G0_RECEIPT"))
+	expectedG1 := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G1_RECEIPT"))
+	if r.Header.Get("X-Self-Development-Disposable") != "true" || r.Header.Get("X-Self-Development-Mode-Generation") != "0" ||
+		expectedG0 == "" || expectedG1 == "" || request.G0Receipt != expectedG0 || request.G1Receipt != expectedG1 ||
+		request.CandidateRef == "" || request.CandidateRef != strings.TrimSpace(buildinfo.Commit) || request.CandidateRef == "local" {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires disposable target, absent off-mode state, and exact frozen G0/G1 candidate receipts"})
 		return
 	}
 	eventIdempotency := "selfdev-genesis-" + computerevent.DigestBytes([]byte(computerID+"\x00"+request.IdempotencyKey))
@@ -478,6 +528,11 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 	request.ExpectedEffectiveEventHead = strings.TrimSpace(request.ExpectedEffectiveEventHead)
 	request.ExpectedDesiredStateCommitment = strings.TrimSpace(request.ExpectedDesiredStateCommitment)
 	request.ExpectedEffectiveStateCommitment = strings.TrimSpace(request.ExpectedEffectiveStateCommitment)
+	if request.ExpectedPendingTransitionRef == nil {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "expected_pending_transition_ref is required"})
+		return
+	}
+	expectedPendingTransitionRef := strings.TrimSpace(*request.ExpectedPendingTransitionRef)
 	if operationID == "" || request.IdempotencyKey == "" || !computerevent.IsSHA256(request.BundleDigest) || request.VerifierRef == "" ||
 		!computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) ||
 		!computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) ||
@@ -543,6 +598,7 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		head, headErr := h.rt.store.Head(r.Context(), computerID)
 		if headErr != nil || head == nil || head.DesiredEventHead != request.ExpectedDesiredEventHead ||
 			head.EffectiveEventHead != request.ExpectedEffectiveEventHead ||
+			head.PendingTransitionRef != expectedPendingTransitionRef ||
 			head.DesiredStateCommitment != request.ExpectedDesiredStateCommitment ||
 			head.EffectiveStateCommitment != request.ExpectedEffectiveStateCommitment {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "decision head binding changed"})
@@ -560,9 +616,11 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
 			EventKind: expectedKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: eventIdempotency,
 			RequestCommitment: computerevent.ZeroHead, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
-			PreviousHead: expectedCanonicalHead,
-			ActorProfile: agentprofile.Super, AuthorityRef: "external-owner:" + ownerID, PrivacyClass: "owner",
+			ParentEventID: operation.OperationID,
+			PreviousHead:  expectedCanonicalHead,
+			ActorProfile:  agentprofile.Super, AuthorityRef: "external-owner:" + ownerID, PrivacyClass: "owner",
 			ExpectedDesiredEventHead: request.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: request.ExpectedEffectiveEventHead,
+			ExpectedPendingTransitionRef:     expectedPendingTransitionRef,
 			ExpectedDesiredStateCommitment:   request.ExpectedDesiredStateCommitment,
 			ExpectedEffectiveStateCommitment: request.ExpectedEffectiveStateCommitment,
 			RequireExpectedHead:              true,
@@ -602,7 +660,7 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable decision event binding mismatch"})
 		return
 	}
-	transition, transitionFound, transitionErr := h.rt.store.FinalizedDecisionForOperation(r.Context(), computerID, operation.TrajectoryID, operation.CapsuleID)
+	transition, transitionFound, transitionErr := h.rt.store.FinalizedDecisionForOperation(r.Context(), computerID, operation.OperationID, operation.TrajectoryID, operation.CapsuleID)
 	if transitionErr != nil || !transitionFound || transition.Request.EventDigest != eventDigest {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "exact decision transition projection unavailable"})
 		return
@@ -610,6 +668,7 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 	operation, err = h.rt.selfdevOperations.Transition(r.Context(), computerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
 		next.DecisionEvent = eventDigest
 		next.DesiredHead, next.EffectiveHead = transition.Request.Next.DesiredEventHead, transition.Request.Next.EffectiveEventHead
+		next.DecisionReceipt = transition.Receipt.ReceiptID
 		next.ModeReceipt = modeReceiptDigest
 		return nil
 	})
@@ -629,8 +688,9 @@ func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, o
 		return fmt.Errorf("valid consumed accept_once mode receipt is required")
 	}
 	issuedAt, err := time.Parse(time.RFC3339Nano, receipt.IssuedAt)
-	if err != nil || time.Since(issuedAt) > 10*time.Minute || issuedAt.After(time.Now().UTC()) {
-		return fmt.Errorf("fresh consumed accept_once mode receipt is required")
+	consumedExpiry, expiryErr := time.Parse(time.RFC3339Nano, fmt.Sprint(receipt.KindFields["consumed_expires_at"]))
+	if err != nil || expiryErr != nil || issuedAt.After(consumedExpiry) {
+		return fmt.Errorf("consumed accept_once mode receipt was issued outside its authorization window")
 	}
 	field := func(name string) string {
 		value, _ := receipt.KindFields[name].(string)
@@ -640,6 +700,7 @@ func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, o
 		field("consumed_operation_id") != operationID || field("consumed_bundle_digest") != request.BundleDigest ||
 		field("consumed_desired_event_head") != request.ExpectedDesiredEventHead ||
 		field("consumed_effective_event_head") != request.ExpectedEffectiveEventHead ||
+		field("consumed_pending_transition_ref") != strings.TrimSpace(*request.ExpectedPendingTransitionRef) ||
 		field("consumed_desired_state_commitment") != request.ExpectedDesiredStateCommitment ||
 		field("consumed_effective_state_commitment") != request.ExpectedEffectiveStateCommitment ||
 		!strings.HasSuffix(field("idempotency_key"), ":"+request.IdempotencyKey) {
@@ -851,7 +912,8 @@ func (h *APIHandler) HandleSelfDevelopmentRestartHandoff(w http.ResponseWriter, 
 	}
 	path := strings.TrimSpace(os.Getenv("CHOIR_RESTART_CREDENTIAL_HANDOFF"))
 	if path == "" {
-		path = "/run/choir-bootstrap/restart-capability"
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "restart credential handoff path unavailable"})
+		return
 	}
 	if err := h.rt.selfdevControl.WriteRestartHandoff(r.Context(), path); err != nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "restart credential handoff failed"})

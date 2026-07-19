@@ -833,18 +833,8 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 	if own == nil || mgr == nil {
 		return nil, nil
 	}
-	if info, err := mgr.ResumeVM(own.VMID); err == nil {
-		return info, nil
-	} else if existing := mgr.GetVM(own.VMID); existing != nil {
-		state := strings.ToLower(strings.TrimSpace(existing.State))
-		if state == "failed" || state == "pending" {
-			recovered, recoverErr := mgr.RecoverVM(own.VMID, r.freshVMConfig(own, ""))
-			if recoverErr == nil {
-				return recovered, nil
-			}
-			return nil, fmt.Errorf("resume existing VM %s failed: %w; recovery also failed: %v", own.VMID, err, recoverErr)
-		}
-		return nil, err
+	if mgr.GetVM(own.VMID) != nil {
+		return mgr.RecoverVM(own.VMID, r.freshVMConfig(own, ""))
 	}
 	cfg := r.freshVMConfig(own, r.issueGatewayToken(own.VMID))
 	return mgr.BootVM(cfg)
@@ -1553,9 +1543,12 @@ func (r *OwnershipRegistry) StopVMForDesktop(userID, desktopID string) error {
 		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
 
-	// Delegate to the real VM manager if available.
+	// Every product start is a fresh realization. Propagate actuator failure;
+	// never project a stopped state that vmctl did not observe.
 	if r.vmManager != nil && (own.State == VMStateActive || own.State == VMStateDegraded) {
-		_ = r.vmManager.StopVM(own.VMID)
+		if err := r.vmManager.StopVM(own.VMID); err != nil {
+			return fmt.Errorf("stop VM %s: %w", own.VMID, err)
+		}
 	}
 
 	own.State = VMStateStopped
@@ -1684,12 +1677,9 @@ func (r *OwnershipRegistry) ReclaimPressureVMs(ctx context.Context, guard Comput
 	return reclaimed
 }
 
-// ResumeVM resumes a stopped or hibernated VM for the given user,
-// restoring the same user's persisted state (VAL-CROSS-116).
-//
-// The epoch does NOT increment on resume, so callers can detect that
-// this is a resume rather than a fresh boot. This prevents duplicate
-// canonical effects (VAL-CROSS-117).
+// ResumeVM starts a stopped or hibernated computer as a fresh disposable
+// realization while preserving its persistent user state. The epoch advances
+// and a new realization-bound credential envelope is issued.
 func (r *OwnershipRegistry) ResumeVM(userID string) (*VMOwnership, error) {
 	return r.ResumeVMForDesktop(userID, PrimaryDesktopID)
 }
@@ -1745,13 +1735,12 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 		}
 	}
 
-	// Transition to active. Epoch stays the same for resume (VAL-CROSS-117).
-	// A fresh boot would increment the epoch.
+	// Transition the stable computer to its newly booted disposable realization.
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
 	r.saveLocked()
-	log.Printf("vmctl: resumed VM %s for user %s desktop %s (epoch=%d, same-epoch=resume)", own.VMID, userID, own.DesktopID, own.Epoch)
+	log.Printf("vmctl: started VM %s for user %s desktop %s (epoch=%d)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
 	r.mu.Unlock()
 	return own, nil

@@ -33,14 +33,15 @@ func main() {
 	if handled, code := updater.RunKernelCapabilityProbeWriter(context.Background()); handled {
 		os.Exit(code)
 	}
-	var root, socketPath, computerID, realizationID, restartRequestPath, restartPrepareURL, restartHandoffPath, healthURL, signingKeyPath, verifierSigningKeyPath, guestImageManifestPath, kernelConfigPath, kernelProbePath string
+	var root, socketPath, computerID, realizationID, restartRequestPath, recoveryRequestPath, cleanupRequestPath, restartPrepareURL, healthURL, signingKeyPath, verifierSigningKeyPath, guestImageManifestPath, kernelConfigPath, kernelProbePath string
 	flag.StringVar(&root, "root", "/var/lib/choir-updater", "Root-owned updater state directory")
 	flag.StringVar(&socketPath, "socket", "/run/choir/updater.sock", "Permissioned updater Unix socket")
 	flag.StringVar(&computerID, "computer-id", os.Getenv("CHOIR_COMPUTER_ID"), "Stable ComputerID")
 	flag.StringVar(&realizationID, "realization-id", os.Getenv("CHOIR_REALIZATION_ID"), "Current realization identity")
 	flag.StringVar(&restartRequestPath, "restart-request", "/run/choir-updater-control/restart", "Fixed systemd path-unit restart request")
+	flag.StringVar(&recoveryRequestPath, "recovery-restart-request", "/run/choir-updater-control/recover", "Fixed root-owned recovery restart request")
+	flag.StringVar(&cleanupRequestPath, "recovery-cleanup-request", "/run/choir-updater-control/cleanup", "Fixed root-owned recovery credential cleanup request")
 	flag.StringVar(&restartPrepareURL, "restart-prepare-url", "http://127.0.0.1:8085/internal/self-development/restart-handoff", "Fixed guest restart credential preparation endpoint")
-	flag.StringVar(&restartHandoffPath, "restart-handoff", "/run/choir-bootstrap/restart-capability", "Transient root-only restart credential handoff")
 	flag.StringVar(&healthURL, "health-url", "http://127.0.0.1:8085/health", "Guest Choir health endpoint")
 	flag.StringVar(&signingKeyPath, "signing-key", "/var/lib/choir-updater/keys/guest-core.ed25519", "Root-owned Ed25519 private key")
 	flag.StringVar(&verifierSigningKeyPath, "verifier-signing-key", "/var/lib/choir-updater/keys/verifier.ed25519", "Root-owned independent verifier Ed25519 private key")
@@ -59,7 +60,7 @@ func main() {
 	if err != nil {
 		fatal("load verifier signing key: %v", err)
 	}
-	engine, err := updater.New(filepath.Clean(root), computerID, realizationID, updater.RestartRequestManager{Path: restartRequestPath, PrepareURL: restartPrepareURL, HandoffPath: restartHandoffPath}, updater.HTTPHealthProber{URL: healthURL}, key)
+	engine, err := updater.New(filepath.Clean(root), computerID, realizationID, updater.RestartRequestManager{Path: restartRequestPath, RecoveryPath: recoveryRequestPath, CleanupPath: cleanupRequestPath, PrepareURL: restartPrepareURL}, updater.HTTPHealthProber{URL: healthURL}, key)
 	if err != nil {
 		fatal("initialize: %v", err)
 	}

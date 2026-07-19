@@ -72,11 +72,25 @@ type ExecRequest struct {
 
 // ExecResult is the result of executing a command in a capsule.
 type ExecResult struct {
-	ExitCode  int           // process exit code
-	SessionID string        // session ID (returned when broker creates new session)
-	Stdout    string        // stdout content
-	Stderr    string        // stderr content
-	Duration  time.Duration // execution duration
+	ExitCode   int           // process exit code
+	SessionID  string        // session ID (returned when broker creates new session)
+	Stdout     string        // stdout content
+	Stderr     string        // stderr content
+	Duration   time.Duration // execution duration
+	ReceiptRef string        `json:"receipt_ref,omitempty"`
+}
+
+type ExecutionReceipt struct {
+	ReceiptRef       string `json:"receipt_ref"`
+	CapsuleID        string `json:"capsule_id"`
+	Command          string `json:"command"`
+	Cwd              string `json:"cwd"`
+	ExitCode         int    `json:"exit_code"`
+	StdoutDigest     string `json:"stdout_digest"`
+	StderrDigest     string `json:"stderr_digest"`
+	WorktreeDigest   string `json:"worktree_digest"`
+	SourceTreeDigest string `json:"source_tree_digest"`
+	OccurredAt       string `json:"occurred_at"`
 }
 
 // ChangeKind describes the type of filesystem change.

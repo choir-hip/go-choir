@@ -36,7 +36,7 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+	if r.Method != http.MethodGet && r.Method != http.MethodPut {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
 		return
 	}
@@ -45,8 +45,19 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
+	if authResult.AuthMethod != "api_key" {
+		if h.vmctlClient == nil {
+			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
+			return
+		}
+		ownership, ownershipErr := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, computerID)
+		if ownershipErr != nil || ownership == nil || ownership.ComputerID != computerID {
+			writeJSON(w, http.StatusForbidden, errorResponse{Error: "computer ownership required"})
+			return
+		}
+	}
 	requiredScope := "computer:self_development:read"
-	if r.Method == http.MethodPost {
+	if r.Method == http.MethodPut {
 		requiredScope = "computer:self_development:mode"
 	}
 	if authResult.AuthMethod == "api_key" {
@@ -72,14 +83,18 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 	query := u.Query()
 	query.Set("computer_id", computerID)
 	u.RawQuery = query.Encode()
-	upstream, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), http.MaxBytesReader(w, r.Body, 64<<10))
+	upstreamMethod := r.Method
+	if upstreamMethod == http.MethodPut {
+		upstreamMethod = http.MethodPost
+	}
+	upstream, err := http.NewRequestWithContext(r.Context(), upstreamMethod, u.String(), http.MaxBytesReader(w, r.Body, 64<<10))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
 		return
 	}
 	upstream.Header.Set("X-Internal-Caller", "true")
 	upstream.Header.Set("X-Authenticated-User", authResult.UserID)
-	if r.Method == http.MethodPost {
+	if r.Method == http.MethodPut {
 		upstream.Header.Set("Content-Type", "application/json")
 	}
 	response, err := h.corpusd.Do(upstream)

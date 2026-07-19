@@ -88,10 +88,10 @@ func (s *Store) Finalize(ctx context.Context, computerID, eventDigest string, re
 		return err
 	}
 	defer tx.Rollback()
-	var sequence uint64
+	var sequence, nextReducerVersion, nextCredentialRevocationEpoch uint64
 	var previousHead, status, desiredHead, effectiveHead, desiredCommitment, effectiveCommitment string
 	var pending sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT sequence, previous_head, status, next_desired_event_head, next_effective_event_head, next_pending_transition_ref, next_desired_state_commitment, next_effective_state_commitment FROM computer_event_index WHERE computer_id=? AND event_digest=? FOR UPDATE`, computerID, eventDigest).Scan(&sequence, &previousHead, &status, &desiredHead, &effectiveHead, &pending, &desiredCommitment, &effectiveCommitment)
+	err = tx.QueryRowContext(ctx, `SELECT sequence, previous_head, status, next_desired_event_head, next_effective_event_head, next_pending_transition_ref, next_desired_state_commitment, next_effective_state_commitment, next_reducer_version, next_credential_revocation_epoch FROM computer_event_index WHERE computer_id=? AND event_digest=? FOR UPDATE`, computerID, eventDigest).Scan(&sequence, &previousHead, &status, &desiredHead, &effectiveHead, &pending, &desiredCommitment, &effectiveCommitment, &nextReducerVersion, &nextCredentialRevocationEpoch)
 	if err != nil {
 		return fmt.Errorf("computer event projection: load prepared event: %w", err)
 	}
@@ -108,12 +108,12 @@ func (s *Store) Finalize(ctx context.Context, computerID, eventDigest string, re
 		if sequence != 1 || previousHead != computerevent.ZeroHead {
 			return computerevent.ErrProjectionMismatch
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO computer_event_projection_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, pending_transition_ref, desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`, computerID, sequence, eventDigest, desiredHead, effectiveHead, nullableEventString(pending.String), desiredCommitment, effectiveCommitment, computerevent.ReducerVersionV1, time.Now().UTC())
+		_, err = tx.ExecContext(ctx, `INSERT INTO computer_event_projection_heads (computer_id, sequence, canonical_event_head, desired_event_head, effective_event_head, pending_transition_ref, desired_state_commitment, effective_state_commitment, reducer_version, credential_revocation_epoch, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, computerID, sequence, eventDigest, desiredHead, effectiveHead, nullableEventString(pending.String), desiredCommitment, effectiveCommitment, nextReducerVersion, nextCredentialRevocationEpoch, time.Now().UTC())
 	} else if err == nil {
 		if currentSequence+1 != sequence || currentHead != previousHead {
 			return computerevent.ErrProjectionMismatch
 		}
-		_, err = tx.ExecContext(ctx, `UPDATE computer_event_projection_heads SET sequence=?, canonical_event_head=?, desired_event_head=?, effective_event_head=?, pending_transition_ref=?, desired_state_commitment=?, effective_state_commitment=?, updated_at=? WHERE computer_id=? AND sequence=? AND canonical_event_head=?`, sequence, eventDigest, desiredHead, effectiveHead, nullableEventString(pending.String), desiredCommitment, effectiveCommitment, time.Now().UTC(), computerID, currentSequence, currentHead)
+		_, err = tx.ExecContext(ctx, `UPDATE computer_event_projection_heads SET sequence=?, canonical_event_head=?, desired_event_head=?, effective_event_head=?, pending_transition_ref=?, desired_state_commitment=?, effective_state_commitment=?, reducer_version=?, credential_revocation_epoch=?, updated_at=? WHERE computer_id=? AND sequence=? AND canonical_event_head=?`, sequence, eventDigest, desiredHead, effectiveHead, nullableEventString(pending.String), desiredCommitment, effectiveCommitment, nextReducerVersion, nextCredentialRevocationEpoch, time.Now().UTC(), computerID, currentSequence, currentHead)
 	}
 	if err != nil {
 		return fmt.Errorf("computer event projection: update head: %w", err)

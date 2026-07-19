@@ -2203,9 +2203,6 @@ func TestHandler_ResumeBootsPersistedVMWhenManagerLostInstance(t *testing.T) {
 	if result3.SandboxURL != "http://127.0.0.1:9101" {
 		t.Fatalf("SandboxURL = %s, want boot fallback URL", result3.SandboxURL)
 	}
-	if len(mock.resumes) != 1 {
-		t.Fatalf("expected one resume attempt, got %d", len(mock.resumes))
-	}
 	if len(mock.boots) != 1 || mock.boots[0].VMID != result1.VMID {
 		t.Fatalf("boot fallback = %+v, want one boot for %s", mock.boots, result1.VMID)
 	}
@@ -2421,26 +2418,29 @@ type mockVMManager struct {
 	destroys     []string
 	tokens       map[string]string
 	// Configurable responses
-	bootResponse      *VMInstanceInfo
-	bootError         error
-	bootHook          func(VMManagerConfig)
-	stopError         error
-	destroyError      error
-	resumeResponse    *VMInstanceInfo
-	resumeError       error
-	reattachResponse  *VMInstanceInfo
-	reattachError     error
-	recoverResponse   *VMInstanceInfo
-	recoverError      error
-	refreshResponse   *VMInstanceInfo
-	refreshError      error
-	getVMs            map[string]*VMInstanceInfo
-	checkHealthOK     *bool
-	checkHealthError  error
-	checkHealthCalls  []string
-	resumeStarted     chan struct{}
-	resumeRelease     chan struct{}
-	resumeStartedOnce sync.Once
+	bootResponse       *VMInstanceInfo
+	bootError          error
+	bootHook           func(VMManagerConfig)
+	stopError          error
+	destroyError       error
+	resumeResponse     *VMInstanceInfo
+	resumeError        error
+	reattachResponse   *VMInstanceInfo
+	reattachError      error
+	recoverResponse    *VMInstanceInfo
+	recoverError       error
+	refreshResponse    *VMInstanceInfo
+	refreshError       error
+	getVMs             map[string]*VMInstanceInfo
+	checkHealthOK      *bool
+	checkHealthError   error
+	checkHealthCalls   []string
+	resumeStarted      chan struct{}
+	resumeRelease      chan struct{}
+	resumeStartedOnce  sync.Once
+	recoverStarted     chan struct{}
+	recoverRelease     chan struct{}
+	recoverStartedOnce sync.Once
 }
 
 func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
@@ -2512,8 +2512,19 @@ func (m *mockVMManager) ReattachVMWithConfig(vmID, hostURL string, epoch int64, 
 }
 
 func (m *mockVMManager) RecoverVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
+	m.mu.Lock()
 	m.recovers = append(m.recovers, vmID)
 	m.recoverCfgs = append(m.recoverCfgs, cfg)
+	m.recoverStartedOnce.Do(func() {
+		if m.recoverStarted != nil {
+			close(m.recoverStarted)
+		}
+	})
+	release := m.recoverRelease
+	m.mu.Unlock()
+	if release != nil {
+		<-release
+	}
 	if m.recoverError != nil {
 		return nil, m.recoverError
 	}
@@ -2881,9 +2892,6 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 	if err != nil {
 		t.Fatalf("ResolveOrAssignDesktop: %v", err)
 	}
-	if len(mock.resumes) != 1 || mock.resumes[0] != own.VMID {
-		t.Fatalf("resumes = %+v, want [%s]", mock.resumes, own.VMID)
-	}
 	if len(mock.recovers) != 1 || mock.recovers[0] != own.VMID {
 		t.Fatalf("recovers = %+v, want [%s]", mock.recovers, own.VMID)
 	}
@@ -2976,33 +2984,32 @@ func TestOwnershipRegistry_DelegatesHibernateToVMManager(t *testing.T) {
 	}
 }
 
-func TestOwnershipRegistry_DelegatesResumeToVMManager(t *testing.T) {
+func TestOwnershipRegistry_StartsFreshRealizationThroughVMManager(t *testing.T) {
 	mock := &mockVMManager{
-		resumeResponse: &VMInstanceInfo{
+		recoverResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9043",
 			Epoch:   5,
 			Healthy: true,
 			State:   "running",
 		},
+		getVMs: make(map[string]*VMInstanceInfo),
 	}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mock)
 
-	_, _ = reg.ResolveOrAssign("user-resume-vm")
+	initial, _ := reg.ResolveOrAssign("user-resume-vm")
+	mock.getVMs[initial.VMID] = &VMInstanceInfo{HostURL: initial.SandboxURL, Epoch: initial.Epoch, Healthy: true, State: "stopped"}
 	_ = reg.HibernateVM("user-resume-vm")
 
 	own, err := reg.ResumeVM("user-resume-vm")
 	if err != nil {
 		t.Fatalf("ResumeVM: %v", err)
 	}
-
-	if len(mock.resumes) != 1 {
-		t.Fatalf("expected 1 ResumeVM call, got %d", len(mock.resumes))
+	if len(mock.recovers) != 1 {
+		t.Fatalf("expected 1 fresh realization recovery call, got %d", len(mock.recovers))
 	}
-
-	// Verify the sandbox URL was updated from the resume response.
-	if own.SandboxURL != "http://127.0.0.1:9043" {
-		t.Errorf("expected sandbox URL from resume response, got %s", own.SandboxURL)
+	if own.SandboxURL != "http://127.0.0.1:9043" || own.Epoch != 5 {
+		t.Errorf("fresh realization = %+v", own)
 	}
 }
 
@@ -3214,17 +3221,17 @@ func TestOwnershipRegistry_RefreshAllowsHibernatedVM(t *testing.T) {
 	}
 }
 
-func TestOwnershipRegistry_ResolveCoalescesStoppedVMResume(t *testing.T) {
+func TestOwnershipRegistry_ResolveCoalescesStoppedComputerStart(t *testing.T) {
 	mgr := &mockVMManager{
-		resumeResponse: &VMInstanceInfo{
+		recoverResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9048",
 			Epoch:   103,
 			Healthy: true,
 			State:   "running",
 		},
-		resumeStarted: make(chan struct{}),
-		resumeRelease: make(chan struct{}),
-		getVMs:        make(map[string]*VMInstanceInfo),
+		recoverStarted: make(chan struct{}),
+		recoverRelease: make(chan struct{}),
+		getVMs:         make(map[string]*VMInstanceInfo),
 	}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mgr)
@@ -3232,6 +3239,7 @@ func TestOwnershipRegistry_ResolveCoalescesStoppedVMResume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveOrAssign: %v", err)
 	}
+	mgr.getVMs[initial.VMID] = &VMInstanceInfo{HostURL: initial.SandboxURL, Epoch: initial.Epoch, Healthy: true, State: "running"}
 	if err := reg.StopVM("user-coalesce-stopped"); err != nil {
 		t.Fatalf("StopVM: %v", err)
 	}
@@ -3254,11 +3262,11 @@ func TestOwnershipRegistry_ResolveCoalescesStoppedVMResume(t *testing.T) {
 	}
 
 	select {
-	case <-mgr.resumeStarted:
+	case <-mgr.recoverStarted:
 	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for first resume")
+		t.Fatal("timed out waiting for first fresh realization start")
 	}
-	close(mgr.resumeRelease)
+	close(mgr.recoverRelease)
 	wg.Wait()
 	close(results)
 	close(errs)
@@ -3278,10 +3286,10 @@ func TestOwnershipRegistry_ResolveCoalescesStoppedVMResume(t *testing.T) {
 		}
 	}
 	mgr.mu.Lock()
-	resumeCount := len(mgr.resumes)
+	recoverCount := len(mgr.recovers)
 	mgr.mu.Unlock()
-	if resumeCount != 1 {
-		t.Fatalf("ResumeVM calls = %d, want 1", resumeCount)
+	if recoverCount != 1 {
+		t.Fatalf("recover count = %d, want 1", recoverCount)
 	}
 }
 
@@ -3392,43 +3400,34 @@ func TestOwnershipRegistry_NoVMManagerUsesHostProcessMode(t *testing.T) {
 	}
 }
 
-func TestOwnershipRegistry_ResumeOnResolveWithVMManager(t *testing.T) {
-	// When a user has a hibernated VM and resolves again, the VM should
-	// be resumed through the manager with the per-VM sandbox URL.
+func TestOwnershipRegistry_StartOnResolveUsesFreshRealization(t *testing.T) {
 	mock := &mockVMManager{
-		resumeResponse: &VMInstanceInfo{
+		recoverResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9050",
 			Epoch:   3,
 			Healthy: true,
 			State:   "running",
 		},
+		getVMs: make(map[string]*VMInstanceInfo),
 	}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mock)
-
-	// First assign and hibernate.
 	own1, _ := reg.ResolveOrAssign("user-resume-resolve")
+	mock.getVMs[own1.VMID] = &VMInstanceInfo{HostURL: own1.SandboxURL, Epoch: own1.Epoch, Healthy: true, State: "running"}
 	_ = reg.HibernateVM("user-resume-resolve")
 
-	// Resolve again should resume the VM.
 	own2, err := reg.ResolveOrAssign("user-resume-resolve")
 	if err != nil {
 		t.Fatalf("ResolveOrAssign after hibernate: %v", err)
 	}
-
-	// Same VM ID.
 	if own1.VMID != own2.VMID {
-		t.Errorf("expected same VM ID after resume, got %s and %s", own1.VMID, own2.VMID)
+		t.Errorf("expected stable VM slot, got %s and %s", own1.VMID, own2.VMID)
 	}
-
-	// Sandbox URL should be updated from the resume response.
-	if own2.SandboxURL != "http://127.0.0.1:9050" {
-		t.Errorf("expected sandbox URL from resume, got %s", own2.SandboxURL)
+	if own2.SandboxURL != "http://127.0.0.1:9050" || own2.Epoch != 3 {
+		t.Errorf("fresh realization = %+v", own2)
 	}
-
-	// Verify resume was called on the manager.
-	if len(mock.resumes) != 1 {
-		t.Fatalf("expected 1 ResumeVM call, got %d", len(mock.resumes))
+	if len(mock.recovers) != 1 {
+		t.Fatalf("expected 1 fresh realization call, got %d", len(mock.recovers))
 	}
 }
 
@@ -3492,9 +3491,6 @@ func TestOwnershipRegistry_PersistsOwnershipAndRebootsSameVMIDAfterRestart(t *te
 	}
 	if resolved.State != VMStateActive {
 		t.Fatalf("resolved state = %s, want active", resolved.State)
-	}
-	if len(mock.resumes) != 1 {
-		t.Fatalf("expected resume attempt before boot fallback, got %d", len(mock.resumes))
 	}
 	if len(mock.boots) != 1 {
 		t.Fatalf("expected one boot fallback, got %d", len(mock.boots))

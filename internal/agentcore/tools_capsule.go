@@ -88,6 +88,17 @@ func requireCapsuleRole(ctx context.Context, role capsule.AgentRole) (*CapsuleTo
 	}
 	return value, nil
 }
+func requireCapsuleMutationRole(ctx context.Context) (*CapsuleToolCtx, error) {
+	toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+	if err != nil {
+		return nil, err
+	}
+	execution := toolregistry.ExecutionContextFrom(ctx)
+	if execution.RunRecord == nil || normalizeCoSuperSlot(metadataStringValue(execution.RunRecord.Metadata, runMetadataCoSuperSlot)) != "implementation" {
+		return nil, fmt.Errorf("capsule mutation is restricted to the co-super implementation slot")
+	}
+	return toolCtx, nil
+}
 
 func newSpawnCapsuleTool() toolregistry.Tool {
 	type args struct {
@@ -187,19 +198,40 @@ func newListCapsulesTool() toolregistry.Tool {
 
 func newCommitTransactionTool() toolregistry.Tool {
 	type args struct {
-		Handle string `json:"handle"`
+		Handle                  string   `json:"handle"`
+		BuildRecipeRef          string   `json:"build_recipe_ref"`
+		TestReceipts            []string `json:"test_receipts"`
+		DependencyToolchainRefs []string `json:"dependency_toolchain_refs"`
 	}
+	arrayOfStrings := map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
 	return toolregistry.Tool{
-		Name: "commit_transaction", Description: "Classify and freeze the capsule diff for audited proposal construction.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{"handle": map[string]any{"type": "string"}}, []string{"handle"}, false),
+		Name: "commit_transaction", Description: "Classify and freeze the capsule diff as a complete verifier-ready effect bundle draft.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
+			"handle": map[string]any{"type": "string"}, "build_recipe_ref": map[string]any{"type": "string"},
+			"test_receipts": arrayOfStrings, "dependency_toolchain_refs": arrayOfStrings,
+		}, []string{"handle", "build_recipe_ref", "test_receipts", "dependency_toolchain_refs"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			toolCtx, err := requireCapsuleMutationRole(ctx)
 			if err != nil {
 				return "", err
 			}
 			var input args
 			if err := json.Unmarshal(raw, &input); err != nil {
 				return "", err
+			}
+			input.Handle, input.BuildRecipeRef = strings.TrimSpace(input.Handle), strings.TrimSpace(input.BuildRecipeRef)
+			input.TestReceipts, input.DependencyToolchainRefs = trimNonEmptyStrings(input.TestReceipts), trimNonEmptyStrings(input.DependencyToolchainRefs)
+			if input.Handle == "" || input.BuildRecipeRef == "" || len(input.TestReceipts) == 0 || len(input.DependencyToolchainRefs) == 0 {
+				return "", fmt.Errorf("complete build recipe, test receipts, and dependency/toolchain refs are required")
+			}
+			evidenceRefs := append([]string{input.BuildRecipeRef}, input.TestReceipts...)
+			evidenceRefs = append(evidenceRefs, input.DependencyToolchainRefs...)
+			executionReceipts, err := toolCtx.Executor.ResolveGrantedExecutionReceipts(ctx, toolCtx.AgentRunID, input.Handle, evidenceRefs)
+			if err != nil {
+				return "", err
+			}
+			if len(executionReceipts) < 3 {
+				return "", fmt.Errorf("distinct build, test, and dependency/toolchain execution receipts are required")
 			}
 			changes, err := toolCtx.Executor.ExtractGranted(toolCtx.AgentRunID, input.Handle)
 			if err != nil {
@@ -212,7 +244,7 @@ func newCommitTransactionTool() toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
-			record, err := toolCtx.TransactionBuilder.BuildTransactionFromDiff(capsuleID, changes)
+			record, err := toolCtx.TransactionBuilder.BuildBundleFromDiff(capsuleID, changes)
 			if err != nil {
 				return "", err
 			}
@@ -238,8 +270,8 @@ func newCommitTransactionTool() toolregistry.Tool {
 				return "", fmt.Errorf("self-development operation is %s, expected %s", operation.State, selfdev.StateExecuting)
 			}
 			headBefore, err := toolCtx.EventProjection.Head(ctx, toolCtx.ComputerID)
-			if err != nil || headBefore == nil || headBefore.PendingTransitionRef != "" {
-				return "", fmt.Errorf("self-development base head unavailable or pending")
+			if err != nil || headBefore == nil || headBefore.PendingTransitionRef != "" || headBefore.CanonicalEventHead != operation.BaseHead {
+				return "", fmt.Errorf("self-development base head unavailable, stale, or pending")
 			}
 			files, temporary, err := toolCtx.Executor.StageGrantedRelease(toolCtx.AgentRunID, input.Handle, filepath.Join(toolCtx.UpdaterRoot, "incoming"))
 			if err != nil {
@@ -250,83 +282,66 @@ func newCommitTransactionTool() toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
+			capabilityPolicyDigest, resourceReceipt, err := toolCtx.Executor.ResolveGrantedFreezeBindings(toolCtx.AgentRunID, input.Handle)
+			if err != nil {
+				return "", err
+			}
 			runtimeIntent, err := computerevent.CanonicalJSON(files)
 			if err != nil {
 				return "", err
 			}
-			record.SourceTreeDigest = sourceTreeDigest
-			record.RuntimeArtifactDigest = computerevent.DigestBytes(runtimeIntent)
-			record.BaseEffectiveEventHead = headBefore.EffectiveEventHead
-			record.RuntimeFiles = files
-			bundle, err := computerevent.CanonicalJSON(record)
-			if err != nil {
-				return "", fmt.Errorf("canonical capsule effect bundle: %w", err)
+			runtimeDigest := computerevent.DigestBytes(runtimeIntent)
+			generatedRefs := make([]string, len(files))
+			for index, file := range files {
+				generatedRefs[index] = "artifact:sha256:" + file.SHA256
 			}
-			bundleDigest := computerevent.DigestBytes(bundle)
-			if err := os.WriteFile(filepath.Join(temporary, "bundle.json"), bundle, 0o400); err != nil {
+			record.ComputerID = toolCtx.ComputerID
+			record.BaseEventHead = operation.BaseHead
+			record.TrajectoryRef = trajectoryID
+			record.CapabilityPolicyDigest = capabilityPolicyDigest
+			record.SourceTreeRef = "source-tree:sha256:" + sourceTreeDigest
+			record.GeneratedArtifactRefs = generatedRefs
+			record.BuildRecipeRef = input.BuildRecipeRef
+			record.RuntimeArtifactRef = "runtime-artifact:sha256:" + runtimeDigest
+			record.TestReceipts = input.TestReceipts
+			record.VerifierReceipts = []string{}
+			record.DependencyToolchainRefs = input.DependencyToolchainRefs
+			record.ResourceReceipts = []string{resourceReceipt}
+			record.RuntimeFiles = files
+			record.ContentDigest, err = record.ComputeContentDigest()
+			if err != nil || record.Validate(false) != nil {
+				return "", fmt.Errorf("complete capsule effect bundle draft unavailable")
+			}
+			draft, err := computerevent.CanonicalJSON(record)
+			if err != nil {
+				return "", fmt.Errorf("canonical capsule effect bundle draft: %w", err)
+			}
+			if err := os.WriteFile(filepath.Join(temporary, "bundle.draft.json"), draft, 0o400); err != nil {
 				return "", err
 			}
-			frozenRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", bundleDigest)
+			frozenRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", record.ContentDigest)
 			if err := os.Rename(temporary, frozenRoot); err != nil {
-				existing, readErr := os.ReadFile(filepath.Join(frozenRoot, "bundle.json"))
-				if readErr != nil || !bytes.Equal(existing, bundle) {
-					return "", fmt.Errorf("freeze immutable release: %w", err)
+				existing, readErr := os.ReadFile(filepath.Join(frozenRoot, "bundle.draft.json"))
+				if readErr != nil || !bytes.Equal(existing, draft) {
+					return "", fmt.Errorf("freeze immutable bundle draft: %w", err)
 				}
-			}
-			eventIdempotency := computerevent.DigestBytes([]byte("capsule-effect-v1\x00" + toolCtx.AgentRunID + "\x00" + capsuleID + "\x00" + bundleDigest))
-			var receiptID string
-			pinnedDigest := bundleDigest
-			existingEvent := false
-			if toolCtx.EventProjection != nil {
-				projected, found, lookupErr := toolCtx.EventProjection.EventByIdempotency(ctx, toolCtx.ComputerID, eventIdempotency)
-				if lookupErr != nil {
-					return "", lookupErr
-				}
-				if found {
-					if projected.ProposedEffectRef != bundleDigest || projected.TrajectoryID != trajectoryID || projected.CapsuleID != capsuleID {
-						return "", fmt.Errorf("durable capsule effect event binding mismatch")
-					}
-					existingEvent = true
-				}
-			}
-			if !existingEvent {
-				eventID, eventErr := computerevent.NewEventID()
-				if eventErr != nil {
-					return "", eventErr
-				}
-				event := computerevent.Event{
-					SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: toolCtx.ComputerID,
-					EventKind: computerevent.EventEffectProposed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
-					IdempotencyKey: eventIdempotency, TrajectoryID: trajectoryID, CapsuleID: capsuleID, ActorProfile: agentprofile.CoSuper,
-					AuthorityRef: "guest-core:capsule-control", PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
-				}
-				receipt, digest, appendErr := toolCtx.EventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, bundle, "application/vnd.choir.capsule-effect+json", "public")
-				if appendErr != nil {
-					return "", appendErr
-				}
-				receiptID, pinnedDigest = receipt.ReceiptID, digest
-			}
-			head, headErr := toolCtx.EventProjection.Head(ctx, toolCtx.ComputerID)
-			if headErr != nil || head == nil {
-				return "", fmt.Errorf("resolve frozen operation head: %w", headErr)
 			}
 			operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
 				next.CapsuleID = capsuleID
-				next.BundleDigest = pinnedDigest
-				next.DesiredHead = head.DesiredEventHead
-				next.EffectiveHead = head.EffectiveEventHead
+				next.BundleDigest = record.ContentDigest
+				next.DesiredHead = headBefore.DesiredEventHead
+				next.EffectiveHead = headBefore.EffectiveEventHead
 				return nil
 			})
 			if err != nil {
 				return "", err
 			}
-			result := map[string]any{
+			return toolregistry.ResultJSON(map[string]any{
 				"handle": input.Handle, "change_count": len(changes), "classifier_version": record.ClassifierV,
 				"classifier_digest": record.ClassifierDigest, "groups": record.Groups,
-				"bundle_digest": pinnedDigest, "event_head_receipt_id": receiptID,
-			}
-			result["operation_id"], result["state"] = operation.OperationID, operation.State
-			return toolregistry.ResultJSON(result)
+				"content_digest": record.ContentDigest, "bundle_digest": record.ContentDigest,
+				"operation_id": operation.OperationID, "state": operation.State,
+			})
 		},
 	}
 }
@@ -365,15 +380,16 @@ func newInspectSelfDevelopmentBundleTool() toolregistry.Tool {
 				return "", fmt.Errorf("frozen operation binding mismatch")
 			}
 			root := filepath.Join(toolCtx.UpdaterRoot, "incoming", input.BundleDigest)
-			rawBundle, err := os.ReadFile(filepath.Join(root, "bundle.json"))
-			if err != nil || computerevent.DigestBytes(rawBundle) != input.BundleDigest {
-				return "", fmt.Errorf("immutable bundle digest mismatch")
+			rawBundle, err := os.ReadFile(filepath.Join(root, "bundle.draft.json"))
+			if err != nil {
+				return "", fmt.Errorf("immutable bundle draft unavailable")
 			}
-			var record transaction.TransactionRecord
+			var record transaction.CapsuleEffectBundle
 			decoder := json.NewDecoder(bytes.NewReader(rawBundle))
 			decoder.DisallowUnknownFields()
-			if err := decoder.Decode(&record); err != nil || record.Rejected || record.BaseEffectiveEventHead != operation.EffectiveHead {
-				return "", fmt.Errorf("invalid frozen bundle")
+			if err := decoder.Decode(&record); err != nil || record.ContentDigest != input.BundleDigest ||
+				record.BaseEventHead != operation.BaseHead || record.Validate(false) != nil {
+				return "", fmt.Errorf("invalid frozen bundle draft")
 			}
 			for _, file := range record.RuntimeFiles {
 				path := filepath.Join(root, filepath.FromSlash(file.Path))
@@ -388,10 +404,19 @@ func newInspectSelfDevelopmentBundleTool() toolregistry.Tool {
 					return "", fmt.Errorf("frozen runtime file digest mismatch: %s", file.Path)
 				}
 			}
+			evidenceRefs := append([]string{record.BuildRecipeRef}, record.TestReceipts...)
+			evidenceRefs = append(evidenceRefs, record.DependencyToolchainRefs...)
+			executionReceipts, err := toolCtx.Executor.ResolveExecutionReceipts(evidenceRefs)
+			if err != nil {
+				return "", err
+			}
 			return toolregistry.ResultJSON(map[string]any{
-				"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest,
-				"source_tree_digest": record.SourceTreeDigest, "runtime_artifact_digest": record.RuntimeArtifactDigest,
-				"base_effective_event_head": record.BaseEffectiveEventHead, "runtime_files": record.RuntimeFiles,
+				"operation_id": operation.OperationID, "content_digest": record.ContentDigest,
+				"source_tree_ref": record.SourceTreeRef, "runtime_artifact_ref": record.RuntimeArtifactRef,
+				"base_event_head": record.BaseEventHead, "runtime_files": record.RuntimeFiles,
+				"build_recipe_ref": record.BuildRecipeRef, "test_receipts": record.TestReceipts,
+				"dependency_toolchain_refs": record.DependencyToolchainRefs, "resource_receipts": record.ResourceReceipts,
+				"execution_receipts": executionReceipts,
 				"classifier_version": record.ClassifierV, "classifier_digest": record.ClassifierDigest, "groups": record.Groups,
 			})
 		},
@@ -420,7 +445,7 @@ func newRecordSelfDevelopmentVerificationTool() toolregistry.Tool {
 				return "", err
 			}
 			execution := toolregistry.ExecutionContextFrom(ctx)
-			if normalizeCoSuperSlot(metadataStringValue(execution.RunRecord.Metadata, runMetadataCoSuperSlot)) != "verifier" {
+			if execution.RunRecord == nil || normalizeCoSuperSlot(metadataStringValue(execution.RunRecord.Metadata, runMetadataCoSuperSlot)) != "verifier" {
 				return "", fmt.Errorf("verification recording is restricted to the co-super verifier slot")
 			}
 			if toolCtx.OperationStore == nil || toolCtx.EventAppender == nil || toolCtx.EventProjection == nil {
@@ -439,10 +464,20 @@ func newRecordSelfDevelopmentVerificationTool() toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
-			if operation.BundleDigest != input.BundleDigest || operation.TrajectoryID != trajectoryIDForRun(execution.RunRecord) {
+			if operation.TrajectoryID != trajectoryIDForRun(execution.RunRecord) {
 				return "", fmt.Errorf("verification does not bind the frozen operation")
 			}
-			if (operation.State == selfdev.StateAwaitingApproval && input.Decision == "pass") || (operation.State == selfdev.StateFailed && input.Decision == "fail") {
+			if operation.State == selfdev.StateAwaitingApproval && input.Decision == "pass" {
+				rawFinal, readErr := os.ReadFile(filepath.Join(toolCtx.UpdaterRoot, "incoming", operation.BundleDigest, "bundle.json"))
+				var finalBundle transaction.CapsuleEffectBundle
+				if readErr == nil && json.Unmarshal(rawFinal, &finalBundle) == nil && finalBundle.ContentDigest == input.BundleDigest && finalBundle.Validate(true) == nil {
+					return toolregistry.ResultJSON(map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "verifier_ref": firstString(operation.VerifierRefs)})
+				}
+			}
+			if operation.BundleDigest != input.BundleDigest {
+				return "", fmt.Errorf("verification does not bind the frozen bundle content")
+			}
+			if operation.State == selfdev.StateFailed && input.Decision == "fail" {
 				return toolregistry.ResultJSON(map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "verifier_ref": firstString(operation.VerifierRefs)})
 			}
 			if operation.State != selfdev.StateFrozen && operation.State != selfdev.StateVerified {
@@ -492,16 +527,10 @@ func newRecordSelfDevelopmentVerificationTool() toolregistry.Tool {
 					return nil
 				})
 			} else {
-				if operation.State == selfdev.StateFrozen {
-					operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateVerified, func(next *selfdev.Operation) error {
-						next.VerifierRefs = []string{verifierRef}
-						return nil
-					})
-					if err != nil {
-						return "", err
-					}
+				operation, err = finalizeVerifiedCapsuleBundle(ctx, toolCtx, operation, verifierRef)
+				if err == nil {
+					operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateVerified, selfdev.StateAwaitingApproval, nil)
 				}
-				operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateVerified, selfdev.StateAwaitingApproval, nil)
 			}
 			if err != nil {
 				return "", err
@@ -509,6 +538,101 @@ func newRecordSelfDevelopmentVerificationTool() toolregistry.Tool {
 			return toolregistry.ResultJSON(map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "decision": input.Decision, "verifier_ref": verifierRef})
 		},
 	}
+}
+
+func finalizeVerifiedCapsuleBundle(ctx context.Context, toolCtx *CapsuleToolCtx, operation selfdev.Operation, verifierRef string) (selfdev.Operation, error) {
+	if operation.State == selfdev.StateVerified {
+		return operation, nil
+	}
+	contentDigest := operation.BundleDigest
+	draftRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", contentDigest)
+	var bundle transaction.CapsuleEffectBundle
+	rawDraft, draftErr := os.ReadFile(filepath.Join(draftRoot, "bundle.draft.json"))
+	if draftErr == nil {
+		decoder := json.NewDecoder(bytes.NewReader(rawDraft))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&bundle) != nil || bundle.ContentDigest != contentDigest || bundle.Validate(false) != nil {
+			return operation, fmt.Errorf("verified bundle draft binding mismatch")
+		}
+		bundle.VerifierReceipts = []string{verifierRef}
+		if bundle.Validate(true) != nil {
+			return operation, fmt.Errorf("verified bundle is incomplete")
+		}
+	} else {
+		mapping, err := os.ReadFile(filepath.Join(toolCtx.UpdaterRoot, "bundle-finalizations", contentDigest))
+		if err != nil || !computerevent.IsSHA256(strings.TrimSpace(string(mapping))) {
+			return operation, fmt.Errorf("verified bundle draft unavailable")
+		}
+		finalRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", strings.TrimSpace(string(mapping)))
+		rawFinal, err := os.ReadFile(filepath.Join(finalRoot, "bundle.json"))
+		if err != nil || json.Unmarshal(rawFinal, &bundle) != nil || bundle.ContentDigest != contentDigest ||
+			!selfDevelopmentContainsString(bundle.VerifierReceipts, verifierRef) || bundle.Validate(true) != nil {
+			return operation, fmt.Errorf("verified bundle recovery binding mismatch")
+		}
+	}
+	finalBytes, err := computerevent.CanonicalJSON(bundle)
+	if err != nil {
+		return operation, err
+	}
+	finalDigest := computerevent.DigestBytes(finalBytes)
+	finalRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", finalDigest)
+	if draftErr == nil {
+		if err := os.WriteFile(filepath.Join(draftRoot, "bundle.json"), finalBytes, 0o400); err != nil {
+			return operation, err
+		}
+		mappingRoot := filepath.Join(toolCtx.UpdaterRoot, "bundle-finalizations")
+		if err := os.MkdirAll(mappingRoot, 0o700); err != nil {
+			return operation, err
+		}
+		if err := os.WriteFile(filepath.Join(mappingRoot, contentDigest), []byte(finalDigest), 0o400); err != nil {
+			return operation, err
+		}
+		if err := os.Rename(draftRoot, finalRoot); err != nil {
+			existing, readErr := os.ReadFile(filepath.Join(finalRoot, "bundle.json"))
+			if readErr != nil || !bytes.Equal(existing, finalBytes) {
+				return operation, fmt.Errorf("publish verified bundle: %w", err)
+			}
+		}
+	}
+	eventIdempotency := computerevent.DigestBytes([]byte("capsule-effect-final-v1\x00" + operation.OperationID + "\x00" + finalDigest))
+	projected, found, err := toolCtx.EventProjection.EventByIdempotency(ctx, toolCtx.ComputerID, eventIdempotency)
+	if err != nil {
+		return operation, err
+	}
+	if !found {
+		eventID, eventErr := computerevent.NewEventID()
+		if eventErr != nil {
+			return operation, eventErr
+		}
+		event := computerevent.Event{
+			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: toolCtx.ComputerID,
+			EventKind: computerevent.EventEffectProposed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+			IdempotencyKey: eventIdempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
+			ActorProfile: agentprofile.CoSuper, AuthorityRef: "guest-core:verified-bundle-finalizer",
+			PrivacyClass: "public", VerifierRefs: []string{verifierRef}, ReducerVersion: computerevent.ReducerVersionV1,
+		}
+		if _, pinnedDigest, appendErr := toolCtx.EventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, finalBytes, "application/vnd.choir.capsule-effect+json", "public"); appendErr != nil || pinnedDigest != finalDigest {
+			return operation, fmt.Errorf("append verified effect proposal: %w", appendErr)
+		}
+		projected, found, err = toolCtx.EventProjection.EventByIdempotency(ctx, toolCtx.ComputerID, eventIdempotency)
+		if err != nil || !found {
+			return operation, fmt.Errorf("verified effect proposal projection unavailable")
+		}
+	}
+	if projected.ProposedEffectRef != finalDigest || projected.TrajectoryID != operation.TrajectoryID || projected.CapsuleID != operation.CapsuleID {
+		return operation, fmt.Errorf("verified effect proposal binding mismatch")
+	}
+	head, err := toolCtx.EventProjection.Head(ctx, toolCtx.ComputerID)
+	if err != nil || head == nil {
+		return operation, fmt.Errorf("verified effect head unavailable")
+	}
+	return toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateVerified, func(next *selfdev.Operation) error {
+		next.BundleDigest = finalDigest
+		next.VerifierRefs = []string{verifierRef}
+		next.DesiredHead = head.DesiredEventHead
+		next.EffectiveHead = head.EffectiveEventHead
+		return nil
+	})
 }
 
 func newInspectCapsuleTool() toolregistry.Tool {
@@ -548,7 +672,7 @@ func newCapsuleExecTool() toolregistry.Tool {
 			"command": map[string]any{"type": "string"}, "cwd": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer"},
 		}, []string{"command"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			toolCtx, err := requireCapsuleMutationRole(ctx)
 			if err != nil {
 				return "", err
 			}
@@ -600,7 +724,7 @@ func newCapsuleWriteFileTool() toolregistry.Tool {
 			"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "mode": map[string]any{"type": "integer"},
 		}, []string{"path", "content"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			toolCtx, err := requireCapsuleMutationRole(ctx)
 			if err != nil {
 				return "", err
 			}

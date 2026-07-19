@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
 func externalTestCipher(t *testing.T, fill byte) *PrivateArtifactCipher {
 	t.Helper()
-	cipher, err := NewPrivateArtifactCipherFromExternalKey("computer-test", base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{fill}, 32)))
+	cipher, err := newPrivateArtifactCipher("computer-test", base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{fill}, 32)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,9 +71,9 @@ func TestPrivateArtifactCipherRedactsSecretsBeforeImmutableEncryption(t *testing
 	}
 }
 
-func TestExternalPrivacyKeyringSurvivesTrustedCoreReconstructionWithoutFilesystemState(t *testing.T) {
-	encoded := base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0x5a}, 32))
-	first, err := NewPrivateArtifactCipherFromExternalKey("computer-test", encoded)
+func TestGuestPrivacyKeyringSurvivesTrustedCoreReconstruction(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keyring", "privacy-key")
+	first, err := LoadGuestPrivateArtifactCipher(path, "computer-test", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +81,7 @@ func TestExternalPrivacyKeyringSurvivesTrustedCoreReconstructionWithoutFilesyste
 	if err != nil {
 		t.Fatal(err)
 	}
-	reconstructed, err := NewPrivateArtifactCipherFromExternalKey("computer-test", encoded)
+	reconstructed, err := LoadGuestPrivateArtifactCipher(path, "computer-test", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,5 +91,18 @@ func TestExternalPrivacyKeyringSurvivesTrustedCoreReconstructionWithoutFilesyste
 	}
 	if string(plaintext) != "restart durable" || recoveredMetadata.KeyVersionDigest != metadata.KeyVersionDigest {
 		t.Fatalf("reconstructed private artifact = %q %+v", plaintext, recoveredMetadata)
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o400 {
+		t.Fatalf("guest privacy key mode = %v, %v", info, err)
+	}
+	if _, err := LoadGuestPrivateArtifactCipher(path, "computer-other", false); err == nil {
+		t.Fatal("guest privacy key accepted for another computer")
+	}
+}
+
+func TestGuestPrivacyKeyringRefusesMissingKeyAfterGenesis(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keyring", "privacy-key")
+	if _, err := LoadGuestPrivateArtifactCipher(path, "computer-test", false); err == nil {
+		t.Fatal("missing post-genesis guest privacy key was recreated")
 	}
 }

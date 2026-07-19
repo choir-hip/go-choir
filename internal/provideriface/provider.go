@@ -244,24 +244,6 @@ type Config struct {
 	// alongside each run-memory compaction checkpoint.
 	RunMemoryKeepRecentTokens int
 
-	// PromotionSourceRepo is the server-owned canonical go-choir source used
-	// to create product-safe promotion integration workspaces.
-	PromotionSourceRepo string
-
-	// SourceLedgerRepo is the product-visible source lineage remote. It may be
-	// private; package/adoption records name refs in this ledger.
-	SourceLedgerRepo string
-
-	// PromotionWorkspaceRoot is the server-owned root for per-candidate
-	// integration workspaces. Browser callers never provide this path.
-	PromotionWorkspaceRoot string
-
-	AppPromotionRuntimeBuildCommand string
-	AppPromotionRuntimeArtifactPath string
-	AppPromotionUIBuildCommand      string
-	AppPromotionUIArtifactPath      string
-	AppPromotionBuildTimeout        time.Duration
-
 	// QdrantURL is the Qdrant instance URL for semantic routing and indexing.
 	// Defaults to the node-b local instance.
 	QdrantURL string

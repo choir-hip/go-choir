@@ -6,8 +6,12 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -45,44 +49,115 @@ type privateKeyring interface {
 	resolve(context.Context, string, string) (privateKeyMaterial, error)
 }
 
-type ExternalPrivacyKeyring struct {
+type guestPrivacyKeyring struct {
 	computerID string
 	material   privateKeyMaterial
 }
 
-func NewExternalPrivacyKeyring(computerID, encodedKey string) (*ExternalPrivacyKeyring, error) {
+type guestPrivacyKeyFile struct {
+	Version    int    `json:"version"`
+	ComputerID string `json:"computer_id"`
+	Key        string `json:"key"`
+}
+
+func newPrivateArtifactCipher(computerID, encodedKey string) (*PrivateArtifactCipher, error) {
 	raw, err := base64.RawStdEncoding.DecodeString(strings.TrimSpace(encodedKey))
 	if err != nil || len(raw) != chacha20poly1305.KeySize || strings.TrimSpace(computerID) == "" {
-		return nil, fmt.Errorf("privacy keyring: invalid external key")
+		return nil, fmt.Errorf("privacy keyring: invalid guest key")
 	}
 	var key [chacha20poly1305.KeySize]byte
 	copy(key[:], raw)
-	return &ExternalPrivacyKeyring{
+	return &PrivateArtifactCipher{keys: &guestPrivacyKeyring{
 		computerID: computerID,
 		material:   privateKeyMaterial{digest: DigestBytes(raw), key: key},
-	}, nil
+	}}, nil
 }
 
-func (k *ExternalPrivacyKeyring) current(_ context.Context, computerID string) (privateKeyMaterial, error) {
+// LoadGuestPrivateArtifactCipher loads the root guest-owned per-computer key.
+// A key may be created only before the canonical event chain exists.
+func LoadGuestPrivateArtifactCipher(path, computerID string, allowCreate bool) (*PrivateArtifactCipher, error) {
+	path = filepath.Clean(path)
+	computerID = strings.TrimSpace(computerID)
+	if !filepath.IsAbs(path) || computerID == "" {
+		return nil, fmt.Errorf("privacy keyring: absolute path and computer identity are required")
+	}
+	raw, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) && allowCreate {
+		raw, err = createGuestPrivacyKey(path, computerID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("privacy keyring: load guest key: %w", err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o400 {
+		return nil, fmt.Errorf("privacy keyring: guest key must be a mode-0400 regular file")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != uint32(os.Geteuid()) {
+		return nil, fmt.Errorf("privacy keyring: guest key owner mismatch")
+	}
+	var keyFile guestPrivacyKeyFile
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&keyFile); err != nil {
+		return nil, fmt.Errorf("privacy keyring: invalid guest key")
+	}
+	canonical, err := CanonicalJSON(keyFile)
+	if err != nil || !bytes.Equal(canonical, raw) || keyFile.Version != 1 || keyFile.ComputerID != computerID {
+		return nil, fmt.Errorf("privacy keyring: guest key binding mismatch")
+	}
+	return newPrivateArtifactCipher(computerID, keyFile.Key)
+}
+
+func createGuestPrivacyKey(path, computerID string) ([]byte, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	key := make([]byte, chacha20poly1305.KeySize)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	canonical, err := CanonicalJSON(guestPrivacyKeyFile{
+		Version: 1, ComputerID: computerID, Key: base64.RawStdEncoding.EncodeToString(key),
+	})
+	if err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o400)
+	if errors.Is(err, os.ErrExist) {
+		return os.ReadFile(path)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if _, err = file.Write(canonical); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(path)
+		return nil, err
+	}
+	return canonical, nil
+}
+
+func (k *guestPrivacyKeyring) current(_ context.Context, computerID string) (privateKeyMaterial, error) {
 	if k == nil || computerID != k.computerID {
 		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: computer binding mismatch")
 	}
 	return k.material, nil
 }
 
-func (k *ExternalPrivacyKeyring) resolve(_ context.Context, computerID, digest string) (privateKeyMaterial, error) {
+func (k *guestPrivacyKeyring) resolve(_ context.Context, computerID, digest string) (privateKeyMaterial, error) {
 	if k == nil || computerID != k.computerID || digest != k.material.digest {
 		return privateKeyMaterial{}, fmt.Errorf("privacy keyring: key version unavailable")
 	}
 	return k.material, nil
-}
-
-func NewPrivateArtifactCipherFromExternalKey(computerID, encodedKey string) (*PrivateArtifactCipher, error) {
-	keyring, err := NewExternalPrivacyKeyring(computerID, encodedKey)
-	if err != nil {
-		return nil, err
-	}
-	return &PrivateArtifactCipher{keys: keyring}, nil
 }
 
 type PrivateArtifactCipher struct {

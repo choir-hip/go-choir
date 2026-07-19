@@ -1125,7 +1125,7 @@ func TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	registerCountingTool("update_coagent")
 
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "vsuper-run",
+		RunID:        "super-run",
 		OwnerID:      "owner",
 		AgentProfile: agentprofile.Super,
 	}))

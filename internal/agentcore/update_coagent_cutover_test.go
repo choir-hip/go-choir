@@ -2078,8 +2078,8 @@ func toolLoopRequestContains(req provideriface.ToolLoopRequest, needle string) b
 	return false
 }
 
-// TestVSuperCoSuperSlotReusedByTrajectorySlot verifies the co-super slot
-// reuse semantics for the VSuper/CoSuper trajectory-slot model:
+// TestSuperCoSuperSlotReusedByTrajectorySlot verifies the co-super slot
+// reuse semantics for the Super/CoSuper trajectory-slot model:
 //
 //  1. A second StartCoagentRun for the same (trajectory, slot) while the
 //     owner run is still active MUST reuse the existing run and mark it

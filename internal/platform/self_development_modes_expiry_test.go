@@ -27,10 +27,12 @@ func TestSelfDevelopmentModeGetDurablyExpiresAcceptOnce(t *testing.T) {
 	now := time.Date(2026, 7, 19, 1, 0, 0, 0, time.UTC)
 	authority.now = func() time.Time { return now }
 	digest := strings.Repeat("a", 64)
+	pending := ""
 	accepted, err := authority.Set(context.Background(), "computer-expiry-test", SetSelfDevelopmentModeRequest{
 		Mode: SelfDevelopmentModeAcceptOnce, ExpectedGeneration: 0, IdempotencyKey: "enable-once",
 		OperationID: "operation-1", BundleDigest: digest,
 		ExpectedDesiredEventHead: digest, ExpectedEffectiveEventHead: digest,
+		ExpectedPendingTransitionRef:   &pending,
 		ExpectedDesiredStateCommitment: digest, ExpectedEffectiveStateCommitment: digest,
 		ExpiresAt: now.Add(time.Minute).Format(time.RFC3339Nano),
 	})
@@ -44,6 +46,9 @@ func TestSelfDevelopmentModeGetDurablyExpiresAcceptOnce(t *testing.T) {
 	}
 	if expired.Mode != SelfDevelopmentModeOff || expired.Generation != 2 || expired.Receipt == nil {
 		t.Fatalf("expired mode = %+v", expired)
+	}
+	if expired.Receipt.KindFields["consumed_expires_at"] != accepted.ExpiresAt {
+		t.Fatalf("expiry receipt lost original accept_once deadline: %+v", expired.Receipt.KindFields)
 	}
 	reloaded, err := authority.Get(context.Background(), "computer-expiry-test")
 	if err != nil || reloaded.Mode != SelfDevelopmentModeOff || reloaded.Generation != expired.Generation {

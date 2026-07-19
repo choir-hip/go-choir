@@ -2,7 +2,6 @@ package transaction
 
 import (
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 )
@@ -47,7 +46,7 @@ func TestClassifierRejectsUnknown(t *testing.T) {
 		{Path: "/unknown/path.txt", Kind: capsule.ChangeAdded, Mode: 0o644},
 	}
 
-	record, err := builder.BuildTransactionFromDiff("capsule-1", changes)
+	record, err := builder.BuildBundleFromDiff("capsule-1", changes)
 	if err != nil {
 		t.Fatalf("build transaction: %v", err)
 	}
@@ -69,15 +68,15 @@ func TestTransactionBuilderAcceptsKnownPaths(t *testing.T) {
 		{Path: "/var/lib/blob/abc123", Kind: capsule.ChangeAdded, Mode: 0o644},
 	}
 
-	record, err := builder.BuildTransactionFromDiff("capsule-1", changes)
+	record, err := builder.BuildBundleFromDiff("capsule-1", changes)
 	if err != nil {
 		t.Fatalf("build transaction: %v", err)
 	}
 	if record.Rejected {
 		t.Errorf("record should not be rejected, but: %s", record.RejectReason)
 	}
-	if record.CapsuleID != "capsule-1" {
-		t.Errorf("capsule ID: got %q, want %q", record.CapsuleID, "capsule-1")
+	if record.CapsuleIdentity != "capsule-1" {
+		t.Errorf("capsule ID: got %q, want %q", record.CapsuleIdentity, "capsule-1")
 	}
 	if record.ClassifierV != "v1" {
 		t.Errorf("classifier version: got %q, want %q", record.ClassifierV, "v1")
@@ -93,202 +92,42 @@ func TestTransactionBuilderAcceptsKnownPaths(t *testing.T) {
 	}
 }
 
-func TestTapeAppendAndVerify(t *testing.T) {
-	c := NewClassifier()
-	builder := NewTransactionBuilder(c)
-	tape := NewTape()
-
-	// Append 3 valid transactions.
-	for i := 0; i < 3; i++ {
-		changes := []capsule.FileChange{
-			{Path: "/var/lib/dolt/choir/items.sql", Kind: capsule.ChangeModified, Mode: 0o644},
-		}
-		record, err := builder.BuildTransactionFromDiff("capsule-1", changes)
-		if err != nil {
-			t.Fatalf("build transaction %d: %v", i, err)
-		}
-		hash, err := tape.Append(record)
-		if err != nil {
-			t.Fatalf("append %d: %v", i, err)
-		}
-		if hash == "" {
-			t.Errorf("append %d: empty hash", i)
-		}
+func TestCapsuleEffectBundleContentDigestBindsCompleteSchemaBeforeDetachedVerifier(t *testing.T) {
+	digest := func(fill byte) string { return string(make([]byte, 0)) + repeatHex(fill) }
+	bundle := CapsuleEffectBundle{
+		BundleVersion: 1, ComputerID: "computer-1", BaseEventHead: digest('a'),
+		TrajectoryRef: "trajectory-1", CapsuleIdentity: "capsule-1", CapabilityPolicyDigest: digest('b'),
+		SourceTreeRef:         "source-tree:sha256:" + digest('c'),
+		OrderedFileEffects:    []ChangeRecord{{Path: "var/lib/artifact/release/bin/sandbox", Kind: "added", Mode: 0o755}},
+		GeneratedArtifactRefs: []string{"artifact:sha256:" + digest('d')},
+		BuildRecipeRef:        "capsule-exec:sha256:" + digest('e'),
+		RuntimeArtifactRef:    "runtime-artifact:sha256:" + digest('f'),
+		TestReceipts:          []string{"capsule-exec:sha256:" + digest('1')}, VerifierReceipts: []string{},
+		DependencyToolchainRefs: []string{"capsule-exec:sha256:" + digest('2')},
+		ResourceReceipts:        []string{"resource:sha256:" + digest('3')},
+		RuntimeFiles:            []capsule.FrozenReleaseFile{{Path: "bin/sandbox", SHA256: digest('d'), Mode: 0o755}},
+		Groups:                  map[string][]ChangeRecord{}, Ignored: []ChangeRecord{},
 	}
-
-	if tape.Len() != 3 {
-		t.Errorf("tape length: expected 3, got %d", tape.Len())
+	var err error
+	bundle.ContentDigest, err = bundle.ComputeContentDigest()
+	if err != nil || bundle.Validate(false) != nil {
+		t.Fatalf("valid draft refused: digest=%s err=%v validate=%v", bundle.ContentDigest, err, bundle.Validate(false))
 	}
-
-	// Verify the chain.
-	if err := tape.Verify(); err != nil {
-		t.Fatalf("verify: %v", err)
+	bundle.VerifierReceipts = []string{digest('4')}
+	if err := bundle.Validate(true); err != nil {
+		t.Fatal(err)
 	}
-
-	// Head should be the last entry's hash.
-	entries := tape.Entries()
-	if tape.Head() != entries[2].Hash {
-		t.Errorf("head: got %q, want %q", tape.Head(), entries[2].Hash)
+	tampered := bundle
+	tampered.BuildRecipeRef = "capsule-exec:sha256:" + digest('5')
+	if err := tampered.Validate(true); err == nil {
+		t.Fatal("bundle accepted a build recipe substitution")
 	}
 }
 
-func TestTapeRejectsRejectedRecords(t *testing.T) {
-	c := NewClassifier()
-	builder := NewTransactionBuilder(c)
-	tape := NewTape()
-
-	changes := []capsule.FileChange{
-		{Path: "/unknown/path.txt", Kind: capsule.ChangeAdded, Mode: 0o644},
+func repeatHex(fill byte) string {
+	out := make([]byte, 64)
+	for index := range out {
+		out[index] = fill
 	}
-	record, err := builder.BuildTransactionFromDiff("capsule-1", changes)
-	if err != nil {
-		t.Fatalf("build: %v", err)
-	}
-	if !record.Rejected {
-		t.Fatal("record should be rejected")
-	}
-
-	_, err = tape.Append(record)
-	if err == nil {
-		t.Fatal("expected error appending rejected record, got nil")
-	}
-	if tape.Len() != 0 {
-		t.Errorf("tape should be empty, got %d", tape.Len())
-	}
-}
-
-func TestTapeTamperDetection(t *testing.T) {
-	c := NewClassifier()
-	builder := NewTransactionBuilder(c)
-	tape := NewTape()
-
-	// Append 3 transactions.
-	for i := 0; i < 3; i++ {
-		changes := []capsule.FileChange{
-			{Path: "/var/lib/dolt/choir/items.sql", Kind: capsule.ChangeModified, Mode: 0o644},
-		}
-		record, _ := builder.BuildTransactionFromDiff("capsule-1", changes)
-		tape.Append(record)
-	}
-
-	// Verify intact.
-	if err := tape.Verify(); err != nil {
-		t.Fatalf("verify before tamper: %v", err)
-	}
-
-	// Tamper: modify the second entry's record.
-	entries := tape.Entries()
-	entries[1].Record.CapsuleID = "tampered"
-
-	// Write the tampered entries back.
-	tape.mu.Lock()
-	tape.entries = entries
-	tape.mu.Unlock()
-
-	// Verify should detect the tamper.
-	err := tape.Verify()
-	if err == nil {
-		t.Fatal("expected tamper detection, got nil")
-	}
-}
-
-func TestTapeReset(t *testing.T) {
-	c := NewClassifier()
-	builder := NewTransactionBuilder(c)
-	tape := NewTape()
-
-	changes := []capsule.FileChange{
-		{Path: "/var/lib/dolt/choir/items.sql", Kind: capsule.ChangeModified, Mode: 0o644},
-	}
-	record, _ := builder.BuildTransactionFromDiff("capsule-1", changes)
-	tape.Append(record)
-
-	if tape.Len() != 1 {
-		t.Fatalf("expected 1 entry, got %d", tape.Len())
-	}
-
-	tape.Reset()
-
-	if tape.Len() != 0 {
-		t.Errorf("after reset: expected 0, got %d", tape.Len())
-	}
-	if tape.Head() != "" {
-		t.Errorf("after reset: head should be empty, got %q", tape.Head())
-	}
-}
-
-func TestTapeChainIntegrity(t *testing.T) {
-	c := NewClassifier()
-	builder := NewTransactionBuilder(c)
-	tape := NewTape()
-
-	// Each entry must link to the previous.
-	var prevHash string
-	for i := 0; i < 5; i++ {
-		changes := []capsule.FileChange{
-			{Path: "/var/lib/dolt/choir/items.sql", Kind: capsule.ChangeModified, Mode: 0o644},
-		}
-		record, _ := builder.BuildTransactionFromDiff("capsule-1", changes)
-		record.Timestamp = time.Now().UTC().Add(time.Duration(i) * time.Second)
-		hash, err := tape.Append(record)
-		if err != nil {
-			t.Fatalf("append %d: %v", i, err)
-		}
-
-		entries := tape.Entries()
-		entry := entries[i]
-		if entry.PrevHash != prevHash {
-			t.Errorf("entry %d: prevHash %q != expected %q", i, entry.PrevHash, prevHash)
-		}
-		if entry.Hash != hash {
-			t.Errorf("entry %d: hash mismatch", i)
-		}
-		if entry.Index != i {
-			t.Errorf("entry %d: index %d != expected %d", i, entry.Index, i)
-		}
-		prevHash = hash
-	}
-
-	// Full verification.
-	if err := tape.Verify(); err != nil {
-		t.Fatalf("verify: %v", err)
-	}
-}
-
-func TestTapeMarshalUnmarshal(t *testing.T) {
-	c := NewClassifier()
-	builder := NewTransactionBuilder(c)
-	tape := NewTape()
-
-	for i := 0; i < 3; i++ {
-		changes := []capsule.FileChange{
-			{Path: "/var/lib/dolt/choir/items.sql", Kind: capsule.ChangeModified, Mode: 0o644},
-		}
-		record, _ := builder.BuildTransactionFromDiff("capsule-1", changes)
-		tape.Append(record)
-	}
-
-	data, err := tape.MarshalJSON()
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-
-	tape2 := NewTape()
-	if err := tape2.UnmarshalJSON(data); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	if tape2.Len() != 3 {
-		t.Errorf("unmarshaled tape length: expected 3, got %d", tape2.Len())
-	}
-
-	// The unmarshaled tape should verify.
-	if err := tape2.Verify(); err != nil {
-		t.Fatalf("verify unmarshaled tape: %v", err)
-	}
-
-	// Heads should match.
-	if tape.Head() != tape2.Head() {
-		t.Errorf("head mismatch: %q != %q", tape.Head(), tape2.Head())
-	}
+	return string(out)
 }

@@ -57,6 +57,7 @@ type Operation struct {
 	VerifierRefs           []string `json:"verifier_refs"`
 	DecisionActor          string   `json:"decision_actor,omitempty"`
 	DecisionEvent          string   `json:"decision_event,omitempty"`
+	DecisionReceipt        string   `json:"decision_receipt,omitempty"`
 	DesiredHead            string   `json:"desired_head"`
 	EffectiveHead          string   `json:"effective_head"`
 	MaterializationReceipt string   `json:"materialization_receipt,omitempty"`
@@ -335,7 +336,7 @@ func (s *Store) Transition(ctx context.Context, computerID, operationID, expecte
 	if err != nil {
 		return Operation{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE self_development_operations SET capsule_id=?, bundle_digest=?, release_digest=?, code_ref=?, artifact_program_ref=?, verifier_refs_json=?, decision_actor=?, decision_event=?, desired_head=?, effective_head=?, materialization_receipt=?, checkpoint_ref=?, route_certificate=?, route_generation=?, route_receipt=?, mode_receipt=?, lifecycle_receipt=?, state=?, terminal_error=?, updated_at=? WHERE computer_id=? AND operation_id=? AND state=?`, operation.CapsuleID, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, string(verifiers), operation.DecisionActor, operation.DecisionEvent, operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef, operation.RouteCertificate, operation.RouteGeneration, operation.RouteReceipt, operation.ModeReceipt, operation.LifecycleReceipt, operation.State, operation.TerminalError, now, strings.TrimSpace(computerID), strings.TrimSpace(operationID), expectedState)
+	result, err := tx.ExecContext(ctx, `UPDATE self_development_operations SET capsule_id=?, bundle_digest=?, release_digest=?, code_ref=?, artifact_program_ref=?, verifier_refs_json=?, decision_actor=?, decision_event=?, decision_receipt=?, desired_head=?, effective_head=?, materialization_receipt=?, checkpoint_ref=?, route_certificate=?, route_generation=?, route_receipt=?, mode_receipt=?, lifecycle_receipt=?, state=?, terminal_error=?, updated_at=? WHERE computer_id=? AND operation_id=? AND state=?`, operation.CapsuleID, operation.BundleDigest, operation.ReleaseDigest, operation.CodeRef, operation.ArtifactProgramRef, string(verifiers), operation.DecisionActor, operation.DecisionEvent, operation.DecisionReceipt, operation.DesiredHead, operation.EffectiveHead, operation.MaterializationReceipt, operation.CheckpointRef, operation.RouteCertificate, operation.RouteGeneration, operation.RouteReceipt, operation.ModeReceipt, operation.LifecycleReceipt, operation.State, operation.TerminalError, now, strings.TrimSpace(computerID), strings.TrimSpace(operationID), expectedState)
 	if err != nil {
 		return Operation{}, err
 	}
@@ -356,7 +357,7 @@ func (s *Store) byIdempotency(ctx context.Context, computerID, idempotencyKey st
 	return operation, err == nil, err
 }
 
-const operationSelect = `SELECT operation_id, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, created_at, updated_at FROM self_development_operations`
+const operationSelect = `SELECT operation_id, request_commitment, computer_id, trajectory_id, capsule_id, base_head, prompt_artifact_ref, bundle_digest, release_digest, code_ref, artifact_program_ref, verifier_refs_json, decision_actor, decision_event, decision_receipt, desired_head, effective_head, materialization_receipt, checkpoint_ref, route_certificate, route_generation, route_receipt, mode_receipt, lifecycle_receipt, state, terminal_error, created_at, updated_at FROM self_development_operations`
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -365,7 +366,7 @@ func scanOperation(row rowScanner) (Operation, error) {
 	var verifiers string
 	var routeGeneration sql.NullInt64
 	var createdAt, updatedAt time.Time
-	err := row.Scan(&operation.OperationID, &operation.RequestCommitment, &operation.ComputerID, &operation.TrajectoryID, &operation.CapsuleID, &operation.BaseHead, &operation.PromptArtifactRef, &operation.BundleDigest, &operation.ReleaseDigest, &operation.CodeRef, &operation.ArtifactProgramRef, &verifiers, &operation.DecisionActor, &operation.DecisionEvent, &operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef, &operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt, &operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &createdAt, &updatedAt)
+	err := row.Scan(&operation.OperationID, &operation.RequestCommitment, &operation.ComputerID, &operation.TrajectoryID, &operation.CapsuleID, &operation.BaseHead, &operation.PromptArtifactRef, &operation.BundleDigest, &operation.ReleaseDigest, &operation.CodeRef, &operation.ArtifactProgramRef, &verifiers, &operation.DecisionActor, &operation.DecisionEvent, &operation.DecisionReceipt, &operation.DesiredHead, &operation.EffectiveHead, &operation.MaterializationReceipt, &operation.CheckpointRef, &operation.RouteCertificate, &routeGeneration, &operation.RouteReceipt, &operation.ModeReceipt, &operation.LifecycleReceipt, &operation.State, &operation.TerminalError, &createdAt, &updatedAt)
 	if err != nil {
 		return Operation{}, err
 	}

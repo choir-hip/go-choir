@@ -115,6 +115,42 @@ func (h *Handler) HandleComputerCredentialExchange(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusCreated, result)
 }
 
+func (h *Handler) HandleComputerLifecycleControl(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	if r.Header.Get("X-Internal-Caller") != "true" || strings.TrimSpace(r.Header.Get("X-Authenticated-User")) == "" || h == nil || h.service == nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "lifecycle control receipt refused"})
+		return
+	}
+	var request LifecycleControlRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle control result"})
+		return
+	}
+	switch request.Phase {
+	case "prepare":
+		result, err := h.service.PrepareLifecycleControl(r.Context(), request)
+		if err != nil {
+			writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+	case "complete":
+		receipt, err := h.service.RecordLifecycleControl(r.Context(), request)
+		if err != nil {
+			writeJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusCreated, LifecycleControlResult{Status: "completed", Action: request.Action, Receipt: &receipt})
+	default:
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle control phase"})
+	}
+}
+
 func (h *Handler) HandleComputerEventHead(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
