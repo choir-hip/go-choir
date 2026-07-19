@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -176,10 +175,12 @@ func (s *EventArtifactService) ValidateEventPins(_ context.Context, request comp
 	return nil
 }
 
-func eventArtifactDigestFromRef(ref string) (string, bool) {
-	digest := strings.TrimPrefix(ref, "artifact:")
-	digest = strings.TrimPrefix(digest, "sha256:")
-	return digest, computerevent.IsSHA256(digest)
+func eventArtifactDigestFromRef(raw string) (string, bool) {
+	ref, err := computerevent.NormalizeArtifactRef(raw)
+	if err != nil {
+		return "", false
+	}
+	return ref.Digest().String(), true
 }
 
 func (s *Service) computerEventSigningKey() computerevent.SigningKey {

@@ -272,6 +272,48 @@ func TestAppenderAppendNewPrivatePayloadEncryptsAndBindsEnvelope(t *testing.T) {
 	}
 }
 
+func TestAppenderAppendNewPayloadSetBindsCanonicalInputAndPrivateOutput(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := SigningKey{SignerRef: SignerRef{SignerDomain: "platform-control", KeyID: "platform-1"}, PrivateKey: privateKey}
+	projection := &memoryProjection{}
+	cas := &memoryCAS{signer: signer}
+	appender, err := NewComputerEventAppender(testComputerID, memoryPinner{signer: signer}, projection, cas, EventHeadReceiptVerifier{Keys: staticKeyResolver{key: publicKey}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesis := testEvent(t, nil, EventGenesisImported)
+	genesis.ResultingEffectiveCommitment = testDigestA
+	if _, err := appender.AppendNew(context.Background(), genesis, TransitionInput{TargetStateCommitment: testDigestA}, nil); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := newPrivateArtifactCipher(testComputerID, base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0x44}, 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := []byte(`{"receipt":"mode"}`)
+	output := []byte("private reason")
+	event := testEvent(t, nil, EventTrajectoryStarted)
+	_, digests, err := appender.AppendNewPayloadSet(context.Background(), event, TransitionInput{}, []EventPayload{
+		{Content: input, MediaType: "application/json", PrivacyClass: "owner", Direction: EventPayloadInput},
+		{Content: output, MediaType: "text/plain", PrivacyClass: "private", Direction: EventPayloadOutput, Private: true},
+	}, cipher)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(digests) != 2 || digests[0] != DigestBytes(input) || digests[1] == DigestBytes(output) {
+		t.Fatalf("payload set digests = %#v", digests)
+	}
+	request := cas.records[1].Request
+	if len(request.Event.InputArtifactRefs) != 1 || request.Event.InputArtifactRefs[0] != "artifact:sha256:"+digests[0] ||
+		len(request.Event.OutputArtifactRefs) != 1 || request.Event.OutputArtifactRefs[0] != "artifact:sha256:"+digests[1] ||
+		request.Event.PayloadCommitment != digests[1] || len(request.PayloadPinReceiptDigests) != 2 {
+		t.Fatalf("payload set binding incomplete: %+v", request)
+	}
+}
+
 func TestAppenderRecoversCrashAfterCanonicalCAS(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

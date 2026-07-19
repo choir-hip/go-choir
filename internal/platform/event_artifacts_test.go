@@ -51,7 +51,7 @@ func TestEventArtifactPinsBindEveryEventArtifactReference(t *testing.T) {
 		IdempotencyKey:                   "genesis-test",
 		ActorProfile:                     "trusted-core",
 		AuthorityRef:                     "authority:test",
-		InputArtifactRefs:                []string{"sha256:" + computerevent.DigestBytes(payload)},
+		InputArtifactRefs:                []string{"artifact:sha256:" + computerevent.DigestBytes(payload)},
 		PayloadCommitment:                platformTestDigest('a'),
 		PrivacyClass:                     "public",
 		ReducerVersion:                   computerevent.ReducerVersionV1,
@@ -102,7 +102,7 @@ func TestEventArtifactPinsBindEveryEventArtifactReference(t *testing.T) {
 	if err := artifacts.ValidateEventPins(context.Background(), request); err != nil {
 		t.Fatalf("valid pin set refused: %v", err)
 	}
-	request.Event.InputArtifactRefs = []string{"sha256:" + platformTestDigest('d')}
+	request.Event.InputArtifactRefs = []string{"artifact:sha256:" + platformTestDigest('d')}
 	if err := artifacts.ValidateEventPins(context.Background(), request); err == nil {
 		t.Fatal("pin set for an unrelated artifact was accepted")
 	}
@@ -206,7 +206,7 @@ func TestPrivatePayloadAppendCompletesDirectedCommitmentGraph(t *testing.T) {
 		Sequence: 1, PreviousHead: computerevent.ZeroHead, EventKind: computerevent.EventGenesisImported,
 		OccurredAt:     time.Date(2026, 7, 18, 23, 30, 0, 0, time.UTC).Format(time.RFC3339Nano),
 		IdempotencyKey: "private-genesis", ActorProfile: "trusted-core", AuthorityRef: "authority:test",
-		OutputArtifactRefs: []string{"sha256:" + computerevent.DigestBytes(envelope)},
+		OutputArtifactRefs: []string{"artifact:sha256:" + computerevent.DigestBytes(envelope)},
 		PayloadCommitment:  computerevent.DigestBytes(plaintext), PrivacyClass: "private",
 		VerifierRefs: []string{
 			"updater-key:updater-test:sha256:" + platformTestDigest('7'),
@@ -601,7 +601,7 @@ func TestCheckpointVerifierEvidenceRequiresPinnedCoSuperPass(t *testing.T) {
 		Sequence: 2, PreviousHead: platformTestDigest('b'), EventKind: computerevent.EventVerificationRecorded,
 		OccurredAt: now.Format(time.RFC3339Nano), IdempotencyKey: "verification-event", RequestCommitment: platformTestDigest('c'),
 		TrajectoryID: "trajectory-verify", CapsuleID: "capsule-verify", ActorProfile: "co-super",
-		AuthorityRef: "guest-core:self-development-verifier", OutputArtifactRefs: []string{"sha256:" + payloadDigest},
+		AuthorityRef: "guest-core:self-development-verifier", OutputArtifactRefs: []string{"artifact:sha256:" + payloadDigest},
 		PayloadCommitment: payloadDigest, PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
 		ExpectedDesiredEventHead: platformTestDigest('b'), ExpectedEffectiveEventHead: platformTestDigest('b'),
 		ExpectedDesiredStateCommitment: platformTestDigest('f'), ExpectedEffectiveStateCommitment: platformTestDigest('f'),

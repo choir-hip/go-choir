@@ -188,10 +188,11 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 		event.ActorProfile != "co-super" || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
 		return fmt.Errorf("checkpoint authority: verifier event authority mismatch")
 	}
-	payloadDigest := strings.TrimPrefix(event.OutputArtifactRefs[0], "sha256:")
-	if !computerevent.IsSHA256(payloadDigest) {
+	payloadRef, err := computerevent.NormalizeArtifactRef(event.OutputArtifactRefs[0])
+	if err != nil {
 		return fmt.Errorf("checkpoint authority: verifier payload reference refused")
 	}
+	payloadDigest := payloadRef.Digest().String()
 	rawPayload, err := os.ReadFile(filepath.Join(a.service.artifactsRoot, "sha256", "computer-event-payload", payloadDigest))
 	if err != nil || computerevent.DigestBytes(rawPayload) != payloadDigest {
 		return fmt.Errorf("checkpoint authority: verifier payload unavailable")

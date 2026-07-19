@@ -50,14 +50,15 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: receipt join mismatch")
 	}
 	modeReceiptDigest := ""
-	if len(event.InputArtifactRefs) > 1 {
+	if len(event.InputArtifactRefs) != 1 {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt cardinality mismatch")
 	}
-	if len(event.InputArtifactRefs) == 1 {
-		modeReceiptDigest = event.InputArtifactRefs[0]
-		if !computerevent.IsSHA256(modeReceiptDigest) {
-			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt digest mismatch")
+	{
+		modeReceiptRef, err := computerevent.NormalizeArtifactRef(event.InputArtifactRefs[0])
+		if err != nil {
+			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt artifact reference mismatch")
 		}
+		modeReceiptDigest = modeReceiptRef.Digest().String()
 	}
 	if operation.State != selfdev.StateAwaitingApproval && !selfDevelopmentDecisionStateDescends(operation.State, nextState) {
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: operation state is not a legal decision descendant")

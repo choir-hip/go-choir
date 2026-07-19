@@ -236,6 +236,7 @@ func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProje
 		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: bundleDigest,
 		DecisionRef: strings.Repeat("d", 64), VerifierRefs: []string{strings.Repeat("e", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+		InputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("f", 64)},
 	}
 	target, err := computerevent.CanonicalJSON(map[string]string{"base_head": operation.BaseHead, "bundle_digest": bundleDigest})
 	if err != nil {
@@ -272,18 +273,18 @@ func TestGenesisAuthoritySeparatesReviewedCandidateFromDeployedRelease(t *testin
 		G0Receipt: "g0-receipt", G1Receipt: "g1-receipt",
 		CandidateRef: "reviewed-candidate", DeployedReleaseRef: "deployed-release",
 	}
-	ref, err := selfDevelopmentGenesisAuthorityRef(request, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release")
-	if err != nil || !strings.HasPrefix(ref, "genesis-authority:sha256:") {
-		t.Fatalf("separate candidate/deployed binding refused: ref=%q err=%v", ref, err)
+	ref, payload, err := selfDevelopmentGenesisAuthorityRef(request, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release")
+	if err != nil || !strings.HasPrefix(ref, "artifact:sha256:") || computerevent.DigestBytes(payload) != strings.TrimPrefix(ref, "artifact:sha256:") {
+		t.Fatalf("separate candidate/deployed artifact refused: ref=%q err=%v", ref, err)
 	}
 	changed := request
 	changed.DeployedReleaseRef = changed.CandidateRef
-	if _, err := selfDevelopmentGenesisAuthorityRef(changed, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release"); err == nil {
+	if _, _, err := selfDevelopmentGenesisAuthorityRef(changed, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release"); err == nil {
 		t.Fatal("genesis accepted reviewed candidate as the deployed release")
 	}
 	changed = request
 	changed.CandidateRef = changed.DeployedReleaseRef
-	if _, err := selfDevelopmentGenesisAuthorityRef(changed, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release"); err == nil {
+	if _, _, err := selfDevelopmentGenesisAuthorityRef(changed, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release"); err == nil {
 		t.Fatal("genesis accepted deployed release as the reviewed candidate")
 	}
 }
@@ -405,7 +406,8 @@ func TestFinalizedDecisionBindingRejectsCrossAuthorityJoinsAndAllowsAcceptedDesc
 		ExpectedDesiredStateCommitment: strings.Repeat("b", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
 		RequireExpectedHead: true,
 		PayloadCommitment:   computerevent.ZeroHead, ProposedEffectRef: strings.Repeat("2", 64), DecisionRef: strings.Repeat("3", 64),
-		VerifierRefs: []string{strings.Repeat("4", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+		InputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("d", 64)},
+		VerifierRefs:      []string{strings.Repeat("4", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
 	}
 	eventDigest, err := event.Digest()
 	if err != nil {

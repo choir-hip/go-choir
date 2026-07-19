@@ -316,7 +316,7 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires disposable target and absent off-mode state"})
 		return
 	}
-	genesisAuthorityRef, err := selfDevelopmentGenesisAuthorityRef(request, expectedG0, expectedG1, expectedCandidate, strings.TrimSpace(buildinfo.Commit))
+	genesisAuthorityRef, genesisAuthorityPayload, err := selfDevelopmentGenesisAuthorityRef(request, expectedG0, expectedG1, expectedCandidate, strings.TrimSpace(buildinfo.Commit))
 	if err != nil {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires exact frozen G0/G1 candidate and deployed release bindings"})
 		return
@@ -418,10 +418,15 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		ActorProfile: agentprofile.Super, AuthorityRef: "external-owner-genesis:" + ownerID, PrivacyClass: "owner",
 		PayloadCommitment: request.BaselineState, ProposedEffectRef: request.BaselineVersion,
 		VerifierRefs: genesisKeyRefs, ResultingEffectiveCommitment: request.BaselineState,
-		InputArtifactRefs: []string{genesisAuthorityRef},
-		ReducerVersion:    computerevent.ReducerVersionV1,
+		ReducerVersion: computerevent.ReducerVersionV1,
 	}
-	receipt, err := h.rt.eventAppender.AppendNew(r.Context(), event, computerevent.TransitionInput{TargetStateCommitment: request.BaselineState}, nil)
+	receipt, artifactDigests, err := h.rt.eventAppender.AppendNewPayloadSet(r.Context(), event, computerevent.TransitionInput{TargetStateCommitment: request.BaselineState}, []computerevent.EventPayload{{
+		Content: genesisAuthorityPayload, MediaType: "application/vnd.choir.genesis-authority+json",
+		PrivacyClass: "owner", Direction: computerevent.EventPayloadInput,
+	}}, nil)
+	if err == nil && (len(artifactDigests) != 1 || genesisAuthorityRef != "artifact:sha256:"+artifactDigests[0]) {
+		err = fmt.Errorf("genesis authority artifact binding mismatch")
+	}
 	if err != nil {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return
@@ -443,20 +448,24 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 	}
 	writeAPIJSON(w, http.StatusCreated, map[string]any{"receipt": receipt, "head": head, "checkpoint": checkpoint, "baseline": baseline})
 }
-func selfDevelopmentGenesisAuthorityRef(request selfDevelopmentGenesisRequest, expectedG0, expectedG1, expectedCandidate, deployedRelease string) (string, error) {
+func selfDevelopmentGenesisAuthorityRef(request selfDevelopmentGenesisRequest, expectedG0, expectedG1, expectedCandidate, deployedRelease string) (string, []byte, error) {
 	if expectedG0 == "" || expectedG1 == "" || expectedCandidate == "" || deployedRelease == "" || deployedRelease == "local" ||
 		request.G0Receipt != expectedG0 || request.G1Receipt != expectedG1 || request.CandidateRef != expectedCandidate ||
 		request.DeployedReleaseRef != deployedRelease {
-		return "", fmt.Errorf("genesis authority identity mismatch")
+		return "", nil, fmt.Errorf("genesis authority identity mismatch")
 	}
 	canonical, err := computerevent.CanonicalJSON(map[string]string{
 		"g0_receipt": request.G0Receipt, "g1_receipt": request.G1Receipt,
 		"candidate_ref": request.CandidateRef, "deployed_release_ref": request.DeployedReleaseRef,
 	})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return "genesis-authority:sha256:" + computerevent.DigestBytes(canonical), nil
+	ref, err := computerevent.ArtifactRefFromDigest(computerevent.DigestBytes(canonical))
+	if err != nil {
+		return "", nil, err
+	}
+	return ref.String(), canonical, nil
 }
 
 func (h *APIHandler) recordGenesisBaseline(ctx context.Context, request selfDevelopmentGenesisRequest, event computerevent.Event, eventIdempotency string, route vmctl.RouteResolution, manifest updater.ReleaseManifest) (selfdev.Operation, selfdevprotocol.CheckpointResponse, error) {
@@ -739,9 +748,6 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			PayloadCommitment:                computerevent.ZeroHead, ProposedEffectRef: operation.BundleDigest, DecisionRef: decisionRef,
 			VerifierRefs: []string{request.VerifierRef}, ReducerVersion: computerevent.ReducerVersionV1,
 		}
-		if modeReceiptDigest != "" {
-			event.InputArtifactRefs = []string{modeReceiptDigest}
-		}
 		input := computerevent.TransitionInput{}
 		if request.Decision == "approve" {
 			target, targetErr := computerevent.CanonicalJSON(map[string]string{"base_head": operation.BaseHead, "bundle_digest": operation.BundleDigest})
@@ -751,11 +757,19 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 			}
 			input.TargetStateCommitment = computerevent.DigestBytes(target)
 		}
-		var appendErr error
+		payloads := []computerevent.EventPayload{{
+			Content: modeBytes, MediaType: "application/vnd.choir.mode-receipt+json",
+			PrivacyClass: "owner", Direction: computerevent.EventPayloadInput,
+		}}
 		if request.Decision == "reject" {
-			_, _, appendErr = h.rt.eventAppender.AppendNewPrivatePayload(r.Context(), event, input, []byte(request.Reason), "text/plain; charset=utf-8", h.rt.privateArtifactCipher)
-		} else {
-			_, appendErr = h.rt.eventAppender.AppendNew(r.Context(), event, input, nil)
+			payloads = append(payloads, computerevent.EventPayload{
+				Content: []byte(request.Reason), MediaType: "text/plain; charset=utf-8",
+				PrivacyClass: "private", Direction: computerevent.EventPayloadOutput, Private: true,
+			})
+		}
+		_, artifactDigests, appendErr := h.rt.eventAppender.AppendNewPayloadSet(r.Context(), event, input, payloads, h.rt.privateArtifactCipher)
+		if appendErr == nil && (len(artifactDigests) == 0 || artifactDigests[0] != modeReceiptDigest) {
+			appendErr = fmt.Errorf("mode receipt artifact binding mismatch")
 		}
 		if appendErr != nil {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: appendErr.Error()})

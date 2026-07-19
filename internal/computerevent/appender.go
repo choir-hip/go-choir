@@ -214,6 +214,117 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 	return receipt, payloadDigest, err
 }
 
+type EventPayloadDirection string
+
+const (
+	EventPayloadInput  EventPayloadDirection = "input"
+	EventPayloadOutput EventPayloadDirection = "output"
+)
+
+type EventPayload struct {
+	Content      []byte
+	MediaType    string
+	PrivacyClass string
+	Direction    EventPayloadDirection
+	Private      bool
+}
+
+// AppendNewPayloadSet pins every input before every output and binds their
+// canonical artifact references and pin receipts into one event append.
+func (a *ComputerEventAppender) AppendNewPayloadSet(ctx context.Context, event Event, input TransitionInput, payloads []EventPayload, cipher *PrivateArtifactCipher) (Receipt, []string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(payloads) == 0 {
+		return Receipt{}, nil, fmt.Errorf("computer event appender: payload set is empty")
+	}
+	if err := a.bindCurrentHeadLocked(ctx, &event); err != nil {
+		return Receipt{}, nil, err
+	}
+	type preparedPayload struct {
+		EventPayload
+		stored []byte
+		digest string
+	}
+	prepared := make([]preparedPayload, 0, len(payloads))
+	outputCount := 0
+	for _, direction := range []EventPayloadDirection{EventPayloadInput, EventPayloadOutput} {
+		for _, payload := range payloads {
+			if payload.Direction != direction || len(payload.Content) == 0 || payload.MediaType == "" {
+				if payload.Direction != direction {
+					continue
+				}
+				return Receipt{}, nil, fmt.Errorf("computer event appender: invalid payload set member")
+			}
+			stored := payload.Content
+			if payload.Private {
+				pinner, ok := a.pins.(PrivatePayloadPinner)
+				if !ok || cipher == nil {
+					return Receipt{}, nil, fmt.Errorf("computer event appender: private payload authority unavailable")
+				}
+				envelope, _, err := pinner.PreparePrivatePayload(ctx, cipher, a.computerID, event.EventID, payload.MediaType, payload.Content)
+				if err != nil {
+					return Receipt{}, nil, fmt.Errorf("computer event appender: encrypt payload set member: %w", err)
+				}
+				stored = envelope
+			}
+			digest := DigestBytes(stored)
+			ref, err := ArtifactRefFromDigest(digest)
+			if err != nil {
+				return Receipt{}, nil, fmt.Errorf("computer event appender: create payload set artifact ref: %w", err)
+			}
+			if direction == EventPayloadInput {
+				event.InputArtifactRefs = append(nonNilStrings(event.InputArtifactRefs), ref.String())
+			} else {
+				outputCount++
+				event.OutputArtifactRefs = append(nonNilStrings(event.OutputArtifactRefs), ref.String())
+				event.PayloadCommitment = digest
+			}
+			prepared = append(prepared, preparedPayload{EventPayload: payload, stored: stored, digest: digest})
+		}
+	}
+	if len(prepared) != len(payloads) || outputCount > 1 {
+		return Receipt{}, nil, fmt.Errorf("computer event appender: payload set direction or output cardinality is invalid")
+	}
+	event.RequestCommitment = ZeroHead
+	pinIntentCommitment, err := ComputePinIntentCommitment(event, input)
+	if err != nil {
+		return Receipt{}, nil, fmt.Errorf("computer event appender: compute payload set pin intent: %w", err)
+	}
+	receiptDigests := make([]string, 0, len(prepared))
+	artifactDigests := make([]string, 0, len(prepared))
+	for _, payload := range prepared {
+		var pin PinResult
+		if payload.Private {
+			pinner := a.pins.(PrivatePayloadPinner)
+			pin, err = pinner.PinPrivatePayload(ctx, cipher, a.computerID, event.EventID, payload.stored, pinIntentCommitment)
+		} else {
+			pinner, ok := a.pins.(NonPrivatePayloadPinner)
+			if !ok {
+				return Receipt{}, nil, fmt.Errorf("computer event appender: non-private payload pinning unavailable")
+			}
+			pin, err = pinner.PinNonPrivatePayload(ctx, a.computerID, payload.stored, payload.MediaType, payload.PrivacyClass, pinIntentCommitment)
+		}
+		if err != nil {
+			return Receipt{}, nil, fmt.Errorf("computer event appender: pin payload set member: %w", err)
+		}
+		if pin.ArtifactDigest != payload.digest {
+			return Receipt{}, nil, fmt.Errorf("computer event appender: pinned payload set digest mismatch")
+		}
+		receiptBytes, receiptErr := pin.Receipt.CanonicalBytes()
+		if receiptErr != nil {
+			return Receipt{}, nil, fmt.Errorf("computer event appender: canonical payload set receipt: %w", receiptErr)
+		}
+		receiptDigests = append(receiptDigests, DigestBytes(receiptBytes))
+		artifactDigests = append(artifactDigests, payload.digest)
+	}
+	event.RequestCommitment, err = ComputeRequestCommitment(event, input, pinIntentCommitment, receiptDigests)
+	if err != nil {
+		return Receipt{}, nil, fmt.Errorf("computer event appender: compute payload set request commitment: %w", err)
+	}
+	receipt, err := a.appendLocked(ctx, event, input, receiptDigests)
+	return receipt, artifactDigests, err
+}
+
 func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event *Event) error {
 	head, err := a.cas.Head(ctx, a.computerID)
 	if err != nil {

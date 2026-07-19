@@ -291,8 +291,8 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
 			ActorProfile: agentprofile.Super, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
 			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
-			ResultingEffectiveCommitment: head.DesiredStateCommitment, OutputArtifactRefs: []string{receiptDigest, result.ReleaseDigest},
-			ReducerVersion: computerevent.ReducerVersionV1,
+			ResultingEffectiveCommitment: head.DesiredStateCommitment,
+			ReducerVersion:               computerevent.ReducerVersionV1,
 		}
 		if _, _, eventErr = rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.materialization-result+json", "owner"); eventErr != nil {
 			return eventErr
@@ -516,7 +516,7 @@ func (rt *Runtime) recordMaterializationFailed(ctx context.Context, operation se
 			IdempotencyKey: idempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
 			ActorProfile: agentprofile.Super, AuthorityRef: "guest-core:choir-updater", PrivacyClass: "owner",
 			ProposedEffectRef: operation.BundleDigest, DecisionRef: operation.DecisionEvent,
-			OutputArtifactRefs: []string{recoveryDigest}, ReducerVersion: computerevent.ReducerVersionV1,
+			ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		if _, _, eventErr = rt.eventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{RestoredPriorEffective: true}, payload, "application/vnd.choir.materialization-result+json", "owner"); eventErr != nil {
 			return eventErr
