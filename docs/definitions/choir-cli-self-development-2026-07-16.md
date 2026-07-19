@@ -587,14 +587,14 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-7
-    state: frozen_pending_G1
+    state: rejected_G1_repairing
     ref: 153c68668a8b16f47ff5fba17a983d2d37339cbb
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Effects-OFF B clean cutover plus all documented G1 repairs. Bootstrap exchange is now two-phase: byte-identical preparation is deterministic until the authenticated consume receipt, the exact pending transition is atomically stored before consumption, restore never deletes its only handoff, consumed exchange replay returns no bearer, and changed nonce/request conflicts. Exact terminal decision replay precedes later current-mode validation while changed requests still conflict. Updater has no verifier client, flag, route, or socket visibility; verifier authority runs under its disjoint user/key/root/socket and the runtime uses only its typed verifier endpoint."
+    scope: "Effects-OFF B cutover with all round-6 repairs, but round-7 G1 found three remaining clean-cutover blockers: the public proxy rejects exact terminal decision replay after mode advances before the guest can recognize it; the guest start authority can create proposals while mode is off because only the proxy gates starts; and top-level AGENTS/README guidance still directs self-development through deleted candidate-computer/promotion/lineage concepts."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3]
-    verification: "Focused changed-package tests pass, including prepared-exchange crash recovery, consumption idempotency/changed nonce/consumed replay, non-deleting restore, post-revocation crash recovery, and exact terminal decision replay independent of later mode. All runtime shards passed; the complete native source tree compiled across 76 packages. Nix evaluated exact updater/signer/runtime principal separation and toplevel `/nix/store/s66n8vjl57ldwnihgadyag6ajhp4gcgg-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`; the isolated receipt signer cross-built for linux/amd64. Full x86_64-linux Nix build remains unavailable because only an aarch64-linux remote builder is configured, not because of a source failure."
-    disposition: "Frozen for fresh diverse G1 review. Effects remain OFF; do not deploy unless G1 accepts this exact SHA."
+    verification: "All prior focused tests, runtime shards, native compile, and Nix evaluation pass. Round-7 diverse review split three rejects and three accepts; local source inspection confirms the public-proxy replay ordering, missing guest start mode gate, and stale top-level candidate-computer guidance. The accepting reviews did not rebut these paths."
+    disposition: "Rejected at G1. Effects remain OFF; do not deploy. Documented before repair-code mutation. Repair all three confirmed blockers, freeze an exact successor, and rerun a fresh diverse panel."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -604,9 +604,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 153c68668a8b16f47ff5fba17a983d2d37339cbb, /tmp/choir-selfdev-g1-round6-panel/manifest.tsv]
-  blocker_or_risk: "No known source blocker after round-7 repair. Full Linux/Nix realization, immutable-image runtime capability receipt, deployment identity, mode-off staging behavior, and all C–F product transitions remain intentionally unproved deployed gates; none may be replaced with local evidence."
-  next_action: "Run a fresh diverse G1 panel against exact code candidate 153c68668a8b16f47ff5fba17a983d2d37339cbb and this authority card; accept only if no reproducible source blocker remains."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 153c68668a8b16f47ff5fba17a983d2d37339cbb, /tmp/choir-selfdev-g1-round7-panel/manifest.tsv]
+  blocker_or_risk: "B remains blocked. Public exact terminal replay is not end-to-end canonical because the proxy validates the later mode first. Guest direct/public authority can start proposal effects under off/absent mode because only the proxy checks propose_only. AGENTS.md and README.md still instruct risky/personal computer change through candidate computers, promotion, and lineage despite the owner-settled stable-computer capsule/checkpoint/event path. Later deployed gates remain correctly deferred."
+  next_action: "Move exact terminal replay recognition ahead of proxy current-mode validation without weakening changed-request conflicts; enforce signed current propose_only mode in the guest start authority; replace top-level candidate-computer/promotion/lineage guidance with stable-computer capsule/checkpoint/event semantics; add end-to-end proxy and guest mode-off regression tests; freeze and re-review."
 
 successor:
   status: selected_draft_non_executable
@@ -729,6 +729,17 @@ review_receipts:
     verdicts: [codex:REJECT_G1, cursor:ACCEPT_G1, opencode:ACCEPT_G1, omp-gpt55:REJECT_G1, omp-gemini35:ACCEPT_G1, devin:TIMED_OUT, omp-glm52:FAILED]
     outcome: repair
     adjudication: "Minority rule rejects G1. Local source inspection confirms Codex's two blockers—non-atomic credential handoff acquisition/restore and canonical decision replay after current-mode validation—and omp-gpt55's independent-authority blocker: updater owns both signer clients and exposes verifier signing to guest runtime callers through updater.sock. The three accepting reviews did not rebut these reproducible paths. This receipt documents every confirmed problem before repair-code mutation; deployed-only gates remain excluded."
+
+  - id: G1-disabled-cutover-round-7-2026-07-19
+    reviewed_at: 2026-07-19T18:04:52Z
+    candidate_ref: 153c68668a8b16f47ff5fba17a983d2d37339cbb
+    authority_ref: 7990a2022e28bf59211e54f72d4b3e0d684d3254
+    manifest: /tmp/choir-selfdev-g1-round7-panel/manifest.tsv
+    panel: [codex, devin, cursor, opencode, omp-gpt55, omp-gemini35, omp-glm52]
+    health: "Codex, Devin, Cursor, OpenCode, omp-gpt55, and omp-gemini35 completed; omp-glm52 failed before review."
+    verdicts: [codex:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1, devin:ACCEPT_G1, omp-glm52:FAILED]
+    outcome: repair
+    adjudication: "The split panel rejects under the severe-minority rule. Local inspection confirms Codex's public-proxy terminal-replay blocker, Cursor's proxy-only start-mode gate, and omp-gpt55's stale top-level candidate-computer/promotion/lineage guidance. The three accepting reviews did not rebut these reproducible paths. This receipt records all confirmed problems before repair-code mutation; prior round-6 repairs remain sound and deployed-only C–F gates remain excluded."
 
 view:
   path: none
