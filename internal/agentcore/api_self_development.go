@@ -27,8 +27,9 @@ import (
 const selfDevelopmentPromptMediaType = "text/markdown; charset=utf-8"
 
 type selfDevelopmentStartRequest struct {
-	IdempotencyKey string `json:"idempotency_key"`
-	Prompt         string `json:"prompt"`
+	IdempotencyKey string                 `json:"idempotency_key"`
+	Prompt         string                 `json:"prompt"`
+	ModeReceipt    *computerevent.Receipt `json:"mode_receipt,omitempty"`
 }
 
 type selfDevelopmentDecisionRequest struct {
@@ -180,12 +181,30 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "idempotency key reused with different prompt"})
 			return
 		}
+		if h.rt.selfdevControl == nil {
+			writeAPIJSON(w, http.StatusOK, existing)
+			return
+		}
+		currentMode, modeErr := h.rt.selfdevControl.SelfDevelopmentMode(r.Context())
+		if modeErr != nil || h.verifyStartModeReceipt(computerID, currentMode.Mode, currentMode.Receipt, request.ModeReceipt) != nil {
+			writeAPIJSON(w, http.StatusOK, existing)
+			return
+		}
 		operation, ensureErr := h.ensureSelfDevelopmentRun(r, existing, ownerID, request.Prompt)
 		if ensureErr != nil {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: ensureErr.Error()})
 			return
 		}
 		writeAPIJSON(w, http.StatusOK, operation)
+		return
+	}
+	if h.rt.selfdevControl == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development mode authority unavailable"})
+		return
+	}
+	currentMode, modeErr := h.rt.selfdevControl.SelfDevelopmentMode(r.Context())
+	if modeErr != nil || h.verifyStartModeReceipt(computerID, currentMode.Mode, currentMode.Receipt, request.ModeReceipt) != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current signed mode does not authorize proposal"})
 		return
 	}
 	if h.rt.eventAppender == nil || h.rt.privateArtifactCipher == nil {
@@ -571,12 +590,11 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "decision binding does not match frozen operation"})
 		return
 	}
-	requestBytes, err := computerevent.CanonicalJSON(request)
+	decisionRef, err := selfDevelopmentDecisionRef(request)
 	if err != nil {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid self-development decision"})
 		return
 	}
-	decisionRef := computerevent.DigestBytes(requestBytes)
 	eventIdempotency := "selfdev-decision-" + computerevent.DigestBytes([]byte(computerID+"\x00"+operationID+"\x00"+request.IdempotencyKey))
 	event, found, err := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency)
 	if err != nil {
@@ -704,12 +722,37 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 	writeAPIJSON(w, http.StatusOK, operation)
 }
 
+func selfDevelopmentDecisionRef(request selfDevelopmentDecisionRequest) (string, error) {
+	request.ModeReceipt = nil
+	requestBytes, err := computerevent.CanonicalJSON(request)
+	if err != nil {
+		return "", err
+	}
+	return computerevent.DigestBytes(requestBytes), nil
+}
+
 func exactTerminalDecisionReplay(operation selfdev.Operation, event computerevent.Event, found bool, nextState, decisionRef string) bool {
 	if !found || operation.State != nextState || event.DecisionRef != decisionRef {
 		return false
 	}
 	eventDigest, err := event.Digest()
 	return err == nil && operation.DecisionEvent == eventDigest
+}
+
+func (h *APIHandler) verifyStartModeReceipt(computerID, mode string, current, request *computerevent.Receipt) error {
+	if h == nil || h.rt == nil || h.rt.selfdevControl == nil || current == nil || request == nil ||
+		current.ReceiptKind != "ModeReceipt" || current.Verify(h.rt.selfdevControl.KeyResolver()) != nil {
+		return fmt.Errorf("signed current mode receipt is required")
+	}
+	currentBytes, currentErr := current.CanonicalBytes()
+	requestBytes, requestErr := request.CanonicalBytes()
+	computer, _ := current.KindFields["computer_id"].(string)
+	newMode, _ := current.KindFields["new_mode"].(string)
+	if currentErr != nil || requestErr != nil || !bytes.Equal(currentBytes, requestBytes) ||
+		computer != computerID || newMode != mode || mode != "propose_only" {
+		return fmt.Errorf("mode receipt does not match current proposal authority")
+	}
+	return nil
 }
 
 func (h *APIHandler) verifyDecisionModeReceipt(computerID, operationID, mode string, current *computerevent.Receipt, request selfDevelopmentDecisionRequest) error {

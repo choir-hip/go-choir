@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
@@ -31,6 +32,12 @@ type selfDevelopmentModeProjection struct {
 	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment,omitempty"`
 	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment,omitempty"`
 	Receipt                          *computerevent.Receipt `json:"receipt,omitempty"`
+}
+
+type proxiedSelfDevelopmentStart struct {
+	IdempotencyKey string                 `json:"idempotency_key"`
+	Prompt         string                 `json:"prompt"`
+	ModeReceipt    *computerevent.Receipt `json:"mode_receipt,omitempty"`
 }
 
 type proxiedSelfDevelopmentDecision struct {
@@ -133,8 +140,51 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 		}
 	}
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/computers/"+url.PathEscape(target.ComputerID))
+	if h.vmctlClient == nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "target computer resolver unavailable"})
+		return
+	}
+	ownership, err := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, target.ComputerID)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve target computer"})
+		return
+	}
+	if ownership == nil || ownership.SandboxURL == "" || ownership.State != "active" {
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "target computer is not active"})
+		return
+	}
+	upstreamURL, err := joinBasePath(ownership.SandboxURL, r.URL.Path)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build target computer request"})
+		return
+	}
 	var mode selfDevelopmentModeProjection
 	var decision proxiedSelfDevelopmentDecision
+	operationID := ""
+	if strings.HasSuffix(suffix, "/decision") {
+		decoder := json.NewDecoder(bytes.NewReader(requestBody))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&decision); err != nil {
+			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development decision"})
+			return
+		}
+		operationID = strings.TrimSuffix(strings.TrimPrefix(suffix, "/self-development/operations/"), "/decision")
+		replayBody, exactReplay, terminal, replayErr := h.readTerminalDecisionReplay(r.Context(), ownership.SandboxURL, authResult.UserID, target.ComputerID, operationID, decision)
+		if replayErr != nil {
+			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to verify terminal decision replay"})
+			return
+		}
+		if exactReplay {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(replayBody)
+			return
+		}
+		if terminal {
+			writeJSON(w, http.StatusConflict, errorResponse{Error: "decision conflicts with terminal operation"})
+			return
+		}
+	}
 	modeGuarded := suffix == "/self-development/operations" || suffix == "/self-development/genesis" || strings.HasSuffix(suffix, "/decision")
 	if modeGuarded {
 		mode, err = h.readSelfDevelopmentMode(r.Context(), target.ComputerID, authResult.UserID)
@@ -150,17 +200,25 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 				writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development genesis requires the configured disposable computer with absent mode state"})
 				return
 			}
-		case suffix == "/self-development/operations" && mode.Mode != "propose_only":
-			writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development proposal mode is not enabled"})
-			return
-		case strings.HasSuffix(suffix, "/decision"):
-			decoder := json.NewDecoder(bytes.NewReader(requestBody))
-			decoder.DisallowUnknownFields()
-			if err := decoder.Decode(&decision); err != nil {
-				writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development decision"})
+		case suffix == "/self-development/operations":
+			if mode.Mode != "propose_only" {
+				writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development proposal mode is not enabled"})
 				return
 			}
-			operationID := strings.TrimSuffix(strings.TrimPrefix(suffix, "/self-development/operations/"), "/decision")
+			var start proxiedSelfDevelopmentStart
+			decoder := json.NewDecoder(bytes.NewReader(requestBody))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&start); err != nil {
+				writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
+				return
+			}
+			start.ModeReceipt = mode.Receipt
+			requestBody, err = json.Marshal(start)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
+				return
+			}
+		case strings.HasSuffix(suffix, "/decision"):
 			requiresConsumption := mode.Mode == "accept_once"
 			if requiresConsumption && decision.Decision != "approve" {
 				writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once authorizes only its exact approval"})
@@ -207,24 +265,6 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 			}
 		}
 	}
-	if h.vmctlClient == nil {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "target computer resolver unavailable"})
-		return
-	}
-	ownership, err := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, target.ComputerID)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve target computer"})
-		return
-	}
-	if ownership == nil || ownership.SandboxURL == "" || ownership.State != "active" {
-		writeJSON(w, http.StatusConflict, errorResponse{Error: "target computer is not active"})
-		return
-	}
-	upstreamURL, err := joinBasePath(ownership.SandboxURL, r.URL.Path)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to build target computer request"})
-		return
-	}
 	var upstreamBody io.Reader
 	if requestBody != nil {
 		upstreamBody = bytes.NewReader(requestBody)
@@ -260,6 +300,81 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 	}
 	w.WriteHeader(response.StatusCode)
 	_, _ = w.Write(body)
+}
+
+func (h *Handler) readTerminalDecisionReplay(ctx context.Context, sandboxURL, userID, computerID, operationID string, decision proxiedSelfDevelopmentDecision) ([]byte, bool, bool, error) {
+	if h.sandboxHTTP == nil {
+		return nil, false, false, fmt.Errorf("sandbox client unavailable")
+	}
+	read := func(path string, target any) ([]byte, int, error) {
+		endpoint, err := joinBasePath(sandboxURL, path)
+		if err != nil {
+			return nil, 0, err
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, 0, err
+		}
+		request.Header.Set("X-Internal-Caller", "true")
+		request.Header.Set("X-Authenticated-User", userID)
+		request.Header.Set("X-Authenticated-Computer", computerID)
+		response, err := h.sandboxHTTP.Do(request)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer func() { _ = response.Body.Close() }()
+		body, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+		if err != nil {
+			return nil, response.StatusCode, err
+		}
+		if response.StatusCode == http.StatusOK {
+			if err := json.Unmarshal(body, target); err != nil {
+				return nil, response.StatusCode, err
+			}
+		}
+		return body, response.StatusCode, nil
+	}
+	operationPath := "/api/computers/" + url.PathEscape(computerID) + "/self-development/operations/" + url.PathEscape(operationID)
+	var operation selfdev.Operation
+	operationBody, status, err := read(operationPath, &operation)
+	if err != nil {
+		return nil, false, false, err
+	}
+	if status == http.StatusNotFound {
+		return nil, false, false, nil
+	}
+	if status != http.StatusOK {
+		return nil, false, false, fmt.Errorf("operation read status %d", status)
+	}
+	nextState := selfdev.StateRejected
+	if decision.Decision == "approve" {
+		nextState = selfdev.StateAccepted
+	}
+	terminal := operation.State == selfdev.StateAccepted || operation.State == selfdev.StateRejected
+	if !terminal {
+		return nil, false, false, nil
+	}
+	if operation.State != nextState || !computerevent.IsSHA256(operation.DecisionEvent) {
+		return operationBody, false, true, nil
+	}
+	eventPath := "/api/computers/" + url.PathEscape(computerID) + "/events/" + operation.DecisionEvent
+	var event computerevent.Event
+	if _, status, err = read(eventPath, &event); err != nil {
+		return nil, false, true, err
+	} else if status != http.StatusOK {
+		return nil, false, true, fmt.Errorf("decision event read status %d", status)
+	}
+	eventDigest, err := event.Digest()
+	if err != nil {
+		return nil, false, true, err
+	}
+	decision.ModeReceipt = nil
+	requestBytes, err := computerevent.CanonicalJSON(decision)
+	if err != nil {
+		return nil, false, true, err
+	}
+	exact := eventDigest == operation.DecisionEvent && event.DecisionRef == computerevent.DigestBytes(requestBytes)
+	return operationBody, exact, true, nil
 }
 
 func (h *Handler) readSelfDevelopmentMode(ctx context.Context, computerID, userID string) (selfDevelopmentModeProjection, error) {

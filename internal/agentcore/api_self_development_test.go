@@ -294,6 +294,28 @@ func TestExactTerminalDecisionReplayDoesNotDependOnLaterCurrentMode(t *testing.T
 		t.Fatal(err)
 	}
 	decisionRef := strings.Repeat("d", 64)
+	publicDecision := selfDevelopmentDecisionRequest{
+		Decision: "reject", IdempotencyKey: "decision-replay", BundleDigest: strings.Repeat("a", 64),
+		VerifierRef: strings.Repeat("1", 64), Reason: "owner rejected",
+		ExpectedDesiredEventHead: strings.Repeat("a", 64), ExpectedEffectiveEventHead: strings.Repeat("b", 64),
+		ExpectedDesiredStateCommitment: strings.Repeat("c", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
+	}
+	pending := ""
+	publicDecision.ExpectedPendingTransitionRef = &pending
+	withReceipt := publicDecision
+	withReceipt.ModeReceipt = &computerevent.Receipt{ReceiptKind: "ModeReceipt", ReceiptID: "mode-receipt"}
+	publicRef, err := selfDevelopmentDecisionRef(publicDecision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxiedRef, err := selfDevelopmentDecisionRef(withReceipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if publicRef != proxiedRef {
+		t.Fatal("proxy-injected mode receipt changed the public decision identity")
+	}
+	decisionRef = publicRef
 	event := computerevent.Event{
 		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: "computer-replay",
 		Sequence: 1, PreviousHead: computerevent.ZeroHead, EventKind: computerevent.EventEffectRejected,
@@ -316,5 +338,39 @@ func TestExactTerminalDecisionReplayDoesNotDependOnLaterCurrentMode(t *testing.T
 	}
 	if exactTerminalDecisionReplay(operation, event, true, selfdev.StateRejected, strings.Repeat("2", 64)) {
 		t.Fatal("changed terminal retry was accepted")
+	}
+}
+
+func TestGuestStartRefusesAbsentModeBeforeAnyEffect(t *testing.T) {
+	computerID := "computer-mode-off"
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := &APIHandler{rt: &Runtime{
+		cfg: provideriface.Config{SandboxID: computerID}, store: productStore, selfdevOperations: operations,
+	}}
+	body, err := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: "mode-off-start", Prompt: "change runtime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
+	request.Header.Set("X-Authenticated-User", "owner")
+	request.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	handler.HandleComputersRouter(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("absent-mode start status=%d body=%s", response.Code, response.Body.String())
+	}
+	if _, found, err := operations.GetByIdempotency(context.Background(), computerID, "mode-off-start"); err != nil || found {
+		t.Fatalf("absent-mode start created operation: found=%v err=%v", found, err)
+	}
+	if event, found, err := productStore.EventByIdempotency(context.Background(), computerID, "selfdev-start-"+computerevent.DigestBytes([]byte(computerID+"\x00mode-off-start"))); err != nil || found {
+		t.Fatalf("absent-mode start appended event: event=%+v found=%v err=%v", event, found, err)
 	}
 }

@@ -30,9 +30,9 @@ on demand.
 Staging is the acceptance environment: `https://choir.news`. Use local
 development only for fast frontend visual iteration, focused unit shaping, or
 reproducing a staging failure after staging evidence identifies the failed
-transition. Do not claim local proof for vmctl, live worker/candidate computers,
-gateway credentials, model/search calls, auth/session renewal, platform
-promotion, rollback, or Choir-in-Choir behavior.
+transition. Do not claim local proof for vmctl, live user computers,
+gateway credentials, model/search calls, auth/session renewal, checkpoint/route
+projection, rollback, or Choir-in-Choir behavior.
 
 The repo dev shell (Nix flake with ICU for Dolt cgo) loads automatically via
 direnv + nix-direnv. `CGO_CFLAGS`, `PKG_CONFIG_PATH`, `LD_LIBRARY_PATH`, and
@@ -77,7 +77,7 @@ Classify every mission/change by mutation class before editing:
 - `orange`: runtime behavior, product APIs, app state, database queries, or
   provider/model routing;
 - `red`: protected surfaces such as Texture canonical writes, Trace/evidence,
-  promotion/rollback, candidate computers, auth/session renewal, vmctl,
+  checkpoint/route projection, auth/session renewal, vmctl,
   gateway/provider calls, run acceptance, and deployment routing;
 - `black`: irreversible or production-destructive work.
 
@@ -232,8 +232,9 @@ Assume the worktree may contain user or other-agent changes. Do not revert
 unrelated changes. Avoid destructive commands unless the user explicitly asked
 for them.
 
-Use background/candidate computers or candidate worlds for risky mutation. Failed
-candidates should leave diagnostics, rollback refs, and next safe probes.
+Use disposable guest-local capsules inside the stable computer for risky
+mutation. Failed capsules should leave diagnostics, retained events, rollback
+refs, and next safe probes; do not create a candidate/worker computer or VM.
 
 ## Final Evidence
 

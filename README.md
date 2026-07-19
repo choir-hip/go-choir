@@ -6,12 +6,13 @@
 
 `go-choir` is the implementation repo for Choir, a human-improving,
 machine-compounding mainframe: a persistent-computer system for owned learning
-over artifacts, evidence, provenance, and promotion history.
+over artifacts, evidence, provenance, accepted events, and checkpoints.
 
-Choir runs apps, agents, traces, source material, code, candidate worlds, and
-promotion flows inside persistent computers. It is not a personal note app, an
-AI workspace, or a one-off chat surface (chat is a deprecated framing). It is a substrate where work can be
-created, inspected, revised, verified, forked, and promoted.
+Choir runs apps, agents, traces, source material, code, and disposable effect
+capsules inside stable persistent computers. It is not a personal note app, an
+AI workspace, or a one-off chat surface (chat is a deprecated framing). It is a
+substrate where work can be created, inspected, revised, verified, accepted,
+materialized, reconstructed, and rolled back.
 
 The short version:
 
@@ -40,10 +41,10 @@ Older docs and code comments may still describe Choir as a personal writing
 system, publishing system, AI workspace, sandbox, or workflow app. Treat that as
 historical or surface-specific language unless a current doctrine document
 explicitly promotes it. The current framing is human-improving,
-machine-compounding mainframe, persistent computers, durable artifacts,
-evidence, trajectories, candidate worlds, and promotion.
-Where those older terms appear below, they are contrast classes or transition
-labels, not endorsed root framing.
+machine-compounding mainframe, stable persistent computers, durable artifacts,
+evidence, trajectories, capsules, accepted checkpoints, and event-derived
+rollback. Where older terms appear below, they are contrast classes or
+transition labels, not endorsed root framing.
 
 Choir is not trying to optimize for chat smoothness (a deprecated framing), local test passage, or a
 short-term product demo. The architecture is currently optimizing for:
@@ -362,12 +363,14 @@ platform behavior-changing mission is not complete because local tests pass. It
 is complete when the pushed commit is running on staging and the deployed
 product path is verified there.
 
-Personal-computer evolution is different. A user should be able to fork their
-own computer, build a new Go runtime or Svelte UI, install packages, add apps,
-change prompts, and promote that candidate back into their own active computer
-without waiting for a global platform deploy. That path still needs lineage,
-typed deltas, verifier evidence, owner acceptance, and rollback, but its target
-is the user's active computer rather than `origin/main`.
+Personal-computer evolution is different. A user's stable computer develops a
+new Go runtime, Svelte UI, package set, app, or prompt inside a guest-local
+capsule. The frozen effect bundle receives verifier evidence and explicit owner
+acceptance before the updater materializes it as an immutable checkpoint and
+the serving route advances to that accepted checkpoint. The canonical computer
+event chain supplies typed deltas, causal history, reconstruction, and rollback;
+no candidate/worker computer, mutable branch, host repair path, or global
+platform deploy participates.
 
 Required landing loop for behavior changes:
 
