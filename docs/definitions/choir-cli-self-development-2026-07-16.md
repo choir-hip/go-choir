@@ -666,17 +666,17 @@ now:
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
   node_a_exact_guest_receipt:
-    observed_at: 2026-07-19T21:56:39Z
-    status: rejected_harness_noncanonical_credential
-    source_identity: 9b41218dccc39815fb641e5127c6d604fc06ec12
-    guest_image_ref: /tmp/g1-landlock-probe
+    observed_at: 2026-07-19T22:00:25Z
+    status: rejected_guest_credential_exchange_route
+    source_identity: 434879ff14cc92cb5755d7734bb78ad0a7c27db2
+    guest_image_ref: /tmp/g1-landlock-probe@9b41218dccc39815fb641e5127c6d604fc06ec12
     managed_guest_rollback: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
     pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
-    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=landlock9b4 CHOIR_G1_EXPECTED_COMMIT=9b41218dccc39815fb641e5127c6d604fc06ec12 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-landlock-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
-    evidence: "Both focused Node A isolation regressions passed. The exact guest completed every mandatory kernel probe, started guest-core/verifier signers and guest-local capsule authority, then restart-looped on `guest credential: non-canonical bootstrap envelope`. Kernel/config capability gate A is now runtime-proven for this exact image. The harness cleaned up its disposable VM."
-    problem: "The harness base64-encodes corpusd's raw JSON response member directly. Production vmctl first decodes the member, canonicalizes it with computerevent.CanonicalJSON, and only then base64url-encodes it. The harness therefore sends a representation production never sends; the guest correctly rejects it."
-    next_probe: "Make issueHarnessCredential use the production canonicalization sequence, rerun against the same exact guest image, and require healthy effects-OFF 409 plus public signed kernel receipt. No product credential parser change."
-    heresy_delta: {discovered: "The Linux harness diverged from production credential canonicalization and generated an invalid bootstrap envelope.", introduced: none, repaired: "All mandatory exact guest kernel capabilities, seccomp, and Landlock are now runtime-proven; guest effects-OFF startup remains open."}
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=cred434 CHOIR_G1_EXPECTED_COMMIT=9b41218dccc39815fb641e5127c6d604fc06ec12 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-landlock-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "Canonical harness encoding passed guest bootstrap verification; the next call failed `guest credential: exchange refused`. Node A maps 8082 to proxy and 8086 to corpusd. Guest Nix derives CHOIR_PLATFORM_URL from `choir.wire_publish_url` (8082), while the credential was issued by corpusd and proxy registers no `/internal/computers/credentials/exchange` passthrough. All kernel probes still passed; cleanup remained correct."
+    problem: "VM boot configuration conflates the wire/public proxy endpoint with the capability-authenticated guest event authority. Credential exchange/consume/renew and signed event operations must reach corpusd, but the guest is given only the proxy URL."
+    next_probe: "Add an explicit `choir.platform_url=http://<tap-host>:8086` boot parameter, map it to CHOIR_PLATFORM_URL, and stop deriving that variable from the 8082 wire URL. Preserve RUNTIME_WIRE_PUBLISH_URL at 8082. Add boot-argument/env extraction tests, rebuild the exact guest, and rerun."
+    heresy_delta: {discovered: "Guest credential authority was misrouted to the wire proxy because two distinct host services shared one environment variable.", introduced: none, repaired: "Harness canonicalization and all mandatory kernel/isolation probes are repaired; authenticated guest event authority startup remains open."}
 
 successor:
   status: selected_draft_non_executable
