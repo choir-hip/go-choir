@@ -110,6 +110,10 @@ type Runtime struct {
 	selfdevUpdaterRoot    string
 	selfdevComputerID     string
 	selfdevRealizationID  string
+	selfdevStartupMarker        string
+	selfdevStartupReleaseDigest string
+	selfdevStartupEventSchema   uint64
+	selfdevStartupReducer       uint64
 	selfdevMaterializeMu  sync.Mutex
 }
 
@@ -491,6 +495,12 @@ func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realiz
 		rt.selfdevUpdaterRoot = filepath.Clean(strings.TrimSpace(root))
 		rt.selfdevComputerID = strings.TrimSpace(computerID)
 		rt.selfdevRealizationID = strings.TrimSpace(realizationID)
+		if manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot); err == nil {
+			rt.selfdevStartupMarker = manifest.Marker
+			rt.selfdevStartupReleaseDigest = manifest.ContentDigest
+			rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
+			rt.selfdevStartupReducer = manifest.ReducerVersion
+		}
 	}
 }
 
@@ -1822,12 +1832,12 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		switch agentProfileForRun(rec) {
 		case agentprofile.Super:
 			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
-				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.cfg.SandboxID, Role: capsule.RoleSuper,
+				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.RoleSuper,
 				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 			})
 		case agentprofile.CoSuper:
 			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
-				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.cfg.SandboxID, Role: capsule.RoleCoSuper,
+				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.selfdevComputerID, Role: capsule.RoleCoSuper,
 				UpdaterRoot: os.Getenv("CHOIR_UPDATER_ROOT"), CapsuleHandle: metadataStringValue(rec.Metadata, "capsule_handle"),
 				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
 				OperationStore: rt.selfdevOperations, EventProjection: rt.store,

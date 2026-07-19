@@ -23,7 +23,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
@@ -1038,14 +1037,10 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("sandbox"),
 	}
-	if root := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")); root != "" {
-		if manifest, err := updater.ReadCurrentManifest(root); err == nil {
-			resp.SelfDevelopmentMarker = manifest.Marker
-			resp.EventSchemaVersion = manifest.EventSchemaVersion
-			resp.ReducerVersion = manifest.ReducerVersion
-			resp.ReleaseDigest = manifest.ContentDigest
-		}
-	}
+	resp.SelfDevelopmentMarker = h.rt.selfdevStartupMarker
+	resp.EventSchemaVersion = h.rt.selfdevStartupEventSchema
+	resp.ReducerVersion = h.rt.selfdevStartupReducer
+	resp.ReleaseDigest = h.rt.selfdevStartupReleaseDigest
 	if usage, err := persistentdisk.Statfs(filepath.Dir(h.rt.cfg.StorePath)); err == nil {
 		status := persistentdisk.StatusFromGuestUsage(usage)
 		resp.PersistentDisk = &status

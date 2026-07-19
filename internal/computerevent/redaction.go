@@ -28,6 +28,21 @@ var privateSecretPatterns = []secretPattern{
 	{kind: "google_api_key", expression: regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{20,}\b`)},
 }
 
+func DetectPrivateSecrets(payload []byte) []string {
+	kinds := make(map[string]struct{})
+	for _, pattern := range privateSecretPatterns {
+		if pattern.expression.Match(payload) {
+			kinds[pattern.kind] = struct{}{}
+		}
+	}
+	result := make([]string, 0, len(kinds))
+	for kind := range kinds {
+		result = append(result, kind)
+	}
+	sort.Strings(result)
+	return result
+}
+
 type secretMatch struct {
 	start int
 	end   int

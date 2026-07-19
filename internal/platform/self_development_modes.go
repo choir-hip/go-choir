@@ -164,7 +164,13 @@ func (c *SelfDevelopmentModeCAS) Set(ctx context.Context, computerID string, req
 		"expected_desired_state_commitment":   next.ExpectedDesiredStateCommitment,
 		"expected_effective_state_commitment": next.ExpectedEffectiveStateCommitment,
 		"bundle_digest":                       next.BundleDigest, "expires_at": next.ExpiresAt,
-		"idempotency_key": request.IdempotencyKey, "request_commitment": requestCommitment,
+		"consumed_operation_id":               current.OperationID,
+		"consumed_bundle_digest":              current.BundleDigest,
+		"consumed_desired_event_head":         current.ExpectedDesiredEventHead,
+		"consumed_effective_event_head":       current.ExpectedEffectiveEventHead,
+		"consumed_desired_state_commitment":   current.ExpectedDesiredStateCommitment,
+		"consumed_effective_state_commitment": current.ExpectedEffectiveStateCommitment,
+		"idempotency_key":                     request.IdempotencyKey, "request_commitment": requestCommitment,
 	}
 	receipt, err := computerevent.NewSignedReceipt("ModeReceipt", "corpusd", fields, []computerevent.SigningKey{c.signingKey}, now)
 	if err != nil {

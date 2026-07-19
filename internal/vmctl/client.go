@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -142,7 +143,6 @@ func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID st
 	return &result, nil
 }
 
-
 // Lookup returns the current ownership for a user without creating a VM.
 // Returns nil if no ownership exists.
 func (c *Client) Lookup(userID string) (*ownershipResponse, error) {
@@ -196,6 +196,38 @@ func (c *Client) LookupDesktopContext(ctx context.Context, userID, desktopID str
 		return nil, fmt.Errorf("vmctl client: decode lookup response: %w", err)
 	}
 
+	return &result, nil
+}
+
+func (c *Client) LookupComputerContext(ctx context.Context, userID, computerID string) (*ownershipResponse, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpoint := LookupEndpoint(c.baseURL) + "?user_id=" + url.QueryEscape(userID) + "&computer_id=" + url.QueryEscape(strings.TrimSpace(computerID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: create computer lookup request: %w", err)
+	}
+	req.Header.Set("X-Internal-Caller", "true")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("vmctl client: computer lookup call failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("vmctl client: computer lookup status %s", resp.Status)
+	}
+	var result ownershipResponse
+	if err := json.Unmarshal(body, &result); err != nil || result.ComputerID != strings.TrimSpace(computerID) {
+		return nil, fmt.Errorf("vmctl client: computer lookup identity mismatch")
+	}
 	return &result, nil
 }
 

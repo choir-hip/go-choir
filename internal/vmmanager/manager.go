@@ -130,6 +130,8 @@ type VMConfig struct {
 	ComputerKind string
 	OwnerID      string
 	DesktopID    string
+	ComputerID   string
+	RealizationID string
 	// ComputerCredentialEnvelope is a short-lived signed bootstrap envelope
 	// for guest-to-corpusd event capability exchange. It is scoped to VMID and
 	// contains no platform signing key.
@@ -1392,9 +1394,14 @@ func sourceServiceRuntimeOwnerID(cfg VMConfig) string {
 	}
 	return "universal-wire-platform"
 }
-
 func guestIdentityKernelParams(cfg VMConfig) []string {
-	params := make([]string, 0, 3)
+	params := make([]string, 0, 5)
+	if value := kernelParamValue(cfg.ComputerID); value != "" {
+		params = append(params, "choir.computer_id="+value)
+	}
+	if value := kernelParamValue(cfg.RealizationID); value != "" {
+		params = append(params, "choir.realization_id="+value)
+	}
 	if value := kernelParamValue(cfg.ComputerKind); value != "" {
 		params = append(params, "choir.computer_kind="+value)
 	}

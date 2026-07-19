@@ -47,6 +47,7 @@ type resolveRequest struct {
 // resolveResponse is the JSON response for POST /internal/vmctl/resolve.
 type resolveResponse struct {
 	VMID          string `json:"vm_id"`
+	ComputerID    string `json:"computer_id"`
 	UserID        string `json:"user_id"`
 	DesktopID     string `json:"desktop_id"`
 	Kind          VMKind `json:"kind,omitempty"`
@@ -58,6 +59,7 @@ type resolveResponse struct {
 // ownershipResponse is the JSON response for ownership queries.
 type ownershipResponse struct {
 	VMID          string             `json:"vm_id"`
+	ComputerID    string             `json:"computer_id"`
 	UserID        string             `json:"user_id"`
 	DesktopID     string             `json:"desktop_id"`
 	Kind          VMKind             `json:"kind,omitempty"`
@@ -197,6 +199,7 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		}
 		writeVMCTLJSON(w, http.StatusOK, resolveResponse{
 			VMID:          own.VMID,
+			ComputerID:    stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
 			UserID:        own.UserID,
 			DesktopID:     own.DesktopID,
 			Kind:          own.Kind,
@@ -222,6 +225,7 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
 		VMID:          own.VMID,
+		ComputerID:    stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
 		UserID:        own.UserID,
 		DesktopID:     own.DesktopID,
 		Kind:          own.Kind,
@@ -230,7 +234,6 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 		State:         string(own.State),
 	})
 }
-
 
 // HandleLookup handles GET /internal/vmctl/lookup?user_id=...
 // Returns the current ownership for a user without creating a new VM.
@@ -252,13 +255,19 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id query parameter is required"})
 		return
 	}
-	desktopID := normalizeDesktopID(r.URL.Query().Get("desktop_id"))
-	if err := h.requireComputerVersionRoute(r.Context(), userID, desktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
+	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
+	var own *VMOwnership
+	if computerID != "" {
+		own = h.registry.GetOwnershipForComputer(userID, computerID)
+	} else {
+		own = h.registry.GetOwnershipForDesktop(userID, normalizeDesktopID(r.URL.Query().Get("desktop_id")))
 	}
-
-	own := h.registry.GetOwnershipForDesktop(userID, desktopID)
+	if own != nil {
+		if err := h.requireComputerVersionRoute(r.Context(), userID, own.DesktopID); err != nil {
+			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
+			return
+		}
+	}
 	if own == nil {
 		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no VM found for user"})
 		return
@@ -273,6 +282,7 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	}
 	writeVMCTLJSON(w, http.StatusOK, ownershipResponse{
 		VMID:          own.VMID,
+		ComputerID:    stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
 		UserID:        own.UserID,
 		DesktopID:     own.DesktopID,
 		Kind:          own.Kind,
@@ -448,6 +458,7 @@ func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
 		VMID:       own.VMID,
+		ComputerID: stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
 		UserID:     own.UserID,
 		DesktopID:  own.DesktopID,
 		Kind:       own.Kind,
@@ -496,6 +507,7 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
 		VMID:       own.VMID,
+		ComputerID: stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
 		UserID:     own.UserID,
 		DesktopID:  own.DesktopID,
 		Kind:       own.Kind,
@@ -544,6 +556,7 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
 		VMID:       own.VMID,
+		ComputerID: stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
 		UserID:     own.UserID,
 		DesktopID:  own.DesktopID,
 		Kind:       own.Kind,
@@ -1206,7 +1219,6 @@ func LookupEndpoint(baseURL string) string {
 func ListEndpoint(baseURL string) string {
 	return baseURL + "/internal/vmctl/list"
 }
-
 
 // StopEndpoint returns the full stop endpoint URL for the vmctl
 // service at the given base URL.

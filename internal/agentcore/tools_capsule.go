@@ -246,7 +246,7 @@ func newCommitTransactionTool() toolregistry.Tool {
 				return "", err
 			}
 			defer os.RemoveAll(temporary)
-			sourceIntent, err := computerevent.CanonicalJSON(record.Groups)
+			sourceTreeDigest, err := toolCtx.Executor.ResolveGrantedSourceSnapshotDigest(toolCtx.AgentRunID, input.Handle)
 			if err != nil {
 				return "", err
 			}
@@ -254,7 +254,7 @@ func newCommitTransactionTool() toolregistry.Tool {
 			if err != nil {
 				return "", err
 			}
-			record.SourceTreeDigest = computerevent.DigestBytes(sourceIntent)
+			record.SourceTreeDigest = sourceTreeDigest
 			record.RuntimeArtifactDigest = computerevent.DigestBytes(runtimeIntent)
 			record.BaseEffectiveEventHead = headBefore.EffectiveEventHead
 			record.RuntimeFiles = files

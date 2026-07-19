@@ -3,6 +3,7 @@
 package capsule
 
 import (
+	"bufio"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -21,6 +22,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 // Executor is the guest-core authority for ephemeral capsule lifecycle and
@@ -505,6 +508,19 @@ func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, e
 	}
 	return capability.TargetCapsule, nil
 }
+func (e *Executor) ResolveGrantedSourceSnapshotDigest(agentRunID, handle string) (string, error) {
+	capability, err := e.ResolveCapability(agentRunID, handle)
+	if err != nil || capability.AgentRole != RoleCoSuper {
+		return "", fmt.Errorf("capsule granted source snapshot unavailable")
+	}
+	e.mu.RLock()
+	capsule := e.capsules[capability.TargetCapsule]
+	e.mu.RUnlock()
+	if capsule == nil || !computerevent.IsSHA256(capsule.SourceSnapshotDigest) {
+		return "", fmt.Errorf("capsule granted source snapshot unavailable")
+	}
+	return capsule.SourceSnapshotDigest, nil
+}
 
 func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) ([]FrozenReleaseFile, string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
@@ -566,8 +582,29 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
 			return nil, "", err
 		}
+		base := strings.ToLower(filepath.Base(clean))
+		extension := strings.ToLower(filepath.Ext(base))
+		if base == ".env" || strings.HasPrefix(base, ".env.") || extension == ".pem" || extension == ".key" || extension == ".p12" || extension == ".pfx" {
+			return nil, "", fmt.Errorf("capsule release refuses secret-bearing path %q", change.Path)
+		}
 		input, err := os.Open(source)
 		if err != nil {
+			return nil, "", err
+		}
+		scanner := bufio.NewScanner(input)
+		scanner.Buffer(make([]byte, 64<<10), 1<<20)
+		for scanner.Scan() {
+			if findings := computerevent.DetectPrivateSecrets(scanner.Bytes()); len(findings) != 0 {
+				_ = input.Close()
+				return nil, "", fmt.Errorf("capsule release refuses secret content in %q", change.Path)
+			}
+		}
+		if scanErr := scanner.Err(); scanErr != nil {
+			_ = input.Close()
+			return nil, "", fmt.Errorf("capsule release secret scan failed for %q: %w", change.Path, scanErr)
+		}
+		if _, err := input.Seek(0, io.SeekStart); err != nil {
+			_ = input.Close()
 			return nil, "", err
 		}
 		output, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
@@ -782,4 +819,3 @@ func cloneVerbSet(input VerbSet) VerbSet {
 	}
 	return out
 }
-

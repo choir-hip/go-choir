@@ -14,9 +14,13 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
-type fakeServiceManager struct{ restarts int }
+type fakeServiceManager struct {
+	restarts int
+	cleanups int
+}
 
 func (s *fakeServiceManager) Restart(context.Context) error { s.restarts++; return nil }
+func (s *fakeServiceManager) CleanupRestartHandoff() error  { s.cleanups++; return nil }
 
 type fakeHealthProber struct{ failDigest string }
 
@@ -53,8 +57,8 @@ func TestUpdaterAppliesIdempotentlyAndRestoresPriorHealthyRelease(t *testing.T) 
 	if result.Outcome != "applied" || result.ReleaseDigest != first.Manifest.ContentDigest || result.MaterializationReceipt.ReceiptKind != "MaterializationReceipt" {
 		t.Fatalf("first result = %+v", result)
 	}
-	if service.restarts != 1 {
-		t.Fatalf("first restart count = %d", service.restarts)
+	if service.restarts != 1 || service.cleanups != 1 {
+		t.Fatalf("first restart/cleanup count = %d/%d", service.restarts, service.cleanups)
 	}
 	retry, err := updater.Apply(context.Background(), first)
 	if err != nil || retry.MaterializationReceipt.ReceiptID != result.MaterializationReceipt.ReceiptID || service.restarts != 1 {
@@ -71,8 +75,8 @@ func TestUpdaterAppliesIdempotentlyAndRestoresPriorHealthyRelease(t *testing.T) 
 	if err != nil || currentDigest != first.Manifest.ContentDigest {
 		t.Fatalf("current release after recovery = %q, %v; want %q", currentDigest, err, first.Manifest.ContentDigest)
 	}
-	if service.restarts != 3 {
-		t.Fatalf("failure and restore restart count = %d, want 3", service.restarts)
+	if service.restarts != 3 || service.cleanups != 2 {
+		t.Fatalf("failure and restore restart/cleanup count = %d/%d, want 3/2", service.restarts, service.cleanups)
 	}
 }
 

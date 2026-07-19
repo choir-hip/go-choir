@@ -87,6 +87,7 @@ type Event struct {
 	ExpectedPendingTransitionRef     string    `json:"expected_pending_transition_ref"`
 	ExpectedDesiredStateCommitment   string    `json:"expected_desired_state_commitment"`
 	ExpectedEffectiveStateCommitment string    `json:"expected_effective_state_commitment"`
+	RequireExpectedHead              bool      `json:"-"`
 	ResultingEffectiveCommitment     string    `json:"resulting_effective_state_commitment"`
 }
 

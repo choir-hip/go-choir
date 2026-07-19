@@ -84,6 +84,9 @@ const (
 type VMOwnership struct {
 	// VMID is the unique identifier for the VM.
 	VMID string `json:"vm_id"`
+	// ComputerID is globally stable semantic identity. It survives realization
+	// replacement and is never a VMID or a desktop selector.
+	ComputerID string `json:"computer_id"`
 
 	// UserID is the authenticated user who owns this VM.
 	UserID string `json:"user_id"`
@@ -180,6 +183,9 @@ type vmGatewayTokenReader interface {
 // mirroring the vmmanager.VMConfig fields that the registry controls.
 type VMManagerConfig struct {
 	VMID              string
+	ComputerID        string
+	RealizationID     string
+	Epoch             int64
 	KernelImagePath   string
 	InitrdPath        string
 	RootfsPath        string
@@ -369,6 +375,7 @@ func (r *OwnershipRegistry) loadLocked() error {
 		own.UserID = strings.TrimSpace(own.UserID)
 		own.VMID = strings.TrimSpace(own.VMID)
 		own.DesktopID = normalizeDesktopID(own.DesktopID)
+		own.ComputerID = stableComputerID(own.UserID, own.DesktopID, own.ComputerID)
 		if own.Kind == "" {
 			own.Kind = VMKindInteractive
 		}
@@ -790,11 +797,26 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 	}
 }
 
+func (r *OwnershipRegistry) freshVMConfig(own *VMOwnership, gatewayToken string) VMManagerConfig {
+	cfg := vmManagerConfigForOwnership(own, gatewayToken)
+	cfg.Epoch = own.Epoch + 1
+	cfg.RealizationID = realizationIDFor(own.VMID, cfg.Epoch)
+	cfg.ComputerCredentialEnvelope = r.issueComputerCredentialEnvelope(cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
+	return cfg
+}
+func freshVMConfigWithCredentialIssuer(own *VMOwnership, gatewayToken, corpusdURL string) VMManagerConfig {
+	cfg := vmManagerConfigForOwnership(own, gatewayToken)
+	cfg.Epoch = own.Epoch + 1
+	cfg.RealizationID = realizationIDFor(own.VMID, cfg.Epoch)
+	cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
+	return cfg
+}
+
 func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if mgr.GetVM(own.VMID) == nil {
 		return r.startExistingVM(own, mgr)
 	}
-	recovered, err := mgr.RecoverVM(own.VMID, vmManagerConfigForOwnership(own, ""))
+	recovered, err := mgr.RecoverVM(own.VMID, r.freshVMConfig(own, ""))
 	if err != nil {
 		if mgr.GetVM(own.VMID) == nil {
 			return r.startExistingVM(own, mgr)
@@ -813,7 +835,7 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 	} else if existing := mgr.GetVM(own.VMID); existing != nil {
 		state := strings.ToLower(strings.TrimSpace(existing.State))
 		if state == "failed" || state == "pending" {
-			recovered, recoverErr := mgr.RecoverVM(own.VMID, vmManagerConfigForOwnership(own, ""))
+			recovered, recoverErr := mgr.RecoverVM(own.VMID, r.freshVMConfig(own, ""))
 			if recoverErr == nil {
 				return recovered, nil
 			}
@@ -821,8 +843,7 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 		}
 		return nil, err
 	}
-	cfg := vmManagerConfigForOwnership(own, r.issueGatewayToken(own.VMID))
-	cfg.ComputerCredentialEnvelope = r.issueComputerCredentialEnvelope(own.DesktopID, own.VMID, own.Epoch+1)
+	cfg := r.freshVMConfig(own, r.issueGatewayToken(own.VMID))
 	return mgr.BootVM(cfg)
 }
 
@@ -833,6 +854,7 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 	cpu, mem := machineShapeForOwnership(own)
 	cfg := VMManagerConfig{
 		VMID:              own.VMID,
+		ComputerID:        stableComputerID(own.UserID, own.DesktopID, own.ComputerID),
 		GuestPort:         8085,
 		MachineCPUCount:   cpu,
 		MachineMemSizeMib: mem,
@@ -840,6 +862,8 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 		ComputerKind:      computerKindForOwnership(own),
 		OwnerID:           own.UserID,
 		DesktopID:         own.DesktopID,
+		RealizationID:     realizationIDFor(own.VMID, own.Epoch),
+		Epoch:             own.Epoch,
 	}
 	return cfg
 }
@@ -892,6 +916,10 @@ func (r *OwnershipRegistry) issueComputerCredentialEnvelope(computerID, realizat
 	r.mu.RLock()
 	corpusdURL := r.corpusdURL
 	r.mu.RUnlock()
+	return issueComputerCredentialEnvelope(corpusdURL, computerID, realizationID, epoch)
+}
+
+func issueComputerCredentialEnvelope(corpusdURL, computerID, realizationID string, epoch int64) string {
 	if corpusdURL == "" || computerID == "" || realizationID == "" {
 		return ""
 	}
@@ -914,18 +942,15 @@ func (r *OwnershipRegistry) issueComputerCredentialEnvelope(computerID, realizat
 		return ""
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusCreated {
-		log.Printf("vmctl: computer credential issue returned %d for %s", response.StatusCode, realizationID)
-		return ""
-	}
 	var result struct {
 		Envelope json.RawMessage `json:"envelope"`
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 128<<10)).Decode(&result); err != nil {
+	if response.StatusCode != http.StatusCreated || json.NewDecoder(io.LimitReader(response.Body, 128<<10)).Decode(&result) != nil || len(result.Envelope) == 0 {
+		log.Printf("vmctl: computer credential request refused for %s", realizationID)
 		return ""
 	}
 	var envelope any
-	if err := json.Unmarshal(result.Envelope, &envelope); err != nil {
+	if json.Unmarshal(result.Envelope, &envelope) != nil {
 		return ""
 	}
 	canonical, err := computerevent.CanonicalJSON(envelope)
@@ -1262,10 +1287,11 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 	epoch := r.nextEpoch()
 
 	own := &VMOwnership{
-		VMID:      vmID,
-		UserID:    userID,
-		DesktopID: desktopID,
-		Kind:      VMKindInteractive,
+		VMID:       vmID,
+		UserID:     userID,
+		DesktopID:  desktopID,
+		ComputerID: stableComputerID(userID, desktopID, ""),
+		Kind:       VMKindInteractive,
 		WarmnessClass: warmnessClassForOwnership(&VMOwnership{
 			UserID:    userID,
 			DesktopID: desktopID,
@@ -1300,11 +1326,14 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 
 		info, err := mgr.BootVM(VMManagerConfig{
 			VMID:                       vmID,
+			ComputerID:                 own.ComputerID,
+			RealizationID:              realizationIDFor(vmID, epoch),
+			Epoch:                      epoch,
 			GuestPort:                  8085,
 			MachineCPUCount:            interactiveVMCPUCount,
 			MachineMemSizeMib:          interactiveVMMemSizeMib,
 			GatewayToken:               gwToken,
-			ComputerCredentialEnvelope: r.issueComputerCredentialEnvelope(desktopID, vmID, epoch),
+			ComputerCredentialEnvelope: r.issueComputerCredentialEnvelope(own.ComputerID, realizationIDFor(vmID, epoch), epoch),
 			ComputerKind:               "active",
 			OwnerID:                    userID,
 			DesktopID:                  desktopID,
@@ -1406,6 +1435,18 @@ func (r *OwnershipRegistry) GetOwnershipForDesktop(userID, desktopID string) *VM
 	}
 	snap := *own
 	return &snap
+}
+
+func (r *OwnershipRegistry) GetOwnershipForComputer(userID, computerID string) *VMOwnership {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, own := range r.ownerships {
+		if own != nil && own.UserID == userID && stableComputerID(own.UserID, own.DesktopID, own.ComputerID) == computerID {
+			snapshot := *own
+			return &snapshot
+		}
+	}
+	return nil
 }
 
 // LiveSandboxURL returns the live sandbox URL for the given user/desktop pair.
@@ -1731,6 +1772,9 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 			r.ensureExistingGatewayCredential(ensureVMID)
 		}
 	}()
+	r.mu.RLock()
+	corpusdURL := r.corpusdURL
+	r.mu.RUnlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1745,7 +1789,7 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 
 	// Delegate to the real VM manager if available.
 	if r.vmManager != nil {
-		info, err := r.vmManager.RecoverVM(own.VMID, vmManagerConfigForOwnership(own, ""))
+		info, err := r.vmManager.RecoverVM(own.VMID, freshVMConfigWithCredentialIssuer(own, "", corpusdURL))
 		if err != nil {
 			return nil, fmt.Errorf("failed to recover VM %s: %w", own.VMID, err)
 		}
@@ -2030,4 +2074,15 @@ func generateVMID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return "vm-" + hex.EncodeToString(b)
+}
+
+func stableComputerID(userID, desktopID, existing string) string {
+	if existing = strings.TrimSpace(existing); existing != "" {
+		return existing
+	}
+	return "computer-" + computerevent.DigestBytes([]byte(strings.TrimSpace(userID) + "\x00" + normalizeDesktopID(desktopID)))[:32]
+}
+
+func realizationIDFor(vmID string, epoch int64) string {
+	return fmt.Sprintf("%s-epoch-%d", strings.TrimSpace(vmID), epoch)
 }

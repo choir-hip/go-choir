@@ -184,6 +184,20 @@ func TestAppenderAppendNewBindsCurrentProjection(t *testing.T) {
 		got.ExpectedEffectiveEventHead != cas.records[0].Request.Next.EffectiveEventHead {
 		t.Fatalf("new event was not bound to current projection: %+v", got)
 	}
+	stale := testEvent(t, nil, EventEffectProposed)
+	stale.ProposedEffectRef = testDigestC
+	stale.RequireExpectedHead = true
+	stale.PreviousHead = cas.records[0].Request.EventDigest
+	stale.ExpectedDesiredEventHead = cas.records[0].Request.Next.DesiredEventHead
+	stale.ExpectedEffectiveEventHead = cas.records[0].Request.Next.EffectiveEventHead
+	stale.ExpectedDesiredStateCommitment = cas.records[0].Request.Next.DesiredStateCommitment
+	stale.ExpectedEffectiveStateCommitment = cas.records[0].Request.Next.EffectiveStateCommitment
+	if _, err := appender.AppendNew(context.Background(), stale, TransitionInput{}, nil); err == nil {
+		t.Fatal("stale decision head binding was accepted")
+	}
+	if len(cas.records) != 2 {
+		t.Fatalf("stale append mutated event history: %d records", len(cas.records))
+	}
 }
 
 func TestAppenderAppendNewPayloadPinsBundleIntoEvent(t *testing.T) {

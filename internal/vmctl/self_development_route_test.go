@@ -136,7 +136,7 @@ func TestSelfDevelopmentRouteProjectionRequiresExactPlatformCertificate(t *testi
 	defer corpusd.Close()
 	registry := NewOwnershipRegistry("http://sandbox")
 	registry.SetCorpusdURL(corpusd.URL)
-	ownership := &VMOwnership{VMID: checkpointRequest.ComputerID, UserID: "owner", DesktopID: "primary", State: VMStateActive}
+	ownership := &VMOwnership{VMID: "vm-realization", ComputerID: checkpointRequest.ComputerID, UserID: "owner", DesktopID: "primary", State: VMStateActive}
 	registry.ownerships[ownershipKey("owner", "primary")] = ownership
 	registry.vmByID[ownership.VMID] = ownership
 	request := selfdevprotocol.ApplyRouteProjectionRequest{Projection: projection, Authorization: selfdevprotocol.RouteProjectionResponse{Certificate: certificate, Receipt: certificateReceipt}}

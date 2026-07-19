@@ -211,6 +211,29 @@ func (a *ComputerEventAppender) bindCurrentHeadLocked(ctx context.Context, event
 	if err != nil {
 		return fmt.Errorf("computer event appender: resolve head for new event: %w", err)
 	}
+	if event.RequireExpectedHead {
+		expectedDesiredEventHead, expectedEffectiveEventHead := ZeroHead, ZeroHead
+		expectedDesiredStateCommitment, expectedEffectiveStateCommitment := ZeroHead, ZeroHead
+		expectedCanonicalHead := ZeroHead
+		if head != nil {
+			expectedDesiredEventHead, expectedEffectiveEventHead = head.DesiredEventHead, head.EffectiveEventHead
+			expectedDesiredStateCommitment, expectedEffectiveStateCommitment = head.DesiredStateCommitment, head.EffectiveStateCommitment
+			expectedCanonicalHead = head.CanonicalEventHead
+		}
+		for _, binding := range []struct {
+			name, supplied, current string
+		}{
+			{"canonical event head", event.PreviousHead, expectedCanonicalHead},
+			{"desired event head", event.ExpectedDesiredEventHead, expectedDesiredEventHead},
+			{"effective event head", event.ExpectedEffectiveEventHead, expectedEffectiveEventHead},
+			{"desired state commitment", event.ExpectedDesiredStateCommitment, expectedDesiredStateCommitment},
+			{"effective state commitment", event.ExpectedEffectiveStateCommitment, expectedEffectiveStateCommitment},
+		} {
+			if binding.supplied != binding.current {
+				return fmt.Errorf("computer event appender: expected %s changed", binding.name)
+			}
+		}
+	}
 	if head == nil {
 		event.Sequence = 1
 		event.PreviousHead = ZeroHead

@@ -17,7 +17,10 @@ import (
 // Choir. The updater never receives access to PID 1 or a general service
 // manager socket.
 type RestartRequestManager struct {
-	Path string
+	Path        string
+	PrepareURL  string
+	HandoffPath string
+	Client      *http.Client
 }
 
 func (m RestartRequestManager) Restart(ctx context.Context) error {
@@ -27,6 +30,33 @@ func (m RestartRequestManager) Restart(ctx context.Context) error {
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	handoffPath := filepath.Clean(strings.TrimSpace(m.HandoffPath))
+	if m.PrepareURL != "" {
+		if !filepath.IsAbs(handoffPath) || filepath.Base(handoffPath) != "restart-capability" {
+			return fmt.Errorf("updater: invalid restart handoff path")
+		}
+		if _, err := os.Stat(handoffPath); os.IsNotExist(err) {
+			request, requestErr := http.NewRequestWithContext(ctx, http.MethodPost, m.PrepareURL, nil)
+			if requestErr != nil {
+				return requestErr
+			}
+			request.Header.Set("X-Internal-Updater", "true")
+			client := m.Client
+			if client == nil {
+				client = &http.Client{Timeout: 10 * time.Second}
+			}
+			response, requestErr := client.Do(request)
+			if requestErr != nil {
+				return fmt.Errorf("updater: prepare restart credential: %w", requestErr)
+			}
+			_ = response.Body.Close()
+			if response.StatusCode != http.StatusNoContent {
+				return fmt.Errorf("updater: prepare restart credential status %d", response.StatusCode)
+			}
+		} else if err != nil {
+			return err
+		}
 	}
 	file, err := os.CreateTemp(filepath.Dir(path), ".restart-")
 	if err != nil {
@@ -47,6 +77,20 @@ func (m RestartRequestManager) Restart(ctx context.Context) error {
 	}
 	if err := os.Rename(temporary, path); err != nil {
 		return fmt.Errorf("updater: publish restart request: %w", err)
+	}
+	return nil
+}
+
+func (m RestartRequestManager) CleanupRestartHandoff() error {
+	path := filepath.Clean(strings.TrimSpace(m.HandoffPath))
+	if m.PrepareURL == "" {
+		return nil
+	}
+	if !filepath.IsAbs(path) || filepath.Base(path) != "restart-capability" {
+		return fmt.Errorf("updater: invalid restart handoff path")
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }

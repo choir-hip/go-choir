@@ -223,9 +223,15 @@ EOF
             ;;
           vm_id=*)
             echo "SANDBOX_ID=''${param#vm_id=}" >> "$ENV_FILE"
-            echo "CHOIR_REALIZATION_ID=''${param#vm_id=}" >> "$ENV_FILE"
             echo "SANDBOX_ID=''${param#vm_id=}" >> "$UPDATER_ENV_FILE"
-            echo "CHOIR_REALIZATION_ID=''${param#vm_id=}" >> "$UPDATER_ENV_FILE"
+            ;;
+          choir.computer_id=*)
+            echo "CHOIR_COMPUTER_ID=''${param#choir.computer_id=}" >> "$ENV_FILE"
+            echo "CHOIR_COMPUTER_ID=''${param#choir.computer_id=}" >> "$UPDATER_ENV_FILE"
+            ;;
+          choir.realization_id=*)
+            echo "CHOIR_REALIZATION_ID=''${param#choir.realization_id=}" >> "$ENV_FILE"
+            echo "CHOIR_REALIZATION_ID=''${param#choir.realization_id=}" >> "$UPDATER_ENV_FILE"
             ;;
           epoch=*)
             echo "VM_EPOCH=''${param#epoch=}" >> "$ENV_FILE"
@@ -261,8 +267,6 @@ EOF
             ;;
           choir.desktop_id=*)
             echo "CHOIR_DESKTOP_ID=''${param#choir.desktop_id=}" >> "$ENV_FILE"
-            echo "CHOIR_COMPUTER_ID=''${param#choir.desktop_id=}" >> "$ENV_FILE"
-            echo "CHOIR_COMPUTER_ID=''${param#choir.desktop_id=}" >> "$UPDATER_ENV_FILE"
             ;;
           choir.gateway_token=*)
             echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"
@@ -390,8 +394,8 @@ EOF
       ProtectHome = true;
       ProtectSystem = "strict";
       ProtectControlGroups = true;
-      ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" ];
-      InaccessiblePaths = [ "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" "/run/choir-bootstrap" ];
+      InaccessiblePaths = [ "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
@@ -410,6 +414,8 @@ EOF
     requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" ];
     environment = {
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
+      CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-bootstrap/restart-capability";
+      CHOIR_PRIVATE_ARTIFACT_KEYRING = "/mnt/persistent/private-artifact-keys";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         bash
         coreutils

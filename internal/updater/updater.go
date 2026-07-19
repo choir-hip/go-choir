@@ -77,6 +77,10 @@ type ServiceManager interface {
 	Restart(context.Context) error
 }
 
+type restartHandoffCleaner interface {
+	CleanupRestartHandoff() error
+}
+
 type HealthProber interface {
 	Probe(context.Context, string, ReleaseManifest) ([]string, error)
 }
@@ -116,14 +120,21 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		return ApplyResult{}, fmt.Errorf("updater: request commitment mismatch")
 	}
 	journalPath := filepath.Join(u.root, "operations", safeName(request.IdempotencyKey)+".json")
-	if existing, found, err := readJournal(journalPath); err != nil || found {
-		if found && existing.RequestCommitment != request.RequestCommitment {
-			return ApplyResult{}, ErrIdempotencyConflict
+	journal, found, err := readJournal(journalPath)
+	if err != nil {
+		return ApplyResult{}, err
+	}
+	if found && journal.RequestCommitment != request.RequestCommitment {
+		return ApplyResult{}, ErrIdempotencyConflict
+	}
+	if found && journal.Result.Outcome != "" {
+		if journal.Result.Outcome == "failed" {
+			return journal.Result, errors.New(journal.Failure)
 		}
-		return existing.Result, err
+		return journal.Result, nil
 	}
 	releaseDigest := request.Manifest.ContentDigest
-	sourceDir, err := u.trustedSourceDir(request.SourceDir, request.Manifest.ContentDigest)
+	sourceDir, err := u.trustedSourceDir(request.SourceDir, releaseDigest)
 	if err != nil {
 		return ApplyResult{}, err
 	}
@@ -132,54 +143,102 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 	if err := u.stageRelease(request.SourceDir, releaseDir, request.Manifest); err != nil {
 		return ApplyResult{}, err
 	}
-	priorDigest, priorTarget, err := u.currentRelease()
-	if err != nil {
-		return ApplyResult{}, err
+	if !found {
+		priorDigest, priorTarget, priorErr := u.currentRelease()
+		if priorErr != nil {
+			return ApplyResult{}, priorErr
+		}
+		journal = operationJournal{
+			RequestCommitment: request.RequestCommitment, Phase: "prepared",
+			PriorReleaseDigest: priorDigest, PriorReleaseTarget: priorTarget,
+			TargetReleaseDigest: releaseDigest, StartedAt: u.now().UTC().Truncate(time.Microsecond),
+		}
+		if err := writeJournal(journalPath, journal); err != nil {
+			return ApplyResult{}, err
+		}
 	}
-	startedAt := u.now().UTC().Truncate(time.Microsecond)
-	if err := u.swapCurrent(releaseDir); err != nil {
-		return ApplyResult{}, err
+	if journal.TargetReleaseDigest != releaseDigest {
+		return ApplyResult{}, ErrIdempotencyConflict
 	}
-	applyErr := u.service.Restart(ctx)
-	var observations []string
-	if applyErr == nil {
-		observations, applyErr = u.health.Probe(ctx, releaseDigest, request.Manifest)
+	if journal.Phase == "prepared" {
+		if err := u.swapCurrent(releaseDir); err != nil {
+			return ApplyResult{}, err
+		}
+		journal.Phase = "pointer_swapped"
+		if err := writeJournal(journalPath, journal); err != nil {
+			return ApplyResult{}, err
+		}
 	}
+	if journal.Phase == "pointer_swapped" {
+		if err := u.service.Restart(ctx); err != nil {
+			return ApplyResult{}, err
+		}
+		journal.Phase = "restart_requested"
+		if err := writeJournal(journalPath, journal); err != nil {
+			return ApplyResult{}, err
+		}
+	}
+	if journal.Phase == "restart_requested" {
+		observations, probeErr := u.health.Probe(ctx, releaseDigest, request.Manifest)
+		if probeErr == nil {
+			completedAt := u.now().UTC().Truncate(time.Microsecond)
+			if cleaner, ok := u.service.(restartHandoffCleaner); ok {
+				if cleanupErr := cleaner.CleanupRestartHandoff(); cleanupErr != nil {
+					return ApplyResult{}, cleanupErr
+				}
+			}
+			healthReceipt, receiptErr := u.signHealthReceipt(request, releaseDigest, journal.StartedAt, completedAt, observations, "healthy")
+			if receiptErr != nil {
+				return ApplyResult{}, receiptErr
+			}
+			healthBytes, receiptErr := healthReceipt.CanonicalBytes()
+			if receiptErr != nil {
+				return ApplyResult{}, receiptErr
+			}
+			materialization, receiptErr := computerevent.NewSignedReceipt("MaterializationReceipt", "choir-updater", map[string]any{
+				"computer_id": request.ComputerID, "realization_id": request.RealizationID,
+				"accepted_or_rollback_event_head": request.AcceptedEventHead,
+				"prior_release_digest":            journal.PriorReleaseDigest, "resulting_release_digest": releaseDigest,
+				"health_receipt_digest": computerevent.DigestBytes(healthBytes), "outcome": "applied",
+				"request_commitment": request.RequestCommitment,
+			}, []computerevent.SigningKey{u.signingKey}, completedAt)
+			if receiptErr != nil {
+				return ApplyResult{}, receiptErr
+			}
+			journal.Result = ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: journal.PriorReleaseDigest, MaterializationReceipt: materialization, HealthReceipt: healthReceipt, Outcome: "applied"}
+			journal.Phase = "completed"
+			if err := writeJournal(journalPath, journal); err != nil {
+				return ApplyResult{}, err
+			}
+			return journal.Result, nil
+		}
+		journal.Phase = "recovering"
+		journal.Failure = probeErr.Error()
+		if err := writeJournal(journalPath, journal); err != nil {
+			return ApplyResult{}, err
+		}
+	}
+	if journal.Phase != "recovering" {
+		return ApplyResult{}, fmt.Errorf("updater: invalid operation journal phase %q", journal.Phase)
+	}
+	failure := errors.New(journal.Failure)
 	completedAt := u.now().UTC().Truncate(time.Microsecond)
-	if applyErr != nil {
-		recoveryReceipt, recoveryErr := u.restorePrior(ctx, request, priorTarget, priorDigest, releaseDigest, applyErr, completedAt)
-		result := ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: priorDigest, Outcome: "failed", RecoveryReceipt: recoveryReceipt}
-		if recoveryErr != nil {
-			return result, errors.Join(applyErr, recoveryErr)
+	recoveryReceipt, recoveryErr := u.restorePrior(ctx, request, journal.PriorReleaseTarget, journal.PriorReleaseDigest, releaseDigest, failure, completedAt)
+	result := ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: journal.PriorReleaseDigest, Outcome: "failed", RecoveryReceipt: recoveryReceipt}
+	if recoveryErr != nil {
+		return result, errors.Join(failure, recoveryErr)
+	}
+	if cleaner, ok := u.service.(restartHandoffCleaner); ok {
+		if cleanupErr := cleaner.CleanupRestartHandoff(); cleanupErr != nil {
+			return result, cleanupErr
 		}
-		if err := writeJournal(journalPath, operationJournal{RequestCommitment: request.RequestCommitment, Result: result}); err != nil {
-			return result, err
-		}
-		return result, applyErr
 	}
-	healthReceipt, err := u.signHealthReceipt(request, releaseDigest, startedAt, completedAt, observations, "healthy")
-	if err != nil {
-		return ApplyResult{}, err
+	journal.Result = result
+	journal.Phase = "completed"
+	if err := writeJournal(journalPath, journal); err != nil {
+		return result, err
 	}
-	healthBytes, err := healthReceipt.CanonicalBytes()
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	materialization, err := computerevent.NewSignedReceipt("MaterializationReceipt", "choir-updater", map[string]any{
-		"computer_id": request.ComputerID, "realization_id": request.RealizationID,
-		"accepted_or_rollback_event_head": request.AcceptedEventHead,
-		"prior_release_digest":            priorDigest, "resulting_release_digest": releaseDigest,
-		"health_receipt_digest": computerevent.DigestBytes(healthBytes), "outcome": "applied",
-		"request_commitment": request.RequestCommitment,
-	}, []computerevent.SigningKey{u.signingKey}, completedAt)
-	if err != nil {
-		return ApplyResult{}, err
-	}
-	result := ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: priorDigest, MaterializationReceipt: materialization, HealthReceipt: healthReceipt, Outcome: "applied"}
-	if err := writeJournal(journalPath, operationJournal{RequestCommitment: request.RequestCommitment, Result: result}); err != nil {
-		return ApplyResult{}, err
-	}
-	return result, nil
+	return result, failure
 }
 
 func (u *Updater) trustedSourceDir(source, releaseDigest string) (string, error) {
@@ -544,8 +603,14 @@ func (u *Updater) signHealthReceipt(request ApplyRequest, releaseDigest string, 
 }
 
 type operationJournal struct {
-	RequestCommitment string      `json:"request_commitment"`
-	Result            ApplyResult `json:"result"`
+	RequestCommitment   string      `json:"request_commitment"`
+	Phase               string      `json:"phase"`
+	PriorReleaseDigest  string      `json:"prior_release_digest,omitempty"`
+	PriorReleaseTarget  string      `json:"prior_release_target,omitempty"`
+	TargetReleaseDigest string      `json:"target_release_digest"`
+	StartedAt           time.Time   `json:"started_at"`
+	Failure             string      `json:"failure,omitempty"`
+	Result              ApplyResult `json:"result"`
 }
 
 func readJournal(path string) (operationJournal, bool, error) {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,15 +30,16 @@ type selfDevelopmentStartRequest struct {
 }
 
 type selfDevelopmentDecisionRequest struct {
-	Decision                         string `json:"decision"`
-	IdempotencyKey                   string `json:"idempotency_key"`
-	BundleDigest                     string `json:"bundle_digest"`
-	VerifierRef                      string `json:"verifier_ref"`
-	Reason                           string `json:"reason,omitempty"`
-	ExpectedDesiredEventHead         string `json:"expected_desired_event_head"`
-	ExpectedEffectiveEventHead       string `json:"expected_effective_event_head"`
-	ExpectedDesiredStateCommitment   string `json:"expected_desired_state_commitment"`
-	ExpectedEffectiveStateCommitment string `json:"expected_effective_state_commitment"`
+	Decision                         string                 `json:"decision"`
+	IdempotencyKey                   string                 `json:"idempotency_key"`
+	BundleDigest                     string                 `json:"bundle_digest"`
+	VerifierRef                      string                 `json:"verifier_ref"`
+	Reason                           string                 `json:"reason,omitempty"`
+	ExpectedDesiredEventHead         string                 `json:"expected_desired_event_head"`
+	ExpectedEffectiveEventHead       string                 `json:"expected_effective_event_head"`
+	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment"`
+	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment"`
+	ModeReceipt                      *computerevent.Receipt `json:"mode_receipt,omitempty"`
 }
 
 type selfDevelopmentGenesisRequest struct {
@@ -467,20 +469,19 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "complete approve or reject decision binding is required"})
 		return
 	}
+	if request.Decision == "approve" || request.ModeReceipt != nil {
+		if err := h.verifyConsumedModeReceipt(request.ModeReceipt, operationID, request); err != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+			return
+		}
+	}
 	operation, err := h.rt.selfdevOperations.Get(r.Context(), computerID, operationID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "self-development operation not found"})
 		return
 	}
-	head, err := h.rt.store.Head(r.Context(), computerID)
-	if err != nil || head == nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "computer event head unavailable"})
-		return
-	}
-	if operation.BundleDigest != request.BundleDigest || !selfDevelopmentContainsString(operation.VerifierRefs, request.VerifierRef) ||
-		head.DesiredEventHead != request.ExpectedDesiredEventHead || head.EffectiveEventHead != request.ExpectedEffectiveEventHead ||
-		head.DesiredStateCommitment != request.ExpectedDesiredStateCommitment || head.EffectiveStateCommitment != request.ExpectedEffectiveStateCommitment {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "decision binding does not match current frozen operation"})
+	if operation.BundleDigest != request.BundleDigest || !selfDevelopmentContainsString(operation.VerifierRefs, request.VerifierRef) {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "decision binding does not match frozen operation"})
 		return
 	}
 	requestBytes, err := computerevent.CanonicalJSON(request)
@@ -495,22 +496,52 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return
 	}
+	nextState := selfdev.StateRejected
+	expectedKind := computerevent.EventEffectRejected
+	if request.Decision == "approve" {
+		nextState = selfdev.StateAccepted
+		expectedKind = computerevent.EventEffectAccepted
+	}
+	if operation.State == nextState && found {
+		eventDigest, digestErr := event.Digest()
+		if digestErr == nil && operation.DecisionEvent == eventDigest && event.DecisionRef == decisionRef {
+			writeAPIJSON(w, http.StatusOK, operation)
+			return
+		}
+	}
+	if operation.State != selfdev.StateAwaitingApproval {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "self-development operation is not awaiting approval"})
+		return
+	}
+	expectedCanonicalHead := ""
+	if !found {
+		head, headErr := h.rt.store.Head(r.Context(), computerID)
+		if headErr != nil || head == nil || head.DesiredEventHead != request.ExpectedDesiredEventHead ||
+			head.EffectiveEventHead != request.ExpectedEffectiveEventHead ||
+			head.DesiredStateCommitment != request.ExpectedDesiredStateCommitment ||
+			head.EffectiveStateCommitment != request.ExpectedEffectiveStateCommitment {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "decision head binding changed"})
+			return
+		}
+		expectedCanonicalHead = head.CanonicalEventHead
+	}
 	if !found {
 		eventID, eventErr := computerevent.NewEventID()
 		if eventErr != nil {
 			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to create decision event"})
 			return
 		}
-		kind := computerevent.EventEffectRejected
-		if request.Decision == "approve" {
-			kind = computerevent.EventEffectAccepted
-		}
 		event = computerevent.Event{
 			SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
-			EventKind: kind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: eventIdempotency,
+			EventKind: expectedKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: eventIdempotency,
 			RequestCommitment: computerevent.ZeroHead, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
+			PreviousHead: expectedCanonicalHead,
 			ActorProfile: agentprofile.Super, AuthorityRef: "external-owner:" + ownerID, PrivacyClass: "owner",
-			PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: operation.BundleDigest, DecisionRef: decisionRef,
+			ExpectedDesiredEventHead: request.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: request.ExpectedEffectiveEventHead,
+			ExpectedDesiredStateCommitment:   request.ExpectedDesiredStateCommitment,
+			ExpectedEffectiveStateCommitment: request.ExpectedEffectiveStateCommitment,
+			RequireExpectedHead:              true,
+			PayloadCommitment:                computerevent.ZeroHead, ProposedEffectRef: operation.BundleDigest, DecisionRef: decisionRef,
 			VerifierRefs: []string{request.VerifierRef}, ReducerVersion: computerevent.ReducerVersionV1,
 		}
 		input := computerevent.TransitionInput{}
@@ -539,30 +570,28 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		}
 	}
 	eventDigest, err := event.Digest()
-	if err != nil || event.DecisionRef != decisionRef || event.ProposedEffectRef != operation.BundleDigest {
+	if err != nil || event.EventKind != expectedKind || event.DecisionRef != decisionRef || event.ProposedEffectRef != operation.BundleDigest {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "durable decision event binding mismatch"})
 		return
 	}
-	nextState := selfdev.StateRejected
-	if request.Decision == "approve" {
-		nextState = selfdev.StateAccepted
-	}
-	if operation.State == nextState && operation.DecisionEvent == eventDigest {
-		writeAPIJSON(w, http.StatusOK, operation)
-		return
-	}
-	if operation.State != selfdev.StateAwaitingApproval {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "self-development operation is not awaiting approval"})
-		return
-	}
-	head, err = h.rt.store.Head(r.Context(), computerID)
+	head, err := h.rt.store.Head(r.Context(), computerID)
 	if err != nil || head == nil {
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "decision head projection unavailable"})
 		return
 	}
+	modeReceiptDigest := ""
+	if request.ModeReceipt != nil {
+		modeBytes, modeErr := request.ModeReceipt.CanonicalBytes()
+		if modeErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "mode receipt encoding failed"})
+			return
+		}
+		modeReceiptDigest = computerevent.DigestBytes(modeBytes)
+	}
 	operation, err = h.rt.selfdevOperations.Transition(r.Context(), computerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
-		next.DecisionActor, next.DecisionEvent = ownerID, eventDigest
+		next.DecisionEvent = eventDigest
 		next.DesiredHead, next.EffectiveHead = head.DesiredEventHead, head.EffectiveEventHead
+		next.ModeReceipt = modeReceiptDigest
 		return nil
 	})
 	if err != nil {
@@ -573,6 +602,31 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		go h.rt.reconcileSelfDevelopmentMaterialization(context.Background())
 	}
 	writeAPIJSON(w, http.StatusOK, operation)
+}
+
+func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, operationID string, request selfDevelopmentDecisionRequest) error {
+	if receipt == nil || h.rt == nil || h.rt.selfdevControl == nil || receipt.ReceiptKind != "ModeReceipt" ||
+		receipt.Verify(h.rt.selfdevControl.KeyResolver()) != nil {
+		return fmt.Errorf("valid consumed accept_once mode receipt is required")
+	}
+	issuedAt, err := time.Parse(time.RFC3339Nano, receipt.IssuedAt)
+	if err != nil || time.Since(issuedAt) > 10*time.Minute || issuedAt.After(time.Now().UTC()) {
+		return fmt.Errorf("fresh consumed accept_once mode receipt is required")
+	}
+	field := func(name string) string {
+		value, _ := receipt.KindFields[name].(string)
+		return value
+	}
+	if field("old_mode") != "accept_once" || field("new_mode") != "off" ||
+		field("consumed_operation_id") != operationID || field("consumed_bundle_digest") != request.BundleDigest ||
+		field("consumed_desired_event_head") != request.ExpectedDesiredEventHead ||
+		field("consumed_effective_event_head") != request.ExpectedEffectiveEventHead ||
+		field("consumed_desired_state_commitment") != request.ExpectedDesiredStateCommitment ||
+		field("consumed_effective_state_commitment") != request.ExpectedEffectiveStateCommitment ||
+		!strings.HasSuffix(field("idempotency_key"), ":"+request.IdempotencyKey) {
+		return fmt.Errorf("consumed accept_once mode receipt binding mismatch")
+	}
+	return nil
 }
 
 func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev.Operation, ownerID, prompt string) (selfdev.Operation, error) {
@@ -765,4 +819,32 @@ func (h *APIHandler) readKernelCapabilityReceipt(w http.ResponseWriter, r *http.
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, report)
+}
+
+func (h *APIHandler) HandleSelfDevelopmentRestartHandoff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost || r.Header.Get("X-Internal-Updater") != "true" || !requestIsLoopback(r) {
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "not found"})
+		return
+	}
+	if h.rt == nil || h.rt.selfdevControl == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "restart credential authority unavailable"})
+		return
+	}
+	path := strings.TrimSpace(os.Getenv("CHOIR_RESTART_CREDENTIAL_HANDOFF"))
+	if path == "" {
+		path = "/run/choir-bootstrap/restart-capability"
+	}
+	if err := h.rt.selfdevControl.WriteRestartHandoff(r.Context(), path); err != nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "restart credential handoff failed"})
+		return
+	}
+	writeAPIJSON(w, http.StatusNoContent, nil)
+}
+func requestIsLoopback(request *http.Request) bool {
+	host, _, err := net.SplitHostPort(request.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	address := net.ParseIP(host)
+	return address != nil && address.IsLoopback()
 }

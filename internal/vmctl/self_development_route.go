@@ -36,7 +36,9 @@ func (a *RouteAuthority) ApplySelfDevelopmentProjection(ctx context.Context, reg
 	}
 	registry.mu.RLock()
 	ownership := registry.ownerships[ownershipKey(ownerID, desktopID)]
-	bound := ownership != nil && ownership.UserID == ownerID && normalizeDesktopID(ownership.DesktopID) == desktopID && ownership.VMID == projection.ComputerID && ownership.State != VMStateStopping && ownership.State != VMStateStopped
+	bound := ownership != nil && ownership.UserID == ownerID && normalizeDesktopID(ownership.DesktopID) == desktopID &&
+		stableComputerID(ownership.UserID, ownership.DesktopID, ownership.ComputerID) == projection.ComputerID &&
+		ownership.State != VMStateStopping && ownership.State != VMStateStopped
 	registry.mu.RUnlock()
 	if !bound {
 		return RouteResolution{}, fmt.Errorf("vmctl self-development projection: presenter does not own the routed computer")

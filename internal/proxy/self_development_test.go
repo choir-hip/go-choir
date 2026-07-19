@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 func TestSelfDevelopmentModeRequiresExactComputerScope(t *testing.T) {
@@ -77,5 +80,31 @@ func TestKernelCapabilityReceiptRequiresReadScopeRoute(t *testing.T) {
 	}
 	if _, ok := parseSelfDevelopmentTarget("/api/computers/computer-a/self-development/kernel-capabilities", http.MethodPost); ok {
 		t.Fatal("kernel capability mutation route was accepted")
+	}
+}
+
+func TestConsumedModeReceiptAuthorizesOnlyExactCrashedDecisionRetry(t *testing.T) {
+	digest := func(fill byte) string { return strings.Repeat(string(fill), 64) }
+	decision := proxiedSelfDevelopmentDecision{
+		Decision: "approve", IdempotencyKey: "decision-1", BundleDigest: digest('a'),
+		ExpectedDesiredEventHead: digest('b'), ExpectedEffectiveEventHead: digest('c'),
+		ExpectedDesiredStateCommitment: digest('d'), ExpectedEffectiveStateCommitment: digest('e'),
+	}
+	receipt := &computerevent.Receipt{ReceiptKind: "ModeReceipt", KindFields: map[string]any{
+		"old_mode": "accept_once", "new_mode": "off", "consumed_operation_id": "operation-1",
+		"consumed_bundle_digest":              decision.BundleDigest,
+		"consumed_desired_event_head":         decision.ExpectedDesiredEventHead,
+		"consumed_effective_event_head":       decision.ExpectedEffectiveEventHead,
+		"consumed_desired_state_commitment":   decision.ExpectedDesiredStateCommitment,
+		"consumed_effective_state_commitment": decision.ExpectedEffectiveStateCommitment,
+		"idempotency_key":                     "accept-once-consumed:operation-1:7:decision-1",
+	}}
+	if !consumedModeReceiptMatches(receipt, "operation-1", decision) {
+		t.Fatal("exact consumed decision receipt was refused")
+	}
+	changed := decision
+	changed.ExpectedEffectiveEventHead = digest('f')
+	if consumedModeReceiptMatches(receipt, "operation-1", changed) {
+		t.Fatal("consumed receipt authorized a changed decision")
 	}
 }

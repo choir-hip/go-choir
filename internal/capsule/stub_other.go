@@ -45,6 +45,9 @@ func (e *Executor) ExtractGranted(string, string) ([]FileChange, error) {
 func (e *Executor) ResolveGrantedCapsuleID(string, string) (string, error) {
 	return "", stubErr("resolve")
 }
+func (e *Executor) ResolveGrantedSourceSnapshotDigest(string, string) (string, error) {
+	return "", stubErr("resolve")
+}
 func (e *Executor) StageGrantedRelease(string, string, string) ([]FrozenReleaseFile, string, error) {
 	return nil, "", stubErr("stage")
 }

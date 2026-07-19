@@ -195,6 +195,9 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 	return vmmanager.VMConfig{
 		VMID:                       cfg.VMID,
+		ComputerID:                 cfg.ComputerID,
+		RealizationID:              cfg.RealizationID,
+		Epoch:                      cfg.Epoch,
 		KernelImagePath:            cfg.KernelImagePath,
 		InitrdPath:                 cfg.InitrdPath,
 		RootfsPath:                 cfg.RootfsPath,

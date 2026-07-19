@@ -161,18 +161,27 @@ func Run() {
 		log.Printf("sandbox: guest-local capsule authority configured")
 	}
 	if credentialPath := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_CREDENTIAL_FILE")); credentialPath != "" {
-		encodedEnvelope, err := consumeComputerCredentialEnvelope(credentialPath)
-		if err != nil {
-			log.Fatalf("sandbox: consume computer event credential file: %v", err)
-		}
 		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
 		realizationID := strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID"))
 		platformURL := strings.TrimSpace(os.Getenv("CHOIR_PLATFORM_URL"))
 		bootstrapCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		credentials, err := selfdev.ExchangeGuestCredential(bootstrapCtx, platformURL, encodedEnvelope, computerID, realizationID)
+		var credentials *selfdev.GuestCredentials
+		var err error
+		if _, statErr := os.Stat(credentialPath); statErr == nil {
+			var encodedEnvelope string
+			encodedEnvelope, err = consumeComputerCredentialEnvelope(credentialPath)
+			if err == nil {
+				credentials, err = selfdev.ExchangeGuestCredential(bootstrapCtx, platformURL, encodedEnvelope, computerID, realizationID)
+			}
+		} else if os.IsNotExist(statErr) {
+			handoffPath := strings.TrimSpace(os.Getenv("CHOIR_RESTART_CREDENTIAL_HANDOFF"))
+			credentials, err = selfdev.RestoreGuestCredentials(handoffPath, platformURL, computerID)
+		} else {
+			err = statErr
+		}
 		if err != nil {
 			cancel()
-			log.Fatalf("sandbox: exchange computer event credential: %v", err)
+			log.Fatalf("sandbox: acquire computer event credential: %v", err)
 		}
 		eventClient, err := computerevent.NewGuestHTTPClient(platformURL, credentials.Capability)
 		if err != nil {
