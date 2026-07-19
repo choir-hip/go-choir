@@ -183,10 +183,8 @@ Browser or Playwright acceptance may use public authenticated product APIs such 
 - `/api/prompt-bar/submissions/{id}`
 - `/api/texture/*`
 - `/api/trace/*`
-- `/api/app-change-packages/*`
-- `/api/computers/*/source-lineage`
-- `/api/computers/*/adoptions`
-- `/api/adoptions/*`
+- `/api/current-computer`
+- `/api/computers/*/self-development/*`
 - `/api/continuations/*` (transitional H007/H008 residue; prefer
   trajectory/work-item product evidence when available and do not add new
   continuation-shaped acceptance)
@@ -206,25 +204,20 @@ The verifier must observe product/control evidence. It must not manually seed su
 
 For long-running Definition mission proof (`/goal <doc>.md`), the mission's own
 evidence ledger and completion semantics in `skills/definition/SKILL.md` govern
-what counts as settled. Synthesize a durable `RunAcceptanceRecord` from that
-ledger when a mission reaches `complete` or a clean handoff state. For
-self-development proof outside a Definition run, synthesize a record from
-existing evidence:
+what counts as settled. `RunAcceptanceRecord` is a historical evidence
+projection for older runs; it is not self-development authority.
 
-```text
-POST /api/run-acceptances/synthesize
-```
-
-Required self-development evidence includes ComputerID; source/deploy identity;
-canonical, desired, and effective event heads; trajectory and capsule refs;
-bundle/verifier/decision/materialization/checkpoint/route receipts; role and
+The active self-development Definition requires ComputerID; source/deploy
+identity; canonical, desired, and effective event heads; trajectory and capsule
+refs; bundle/verifier/decision/materialization/checkpoint/route receipts;
 authority refusals; restart/reconstruction; rejection; rollback; mutation and
-heresy deltas; and residual risks. Acceptance names match evidence class.
+heresy deltas; and residual risks.
 
-Do not claim deployed self-development from AppChangePackage/AppAdoption,
-RunAcceptance, worker/candidate VM, local tests, a verifier statement,
-checkpoint publication, or route transition alone. Only the active
-Definition's complete deployed product path and G3 receipt can settle it.
+Do not claim deployed self-development from a deleted
+AppChangePackage/AppAdoption path, RunAcceptance, worker/candidate VM, local
+tests, a verifier statement, checkpoint publication, or route transition alone.
+Only the active Definition's complete deployed product path and G3 receipt can
+settle it.
 
 `continuation-level` is transitional H008/H014 residue: the durable-actor contract re-points this
 acceptance level at trajectory/work-item settlement evidence. No deleted

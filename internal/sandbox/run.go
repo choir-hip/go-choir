@@ -162,6 +162,8 @@ func Run() {
 		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
 		realizationID := strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID"))
 		platformURL := strings.TrimSpace(os.Getenv("CHOIR_PLATFORM_URL"))
+		restartHandoffPath := strings.TrimSpace(os.Getenv("CHOIR_RESTART_CREDENTIAL_HANDOFF"))
+		recoveryHandoffPath := strings.TrimSpace(os.Getenv("CHOIR_REVOCATION_CREDENTIAL_HANDOFF"))
 		bootstrapCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		var credentials *selfdev.GuestCredentials
 		var err error
@@ -172,14 +174,24 @@ func Run() {
 				credentials, err = selfdev.ExchangeGuestCredential(bootstrapCtx, platformURL, encodedEnvelope, computerID, realizationID)
 			}
 		} else if os.IsNotExist(statErr) {
-			handoffPath := strings.TrimSpace(os.Getenv("CHOIR_RESTART_CREDENTIAL_HANDOFF"))
-			credentials, err = selfdev.RestoreGuestCredentials(handoffPath, platformURL, computerID, realizationID)
+			if _, recoveryErr := os.Stat(recoveryHandoffPath); recoveryErr == nil {
+				credentials, err = selfdev.RestoreGuestCredentials(recoveryHandoffPath, platformURL, computerID, realizationID)
+			} else {
+				credentials, err = selfdev.RestoreGuestCredentials(restartHandoffPath, platformURL, computerID, realizationID)
+			}
 		} else {
 			err = statErr
 		}
 		if err != nil {
 			cancel()
 			log.Fatalf("sandbox: acquire computer event credential: %v", err)
+		}
+		if err = credentials.ConfigureRecoveryHandoff(bootstrapCtx, recoveryHandoffPath); err == nil {
+			_, err = credentials.RecoverPostRevocationCapability(bootstrapCtx)
+		}
+		if err != nil {
+			cancel()
+			log.Fatalf("sandbox: recover computer event credential: %v", err)
 		}
 		eventClient, err := computerevent.NewGuestHTTPClient(platformURL, credentials.Capability)
 		if err != nil {
@@ -236,12 +248,14 @@ func Run() {
 					err = appendErr
 					break
 				}
-				credentials.AcknowledgePendingLifecycleReceipt(lifecycleReceipt.ReceiptID)
 				if actionField == "credential_envelope_consumed" {
-					if activationErr := credentials.ActivatePostRevocationCapability(); activationErr != nil {
-						err = activationErr
+					if transitionErr := credentials.CompletePostRevocation(lifecycleReceipt.ReceiptID); transitionErr != nil {
+						err = transitionErr
 						break
 					}
+				} else if acknowledgeErr := credentials.AcknowledgePendingLifecycleReceipt(lifecycleReceipt.ReceiptID); acknowledgeErr != nil {
+					err = acknowledgeErr
+					break
 				}
 			}
 		}

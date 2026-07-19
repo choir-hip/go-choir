@@ -1,47 +1,42 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-07-10
-**Changelog:** Reconciled the App Catalog and Apps & Changes/Features entries
-with the shipped `features` app (frontend/src/lib/FeaturesApp.svelte) after
-the 2026-05-28/31 frontend redesign cutover, the 2026-06-11 owner-approval
-gate (commit `77f65651`), and the freshness CAS guard; moved unshipped
-design intentions (Uninstall/Disable/portfolio review/trace evidence/Try-preview)
-to a clearly labeled "Design intent, not shipped" section. The superseded
-portfolio and promotion design sources remain available in Git history.
-**Baseline checked:** `choir.news` primary-domain cutover, WebAuthn hard reset,
-VM retention/pruning policy hardening, deploy-speed, and disk-pressure work.
+**Last updated:** 2026-07-19
+**Changelog:** Reconciled the executable app inventory and self-development
+authority after the clean cutover. Features/AppChangePackage/AppAdoption,
+Candidate Review, and worker/candidate-machine product paths are deleted;
+historical design material remains in Git history.
+**Baseline checked:** source candidate only; fresh staging acceptance remains
+gated by the active self-development Definition.
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
-and known gaps. Keep it updated when platform-level OS, shell, routing, app, VM
-lifecycle, promotion, or public/default computer behavior changes.
+and known gaps. Keep it updated when platform-level OS, shell, routing, app,
+computer lifecycle, self-development, or public/default behavior changes.
 
 ## Executable App Inventory
 
 `frontend/src/lib/apps/registry.ts` is the executable inventory and wins over
-this narrative if they drift. At this revision it registers 20 surfaces:
+this narrative if they drift. At this revision it registers 18 surfaces:
 
 ```text
 Files, Web Lens, Email, Compute Monitor, Pulse, Texture, Universal Wire,
-Podcast, Image, Audio, Video, PDF, EPUB, Slides, Calendar, Features,
-Candidate Review, Source, Super Console, Settings
+Podcast, Image, Audio, Video, PDF, EPUB, Slides, Calendar, Source,
+Super Console, Settings
 ```
 
 Registration means code-live surface, not feature completeness or semantic
-endorsement of its visible name. In particular, `Universal Wire` is retained
-implementation vocabulary pending the World Wire rename; Candidate Review is a
-read-only, non-deployed review surface; Source is the hidden reader/viewer path;
-and Features activation is an adoption/lineage protocol rather than a served
-runtime/UI cutover. Detailed rows below describe selected high-impact surfaces;
-absence of a row does not mean absence from the registry.
+endorsement of its visible name. `Universal Wire` is retained implementation
+vocabulary pending the World Wire rename; Source is the hidden reader/viewer
+path. Detailed rows below describe selected high-impact surfaces; absence of a
+row does not mean absence from the registry.
 
 User computers are allowed to diverge. For now, this ledger describes the common
 platform/default state that new and ordinary user computers inherit or project
 through. Later, each divergent computer should have its own product-visible state
-ledger derived from the same schema: app catalog, source/build refs, package
-adoptions, local app state, artifact digests, verifier evidence, and rollback
-refs.
+ledger derived from the same schema: app catalog, source/build refs, accepted
+event/checkpoint refs, local app state, artifact digests, verifier evidence,
+and rollback refs.
 
 ## Update Discipline
 
@@ -237,13 +232,12 @@ Known gaps:
 | App | Current state | Known gaps / next realism axis |
 | --- | --- | --- |
 | **Files** | First-class file browser with navigation, upload, text-to-Texture open, known media routing to Image/Audio/Video/PDF/EPUB apps, and live file-change notifications for the current directory. Unknown binaries still download. | Keep proving that PDF/EPUB/media open in apps instead of downloading. Add richer previews only through app boundaries and broaden live file events into richer change history. |
-| **Texture** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Source citation is tri-state: every source entity is cited (`source_ref` in the body), toolbar-only (a Style.texture style source), or marked-unused (`mark_source_unused` with rationale). The former `source_embed` block node is removed; all citations are `source_ref` with `display_mode` (`numbered_ref` \| `expanded_ref`). There is no `WireTexture` prompt control-flow branch; article-format guidance is unconditional, driven by the default Style.texture. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, candidate demo videos, interactive graphics, and nested Textures. | Continue version-advancement stability hardening. Add durable snippet/embed records, Pretext-powered responsive reading/layout, expansion into owning app windows, and video-first candidate approval reports without mixing worker patches directly into canonical text. |
+| **Texture** | Primary appagent and versioned document editor. Owns canonical document versions and prompt-created writing surfaces. Source citation is tri-state: every source entity is cited (`source_ref` in the body), toolbar-only (a Style.texture style source), or marked-unused (`mark_source_unused` with rationale). The former `source_embed` block node is removed; all citations are `source_ref` with `display_mode` (`numbered_ref` \| `expanded_ref`). There is no `WireTexture` prompt control-flow branch; article-format guidance is unconditional, driven by the default Style.texture. Target direction is a multimedia computational-essay surface with typed snippets for sources, media, evidence, proposal demo videos, interactive graphics, and nested Textures. | Keep strengthening citation integrity, typed media/evidence blocks, model-visible rendering, and product-path verification without moving semantic authority out of Texture. |
 | **Trace Evidence** | Trace remains as structured evidence, unified logs, run bundles, acceptance records, and diagnosis artifacts. The visual Trace app is no longer a product direction and should be unshipped rather than redesigned. | Preserve machine-readable evidence for zot, Texture reports, run acceptance, and operator diagnosis. Do not keep an emergency human Trace UI. |
 | **Web Lens** | Explicit live/original web inspection surface. It still carries legacy `browser` implementation IDs, data attributes, session tables, and iframe behavior, but the product object is Web Lens, not a general manual Browser app. Durable web-derived sources should default to Source Viewer/reader artifacts before live/original inspection. | Rename or quarantine browser-session implementation residue over time. Backend control/screenshot support remains a distinct substrate frontier for Web Lens, source acquisition, and capsule-proposal inspection; it must not become a bypass around product APIs or the primary source-gathering workflow. |
 | **Super Console** | Target replacement for retired Terminal: singleton repair app inside each user computer, backed by out-of-process `zot` running separately from the runtime MAS. It reads unified logs/source/files/process state, can run command-actuation such as `!` commands, patches/rebuilds/restarts locally, verifies, and writes markdown diagnosis reports that Texture can open. | Do not expose retired raw Terminal as a normal app. Do not let Super Console become the main scripting/product surface or spawn multiple retired chat-agent sessions. It is repair mode when Texture/MAS malfunctions. |
-| **Settings** | Account, runtime health, server-backed theme presets/editing, and low-level promotion/adoption evidence. Promotion queue refresh UI has been removed in favor of live product events. | Theme system needs taste/design hardening. Settings should not be the main owner-facing install surface; Features owns ordinary change discovery and adoption. Runtime health still needs a true push source rather than opportunistic event refreshes. |
-| **Compute Monitor** | First-class app for the signed-in user's stable computer, realization health, app restore weight, and bounded recovery. Existing background/candidate-computer controls are obsolete residue, not a product direction. | Delete candidate/worker lifecycle surfaces in the active self-development cutover. Add event-backed computer status, trend history, app-owned process/resource accounting, conductor recovery intents, and stronger long-session regression proof without exposing raw VM identities. |
-| **Features** (`frontend/src/lib/FeaturesApp.svelte`, app id `features`) | Launcher-facing AppChangePackage catalog. **Import** creates an adoption for hard-coded target `primary` and starts recipient build/verification. **Activate** records owner approval then calls promote; Roll back/Roll forward call the corresponding protocol APIs. | "Activate" updates `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests, `RouteProfile`) with approval and freshness guards. Nothing in the ordinary personal-computer path consumes `RouteProfile` to switch routes, restart a process, or swap runtime/UI binaries. Treat active/rolled-back labels and current API promotion-level records as adoption/lineage evidence, not completed ComputerVersion promotion. Preview exists server-side but has no Features UI. |
+| **Settings** | Account, runtime health, and server-backed theme presets/editing. Deleted package/adoption promotion controls are not retained. | Theme system needs taste/design hardening. Runtime health still needs a true push source rather than opportunistic event refreshes. |
+| **Compute Monitor** | First-class app for the signed-in user's stable computer, realization health, app restore weight, and bounded recovery. It exposes no worker/candidate-machine classification or controls. | Add event-backed computer status, trend history, app-owned process/resource accounting, conductor recovery intents, and stronger long-session regression proof without exposing raw VM identities. |
 | **Podcast** | Working app-grade v0. It has library/search/recommendations, hidden advanced RSS import, feed detail, scrollable episode list, full player controls, speed/seek, and server-backed playback-position sync. | Treat as a regression/reference app, not the center of the next media mission. Continue improving subscription durability, played/unplayed state, conductor actions, and Texture radio continuity later. |
 | **Image** | First-class app with source resolution, title, fit/original, zoom controls, rotate left/right, reset, and image rendering. | Add pan/drag, touch/pinch behavior, folder gallery navigation, richer metadata, and persisted viewer state. |
 | **Audio** | First-class app with play/pause, 15s back, 30s forward, scrubber, speed, current/duration, native audio fallback, server-backed recents, and server-backed playback-position sync. | Add queue/playlist from Files, metadata, Media Session integration, transcript/Texture hook, and keyboard controls. |
@@ -251,51 +245,6 @@ Known gaps:
 | **PDF** | Real reader path using PDF.js: browser-fetchable PDFs render to canvas pages with actual page count, page navigation, zoom/fit width/fit page, text search, and server-backed recents. Files/prompt routes can open the PDF app. | Add thumbnails/outline, annotations, richer text selection, and server-side/import fallback for CORS-blocked remote PDFs. |
 | **EPUB** | Real reader path using EPUB archive parsing: browser-fetchable EPUBs parse container/package/spine, render chapters as safe text blocks, expose chapter selection, font/width/progress controls, search, server-backed recents, and server-backed reading-position sync. Extracted text still renders as a reader source. | Add richer XHTML formatting, EPUB nav/TOC semantics, bookmarks, image assets, server-side extraction, and Texture/transclusion handoff. |
 | **ContentViewer** | Legacy generic content surface still exists in code but is not the place to add media behavior. | Do not put new app work here. Retain only as fallback/dispatcher/inspector until it can be safely retired or narrowed. |
-
-## Features: design intent, not shipped
-
-The predecessor "Apps & Changes" app described capabilities and a removal
-model that were never carried into the shipped `features` app
-(`frontend/src/lib/FeaturesApp.svelte`) after the 2026-05-28/31 frontend
-redesign cutover. These remain real design intentions worth preserving, but
-none of the following ships today. Do not describe them as current product
-behavior.
-
-- **Uninstall / Disable removal model.** The pre-cutover design called for an
-  honest removal/recovery model: rollback-only labeling for changes without a
-  verified inverse source patch, Uninstall disabled without a verified
-  inverse source patch, Disable disabled without a declared feature
-  flag/capability toggle, and empty rollback-profile JSON not accepted as
-  evidence. Features today only ships **Roll back** / **Roll forward** against
-  a recorded rollback ref; there is no Uninstall or Disable action, declared
-  or stubbed, in the current UI or adoption API. Source-level
-  uninstall/disable semantics remain a real gap (see Near-Term Gaps item 9).
-- **Portfolio review panel.** The pre-cutover design aggregated multiple
-  experiment Changes into a portfolio view with report/benchmark coverage and
-  an accepted-promotion-level row per experiment. Features has no portfolio
-  aggregation view; it is a flat catalog list with a single detail pane.
-  Portfolio-style review (headline, plan view, check badges gating Approve,
-  restore-point timeline) remains target behavior, not shipped behavior.
-- **Trace integration.** The pre-cutover design intended the selected Change
-  to surface run-acceptance/evidence refs and expose evidence without a separate
-  visual retired Trace app. In the shipped Features app, this path is still a
-  compatibility stub and may return `"Trace UI is unshipped"` (retired) when a trace ref
-  exists. That behavior is a known bug-shaped gap: the visual retired Trace app is not a
-  product direction, and product-ready behavior should replace this stub with a
-  trace-evidence/provenance action and run-acceptance linkage.
-- **Try/preview flow.** The pre-cutover design described an internal-frame
-  preview of a candidate before installing. A preview endpoint already EXISTS
-  server-side at `/api/adoptions/{id}/preview/*` (requires a verified
-  recipient build), but the Features UI never calls it — there is no
-  Try-it-now button or preview frame. Wiring it remains unowned product work.
-- **Legacy adoption pointer mismatch.** The pre-cutover design implied that
-  Install/Activate changed what the computer actually served. Today “Activate”
-  only updates `ComputerSourceLineageRecord` (`ActiveSourceRef`, digests,
-  `RouteProfile`) with no route switch, process restart, or binary swap consuming
-  it. Those records are package/adoption residue, not self-development
-  candidates, accepted events, or route authority. The active self-development
-  Definition deletes their use as a promotion path; deleted portfolio/design
-  chains are not executable successors.
 
 ## App Boundary Rules
 
@@ -311,14 +260,14 @@ behavior.
 - Texture may embed snippets from other apps, but the full-control surface remains
   the owning app. Embedded snippets are durable artifact references and layout
   intent; they are not a reason to collapse Image, Audio, Video, Podcast, PDF,
-  EPUB, Trace Evidence, Features, or Web Lens back into a generic viewer.
+  EPUB, Trace Evidence, or Web Lens back into a generic viewer.
 - Each Texture snippet should expose an expansion target that opens the relevant
   app/window while preserving the reader's Texture position. Multi-window reading
   is a core affordance for sources, demos, media, nested Textures, and evidence.
-- Candidate coding work intended for human approval should be video-first when
-  visual or temporal behavior matters. The Texture approval packet should embed
-  the demo video if available, then link package/diff refs, verifier evidence,
-  Trace/run-acceptance refs, rollback path, risks, and follow-up requests.
+- Proposal implementation work intended for human approval should be video-first
+  when visual or temporal behavior matters. The Texture approval packet should
+  embed the demo video if available, then link bundle/diff refs, verifier
+  evidence, event/receipt refs, rollback path, risks, and follow-up requests.
 - Primary app chrome should expose the user's task first. Provenance, source
   hashes, debug ids, and raw manifests belong in secondary details or Trace,
   not at the top of ordinary app workflows.
@@ -427,12 +376,10 @@ Recent deployed platform proof for live multi-device computer sync:
   `desktop-after-app-content-sync.png`, and
   `mobile-driver-texture-content-sync.png`.
 
-Recent deployed platform proof for Apps & Changes, Texture reports, and benchmark
-evidence (historical: this proof predates the 2026-05-28/31 frontend redesign
-cutover that replaced "Apps & Changes" with the `features` app described
-above; the underlying adoption/promotion product APIs and evidence model are
-still in active use by Features, but the "Apps & Changes" UI and its
-portfolio review panel no longer ship):
+Historical deployed proof for the retired Apps & Changes/package-adoption
+surface follows only as provenance. The clean self-development cutover deleted
+that UI and its package/adoption authority; these receipts do not describe a
+current product path:
 
 - behavior commits:
   `e0a8f76954cb01a983c6d980b3e558fae45e06a0`,
@@ -707,7 +654,6 @@ The highest-gradient UX gaps are:
    live thumbnails, and configurable Shelf placement.
 8. Capsule proposal review, verification, and scoped acceptance should become
    contextual product surfaces without exposing VM or route identity.
-9. Features needs honest source-level uninstall/disable capability records,
-   non-Chiron accepted-record loading for package sharing, and a Try-it-now flow
-   wired to the existing preview endpoint (M7). Package previews and adoption
-   records are non-authorizing and do not become self-development promotion.
+9. Self-development status, evidence, decision, and rollback should gain
+   contextual owner UI only after the public CLI/API loop passes deployed G3;
+   no deleted package/adoption or candidate-machine surface may be revived.

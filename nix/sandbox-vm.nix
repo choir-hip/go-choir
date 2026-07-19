@@ -297,14 +297,15 @@ EOF
     '';
   };
 
-  users.groups.choir-signers = {};
+  users.groups.choir-guest-signer = {};
+  users.groups.choir-verifier-signer = {};
   users.users.choir-guest-signer = {
     isSystemUser = true;
-    group = "choir-signers";
+    group = "choir-guest-signer";
   };
   users.users.choir-verifier-signer = {
     isSystemUser = true;
-    group = "choir-signers";
+    group = "choir-verifier-signer";
   };
 
   systemd.tmpfiles.rules = [
@@ -313,9 +314,11 @@ EOF
     "d /run/choir-runtime-handoff 0700 root root -"
     "d /run/choir 0700 root root -"
     "d /mnt/persistent/choir-signers 0711 root root -"
-    "d /mnt/persistent/choir-signers/guest-core 0700 choir-guest-signer choir-signers -"
-    "d /mnt/persistent/choir-signers/verifier 0700 choir-verifier-signer choir-signers -"
-    "d /run/choir-signers 0770 root choir-signers -"
+    "d /mnt/persistent/choir-signers/guest-core 0700 choir-guest-signer choir-guest-signer -"
+    "d /mnt/persistent/choir-signers/verifier 0700 choir-verifier-signer choir-verifier-signer -"
+    "d /run/choir-signers 0711 root root -"
+    "d /run/choir-signers/guest-core 0750 choir-guest-signer choir-guest-signer -"
+    "d /run/choir-signers/verifier 0750 choir-verifier-signer choir-verifier-signer -"
   ];
 
   # Fixed privileged restart bridge. The updater may create only the trigger;
@@ -383,8 +386,8 @@ EOF
     serviceConfig = {
       Type = "simple";
       User = "choir-guest-signer";
-      Group = "choir-signers";
-      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode guest-core --socket /run/choir-signers/guest-core.sock --key /mnt/persistent/choir-signers/guest-core/key.ed25519 --state-root /mnt/persistent/choir-signers/guest-core/receipts";
+      Group = "choir-guest-signer";
+      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode guest-core --socket /run/choir-signers/guest-core/signer.sock --key /mnt/persistent/choir-signers/guest-core/key.ed25519 --state-root /mnt/persistent/choir-signers/guest-core/receipts";
       EnvironmentFile = [ "-/run/go-choir-updater.env" ];
       Restart = "on-failure";
       RestartSec = 1;
@@ -400,7 +403,7 @@ EOF
       ProtectHome = true;
       ProtectSystem = "strict";
       ProtectControlGroups = true;
-      ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" "/run/choir-signers" ];
+      ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" "/run/choir-signers/guest-core" ];
       InaccessiblePaths = [ "/mnt/persistent/choir-signers/verifier" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" ];
       LockPersonality = true;
@@ -417,8 +420,8 @@ EOF
     serviceConfig = {
       Type = "simple";
       User = "choir-verifier-signer";
-      Group = "choir-signers";
-      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode verifier-control --socket /run/choir-signers/verifier.sock --key /mnt/persistent/choir-signers/verifier/key.ed25519 --state-root /mnt/persistent/choir-signers/verifier/receipts";
+      Group = "choir-verifier-signer";
+      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode verifier-control --socket /run/choir-signers/verifier/signer.sock --key /mnt/persistent/choir-signers/verifier/key.ed25519 --state-root /mnt/persistent/choir-signers/verifier/receipts";
       EnvironmentFile = [ "-/run/go-choir-updater.env" ];
       Restart = "on-failure";
       RestartSec = 1;
@@ -434,7 +437,7 @@ EOF
       ProtectHome = true;
       ProtectSystem = "strict";
       ProtectControlGroups = true;
-      ReadWritePaths = [ "/mnt/persistent/choir-signers/verifier" "/run/choir-signers" ];
+      ReadWritePaths = [ "/mnt/persistent/choir-signers/verifier" "/run/choir-signers/verifier" ];
       InaccessiblePaths = [ "/mnt/persistent/choir-signers/guest-core" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" ];
       LockPersonality = true;
@@ -492,7 +495,7 @@ EOF
       Type = "simple";
       User = "root";
       Group = "root";
-      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --recovery-restart-request /run/choir-updater-control/recover --recovery-cleanup-request /run/choir-updater-control/cleanup --restart-prepare-url http://127.0.0.1:8085/internal/self-development/restart-handoff --health-url http://127.0.0.1:8085/health --signer-socket /run/choir-signers/guest-core.sock --verifier-signer-socket /run/choir-signers/verifier.sock --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
+      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --recovery-restart-request /run/choir-updater-control/recover --recovery-cleanup-request /run/choir-updater-control/cleanup --restart-prepare-url http://127.0.0.1:8085/internal/self-development/restart-handoff --health-url http://127.0.0.1:8085/health --signer-socket /run/choir-signers/guest-core/signer.sock --verifier-signer-socket /run/choir-signers/verifier/signer.sock --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
       Restart = "on-failure";
       RestartSec = 1;
       UMask = "0077";
@@ -529,6 +532,7 @@ EOF
     requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" ];
     environment = {
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
+      CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
       CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/restart-capability";
       CHOIR_PRIVACY_KEY_FILE = "/mnt/persistent/choir-credentials/privacy-key";
       CHOIR_KERNEL_CAPABILITY_PROBE = "/run/choir/kernel-capabilities.json";

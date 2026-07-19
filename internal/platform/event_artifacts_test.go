@@ -492,23 +492,49 @@ func TestCredentialEnvelopeExchangeRefusesReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first exchange refused: %v", err)
 	}
-	if result.Capability == "" || result.PostRevocationCapability == "" {
-		t.Fatal("credential exchange omitted revocation handoff capabilities")
+	if result.Capability == "" || result.PostRevocationCapability != "" {
+		t.Fatal("pre-genesis credential exchange returned an invalid capability set")
 	}
-	if len(result.PendingLifecycleReceipts) == 0 || result.PendingLifecycleReceipts[len(result.PendingLifecycleReceipts)-1].KindFields["action"] != "credential_envelope_consumed" {
-		t.Fatal("credential exchange omitted the canonical key-revocation input")
-	}
-	parts := strings.Split(result.PostRevocationCapability, ".")
-	var nextCapability ComputerCapability
-	payload, decodeErr := base64.RawURLEncoding.DecodeString(parts[0])
-	if len(parts) != 2 || decodeErr != nil || json.Unmarshal(payload, &nextCapability) != nil || nextCapability.RevocationEpoch != envelope.RevocationEpoch+1 {
-		t.Fatal("post-revocation capability does not bind the next event epoch")
+	if len(result.PendingLifecycleReceipts) != 0 {
+		t.Fatal("pre-genesis exchange scheduled a revocation event before an event head exists")
 	}
 	if replay, err := service.exchangeComputerCredentialEnvelope(context.Background(), raw); err == nil || replay.Capability != "" {
 		t.Fatalf("consumed envelope replay = %#v, %v; want refusal without bearer", replay, err)
 	}
 	if encoded := base64.RawURLEncoding.EncodeToString(raw); encoded == "" {
 		t.Fatal("canonical bootstrap encoding unavailable")
+	}
+}
+
+func TestCapabilityRenewalReturnsCurrentAndPostRevocationPair(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
+	result, err := service.RenewComputerCapability(context.Background(), "computer-renew")
+	if err != nil {
+		t.Fatal(err)
+	}
+	decode := func(token string) ComputerCapability {
+		t.Helper()
+		parts := strings.Split(token, ".")
+		if len(parts) != 2 {
+			t.Fatalf("malformed renewed capability")
+		}
+		payload, err := base64.RawURLEncoding.DecodeString(parts[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var capability ComputerCapability
+		if err := json.Unmarshal(payload, &capability); err != nil {
+			t.Fatal(err)
+		}
+		return capability
+	}
+	current := decode(result.Capability)
+	next := decode(result.PostRevocationCapability)
+	if current.ComputerID != "computer-renew" || next.ComputerID != current.ComputerID ||
+		current.RevocationEpoch != 0 || next.RevocationEpoch != 1 ||
+		current.ExpiresAt != next.ExpiresAt || current.Nonce == next.Nonce {
+		t.Fatalf("renewed capability pair does not fate-share correctly: current=%+v next=%+v", current, next)
 	}
 }
 

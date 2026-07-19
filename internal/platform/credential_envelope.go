@@ -173,13 +173,16 @@ func (s *Service) exchangeComputerCredentialEnvelope(ctx context.Context, encode
 	} else if found {
 		return CredentialExchangeResult{}, fmt.Errorf("credential envelope: already consumed")
 	}
-	postRevocationCapability, err := MintComputerCapability(ComputerCapability{
-		Version: 1, ComputerID: envelope.ComputerID,
-		Scopes: []string{"event:read", "event:pin", "event:append"}, ExpiresAt: envelope.ExpiresAt,
-		RevocationEpoch: envelope.RevocationEpoch + 1, Nonce: envelope.Nonce + ":revoked",
-	}, s.signingKey.Private)
-	if err != nil {
-		return CredentialExchangeResult{}, err
+	postRevocationCapability := ""
+	if head != nil {
+		postRevocationCapability, err = MintComputerCapability(ComputerCapability{
+			Version: 1, ComputerID: envelope.ComputerID,
+			Scopes: []string{"event:read", "event:pin", "event:append"}, ExpiresAt: envelope.ExpiresAt,
+			RevocationEpoch: envelope.RevocationEpoch + 1, Nonce: envelope.Nonce + ":revoked",
+		}, s.signingKey.Private)
+		if err != nil {
+			return CredentialExchangeResult{}, err
+		}
 	}
 	receipt, err := computerevent.NewSignedReceipt("LifecycleReceipt", "corpusd", map[string]any{
 		"computer_id": envelope.ComputerID, "action": "credential_envelope_consumed",
@@ -197,7 +200,9 @@ func (s *Service) exchangeComputerCredentialEnvelope(ctx context.Context, encode
 	if err != nil {
 		return CredentialExchangeResult{}, err
 	}
-	pending = append(pending, receipt)
+	if head != nil {
+		pending = append(pending, receipt)
+	}
 	return CredentialExchangeResult{Capability: token, PostRevocationCapability: postRevocationCapability, Receipt: receipt, ExpiresAt: envelope.ExpiresAt, PendingLifecycleReceipts: pending}, nil
 }
 func (s *Service) RenewComputerCapability(ctx context.Context, computerID string) (CredentialExchangeResult, error) {
@@ -212,21 +217,31 @@ func (s *Service) RenewComputerCapability(ctx context.Context, computerID string
 	if head != nil {
 		epoch = head.CredentialRevocationEpoch
 	}
-	var nonceBytes [32]byte
-	if _, err := rand.Read(nonceBytes[:]); err != nil {
-		return CredentialExchangeResult{}, err
-	}
 	expiresAt := time.Now().UTC().Truncate(time.Microsecond).Add(defaultComputerCapabilityTTL)
-	token, err := MintComputerCapability(ComputerCapability{
-		Version: 1, ComputerID: computerID,
-		Scopes:    []string{"event:read", "event:pin", "event:append"},
-		ExpiresAt: expiresAt.Format(time.RFC3339Nano), RevocationEpoch: epoch,
-		Nonce: base64.RawURLEncoding.EncodeToString(nonceBytes[:]),
-	}, s.signingKey.Private)
+	mint := func(revocationEpoch uint64) (string, error) {
+		var nonceBytes [32]byte
+		if _, err := rand.Read(nonceBytes[:]); err != nil {
+			return "", err
+		}
+		return MintComputerCapability(ComputerCapability{
+			Version: 1, ComputerID: computerID,
+			Scopes:    []string{"event:read", "event:pin", "event:append"},
+			ExpiresAt: expiresAt.Format(time.RFC3339Nano), RevocationEpoch: revocationEpoch,
+			Nonce: base64.RawURLEncoding.EncodeToString(nonceBytes[:]),
+		}, s.signingKey.Private)
+	}
+	token, err := mint(epoch)
 	if err != nil {
 		return CredentialExchangeResult{}, err
 	}
-	return CredentialExchangeResult{Capability: token, ExpiresAt: expiresAt.Format(time.RFC3339Nano)}, nil
+	postRevocationCapability, err := mint(epoch + 1)
+	if err != nil {
+		return CredentialExchangeResult{}, err
+	}
+	return CredentialExchangeResult{
+		Capability: token, PostRevocationCapability: postRevocationCapability,
+		ExpiresAt: expiresAt.Format(time.RFC3339Nano),
+	}, nil
 }
 
 func (s *Service) buildCredentialEnvelope(computerID, realizationID, idempotencyKey, requestCommitment string, epoch uint64, issuedAt, expiresAt time.Time) (ComputerCredentialEnvelope, error) {

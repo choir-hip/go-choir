@@ -1,6 +1,7 @@
 package agentcore
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -561,11 +562,14 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "complete approve or reject decision binding is required"})
 		return
 	}
-	if request.Decision == "approve" || request.ModeReceipt != nil {
-		if err := h.verifyConsumedModeReceipt(request.ModeReceipt, operationID, request); err != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-			return
-		}
+	if h.rt.selfdevControl == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development mode authority unavailable"})
+		return
+	}
+	currentMode, modeErr := h.rt.selfdevControl.SelfDevelopmentMode(r.Context())
+	if modeErr != nil || h.verifyDecisionModeReceipt(computerID, operationID, currentMode.Mode, currentMode.Receipt, request) != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current signed mode does not authorize this decision"})
+		return
 	}
 	operation, err := h.rt.selfdevOperations.Get(r.Context(), computerID, operationID)
 	if err != nil {
@@ -701,6 +705,30 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		go h.rt.reconcileSelfDevelopmentMaterialization(context.Background())
 	}
 	writeAPIJSON(w, http.StatusOK, operation)
+}
+
+func (h *APIHandler) verifyDecisionModeReceipt(computerID, operationID, mode string, current *computerevent.Receipt, request selfDevelopmentDecisionRequest) error {
+	if current == nil || request.ModeReceipt == nil || current.ReceiptKind != "ModeReceipt" ||
+		current.Verify(h.rt.selfdevControl.KeyResolver()) != nil {
+		return fmt.Errorf("signed current mode receipt is required")
+	}
+	currentBytes, currentErr := current.CanonicalBytes()
+	requestBytes, requestErr := request.ModeReceipt.CanonicalBytes()
+	field := func(name string) string {
+		value, _ := current.KindFields[name].(string)
+		return value
+	}
+	if currentErr != nil || requestErr != nil || !bytes.Equal(currentBytes, requestBytes) ||
+		field("computer_id") != computerID || field("new_mode") != mode || mode != "propose_only" {
+		return fmt.Errorf("mode receipt does not match current authority")
+	}
+	if request.Decision == "approve" {
+		return h.verifyConsumedModeReceipt(request.ModeReceipt, operationID, request)
+	}
+	if request.Decision != "reject" || field("old_mode") == "accept_once" || field("consumed_operation_id") != "" {
+		return fmt.Errorf("current mode does not authorize rejection")
+	}
+	return nil
 }
 
 func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, operationID string, request selfDevelopmentDecisionRequest) error {

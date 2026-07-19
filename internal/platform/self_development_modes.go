@@ -289,13 +289,14 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development mode authority unavailable"})
 		return
 	}
-	if r.Header.Get("X-Internal-Caller") != "true" {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
-		return
-	}
 	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
 	if computerID == "" {
 		writeJSON(w, http.StatusBadRequest, apiError{Error: "computer_id is required"})
+		return
+	}
+	internalCaller := r.Header.Get("X-Internal-Caller") == "true"
+	if !internalCaller && (h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:read") != nil) {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "self-development mode capability refused"})
 		return
 	}
 	switch r.Method {
@@ -307,6 +308,10 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		}
 		writeJSON(w, http.StatusOK, mode)
 	case http.MethodPost:
+		if !internalCaller {
+			writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+			return
+		}
 		var request SetSelfDevelopmentModeRequest
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 		decoder.DisallowUnknownFields()

@@ -18,7 +18,6 @@
 
   $: currentComputer = status?.current_computer || {};
   $: computers = status?.computers || [];
-  $: candidateComputers = computers.filter((computer) => computer.role === 'candidate');
   $: runtime = status?.runtime || {};
   $: persistentDisk = status?.persistent_disk || runtime?.persistent_disk || null;
   $: currentWindows = ($windows || []).filter((win) => win.mode !== 'closed' && win.mode !== 'hidden');
@@ -149,8 +148,7 @@
 
   function computerLabel(computer) {
     if (computer.current) return 'Current';
-    if (computer.role === 'candidate') return 'Candidate';
-    return computer.role || 'Computer';
+    return 'Computer';
   }
 </script>
 
@@ -186,7 +184,7 @@
       <span class="metric-label">User computers</span>
       <strong>{computers.length || 1}</strong>
       <div class="meter cpu"><span style="width:{barWidth(computers.length || 1, Math.max(computers.length || 1, 1))}"></span></div>
-      <small>{candidateComputers.length} background candidate{candidateComputers.length === 1 ? '' : 's'}</small>
+      <small>Stable computer identities only</small>
     </article>
     <article class="metric-card">
       <span class="metric-label">Runtime health</span>

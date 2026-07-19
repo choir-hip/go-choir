@@ -59,16 +59,16 @@ explicit Web Lens inspection, Trace as evidence rather than a user app, and
 
 | Subsystem | Status | Current authority boundary |
 | --- | --- | --- |
-| Automatic computer | **Live persistent substrate; self-development not yet implemented** | Stable computers, audited ComputerVersion construction, lifecycle, checkpoint routes, and no-SSH inspection are live. Canonical event authority, capsule isolation, updater, and self-development acceptance remain the active cutover. |
-| Choir CLI | **Supported read/control subset** | Submit/read/trajectory/search/Wire/API-key/current-computer surfaces exist. Public explicitly targeted self-development, mode, lifecycle, receipt, and rollback commands do not yet exist; plaintext API-key flags and internal run routes still require replacement. |
+| Automatic computer | **Live persistent substrate; effects-off self-development source candidate implemented** | Stable computers, audited ComputerVersion construction, lifecycle, canonical events, guest-local capsules, updater recovery, checkpoint routes, and no-SSH inspection are wired. Deployed kernel, genesis, proposal, acceptance, recovery, rejection, and rollback proof remain gated by the active Definition. |
+| Choir CLI | **Supported read/control subset plus source self-development controls** | Submit/read/trajectory/search/Wire/API-key/current-computer and explicitly targeted self-development mode/lifecycle/receipt/rollback commands exist. Distribution and deployed self-development acceptance remain unproved; `/goal` is still external. |
 | Web desktop | **Live** | `frontend/src/lib/apps/registry.ts` is the executable app inventory; this memo and `platform-os-app-state.md` classify behavior and gaps. |
 | macOS desktop | **Buildable wrapper; shipment unproven here** | Wails shell around the Svelte product; distribution/daily-driver status requires dated acceptance evidence. |
 | Choir Base / File Provider | **Substantial tested substrate, product wiring incomplete** | Append-only journal, tree/blob, sync, and API helpers exist. No deployed product service currently owns the API, and Base is not canonical app-state authority. |
 | Autopaper | **Tabled** | No active Definition or canonical implementation. Revival requires a fresh Definition; issue residue is not authority. |
 | `corpusd` | **Code-present and deployment-wired** | Service/store writer and sanitized public API boundary for publication/World Wire; platform-computer agents remain semantic owners. |
 | `sourcecycled` | **Code-present, deployment-wired experimental adapter** | Poll cycles and queue state are in memory and lost on restart. It hands off/projects durable artifacts; it does not own canonical article meaning. |
-| Capsules | **Scaffolded, inert by default** | Host authority is unwired, isolation/broker/cleanup are incomplete, and exec/file tools return `not_implemented`. The active target is mandatory guest-local capsule authority and fail-closed isolation. |
-| Features activation | **Live unrelated adoption/lineage records** | Approval/freshness/build/lineage records do not change served code and cannot authorize self-development. |
+| Capsules | **Source-implemented guest-local authority; deployed proof pending** | Namespaces, cgroup, seccomp, Landlock, capability broker, transaction tape, admission, and cleanup are wired in the source candidate. Exact immutable-image kernel and deployed product-path evidence remain mandatory. |
+| Features/package adoption | **Deleted historical path** | AppChangePackage/AppAdoption UI, API, state, and promotion adapters cannot authorize self-development and must not be revived. |
 
 `/goal <definition.md>` is an external compatible-harness invocation. Choir's
 CLI, prompt bar, and runtime do not implement an end-to-end Definition runner.
@@ -180,7 +180,7 @@ short version is:
 platform substrate changes -> GitHub main -> CI -> NixOS deploy
 computer semantic change   -> canonical event -> guest materialization
 served checkpoint change   -> applied event -> ComputerVersion -> vmctl route CAS
-source/app sharing         -> package/adoption protocol, never self-development authority
+cross-computer sharing      -> typed publication protocol, separate from self-development
 new-user default image     -> official platform construction inputs
 private public surface     -> selected route projection, not whole-computer exposure
 ```
@@ -556,13 +556,13 @@ shared app-state protocol. The shell owns a universal `app_context` persistence
 path for each window: apps hydrate from the context they receive, emit typed
 context/state changes back to the shell, and the shell saves that state through
 the server-backed desktop API. Folder selection, selected document/message,
-reader position, media source identity, candidate review selection, and similar
+reader position, media source identity, proposal review selection, and similar
 view state must not live only in browser component variables. Per-app code can
 define the shape of its typed context, but persistence and reload semantics must
 use the universal shell/API path.
 
 `texture` is the single writer for canonical document versions. It synthesizes user
-edits and worker updates into durable document state.
+edits and coagent updates into durable document state.
 
 `researcher` reads local files and the web, then submits findings/evidence only
 through the typed `update_coagent` source-packet mutation. It has no bash, raw

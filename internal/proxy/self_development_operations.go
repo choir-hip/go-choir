@@ -188,6 +188,9 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 					writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development decision mode is not enabled"})
 					return
 				}
+				if !requiresConsumption {
+					decision.ModeReceipt = mode.Receipt
+				}
 				if requiresConsumption {
 					receipt, consumeErr := h.consumeSelfDevelopmentMode(r.Context(), target.ComputerID, authResult.UserID, mode, decision)
 					if consumeErr != nil {
