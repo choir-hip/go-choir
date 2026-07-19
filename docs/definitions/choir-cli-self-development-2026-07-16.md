@@ -587,14 +587,14 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-9
-    state: frozen_pending_G1
+    state: rejected_G1_blocked_incomplete
     ref: ae881720132809d6d6092b4a739e43a311489000
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Effects-OFF B clean cutover plus all documented G1 repairs. Terminal replay now requires complete operation/computer/trajectory/capsule/bundle/verifier/state and decision-event kind/parent/authority/privacy/reducer/request/head joins before returning the original operation. Proposal start records a private local Dolt start-intent commitment before event append, so an event-only crash accepts only the byte-identical public prompt request without exposing that commitment in the public/private event envelope. Capsule broker admission now expects the parent guest-core overflow UID 65534 inside the child 0→65534 user namespace, rejects child UID 0 before signature verification, and declares readiness only after a signed role-bound `stat` RPC succeeds. A Linux broker test exercises the peer check, signed capability, and RPC response. Runtime invariants delete current package/adoption promotion guidance."
+    scope: "Effects-OFF B cutover after nine G1 candidates. Round-9 review confirmed six new source/authority blockers: proposal start passes a raw envelope digest where Store.Start requires `artifact:sha256:`; public exact start retry is still mode-gated at proxy after mode advances; exact approval replay recognizes only mutable `accepted` state and omits terminal operation head/receipt joins after materialization; startup decision recovery bypasses the hardened public join; child UID 0 cannot create its socket in the parent-root mode-0700 broker directory; and several current authority/CLI documents still describe deleted worker/VM/package paths or obsolete plaintext API-key/verb behavior."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92]
-    verification: "Full selfdev, agentcore, proxy, and capsule packages pass; focused tests reject changed durable start intent, inconsistent recovered start event, and semantically inconsistent terminal projection. All runtime shards pass. The complete native tree compiles across 76 packages; the unrelated full-suite trajectory timeout passed alone, while live provider integration failures were exhausted account quotas and are not candidate failures. Linux/amd64 capsule broker and capsule test binaries cross-compile, as does the broker executable. Nix evaluates the exact dirty guest system to `/nix/store/8zhfdja9pc6nw6kr5w3d4ms1pc0nmk1v-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`."
-    disposition: "Frozen for fresh diverse G1 review. Effects remain OFF; do not deploy unless G1 accepts this exact SHA."
+    verification: "Four of six substantive round-9 reviewers rejected. Local inspection confirms every blocking class: private event output refs are raw SHA-256 while selfdev.Store requires an artifact URI; proxy start mode checks precede guest idempotency; accepted operations advance to materializing/applied; recoverSelfDevelopmentDecision validates only event kind/proposed effect before mutation; `/run/capsule` is parent-root mode 0700 with no ownership handoff to mapped host UID 65534; and the cited current AGENTS/runtime/computer-ontology/README/CLI-skill statements remain live. These are not deployed-only gaps."
+    disposition: "Rejected at G1 and blocked_incomplete under AGENTS.md Dead-End Escalation after nine non-convergent repair iterations. Effects remain OFF; do not deploy and do not make another incremental repair without explicit owner direction on the structural route."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -604,9 +604,15 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, ae881720132809d6d6092b4a739e43a311489000, /tmp/choir-selfdev-g1-round8-panel/manifest.tsv]
-  blocker_or_risk: "No known source blocker after round-9 repair. Linux broker tests are cross-compiled locally but cannot execute on this Darwin workstation; CI/Linux and the later exact-image runtime receipt remain required. Full Linux/Nix realization, deployment identity, mode-off staging behavior, and all C–F product transitions remain intentionally unproved deployed gates."
-  next_action: "Run a fresh diverse G1 panel against exact code candidate ae881720132809d6d6092b4a739e43a311489000 and this authority card; accept only if no reproducible source blocker remains."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, ae881720132809d6d6092b4a739e43a311489000, /tmp/choir-selfdev-g1-round9-panel/manifest.tsv]
+  blocker_or_risk: "The blocker cluster is substrate-level, not six independent local defects: source review and Darwin/unit evidence are standing in for one executable Linux effects-OFF lifecycle contract, while decision identity is duplicated across proxy, guest handler, recovery reconciler, operation projection, and materializer. Repeated local patches move one mirror without closing the others. The candidate also lacks a single generated current-authority inventory, so stale positive guidance reappears outside the manually edited set."
+  next_action: "Owner direction required by Dead-End Escalation. Recommended structural route: first establish an executable x86_64-linux disposable G1 harness that boots the exact Nix guest and exercises proposal start/retry/crash recovery, authenticated capsule RPC, decision/recovery/replay through applied state, and negative authority calls; centralize one decision/start binding verifier used by proxy-facing reads and guest recovery; derive current CLI/docs inventory from the shipped grammar; then repair against that harness and freeze once. Do not continue file-by-file G1 patching."
+  dead_end_assessment:
+    trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
+    dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
+    substrate_vs_symptoms: "Substrate: no exact Linux lifecycle harness and no single decision/start binding authority. Symptoms: raw artifact ref, mode-ordered retry, mutable-state terminal replay, weak recovery mirror, broker directory ownership, and stale current guidance."
+    existing_replacements: "Canonical ComputerEventAppender, selfdev operation/start-intent stores, guest-local capsule Executor, isolated verifier/updater, checkpoint and vmctl route CAS are the intended replacements and are wired partially; none replaces the missing end-to-end verifier of their joins."
+    authority_needed: "Owner must authorize the recommended harness-and-centralization route, explicitly override Dead-End Escalation for another incremental pass, or supersede the mission."
 
 successor:
   status: selected_draft_non_executable
@@ -751,6 +757,17 @@ review_receipts:
     verdicts: [codex:REJECT_G1, omp-gpt55:REJECT_G1, devin:REJECT_G1, cursor:ACCEPT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1, omp-glm52:FAILED]
     outcome: repair
     adjudication: "The split panel rejects under the severe-minority rule. Codex identified incomplete terminal semantic joins and stale current runtime guidance; omp-gpt55 reproduced changed proposal retry after an event-only crash; Devin identified the user-namespace-inverted broker peer check and dial-only readiness. Local inspection confirms each class. The accepting reviews did not rebut them. This receipt records all confirmed problems before repair-code mutation; prior repairs remain sound and deployed-only C–F gates remain excluded."
+
+  - id: G1-disabled-cutover-round-9-2026-07-19
+    reviewed_at: 2026-07-19T19:33:16Z
+    candidate_ref: ae881720132809d6d6092b4a739e43a311489000
+    authority_ref: d12e1d9d337fffabee5dd9c0385159213b463b24
+    manifest: /tmp/choir-selfdev-g1-round9-panel/manifest.tsv
+    panel: [codex, devin, cursor, opencode, omp-gpt55, omp-gemini35, omp-glm52]
+    health: "Codex, Devin, Cursor, OpenCode, omp-gpt55, and omp-gemini35 completed; omp-glm52 failed before review."
+    verdicts: [codex:REJECT_G1, devin:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1, omp-glm52:FAILED]
+    outcome: blocked_incomplete_structural_escalation
+    adjudication: "Four independent reviewers rejected. Local inspection confirms Cursor's non-executable raw prompt artifact join, omp-gpt55's public start replay ordering, Devin's weak startup decision recovery, and Codex's post-materialization terminal replay, broker-directory ownership, and stale-current-authority findings. These cluster at missing executable Linux lifecycle and duplicated binding-authority substrates. AGENTS.md Dead-End Escalation now prohibits another incremental patch without explicit owner direction."
 
 view:
   path: none
