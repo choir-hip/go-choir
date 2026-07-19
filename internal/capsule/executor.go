@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -140,11 +141,15 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		if retErr == nil {
 			return
 		}
+		var cleanupErr error
 		if caps.Process != nil {
 			_ = caps.Process.Kill()
 			_, _ = caps.Process.Wait()
 		}
-		var cleanupErr error
+		if caps.listener != nil {
+			cleanupErr = errors.Join(cleanupErr, caps.listener.Close())
+			caps.listener = nil
+		}
 		if caps.Cgroup != nil {
 			cleanupErr = errors.Join(cleanupErr, caps.Cgroup.Delete())
 		}
@@ -195,8 +200,21 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	hostSocket := filepath.Join(caps.MergedDir, "run", "capsule", "broker.sock")
 	_ = os.Remove(hostSocket)
-	args := []string{"--socket", "/run/capsule/broker.sock", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/", "--authorized-peer-uid", fmt.Sprint(capsuleNamespaceHostID)}
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: hostSocket, Net: "unix"})
+	if err != nil {
+		return fmt.Errorf("capsule create parent broker listener: %w", err)
+	}
+	caps.listener = listener
+	if err := os.Chmod(hostSocket, 0o600); err != nil {
+		return fmt.Errorf("capsule secure parent broker listener: %w", err)
+	}
+	inheritedListener, err := listener.File()
+	if err != nil {
+		return fmt.Errorf("capsule duplicate broker listener: %w", err)
+	}
+	args := []string{"--socket", "/run/capsule/broker.sock", "--listener-fd", "3", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/", "--authorized-peer-uid", fmt.Sprint(capsuleNamespaceHostID)}
 	cmd := exec.Command("/run/capsule/broker", args...)
+	cmd.ExtraFiles = []*os.File{inheritedListener}
 	cmd.Env = []string{"PATH=/bin:/usr/bin:/run/current-system/sw/bin", "HOME=/root", "TMPDIR=/tmp"}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Chroot:                     caps.MergedDir,
@@ -207,8 +225,10 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 		Pdeathsig:                  syscall.SIGKILL,
 	}
 	if err := cmd.Start(); err != nil {
+		_ = inheritedListener.Close()
 		return fmt.Errorf("capsule start broker: %w", err)
 	}
+	_ = inheritedListener.Close()
 	caps.Process = cmd.Process
 	caps.wait = cmd.Wait
 	caps.PID = cmd.Process.Pid
@@ -267,6 +287,10 @@ func (e *Executor) destroy(ctx context.Context, id string, signal syscall.Signal
 	caps.State = StateDestroying
 	if caps.broker != nil {
 		_ = caps.broker.Close()
+	}
+	if caps.listener != nil {
+		_ = caps.listener.Close()
+		caps.listener = nil
 	}
 	if caps.Process != nil {
 		_ = caps.Process.Signal(signal)

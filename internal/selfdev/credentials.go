@@ -208,6 +208,37 @@ func (g *GuestCredentials) SelfDevelopmentMode(ctx context.Context) (platform.Se
 	}
 	return mode, nil
 }
+func (g *GuestCredentials) SetSelfDevelopmentMode(ctx context.Context, change platform.SetSelfDevelopmentModeRequest) (platform.SelfDevelopmentMode, error) {
+	if g == nil {
+		return platform.SelfDevelopmentMode{}, fmt.Errorf("guest credential: mode authority unavailable")
+	}
+	body, err := computerevent.CanonicalJSON(change)
+	if err != nil {
+		return platform.SelfDevelopmentMode{}, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/internal/computers/self-development/mode?computer_id="+url.QueryEscape(g.computerID), bytes.NewReader(body))
+	if err != nil {
+		return platform.SelfDevelopmentMode{}, err
+	}
+	token, err := g.Capability(ctx)
+	if err != nil {
+		return platform.SelfDevelopmentMode{}, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := g.http.Do(request)
+	if err != nil {
+		return platform.SelfDevelopmentMode{}, err
+	}
+	defer response.Body.Close()
+	var mode platform.SelfDevelopmentMode
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 256<<10))
+	decoder.DisallowUnknownFields()
+	if response.StatusCode != http.StatusOK || decoder.Decode(&mode) != nil || mode.ComputerID != g.computerID {
+		return platform.SelfDevelopmentMode{}, fmt.Errorf("guest credential: mode mutation refused")
+	}
+	return mode, nil
+}
 
 func (g *GuestCredentials) PublishCheckpoint(ctx context.Context, checkpoint selfdevprotocol.CheckpointRequest) (selfdevprotocol.CheckpointResponse, error) {
 	if g == nil || checkpoint.ComputerID != g.computerID {

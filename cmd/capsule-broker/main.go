@@ -74,10 +74,12 @@ func main() {
 		capsuleID         string
 		pubKeyHex         string
 		mergedDir         string
+		listenerFD        int
 		authorizedPeerUID uint
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
+	flag.IntVar(&listenerFD, "listener-fd", -1, "inherited parent-owned Unix listener file descriptor")
 	flag.StringVar(&capsuleID, "capsule-id", "", "Capsule ID this broker serves (binding check)")
 	flag.StringVar(&pubKeyHex, "pubkey", "", "Ed25519 public key (hex)")
 	flag.StringVar(&mergedDir, "merged", "/mnt/merged", "Merged overlayfs mount point")
@@ -100,6 +102,22 @@ func main() {
 	}
 	if len(pubKeyBytes) != ed25519.PublicKeySize {
 		log.Fatalf("invalid public key size: %d (expected %d)", len(pubKeyBytes), ed25519.PublicKeySize)
+	}
+	if listenerFD != 3 {
+		log.Fatal("--listener-fd must be the parent-owned descriptor 3")
+	}
+	listenerFile := os.NewFile(uintptr(listenerFD), "capsule-broker-listener")
+	if listenerFile == nil {
+		log.Fatal("inherited broker listener is unavailable")
+	}
+	listener, err := net.FileListener(listenerFile)
+	_ = listenerFile.Close()
+	if err != nil {
+		log.Fatalf("failed to inherit parent broker listener: %v", err)
+	}
+	if _, ok := listener.(*net.UnixListener); !ok {
+		_ = listener.Close()
+		log.Fatal("inherited broker listener is not Unix")
 	}
 
 	if err := unix.Mount("proc", "/proc", "proc", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, "hidepid=2"); err != nil {
@@ -131,22 +149,9 @@ func main() {
 		publicKey:         ed25519.PublicKey(pubKeyBytes),
 		mergedDir:         mergedDir,
 		authorizedPeerUID: uint32(authorizedPeerUID),
+		listener:          listener,
 		sessions:          make(map[string]*Session),
 		revokedCaps:       make(map[string]bool),
-	}
-
-	// Remove stale socket if it exists.
-	os.Remove(socketPath)
-
-	// Listen on Unix socket.
-	listener, err := net.Listen("unix", socketPath)
-	if err != nil {
-		log.Fatalf("failed to listen on %s: %v", socketPath, err)
-	}
-	broker.listener = listener
-	if err := os.Chmod(socketPath, 0o600); err != nil {
-		listener.Close()
-		log.Fatalf("failed to secure broker socket: %v", err)
 	}
 
 	// Handle signals for clean shutdown.

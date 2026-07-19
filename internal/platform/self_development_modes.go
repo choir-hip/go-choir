@@ -295,12 +295,12 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	internalCaller := r.Header.Get("X-Internal-Caller") == "true"
-	if !internalCaller && (h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:read") != nil) {
-		writeJSON(w, http.StatusForbidden, apiError{Error: "self-development mode capability refused"})
-		return
-	}
 	switch r.Method {
 	case http.MethodGet:
+		if !internalCaller && (h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:read") != nil) {
+			writeJSON(w, http.StatusForbidden, apiError{Error: "self-development mode capability refused"})
+			return
+		}
 		mode, err := h.selfDevelopmentModes.Get(r.Context(), computerID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, apiError{Error: "failed to read self-development mode"})
@@ -308,8 +308,8 @@ func (h *Handler) HandleSelfDevelopmentMode(w http.ResponseWriter, r *http.Reque
 		}
 		writeJSON(w, http.StatusOK, mode)
 	case http.MethodPost:
-		if !internalCaller {
-			writeJSON(w, http.StatusForbidden, apiError{Error: "internal caller required"})
+		if !internalCaller && (h.eventAuth == nil || h.eventAuth.Authorize(r, computerID, "event:append") != nil) {
+			writeJSON(w, http.StatusForbidden, apiError{Error: "self-development mode mutation capability refused"})
 			return
 		}
 		var request SetSelfDevelopmentModeRequest

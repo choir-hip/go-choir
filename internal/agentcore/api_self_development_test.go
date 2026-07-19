@@ -235,7 +235,7 @@ func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProje
 		ExpectedDesiredEventHead: head.DesiredEventHead, ExpectedEffectiveEventHead: head.EffectiveEventHead,
 		ExpectedDesiredStateCommitment: head.DesiredStateCommitment, ExpectedEffectiveStateCommitment: head.EffectiveStateCommitment,
 		RequireExpectedHead: true, PayloadCommitment: computerevent.ZeroHead, ProposedEffectRef: bundleDigest,
-		DecisionRef: "decision:recovery", VerifierRefs: []string{strings.Repeat("e", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+		DecisionRef: strings.Repeat("d", 64), VerifierRefs: []string{strings.Repeat("e", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
 	}
 	target, err := computerevent.CanonicalJSON(map[string]string{"base_head": operation.BaseHead, "bundle_digest": bundleDigest})
 	if err != nil {
@@ -328,27 +328,12 @@ func TestExactTerminalDecisionReplayDoesNotDependOnLaterCurrentMode(t *testing.T
 		ProposedEffectRef: publicDecision.BundleDigest, DecisionRef: decisionRef,
 		VerifierRefs: []string{strings.Repeat("1", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
 	}
-	digest, err := event.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	operation := selfdev.Operation{
-		OperationID: "operation-replay", ComputerID: "computer-replay", TrajectoryID: event.TrajectoryID,
-		CapsuleID: event.CapsuleID, BundleDigest: publicDecision.BundleDigest,
-		VerifierRefs: []string{publicDecision.VerifierRef}, State: selfdev.StateRejected, DecisionEvent: digest,
-	}
-	if !exactTerminalDecisionReplay(operation, event, true, operation.ComputerID, operation.OperationID, "owner", selfdev.StateRejected, computerevent.EventEffectRejected, decisionRef, publicDecision) {
+	if !exactSelfDevelopmentDecisionRequestMatches(event, "computer-replay", "operation-replay", "owner", computerevent.EventEffectRejected, decisionRef, publicDecision) {
 		t.Fatal("exact terminal retry was not recognized before current-mode authorization")
 	}
 	inconsistent := event
 	inconsistent.ProposedEffectRef = strings.Repeat("2", 64)
-	inconsistentDigest, err := inconsistent.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	inconsistentOperation := operation
-	inconsistentOperation.DecisionEvent = inconsistentDigest
-	if exactTerminalDecisionReplay(inconsistentOperation, inconsistent, true, operation.ComputerID, operation.OperationID, "owner", selfdev.StateRejected, computerevent.EventEffectRejected, decisionRef, publicDecision) {
+	if exactSelfDevelopmentDecisionRequestMatches(inconsistent, "computer-replay", "operation-replay", "owner", computerevent.EventEffectRejected, decisionRef, publicDecision) {
 		t.Fatal("semantically inconsistent terminal projection was accepted")
 	}
 }
@@ -393,7 +378,7 @@ func TestRecoveredStartEventRequiresExactCausalBinding(t *testing.T) {
 		EventKind: computerevent.EventTrajectoryStarted, TrajectoryID: "trajectory-crash",
 		IdempotencyKey: "selfdev-start-crash", RequestCommitment: strings.Repeat("a", 64),
 		AuthorityRef: "public-self-development-api:owner", PrivacyClass: "private",
-		OutputArtifactRefs: []string{strings.Repeat("b", 64)},
+		OutputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("b", 64)},
 	}
 	ref, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner")
 	if err != nil || ref != event.OutputArtifactRefs[0] {
@@ -402,5 +387,79 @@ func TestRecoveredStartEventRequiresExactCausalBinding(t *testing.T) {
 	event.AuthorityRef = "public-self-development-api:other"
 	if _, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner"); err == nil {
 		t.Fatal("changed trajectory authority recovered the old event")
+	}
+}
+
+func TestFinalizedDecisionBindingRejectsCrossAuthorityJoinsAndAllowsAcceptedDescendants(t *testing.T) {
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: "computer-binding",
+		Sequence: 1, PreviousHead: computerevent.ZeroHead, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		EventKind: computerevent.EventEffectAccepted, IdempotencyKey: "decision-binding", RequestCommitment: strings.Repeat("1", 64),
+		TrajectoryID: "trajectory-binding", CapsuleID: "capsule-binding", ParentEventID: "operation-binding",
+		ActorProfile: "super", AuthorityRef: "external-owner:owner-binding", PrivacyClass: "owner",
+		ExpectedDesiredEventHead: strings.Repeat("9", 64), ExpectedEffectiveEventHead: strings.Repeat("a", 64),
+		ExpectedDesiredStateCommitment: strings.Repeat("b", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
+		RequireExpectedHead: true,
+		PayloadCommitment:   computerevent.ZeroHead, ProposedEffectRef: strings.Repeat("2", 64), DecisionRef: strings.Repeat("3", 64),
+		VerifierRefs: []string{strings.Repeat("4", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	eventDigest, err := event.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	transition := computerevent.DurableEvent{
+		Request: computerevent.CASRequest{
+			Event: event, EventDigest: eventDigest,
+			Next: computerevent.Head{DesiredEventHead: strings.Repeat("5", 64), EffectiveEventHead: strings.Repeat("6", 64)},
+		},
+		Receipt: computerevent.Receipt{ReceiptKind: "EventHeadReceipt", ReceiptID: "receipt-binding", KindFields: map[string]any{"event_digest": eventDigest}},
+	}
+	operation := selfdev.Operation{
+		OperationID: event.ParentEventID, ComputerID: event.ComputerID, TrajectoryID: event.TrajectoryID,
+		CapsuleID: event.CapsuleID, BundleDigest: event.ProposedEffectRef, VerifierRefs: append([]string(nil), event.VerifierRefs...),
+		DecisionActor: "owner-binding", DecisionEvent: eventDigest, DecisionReceipt: transition.Receipt.ReceiptID,
+		DesiredHead: transition.Request.Next.DesiredEventHead, EffectiveHead: transition.Request.Next.EffectiveEventHead,
+		State: selfdev.StateMaterializing,
+	}
+	if _, err := verifyFinalizedSelfDevelopmentDecision(operation, transition); err != nil {
+		t.Fatalf("accepted descendant refused: %v", err)
+	}
+	for name, mutate := range map[string]func(*selfdev.Operation, *computerevent.DurableEvent){
+		"actor": func(_ *selfdev.Operation, durable *computerevent.DurableEvent) {
+			durable.Request.Event.AuthorityRef = "external-owner:other"
+		},
+		"capsule": func(op *selfdev.Operation, _ *computerevent.DurableEvent) {
+			op.CapsuleID = "capsule-other"
+		},
+		"verifier": func(_ *selfdev.Operation, durable *computerevent.DurableEvent) {
+			durable.Request.Event.VerifierRefs = []string{strings.Repeat("7", 64)}
+		},
+		"receipt": func(_ *selfdev.Operation, durable *computerevent.DurableEvent) {
+			durable.Receipt.KindFields = map[string]any{"event_digest": strings.Repeat("8", 64)}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			changedOperation := operation
+			changedTransition := transition
+			mutate(&changedOperation, &changedTransition)
+			if _, err := verifyFinalizedSelfDevelopmentDecision(changedOperation, changedTransition); err == nil {
+				t.Fatal("cross-authority decision join was accepted")
+			}
+		})
+	}
+	rejected := transition
+	rejected.Request.Event.EventKind = computerevent.EventEffectRejected
+	rejectedDigest, err := rejected.Request.Event.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rejected.Request.EventDigest = rejectedDigest
+	rejected.Receipt.KindFields = map[string]any{"event_digest": rejectedDigest}
+	if _, err := verifyFinalizedSelfDevelopmentDecision(operation, rejected); err == nil {
+		t.Fatal("rejected decision was accepted as an applied descendant")
 	}
 }

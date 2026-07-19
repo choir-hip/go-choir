@@ -416,10 +416,8 @@ func startRequestCommitment(request StartRequest) (string, error) {
 }
 
 func isArtifactRef(ref string) bool {
-	if !strings.HasPrefix(ref, "artifact:sha256:") {
-		return false
-	}
-	return computerevent.IsSHA256(strings.TrimPrefix(ref, "artifact:sha256:"))
+	_, err := computerevent.ParseArtifactRef(ref)
+	return err == nil
 }
 
 func allowedTransition(from, to string) bool {

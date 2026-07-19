@@ -5,6 +5,7 @@ package capsule
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ type Capsule struct {
 	Process              *os.Process
 	Cgroup               *CgroupManager
 	wait                 func() error
+	listener             net.Listener
 	Pinned               bool
 	PinExpiry            *time.Time
 	inflightOps          int

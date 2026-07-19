@@ -11,8 +11,6 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
-	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
 type selfDevelopmentTarget struct {
@@ -38,20 +36,6 @@ type proxiedSelfDevelopmentStart struct {
 	IdempotencyKey string                 `json:"idempotency_key"`
 	Prompt         string                 `json:"prompt"`
 	ModeReceipt    *computerevent.Receipt `json:"mode_receipt,omitempty"`
-}
-
-type proxiedSelfDevelopmentDecision struct {
-	Decision                         string                 `json:"decision"`
-	IdempotencyKey                   string                 `json:"idempotency_key"`
-	BundleDigest                     string                 `json:"bundle_digest"`
-	VerifierRef                      string                 `json:"verifier_ref"`
-	Reason                           string                 `json:"reason,omitempty"`
-	ExpectedDesiredEventHead         string                 `json:"expected_desired_event_head"`
-	ExpectedEffectiveEventHead       string                 `json:"expected_effective_event_head"`
-	ExpectedPendingTransitionRef     *string                `json:"expected_pending_transition_ref"`
-	ExpectedDesiredStateCommitment   string                 `json:"expected_desired_state_commitment"`
-	ExpectedEffectiveStateCommitment string                 `json:"expected_effective_state_commitment"`
-	ModeReceipt                      *computerevent.Receipt `json:"mode_receipt,omitempty"`
 }
 
 func isSelfDevelopmentTarget(path, method string) bool {
@@ -159,33 +143,7 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 		return
 	}
 	var mode selfDevelopmentModeProjection
-	var decision proxiedSelfDevelopmentDecision
-	operationID := ""
-	if strings.HasSuffix(suffix, "/decision") {
-		decoder := json.NewDecoder(bytes.NewReader(requestBody))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&decision); err != nil {
-			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development decision"})
-			return
-		}
-		operationID = strings.TrimSuffix(strings.TrimPrefix(suffix, "/self-development/operations/"), "/decision")
-		replayBody, exactReplay, terminal, replayErr := h.readTerminalDecisionReplay(r.Context(), ownership.SandboxURL, authResult.UserID, target.ComputerID, operationID, decision)
-		if replayErr != nil {
-			writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to verify terminal decision replay"})
-			return
-		}
-		if exactReplay {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write(replayBody)
-			return
-		}
-		if terminal {
-			writeJSON(w, http.StatusConflict, errorResponse{Error: "decision conflicts with terminal operation"})
-			return
-		}
-	}
-	modeGuarded := suffix == "/self-development/operations" || suffix == "/self-development/genesis" || strings.HasSuffix(suffix, "/decision")
+	modeGuarded := suffix == "/self-development/operations" || suffix == "/self-development/genesis"
 	if modeGuarded {
 		mode, err = h.readSelfDevelopmentMode(r.Context(), target.ComputerID, authResult.UserID)
 		if err != nil {
@@ -201,10 +159,6 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 				return
 			}
 		case suffix == "/self-development/operations":
-			if mode.Mode != "propose_only" {
-				writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development proposal mode is not enabled"})
-				return
-			}
 			var start proxiedSelfDevelopmentStart
 			decoder := json.NewDecoder(bytes.NewReader(requestBody))
 			decoder.DisallowUnknownFields()
@@ -216,51 +170,6 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 			requestBody, err = json.Marshal(start)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development request"})
-				return
-			}
-		case strings.HasSuffix(suffix, "/decision"):
-			requiresConsumption := mode.Mode == "accept_once"
-			if requiresConsumption && decision.Decision != "approve" {
-				writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once authorizes only its exact approval"})
-				return
-			}
-			if mode.Mode == "propose_only" && consumedModeReceiptMatches(mode.Receipt, operationID, decision) {
-				decision.ModeReceipt = mode.Receipt
-			} else {
-				if decision.Decision != "approve" && decision.Decision != "reject" {
-					writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development decision mode is not enabled"})
-					return
-				}
-				switch mode.Mode {
-				case "accept_once":
-					if !modeProjectionMatchesDecision(mode, operationID, decision) {
-						writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once mode does not bind this exact decision"})
-						return
-					}
-				case "propose_only":
-					if decision.Decision != "reject" {
-						writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once mode does not bind this exact approval"})
-						return
-					}
-				default:
-					writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development decision mode is not enabled"})
-					return
-				}
-				if !requiresConsumption {
-					decision.ModeReceipt = mode.Receipt
-				}
-				if requiresConsumption {
-					receipt, consumeErr := h.consumeSelfDevelopmentMode(r.Context(), target.ComputerID, authResult.UserID, mode, decision)
-					if consumeErr != nil {
-						writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once mode consumption failed"})
-						return
-					}
-					decision.ModeReceipt = &receipt
-				}
-			}
-			requestBody, err = json.Marshal(decision)
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid self-development decision"})
 				return
 			}
 		}
@@ -302,109 +211,6 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 	_, _ = w.Write(body)
 }
 
-func (h *Handler) readTerminalDecisionReplay(ctx context.Context, sandboxURL, userID, computerID, operationID string, decision proxiedSelfDevelopmentDecision) ([]byte, bool, bool, error) {
-	if h.sandboxHTTP == nil {
-		return nil, false, false, fmt.Errorf("sandbox client unavailable")
-	}
-	read := func(path string, target any) ([]byte, int, error) {
-		endpoint, err := joinBasePath(sandboxURL, path)
-		if err != nil {
-			return nil, 0, err
-		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return nil, 0, err
-		}
-		request.Header.Set("X-Internal-Caller", "true")
-		request.Header.Set("X-Authenticated-User", userID)
-		request.Header.Set("X-Authenticated-Computer", computerID)
-		response, err := h.sandboxHTTP.Do(request)
-		if err != nil {
-			return nil, 0, err
-		}
-		defer func() { _ = response.Body.Close() }()
-		body, err := io.ReadAll(io.LimitReader(response.Body, 4<<20))
-		if err != nil {
-			return nil, response.StatusCode, err
-		}
-		if response.StatusCode == http.StatusOK {
-			if err := json.Unmarshal(body, target); err != nil {
-				return nil, response.StatusCode, err
-			}
-		}
-		return body, response.StatusCode, nil
-	}
-	operationPath := "/api/computers/" + url.PathEscape(computerID) + "/self-development/operations/" + url.PathEscape(operationID)
-	var operation selfdev.Operation
-	operationBody, status, err := read(operationPath, &operation)
-	if err != nil {
-		return nil, false, false, err
-	}
-	if status == http.StatusNotFound {
-		return nil, false, false, nil
-	}
-	if status != http.StatusOK {
-		return nil, false, false, fmt.Errorf("operation read status %d", status)
-	}
-	nextState, expectedKind := selfdev.StateRejected, computerevent.EventEffectRejected
-	if decision.Decision == "approve" {
-		nextState, expectedKind = selfdev.StateAccepted, computerevent.EventEffectAccepted
-	}
-	terminal := operation.State == selfdev.StateAccepted || operation.State == selfdev.StateRejected
-	if !terminal {
-		return nil, false, false, nil
-	}
-	verifierBound := false
-	for _, verifierRef := range operation.VerifierRefs {
-		if verifierRef == decision.VerifierRef {
-			verifierBound = true
-			break
-		}
-	}
-	if operation.ComputerID != computerID || operation.OperationID != operationID ||
-		operation.State != nextState || operation.BundleDigest != decision.BundleDigest ||
-		!verifierBound || operation.TrajectoryID == "" || operation.CapsuleID == "" ||
-		!computerevent.IsSHA256(operation.DecisionEvent) {
-		return operationBody, false, true, nil
-	}
-	eventPath := "/api/computers/" + url.PathEscape(computerID) + "/events/" + operation.DecisionEvent
-	var event computerevent.Event
-	if _, status, err = read(eventPath, &event); err != nil {
-		return nil, false, true, err
-	} else if status != http.StatusOK {
-		return nil, false, true, fmt.Errorf("decision event read status %d", status)
-	}
-	eventDigest, err := event.Digest()
-	if err != nil {
-		return nil, false, true, err
-	}
-	decision.ModeReceipt = nil
-	requestBytes, err := computerevent.CanonicalJSON(decision)
-	if err != nil {
-		return nil, false, true, err
-	}
-	expectedPending := ""
-	if decision.ExpectedPendingTransitionRef != nil {
-		expectedPending = strings.TrimSpace(*decision.ExpectedPendingTransitionRef)
-	}
-	exact := eventDigest == operation.DecisionEvent &&
-		event.SchemaVersion == computerevent.SchemaVersionV1 && event.ComputerID == computerID &&
-		event.EventKind == expectedKind && event.TrajectoryID == operation.TrajectoryID &&
-		event.CapsuleID == operation.CapsuleID && event.ParentEventID == operationID &&
-		event.ActorProfile == "super" && event.AuthorityRef == "external-owner:"+userID &&
-		event.PrivacyClass == "owner" && event.ReducerVersion == computerevent.ReducerVersionV1 &&
-		event.RequestCommitment == computerevent.ZeroHead &&
-		event.ProposedEffectRef == decision.BundleDigest &&
-		event.DecisionRef == computerevent.DigestBytes(requestBytes) &&
-		len(event.VerifierRefs) == 1 && event.VerifierRefs[0] == decision.VerifierRef &&
-		event.ExpectedDesiredEventHead == decision.ExpectedDesiredEventHead &&
-		event.ExpectedEffectiveEventHead == decision.ExpectedEffectiveEventHead &&
-		event.ExpectedPendingTransitionRef == expectedPending &&
-		event.ExpectedDesiredStateCommitment == decision.ExpectedDesiredStateCommitment &&
-		event.ExpectedEffectiveStateCommitment == decision.ExpectedEffectiveStateCommitment
-	return operationBody, exact, true, nil
-}
-
 func (h *Handler) readSelfDevelopmentMode(ctx context.Context, computerID, userID string) (selfDevelopmentModeProjection, error) {
 	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/computers/self-development/mode")
 	if err != nil {
@@ -436,100 +242,4 @@ func (h *Handler) readSelfDevelopmentMode(ctx context.Context, computerID, userI
 		return selfDevelopmentModeProjection{}, err
 	}
 	return mode, nil
-}
-
-func (h *Handler) consumeSelfDevelopmentMode(ctx context.Context, computerID, userID string, current selfDevelopmentModeProjection, decision proxiedSelfDevelopmentDecision) (computerevent.Receipt, error) {
-	target, err := joinBasePath(h.cfg.CorpusdURL, "/internal/computers/self-development/mode")
-	if err != nil {
-		return computerevent.Receipt{}, err
-	}
-	u, err := url.Parse(target)
-	if err != nil {
-		return computerevent.Receipt{}, err
-	}
-	query := u.Query()
-	query.Set("computer_id", computerID)
-	u.RawQuery = query.Encode()
-	consumptionKey, err := consumedModeIdempotency(decisionOperationID(current), decision)
-	if err != nil {
-		return computerevent.Receipt{}, err
-	}
-	body, err := json.Marshal(map[string]any{
-		"mode": "propose_only", "expected_generation": current.Generation,
-		"idempotency_key": consumptionKey,
-	})
-	if err != nil {
-		return computerevent.Receipt{}, err
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
-	if err != nil {
-		return computerevent.Receipt{}, err
-	}
-	request.Header.Set("X-Internal-Caller", "true")
-	request.Header.Set("X-Authenticated-User", userID)
-	request.Header.Set("Content-Type", "application/json")
-	response, err := h.corpusd.Do(request)
-	if err != nil {
-		return computerevent.Receipt{}, err
-	}
-	defer response.Body.Close()
-	var consumed selfDevelopmentModeProjection
-	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 256<<10)).Decode(&consumed) != nil || consumed.Receipt == nil {
-		return computerevent.Receipt{}, fmt.Errorf("mode consumption status %d", response.StatusCode)
-	}
-	return *consumed.Receipt, nil
-}
-
-func decisionOperationID(mode selfDevelopmentModeProjection) string {
-	return strings.TrimSpace(mode.OperationID)
-}
-
-func modeProjectionMatchesDecision(mode selfDevelopmentModeProjection, operationID string, decision proxiedSelfDevelopmentDecision) bool {
-	return decision.ExpectedPendingTransitionRef != nil &&
-		mode.OperationID == operationID && mode.BundleDigest == decision.BundleDigest &&
-		mode.ExpectedDesiredEventHead == decision.ExpectedDesiredEventHead && mode.ExpectedEffectiveEventHead == decision.ExpectedEffectiveEventHead &&
-		mode.ExpectedPendingTransitionRef == strings.TrimSpace(*decision.ExpectedPendingTransitionRef) &&
-		mode.ExpectedDesiredStateCommitment == decision.ExpectedDesiredStateCommitment &&
-		mode.ExpectedEffectiveStateCommitment == decision.ExpectedEffectiveStateCommitment
-}
-
-func consumedModeIdempotency(operationID string, decision proxiedSelfDevelopmentDecision) (string, error) {
-	digest, err := selfdevprotocol.DecisionBindingDigest(proxiedDecisionBinding(operationID, decision))
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("accept-once-consumed:%s:%s", strings.TrimSpace(operationID), digest), nil
-}
-
-func consumedModeReceiptMatches(receipt *computerevent.Receipt, operationID string, decision proxiedSelfDevelopmentDecision) bool {
-	if receipt == nil || receipt.ReceiptKind != "ModeReceipt" || decision.ExpectedPendingTransitionRef == nil || decision.Decision != "approve" {
-		return false
-	}
-	expectedIdempotency, err := consumedModeIdempotency(operationID, decision)
-	if err != nil {
-		return false
-	}
-	field := func(name string) string {
-		value, _ := receipt.KindFields[name].(string)
-		return value
-	}
-	return field("old_mode") == "accept_once" && field("new_mode") == "propose_only" &&
-		field("consumed_operation_id") == operationID && field("consumed_bundle_digest") == decision.BundleDigest &&
-		field("consumed_desired_event_head") == decision.ExpectedDesiredEventHead &&
-		field("consumed_effective_event_head") == decision.ExpectedEffectiveEventHead &&
-		field("consumed_pending_transition_ref") == strings.TrimSpace(*decision.ExpectedPendingTransitionRef) &&
-		field("consumed_desired_state_commitment") == decision.ExpectedDesiredStateCommitment &&
-		field("consumed_effective_state_commitment") == decision.ExpectedEffectiveStateCommitment &&
-		field("idempotency_key") == expectedIdempotency
-}
-
-func proxiedDecisionBinding(operationID string, decision proxiedSelfDevelopmentDecision) selfdevprotocol.DecisionBinding {
-	return selfdevprotocol.DecisionBinding{
-		OperationID: operationID, Decision: decision.Decision, IdempotencyKey: decision.IdempotencyKey,
-		BundleDigest: decision.BundleDigest, VerifierRef: decision.VerifierRef, Reason: decision.Reason,
-		ExpectedDesiredEventHead: decision.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: decision.ExpectedEffectiveEventHead,
-		ExpectedPendingTransitionRef:     decision.ExpectedPendingTransitionRef,
-		ExpectedDesiredStateCommitment:   decision.ExpectedDesiredStateCommitment,
-		ExpectedEffectiveStateCommitment: decision.ExpectedEffectiveStateCommitment,
-	}
 }

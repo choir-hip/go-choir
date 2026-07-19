@@ -72,31 +72,27 @@ func (rt *Runtime) recoverSelfDevelopmentDecision(ctx context.Context, operation
 	if err != nil || !found {
 		return operation, found, err
 	}
-	event := transition.Request.Event
-	if event.ProposedEffectRef != operation.BundleDigest || (event.EventKind != computerevent.EventEffectAccepted && event.EventKind != computerevent.EventEffectRejected) {
-		return operation, false, fmt.Errorf("decision recovery: event binding mismatch")
+	decision, err := verifyFinalizedSelfDevelopmentDecision(operation, transition)
+	if err != nil {
+		return operation, false, err
 	}
-	nextState := selfdev.StateRejected
-	if event.EventKind == computerevent.EventEffectAccepted {
-		nextState = selfdev.StateAccepted
-	}
-	modeReceipt := ""
-	if len(event.InputArtifactRefs) == 1 {
-		modeReceipt = event.InputArtifactRefs[0]
-	}
-	recovered, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, selfdev.StateAwaitingApproval, nextState, func(next *selfdev.Operation) error {
+	recovered, err := rt.selfdevOperations.Transition(ctx, operation.ComputerID, operation.OperationID, selfdev.StateAwaitingApproval, decision.NextState, func(next *selfdev.Operation) error {
 		next.DecisionEvent = transition.Request.EventDigest
 		next.DecisionReceipt = transition.Receipt.ReceiptID
-		next.DecisionActor = strings.TrimPrefix(event.AuthorityRef, "external-owner:")
+		next.DecisionActor = decision.Actor
 		next.DesiredHead = transition.Request.Next.DesiredEventHead
 		next.EffectiveHead = transition.Request.Next.EffectiveEventHead
-		next.ModeReceipt = modeReceipt
+		next.ModeReceipt = decision.ModeReceiptDigest
 		return nil
 	})
 	if err != nil {
 		current, getErr := rt.selfdevOperations.Get(ctx, operation.ComputerID, operation.OperationID)
-		if getErr == nil && current.DecisionEvent == transition.Request.EventDigest {
-			return current, true, nil
+		if getErr == nil && current.DecisionEvent == transition.Request.EventDigest &&
+			current.DecisionReceipt == transition.Receipt.ReceiptID &&
+			selfDevelopmentDecisionStateDescends(current.State, decision.NextState) {
+			if _, verifyErr := verifyFinalizedSelfDevelopmentDecision(current, transition); verifyErr == nil {
+				return current, true, nil
+			}
 		}
 		return operation, false, err
 	}

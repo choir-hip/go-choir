@@ -7,10 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -127,186 +125,53 @@ func TestKernelCapabilityReceiptRequiresReadScopeRoute(t *testing.T) {
 	}
 }
 
-func TestConsumedModeReceiptAuthorizesOnlyExactCrashedDecisionRetry(t *testing.T) {
-	digest := func(fill byte) string { return strings.Repeat(string(fill), 64) }
-	pending := ""
-	decision := proxiedSelfDevelopmentDecision{
-		Decision: "approve", IdempotencyKey: "decision-1", BundleDigest: digest('a'),
-		VerifierRef:              "verifier-ref",
-		ExpectedDesiredEventHead: digest('b'), ExpectedEffectiveEventHead: digest('c'),
-		ExpectedPendingTransitionRef:   &pending,
-		ExpectedDesiredStateCommitment: digest('d'), ExpectedEffectiveStateCommitment: digest('e'),
-	}
-	consumptionKey, err := consumedModeIdempotency("operation-1", decision)
-	if err != nil {
-		t.Fatal(err)
-	}
-	receipt := &computerevent.Receipt{ReceiptKind: "ModeReceipt", KindFields: map[string]any{
-		"old_mode": "accept_once", "new_mode": "propose_only", "consumed_operation_id": "operation-1",
-		"consumed_bundle_digest":              decision.BundleDigest,
-		"consumed_desired_event_head":         decision.ExpectedDesiredEventHead,
-		"consumed_effective_event_head":       decision.ExpectedEffectiveEventHead,
-		"consumed_pending_transition_ref":     pending,
-		"consumed_desired_state_commitment":   decision.ExpectedDesiredStateCommitment,
-		"consumed_effective_state_commitment": decision.ExpectedEffectiveStateCommitment,
-		"idempotency_key":                     consumptionKey,
-	}}
-	if !consumedModeReceiptMatches(receipt, "operation-1", decision) {
-		t.Fatal("exact consumed decision receipt was refused")
-	}
-	changed := decision
-	changed.ExpectedEffectiveEventHead = digest('f')
-	if consumedModeReceiptMatches(receipt, "operation-1", changed) {
-		t.Fatal("consumed receipt authorized a changed decision")
-	}
-}
-
-func TestConsumeAcceptOncePostsDeterministicIdempotencyAndReturnsExactReceipt(t *testing.T) {
-	digest := func(fill byte) string { return strings.Repeat(string(fill), 64) }
-	pending := ""
-	decision := proxiedSelfDevelopmentDecision{
-		Decision: "approve", IdempotencyKey: "decision-1", BundleDigest: digest('a'),
-		VerifierRef:              "verifier-ref",
-		ExpectedDesiredEventHead: digest('b'), ExpectedEffectiveEventHead: digest('c'),
-		ExpectedPendingTransitionRef:   &pending,
-		ExpectedDesiredStateCommitment: digest('d'), ExpectedEffectiveStateCommitment: digest('e'),
-	}
-	mode := selfDevelopmentModeProjection{
-		ComputerID: "computer-1", Mode: "accept_once", Generation: 7, OperationID: "operation-1",
-		BundleDigest: decision.BundleDigest, ExpectedDesiredEventHead: decision.ExpectedDesiredEventHead,
-		ExpectedEffectiveEventHead:       decision.ExpectedEffectiveEventHead,
-		ExpectedPendingTransitionRef:     pending,
-		ExpectedDesiredStateCommitment:   decision.ExpectedDesiredStateCommitment,
-		ExpectedEffectiveStateCommitment: decision.ExpectedEffectiveStateCommitment,
-	}
-	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request map[string]any
-		if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&request) != nil {
-			t.Fatal("invalid mode consumption request")
-		}
-		wantKey, keyErr := consumedModeIdempotency("operation-1", decision)
-		if keyErr != nil {
-			t.Fatal(keyErr)
-		}
-		if request["mode"] != "propose_only" || request["idempotency_key"] != wantKey || request["expected_generation"] != float64(7) {
-			t.Fatalf("mode consumption request = %#v", request)
-		}
-		receipt := &computerevent.Receipt{ReceiptKind: "ModeReceipt", KindFields: map[string]any{
-			"old_mode": "accept_once", "new_mode": "propose_only", "consumed_operation_id": "operation-1",
-			"consumed_bundle_digest": decision.BundleDigest, "consumed_desired_event_head": decision.ExpectedDesiredEventHead,
-			"consumed_effective_event_head":       decision.ExpectedEffectiveEventHead,
-			"consumed_pending_transition_ref":     pending,
-			"consumed_desired_state_commitment":   decision.ExpectedDesiredStateCommitment,
-			"consumed_effective_state_commitment": decision.ExpectedEffectiveStateCommitment,
-			"idempotency_key":                     wantKey,
-		}}
-		_ = json.NewEncoder(w).Encode(selfDevelopmentModeProjection{ComputerID: "computer-1", Mode: "propose_only", Generation: 8, Receipt: receipt})
-	}))
-	defer corpusd.Close()
-	handler := &Handler{cfg: &Config{CorpusdURL: corpusd.URL}, corpusd: corpusd.Client()}
-	receipt, err := handler.consumeSelfDevelopmentMode(context.Background(), "computer-1", "owner-1", mode, decision)
-	if err != nil || !consumedModeReceiptMatches(&receipt, "operation-1", decision) {
-		t.Fatalf("consumed receipt = %+v err=%v", receipt, err)
-	}
-}
-
-func TestPublicTerminalDecisionReplayPrecedesLaterModeAuthority(t *testing.T) {
-	digest := func(fill byte) string { return strings.Repeat(string(fill), 64) }
-	pending := ""
-	decision := proxiedSelfDevelopmentDecision{
-		Decision: "reject", IdempotencyKey: "decision-replay", BundleDigest: digest('a'), VerifierRef: digest('b'), Reason: "owner rejected",
-		ExpectedDesiredEventHead: digest('c'), ExpectedEffectiveEventHead: digest('d'), ExpectedPendingTransitionRef: &pending,
-		ExpectedDesiredStateCommitment: digest('e'), ExpectedEffectiveStateCommitment: digest('f'),
-	}
-	decisionBytes, err := computerevent.CanonicalJSON(decision)
-	if err != nil {
-		t.Fatal(err)
-	}
-	eventID, err := computerevent.NewEventID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	event := computerevent.Event{
-		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: "computer-replay",
-		Sequence: 1, PreviousHead: computerevent.ZeroHead, EventKind: computerevent.EventEffectRejected,
-		OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "event-replay", RequestCommitment: computerevent.ZeroHead,
-		TrajectoryID: "trajectory-replay", CapsuleID: "capsule-replay", ParentEventID: "operation-replay",
-		ActorProfile: "super", AuthorityRef: "external-owner:owner-replay", PrivacyClass: "owner",
-		ExpectedDesiredEventHead: decision.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: decision.ExpectedEffectiveEventHead,
-		ExpectedDesiredStateCommitment: decision.ExpectedDesiredStateCommitment, ExpectedEffectiveStateCommitment: decision.ExpectedEffectiveStateCommitment,
-		RequireExpectedHead: true, PayloadCommitment: digest('1'), ProposedEffectRef: decision.BundleDigest,
-		DecisionRef: computerevent.DigestBytes(decisionBytes), VerifierRefs: []string{decision.VerifierRef}, ReducerVersion: computerevent.ReducerVersionV1,
-	}
-	eventDigest, err := event.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	operation := selfdev.Operation{
-		OperationID: "operation-replay", ComputerID: "computer-replay",
-		TrajectoryID: event.TrajectoryID, CapsuleID: event.CapsuleID, BundleDigest: decision.BundleDigest,
-		VerifierRefs: []string{decision.VerifierRef}, DecisionEvent: eventDigest, State: selfdev.StateRejected,
-	}
-	var decisionPosts int
+func TestPublicDecisionDelegatesModeAuthorityToGuest(t *testing.T) {
+	var modeReads, decisionPosts int
 	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Authenticated-Computer") != "computer-replay" {
-			t.Fatal("guest request lost computer binding")
+		if r.Header.Get("X-Authenticated-Computer") != "computer-decision" ||
+			r.Header.Get("X-Authenticated-User") != "owner-decision" {
+			t.Fatal("guest request lost authenticated binding")
 		}
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/operations/operation-replay"):
-			_ = json.NewEncoder(w).Encode(operation)
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events/"+eventDigest):
-			_ = json.NewEncoder(w).Encode(event)
-		case r.Method == http.MethodPost:
-			decisionPosts++
-			http.Error(w, "unexpected decision mutation", http.StatusConflict)
-		default:
-			http.NotFound(w, r)
+		var decision map[string]any
+		if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&decision) != nil ||
+			decision["idempotency_key"] != "decision-replay" {
+			t.Fatalf("invalid guest decision request: %#v", decision)
 		}
+		decisionPosts++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"operation_id":"operation-decision","state":"rejected"}`))
 	}))
 	defer guest.Close()
 	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"computer_id": "computer-replay", "desktop_id": "primary", "user_id": "owner-replay",
+			"computer_id": "computer-decision", "desktop_id": "primary", "user_id": "owner-decision",
 			"state": "active", "sandbox_url": guest.URL,
 		})
 	}))
 	defer ownership.Close()
-	var modeReads int
 	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		modeReads++
-		http.Error(w, "later mode unavailable", http.StatusServiceUnavailable)
+		http.Error(w, "proxy must not own decision mode state", http.StatusServiceUnavailable)
 	}))
 	defer corpusd.Close()
-	handler, privateKey, _, _ := testProxyEnvWithAuthStore(t)
+	handler, _, _, store := testProxyEnvWithAuthStore(t)
 	handler.vmctlClient = vmctl.NewClient(ownership.URL)
 	handler.cfg.CorpusdURL = corpusd.URL
-	body, err := json.Marshal(decision)
+	user, err := store.CreateUser("owner-decision", "owner-decision@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-replay/self-development/operations/operation-replay/decision", strings.NewReader(string(body)))
-	request.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-replay")})
+	_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "selfdev-decision", []string{"computer:self_development:approve"}, "computer-decision", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"decision":"reject","idempotency_key":"decision-replay"}`
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-decision/self-development/operations/operation-decision/decision", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+secret)
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
-	if response.Code != http.StatusOK || modeReads != 0 || decisionPosts != 0 {
-		t.Fatalf("terminal replay status=%d mode_reads=%d decision_posts=%d body=%s", response.Code, modeReads, decisionPosts, response.Body.String())
-	}
-	var replayed selfdev.Operation
-	if json.Unmarshal(response.Body.Bytes(), &replayed) != nil || replayed.DecisionEvent != eventDigest {
-		t.Fatalf("terminal replay operation = %+v", replayed)
-	}
-	changed := decision
-	changed.Reason = "different rejection"
-	changedBody, err := json.Marshal(changed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	changedRequest := httptest.NewRequest(http.MethodPost, "/api/computers/computer-replay/self-development/operations/operation-replay/decision", strings.NewReader(string(changedBody)))
-	changedRequest.AddCookie(&http.Cookie{Name: "choir_access", Value: issueTestAccessJWT(privateKey, "owner-replay")})
-	changedResponse := httptest.NewRecorder()
-	handler.HandleAPI(changedResponse, changedRequest)
-	if changedResponse.Code != http.StatusConflict || modeReads != 0 || decisionPosts != 0 {
-		t.Fatalf("changed terminal replay status=%d mode_reads=%d decision_posts=%d body=%s", changedResponse.Code, modeReads, decisionPosts, changedResponse.Body.String())
+	if response.Code != http.StatusOK || modeReads != 0 || decisionPosts != 1 {
+		t.Fatalf("decision status=%d mode_reads=%d decision_posts=%d body=%s", response.Code, modeReads, decisionPosts, response.Body.String())
 	}
 }
 

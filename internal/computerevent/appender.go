@@ -128,8 +128,12 @@ func (a *ComputerEventAppender) AppendNewPayload(ctx context.Context, event Even
 		return Receipt{}, "", err
 	}
 	payloadDigest := DigestBytes(payload)
+	artifactRef, err := ArtifactRefFromDigest(payloadDigest)
+	if err != nil {
+		return Receipt{}, "", fmt.Errorf("computer event appender: create payload artifact ref: %w", err)
+	}
 	event.PayloadCommitment = payloadDigest
-	event.OutputArtifactRefs = append(nonNilStrings(event.OutputArtifactRefs), payloadDigest)
+	event.OutputArtifactRefs = append(nonNilStrings(event.OutputArtifactRefs), artifactRef.String())
 	if event.ProposedEffectRef == "" {
 		event.ProposedEffectRef = payloadDigest
 	}
@@ -176,8 +180,12 @@ func (a *ComputerEventAppender) AppendNewPrivatePayload(ctx context.Context, eve
 		return Receipt{}, "", fmt.Errorf("computer event appender: encrypt private payload: %w", err)
 	}
 	payloadDigest := DigestBytes(envelope)
+	artifactRef, err := ArtifactRefFromDigest(payloadDigest)
+	if err != nil {
+		return Receipt{}, "", fmt.Errorf("computer event appender: create private payload artifact ref: %w", err)
+	}
 	event.PayloadCommitment = payloadDigest
-	event.OutputArtifactRefs = append(nonNilStrings(event.OutputArtifactRefs), payloadDigest)
+	event.OutputArtifactRefs = append(nonNilStrings(event.OutputArtifactRefs), artifactRef.String())
 	if event.ProposedEffectRef == "" {
 		event.ProposedEffectRef = payloadDigest
 	}

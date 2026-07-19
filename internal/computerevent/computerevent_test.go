@@ -230,7 +230,7 @@ func TestAppenderAppendNewPayloadPinsBundleIntoEvent(t *testing.T) {
 	}
 	request := cas.records[1].Request
 	if request.Event.ProposedEffectRef != digest || request.Event.PayloadCommitment != digest ||
-		len(request.Event.OutputArtifactRefs) != 1 || request.Event.OutputArtifactRefs[0] != digest ||
+		len(request.Event.OutputArtifactRefs) != 1 || request.Event.OutputArtifactRefs[0] != "artifact:sha256:"+digest ||
 		len(request.PayloadPinReceiptDigests) != 1 {
 		t.Fatalf("payload binding incomplete: %+v", request)
 	}
@@ -267,7 +267,7 @@ func TestAppenderAppendNewPrivatePayloadEncryptsAndBindsEnvelope(t *testing.T) {
 		t.Fatalf("private envelope digest/records = %q/%d", digest, len(cas.records))
 	}
 	request := cas.records[1].Request
-	if request.Event.PayloadCommitment != digest || request.Event.OutputArtifactRefs[0] != digest || len(request.PayloadPinReceiptDigests) != 1 {
+	if request.Event.PayloadCommitment != digest || request.Event.OutputArtifactRefs[0] != "artifact:sha256:"+digest || len(request.PayloadPinReceiptDigests) != 1 {
 		t.Fatalf("private payload binding incomplete: %+v", request)
 	}
 }
