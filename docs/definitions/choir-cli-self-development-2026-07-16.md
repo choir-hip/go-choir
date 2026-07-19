@@ -587,14 +587,14 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-8
-    state: frozen_pending_G1
+    state: rejected_G1_repairing
     ref: 18e4f9dbfb37eb7d518103a8315542bc11f02f92
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Effects-OFF B clean cutover plus all documented G1 repairs. Public decisions now resolve the owned active guest and verify exact terminal operation/event/request identity before reading later mode; exact replays return the original operation and changed terminal requests conflict. The canonical decision identity excludes the proxy-injected authorization receipt while all new decisions still require the exact signed current/consumed receipt. Public proposal starts inject the current ModeReceipt; guest-core independently verifies an exact signed propose_only receipt before any event, operation, or run effect, while an existing exact operation can be read under off without resuming effects. Top-level AGENTS and README guidance now names stable computers, guest-local capsules, accepted events/checkpoints, reconstruction, and rollback, and explicitly forbids candidate/worker computers or VMs."
+    scope: "Effects-OFF B cutover with all round-7 repairs, but round-8 G1 found four source blockers: terminal replay joins are too weak to prove operation/event/request semantic consistency; a trajectory-start event-only crash permits a changed-prompt retry to create an operation against the old artifact; the capsule broker's child-user-namespace SO_PEERCRED check rejects guest-core and admits child UID 0 while readiness only proves dial; and current runtime-invariants guidance still positively permits package/adoption promotion."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb]
-    verification: "Full agentcore and proxy packages pass. Focused regressions prove public exact terminal replay bypasses unavailable later mode without a mutation POST, changed terminal input conflicts, public starts inject current mode receipts, and guest starts with absent mode create neither operation nor event. All runtime shards pass, complete native source compiles across 76 packages, diff checks pass, and Nix evaluates the dirty exact guest system to `/nix/store/qbjlb123cnh6mvsvn6xnpmbl1bgla7g3-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`."
-    disposition: "Frozen for fresh diverse G1 review. Effects remain OFF; do not deploy unless G1 accepts this exact SHA."
+    verification: "All local tests/shards/native compile/Nix evaluation pass, but the split round-8 panel supplied three independent severe rejections. Local source inspection confirms all four classes: the deliberately inconsistent terminal replay fixture passes; start events carry ZeroHead rather than the public request commitment and recovery omits that join; broker UID 0 is the child identity under the 0→65534 map while parent root is unmapped; readiness is dial-only; and runtime-invariants lines 273-277 retain package/adoption promotion as current guidance."
+    disposition: "Rejected at G1. Effects remain OFF; do not deploy. Documented before repair-code mutation. Repair all four confirmed blockers, freeze an exact successor, and rerun a fresh diverse panel."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -604,9 +604,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, /tmp/choir-selfdev-g1-round7-panel/manifest.tsv]
-  blocker_or_risk: "No known source blocker after round-8 repair. Full Linux/Nix realization, exact-image runtime capability receipt, deployment identity, mode-off staging behavior, and all C–F product transitions remain intentionally unproved deployed gates; none may be replaced with local evidence."
-  next_action: "Run a fresh diverse G1 panel against exact code candidate 18e4f9dbfb37eb7d518103a8315542bc11f02f92 and this authority card; accept only if no reproducible source blocker remains."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, /tmp/choir-selfdev-g1-round8-panel/manifest.tsv]
+  blocker_or_risk: "B remains blocked. Terminal retry could bless inconsistent durable projections. Event-only start crash recovery does not bind the original prompt commitment. Capsule broker peer identity is inverted across its user namespace and socket readiness does not prove an authenticated RPC. Current runtime guidance can reintroduce deleted package/adoption promotion. Later deployed gates remain correctly deferred."
+  next_action: "Require complete operation/event/request joins for terminal replay; persist and verify proposal request commitment across event-only crash recovery; make capsule broker peer identity user-namespace-correct and readiness perform a capability-authenticated RPC with Linux integration coverage; delete current package/adoption promotion guidance; freeze and re-review."
 
 successor:
   status: selected_draft_non_executable
@@ -740,6 +740,17 @@ review_receipts:
     verdicts: [codex:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1, devin:ACCEPT_G1, omp-glm52:FAILED]
     outcome: repair
     adjudication: "The split panel rejects under the severe-minority rule. Local inspection confirms Codex's public-proxy terminal-replay blocker, Cursor's proxy-only start-mode gate, and omp-gpt55's stale top-level candidate-computer/promotion/lineage guidance. The three accepting reviews did not rebut these reproducible paths. This receipt records all confirmed problems before repair-code mutation; prior round-6 repairs remain sound and deployed-only C–F gates remain excluded."
+
+  - id: G1-disabled-cutover-round-8-2026-07-19
+    reviewed_at: 2026-07-19T18:42:42Z
+    candidate_ref: 18e4f9dbfb37eb7d518103a8315542bc11f02f92
+    authority_ref: 12e09034a6b961dc263cfa9c02f82d9d95c66024
+    manifest: /tmp/choir-selfdev-g1-round8-panel/manifest.tsv
+    panel: [codex, devin, cursor, opencode, omp-gpt55, omp-gemini35, omp-glm52]
+    health: "Codex, Devin, Cursor, OpenCode, omp-gpt55, and omp-gemini35 completed; omp-glm52 failed before review."
+    verdicts: [codex:REJECT_G1, omp-gpt55:REJECT_G1, devin:REJECT_G1, cursor:ACCEPT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1, omp-glm52:FAILED]
+    outcome: repair
+    adjudication: "The split panel rejects under the severe-minority rule. Codex identified incomplete terminal semantic joins and stale current runtime guidance; omp-gpt55 reproduced changed proposal retry after an event-only crash; Devin identified the user-namespace-inverted broker peer check and dial-only readiness. Local inspection confirms each class. The accepting reviews did not rebut them. This receipt records all confirmed problems before repair-code mutation; prior repairs remain sound and deployed-only C–F gates remain excluded."
 
 view:
   path: none
