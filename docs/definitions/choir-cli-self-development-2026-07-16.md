@@ -595,6 +595,18 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000]
     verification: "Six of seven reviewers completed; Cursor, Codex, Devin, and omp-gpt55 rejected while OpenCode and Gemini accepted and GLM failed before review. Local source inspection confirms all five blocker classes at the cited paths. These are the same round-9 symptoms for which the owner subsequently settled typed artifact refs, any-mode exact replay, one shared decision-binding verifier, parent-owned inherited broker listener, and Node A Linux proof; the harness substrate was repaired, but the product callsites were not."
     disposition: "Rejected at G1. Effects remain OFF and no deployment is authorized. The owner's structural recovery decision authorizes one coherent repair connecting the five exact settled semantics, followed by an Executor.Spawn Linux proof and a newly frozen G1 panel."
+  g1_round_11_probe:
+    observed_at: 2026-07-19T23:31:00Z
+    status: rejected_capsule_cgroup_path
+    source_identity: 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c
+    mutation_class: red
+    protected_surfaces: [guest_capsule_isolation, cgroup_v2_admission, inherited_broker_listener]
+    evidence_class: "Exact Node A x86_64-linux opt-in Executor.Spawn integration using the immutable Nix capsule-broker. The test creates a clean frozen source repo, an isolated overlay lower root, and calls the production Executor path as root."
+    success_before_blocker: "The source candidate passed the focused Go packages, exact Nix guest-image build, and exact Firecracker effects-OFF boot harness at build identity 8b258d3b. Canonical pinned input/output artifact references, shared decision recovery verification, guest-owned mode consumption, and parent-owned listener FD transfer are present in source."
+    problem: "`TestExecutorInheritedBrokerListenerEndToEnd` failed before broker spawn with `failed to create cgroup capsule/g1-listener-3455982: cgroups: invalid group path`. `CreateCgroup` passes relative `capsule/<id>` to containerd/cgroups v2 `NewManager`; that API requires an absolute cgroup path. The effects-OFF boot harness did not exercise Executor.Spawn and therefore could not reveal this admission blocker."
+    disposition: "Documented before repair. G1 remains rejected and effects remain OFF. This is a capsule substrate blocker, not a deployment or product-acceptance gap."
+    next_probe: "Change only the cgroup manager path to absolute `/capsule/<id>`, add a focused path contract, rerun the exact Node A Executor.Spawn inherited-listener integration through authenticated broker readiness and cleanup, then freeze and review the resulting source candidate."
+    rollback: "Revert the focused cgroup path commit; no deployed state or production cgroup was mutated by the failed disposable probe."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
