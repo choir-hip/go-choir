@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var denyEPERM = seccomp.ActionErrno | seccomp.Action(unix.EPERM)
+var denyEPERM = seccomp.ActionErrno
 
 var capsuleAllowedSyscalls = []string{
 	"read", "write", "readv", "writev", "pread64", "pwrite64", "close", "close_range",
