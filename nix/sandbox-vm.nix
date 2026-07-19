@@ -461,8 +461,8 @@ EOF
       Group = "root";
       ExecStart = "${goChoirPackages.updater}/bin/choir-updater";
       UMask = "0077";
-      CapabilityBoundingSet = [ "CAP_SYS_ADMIN" "CAP_SETUID" "CAP_SETGID" ];
-      AmbientCapabilities = [ "CAP_SYS_ADMIN" "CAP_SETUID" "CAP_SETGID" ];
+      CapabilityBoundingSet = [ "CAP_SYS_ADMIN" "CAP_SETUID" "CAP_SETGID" "CAP_SETFCAP" ];
+      AmbientCapabilities = [ "CAP_SYS_ADMIN" "CAP_SETUID" "CAP_SETGID" "CAP_SETFCAP" ];
       Delegate = true;
       PrivateTmp = true;
       PrivateDevices = true;
