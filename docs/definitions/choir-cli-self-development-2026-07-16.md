@@ -606,13 +606,21 @@ now:
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, ae881720132809d6d6092b4a739e43a311489000, /tmp/choir-selfdev-g1-round9-panel/manifest.tsv]
   blocker_or_risk: "The blocker cluster is substrate-level, not six independent local defects: source review and Darwin/unit evidence are standing in for one executable Linux effects-OFF lifecycle contract, while decision identity is duplicated across proxy, guest handler, recovery reconciler, operation projection, and materializer. Repeated local patches move one mirror without closing the others. The candidate also lacks a single generated current-authority inventory, so stale positive guidance reappears outside the manually edited set."
-  next_action: "Owner direction required by Dead-End Escalation. Recommended structural route: first establish an executable x86_64-linux disposable G1 harness that boots the exact Nix guest and exercises proposal start/retry/crash recovery, authenticated capsule RPC, decision/recovery/replay through applied state, and negative authority calls; centralize one decision/start binding verifier used by proxy-facing reads and guest recovery; derive current CLI/docs inventory from the shipped grammar; then repair against that harness and freeze once. Do not continue file-by-file G1 patching."
+  next_action: "Update clean Node A from lagging source/config to current origin/main, preserve its existing state and rollback generation, then use it as the x86_64-linux effects-OFF G1 lifecycle harness. Before product repairs, settle approval retry, decision-binding authority, capsule socket ownership, and artifact-reference representation through a diverse agentic-consensus panel and owner-readable synthesis."
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
     substrate_vs_symptoms: "Substrate: no exact Linux lifecycle harness and no single decision/start binding authority. Symptoms: raw artifact ref, mode-ordered retry, mutable-state terminal replay, weak recovery mirror, broker directory ownership, and stale current guidance."
     existing_replacements: "Canonical ComputerEventAppender, selfdev operation/start-intent stores, guest-local capsule Executor, isolated verifier/updater, checkpoint and vmctl route CAS are the intended replacements and are wired partially; none replaces the missing end-to-end verifier of their joins."
-    authority_needed: "Owner must authorize the recommended harness-and-centralization route, explicitly override Dead-End Escalation for another incremental pass, or supersede the mission."
+    authority_needed: "Resolved in part by owner on 2026-07-19: use Node A as the Linux harness and update it to current code/config first; resolve approval retry, decision binding, broker socket, and artifact representation through agentic consensus. Product semantics requiring owner judgment remain unsettled until the panel synthesis is reviewed."
+
+  structural_recovery_decision:
+    status: settled
+    source: owner
+    settled_by: owner
+    recorded_at: 2026-07-19T19:45:00Z
+    selected: "Use Node A (`ssh node-a`) as the x86_64-linux harness. It is a lagging Choir mirror; first fast-forward its clean checkout and deploy the current Node A code/config with rollback preserved. Run agentic consensus on approval retry semantics, canonical decision-binding authority, capsule broker socket ownership, and standardized artifact references before further product repair."
+    boundary: "Node A is harness infrastructure, not staging/product acceptance. SSH may administer the harness but is not admissible proof for the public no-SSH self-development product path. Effects remain OFF and G1 remains rejected."
 
 successor:
   status: selected_draft_non_executable
