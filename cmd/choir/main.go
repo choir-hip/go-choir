@@ -725,7 +725,8 @@ func runSelfDevelopmentGenesis(args []string, stdout, stderr io.Writer) int {
 	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
 	g0Receipt := fs.String("g0-receipt", "", "Frozen G0 conformance receipt")
 	g1Receipt := fs.String("g1-receipt", "", "Frozen accepted G1 gate receipt")
-	candidateRef := fs.String("candidate-ref", "", "Exact deployed G1 candidate commit")
+	candidateRef := fs.String("candidate-ref", "", "Exact frozen G1 code candidate commit")
+	deployedReleaseRef := fs.String("deployed-release-ref", "", "Exact deployed release commit")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir self-dev genesis: %v\n", err)
@@ -733,14 +734,15 @@ func runSelfDevelopmentGenesis(args []string, stdout, stderr io.Writer) int {
 	}
 	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*baselineVersion) == "" || strings.TrimSpace(*baselineState) == "" ||
 		strings.TrimSpace(*idempotencyKey) == "" || strings.TrimSpace(*g0Receipt) == "" || strings.TrimSpace(*g1Receipt) == "" ||
-		strings.TrimSpace(*candidateRef) == "" || !*expectedAbsent || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir self-dev genesis: --computer, --baseline-version, --baseline-state, --expected-absent, and --idempotency-key are required")
+		strings.TrimSpace(*candidateRef) == "" || strings.TrimSpace(*deployedReleaseRef) == "" || !*expectedAbsent || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir self-dev genesis: --computer, --baseline-version, --baseline-state, --expected-absent, --idempotency-key, --g0-receipt, --g1-receipt, --candidate-ref, and --deployed-release-ref are required")
 		return 2
 	}
 	body := map[string]any{
 		"baseline_version": strings.TrimSpace(*baselineVersion), "baseline_state": strings.TrimSpace(*baselineState),
 		"expected_absent": true, "idempotency_key": strings.TrimSpace(*idempotencyKey),
-		"g0_receipt": strings.TrimSpace(*g0Receipt), "g1_receipt": strings.TrimSpace(*g1Receipt), "candidate_ref": strings.TrimSpace(*candidateRef),
+		"g0_receipt": strings.TrimSpace(*g0Receipt), "g1_receipt": strings.TrimSpace(*g1Receipt),
+		"candidate_ref": strings.TrimSpace(*candidateRef), "deployed_release_ref": strings.TrimSpace(*deployedReleaseRef),
 	}
 	var response json.RawMessage
 	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/genesis"

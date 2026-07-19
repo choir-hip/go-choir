@@ -2,6 +2,7 @@ package updater
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
@@ -59,7 +60,7 @@ type KernelCapabilityIdentity struct {
 	LifecycleGeneration uint64
 }
 
-func NewKernelCapabilityReport(identity KernelCapabilityIdentity, request KernelCapabilityRequest, probe KernelCapabilityProbe, key computerevent.SigningKey, now time.Time) (KernelCapabilityReport, error) {
+func NewKernelCapabilityReport(ctx context.Context, identity KernelCapabilityIdentity, request KernelCapabilityRequest, probe KernelCapabilityProbe, signer ReceiptSigner, now time.Time) (KernelCapabilityReport, error) {
 	if strings.TrimSpace(identity.ComputerID) == "" || strings.TrimSpace(identity.RealizationID) == "" ||
 		!computerevent.IsSHA256(identity.GuestImageDigest) || !computerevent.IsSHA256(identity.KernelConfigDigest) ||
 		!request.ComputerVersion.Valid() || !computerevent.IsSHA256(request.ReleaseDigest) ||
@@ -93,12 +94,12 @@ func NewKernelCapabilityReport(identity KernelCapabilityIdentity, request Kernel
 		"observed_at": observedAt.Format(time.RFC3339Nano), "expires_at": expires.Format(time.RFC3339Nano),
 		"lifecycle_generation": identity.LifecycleGeneration,
 	}
-	receipt, err := computerevent.NewSignedReceipt(KernelCapabilityReceiptKind, "choir-updater", fields, []computerevent.SigningKey{key}, now)
+	receipt, err := signer.SignReceipt(ctx, KernelCapabilityReceiptKind, "choir-updater", fields, now)
 	if err != nil {
 		return KernelCapabilityReport{}, err
 	}
-	publicKey, ok := key.PrivateKey.Public().(ed25519.PublicKey)
-	if !ok {
+	_, publicKey, err := signer.PublicKey(ctx)
+	if err != nil {
 		return KernelCapabilityReport{}, fmt.Errorf("kernel capability receipt: public key unavailable")
 	}
 	return KernelCapabilityReport{Receipt: receipt, PublicKey: base64.RawStdEncoding.EncodeToString(publicKey)}, nil

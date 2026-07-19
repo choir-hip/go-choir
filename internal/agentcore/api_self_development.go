@@ -45,13 +45,14 @@ type selfDevelopmentDecisionRequest struct {
 }
 
 type selfDevelopmentGenesisRequest struct {
-	BaselineVersion string `json:"baseline_version"`
-	BaselineState   string `json:"baseline_state"`
-	ExpectedAbsent  bool   `json:"expected_absent"`
-	IdempotencyKey  string `json:"idempotency_key"`
-	G0Receipt       string `json:"g0_receipt"`
-	G1Receipt       string `json:"g1_receipt"`
-	CandidateRef    string `json:"candidate_ref"`
+	BaselineVersion    string `json:"baseline_version"`
+	BaselineState      string `json:"baseline_state"`
+	ExpectedAbsent     bool   `json:"expected_absent"`
+	IdempotencyKey     string `json:"idempotency_key"`
+	G0Receipt          string `json:"g0_receipt"`
+	G1Receipt          string `json:"g1_receipt"`
+	CandidateRef       string `json:"candidate_ref"`
+	DeployedReleaseRef string `json:"deployed_release_ref"`
 }
 
 type selfDevelopmentRollbackRequest struct {
@@ -278,22 +279,26 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		return
 	}
 	request.BaselineVersion, request.BaselineState, request.IdempotencyKey = strings.TrimSpace(request.BaselineVersion), strings.TrimSpace(request.BaselineState), strings.TrimSpace(request.IdempotencyKey)
-	request.G0Receipt, request.G1Receipt, request.CandidateRef = strings.TrimSpace(request.G0Receipt), strings.TrimSpace(request.G1Receipt), strings.TrimSpace(request.CandidateRef)
+	request.G0Receipt, request.G1Receipt, request.CandidateRef, request.DeployedReleaseRef = strings.TrimSpace(request.G0Receipt), strings.TrimSpace(request.G1Receipt), strings.TrimSpace(request.CandidateRef), strings.TrimSpace(request.DeployedReleaseRef)
 	if !request.ExpectedAbsent || !computerevent.IsSHA256(request.BaselineVersion) || !computerevent.IsSHA256(request.BaselineState) || request.IdempotencyKey == "" {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "exact absent baseline version, state, and idempotency binding are required"})
 		return
 	}
 	expectedG0 := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G0_RECEIPT"))
 	expectedG1 := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G1_RECEIPT"))
-	if r.Header.Get("X-Self-Development-Disposable") != "true" || r.Header.Get("X-Self-Development-Mode-Generation") != "0" ||
-		expectedG0 == "" || expectedG1 == "" || request.G0Receipt != expectedG0 || request.G1Receipt != expectedG1 ||
-		request.CandidateRef == "" || request.CandidateRef != strings.TrimSpace(buildinfo.Commit) || request.CandidateRef == "local" {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires disposable target, absent off-mode state, and exact frozen G0/G1 candidate receipts"})
+	expectedCandidate := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF"))
+	if r.Header.Get("X-Self-Development-Disposable") != "true" || r.Header.Get("X-Self-Development-Mode-Generation") != "0" {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires disposable target and absent off-mode state"})
+		return
+	}
+	genesisAuthorityRef, err := selfDevelopmentGenesisAuthorityRef(request, expectedG0, expectedG1, expectedCandidate, strings.TrimSpace(buildinfo.Commit))
+	if err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires exact frozen G0/G1 candidate and deployed release bindings"})
 		return
 	}
 	eventIdempotency := "selfdev-genesis-" + computerevent.DigestBytes([]byte(computerID+"\x00"+request.IdempotencyKey))
 	if existingEvent, found, lookupErr := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency); lookupErr == nil && found {
-		if existingEvent.ProposedEffectRef != request.BaselineVersion || existingEvent.ResultingEffectiveCommitment != request.BaselineState {
+		if existingEvent.ProposedEffectRef != request.BaselineVersion || existingEvent.ResultingEffectiveCommitment != request.BaselineState || !selfDevelopmentContainsString(existingEvent.InputArtifactRefs, genesisAuthorityRef) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis idempotency binding changed"})
 			return
 		}
@@ -355,7 +360,7 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return
 	} else if found {
-		if existing.ProposedEffectRef != request.BaselineVersion || existing.ResultingEffectiveCommitment != request.BaselineState {
+		if existing.ProposedEffectRef != request.BaselineVersion || existing.ResultingEffectiveCommitment != request.BaselineState || !selfDevelopmentContainsString(existing.InputArtifactRefs, genesisAuthorityRef) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis idempotency binding changed"})
 			return
 		}
@@ -388,7 +393,8 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		ActorProfile: agentprofile.Super, AuthorityRef: "external-owner-genesis:" + ownerID, PrivacyClass: "owner",
 		PayloadCommitment: request.BaselineState, ProposedEffectRef: request.BaselineVersion,
 		VerifierRefs: genesisKeyRefs, ResultingEffectiveCommitment: request.BaselineState,
-		ReducerVersion: computerevent.ReducerVersionV1,
+		InputArtifactRefs: []string{genesisAuthorityRef},
+		ReducerVersion:    computerevent.ReducerVersionV1,
 	}
 	receipt, err := h.rt.eventAppender.AppendNew(r.Context(), event, computerevent.TransitionInput{TargetStateCommitment: request.BaselineState}, nil)
 	if err != nil {
@@ -411,6 +417,21 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		return
 	}
 	writeAPIJSON(w, http.StatusCreated, map[string]any{"receipt": receipt, "head": head, "checkpoint": checkpoint, "baseline": baseline})
+}
+func selfDevelopmentGenesisAuthorityRef(request selfDevelopmentGenesisRequest, expectedG0, expectedG1, expectedCandidate, deployedRelease string) (string, error) {
+	if expectedG0 == "" || expectedG1 == "" || expectedCandidate == "" || deployedRelease == "" || deployedRelease == "local" ||
+		request.G0Receipt != expectedG0 || request.G1Receipt != expectedG1 || request.CandidateRef != expectedCandidate ||
+		request.DeployedReleaseRef != deployedRelease {
+		return "", fmt.Errorf("genesis authority identity mismatch")
+	}
+	canonical, err := computerevent.CanonicalJSON(map[string]string{
+		"g0_receipt": request.G0Receipt, "g1_receipt": request.G1Receipt,
+		"candidate_ref": request.CandidateRef, "deployed_release_ref": request.DeployedReleaseRef,
+	})
+	if err != nil {
+		return "", err
+	}
+	return "genesis-authority:sha256:" + computerevent.DigestBytes(canonical), nil
 }
 
 func (h *APIHandler) recordGenesisBaseline(ctx context.Context, request selfDevelopmentGenesisRequest, event computerevent.Event, eventIdempotency string, route vmctl.RouteResolution, manifest updater.ReleaseManifest) (selfdev.Operation, selfdevprotocol.CheckpointResponse, error) {
@@ -536,7 +557,7 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 	if operationID == "" || request.IdempotencyKey == "" || !computerevent.IsSHA256(request.BundleDigest) || request.VerifierRef == "" ||
 		!computerevent.IsSHA256(request.ExpectedDesiredEventHead) || !computerevent.IsSHA256(request.ExpectedEffectiveEventHead) ||
 		!computerevent.IsSHA256(request.ExpectedDesiredStateCommitment) || !computerevent.IsSHA256(request.ExpectedEffectiveStateCommitment) ||
-		(request.Decision != "approve" && request.Decision != "reject") || (request.Decision == "reject" && strings.TrimSpace(request.Reason) == "") {
+		(request.Decision != "approve" && request.Decision != "reject") || (request.Decision == "approve" && strings.TrimSpace(request.Reason) != "") || (request.Decision == "reject" && strings.TrimSpace(request.Reason) == "") {
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "complete approve or reject decision binding is required"})
 		return
 	}
@@ -696,17 +717,30 @@ func (h *APIHandler) verifyConsumedModeReceipt(receipt *computerevent.Receipt, o
 		value, _ := receipt.KindFields[name].(string)
 		return value
 	}
-	if field("old_mode") != "accept_once" || field("new_mode") != "propose_only" ||
+	expectedConsumptionDigest, digestErr := selfdevprotocol.DecisionBindingDigest(selfDevelopmentDecisionBinding(operationID, request))
+	expectedConsumptionKey := "accept-once-consumed:" + strings.TrimSpace(operationID) + ":" + expectedConsumptionDigest
+	if digestErr != nil || field("old_mode") != "accept_once" || field("new_mode") != "propose_only" ||
 		field("consumed_operation_id") != operationID || field("consumed_bundle_digest") != request.BundleDigest ||
 		field("consumed_desired_event_head") != request.ExpectedDesiredEventHead ||
 		field("consumed_effective_event_head") != request.ExpectedEffectiveEventHead ||
 		field("consumed_pending_transition_ref") != strings.TrimSpace(*request.ExpectedPendingTransitionRef) ||
 		field("consumed_desired_state_commitment") != request.ExpectedDesiredStateCommitment ||
 		field("consumed_effective_state_commitment") != request.ExpectedEffectiveStateCommitment ||
-		!strings.HasSuffix(field("idempotency_key"), ":"+request.IdempotencyKey) {
+		field("idempotency_key") != expectedConsumptionKey {
 		return fmt.Errorf("consumed accept_once mode receipt binding mismatch")
 	}
 	return nil
+}
+
+func selfDevelopmentDecisionBinding(operationID string, request selfDevelopmentDecisionRequest) selfdevprotocol.DecisionBinding {
+	return selfdevprotocol.DecisionBinding{
+		OperationID: operationID, Decision: request.Decision, IdempotencyKey: request.IdempotencyKey,
+		BundleDigest: request.BundleDigest, VerifierRef: request.VerifierRef, Reason: request.Reason,
+		ExpectedDesiredEventHead: request.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: request.ExpectedEffectiveEventHead,
+		ExpectedPendingTransitionRef:     request.ExpectedPendingTransitionRef,
+		ExpectedDesiredStateCommitment:   request.ExpectedDesiredStateCommitment,
+		ExpectedEffectiveStateCommitment: request.ExpectedEffectiveStateCommitment,
+	}
 }
 
 func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev.Operation, ownerID, prompt string) (selfdev.Operation, error) {

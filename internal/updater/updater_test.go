@@ -47,10 +47,8 @@ func TestUpdaterAppliesIdempotentlyAndRestoresPriorHealthyRelease(t *testing.T) 
 	t.Cleanup(func() { makeTreeWritable(root) })
 	service := &fakeServiceManager{}
 	prober := &fakeHealthProber{}
-	updater, err := New(root, "computer-test", "realization-test", service, prober, computerevent.SigningKey{
-		SignerRef:  computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"},
-		PrivateKey: privateKey,
-	})
+	updater, err := New(root, "computer-test", "realization-test", service, prober, testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"},
+		PrivateKey: privateKey}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,9 +137,7 @@ func TestUpdaterRestartsRealReleaseProcessAcrossPointerSwap(t *testing.T) {
 			_, _ = manager.process.Wait()
 		}
 	})
-	engine, err := New(root, "computer-test", "realization-test", manager, processHealthProber{output: manager.output}, computerevent.SigningKey{
-		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "process-restart-test"}, PrivateKey: privateKey,
-	})
+	engine, err := New(root, "computer-test", "realization-test", manager, processHealthProber{output: manager.output}, testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "process-restart-test"}, PrivateKey: privateKey}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +169,7 @@ func TestUpdaterRejectsSymlinkManifestEntryBeforePointerMutation(t *testing.T) {
 	}
 	root := filepath.Join(t.TempDir(), "updater")
 	t.Cleanup(func() { makeTreeWritable(root) })
-	updater, err := New(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{}, computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey})
+	updater, err := New(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{}, testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,9 +292,7 @@ func TestUpdaterImportsImmutableBaselineOnce(t *testing.T) {
 	}
 	root := filepath.Join(t.TempDir(), "updater")
 	t.Cleanup(func() { makeTreeWritable(root) })
-	engine, err := New(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{}, computerevent.SigningKey{
-		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey,
-	})
+	engine, err := New(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{}, testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}})
 	if err != nil {
 		t.Fatal(err)
 	}

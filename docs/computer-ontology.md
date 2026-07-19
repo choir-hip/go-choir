@@ -69,12 +69,12 @@ different merge laws.
 | Layer | Status now | Claim boundary |
 | --- | --- | --- |
 | Persistent user computer and VM lifecycle | **Live** | A long-lived computer is identified by stable ComputerID; a realization is replaceable machine state. Existing lifecycle/status remain projections and actuators. |
-| Worker/background and candidate VM mutation | **Live obsolete code; delete** | Worker-VM and candidate-VM are retired concepts. This mission deletes their lifecycle/controller/tool/profile/prompt/API code; generic delegated agents use durable runs/trajectories and capsules. |
+| Worker/background and candidate VM mutation | **Deleted by clean cutover** | Generic delegated agents are durable runs/trajectories and perform bounded effects only through guest-local capsules. |
 | `internal/computerversion` constructor/verifier | **Live audited construction substrate** | ComputerVersion is an immutable reconstruction checkpoint at an event head, not the evolving computer or semantic promotion authority. |
-| Computer event authority | **Active target / not implemented** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery are specified by the active self-development Definition. |
-| Capsules | **Scaffolded, inert by default** | Current host authority, executor, broker, cleanup, and exec/file tools are non-conformant; the target is mandatory guest-local fail-closed isolation. |
-| Features adoption and activation | **Live unrelated protocol records** | AppAdoption/lineage records do not change served code and are forbidden as self-development promotion authority. |
-| Self-development acceptance/materialization | **Active target / not implemented** | Acceptance must append an event; guest updater, checkpoint, route projection, rejection, restart/reconstruction, and rollback require deployed proof. |
+| Computer event authority | **Implemented source candidate; deployed proof pending** | One guest appender, corpusd head CAS, embedded projection, immutable event artifacts, privacy, and recovery are effects-off pending the active Definition's landing gate. |
+| Capsules | **Implemented source candidate; deployed proof pending** | Guest-local namespaces, cgroup, seccomp, Landlock, capability broker, transaction tape, and fail-closed admission are effects-off pending deployment. |
+| Features adoption and activation | **Deleted by clean cutover** | AppChangePackage/AppAdoption/lineage records are not self-development authority or product fallback. |
+| Self-development acceptance/materialization | **Implemented source candidate; deployed proof pending** | Public CLI/API operations, external decision, guest updater, checkpoint, route projection, rejection, restart/reconstruction, and rollback require G1 acceptance and deployed gates. |
 
 Do not collapse a code-present substrate into a live product claim. A worker
 VM, forked desktop, AppChangePackage, capsule, frozen effect bundle,
@@ -318,10 +318,8 @@ Ideal direction:
 - users can evolve Choir inside Choir without host access or candidate VMs;
 - complete audit preserves learning from proposals, refusals, failures,
   rejections, applications, and rollbacks;
-- published packages remain typed and importable without becoming authority for
-  the recipient computer;
-- platform updates can be reconciled with divergent computers under a separate
-  owner-ratified protocol;
+- cross-computer publication or divergent-platform reconciliation requires a
+  separate owner-ratified protocol and is not inferred from self-development;
 - the artifact graph records who changed what, what verified, what failed, what
   was reused, and what became public memory.
 

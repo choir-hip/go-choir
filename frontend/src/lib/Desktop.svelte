@@ -934,7 +934,7 @@
         return true;
       }
       if (sandboxId !== '') {
-        appendBootLine(previousSandboxId ? 'Waiting for route to stabilize' : 'Candidate computer route found');
+        appendBootLine(previousSandboxId ? 'Waiting for route to stabilize' : 'Computer route found');
       } else {
         appendBootLine('Waiting for computer identity');
       }

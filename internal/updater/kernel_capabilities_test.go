@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"strings"
@@ -29,10 +30,10 @@ func TestKernelCapabilityReceiptBindsIdentityAndFailsClosed(t *testing.T) {
 		ObservedAt:   now.Format(time.RFC3339Nano),
 		Capabilities: capabilities, ContractDigest: strings.Repeat("e", 64),
 	}
-	report, err := NewKernelCapabilityReport(KernelCapabilityIdentity{
+	report, err := NewKernelCapabilityReport(context.Background(), KernelCapabilityIdentity{
 		ComputerID: "computer-1", RealizationID: "realization-1",
 		GuestImageDigest: strings.Repeat("f", 64), KernelConfigDigest: strings.Repeat("1", 64), LifecycleGeneration: 4,
-	}, KernelCapabilityRequest{ComputerVersion: version, ReleaseDigest: strings.Repeat("2", 64)}, probe, key, now)
+	}, KernelCapabilityRequest{ComputerVersion: version, ReleaseDigest: strings.Repeat("2", 64)}, probe, testReceiptSigner{key: key}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,10 +62,10 @@ func TestKernelCapabilityReceiptBindsIdentityAndFailsClosed(t *testing.T) {
 		missing.Capabilities[name] = observation
 	}
 	delete(missing.Capabilities, "landlock_enforcing")
-	if _, err := NewKernelCapabilityReport(KernelCapabilityIdentity{
+	if _, err := NewKernelCapabilityReport(context.Background(), KernelCapabilityIdentity{
 		ComputerID: "computer-1", RealizationID: "realization-1",
 		GuestImageDigest: strings.Repeat("f", 64), KernelConfigDigest: strings.Repeat("1", 64), LifecycleGeneration: 4,
-	}, KernelCapabilityRequest{ComputerVersion: version, ReleaseDigest: strings.Repeat("2", 64)}, missing, key, now); err == nil {
+	}, KernelCapabilityRequest{ComputerVersion: version, ReleaseDigest: strings.Repeat("2", 64)}, missing, testReceiptSigner{key: key}, now); err == nil {
 		t.Fatal("missing mandatory capability was accepted")
 	}
 }

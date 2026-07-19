@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	selfdevprotocol "github.com/yusefmosiah/go-choir/internal/verifierprotocol"
 )
 
 type Client struct {

@@ -7,26 +7,32 @@ wraps the public `/api/` and `/auth/` HTTP routes with API key (Bearer
 `choir_sk_...`) auth so agents and scripts can read Texture documents, observe
 trajectories, search, start runs, and manage API keys without a browser.
 
-**Status:** buildable Phase 1 from this checkout. No supported binary
-distribution or dated staging acceptance is recorded here. `/goal` is an
-external agent-harness invocation, not a CLI command. The CLI does not expose
-packages, adoptions, verifier contracts, run acceptance, promotion, or rollback.
+**Status:** source-buildable. The self-development cutover is effects-off by
+default and has no dated deployed acceptance recorded here. `/goal` remains an
+external agent-harness invocation, not a CLI command.
 
-## Self-Development Handoff Today
+## Self-Development Control
 
-| Step | Surface | Durable handle / evidence | Ceiling |
-| --- | --- | --- | --- |
-| Submit intent | `choir run start` or web prompt bar | submission/trajectory id | Run started; not a code-change claim. |
-| Observe artifact | `choir run status`, `texture revisions`, trajectories | document/revision/trajectory ids | Artifact and causal evidence only. |
-| Delegate mutation | Texture/Super product path | worker/background VM, repo refs, test evidence | Not controllable through CLI; VM is an execution substrate, not a semantic candidate ComputerVersion. |
-| Publish candidate change | Super runtime tools | AppChangePackage id | CLI has no command; publication cannot push shared GitHub source. |
-| Import and verify | Features UI/product APIs | adoption id, recipient build/verifier evidence | CLI has no command. |
-| Approve/activate | Features UI/product APIs | owner approval and lineage/adoption event | Does not prove the served runtime/UI changed. |
-| Land shared Choir change | Git/CI/deploy workflow | commit, CI/deploy identity, staging proof | External to Choir CLI and AppChangePackage promotion. |
+Every operation targets an explicit stable `ComputerID`.
 
-There is no current headless end-to-end self-development command. Switch from
-CLI observation to the Features UI/API for package/adoption state, and use the
-Git landing loop for shared platform code.
+| Step | CLI surface | Durable evidence |
+| --- | --- | --- |
+| Inspect authority | `choir self-dev status`, `inspect`, `kernel-capabilities` | event heads, operation, signed receipts |
+| Control effects | `choir self-dev mode get|set` | generation-CAS `ModeReceipt` |
+| Import baseline | `choir self-dev genesis` | G0/G1 candidate binding, deployed-release binding, genesis event/checkpoint |
+| Start proposal | `choir self-dev start` | operation id and frozen bundle |
+| Decide externally | `choir self-dev approve|reject` | exact decision event and receipt |
+| Observe completion | `choir self-dev wait` | terminal operation and joined evidence |
+| Restore | `choir self-dev rollback` | rollback event, materialization, checkpoint, route receipt |
+
+Effects default to `off`. `accept_once` authorizes only its exact canonical
+approval request and returns to `propose_only` before that approval reaches the
+guest. A package, adoption, mutable branch, VM, local test, verifier statement,
+checkpoint, or route transition alone is not accepted self-development.
+
+Shared GitHub source still lands through commit, push, CI, deploy identity, and
+deployed product-path proof. The reviewed G1 source candidate and the later
+deployed release are separate identities and both bind genesis.
 
 ## Building
 

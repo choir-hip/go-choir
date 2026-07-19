@@ -130,9 +130,14 @@ func TestConsumedModeReceiptAuthorizesOnlyExactCrashedDecisionRetry(t *testing.T
 	pending := ""
 	decision := proxiedSelfDevelopmentDecision{
 		Decision: "approve", IdempotencyKey: "decision-1", BundleDigest: digest('a'),
+		VerifierRef:              "verifier-ref",
 		ExpectedDesiredEventHead: digest('b'), ExpectedEffectiveEventHead: digest('c'),
 		ExpectedPendingTransitionRef:   &pending,
 		ExpectedDesiredStateCommitment: digest('d'), ExpectedEffectiveStateCommitment: digest('e'),
+	}
+	consumptionKey, err := consumedModeIdempotency("operation-1", decision)
+	if err != nil {
+		t.Fatal(err)
 	}
 	receipt := &computerevent.Receipt{ReceiptKind: "ModeReceipt", KindFields: map[string]any{
 		"old_mode": "accept_once", "new_mode": "propose_only", "consumed_operation_id": "operation-1",
@@ -142,7 +147,7 @@ func TestConsumedModeReceiptAuthorizesOnlyExactCrashedDecisionRetry(t *testing.T
 		"consumed_pending_transition_ref":     pending,
 		"consumed_desired_state_commitment":   decision.ExpectedDesiredStateCommitment,
 		"consumed_effective_state_commitment": decision.ExpectedEffectiveStateCommitment,
-		"idempotency_key":                     "accept-once-consumed:operation-1:7:decision-1",
+		"idempotency_key":                     consumptionKey,
 	}}
 	if !consumedModeReceiptMatches(receipt, "operation-1", decision) {
 		t.Fatal("exact consumed decision receipt was refused")
@@ -159,6 +164,7 @@ func TestConsumeAcceptOncePostsDeterministicIdempotencyAndReturnsExactReceipt(t 
 	pending := ""
 	decision := proxiedSelfDevelopmentDecision{
 		Decision: "approve", IdempotencyKey: "decision-1", BundleDigest: digest('a'),
+		VerifierRef:              "verifier-ref",
 		ExpectedDesiredEventHead: digest('b'), ExpectedEffectiveEventHead: digest('c'),
 		ExpectedPendingTransitionRef:   &pending,
 		ExpectedDesiredStateCommitment: digest('d'), ExpectedEffectiveStateCommitment: digest('e'),
@@ -176,7 +182,10 @@ func TestConsumeAcceptOncePostsDeterministicIdempotencyAndReturnsExactReceipt(t 
 		if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&request) != nil {
 			t.Fatal("invalid mode consumption request")
 		}
-		wantKey := consumedModeIdempotency("operation-1", 7, "decision-1")
+		wantKey, keyErr := consumedModeIdempotency("operation-1", decision)
+		if keyErr != nil {
+			t.Fatal(keyErr)
+		}
 		if request["mode"] != "propose_only" || request["idempotency_key"] != wantKey || request["expected_generation"] != float64(7) {
 			t.Fatalf("mode consumption request = %#v", request)
 		}

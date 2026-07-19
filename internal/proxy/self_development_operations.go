@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
 type selfDevelopmentTarget struct {
@@ -161,6 +162,10 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 			}
 			operationID := strings.TrimSuffix(strings.TrimPrefix(suffix, "/self-development/operations/"), "/decision")
 			requiresConsumption := mode.Mode == "accept_once"
+			if requiresConsumption && decision.Decision != "approve" {
+				writeJSON(w, http.StatusConflict, errorResponse{Error: "accept_once authorizes only its exact approval"})
+				return
+			}
 			if mode.Mode == "propose_only" && consumedModeReceiptMatches(mode.Receipt, operationID, decision) {
 				decision.ModeReceipt = mode.Receipt
 			} else {
@@ -299,9 +304,13 @@ func (h *Handler) consumeSelfDevelopmentMode(ctx context.Context, computerID, us
 	query := u.Query()
 	query.Set("computer_id", computerID)
 	u.RawQuery = query.Encode()
+	consumptionKey, err := consumedModeIdempotency(decisionOperationID(current), decision)
+	if err != nil {
+		return computerevent.Receipt{}, err
+	}
 	body, err := json.Marshal(map[string]any{
 		"mode": "propose_only", "expected_generation": current.Generation,
-		"idempotency_key": consumedModeIdempotency(decisionOperationID(current), current.Generation, decision.IdempotencyKey),
+		"idempotency_key": consumptionKey,
 	})
 	if err != nil {
 		return computerevent.Receipt{}, err
@@ -338,12 +347,20 @@ func modeProjectionMatchesDecision(mode selfDevelopmentModeProjection, operation
 		mode.ExpectedEffectiveStateCommitment == decision.ExpectedEffectiveStateCommitment
 }
 
-func consumedModeIdempotency(operationID string, generation uint64, decisionID string) string {
-	return fmt.Sprintf("accept-once-consumed:%s:%d:%s", operationID, generation, decisionID)
+func consumedModeIdempotency(operationID string, decision proxiedSelfDevelopmentDecision) (string, error) {
+	digest, err := selfdevprotocol.DecisionBindingDigest(proxiedDecisionBinding(operationID, decision))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("accept-once-consumed:%s:%s", strings.TrimSpace(operationID), digest), nil
 }
 
 func consumedModeReceiptMatches(receipt *computerevent.Receipt, operationID string, decision proxiedSelfDevelopmentDecision) bool {
-	if receipt == nil || receipt.ReceiptKind != "ModeReceipt" || decision.ExpectedPendingTransitionRef == nil {
+	if receipt == nil || receipt.ReceiptKind != "ModeReceipt" || decision.ExpectedPendingTransitionRef == nil || decision.Decision != "approve" {
+		return false
+	}
+	expectedIdempotency, err := consumedModeIdempotency(operationID, decision)
+	if err != nil {
 		return false
 	}
 	field := func(name string) string {
@@ -357,5 +374,16 @@ func consumedModeReceiptMatches(receipt *computerevent.Receipt, operationID stri
 		field("consumed_pending_transition_ref") == strings.TrimSpace(*decision.ExpectedPendingTransitionRef) &&
 		field("consumed_desired_state_commitment") == decision.ExpectedDesiredStateCommitment &&
 		field("consumed_effective_state_commitment") == decision.ExpectedEffectiveStateCommitment &&
-		strings.HasSuffix(field("idempotency_key"), ":"+decision.IdempotencyKey)
+		field("idempotency_key") == expectedIdempotency
+}
+
+func proxiedDecisionBinding(operationID string, decision proxiedSelfDevelopmentDecision) selfdevprotocol.DecisionBinding {
+	return selfdevprotocol.DecisionBinding{
+		OperationID: operationID, Decision: decision.Decision, IdempotencyKey: decision.IdempotencyKey,
+		BundleDigest: decision.BundleDigest, VerifierRef: decision.VerifierRef, Reason: decision.Reason,
+		ExpectedDesiredEventHead: decision.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: decision.ExpectedEffectiveEventHead,
+		ExpectedPendingTransitionRef:     decision.ExpectedPendingTransitionRef,
+		ExpectedDesiredStateCommitment:   decision.ExpectedDesiredStateCommitment,
+		ExpectedEffectiveStateCommitment: decision.ExpectedEffectiveStateCommitment,
+	}
 }

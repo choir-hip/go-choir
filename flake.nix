@@ -250,6 +250,10 @@
           pname = "choir-updater";
           subPackage = "cmd/choir-updater";
         };
+        receiptSigner = mkGoService {
+          pname = "choir-receipt-signer";
+          subPackage = "cmd/choir-receipt-signer";
+        };
         capsuleBroker = mkGoService {
           pname = "capsule-broker";
           subPackage = "cmd/capsule-broker";

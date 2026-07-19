@@ -1,4 +1,4 @@
-package updater
+package receiptsigner
 
 import (
 	"crypto/ed25519"
@@ -9,19 +9,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	"syscall"
 )
 
-func LoadOrCreateSigningKey(path string) (computerevent.SigningKey, error) {
-	return LoadOrCreateDomainSigningKey(path, "guest-core")
-}
-
-func LoadOrCreateDomainSigningKey(path, domain string) (computerevent.SigningKey, error) {
-	path = filepath.Clean(path)
-	if !filepath.IsAbs(path) || path == string(os.PathSeparator) || domain == "" {
-		return computerevent.SigningKey{}, fmt.Errorf("updater signing key: absolute file path is required")
+func LoadOrCreateSigningKey(path, domain string) (computerevent.SigningKey, error) {
+	path, domain = filepath.Clean(path), filepath.Clean(domain)
+	if !filepath.IsAbs(path) || path == string(os.PathSeparator) || domain == "." || domain == string(os.PathSeparator) {
+		return computerevent.SigningKey{}, fmt.Errorf("receipt signer: absolute key path and domain are required")
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return computerevent.SigningKey{}, err
@@ -52,8 +48,7 @@ func LoadOrCreateDomainSigningKey(path, domain string) (computerevent.SigningKey
 				_ = os.Remove(path)
 				return computerevent.SigningKey{}, closeErr
 			}
-			privateKey = generated
-			err = nil
+			privateKey, err = generated, nil
 		}
 	}
 	if err != nil {
@@ -61,10 +56,7 @@ func LoadOrCreateDomainSigningKey(path, domain string) (computerevent.SigningKey
 	}
 	publicKey := privateKey.Public().(ed25519.PublicKey)
 	digest := sha256.Sum256(publicKey)
-	return computerevent.SigningKey{
-		SignerRef:  computerevent.SignerRef{SignerDomain: domain, KeyID: domain + "-" + hex.EncodeToString(digest[:8])},
-		PrivateKey: privateKey,
-	}, nil
+	return computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: domain, KeyID: domain + "-" + hex.EncodeToString(digest[:8])}, PrivateKey: privateKey}, nil
 }
 
 func readSigningKey(path string) (ed25519.PrivateKey, error) {
@@ -74,17 +66,17 @@ func readSigningKey(path string) (ed25519.PrivateKey, error) {
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || int(stat.Uid) != os.Geteuid() {
-		return nil, fmt.Errorf("updater signing key: existing key owner mismatch")
+		return nil, fmt.Errorf("receipt signer: existing key owner mismatch")
 	}
 	if !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
-		return nil, fmt.Errorf("updater signing key: existing key must be a regular mode-0600 file")
+		return nil, fmt.Errorf("receipt signer: existing key must be a regular mode-0600 file")
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	if len(raw) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("updater signing key: invalid private key size")
+		return nil, fmt.Errorf("receipt signer: invalid private key size")
 	}
 	return ed25519.PrivateKey(raw), nil
 }

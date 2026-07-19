@@ -97,11 +97,11 @@ commit, or deployment. It leaves reusable learning: the system's model of itself
 gets sharper, tests are corrected or added, docs stop lying to future agents,
 and the next run starts from a better state.
 
-Choir-in-Choir is Choir's implementation of Level 5: Choir uses its own
-persistent computers, Texture narratives, Trace evidence, candidate worlds,
-AppChangePackages, verifier contracts, and promotion path to improve Choir
-itself. Choir leaves alpha when this self-development loop is reliable enough
-that failed runs improve the system instead of merely consuming attention.
+Choir-in-Choir is Choir's implementation of Level 5: one persistent computer
+uses durable runs, Texture narratives, Trace evidence, guest-local capsules,
+canonical computer events, external verification, scoped owner decisions,
+checkpoint publication, and event-derived rollback to improve Choir itself.
+Choir leaves alpha only after that complete deployed loop is repeatable.
 
 Level 6 is the perennial beta target: the system can improve its own improvement
 machinery. Choir's version uses conjectures, heresies, proof objects, verifier
@@ -211,84 +211,38 @@ For the deeper design frame, see:
 
 ## Runtime Model
 
-The implementation centers on persistent user computers. The target contract
-for controlled candidate work is ahead of the currently wired product path.
-
-### Live today
-
-At a high level:
-
-- each user computer is a persistent, stateful object;
-- appagents own durable app artifacts;
-- Super can delegate mutable work into worker/background VMs and repo
-  checkouts; those VMs are transitional execution substrates, not semantic
-  candidate ComputerVersions;
-- workers produce evidence, source deltas, AppChangePackages, or reports;
-- AppChangePackages carry source changes between divergent computers;
-- recipient computers rebuild and verify adopted changes themselves;
-- compaction preserves what a run learned for future inference.
-
-The usable self-development path is:
+The implementation centers on persistent user computers. The active
+self-development cutover keeps effects disabled by default while exposing one
+audited path:
 
 ```text
-prompt bar or `choir run start`
--> conductor -> Texture
--> optional Super delegation to a worker/background VM
--> repo edit, build, tests, evidence
--> AppChangePackage
--> Features import and recipient build/verification
--> owner approval and lineage/adoption record
+prompt bar -> conductor -> Texture/Super
+-> durable implementation run in a guest-local capsule
+-> frozen effect bundle and independent verifier certificate
+-> canonical proposal event
+-> external scoped owner decision through the public API/CLI
+-> root guest updater materialization
+-> checkpoint publication and route projection
+-> restart/reconstruction or event-derived rollback
 ```
 
-This path does **not** perform a served runtime/UI route cutover and does not
-land shared Choir source. A shared platform change still uses the Git landing
-loop: commit, push, CI, deploy, deployed identity, and product-path proof.
+The invariants are:
 
-### Target contract
+- one stable `ComputerID` owns the history; realizations are replaceable;
+- exactly one guest-core appender sequences semantic computer events;
+- risky effects run only in capability-scoped capsules;
+- a speculative change is a frozen capsule effect bundle, never a VM, route,
+  mutable branch, package, or lineage record;
+- accepted desired state is distinct from effective materialized state;
+- private event payloads use authenticated encryption with a guest-owned key;
+- guest-core and verifier private keys remain in separate typed signer services
+  and are inaccessible to the updater and runtime;
+- checkpoint publication and route projection follow effective application;
+- rollback is derived from retained events and receipts, not host-local state.
 
-- canonical state stays stable unless a change is promoted;
-- candidate state is a ComputerVersion fork — `(CodeRef, ArtifactProgramRef)` —
-  not a VM;
-- risky effects execute in capsules: ephemeral, capability-scoped chambers
-  whose typed transactions append to the candidate;
-- substrates such as Firecracker, containers, and host processes materialize a
-  ComputerVersion but do not define its identity;
-- promotion is an atomic route flip between ComputerVersions after verifier
-  evidence, owner acceptance, and a recorded rollback target.
-
-A compact **target** operating invariant:
-
-```text
-Evidence enters through researchers.
-Meaning is owned by appagents.
-Computation is orchestrated by super.
-Mutation happens in capsules against forked ComputerVersions.
-Computers diverge.
-Canonical state changes only by promotion.
-```
-
-The target self-development path is:
-
-```text
-prompt bar -> conductor -> appagent/Texture -> super
--> capsule execution against a forked ComputerVersion
--> AppChangePackage
--> recipient adoption and rebuild
--> verifier evidence
--> owner decision
--> promotion (atomic route flip between ComputerVersions) or rollback
-```
-
-The objective is to improve artifacts over time while minimizing corruption,
-deadlock, human monitoring burden, and loss of understanding.
-
-**Promotion claim ceiling today:** Features **Activate** and **Roll back** are
-adoption/source-lineage protocol transitions. Nothing in the ordinary personal
-computer path currently consumes `RouteProfile` to switch the served runtime or
-UI binary. Current API `promotion-level` records therefore prove bounded
-package/adoption protocol evidence only; do not cite them as doctrine-level
-ComputerVersion promotion without an observed route/build cutover and rollback
-proof.
+Shared platform source still uses the Git landing loop: commit, push, CI,
+deploy, deployed identity, then product-path proof. That deployment path is
+separate from the reviewed source-candidate identity bound at the G1 gate.
 
 Storage direction (owner decision, 2026-07-08): exactly two product-state Dolt
 stores remain distinct: the corpusd world-wire sql-server store and each
@@ -308,7 +262,7 @@ The core edge/runtime topology has five Go services:
 | --- | --- | --- |
 | `auth` | 8081 | Email/passkey registration, login, JWT access/refresh sessions |
 | `proxy` | 8082 | Auth-gated HTTP/WebSocket proxy, user-context injection, VM routing |
-| `vmctl` | 8083 | Desktop and worker VM ownership/lifecycle, with host-process fallback where Firecracker is unavailable |
+| `vmctl` | 8083 | Persistent computer realization lifecycle and ComputerVersion route projection |
 | `gateway` | 8084 | Provider-neutral LLM/search gateway reachable by host/guest callers, not the public browser edge |
 | `sandbox` | 8085 | Runtime service for desktop APIs, Texture, files, source/Web Lens sessions, Super Console, trace evidence APIs, and the agent/tool loop |
 
@@ -364,8 +318,8 @@ and the relevant `cmd/*` package configs.
 
 Local development is useful for frontend iteration, focused unit shaping, and
 reproducing transitions identified by deployed evidence. It is not sufficient
-proof for claims about live `vmctl` behavior, provider credentials,
-background/candidate computers, platform promotion, rollback, or production
+proof for live `vmctl`, guest isolation/key custody, provider credentials,
+self-development materialization, route projection, rollback, or production
 deployment.
 
 ## Tests And Dev Shells
@@ -382,11 +336,10 @@ go test -count=1 ./internal/store ./internal/agentcore ./internal/textureowner
 If you use `direnv`, run `direnv allow` once and the same environment will load
 automatically when you enter the repo.
 
-Worker and candidate VMs are different. They should not run `nix develop`,
-`nix build`, or `nix-store`; the guest image is expected to provide direct PATH
-tools such as `git`, `go`, `gcc`, `pkg-config`, `node`, and ICU libraries. If a
-worker VM cannot run Dolt-backed Go tests with plain `go test`, treat that as a
-VM image/runtime regression.
+The guest image provides the direct toolchain used by guest-local capsules:
+`git`, `go`, `gcc`, `pkg-config`, `node`, and ICU libraries. A capsule must use
+that pinned offline toolchain; it must not invoke `nix develop`, `nix build`, or
+`nix-store`.
 
 Full local test shaping:
 
@@ -433,43 +386,26 @@ Read [AGENTS.md](AGENTS.md) before using an agent to modify this repo.
 The short version:
 
 - `conductor` routes exogenous user/app input and does not own semantic outcomes.
-- Appagents own durable app artifacts; `texture` is the current canonical semantic surface.
-- `super` is the foreground orchestration root and mints bounded execution authority.
-- Worker/candidate mutation belongs in background/candidate computers or isolated worker worlds.
-- Canonical state changes only through explicit promotion after verification and owner acceptance.
+- Appagents own durable app artifacts; `texture` is the canonical semantic surface.
+- `super` orchestrates durable runs and guest-local capsules but cannot mutate
+  accepted state directly.
+- CoSuper performs bounded implementation or verification through capsule tools.
+- Canonical computer state changes only through the event appender, external
+  scoped approval, materialization, checkpoint, and route certificates.
 - Verification is a contract and evidence record, not a separate agent caste.
 
-## Run Acceptance
+## Self-Development Proof
 
-The durable verifier is the Run Acceptance System:
+The public `choir self-dev` commands expose mode, genesis, proposal, inspection,
+approval/rejection, rollback, wait, and kernel-capability operations for one
+explicit `ComputerID`. Effects default to `off`; `accept_once` authorizes only
+the exact canonical approval request bound into its consumption receipt.
 
-- `POST /api/run-acceptances/synthesize` derives a `RunAcceptanceRecord` from
-  existing runs, Trace tool results, AppChangePackage/adoption records, build
-  identity, verifier evidence, and owner-scoped state.
-- `GET /api/run-acceptances?trajectory_id=...` lists acceptance records for a
-  trajectory.
-- `GET /api/run-acceptances/{acceptance_id}` fetches one record.
-
-Acceptance levels are explicit so the system does not overclaim:
-
-- `docs-level`
-- `staging-smoke-level`
-- `export-level`
-- `promotion-level`
-- `continuation-level` (transitional H008/H014 residue until M4 re-points or
-  deletes it; not a target permanent doctrine term)
-
-Do not claim `promotion-level` without AppChangePackage adoption verifier
-contract evidence plus owner review and promote/rollback evidence. Do not claim
-`continuation-level` without run-memory/compaction and continuation evidence.
-Do not introduce new continuation-shaped proof as doctrine; the target evidence
-class is trajectory/work-item settlement.
-
-In the current implementation, a recorded rollback reference can satisfy the
-API checkpoint without an exercised rollback, and an adoption promotion event
-does not prove the served runtime/UI changed. Treat current `promotion-level`
-as package/adoption protocol evidence unless route identity, deployed build,
-and rollback behavior were independently observed.
+No individual artifact proves self-development. Completion requires joined
+event heads, verifier and materialization receipts, checkpoint and route
+certificates, deployed build identity, restart/reconstruction evidence,
+rejection evidence, and exercised rollback through the active Definition's
+G3 gate.
 
 ## Documentation Map
 

@@ -83,6 +83,11 @@ type HealthProber interface {
 	Probe(context.Context, string, ReleaseManifest) ([]string, error)
 }
 
+type ReceiptSigner interface {
+	PublicKey(context.Context) (computerevent.SignerRef, ed25519.PublicKey, error)
+	SignReceipt(context.Context, string, string, map[string]any, time.Time) (computerevent.Receipt, error)
+}
+
 type Updater struct {
 	mu            sync.Mutex
 	root          string
@@ -90,21 +95,21 @@ type Updater struct {
 	realizationID string
 	service       ServiceManager
 	health        HealthProber
-	signingKey    computerevent.SigningKey
+	signer        ReceiptSigner
 	now           func() time.Time
 }
 
-func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signingKey computerevent.SigningKey) (*Updater, error) {
+func New(root, computerID, realizationID string, service ServiceManager, health HealthProber, signer ReceiptSigner) (*Updater, error) {
 	root = filepath.Clean(root)
-	if root == "." || !filepath.IsAbs(root) || strings.TrimSpace(computerID) == "" || strings.TrimSpace(realizationID) == "" || service == nil || health == nil || signingKey.SignerDomain != "guest-core" || signingKey.KeyID == "" || len(signingKey.PrivateKey) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("updater: complete absolute root, identity, service, health probe, and guest-core signer are required")
+	if root == "." || !filepath.IsAbs(root) || strings.TrimSpace(computerID) == "" || strings.TrimSpace(realizationID) == "" || service == nil || health == nil || signer == nil {
+		return nil, fmt.Errorf("updater: complete absolute root, identity, service, health probe, and isolated guest-core signer are required")
 	}
 	for _, dir := range []string{filepath.Join(root, "releases"), filepath.Join(root, "operations"), filepath.Join(root, "incoming")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("updater: create state: %w", err)
 		}
 	}
-	return &Updater{root: root, computerID: computerID, realizationID: realizationID, service: service, health: health, signingKey: signingKey, now: func() time.Time { return time.Now().UTC() }}, nil
+	return &Updater{root: root, computerID: computerID, realizationID: realizationID, service: service, health: health, signer: signer, now: func() time.Time { return time.Now().UTC() }}, nil
 }
 
 func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult, error) {
@@ -183,7 +188,7 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			if cleanupErr := u.service.CleanupRecoveryCredential(ctx); cleanupErr != nil {
 				return ApplyResult{}, fmt.Errorf("updater: cleanup recovery credential: %w", cleanupErr)
 			}
-			healthReceipt, receiptErr := u.signHealthReceipt(request, releaseDigest, journal.StartedAt, completedAt, observations, "healthy")
+			healthReceipt, receiptErr := u.signHealthReceipt(ctx, request, releaseDigest, journal.StartedAt, completedAt, observations, "healthy")
 			if receiptErr != nil {
 				return ApplyResult{}, receiptErr
 			}
@@ -191,13 +196,13 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 			if receiptErr != nil {
 				return ApplyResult{}, receiptErr
 			}
-			materialization, receiptErr := computerevent.NewSignedReceipt("MaterializationReceipt", "choir-updater", map[string]any{
+			materialization, receiptErr := u.signer.SignReceipt(ctx, "MaterializationReceipt", "choir-updater", map[string]any{
 				"computer_id": request.ComputerID, "realization_id": request.RealizationID,
 				"accepted_or_rollback_event_head": request.AcceptedEventHead,
 				"prior_release_digest":            journal.PriorReleaseDigest, "resulting_release_digest": releaseDigest,
 				"health_receipt_digest": computerevent.DigestBytes(healthBytes), "outcome": "applied",
 				"request_commitment": request.RequestCommitment,
-			}, []computerevent.SigningKey{u.signingKey}, completedAt)
+			}, completedAt)
 			if receiptErr != nil {
 				return ApplyResult{}, receiptErr
 			}
@@ -565,20 +570,20 @@ func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorT
 	if err := u.service.CleanupRecoveryCredential(ctx); err != nil {
 		return nil, fmt.Errorf("updater: cleanup recovery credential after restore: %w", err)
 	}
-	receipt, err := computerevent.NewSignedReceipt("UpdaterRecoveryReceipt", "choir-updater", map[string]any{
+	receipt, err := u.signer.SignReceipt(ctx, "UpdaterRecoveryReceipt", "choir-updater", map[string]any{
 		"computer_id": request.ComputerID, "realization_id": request.RealizationID,
 		"operation_id": request.OperationID, "failed_release_digest": failedDigest,
 		"restored_release_digest": priorDigest, "accepted_event_head": request.AcceptedEventHead,
 		"request_commitment": request.RequestCommitment, "failure": cause.Error(),
 		"observation_artifact_digests": observations,
-	}, []computerevent.SigningKey{u.signingKey}, completedAt)
+	}, completedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &receipt, nil
 }
 
-func (u *Updater) signHealthReceipt(request ApplyRequest, releaseDigest string, startedAt, completedAt time.Time, observations []string, outcome string) (computerevent.Receipt, error) {
+func (u *Updater) signHealthReceipt(ctx context.Context, request ApplyRequest, releaseDigest string, startedAt, completedAt time.Time, observations []string, outcome string) (computerevent.Receipt, error) {
 	probeContract, err := computerevent.CanonicalJSON(struct {
 		EventSchemaVersion uint64 `json:"event_schema_version"`
 		ReducerVersion     uint64 `json:"reducer_version"`
@@ -587,12 +592,12 @@ func (u *Updater) signHealthReceipt(request ApplyRequest, releaseDigest string, 
 	if err != nil {
 		return computerevent.Receipt{}, err
 	}
-	return computerevent.NewSignedReceipt("HealthReceipt", "choir-updater", map[string]any{
+	return u.signer.SignReceipt(ctx, "HealthReceipt", "choir-updater", map[string]any{
 		"computer_id": request.ComputerID, "realization_id": request.RealizationID,
 		"release_digest": releaseDigest, "probe_contract_digest": computerevent.DigestBytes(probeContract),
 		"started_at": startedAt.Format(time.RFC3339Nano), "completed_at": completedAt.Format(time.RFC3339Nano),
 		"outcome": outcome, "observation_artifact_digests": observations,
-	}, []computerevent.SigningKey{u.signingKey}, completedAt)
+	}, completedAt)
 }
 
 type operationJournal struct {

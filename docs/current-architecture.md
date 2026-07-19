@@ -260,10 +260,10 @@ local-first multiagent runtime, shared scheduler, or broad sandbox-owned "OS
 layer" as the product ontology. The product object is the persistent computer;
 `sandbox` remains an implementation/service name.
 
-Run acceptance is a first-class artifact. A `RunAcceptanceRecord` should be
-synthesized from existing product/control evidence: runs, Trace moments, worker
-AppChangePackages, recipient adoptions, verifier contracts, rollback refs, and
-deployed build identity. It replaces ad hoc claims like "the Trace looked good."
+Run acceptance records are historical evidence projections. Self-development
+acceptance is defined by canonical computer events, frozen capsule bundles,
+verifier/materialization receipts, checkpoints, route certificates, and the
+active Definition's deployed gate.
 
 The embedded Dolt runtime migration is complete on staging. As of commit
 `c3b1a4b2547d672eadd9b3d74b76ba9371518648`, per-user runtime/control product
@@ -320,11 +320,12 @@ Code-present/current foundations:
    to cross an auth boundary before continuing through an owned computer. Treat
    individual public/auth-on-mutation journeys as staging-proof-sensitive.
 2. Prompt bar, conductor routing, Texture documents/revisions/history/export,
-   worker updates, Trace projections, run acceptances, AppChangePackages,
-   adoptions, continuations, and computer source-lineage APIs exist in the
-   runtime product surface.
+   durable runs/trajectories, Trace projections, computer events, guest-local
+   capsules, self-development operations, checkpoints, and route projections
+   form the current source-level product surface. Effects remain default-off
+   until the active Definition authorizes deployed activation.
 3. Texture already has deterministic backend coverage for document creation,
-   revisions, user edits, worker update integration, stale-result protection,
+   revisions, user edits, delegated update integration, stale-result protection,
    source entities, source repairs, attachments, diagnosis, import, export,
    blame, diff, and history.
 4. URL/content ingestion, content items, podcast routes, Web Lens/browser-session

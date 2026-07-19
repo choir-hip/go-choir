@@ -260,8 +260,12 @@ func (c *ComputerEventCAS) CompareAndSwap(ctx context.Context, request computere
 	if err != nil {
 		return computerevent.Receipt{}, fmt.Errorf("computer event CAS: insert receipt: %w", err)
 	}
-	if request.Event.EventKind == computerevent.EventLifecycleObserved {
-		result, joinErr := tx.ExecContext(ctx, `UPDATE computer_lifecycle_receipts SET joined_event_digest=? WHERE computer_id=? AND receipt_digest=? AND action IN ('start','stop','restart') AND joined_event_digest IS NULL`, request.EventDigest, request.Event.ComputerID, request.Event.ProposedEffectRef)
+	if request.Event.EventKind == computerevent.EventLifecycleObserved || request.Event.EventKind == computerevent.EventKeyRevoked {
+		allowedActions := "('start','stop','restart')"
+		if request.Event.EventKind == computerevent.EventKeyRevoked {
+			allowedActions = "('credential_envelope_consumed')"
+		}
+		result, joinErr := tx.ExecContext(ctx, `UPDATE computer_lifecycle_receipts SET joined_event_digest=? WHERE computer_id=? AND receipt_digest=? AND action IN `+allowedActions+` AND joined_event_digest IS NULL`, request.EventDigest, request.Event.ComputerID, request.Event.ProposedEffectRef)
 		if joinErr != nil {
 			return computerevent.Receipt{}, fmt.Errorf("computer event CAS: join lifecycle receipt: %w", joinErr)
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
+	"github.com/yusefmosiah/go-choir/internal/verifierprotocol"
 )
 
 const (
@@ -21,88 +22,54 @@ const (
 	ReceiptKindRouteProjection = "route_projection"
 )
 
-type VerifierCertificateRequest struct {
-	Version                 int      `json:"version"`
-	ComputerID              string   `json:"computer_id"`
-	OperationID             string   `json:"operation_id"`
-	BundleDigest            string   `json:"bundle_digest"`
-	VerificationEventDigest string   `json:"verification_event_digest"`
-	VerifierEvidenceRefs    []string `json:"verifier_evidence_refs"`
-	DecisionEventHead       string   `json:"decision_event_head"`
-	CodeRef                 string   `json:"code_ref"`
-	ArtifactProgramRef      string   `json:"artifact_program_ref"`
-	ReleaseDigest           string   `json:"release_digest"`
-	Decision                string   `json:"decision"`
+type DecisionBinding struct {
+	OperationID                      string  `json:"operation_id"`
+	Decision                         string  `json:"decision"`
+	IdempotencyKey                   string  `json:"idempotency_key"`
+	BundleDigest                     string  `json:"bundle_digest"`
+	VerifierRef                      string  `json:"verifier_ref"`
+	Reason                           string  `json:"reason"`
+	ExpectedDesiredEventHead         string  `json:"expected_desired_event_head"`
+	ExpectedEffectiveEventHead       string  `json:"expected_effective_event_head"`
+	ExpectedPendingTransitionRef     *string `json:"expected_pending_transition_ref"`
+	ExpectedDesiredStateCommitment   string  `json:"expected_desired_state_commitment"`
+	ExpectedEffectiveStateCommitment string  `json:"expected_effective_state_commitment"`
 }
 
-type VerifierCertificateResponse struct {
-	Request     VerifierCertificateRequest `json:"request"`
-	Certificate computerevent.Receipt      `json:"certificate"`
-	PublicKey   string                     `json:"public_key"`
-}
-
-func NewVerifierCertificate(request VerifierCertificateRequest, key computerevent.SigningKey, now time.Time) (computerevent.Receipt, error) {
-	if err := validateVerifierCertificateRequest(request); err != nil {
-		return computerevent.Receipt{}, err
+func DecisionBindingDigest(binding DecisionBinding) (string, error) {
+	if strings.TrimSpace(binding.OperationID) == "" || binding.Decision != "approve" ||
+		strings.TrimSpace(binding.IdempotencyKey) == "" || !computerevent.IsSHA256(strings.TrimSpace(binding.BundleDigest)) ||
+		strings.TrimSpace(binding.VerifierRef) == "" || binding.Reason != "" || binding.ExpectedPendingTransitionRef == nil ||
+		!computerevent.IsSHA256(strings.TrimSpace(binding.ExpectedDesiredEventHead)) ||
+		!computerevent.IsSHA256(strings.TrimSpace(binding.ExpectedEffectiveEventHead)) ||
+		!computerevent.IsSHA256(strings.TrimSpace(binding.ExpectedDesiredStateCommitment)) ||
+		!computerevent.IsSHA256(strings.TrimSpace(binding.ExpectedEffectiveStateCommitment)) {
+		return "", fmt.Errorf("decision binding: complete exact approval is required")
 	}
-	if key.SignerDomain != "verifier-control" || key.KeyID == "" || len(key.PrivateKey) != ed25519.PrivateKeySize {
-		return computerevent.Receipt{}, fmt.Errorf("verifier certificate: independent signing key is required")
-	}
-	canonical, err := computerevent.CanonicalJSON(request)
+	pending := strings.TrimSpace(*binding.ExpectedPendingTransitionRef)
+	binding.OperationID = strings.TrimSpace(binding.OperationID)
+	binding.IdempotencyKey = strings.TrimSpace(binding.IdempotencyKey)
+	binding.BundleDigest = strings.TrimSpace(binding.BundleDigest)
+	binding.VerifierRef = strings.TrimSpace(binding.VerifierRef)
+	binding.ExpectedDesiredEventHead = strings.TrimSpace(binding.ExpectedDesiredEventHead)
+	binding.ExpectedEffectiveEventHead = strings.TrimSpace(binding.ExpectedEffectiveEventHead)
+	binding.ExpectedPendingTransitionRef = &pending
+	binding.ExpectedDesiredStateCommitment = strings.TrimSpace(binding.ExpectedDesiredStateCommitment)
+	binding.ExpectedEffectiveStateCommitment = strings.TrimSpace(binding.ExpectedEffectiveStateCommitment)
+	canonical, err := computerevent.CanonicalJSON(binding)
 	if err != nil {
-		return computerevent.Receipt{}, err
+		return "", err
 	}
-	return computerevent.NewSignedReceipt("VerifierCertificate", "choir-verifier", map[string]any{
-		"request": json.RawMessage(canonical),
-	}, []computerevent.SigningKey{key}, now.UTC())
+	return computerevent.DigestBytes(canonical), nil
 }
 
-func VerifyVerifierCertificate(response VerifierCertificateResponse) error {
-	if err := validateVerifierCertificateRequest(response.Request); err != nil {
-		return err
-	}
-	publicKey, err := base64.RawStdEncoding.DecodeString(response.PublicKey)
-	if err != nil || len(publicKey) != ed25519.PublicKeySize {
-		return fmt.Errorf("verifier certificate: invalid public key")
-	}
-	if response.Certificate.ReceiptKind != "VerifierCertificate" || response.Certificate.Issuer != "choir-verifier" ||
-		len(response.Certificate.RequiredSigners) != 1 || response.Certificate.RequiredSigners[0].SignerDomain != "verifier-control" {
-		return fmt.Errorf("verifier certificate: signature refused")
-	}
-	resolver := verifierCertificateKeyResolver{keyID: response.Certificate.RequiredSigners[0].KeyID, publicKey: ed25519.PublicKey(publicKey)}
-	if response.Certificate.Verify(resolver) != nil || response.Certificate.RequireKindFields("request") != nil {
-		return fmt.Errorf("verifier certificate: signature refused")
-	}
-	expected, _ := computerevent.CanonicalJSON(response.Request)
-	actual, err := computerevent.CanonicalJSON(response.Certificate.KindFields["request"])
-	if err != nil || !bytes.Equal(expected, actual) {
-		return fmt.Errorf("verifier certificate: request binding mismatch")
-	}
-	return nil
-}
+type VerifierCertificateRequest = verifierprotocol.Request
 
-func validateVerifierCertificateRequest(request VerifierCertificateRequest) error {
-	if request.Version != 1 || request.ComputerID == "" || request.OperationID == "" ||
-		!computerevent.IsSHA256(request.BundleDigest) || !computerevent.IsSHA256(request.VerificationEventDigest) ||
-		len(request.VerifierEvidenceRefs) == 0 || !computerevent.IsSHA256(request.DecisionEventHead) ||
-		request.CodeRef == "" || request.ArtifactProgramRef == "" || !computerevent.IsSHA256(request.ReleaseDigest) ||
-		(request.Decision != "pass" && request.Decision != "genesis_baseline" && request.Decision != "rollback_prior_verified") {
-		return fmt.Errorf("verifier certificate: complete exact bindings are required")
-	}
-	return nil
-}
+type VerifierCertificateResponse = verifierprotocol.Response
 
-type verifierCertificateKeyResolver struct {
-	keyID     string
-	publicKey ed25519.PublicKey
-}
+var NewVerifierCertificate = verifierprotocol.NewCertificate
 
-func (r verifierCertificateKeyResolver) ResolveReceiptKey(domain, _ string, keyID string, _ uint64, _ time.Time) (ed25519.PublicKey, error) {
-	if domain != "verifier-control" || keyID != r.keyID {
-		return nil, fmt.Errorf("verifier certificate: signing key refused")
-	}
-	return r.publicKey, nil
-}
+var VerifyVerifierCertificate = verifierprotocol.Verify
 
 type CheckpointRequest struct {
 	ComputerID                   string                          `json:"computer_id"`

@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -22,8 +21,9 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
+	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/updater"
+	selfdevprotocol "github.com/yusefmosiah/go-choir/internal/verifierprotocol"
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 	if handled, code := updater.RunKernelCapabilityProbeWriter(context.Background()); handled {
 		os.Exit(code)
 	}
-	var root, socketPath, computerID, realizationID, restartRequestPath, recoveryRequestPath, cleanupRequestPath, restartPrepareURL, healthURL, signingKeyPath, verifierSigningKeyPath, guestImageManifestPath, kernelConfigPath, kernelProbePath string
+	var root, socketPath, computerID, realizationID, restartRequestPath, recoveryRequestPath, cleanupRequestPath, restartPrepareURL, healthURL, signerSocketPath, verifierSignerSocketPath, guestImageManifestPath, kernelConfigPath, kernelProbePath string
 	flag.StringVar(&root, "root", "/var/lib/choir-updater", "Root-owned updater state directory")
 	flag.StringVar(&socketPath, "socket", "/run/choir/updater.sock", "Permissioned updater Unix socket")
 	flag.StringVar(&computerID, "computer-id", os.Getenv("CHOIR_COMPUTER_ID"), "Stable ComputerID")
@@ -43,8 +43,8 @@ func main() {
 	flag.StringVar(&cleanupRequestPath, "recovery-cleanup-request", "/run/choir-updater-control/cleanup", "Fixed root-owned recovery credential cleanup request")
 	flag.StringVar(&restartPrepareURL, "restart-prepare-url", "http://127.0.0.1:8085/internal/self-development/restart-handoff", "Fixed guest restart credential preparation endpoint")
 	flag.StringVar(&healthURL, "health-url", "http://127.0.0.1:8085/health", "Guest Choir health endpoint")
-	flag.StringVar(&signingKeyPath, "signing-key", "/var/lib/choir-updater/keys/guest-core.ed25519", "Root-owned Ed25519 private key")
-	flag.StringVar(&verifierSigningKeyPath, "verifier-signing-key", "/var/lib/choir-updater/keys/verifier.ed25519", "Root-owned independent verifier Ed25519 private key")
+	flag.StringVar(&signerSocketPath, "signer-socket", "/run/choir-signers/guest-core.sock", "Isolated guest-core signer Unix socket")
+	flag.StringVar(&verifierSignerSocketPath, "verifier-signer-socket", "/run/choir-signers/verifier.sock", "Isolated verifier signer Unix socket")
 	flag.StringVar(&guestImageManifestPath, "guest-image-manifest", os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST"), "Immutable guest image manifest")
 	flag.StringVar(&kernelConfigPath, "kernel-config", os.Getenv("CHOIR_KERNEL_CONFIG"), "Realized guest kernel config")
 	flag.StringVar(&kernelProbePath, "kernel-probe", "/run/choir/kernel-capabilities.json", "Boot-time kernel capability probe artifact")
@@ -52,15 +52,15 @@ func main() {
 	if strings.TrimSpace(computerID) == "" || strings.TrimSpace(realizationID) == "" {
 		fatal("computer and realization identities are required")
 	}
-	key, err := updater.LoadOrCreateSigningKey(signingKeyPath)
+	guestSigner, err := receiptsigner.NewClient(signerSocketPath, receiptsigner.ModeGuestCore)
 	if err != nil {
-		fatal("load signing key: %v", err)
+		fatal("configure guest signer: %v", err)
 	}
-	verifierKey, err := updater.LoadOrCreateDomainSigningKey(verifierSigningKeyPath, "verifier-control")
+	verifierSigner, err := receiptsigner.NewClient(verifierSignerSocketPath, receiptsigner.ModeVerifier)
 	if err != nil {
-		fatal("load verifier signing key: %v", err)
+		fatal("configure verifier signer: %v", err)
 	}
-	engine, err := updater.New(filepath.Clean(root), computerID, realizationID, updater.RestartRequestManager{Path: restartRequestPath, RecoveryPath: recoveryRequestPath, CleanupPath: cleanupRequestPath, PrepareURL: restartPrepareURL}, updater.HTTPHealthProber{URL: healthURL}, key)
+	engine, err := updater.New(filepath.Clean(root), computerID, realizationID, updater.RestartRequestManager{Path: restartRequestPath, RecoveryPath: recoveryRequestPath, CleanupPath: cleanupRequestPath, PrepareURL: restartPrepareURL}, updater.HTTPHealthProber{URL: healthURL}, guestSigner)
 	if err != nil {
 		fatal("initialize: %v", err)
 	}
@@ -86,13 +86,13 @@ func main() {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		publicKey, ok := key.PrivateKey.Public().(ed25519.PublicKey)
-		if !ok {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "signing key unavailable"})
+		ref, publicKey, err := guestSigner.PublicKey(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "signing key unavailable"})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{
-			"signer_domain": key.SignerDomain, "key_id": key.KeyID,
+			"signer_domain": ref.SignerDomain, "key_id": ref.KeyID,
 			"public_key": base64.RawStdEncoding.EncodeToString(publicKey),
 		})
 	})
@@ -116,11 +116,11 @@ func main() {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "mandatory kernel capability probe unavailable"})
 			return
 		}
-		report, err := updater.NewKernelCapabilityReport(updater.KernelCapabilityIdentity{
+		report, err := updater.NewKernelCapabilityReport(r.Context(), updater.KernelCapabilityIdentity{
 			ComputerID: computerID, RealizationID: realizationID,
 			GuestImageDigest: guestImageDigest, KernelConfigDigest: kernelConfigDigest,
 			LifecycleGeneration: generation,
-		}, request, probe, key, time.Now().UTC())
+		}, request, probe, guestSigner, time.Now().UTC())
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "mandatory kernel capability receipt refused"})
 			return
@@ -132,9 +132,13 @@ func main() {
 			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			return
 		}
-		publicKey := verifierKey.PrivateKey.Public().(ed25519.PublicKey)
+		ref, publicKey, err := verifierSigner.PublicKey(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "verifier key unavailable"})
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]string{
-			"signer_domain": verifierKey.SignerDomain, "key_id": verifierKey.KeyID,
+			"signer_domain": ref.SignerDomain, "key_id": ref.KeyID,
 			"public_key": base64.RawStdEncoding.EncodeToString(publicKey),
 		})
 	})
@@ -150,7 +154,7 @@ func main() {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid verifier certificate request"})
 			return
 		}
-		response, err := engine.SignVerifierCertificate(request, verifierKey, time.Now().UTC())
+		response, err := verifierSigner.SignVerifierCertificate(r.Context(), request)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "verifier certificate refused"})
 			return

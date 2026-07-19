@@ -210,7 +210,7 @@ func Run() {
 				computerField, _ := lifecycleReceipt.KindFields["computer_id"].(string)
 				actionField, _ := lifecycleReceipt.KindFields["action"].(string)
 				if payloadErr != nil || lifecycleReceipt.ReceiptKind != "LifecycleReceipt" || lifecycleReceipt.Verify(credentials.KeyResolver()) != nil ||
-					computerField != computerID || (actionField != "start" && actionField != "stop" && actionField != "restart") {
+					computerField != computerID || (actionField != "start" && actionField != "stop" && actionField != "restart" && actionField != "credential_envelope_consumed") {
 					err = fmt.Errorf("sandbox: pending lifecycle receipt binding refused")
 					break
 				}
@@ -219,16 +219,29 @@ func Run() {
 					err = eventErr
 					break
 				}
+				eventKind := computerevent.EventLifecycleObserved
+				authorityRef := "platform-control:lifecycle"
+				if actionField == "credential_envelope_consumed" {
+					eventKind = computerevent.EventKeyRevoked
+					authorityRef = "platform-control:credential-revocation"
+				}
 				event := computerevent.Event{
 					SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
-					EventKind: computerevent.EventLifecycleObserved, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+					EventKind: eventKind, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
 					IdempotencyKey: "lifecycle-observed:" + lifecycleReceipt.ReceiptID,
-					ActorProfile:   agentprofile.Super, AuthorityRef: "platform-control:lifecycle",
+					ActorProfile:   agentprofile.Super, AuthorityRef: authorityRef,
 					PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
 				}
 				if _, _, appendErr := appender.AppendNewPayload(bootstrapCtx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.lifecycle-receipt+json", "public"); appendErr != nil {
 					err = appendErr
 					break
+				}
+				credentials.AcknowledgePendingLifecycleReceipt(lifecycleReceipt.ReceiptID)
+				if actionField == "credential_envelope_consumed" {
+					if activationErr := credentials.ActivatePostRevocationCapability(); activationErr != nil {
+						err = activationErr
+						break
+					}
 				}
 			}
 		}

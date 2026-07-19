@@ -266,3 +266,24 @@ func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProje
 		t.Fatalf("idempotent recovery = %+v found=%v err=%v", replayed, found, err)
 	}
 }
+
+func TestGenesisAuthoritySeparatesReviewedCandidateFromDeployedRelease(t *testing.T) {
+	request := selfDevelopmentGenesisRequest{
+		G0Receipt: "g0-receipt", G1Receipt: "g1-receipt",
+		CandidateRef: "reviewed-candidate", DeployedReleaseRef: "deployed-release",
+	}
+	ref, err := selfDevelopmentGenesisAuthorityRef(request, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release")
+	if err != nil || !strings.HasPrefix(ref, "genesis-authority:sha256:") {
+		t.Fatalf("separate candidate/deployed binding refused: ref=%q err=%v", ref, err)
+	}
+	changed := request
+	changed.DeployedReleaseRef = changed.CandidateRef
+	if _, err := selfDevelopmentGenesisAuthorityRef(changed, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release"); err == nil {
+		t.Fatal("genesis accepted reviewed candidate as the deployed release")
+	}
+	changed = request
+	changed.CandidateRef = changed.DeployedReleaseRef
+	if _, err := selfDevelopmentGenesisAuthorityRef(changed, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release"); err == nil {
+		t.Fatal("genesis accepted deployed release as the reviewed candidate")
+	}
+}

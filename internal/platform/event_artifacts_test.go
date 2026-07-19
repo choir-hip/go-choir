@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -491,8 +492,17 @@ func TestCredentialEnvelopeExchangeRefusesReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first exchange refused: %v", err)
 	}
-	if result.Capability == "" {
-		t.Fatal("first credential exchange omitted the appender capability")
+	if result.Capability == "" || result.PostRevocationCapability == "" {
+		t.Fatal("credential exchange omitted revocation handoff capabilities")
+	}
+	if len(result.PendingLifecycleReceipts) == 0 || result.PendingLifecycleReceipts[len(result.PendingLifecycleReceipts)-1].KindFields["action"] != "credential_envelope_consumed" {
+		t.Fatal("credential exchange omitted the canonical key-revocation input")
+	}
+	parts := strings.Split(result.PostRevocationCapability, ".")
+	var nextCapability ComputerCapability
+	payload, decodeErr := base64.RawURLEncoding.DecodeString(parts[0])
+	if len(parts) != 2 || decodeErr != nil || json.Unmarshal(payload, &nextCapability) != nil || nextCapability.RevocationEpoch != envelope.RevocationEpoch+1 {
+		t.Fatal("post-revocation capability does not bind the next event epoch")
 	}
 	if replay, err := service.exchangeComputerCredentialEnvelope(context.Background(), raw); err == nil || replay.Capability != "" {
 		t.Fatalf("consumed envelope replay = %#v, %v; want refusal without bearer", replay, err)

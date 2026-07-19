@@ -22,16 +22,17 @@ import (
 // memory. It renews before expiry and never exposes the token to agents,
 // capsules, logs, durable state, or command arguments.
 type GuestCredentials struct {
-	mu               sync.Mutex
-	baseURL          string
-	computerID       string
-	realizationID    string
-	http             *http.Client
-	token            string
-	expiresAt        time.Time
-	keyID            string
-	publicKey        ed25519.PublicKey
-	pendingLifecycle []computerevent.Receipt
+	mu                  sync.Mutex
+	baseURL             string
+	computerID          string
+	realizationID       string
+	http                *http.Client
+	token               string
+	postRevocationToken string
+	expiresAt           time.Time
+	keyID               string
+	publicKey           ed25519.PublicKey
+	pendingLifecycle    []computerevent.Receipt
 }
 
 func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, computerID, realizationID string) (*GuestCredentials, error) {
@@ -76,10 +77,11 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 		return nil, fmt.Errorf("guest credential: decode exchange: %w", err)
 	}
 	expiresAt, err := capabilityExpiry(result.Capability)
-	if err != nil {
-		return nil, err
+	postRevocationExpiresAt, postRevocationErr := capabilityExpiry(result.PostRevocationCapability)
+	if err != nil || postRevocationErr != nil || !postRevocationExpiresAt.Equal(expiresAt) {
+		return nil, fmt.Errorf("guest credential: invalid revocation handoff capability")
 	}
-	manager.token, manager.expiresAt = result.Capability, expiresAt
+	manager.token, manager.postRevocationToken, manager.expiresAt = result.Capability, result.PostRevocationCapability, expiresAt
 	manager.pendingLifecycle = append([]computerevent.Receipt(nil), result.PendingLifecycleReceipts...)
 	return manager, nil
 }
@@ -212,6 +214,27 @@ func (g *GuestCredentials) PendingLifecycleReceipts() []computerevent.Receipt {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return append([]computerevent.Receipt(nil), g.pendingLifecycle...)
+}
+
+func (g *GuestCredentials) AcknowledgePendingLifecycleReceipt(receiptID string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for index := range g.pendingLifecycle {
+		if g.pendingLifecycle[index].ReceiptID == receiptID {
+			g.pendingLifecycle = append(g.pendingLifecycle[:index], g.pendingLifecycle[index+1:]...)
+			return
+		}
+	}
+}
+
+func (g *GuestCredentials) ActivatePostRevocationCapability() error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if strings.TrimSpace(g.postRevocationToken) == "" {
+		return fmt.Errorf("guest credential: revocation handoff unavailable")
+	}
+	g.token, g.postRevocationToken = g.postRevocationToken, ""
+	return nil
 }
 
 func capabilityExpiry(token string) (time.Time, error) {

@@ -39,9 +39,10 @@ type ComputerCredentialEnvelope struct {
 }
 
 type CredentialExchangeResult struct {
-	Capability string                `json:"capability"`
-	Receipt    computerevent.Receipt `json:"lifecycle_receipt"`
-	ExpiresAt  string                `json:"expires_at"`
+	Capability               string                `json:"capability"`
+	Receipt                  computerevent.Receipt `json:"lifecycle_receipt"`
+	PostRevocationCapability string                `json:"post_revocation_capability,omitempty"`
+	ExpiresAt                string                `json:"expires_at"`
 
 	PendingLifecycleReceipts []computerevent.Receipt `json:"pending_lifecycle_receipts,omitempty"`
 }
@@ -172,6 +173,14 @@ func (s *Service) exchangeComputerCredentialEnvelope(ctx context.Context, encode
 	} else if found {
 		return CredentialExchangeResult{}, fmt.Errorf("credential envelope: already consumed")
 	}
+	postRevocationCapability, err := MintComputerCapability(ComputerCapability{
+		Version: 1, ComputerID: envelope.ComputerID,
+		Scopes: []string{"event:read", "event:pin", "event:append"}, ExpiresAt: envelope.ExpiresAt,
+		RevocationEpoch: envelope.RevocationEpoch + 1, Nonce: envelope.Nonce + ":revoked",
+	}, s.signingKey.Private)
+	if err != nil {
+		return CredentialExchangeResult{}, err
+	}
 	receipt, err := computerevent.NewSignedReceipt("LifecycleReceipt", "corpusd", map[string]any{
 		"computer_id": envelope.ComputerID, "action": "credential_envelope_consumed",
 		"prior_lifecycle_state": "issued", "resulting_lifecycle_state": "consumed",
@@ -188,7 +197,8 @@ func (s *Service) exchangeComputerCredentialEnvelope(ctx context.Context, encode
 	if err != nil {
 		return CredentialExchangeResult{}, err
 	}
-	return CredentialExchangeResult{Capability: token, Receipt: receipt, ExpiresAt: envelope.ExpiresAt, PendingLifecycleReceipts: pending}, nil
+	pending = append(pending, receipt)
+	return CredentialExchangeResult{Capability: token, PostRevocationCapability: postRevocationCapability, Receipt: receipt, ExpiresAt: envelope.ExpiresAt, PendingLifecycleReceipts: pending}, nil
 }
 func (s *Service) RenewComputerCapability(ctx context.Context, computerID string) (CredentialExchangeResult, error) {
 	if s == nil || s.store == nil || s.signingKey == nil || computerID == "" {

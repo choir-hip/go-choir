@@ -18,9 +18,7 @@ func TestUpdaterAppliesRetainedPinnedReleaseForExplicitRollback(t *testing.T) {
 	}
 	root := filepath.Join(t.TempDir(), "updater")
 	t.Cleanup(func() { makeTreeWritable(root) })
-	engine, err := New(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{}, computerevent.SigningKey{
-		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey,
-	})
+	engine, err := New(root, "computer-test", "realization-test", &fakeServiceManager{}, fakeHealthProber{}, testReceiptSigner{key: computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "updater-test"}, PrivateKey: privateKey}})
 	if err != nil {
 		t.Fatal(err)
 	}
