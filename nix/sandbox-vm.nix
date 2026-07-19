@@ -89,6 +89,10 @@ in
 {
   networking.hostName = "go-choir-sandbox";
 
+  # Capsule overlays and the enforcing boot probe both require the module to
+  # be loaded, not merely present in the immutable kernel closure.
+  boot.kernelModules = [ "overlay" ];
+
   # ── microvm configuration ────────────────────────────────────────────
   microvm = {
     # Firecracker as the hypervisor. The actual hypervisor binary is not
