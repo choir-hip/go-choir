@@ -585,14 +585,14 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-G0-contract-conformance
-    state: accepted_G0_contract
-    ref: docs/evidence/self-development-g0-conformance-2026-07-18.md
+    id: self-development-B-disabled-cutover-round-2
+    state: rejected_G1_repair_required
+    ref: 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    freeze_identity: "sha256:31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd"
-    freeze_algorithm: "Replace the complete freeze_identity scalar with pending_content_digest, then compute lowercase SHA-256 for each repo-relative scope path in listed order; encode each row as <hex><two ASCII spaces><path><LF>; freeze identity is lowercase SHA-256 of the concatenated UTF-8 rows. Equivalent command after the substitution: shasum -a 256 <ordered paths> | shasum -a 256."
-    scope: [docs/definitions/choir-cli-self-development-2026-07-16.md, docs/choir-doctrine.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/current-architecture.md, docs/runtime-invariants.md, docs/platform-os-app-state.md, docs/evidence/self-development-g0-conformance-2026-07-18.md]
+    scope: "Complete 228-path B clean-cutover diff plus the 31-path first G1 repair; effects remain OFF."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe]
+    disposition: "Do not land or deploy. The first repair panel reviewed the reachable same-prefix tree despite a mistyped full SHA in its prompt; reproducible source findings reject the candidate independently of that prompt error."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -602,9 +602,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md, internal/capsule/executor.go, internal/capsule/capsule.go, internal/capsule/transaction/tape.go, internal/agentcore/tools_capsule.go, internal/agentcore/tool_profiles.go, internal/agentprofile/agentprofile.go, internal/trace/store.go, internal/types/task.go, cmd/choir/main.go]
-  blocker_or_risk: "G0 is accepted. The terminal panel produced two confirmations and one claimed digest mismatch; exact recomputation from the documented substituted per-file rows yields 31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd, so the mismatch is rejected as non-reproducible. The immutable start receipt remains historical; current candidate dirt is reconciled in now. B remains unbuilt, and no behavior/deploy/accepted effect is authorized until its own G1/C/D gates."
-  next_action: "Land the code-free G0 boundary, then implement B as one activation-off clean cutover: canonical event/recovery substrate, guest-local capsule isolation, role and worker/candidate deletion, public updater/API/CLI/modes, deterministic tests, and a frozen G1 candidate."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, /tmp/choir-selfdev-g1-final-panel/manifest.tsv, /tmp/choir-selfdev-g1-final-panel/codex.out, /tmp/choir-selfdev-g1-final-panel/cursor.out, /tmp/choir-selfdev-g1-final-panel/omp-gpt55.out]
+  blocker_or_risk: "G0 remains accepted; B is implemented but rejected at G1. Root-cause classification: substrate-level authority cutover remains incomplete, not isolated test symptoms. Confirmed repair set: (1) separate the updater restart-handoff directory from the bootstrap credential mount and sandbox gateway-token env, enforce a loopback-only prepare URL, and replace stale handoffs; (2) reconcile a durably appended decision event into the exact event-derived operation projection after crash rather than using a later current head; (3) consume only an exact approval from accept_once and CAS back to propose_only, while rejection remains propose_only; (4) replace the partial TransactionRecord bundle/verifier signature with the complete G0 CapsuleEffectBundle identity and recompute every joined digest; (5) gate capsule admission on the exact fresh kernel receipt, use default-deny seccomp, and drop workload capabilities; (6) repair the leading-slash release-path mismatch and broaden fail-closed secret path/content refusal; (7) complete deletion/migration of live AppAdoption/AppChangePackage promotion, worker action vocabulary, and public /api/agent/* in favor of /api/runs; (8) validate/migrate persisted ComputerID distinct from VMID/DesktopID/RealizationID and remove the remaining sandbox source-workspace alias; (9) remove production host-process vmctl fallback. The panel-prompt full SHA was mistyped, so final G1 must be rerun against the next exact reachable frozen identity."
+  next_action: "Repair the documented substrate-level G1 blockers as one effects-off cutover, run deterministic package/runtime/Nix checks, freeze the exact full commit identity in this card, and rerun a healthy diverse G1 panel."
 
 successor:
   status: selected_draft_non_executable
@@ -671,6 +671,17 @@ review_receipts:
     outcome: accept
     adjudication: "All semantic blockers from prior G0 rounds are repaired. The Cursor digest finding is rejected by exact deterministic recomputation: after replacing only the freeze_identity scalar with pending_content_digest, the ordered per-file rows are 67a7de1f... definition, 31e43907... doctrine, f54bab30... ontology, 9c058788... agent doctrine, 7e9deb7e... architecture, 407f1777... runtime invariants, f8264c4d... platform state, and baebf4a2... packet; their framed-row SHA-256 is exactly 31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd. OpenCode's own report omitted substitution when displaying 6cfb2bd... but found no semantic blocker; omp-gpt55 independently reproduced the accepted digest. The claim that start.status must become dirty is also rejected: start is the immutable authoring receipt and now.reconciliation is the sole current inventory."
     receipt_binding: "This post-review mutation advances now from A/G0 to B and appends the review receipt only. It changes no reviewed architecture, authority, schema, gate, acceptance, rollback, or deletion semantics. Any later semantic contract change requires a new frozen review."
+
+  - id: G1-disabled-cutover-round-2-2026-07-19
+    reviewed_at: 2026-07-19T10:38:00Z
+    requested_candidate_ref: 8bad0a25bf05c6ed513ecf4ddfef8f8da0b548de
+    actual_reviewed_candidate_ref: 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135
+    manifest: /tmp/choir-selfdev-g1-final-panel/manifest.tsv
+    panel: [codex, devin, cursor, opencode, omp-gpt55, omp-gemini35, omp-glm52]
+    health: "Codex, Cursor, OpenCode, omp-gpt55, and omp-gemini35 completed; Devin timed out; omp-glm52 failed before review. The prompt mistyped the full SHA, but Codex, Cursor, and omp-gpt55 explicitly resolved and inspected the actual local same-prefix candidate."
+    verdicts: [codex:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, opencode:ACCEPT_G1, omp-gemini35:ACCEPT_G1]
+    outcome: repair
+    adjudication: "Minority rule is not needed: three independent reviewers supplied reproducible source blockers. Exact candidate identity is corrected in now; all substantive confirmed blockers are documented there before repair. Claims that conflict with the settled topology are adjudicated during implementation: old app-adoption/promotion and public agent-loop paths are not separately retained product features under the owner clean-cutover decision; accept_once returns to propose_only; capsule admission and production vmctl must fail closed."
 
 view:
   path: none
