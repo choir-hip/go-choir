@@ -585,14 +585,14 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-3
-    state: rejected_G1_repairing
-    ref: f9cc324633fc64a40c407aa8abd328f9b257127a
+    id: self-development-B-disabled-cutover-round-4
+    state: frozen_ready_G1
+    ref: 5ae5b610c4901f6958a5ae5747cba61f283fa548
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Effects-OFF B cutover candidate with substantial G1 repairs, but the healthy round-3 panel found surviving event-projection, accept_once, cross-owner authorization, public-route, obsolete-client, and privacy-key custody blockers."
-    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135]
-    disposition: "Rejected at G1. Effects remain OFF; do not land or deploy. Repair every confirmed blocker in one new immutable candidate and rerun deterministic evidence plus a fresh diverse G1 panel."
+    scope: "Complete effects-OFF B cutover plus all confirmed round-3 G1 repairs: exact embedded projection state, deterministic accept_once consumption, cross-owner refusal, PUT mode and target lifecycle contracts, obsolete product-client/test deletion, keyless corpusd, root guest-owned durable privacy keyring, and updater-inaccessible restart/recovery credentials."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a]
+    disposition: "Frozen for G1 only. Effects remain OFF; do not deploy before an accepting fresh G1 receipt."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -602,9 +602,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, f9cc324633fc64a40c407aa8abd328f9b257127a, /tmp/choir-selfdev-g1-f9cc-panel/manifest.tsv, /tmp/choir-selfdev-g1-f9cc-panel/codex.out, /tmp/choir-selfdev-g1-f9cc-panel/cursor.out, /tmp/choir-selfdev-g1-f9cc-panel/omp-gpt55.out, /tmp/choir-selfdev-g1-f9cc-panel/omp-gemini35.out]
-  blocker_or_risk: "G0 remains accepted; B remains blocked. Confirmed round-3 blockers are: embedded event finalization drops reducer/revocation projection fields; proxy accept_once consumption omits its required deterministic idempotency key; cookie-authenticated mode control omits target ownership; exact PUT mode and target-scoped lifecycle public contracts are absent; product-visible AppChangePackage/AppAdoption clients, notifications, registry entries, and worker-VM browser tests survive; the platform/corpusd privacy-key table and updater-readable restart handoff violate the keyless-corpusd/root-guest-keyring and appender-only boundaries. The round-2 claim that obsolete surfaces were deleted is therefore false for f9cc3246 and is corrected here before repair."
-  next_action: "Repair the documented round-3 blockers, including deletion of surviving obsolete product clients/tests, preserve corpusd keylessness and updater inability to read append/privacy credentials, add end-to-end negative/transition tests, freeze one exact candidate, and rerun a healthy diverse G1 panel."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 5ae5b610c4901f6958a5ae5747cba61f283fa548, /tmp/choir-selfdev-g1-f9cc-panel/manifest.tsv, artifact://698, artifact://700, artifact://702, artifact://704, artifact://710, artifact://712]
+  blocker_or_risk: "G0 remains accepted. Candidate 5ae5b610 repairs every confirmed round-3 source blocker: embedded finalization persists reducer/revocation projections with restart proof; accept_once posts its exact deterministic idempotency key; cookie mode access joins owner and ComputerID; public mode uses PUT and lifecycle exposes target-scoped status/start/stop/restart; Features/CandidateReview/Apps-and-Changes clients, notifications, preview data, and browser pressure are deleted; corpusd stores no privacy key; the root guest keyring creates only pre-genesis, is ComputerID-bound, survives restart on the persistent guest disk, and fails closed if missing after genesis; updater mount isolation denies both the keyring and runtime handoff while fixed root bridges retain recovery credentials outside updater custody. `go test ./... -run '^$' -p 1`, all 14 changed authority package suites, all runtime shards, frontend production build and authenticated registry smoke proof passed. Nix evaluated `/nix/store/56k7ynn98bzfpkysnw5gbnq8w896f6y8-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`; evaluated updater service config has empty capabilities, private PID/proc restrictions, and `InaccessiblePaths` for `/mnt/persistent/choir-credentials` and `/run/choir-runtime-handoff`. Exact x86_64 runtime receipt and real mount denial remain the declared C-before-D deployed gate. Rollback before deployment is 5ae5b610^/b298d2dd; no effect or schema reached staging. Heresy delta: discovered 6 blocker classes, introduced 0 known, repaired 6."
+  next_action: "Run a healthy diverse G1 panel against exact immutable candidate 5ae5b610c4901f6958a5ae5747cba61f283fa548 and this authority card; accept only if no reproducible blocker survives."
 
 successor:
   status: selected_draft_non_executable
