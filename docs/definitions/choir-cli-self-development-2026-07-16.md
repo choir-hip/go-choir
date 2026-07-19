@@ -585,14 +585,14 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-2
-    state: rejected_G1_repair_required
-    ref: 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135
+    id: self-development-B-disabled-cutover-round-3
+    state: frozen_ready_G1
+    ref: f9cc324633fc64a40c407aa8abd328f9b257127a
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete 228-path B clean-cutover diff plus the 31-path first G1 repair; effects remain OFF."
-    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe]
-    disposition: "Do not land or deploy. The first repair panel reviewed the reachable same-prefix tree despite a mistyped full SHA in its prompt; reproducible source findings reject the candidate independently of that prompt error."
+    scope: "Complete effects-OFF B cutover plus G1 substrate repairs: old app-adoption/package and worker/candidate-VM surfaces deleted; stable ComputerID/realization bindings, relative release staging, event-derived crash recovery, exact accept_once consumption, external privacy keys, restart handoff, real process pointer-swap proof, public /api/runs and self-development API/CLI."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135]
+    disposition: "Frozen for G1 only. Effects remain OFF; do not land or deploy before an accepting G1 receipt."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -602,9 +602,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, /tmp/choir-selfdev-g1-final-panel/manifest.tsv, /tmp/choir-selfdev-g1-final-panel/codex.out, /tmp/choir-selfdev-g1-final-panel/cursor.out, /tmp/choir-selfdev-g1-final-panel/omp-gpt55.out]
-  blocker_or_risk: "G0 remains accepted; B is implemented but rejected at G1. Root-cause classification: substrate-level authority cutover remains incomplete, not isolated test symptoms. Confirmed repair set: (1) separate the updater restart-handoff directory from the bootstrap credential mount and sandbox gateway-token env, enforce a loopback-only prepare URL, and replace stale handoffs; (2) reconcile a durably appended decision event into the exact event-derived operation projection after crash rather than using a later current head; (3) consume only an exact approval from accept_once and CAS back to propose_only, while rejection remains propose_only; (4) replace the partial TransactionRecord bundle/verifier signature with the complete G0 CapsuleEffectBundle identity and recompute every joined digest; (5) gate capsule admission on the exact fresh kernel receipt, use default-deny seccomp, and drop workload capabilities; (6) repair the leading-slash release-path mismatch and broaden fail-closed secret path/content refusal; (7) complete deletion/migration of live AppAdoption/AppChangePackage promotion, worker action vocabulary, and public /api/agent/* in favor of /api/runs; (8) validate/migrate persisted ComputerID distinct from VMID/DesktopID/RealizationID and remove the remaining sandbox source-workspace alias; (9) remove production host-process vmctl fallback. The panel-prompt full SHA was mistyped, so final G1 must be rerun against the next exact reachable frozen identity."
-  next_action: "Repair the documented substrate-level G1 blockers as one effects-off cutover, run deterministic package/runtime/Nix checks, freeze the exact full commit identity in this card, and rerun a healthy diverse G1 panel."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, f9cc324633fc64a40c407aa8abd328f9b257127a, /tmp/choir-selfdev-g1-final-panel/manifest.tsv, /tmp/choir-selfdev-g1-final-panel/codex.out, /tmp/choir-selfdev-g1-final-panel/cursor.out, /tmp/choir-selfdev-g1-final-panel/omp-gpt55.out]
+  blocker_or_risk: "G0 remains accepted. B is frozen at f9cc324633fc64a40c407aa8abd328f9b257127a with effects OFF. The prior G1 substrate blockers are repaired and locally verified: real updater process replacement across the immutable pointer swap; exact decision-event recovery after the append/projection crash window; accept_once CAS back to propose_only; platform-owned per-computer AEAD keys delivered only to trusted guest-core memory/restart tmpfs; relative upperdir release staging with Linux compile proof; stable ComputerID/realization binding; old AppChangePackage/AppAdoption and worker/candidate-VM runtime surfaces deleted. `scripts/go-test-runtime-shards` passed. `go test ./... -count=1` passed every package except live provider/search integration calls refused by external quota/timeouts (Tavily 432, Brave timeout, Serper 400, SerpAPI 429, ZAI 429). `nix-instantiate --parse nix/sandbox-vm.nix` and a CGO-disabled Linux capsule test compile passed. G1 independent review remains the sole blocker."
+  next_action: "Run a healthy diverse G1 panel against exact immutable candidate f9cc324633fc64a40c407aa8abd328f9b257127a and this authority card; accept only if no reproducible blocker survives."
 
 successor:
   status: selected_draft_non_executable
