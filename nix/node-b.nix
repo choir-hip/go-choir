@@ -13,7 +13,7 @@
 # - Auth persists sessions in SQLite, so sessions survive auth restarts
 # - Auth reuses the same signing key file across restarts, so existing
 #   access JWTs remain valid after auth restarts (VAL-CROSS-118)
-{ config, lib, pkgs, goChoirPackages, guestRunner ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
+{ config, lib, pkgs, goChoirPackages, guestImage ? null, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 let
   # Auth signing material lives in this writable runtime directory.
   # Using a let-binding so downstream env vars compose the key paths
@@ -678,6 +678,37 @@ in
     fi
   '';
 
+  # The host system closure owns the exact immutable guest image. Point vmctl
+  # at that store output atomically; never let current host binaries boot an
+  # unrelated mutable directory. Preserve the one pre-managed image directory
+  # as an explicit rollback ref during the first cutover.
+  system.activationScripts.go-choir-guest-image = lib.optionalString (guestImage != null) ''
+    set -euo pipefail
+    state=/var/lib/go-choir
+    target="$state/guest"
+    legacy="$state/guest-pre-managed-rollback"
+    next="$state/.guest-next"
+    src="${guestImage}"
+    for artifact in vmlinux rootfs.ext4 initrd storedisk.erofs kernel-params build.json; do
+      if [ ! -f "$src/$artifact" ]; then
+        echo "go-choir guest image missing $artifact in $src" >&2
+        exit 1
+      fi
+    done
+    mkdir -p "$state"
+    if [ -e "$target" ] && [ ! -L "$target" ]; then
+      if [ -e "$legacy" ]; then
+        echo "go-choir guest image cutover refuses to replace existing rollback $legacy" >&2
+        exit 1
+      fi
+      mv "$target" "$legacy"
+    fi
+    rm -f "$next"
+    ln -s "$src" "$next"
+    mv -Tf "$next" "$target"
+    echo "go-choir guest image pointer updated to $src"
+  '';
+
   # Host sandbox service deleted in PR 5 of store-consolidation mission.
   # All runtime work happens in VMs via vmctl. Served proxy routes require an
   # immutable D-ROUTE slot and fail before VM lookup when route authority is
@@ -733,7 +764,6 @@ in
     "z ${mailDir}/raw 0700 root root -"
     "z ${mailDir}/attachments 0700 root root -"
     "z ${mailDir}/attachments/quarantine 0700 root root -"
-    "d /var/lib/go-choir/guest 0750 root root -"
     "d /var/lib/go-choir/vm-state 0750 root root -"
     "d ${platformDoltDir} 0750 root root -"
     "d ${platformDoltDBDir} 0750 root root -"

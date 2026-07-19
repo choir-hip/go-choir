@@ -404,9 +404,9 @@ EOF
         specialArgs = {
           goChoirPackages = goChoirPackages;
           inherit buildCommit sourceRepoRemote;
-          # Pass the guest VM runner artifacts to the host config so
-          # the deploy pipeline can install them to /var/lib/go-choir/guest/.
-          guestRunner = self.nixosConfigurations.go-choir-sandbox-vm.config.microvm.runner.firecracker;
+          # Bind the exact immutable guest image into the host system closure;
+          # node-b activation advances /var/lib/go-choir/guest atomically.
+          guestImage = guest-image;
         };
         modules = [
           ./nix/hardware.nix
@@ -423,7 +423,7 @@ EOF
         specialArgs = {
           goChoirPackages = goChoirPackages;
           inherit buildCommit sourceRepoRemote;
-          guestRunner = self.nixosConfigurations.go-choir-sandbox-vm.config.microvm.runner.firecracker;
+          guestImage = guest-image;
         };
         modules = [
           ./nix/node-a-hardware.nix
