@@ -586,15 +586,15 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-6
-    state: rejected_G1_repairing
-    ref: fb0e56e33de17fbf7cf7326b345fa701d6a241a3
+    id: self-development-B-disabled-cutover-round-7
+    state: frozen_pending_G1
+    ref: 153c68668a8b16f47ff5fba17a983d2d37339cbb
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Effects-OFF B cutover with round-5 repairs, but round-6 G1 found three source blockers: non-atomic credential exchange/restore crash windows, canonical decision replay ordered after current-mode validation, and updater-mediated verifier signing authority reachable from the guest runtime."
-    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a]
-    verification: "Focused tests, runtime shards, frontend build, and Nix evaluation passed, but existing tests omit the newly identified crash boundaries and post-mode-transition canonical replay. Source inspection confirms updater exposes verifier signing through its guest-reachable socket."
-    disposition: "Rejected at G1. Effects remain OFF; do not deploy. Repair every confirmed round-6 blocker, freeze a new exact candidate, and rerun a fresh diverse panel."
+    scope: "Effects-OFF B clean cutover plus all documented G1 repairs. Bootstrap exchange is now two-phase: byte-identical preparation is deterministic until the authenticated consume receipt, the exact pending transition is atomically stored before consumption, restore never deletes its only handoff, consumed exchange replay returns no bearer, and changed nonce/request conflicts. Exact terminal decision replay precedes later current-mode validation while changed requests still conflict. Updater has no verifier client, flag, route, or socket visibility; verifier authority runs under its disjoint user/key/root/socket and the runtime uses only its typed verifier endpoint."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3]
+    verification: "Focused changed-package tests pass, including prepared-exchange crash recovery, consumption idempotency/changed nonce/consumed replay, non-deleting restore, post-revocation crash recovery, and exact terminal decision replay independent of later mode. All runtime shards passed; the complete native source tree compiled across 76 packages. Nix evaluated exact updater/signer/runtime principal separation and toplevel `/nix/store/s66n8vjl57ldwnihgadyag6ajhp4gcgg-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`; the isolated receipt signer cross-built for linux/amd64. Full x86_64-linux Nix build remains unavailable because only an aarch64-linux remote builder is configured, not because of a source failure."
+    disposition: "Frozen for fresh diverse G1 review. Effects remain OFF; do not deploy unless G1 accepts this exact SHA."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -604,9 +604,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, /tmp/choir-selfdev-g1-round6-panel/manifest.tsv]
-  blocker_or_risk: "B remains blocked. Bootstrap exchange consumes its envelope before any durable recovery handoff exists, and restore deletes its sole handoff before replacement, so either crash window can strand guest event authority. Canonical exact decision retries validate against the later current ModeReceipt before consulting the durable terminal decision, so a valid old identical retry can fail after mode advances. The root updater owns both signer clients and exposes verifier signing on the guest-reachable updater socket, bypassing independent verifier principal authority. These are source blockers; later deployed gates remain correctly deferred."
-  next_action: "Make credential acquisition/restore crash-atomic; move exact terminal decision replay before current-mode authorization while preserving conflict refusal; remove verifier signing from the updater/guest-callable authority path and give the independent verifier principal its own inaccessible invocation boundary; add focused negative/crash tests; freeze and re-review."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 153c68668a8b16f47ff5fba17a983d2d37339cbb, /tmp/choir-selfdev-g1-round6-panel/manifest.tsv]
+  blocker_or_risk: "No known source blocker after round-7 repair. Full Linux/Nix realization, immutable-image runtime capability receipt, deployment identity, mode-off staging behavior, and all C–F product transitions remain intentionally unproved deployed gates; none may be replaced with local evidence."
+  next_action: "Run a fresh diverse G1 panel against exact code candidate 153c68668a8b16f47ff5fba17a983d2d37339cbb and this authority card; accept only if no reproducible source blocker remains."
 
 successor:
   status: selected_draft_non_executable
