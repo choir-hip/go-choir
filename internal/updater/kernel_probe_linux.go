@@ -46,13 +46,17 @@ func ProbeKernelCapabilities(ctx context.Context) (KernelCapabilityProbe, error)
 		return KernelCapabilityProbe{}, err
 	}
 
-	checks := map[string]string{
-		"namespaces": "user_namespace,pid_namespace,mount_namespace,network_namespace,uts_namespace,ipc_namespace",
-		"overlay":    "overlayfs_loaded_and_mountable",
-		"seccomp":    "seccomp_filter_enforced",
-		"landlock":   "landlock_enforcing",
+	checks := []struct {
+		helper     string
+		capability string
+	}{
+		{helper: "namespaces", capability: "user_namespace,pid_namespace,mount_namespace,network_namespace,uts_namespace,ipc_namespace"},
+		{helper: "overlay", capability: "overlayfs_loaded_and_mountable"},
+		{helper: "seccomp", capability: "seccomp_filter_enforced"},
+		{helper: "landlock", capability: "landlock_enforcing"},
 	}
-	for helper, capability := range checks {
+	for _, check := range checks {
+		helper, capability := check.helper, check.capability
 		if err := runKernelProbeHelper(ctx, helper); err != nil {
 			return KernelCapabilityProbe{}, fmt.Errorf("kernel capability probe: %s: %w", capability, err)
 		}
@@ -149,10 +153,19 @@ func runKernelProbeHelper(ctx context.Context, helper string) error {
 		}
 		return cmd
 	}
+	run := func(cmd *exec.Cmd) error {
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			if detail := strings.TrimSpace(string(output)); detail != "" {
+				return fmt.Errorf("%w: %s", err, detail)
+			}
+		}
+		return err
+	}
 	switch helper {
 	case "namespaces":
 		combined := uintptr(unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNS | unix.CLONE_NEWNET | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC)
-		if err := command(combined, true).Run(); err != nil {
+		if err := run(command(combined, true)); err != nil {
 			probes := []struct {
 				name    string
 				flag    uintptr
@@ -167,7 +180,7 @@ func runKernelProbeHelper(ctx context.Context, helper string) error {
 			}
 			results := make([]string, 0, len(probes))
 			for _, probe := range probes {
-				probeErr := command(probe.flag, probe.mapRoot).Run()
+				probeErr := run(command(probe.flag, probe.mapRoot))
 				if probeErr == nil {
 					results = append(results, probe.name+"=ok")
 				} else {
@@ -178,9 +191,9 @@ func runKernelProbeHelper(ctx context.Context, helper string) error {
 		}
 		return nil
 	case "overlay":
-		return command(unix.CLONE_NEWNS, false).Run()
+		return run(command(unix.CLONE_NEWNS, false))
 	default:
-		return command(0, false).Run()
+		return run(command(0, false))
 	}
 }
 
