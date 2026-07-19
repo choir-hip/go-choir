@@ -23,7 +23,6 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/updater"
-	selfdevprotocol "github.com/yusefmosiah/go-choir/internal/verifierprotocol"
 )
 
 func main() {
@@ -33,7 +32,7 @@ func main() {
 	if handled, code := updater.RunKernelCapabilityProbeWriter(context.Background()); handled {
 		os.Exit(code)
 	}
-	var root, socketPath, computerID, realizationID, restartRequestPath, recoveryRequestPath, cleanupRequestPath, restartPrepareURL, healthURL, signerSocketPath, verifierSignerSocketPath, guestImageManifestPath, kernelConfigPath, kernelProbePath string
+	var root, socketPath, computerID, realizationID, restartRequestPath, recoveryRequestPath, cleanupRequestPath, restartPrepareURL, healthURL, signerSocketPath, guestImageManifestPath, kernelConfigPath, kernelProbePath string
 	flag.StringVar(&root, "root", "/var/lib/choir-updater", "Root-owned updater state directory")
 	flag.StringVar(&socketPath, "socket", "/run/choir/updater.sock", "Permissioned updater Unix socket")
 	flag.StringVar(&computerID, "computer-id", os.Getenv("CHOIR_COMPUTER_ID"), "Stable ComputerID")
@@ -44,7 +43,6 @@ func main() {
 	flag.StringVar(&restartPrepareURL, "restart-prepare-url", "http://127.0.0.1:8085/internal/self-development/restart-handoff", "Fixed guest restart credential preparation endpoint")
 	flag.StringVar(&healthURL, "health-url", "http://127.0.0.1:8085/health", "Guest Choir health endpoint")
 	flag.StringVar(&signerSocketPath, "signer-socket", "/run/choir-signers/guest-core.sock", "Isolated guest-core signer Unix socket")
-	flag.StringVar(&verifierSignerSocketPath, "verifier-signer-socket", "/run/choir-signers/verifier.sock", "Isolated verifier signer Unix socket")
 	flag.StringVar(&guestImageManifestPath, "guest-image-manifest", os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST"), "Immutable guest image manifest")
 	flag.StringVar(&kernelConfigPath, "kernel-config", os.Getenv("CHOIR_KERNEL_CONFIG"), "Realized guest kernel config")
 	flag.StringVar(&kernelProbePath, "kernel-probe", "/run/choir/kernel-capabilities.json", "Boot-time kernel capability probe artifact")
@@ -55,10 +53,6 @@ func main() {
 	guestSigner, err := receiptsigner.NewClient(signerSocketPath, receiptsigner.ModeGuestCore)
 	if err != nil {
 		fatal("configure guest signer: %v", err)
-	}
-	verifierSigner, err := receiptsigner.NewClient(verifierSignerSocketPath, receiptsigner.ModeVerifier)
-	if err != nil {
-		fatal("configure verifier signer: %v", err)
 	}
 	engine, err := updater.New(filepath.Clean(root), computerID, realizationID, updater.RestartRequestManager{Path: restartRequestPath, RecoveryPath: recoveryRequestPath, CleanupPath: cleanupRequestPath, PrepareURL: restartPrepareURL}, updater.HTTPHealthProber{URL: healthURL}, guestSigner)
 	if err != nil {
@@ -126,40 +120,6 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusOK, report)
-	})
-	mux.HandleFunc("/v1/verifier-public-key", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-			return
-		}
-		ref, publicKey, err := verifierSigner.PublicKey(r.Context())
-		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "verifier key unavailable"})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]string{
-			"signer_domain": ref.SignerDomain, "key_id": ref.KeyID,
-			"public_key": base64.RawStdEncoding.EncodeToString(publicKey),
-		})
-	})
-	mux.HandleFunc("/v1/sign-verifier-certificate", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
-			return
-		}
-		var request selfdevprotocol.VerifierCertificateRequest
-		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&request); err != nil || request.ComputerID != computerID {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid verifier certificate request"})
-			return
-		}
-		response, err := verifierSigner.SignVerifierCertificate(r.Context(), request)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "verifier certificate refused"})
-			return
-		}
-		writeJSON(w, http.StatusOK, response)
 	})
 	mux.HandleFunc("/v1/import-baseline", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

@@ -474,7 +474,7 @@ func TestCredentialEnvelopeIsCanonicalScopedAndDeterministicForRetry(t *testing.
 	}
 }
 
-func TestCredentialEnvelopeExchangeRefusesReplay(t *testing.T) {
+func TestCredentialEnvelopeExchangeSupportsPrepareRetryThenRefusesConsumedReplay(t *testing.T) {
 	store, root := openTestPlatformStore(t)
 	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -497,6 +497,27 @@ func TestCredentialEnvelopeExchangeRefusesReplay(t *testing.T) {
 	}
 	if len(result.PendingLifecycleReceipts) != 0 {
 		t.Fatal("pre-genesis exchange scheduled a revocation event before an event head exists")
+	}
+	retry, err := service.exchangeComputerCredentialEnvelope(context.Background(), raw)
+	if err != nil || retry.Capability != result.Capability {
+		t.Fatalf("unconsumed exchange retry = %#v, %v; want exact prepared capability", retry, err)
+	}
+	consumed, err := service.ConsumeComputerCredentialEnvelope(context.Background(), CredentialConsumptionRequest{
+		ComputerID: envelope.ComputerID, Nonce: envelope.Nonce, RequestCommitment: envelope.RequestCommitment,
+	})
+	if err != nil || consumed.Receipt.ReceiptKind != "LifecycleReceipt" || len(consumed.PendingLifecycleReceipts) != 0 {
+		t.Fatalf("pre-genesis consumption = %#v, %v", consumed, err)
+	}
+	consumedRetry, err := service.ConsumeComputerCredentialEnvelope(context.Background(), CredentialConsumptionRequest{
+		ComputerID: envelope.ComputerID, Nonce: envelope.Nonce, RequestCommitment: envelope.RequestCommitment,
+	})
+	if err != nil || consumedRetry.Receipt.ReceiptID != consumed.Receipt.ReceiptID {
+		t.Fatalf("consumption retry = %#v, %v; want original receipt", consumedRetry, err)
+	}
+	if _, err := service.ConsumeComputerCredentialEnvelope(context.Background(), CredentialConsumptionRequest{
+		ComputerID: envelope.ComputerID, Nonce: envelope.Nonce + "-changed", RequestCommitment: envelope.RequestCommitment,
+	}); err == nil {
+		t.Fatal("changed consumption nonce was accepted")
 	}
 	if replay, err := service.exchangeComputerCredentialEnvelope(context.Background(), raw); err == nil || replay.Capability != "" {
 		t.Fatalf("consumed envelope replay = %#v, %v; want refusal without bearer", replay, err)

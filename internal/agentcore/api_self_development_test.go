@@ -287,3 +287,34 @@ func TestGenesisAuthoritySeparatesReviewedCandidateFromDeployedRelease(t *testin
 		t.Fatal("genesis accepted deployed release as the reviewed candidate")
 	}
 }
+
+func TestExactTerminalDecisionReplayDoesNotDependOnLaterCurrentMode(t *testing.T) {
+	eventID, err := computerevent.NewEventID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisionRef := strings.Repeat("d", 64)
+	event := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: "computer-replay",
+		Sequence: 1, PreviousHead: computerevent.ZeroHead, EventKind: computerevent.EventEffectRejected,
+		OccurredAt: time.Now().UTC().Format(time.RFC3339Nano), IdempotencyKey: "decision-replay", RequestCommitment: computerevent.ZeroHead,
+		TrajectoryID: "trajectory-replay", CapsuleID: "capsule-replay", ParentEventID: "operation-replay",
+		ActorProfile: "super", AuthorityRef: "external-owner:owner", PrivacyClass: "owner",
+		ExpectedDesiredEventHead: strings.Repeat("a", 64), ExpectedEffectiveEventHead: strings.Repeat("b", 64),
+		ExpectedDesiredStateCommitment: strings.Repeat("c", 64), ExpectedEffectiveStateCommitment: strings.Repeat("c", 64),
+		RequireExpectedHead: true, PayloadCommitment: strings.Repeat("e", 64),
+		ProposedEffectRef: strings.Repeat("f", 64), DecisionRef: decisionRef,
+		VerifierRefs: []string{strings.Repeat("1", 64)}, ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	digest, err := event.Digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := selfdev.Operation{State: selfdev.StateRejected, DecisionEvent: digest}
+	if !exactTerminalDecisionReplay(operation, event, true, selfdev.StateRejected, decisionRef) {
+		t.Fatal("exact terminal retry was not recognized before current-mode authorization")
+	}
+	if exactTerminalDecisionReplay(operation, event, true, selfdev.StateRejected, strings.Repeat("2", 64)) {
+		t.Fatal("changed terminal retry was accepted")
+	}
+}

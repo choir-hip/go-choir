@@ -34,7 +34,7 @@ func (r updaterReceiptKeyResolver) ResolveReceiptKey(domain, _ string, keyID str
 }
 
 func (rt *Runtime) reconcileSelfDevelopmentMaterialization(ctx context.Context) {
-	if rt == nil || rt.selfdevUpdater == nil || rt.selfdevControl == nil || rt.selfdevRoute == nil || rt.selfdevRouteOwnerID == "" || rt.selfdevRouteDesktopID == "" || rt.selfdevComputerID == "" || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.selfdevRealizationID) == "" {
+	if rt == nil || rt.selfdevUpdater == nil || rt.selfdevVerifier == nil || rt.selfdevControl == nil || rt.selfdevRoute == nil || rt.selfdevRouteOwnerID == "" || rt.selfdevRouteDesktopID == "" || rt.selfdevComputerID == "" || rt.selfdevOperations == nil || rt.eventAppender == nil || rt.store == nil || strings.TrimSpace(rt.selfdevUpdaterRoot) == "" || strings.TrimSpace(rt.selfdevRealizationID) == "" {
 		return
 	}
 	rt.selfdevMaterializeMu.Lock()
@@ -330,7 +330,7 @@ func (rt *Runtime) recordMaterializationApplied(ctx context.Context, operation s
 	if len(operation.VerifierRefs) == 0 {
 		return fmt.Errorf("materializer: verifier evidence unavailable")
 	}
-	verifierCertificate, err := rt.selfdevUpdater.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
+	verifierCertificate, err := rt.selfdevVerifier.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
 		Version: 1, ComputerID: operation.ComputerID, OperationID: operation.OperationID,
 		BundleDigest: operation.BundleDigest, VerificationEventDigest: operation.VerifierRefs[0],
 		VerifierEvidenceRefs: operation.VerifierRefs, DecisionEventHead: operation.DecisionEvent,

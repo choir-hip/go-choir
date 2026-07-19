@@ -115,6 +115,30 @@ func (h *Handler) HandleComputerCredentialExchange(w http.ResponseWriter, r *htt
 	writeJSON(w, http.StatusCreated, result)
 }
 
+func (h *Handler) HandleComputerCredentialConsume(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	var request CredentialConsumptionRequest
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil || h == nil || h.eventAuth == nil || h.service == nil ||
+		h.eventAuth.Authorize(r, strings.TrimSpace(request.ComputerID), "event:read") != nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "credential consumption refused"})
+		return
+	}
+	request.ComputerID = strings.TrimSpace(request.ComputerID)
+	request.Nonce = strings.TrimSpace(request.Nonce)
+	request.RequestCommitment = strings.TrimSpace(request.RequestCommitment)
+	result, err := h.service.ConsumeComputerCredentialEnvelope(r.Context(), request)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, apiError{Error: "credential consumption refused"})
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h *Handler) HandleComputerLifecycleControl(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

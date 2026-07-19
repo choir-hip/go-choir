@@ -28,6 +28,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -145,6 +146,13 @@ func Run() {
 		}
 		coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentUpdater(updaterClient, updaterRoot, os.Getenv("CHOIR_COMPUTER_ID"), os.Getenv("CHOIR_REALIZATION_ID")))
 	}
+	if verifierSocket := strings.TrimSpace(os.Getenv("CHOIR_VERIFIER_AUTHORITY_SOCKET")); verifierSocket != "" {
+		verifierClient, err := receiptsigner.NewClient(verifierSocket, receiptsigner.ModeVerifier)
+		if err != nil {
+			log.Fatalf("sandbox: configure self-development verifier: %v", err)
+		}
+		coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentVerifier(verifierClient))
+	}
 	if brokerPath := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_BROKER_PATH")); brokerPath != "" {
 		probePath := strings.TrimSpace(os.Getenv("CHOIR_KERNEL_CAPABILITY_PROBE"))
 		probe, probeErr := updater.ReadKernelCapabilityProbe(probePath)
@@ -166,32 +174,47 @@ func Run() {
 		recoveryHandoffPath := strings.TrimSpace(os.Getenv("CHOIR_REVOCATION_CREDENTIAL_HANDOFF"))
 		bootstrapCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		var credentials *selfdev.GuestCredentials
+		var restoredPath string
 		var err error
-		if _, statErr := os.Stat(credentialPath); statErr == nil {
+		if _, recoveryErr := os.Stat(recoveryHandoffPath); recoveryErr == nil {
+			restoredPath = recoveryHandoffPath
+			credentials, err = selfdev.RestoreGuestCredentials(restoredPath, platformURL, computerID, realizationID)
+		} else if !os.IsNotExist(recoveryErr) {
+			err = recoveryErr
+		} else if _, restartErr := os.Stat(restartHandoffPath); restartErr == nil {
+			restoredPath = restartHandoffPath
+			credentials, err = selfdev.RestoreGuestCredentials(restoredPath, platformURL, computerID, realizationID)
+		} else if !os.IsNotExist(restartErr) {
+			err = restartErr
+		} else {
 			var encodedEnvelope string
-			encodedEnvelope, err = consumeComputerCredentialEnvelope(credentialPath)
+			encodedEnvelope, err = readComputerCredentialEnvelope(credentialPath)
 			if err == nil {
 				credentials, err = selfdev.ExchangeGuestCredential(bootstrapCtx, platformURL, encodedEnvelope, computerID, realizationID)
 			}
-		} else if os.IsNotExist(statErr) {
-			if _, recoveryErr := os.Stat(recoveryHandoffPath); recoveryErr == nil {
-				credentials, err = selfdev.RestoreGuestCredentials(recoveryHandoffPath, platformURL, computerID, realizationID)
-			} else {
-				credentials, err = selfdev.RestoreGuestCredentials(restartHandoffPath, platformURL, computerID, realizationID)
+		}
+		if err == nil {
+			err = credentials.ConfigureRecoveryHandoff(bootstrapCtx, recoveryHandoffPath)
+		}
+		if err == nil {
+			err = credentials.CompleteCredentialExchange(bootstrapCtx)
+		}
+		if err == nil {
+			if _, statErr := os.Stat(credentialPath); statErr == nil {
+				err = eraseComputerCredentialEnvelope(credentialPath)
+			} else if !os.IsNotExist(statErr) {
+				err = statErr
 			}
-		} else {
-			err = statErr
 		}
-		if err != nil {
-			cancel()
-			log.Fatalf("sandbox: acquire computer event credential: %v", err)
+		if err == nil && restoredPath != "" && restoredPath != recoveryHandoffPath {
+			err = os.Remove(restoredPath)
 		}
-		if err = credentials.ConfigureRecoveryHandoff(bootstrapCtx, recoveryHandoffPath); err == nil {
+		if err == nil {
 			_, err = credentials.RecoverPostRevocationCapability(bootstrapCtx)
 		}
 		if err != nil {
 			cancel()
-			log.Fatalf("sandbox: recover computer event credential: %v", err)
+			log.Fatalf("sandbox: acquire or recover computer event credential: %v", err)
 		}
 		eventClient, err := computerevent.NewGuestHTTPClient(platformURL, credentials.Capability)
 		if err != nil {
@@ -441,11 +464,11 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 	return rtCfg
 }
 
-func consumeComputerCredentialEnvelope(path string) (string, error) {
-	return consumeComputerCredentialEnvelopeOwned(path, 0)
+func readComputerCredentialEnvelope(path string) (string, error) {
+	return readComputerCredentialEnvelopeOwned(path, 0)
 }
 
-func consumeComputerCredentialEnvelopeOwned(path string, expectedUID uint32) (string, error) {
+func readComputerCredentialEnvelopeOwned(path string, expectedUID uint32) (string, error) {
 	if !filepath.IsAbs(path) {
 		return "", fmt.Errorf("credential path must be absolute")
 	}
@@ -461,9 +484,6 @@ func consumeComputerCredentialEnvelopeOwned(path string, expectedUID uint32) (st
 	if err != nil {
 		return "", err
 	}
-	if err := os.Remove(path); err != nil {
-		return "", fmt.Errorf("erase consumed credential file: %w", err)
-	}
 	encoded := strings.TrimSpace(string(raw))
 	for index := range raw {
 		raw[index] = 0
@@ -472,6 +492,20 @@ func consumeComputerCredentialEnvelopeOwned(path string, expectedUID uint32) (st
 		return "", fmt.Errorf("credential file is empty")
 	}
 	return encoded, nil
+}
+
+func eraseComputerCredentialEnvelope(path string) error {
+	return eraseComputerCredentialEnvelopeOwned(path, 0)
+}
+
+func eraseComputerCredentialEnvelopeOwned(path string, expectedUID uint32) error {
+	if _, err := readComputerCredentialEnvelopeOwned(path, expectedUID); err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("erase consumed credential file: %w", err)
+	}
+	return nil
 }
 
 func desktopIDFromRequest(r *http.Request) string {

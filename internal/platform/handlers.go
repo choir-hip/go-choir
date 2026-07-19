@@ -370,6 +370,7 @@ func (h *Handler) HandleInternalGetTextureRevision(w http.ResponseWriter, r *htt
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/computers/credentials/exchange", h.HandleComputerCredentialExchange)
+	s.HandleFunc("/internal/computers/credentials/consume", h.HandleComputerCredentialConsume)
 	s.HandleFunc("/internal/computers/credentials/issue", h.HandleComputerCredentialIssue)
 	s.HandleFunc("/internal/computers/credentials/renew", h.HandleComputerCredentialRenew)
 	s.HandleFunc("/internal/computers/lifecycle/control", h.HandleComputerLifecycleControl)

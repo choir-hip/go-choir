@@ -47,6 +47,12 @@ type CredentialExchangeResult struct {
 	PendingLifecycleReceipts []computerevent.Receipt `json:"pending_lifecycle_receipts,omitempty"`
 }
 
+type CredentialConsumptionRequest struct {
+	ComputerID        string `json:"computer_id"`
+	Nonce             string `json:"nonce"`
+	RequestCommitment string `json:"request_commitment"`
+}
+
 func (e ComputerCredentialEnvelope) VerifyBootstrap(computerID, realizationID string, now time.Time) (ed25519.PublicKey, error) {
 	publicKey, err := base64.RawStdEncoding.DecodeString(e.SigningPublicKey)
 	if err != nil || len(publicKey) != ed25519.PublicKeySize || e.Version != 1 || e.ComputerID != computerID || e.RealizationID != realizationID || e.Bearer == "" || e.Nonce == "" || e.RequestCommitment == "" || e.SigningKeyID == "" {
@@ -184,26 +190,63 @@ func (s *Service) exchangeComputerCredentialEnvelope(ctx context.Context, encode
 			return CredentialExchangeResult{}, err
 		}
 	}
+	return CredentialExchangeResult{Capability: token, PostRevocationCapability: postRevocationCapability, ExpiresAt: envelope.ExpiresAt}, nil
+}
+
+func (s *Service) ConsumeComputerCredentialEnvelope(ctx context.Context, request CredentialConsumptionRequest) (CredentialExchangeResult, error) {
+	if s == nil || s.store == nil || s.signingKey == nil || request.ComputerID == "" || request.Nonce == "" ||
+		!computerevent.IsSHA256(request.RequestCommitment) {
+		return CredentialExchangeResult{}, fmt.Errorf("credential envelope: invalid consumption request")
+	}
+	consumeKey := "credential-envelope-consume:" + request.Nonce
+	if request.Nonce != credentialPRF(s.signingKey.Private.Seed(), "nonce", request.RequestCommitment) {
+		return CredentialExchangeResult{}, fmt.Errorf("credential envelope: consumption nonce mismatch")
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	if receipt, _, found, err := s.credentialLifecycleReceipt(ctx, request.ComputerID, consumeKey, request.RequestCommitment, "credential_envelope_consumed"); err != nil {
+		return CredentialExchangeResult{}, err
+	} else if found {
+		pending := []computerevent.Receipt(nil)
+		if receipt.KindFields["prior_lifecycle_state"] != "issued_pre_genesis" {
+			pending = append(pending, receipt)
+		}
+		return CredentialExchangeResult{Receipt: receipt, PendingLifecycleReceipts: pending}, nil
+	}
+	var issuedCount int
+	if err := s.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM computer_lifecycle_receipts WHERE computer_id=? AND request_commitment=? AND action='credential_envelope_issued'`, request.ComputerID, request.RequestCommitment).Scan(&issuedCount); err != nil || issuedCount != 1 {
+		return CredentialExchangeResult{}, fmt.Errorf("credential envelope: issuance record absent")
+	}
+	head, err := readComputerEventHead(ctx, s.store.db, request.ComputerID, false)
+	if err != nil {
+		return CredentialExchangeResult{}, err
+	}
+	var epoch uint64
+	if head != nil {
+		epoch = head.CredentialRevocationEpoch
+	}
+	priorState := "issued_pre_genesis"
+	if head != nil {
+		priorState = "issued"
+	}
+	now := time.Now().UTC().Truncate(time.Microsecond)
 	receipt, err := computerevent.NewSignedReceipt("LifecycleReceipt", "corpusd", map[string]any{
-		"computer_id": envelope.ComputerID, "action": "credential_envelope_consumed",
-		"prior_lifecycle_state": "issued", "resulting_lifecycle_state": "consumed",
-		"generation": envelope.RevocationEpoch, "idempotency_key": consumeKey,
-		"request_commitment": envelope.RequestCommitment, "completed_at": now.Format(time.RFC3339Nano),
+		"computer_id": request.ComputerID, "action": "credential_envelope_consumed",
+		"prior_lifecycle_state": priorState, "resulting_lifecycle_state": "consumed",
+		"generation": epoch, "idempotency_key": consumeKey,
+		"request_commitment": request.RequestCommitment, "completed_at": now.Format(time.RFC3339Nano),
 	}, []computerevent.SigningKey{s.computerEventSigningKey()}, now)
 	if err != nil {
 		return CredentialExchangeResult{}, err
 	}
-	if err := s.insertCredentialLifecycleReceipt(ctx, envelope.ComputerID, consumeKey, envelope.RequestCommitment, "credential_envelope_consumed", "issued", "consumed", envelope.RevocationEpoch, now, receipt); err != nil {
+	if err := s.insertCredentialLifecycleReceipt(ctx, request.ComputerID, consumeKey, request.RequestCommitment, "credential_envelope_consumed", priorState, "consumed", epoch, now, receipt); err != nil {
 		return CredentialExchangeResult{}, err
 	}
-	pending, err := s.PendingLifecycleControls(ctx, envelope.ComputerID)
-	if err != nil {
-		return CredentialExchangeResult{}, err
-	}
+	pending := []computerevent.Receipt(nil)
 	if head != nil {
 		pending = append(pending, receipt)
 	}
-	return CredentialExchangeResult{Capability: token, PostRevocationCapability: postRevocationCapability, Receipt: receipt, ExpiresAt: envelope.ExpiresAt, PendingLifecycleReceipts: pending}, nil
+	return CredentialExchangeResult{Receipt: receipt, PendingLifecycleReceipts: pending}, nil
 }
 func (s *Service) RenewComputerCapability(ctx context.Context, computerID string) (CredentialExchangeResult, error) {
 	if s == nil || s.store == nil || s.signingKey == nil || computerID == "" {

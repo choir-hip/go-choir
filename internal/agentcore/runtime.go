@@ -22,6 +22,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/workitem"
 
@@ -99,6 +100,7 @@ type Runtime struct {
 	selfdevOperations           *selfdev.Store
 	privateArtifactCipher       *computerevent.PrivateArtifactCipher
 	selfdevUpdater              *updater.Client
+	selfdevVerifier             *receiptsigner.Client
 	selfdevControl              *selfdev.GuestCredentials
 	selfdevRoute                *vmctl.Client
 	selfdevRouteOwnerID         string
@@ -486,6 +488,12 @@ func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realiz
 			rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
 			rt.selfdevStartupReducer = manifest.ReducerVersion
 		}
+	}
+}
+
+func WithSelfDevelopmentVerifier(client *receiptsigner.Client) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.selfdevVerifier = client
 	}
 }
 

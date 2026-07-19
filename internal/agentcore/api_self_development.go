@@ -309,7 +309,7 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 			return
 		}
 	}
-	if h.rt.selfdevRoute == nil || h.rt.selfdevUpdater == nil || h.rt.selfdevControl == nil {
+	if h.rt.selfdevRoute == nil || h.rt.selfdevUpdater == nil || h.rt.selfdevVerifier == nil || h.rt.selfdevControl == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "genesis reconstruction authority unavailable"})
 		return
 	}
@@ -347,7 +347,7 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		return
 	}
 	updaterSigner, updaterPublicKey, updaterKeyErr := h.rt.selfdevUpdater.PublicKey(r.Context())
-	verifierSigner, verifierPublicKey, verifierKeyErr := h.rt.selfdevUpdater.VerifierPublicKey(r.Context())
+	verifierSigner, verifierPublicKey, verifierKeyErr := h.rt.selfdevVerifier.PublicKey(r.Context())
 	if updaterKeyErr != nil || verifierKeyErr != nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "genesis guest signing keys unavailable"})
 		return
@@ -452,7 +452,7 @@ func (h *APIHandler) recordGenesisBaseline(ctx context.Context, request selfDeve
 	if err != nil {
 		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
 	}
-	verifierRef, verifierKey, err := h.rt.selfdevUpdater.VerifierPublicKey(ctx)
+	verifierRef, verifierKey, err := h.rt.selfdevVerifier.PublicKey(ctx)
 	if err != nil || !selfDevelopmentContainsString(event.VerifierRefs, "updater-key:"+updaterRef.KeyID+":sha256:"+computerevent.DigestBytes(updaterKey)) ||
 		!selfDevelopmentContainsString(event.VerifierRefs, "verifier-key:"+verifierRef.KeyID+":sha256:"+computerevent.DigestBytes(verifierKey)) ||
 		!selfDevelopmentContainsString(event.VerifierRefs, "release:sha256:"+manifest.ContentDigest) {
@@ -466,7 +466,7 @@ func (h *APIHandler) recordGenesisBaseline(ctx context.Context, request selfDeve
 	if err != nil {
 		return selfdev.Operation{}, selfdevprotocol.CheckpointResponse{}, err
 	}
-	verifierCertificate, err := h.rt.selfdevUpdater.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
+	verifierCertificate, err := h.rt.selfdevVerifier.SignVerifierCertificate(ctx, selfdevprotocol.VerifierCertificateRequest{
 		Version: 1, ComputerID: event.ComputerID, OperationID: "genesis-baseline",
 		BundleDigest: manifest.ContentDigest, VerificationEventDigest: eventDigest,
 		VerifierEvidenceRefs: []string{eventDigest}, DecisionEventHead: eventDigest,
@@ -562,15 +562,6 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "complete approve or reject decision binding is required"})
 		return
 	}
-	if h.rt.selfdevControl == nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development mode authority unavailable"})
-		return
-	}
-	currentMode, modeErr := h.rt.selfdevControl.SelfDevelopmentMode(r.Context())
-	if modeErr != nil || h.verifyDecisionModeReceipt(computerID, operationID, currentMode.Mode, currentMode.Receipt, request) != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current signed mode does not authorize this decision"})
-		return
-	}
 	operation, err := h.rt.selfdevOperations.Get(r.Context(), computerID, operationID)
 	if err != nil {
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "self-development operation not found"})
@@ -607,12 +598,18 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		}
 		modeReceiptDigest = computerevent.DigestBytes(modeBytes)
 	}
-	if operation.State == nextState && found {
-		eventDigest, digestErr := event.Digest()
-		if digestErr == nil && operation.DecisionEvent == eventDigest && event.DecisionRef == decisionRef {
-			writeAPIJSON(w, http.StatusOK, operation)
-			return
-		}
+	if exactTerminalDecisionReplay(operation, event, found, nextState, decisionRef) {
+		writeAPIJSON(w, http.StatusOK, operation)
+		return
+	}
+	if h.rt.selfdevControl == nil {
+		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development mode authority unavailable"})
+		return
+	}
+	currentMode, modeErr := h.rt.selfdevControl.SelfDevelopmentMode(r.Context())
+	if modeErr != nil || h.verifyDecisionModeReceipt(computerID, operationID, currentMode.Mode, currentMode.Receipt, request) != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current signed mode does not authorize this decision"})
+		return
 	}
 	if operation.State != selfdev.StateAwaitingApproval {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "self-development operation is not awaiting approval"})
@@ -705,6 +702,14 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		go h.rt.reconcileSelfDevelopmentMaterialization(context.Background())
 	}
 	writeAPIJSON(w, http.StatusOK, operation)
+}
+
+func exactTerminalDecisionReplay(operation selfdev.Operation, event computerevent.Event, found bool, nextState, decisionRef string) bool {
+	if !found || operation.State != nextState || event.DecisionRef != decisionRef {
+		return false
+	}
+	eventDigest, err := event.Digest()
+	return err == nil && operation.DecisionEvent == eventDigest
 }
 
 func (h *APIHandler) verifyDecisionModeReceipt(computerID, operationID, mode string, current *computerevent.Receipt, request selfDevelopmentDecisionRequest) error {

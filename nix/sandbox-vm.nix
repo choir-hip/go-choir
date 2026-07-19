@@ -318,7 +318,7 @@ EOF
     "d /mnt/persistent/choir-signers/verifier 0700 choir-verifier-signer choir-verifier-signer -"
     "d /run/choir-signers 0711 root root -"
     "d /run/choir-signers/guest-core 0750 choir-guest-signer choir-guest-signer -"
-    "d /run/choir-signers/verifier 0750 choir-verifier-signer choir-verifier-signer -"
+    "d /run/choir-verifier 0750 choir-verifier-signer choir-verifier-signer -"
   ];
 
   # Fixed privileged restart bridge. The updater may create only the trigger;
@@ -404,7 +404,7 @@ EOF
       ProtectSystem = "strict";
       ProtectControlGroups = true;
       ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" "/run/choir-signers/guest-core" ];
-      InaccessiblePaths = [ "/mnt/persistent/choir-signers/verifier" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers/verifier" "/run/choir-verifier" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
@@ -421,7 +421,7 @@ EOF
       Type = "simple";
       User = "choir-verifier-signer";
       Group = "choir-verifier-signer";
-      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode verifier-control --socket /run/choir-signers/verifier/signer.sock --key /mnt/persistent/choir-signers/verifier/key.ed25519 --state-root /mnt/persistent/choir-signers/verifier/receipts";
+      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode verifier-control --socket /run/choir-verifier/authority.sock --key /mnt/persistent/choir-signers/verifier/key.ed25519 --state-root /mnt/persistent/choir-signers/verifier/receipts";
       EnvironmentFile = [ "-/run/go-choir-updater.env" ];
       Restart = "on-failure";
       RestartSec = 1;
@@ -437,8 +437,8 @@ EOF
       ProtectHome = true;
       ProtectSystem = "strict";
       ProtectControlGroups = true;
-      ReadWritePaths = [ "/mnt/persistent/choir-signers/verifier" "/run/choir-signers/verifier" ];
-      InaccessiblePaths = [ "/mnt/persistent/choir-signers/guest-core" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      ReadWritePaths = [ "/mnt/persistent/choir-signers/verifier" "/run/choir-verifier" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers/guest-core" "/run/choir-signers" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
@@ -484,10 +484,10 @@ EOF
   systemd.services.go-choir-updater = {
     description = "Choir guest release updater";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
+    after = [ "network-online.target" "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer.service" ];
     before = [ "go-choir-sandbox.service" ];
     wants = [ "network-online.target" ];
-    requires = [ "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer.service" "go-choir-verifier-signer.service" ];
+    requires = [ "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer.service" ];
     environment.CHOIR_UPDATER_ROOT = "/mnt/persistent/choir-updater";
     environment.CHOIR_GUEST_IMAGE_MANIFEST = guestImageManifest;
     environment.CHOIR_KERNEL_CONFIG = config.boot.kernelPackages.kernel.configfile;
@@ -495,7 +495,7 @@ EOF
       Type = "simple";
       User = "root";
       Group = "root";
-      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --recovery-restart-request /run/choir-updater-control/recover --recovery-cleanup-request /run/choir-updater-control/cleanup --restart-prepare-url http://127.0.0.1:8085/internal/self-development/restart-handoff --health-url http://127.0.0.1:8085/health --signer-socket /run/choir-signers/guest-core/signer.sock --verifier-signer-socket /run/choir-signers/verifier/signer.sock --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
+      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --recovery-restart-request /run/choir-updater-control/recover --recovery-cleanup-request /run/choir-updater-control/cleanup --restart-prepare-url http://127.0.0.1:8085/internal/self-development/restart-handoff --health-url http://127.0.0.1:8085/health --signer-socket /run/choir-signers/guest-core/signer.sock --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
       Restart = "on-failure";
       RestartSec = 1;
       UMask = "0077";
@@ -513,7 +513,7 @@ EOF
       ProtectSystem = "strict";
       ProtectControlGroups = true;
       ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" ];
-      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/mnt/persistent/choir-credentials" "/run/choir-bootstrap" "/run/choir-runtime-handoff" "/run/go-choir-sandbox.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-signers/verifier" "/run/choir-verifier" "/mnt/persistent/choir-credentials" "/run/choir-bootstrap" "/run/choir-runtime-handoff" "/run/go-choir-sandbox.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
@@ -527,13 +527,14 @@ EOF
   systemd.services.go-choir-sandbox = {
     description = "go-choir Sandbox Runtime (VM guest)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" ];
+    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-verifier-signer.service" ];
     wants = [ "network-online.target" ];
-    requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" ];
+    requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-verifier-signer.service" ];
     environment = {
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
       CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
       CHOIR_RESTART_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/restart-capability";
+      CHOIR_VERIFIER_AUTHORITY_SOCKET = "/run/choir-verifier/authority.sock";
       CHOIR_PRIVACY_KEY_FILE = "/mnt/persistent/choir-credentials/privacy-key";
       CHOIR_KERNEL_CAPABILITY_PROBE = "/run/choir/kernel-capabilities.json";
       PATH = lib.mkForce (lib.makeBinPath (with pkgs; [

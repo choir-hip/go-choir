@@ -11,12 +11,10 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
-	selfdevprotocol "github.com/yusefmosiah/go-choir/internal/verifierprotocol"
 )
 
 type Client struct {
@@ -93,59 +91,6 @@ func (c *Client) KernelCapabilities(ctx context.Context, request KernelCapabilit
 		return KernelCapabilityReport{}, err
 	}
 	return report, nil
-}
-func (c *Client) VerifierPublicKey(ctx context.Context) (computerevent.SignerRef, ed25519.PublicKey, error) {
-	if c == nil || c.http == nil {
-		return computerevent.SignerRef{}, nil, fmt.Errorf("updater client: verifier key unavailable")
-	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://updater/v1/verifier-public-key", nil)
-	if err != nil {
-		return computerevent.SignerRef{}, nil, err
-	}
-	response, err := c.http.Do(request)
-	if err != nil {
-		return computerevent.SignerRef{}, nil, err
-	}
-	defer response.Body.Close()
-	var result struct {
-		SignerDomain string `json:"signer_domain"`
-		KeyID        string `json:"key_id"`
-		PublicKey    string `json:"public_key"`
-	}
-	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&result) != nil {
-		return computerevent.SignerRef{}, nil, fmt.Errorf("updater client: verifier key unavailable")
-	}
-	publicKey, err := base64.RawStdEncoding.DecodeString(result.PublicKey)
-	if err != nil || len(publicKey) != ed25519.PublicKeySize || result.SignerDomain != "verifier-control" || result.KeyID == "" {
-		return computerevent.SignerRef{}, nil, fmt.Errorf("updater client: invalid verifier key")
-	}
-	return computerevent.SignerRef{SignerDomain: result.SignerDomain, KeyID: result.KeyID}, ed25519.PublicKey(publicKey), nil
-}
-
-func (c *Client) SignVerifierCertificate(ctx context.Context, request selfdevprotocol.VerifierCertificateRequest) (selfdevprotocol.VerifierCertificateResponse, error) {
-	if c == nil || c.http == nil {
-		return selfdevprotocol.VerifierCertificateResponse{}, fmt.Errorf("updater client: verifier signer unavailable")
-	}
-	body, err := json.Marshal(request)
-	if err != nil {
-		return selfdevprotocol.VerifierCertificateResponse{}, err
-	}
-	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://updater/v1/sign-verifier-certificate", bytes.NewReader(body))
-	if err != nil {
-		return selfdevprotocol.VerifierCertificateResponse{}, err
-	}
-	httpRequest.Header.Set("Content-Type", "application/json")
-	response, err := c.http.Do(httpRequest)
-	if err != nil {
-		return selfdevprotocol.VerifierCertificateResponse{}, fmt.Errorf("updater client: verifier certificate: %w", err)
-	}
-	defer response.Body.Close()
-	var result selfdevprotocol.VerifierCertificateResponse
-	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&result) != nil ||
-		!reflect.DeepEqual(result.Request, request) || selfdevprotocol.VerifyVerifierCertificate(result) != nil {
-		return selfdevprotocol.VerifierCertificateResponse{}, fmt.Errorf("updater client: verifier certificate refused")
-	}
-	return result, nil
 }
 
 func (c *Client) ImportBaseline(ctx context.Context, request BaselineImportRequest) (ReleaseManifest, error) {

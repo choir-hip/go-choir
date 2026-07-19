@@ -35,6 +35,7 @@ type GuestCredentials struct {
 	publicKey           ed25519.PublicKey
 	pendingLifecycle    []computerevent.Receipt
 	recoveryHandoffPath string
+	pendingConsumption  *platform.CredentialConsumptionRequest
 }
 
 func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, computerID, realizationID string) (*GuestCredentials, error) {
@@ -88,8 +89,55 @@ func ExchangeGuestCredential(ctx context.Context, baseURL, encodedEnvelope, comp
 		return nil, fmt.Errorf("guest credential: invalid revocation handoff capability")
 	}
 	manager.token, manager.postRevocationToken, manager.expiresAt = result.Capability, result.PostRevocationCapability, expiresAt
-	manager.pendingLifecycle = append([]computerevent.Receipt(nil), result.PendingLifecycleReceipts...)
+	manager.pendingConsumption = &platform.CredentialConsumptionRequest{
+		ComputerID: envelope.ComputerID, Nonce: envelope.Nonce, RequestCommitment: envelope.RequestCommitment,
+	}
 	return manager, nil
+}
+
+func (g *GuestCredentials) CompleteCredentialExchange(ctx context.Context) error {
+	g.mu.Lock()
+	if g.pendingConsumption == nil {
+		g.mu.Unlock()
+		return nil
+	}
+	pending := *g.pendingConsumption
+	token := g.token
+	g.mu.Unlock()
+	body, err := computerevent.CanonicalJSON(pending)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/internal/computers/credentials/consume", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+token)
+	response, err := g.http.Do(request)
+	if err != nil {
+		return fmt.Errorf("guest credential: complete exchange: %w", err)
+	}
+	defer response.Body.Close()
+	var result platform.CredentialExchangeResult
+	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 256<<10)).Decode(&result) != nil ||
+		result.Receipt.ReceiptKind != "LifecycleReceipt" || result.Receipt.Verify(g.KeyResolver()) != nil ||
+		result.Receipt.KindFields["computer_id"] != g.computerID || result.Receipt.KindFields["action"] != "credential_envelope_consumed" ||
+		result.Receipt.KindFields["request_commitment"] != pending.RequestCommitment ||
+		result.Receipt.KindFields["idempotency_key"] != "credential-envelope-consume:"+pending.Nonce {
+		return fmt.Errorf("guest credential: credential consumption receipt refused")
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.pendingConsumption == nil || *g.pendingConsumption != pending || g.token != token {
+		return fmt.Errorf("guest credential: consumption state changed")
+	}
+	g.pendingLifecycle = append([]computerevent.Receipt(nil), result.PendingLifecycleReceipts...)
+	g.pendingConsumption = nil
+	if g.recoveryHandoffPath != "" {
+		return g.writeRestartHandoffLocked(g.recoveryHandoffPath)
+	}
+	return nil
 }
 
 func (g *GuestCredentials) Capability(ctx context.Context) (string, error) {

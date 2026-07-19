@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +16,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/platform"
 )
 
-func TestRestartHandoffRestoresExactTransientCapability(t *testing.T) {
+func TestRestartHandoffRestoresWithoutDeletingOnlyDurableCopy(t *testing.T) {
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -50,11 +51,14 @@ func TestRestartHandoffRestoresExactTransientCapability(t *testing.T) {
 		!restored.expiresAt.Equal(expiresAt) {
 		t.Fatalf("restored handoff changed capability binding: %+v", restored)
 	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("consumed handoff remains readable: %v", err)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("restored handoff was deleted before replacement: %v", err)
 	}
-	if _, err := RestoreGuestCredentials(path, "https://platform.test", "computer-stable", "realization-stable"); err == nil {
-		t.Fatal("consumed handoff replay was accepted")
+	if err := restored.ConfigureRecoveryHandoff(context.Background(), path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RestoreGuestCredentials(path, "https://platform.test", "computer-stable", "realization-stable"); err != nil {
+		t.Fatalf("atomically refreshed recovery handoff is unreadable: %v", err)
 	}
 }
 
@@ -135,5 +139,77 @@ func TestRecoveryHandoffSurvivesCrashUntilRevocationEventCompletes(t *testing.T)
 	}
 	if final.token != next || final.HasPostRevocationCapability() || len(final.PendingLifecycleReceipts()) != 0 {
 		t.Fatal("durable recovery handoff did not record completed revocation state")
+	}
+}
+
+func TestPreparedCredentialExchangeSurvivesCrashBeforeConsumption(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiresAt := time.Now().UTC().Add(5 * time.Minute).Truncate(time.Microsecond)
+	token, err := platform.MintComputerCapability(platform.ComputerCapability{
+		Version: 1, ComputerID: "computer-stable", Scopes: []string{"event:read"},
+		ExpiresAt: expiresAt.Format(time.RFC3339Nano), RevocationEpoch: 0, Nonce: "prepared-token",
+	}, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := platform.CredentialConsumptionRequest{
+		ComputerID: "computer-stable", Nonce: "envelope-nonce",
+		RequestCommitment: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}
+	receipt, err := computerevent.NewSignedReceipt("LifecycleReceipt", "corpusd", map[string]any{
+		"computer_id": pending.ComputerID, "action": "credential_envelope_consumed",
+		"prior_lifecycle_state": "issued_pre_genesis", "resulting_lifecycle_state": "consumed",
+		"generation": uint64(0), "idempotency_key": "credential-envelope-consume:" + pending.Nonce,
+		"request_commitment": pending.RequestCommitment, "completed_at": time.Now().UTC().Format(time.RFC3339Nano),
+	}, []computerevent.SigningKey{{
+		SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "platform-test"}, PrivateKey: privateKey,
+	}}, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/computers/credentials/consume" || r.Header.Get("Authorization") != "Bearer "+token {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		var request platform.CredentialConsumptionRequest
+		if json.NewDecoder(r.Body).Decode(&request) != nil || request != pending {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(platform.CredentialExchangeResult{Receipt: receipt})
+	}))
+	defer server.Close()
+
+	handoffPath := filepath.Join(t.TempDir(), "recovery-capability")
+	credentials := &GuestCredentials{
+		baseURL: server.URL, computerID: pending.ComputerID, realizationID: "realization-stable",
+		http: server.Client(), token: token, expiresAt: expiresAt, keyID: "platform-test", publicKey: publicKey,
+		pendingConsumption: &pending,
+	}
+	if err := credentials.ConfigureRecoveryHandoff(context.Background(), handoffPath); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := RestoreGuestCredentials(handoffPath, server.URL, pending.ComputerID, "realization-stable")
+	if err != nil || restored.pendingConsumption == nil {
+		t.Fatalf("prepared exchange was not crash durable: %+v, %v", restored, err)
+	}
+	restored.http = server.Client()
+	if err := restored.ConfigureRecoveryHandoff(context.Background(), handoffPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.CompleteCredentialExchange(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if restored.pendingConsumption != nil {
+		t.Fatal("completed exchange retained pending consumption")
+	}
+	again, err := RestoreGuestCredentials(handoffPath, server.URL, pending.ComputerID, "realization-stable")
+	if err != nil || again.pendingConsumption != nil {
+		t.Fatalf("completed exchange handoff was not durable: %+v, %v", again, err)
 	}
 }

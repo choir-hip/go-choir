@@ -14,19 +14,21 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/platform"
 )
 
 type restartCredentialHandoff struct {
-	Version                  int                     `json:"version"`
-	BaseURL                  string                  `json:"base_url"`
-	ComputerID               string                  `json:"computer_id"`
-	RealizationID            string                  `json:"realization_id"`
-	Capability               string                  `json:"capability"`
-	PostRevocationCapability string                  `json:"post_revocation_capability,omitempty"`
-	ExpiresAt                string                  `json:"expires_at"`
-	KeyID                    string                  `json:"key_id"`
-	PublicKey                string                  `json:"public_key"`
-	PendingLifecycleReceipts []computerevent.Receipt `json:"pending_lifecycle_receipts,omitempty"`
+	Version                  int                                    `json:"version"`
+	BaseURL                  string                                 `json:"base_url"`
+	ComputerID               string                                 `json:"computer_id"`
+	RealizationID            string                                 `json:"realization_id"`
+	Capability               string                                 `json:"capability"`
+	PostRevocationCapability string                                 `json:"post_revocation_capability,omitempty"`
+	ExpiresAt                string                                 `json:"expires_at"`
+	KeyID                    string                                 `json:"key_id"`
+	PublicKey                string                                 `json:"public_key"`
+	PendingLifecycleReceipts []computerevent.Receipt                `json:"pending_lifecycle_receipts,omitempty"`
+	PendingConsumption       *platform.CredentialConsumptionRequest `json:"pending_consumption,omitempty"`
 }
 
 func (g *GuestCredentials) ConfigureRecoveryHandoff(ctx context.Context, path string) error {
@@ -62,6 +64,13 @@ func (g *GuestCredentials) writeRestartHandoffLocked(path string) error {
 		ExpiresAt: g.expiresAt.UTC().Format(time.RFC3339Nano), KeyID: g.keyID,
 		PublicKey:                base64.RawStdEncoding.EncodeToString(g.publicKey),
 		PendingLifecycleReceipts: append([]computerevent.Receipt(nil), g.pendingLifecycle...),
+		PendingConsumption: func() *platform.CredentialConsumptionRequest {
+			if g.pendingConsumption == nil {
+				return nil
+			}
+			copy := *g.pendingConsumption
+			return &copy
+		}(),
 	}
 	canonical, err := computerevent.CanonicalJSON(handoff)
 	if err != nil {
@@ -123,9 +132,12 @@ func RestoreGuestCredentials(path, baseURL, computerID, realizationID string) (*
 	if handoff.PostRevocationCapability != "" {
 		postRevocationExpires, postRevocationErr = capabilityExpiry(handoff.PostRevocationCapability)
 	}
+	pendingConsumptionInvalid := handoff.PendingConsumption != nil &&
+		(handoff.PendingConsumption.ComputerID != computerID || strings.TrimSpace(handoff.PendingConsumption.Nonce) == "" ||
+			!computerevent.IsSHA256(handoff.PendingConsumption.RequestCommitment))
 	if err != nil || keyErr != nil || capabilityErr != nil || postRevocationErr != nil || len(publicKey) != ed25519.PublicKeySize ||
 		!expiresAt.Equal(capabilityExpires) || (!postRevocationExpires.IsZero() && !expiresAt.Equal(postRevocationExpires)) ||
-		!time.Now().UTC().Before(expiresAt) || handoff.KeyID == "" {
+		!time.Now().UTC().Before(expiresAt) || handoff.KeyID == "" || pendingConsumptionInvalid {
 		return nil, fmt.Errorf("guest credential: restart handoff expired or invalid")
 	}
 	credentials := &GuestCredentials{
@@ -133,9 +145,13 @@ func RestoreGuestCredentials(path, baseURL, computerID, realizationID string) (*
 		http: &http.Client{Timeout: 15 * time.Second}, token: handoff.Capability, postRevocationToken: handoff.PostRevocationCapability, expiresAt: expiresAt,
 		keyID: handoff.KeyID, publicKey: ed25519.PublicKey(publicKey),
 		pendingLifecycle: append([]computerevent.Receipt(nil), handoff.PendingLifecycleReceipts...),
-	}
-	if err := os.Remove(path); err != nil {
-		return nil, fmt.Errorf("guest credential: consume restart handoff: %w", err)
+		pendingConsumption: func() *platform.CredentialConsumptionRequest {
+			if handoff.PendingConsumption == nil {
+				return nil
+			}
+			copy := *handoff.PendingConsumption
+			return &copy
+		}(),
 	}
 	return credentials, nil
 }
