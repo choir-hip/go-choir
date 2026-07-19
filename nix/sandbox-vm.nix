@@ -472,7 +472,6 @@ EOF
       ReadWritePaths = [ "/run/choir" ];
       RestrictAddressFamilies = [ "AF_UNIX" ];
       LockPersonality = true;
-      RestrictSUIDSGID = true;
       StandardOutput = "journal+console";
       StandardError = "journal+console";
     };
