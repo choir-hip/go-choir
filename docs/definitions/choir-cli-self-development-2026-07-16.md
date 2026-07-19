@@ -586,13 +586,13 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-4
-    state: frozen_ready_G1
-    ref: 5ae5b610c4901f6958a5ae5747cba61f283fa548
+    state: rejected_G1_repairing
+    ref: 5ae5b6106bf60610b2404e4b1b1f5f26865c337e
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete effects-OFF B cutover plus all confirmed round-3 G1 repairs: exact embedded projection state, deterministic accept_once consumption, cross-owner refusal, PUT mode and target lifecycle contracts, obsolete product-client/test deletion, keyless corpusd, root guest-owned durable privacy keyring, and updater-inaccessible restart/recovery credentials."
+    scope: "Effects-OFF B cutover with all round-3 blockers repaired, but round-4 G1 found an incorrect frozen SHA, genesis candidate/deployed-release identity conflation, updater/verifier private-key custody violations, incomplete accept_once decision replay binding, and surviving current candidate/AppChangePackage guidance and UI."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a]
-    disposition: "Frozen for G1 only. Effects remain OFF; do not deploy before an accepting fresh G1 receipt."
+    disposition: "Rejected at G1. Effects remain OFF; do not land or deploy. Repair every confirmed round-4 blocker in one new immutable candidate and rerun deterministic evidence plus a fresh diverse G1 panel."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
@@ -602,9 +602,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 5ae5b610c4901f6958a5ae5747cba61f283fa548, /tmp/choir-selfdev-g1-f9cc-panel/manifest.tsv, artifact://698, artifact://700, artifact://702, artifact://704, artifact://710, artifact://712]
-  blocker_or_risk: "G0 remains accepted. Candidate 5ae5b610 repairs every confirmed round-3 source blocker: embedded finalization persists reducer/revocation projections with restart proof; accept_once posts its exact deterministic idempotency key; cookie mode access joins owner and ComputerID; public mode uses PUT and lifecycle exposes target-scoped status/start/stop/restart; Features/CandidateReview/Apps-and-Changes clients, notifications, preview data, and browser pressure are deleted; corpusd stores no privacy key; the root guest keyring creates only pre-genesis, is ComputerID-bound, survives restart on the persistent guest disk, and fails closed if missing after genesis; updater mount isolation denies both the keyring and runtime handoff while fixed root bridges retain recovery credentials outside updater custody. `go test ./... -run '^$' -p 1`, all 14 changed authority package suites, all runtime shards, frontend production build and authenticated registry smoke proof passed. Nix evaluated `/nix/store/56k7ynn98bzfpkysnw5gbnq8w896f6y8-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d.drv`; evaluated updater service config has empty capabilities, private PID/proc restrictions, and `InaccessiblePaths` for `/mnt/persistent/choir-credentials` and `/run/choir-runtime-handoff`. Exact x86_64 runtime receipt and real mount denial remain the declared C-before-D deployed gate. Rollback before deployment is 5ae5b610^/b298d2dd; no effect or schema reached staging. Heresy delta: discovered 6 blocker classes, introduced 0 known, repaired 6."
-  next_action: "Run a healthy diverse G1 panel against exact immutable candidate 5ae5b610c4901f6958a5ae5747cba61f283fa548 and this authority card; accept only if no reproducible blocker survives."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, /tmp/choir-selfdev-g1-round4-panel/manifest.tsv, /tmp/choir-selfdev-g1-round4-panel/codex.out, /tmp/choir-selfdev-g1-round4-panel/cursor.out, /tmp/choir-selfdev-g1-round4-panel/omp-gpt55.out, /tmp/choir-selfdev-g1-round4-panel/omp-gemini35.out]
+  blocker_or_risk: "G0 remains accepted; B remains blocked. The freeze card named nonexistent `5ae5b610c490...`; the exact candidate is `5ae5b6106bf6...`. Genesis also compares the reviewed candidate directly with the later deployed `buildinfo.Commit`, so a correct G1 receipt and deployed release cannot both satisfy it. The updater process directly loads guest-core and verifier private keys and signs verifier/materialization evidence despite G0 requiring private bytes outside updater and independent principals. Consumed accept_once replay binds only state plus an idempotency suffix, not the complete approve decision/verifier/reason/exact key, so a post-consumption altered rejection can pass. Registered Compute Monitor still renders candidate computers; current README and `skills/choir-cli/SKILL.md` teach AppChangePackage/adoption/worker-VM flow; dead runtime helpers retain those concepts. These source claims were reproduced locally and are recorded before repair. Round-3 repairs remain valid. Rollback remains b298d2dd; no effect or schema reached staging."
+  next_action: "Separate reviewed-candidate and deployed-release identities in the G1/genesis contract; move guest-core and verifier signing behind isolated typed signers inaccessible to updater; bind accept_once consumption to the canonical complete approval request and refuse rejection consumption; delete or migrate every current obsolete UI/helper/README/skill citer; freeze the exact resulting commit and rerun G1."
 
 successor:
   status: selected_draft_non_executable
@@ -693,6 +693,18 @@ review_receipts:
     verdicts: [codex:REJECT_G1, cursor:REJECT_G1, omp-gpt55:REJECT_G1, omp-gemini35:ACCEPT_G1, opencode:INCOMPLETE_NO_VERDICT]
     outcome: repair
     adjudication: "Three independent reviewers reproduced source blockers, so G1 rejects without minority-rule ambiguity. Codex and omp-gpt55 independently found broken accept_once consumption, missing cross-owner cookie authorization, and surviving AppChangePackage/AppAdoption product surfaces. Codex additionally found embedded security projection loss; omp-gpt55 found missing exact public routes and corpusd private-key custody. Cursor independently showed the updater-readable restart handoff re-exposes the appender bearer and privacy key. Gemini accepted but did not rebut these concrete paths. This receipt documents the problems before any repair-code commit."
+
+  - id: G1-disabled-cutover-round-4-2026-07-19
+    reviewed_at: 2026-07-19T15:07:03Z
+    requested_candidate_ref: 5ae5b610c4901f6958a5ae5747cba61f283fa548
+    actual_candidate_ref: 5ae5b6106bf60610b2404e4b1b1f5f26865c337e
+    authority_ref: a7e744008eef74e3427ae4a2d38a9e1326c1d7fd
+    manifest: /tmp/choir-selfdev-g1-round4-panel/manifest.tsv
+    panel: [codex, cursor, opencode, omp-gpt55, omp-gemini35]
+    health: "All five configured reviewers exited successfully. Codex, Cursor, omp-gpt55, and omp-gemini35 returned required verdicts; OpenCode did not reach a verdict and is excluded."
+    verdicts: [codex:REJECT_G1, cursor:ACCEPT_G1, omp-gpt55:REJECT_G1, omp-gemini35:ACCEPT_G1, opencode:INCOMPLETE_NO_VERDICT]
+    outcome: repair
+    adjudication: "Exact identity alone rejects G1: Codex and omp-gpt55 confirmed the named SHA does not exist; Cursor and Gemini also observed the mismatch but incorrectly treated it as non-blocking despite the immutable freeze contract. Codex additionally supplied source-reproducible signer-custody, altered accept_once replay, and obsolete-current-citer blockers. Local inspection confirms each against the frozen G0 contract and candidate. This receipt documents them before any repair-code commit."
 
 view:
   path: none
