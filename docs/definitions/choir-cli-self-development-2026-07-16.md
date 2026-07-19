@@ -666,17 +666,17 @@ now:
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
   node_a_exact_guest_receipt:
-    observed_at: 2026-07-19T21:19:28Z
-    status: rejected_kernel_probe_landlock_stage
-    source_identity: 1f9afdfa503f60257ecfd5a07b9a293c9a14075d
-    guest_image_ref: /tmp/g1-namespace-diagnostic
+    observed_at: 2026-07-19T21:26:31Z
+    status: rejected_kernel_probe_user_namespace_capset
+    source_identity: 3ebef8fed3bdb72b710092132a25b9c5d42bad76
+    guest_image_ref: /tmp/g1-deterministic-probe
     managed_guest_rollback: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
     pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
-    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=nsdiag1f9 CHOIR_G1_EXPECTED_COMMIT=1f9afdfa503f60257ecfd5a07b9a293c9a14075d CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-namespace-diagnostic/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
-    evidence: "After removing RestrictSUIDSGID and adding per-namespace failure diagnostics, the exact guest reached a later failure: `kernel capability probe: landlock_enforcing: exit status 1`. The probe currently iterates a Go map, so reaching Landlock does not prove all earlier checks passed, and child stderr is discarded; the exact Landlock syscall/policy error is not yet visible. The fail-closed boot and disposable cleanup remained correct."
-    problem: "Kernel capability checks execute in nondeterministic map order and helper stderr is discarded. A first failure therefore cannot establish an ordered completed prefix or expose the enforcement error. The previous RestrictSUIDSGID hypothesis remains unproved rather than accepted."
-    next_probe: "Make the mandatory probe order explicit and propagate helper stderr in the parent error. Rebuild and rerun the exact guest; repair only the first deterministic kernel/runtime failure and do not downgrade Landlock or any namespace requirement."
-    heresy_delta: {discovered: "Static positive kernel/config claims did not prove the boot-time enforcing probe; nondeterministic probe ordering and discarded child errors made the receipt ambiguous.", introduced: none, repaired: "Exact guest deployment and boot-loaded overlay are repaired; remaining mandatory probes are still open."}
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=det3ebef8 CHOIR_G1_EXPECTED_COMMIT=3ebef8fed3bdb72b710092132a25b9c5d42bad76 CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-deterministic-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "The ordered probe reported `combined namespaces ... operation not permitted` with `individual: user=... operation not permitted, pid=ok, mount=ok, network=ok, uts=ok, ipc=ok`. This supersedes the ambiguous Landlock-first receipt; Landlock has not yet been reached in deterministic order. Fail-closed boot and disposable cleanup remained correct."
+    problem: "The probe maps child UID 0 to parent UID 0 but its systemd CapabilityBoundingSet/AmbientCapabilities omit CAP_SETFCAP. Since Linux 5.12, creating that UID-0 mapping requires CAP_SETFCAP in the parent namespace. The exact kernel supports every namespace; the one-shot probe lacks the capability needed to establish its mapping."
+    next_probe: "Add only CAP_SETFCAP to the root one-shot probe's bounded and ambient capabilities, rebuild, and rerun the deterministic exact guest. No namespace requirement or service fail-closed dependency changes."
+    heresy_delta: {discovered: "The mandatory probe's bounded capability set omitted CAP_SETFCAP required by modern kernels for a UID-0 user-namespace mapping.", introduced: none, repaired: "Exact guest deployment, boot-loaded overlay, deterministic probe order, and detailed helper errors are repaired; later mandatory probes remain open."}
 
 successor:
   status: selected_draft_non_executable
