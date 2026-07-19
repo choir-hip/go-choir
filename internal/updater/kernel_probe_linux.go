@@ -191,7 +191,7 @@ func runKernelProbeHelper(ctx context.Context, helper string) error {
 		}
 		return nil
 	case "overlay":
-		return run(command(unix.CLONE_NEWNS, false))
+		return run(command(unix.CLONE_NEWUSER|unix.CLONE_NEWNS, true))
 	default:
 		return run(command(0, false))
 	}
@@ -225,7 +225,7 @@ func probeCgroupController() error {
 
 func probeOverlayMount() error {
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		return err
+		return fmt.Errorf("make mount namespace private: %w", err)
 	}
 	root, err := os.MkdirTemp("", "choir-overlay-probe-")
 	if err != nil {
@@ -243,7 +243,7 @@ func probeOverlayMount() error {
 	}
 	options := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lower, upper, work)
 	if err := unix.Mount("overlay", merged, "overlay", 0, options); err != nil {
-		return err
+		return fmt.Errorf("mount overlay: %w", err)
 	}
 	defer unix.Unmount(merged, 0)
 	raw, err := os.ReadFile(filepath.Join(merged, "proof"))
