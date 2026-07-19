@@ -62,7 +62,7 @@ owner_ratification:
     canonical_event_authority:
       owner: "Exactly one ComputerEventAppender in the trusted guest core validates and sequences semantic events for one ComputerID. Agents, capsules, Trace, vmctl, route tables, status rows, and reducers cannot append independently."
       durable_form: "Exactly two Dolt stores remain. `computer_event_heads` and append/idempotency receipts are narrow control tables on the existing corpusd world-wire sql-server beside—but semantically separate from—world-wire objects and route-slot tables. Immutable event bodies and payloads use the existing artifact/blob service. VM-local embedded Dolt is the event index and accepted-state materialization, never the sole durable copy. No third database, route-equivalent row, or new host service exists."
-      credential_delivery: "At each realization build, the existing constructor writes a single-use ComputerCredentialEnvelope into the root-owned guest credential partition as realization-local input, never into CodeRef, ArtifactProgramRef, data artifacts, logs, kernel argv, or model context. The envelope contains a random ComputerID-scoped corpusd bearer, expiry, and revocation epoch; it is readable only by the root core credential service, exchanged over TLS for a shorter-lived append/pin capability, then erased. Live rotation uses the authenticated corpusd channel and atomic 0400 credential-file replacement; reconstruction provisions a new envelope and revokes the old realization. This is ordinary vmctl/constructor materialization, not SSH, MMDS/vsock authority, a host daemon, or guest-to-host control. A must locate and freeze the concrete constructor insertion seam; if the existing constructor cannot deliver this envelope without a new host service or agent visibility, G0 sets blocked_incomplete."
+      credential_delivery: "At each realization build, ordinary vmctl/constructor materialization creates a dedicated realization-local ext4 credential partition containing one root-owned mode-0400 ComputerCredentialEnvelope; Firecracker attaches it as a separate writable boot drive. The credential never enters CodeRef, ArtifactProgramRef, data artifacts, persistent VM config, logs, kernel argv, shared service environment, or model context. The updater service masks the mount; the trusted guest core alone reads and unlinks the envelope before agent runtime, exchanges it over TLS for a shorter-lived append/pin capability, and keeps that capability only in memory. A consumed exchange always refuses replay without returning a bearer. Live rotation uses the authenticated corpusd channel and atomic 0400 credential-file replacement; reconstruction provisions a new envelope and revokes the old realization. This is ordinary vmctl/constructor materialization, not SSH, MMDS/vsock authority, a host daemon, or a third store. Failure to provision, mount, authenticate, exchange, erase, renew, or revoke fails closed."
       platform_transport: "The guest appender never receives SQL, route, signing, or host credentials. Through the existing authenticated proxy/corpusd service, it pins blobs and calls a typed event CAS endpoint using the short-lived capability. corpusd is the mechanical transaction writer and returns an EventHeadReceipt; the guest ComputerEventAppender is the sole authorized semantic caller. The capability is unavailable to models, capsules, updater, and ordinary tools; expiry/revocation or service unavailability fails closed."
       minimum_hashed_envelope: [schema_version, event_id, computer_id, sequence, previous_head, event_kind, occurred_at, idempotency_key, request_commitment, trajectory_id, parent_event_id, capsule_id, actor_profile, authority_ref, model_policy_refs, input_artifact_refs, output_artifact_refs, payload_commitment, privacy_class, proposed_effect_ref, decision_ref, verifier_refs, reducer_version, expected_desired_event_head, expected_effective_event_head, expected_pending_transition_ref, expected_desired_state_commitment, expected_effective_state_commitment, resulting_effective_state_commitment]
       derived_heads: "canonical_event_head is digest(E) for every appended event. desired/effective event heads, desired/effective state commitments, and nullable pending_transition_ref are deterministic reducer projections; no event contains its own digest. `resulting_effective_state_commitment` is SHA-256 over canonical reducer_version plus ordered effective CodeRef/ArtifactProgramRef/embedded-Dolt state refs and advances only on an atomically effective ResearcherUpdate, MaterializationApplied, or RollbackApplied."
@@ -72,7 +72,8 @@ owner_ratification:
         rotation_and_time: "Planned platform rotation receipt has old-platform, new-platform, and owner-recovery signatures. The guest verifies it, appends key_rotated while old remains valid, receives the old-key EventHeadReceipt, then corpusd activates new. Emergency replacement has new-platform plus owner-recovery signatures and an explicit compromised-key cutoff; the pinned owner-recovery anchor authorizes the special recovery CAS, its EventHeadReceipt carries new-platform plus owner-recovery signatures, and new activates only after that receipt. Updater rotation follows the same old/new/owner-authorized-event order; emergency updater replacement requires owner-recovery signature. Revocation is owner-recovery-signed and, for an active signing key, names a simultaneously authorized replacement. Every receipt is pinned and inserted into corpusd `control_key_history` before its key event; activation follows the event. Old public keys remain indefinitely. Revocation names key_id and first invalid sequence/time; pre-cutoff receipts remain historical evidence, at/after-cutoff receipts refuse. Authorization expiry uses corpusd time and frozen maximum skew; event/pin/history receipts do not expire."
         verifier_matrix: "Guest appender verifies corpusd pin/head/mode/lifecycle/key receipts; corpusd verifies updater/verifier signatures and append capability; choir-updater verifies EventHeadReceipt plus accepted decision/materialization command; vmctl verifies corpusd EventHeadReceipt, both AuthorizationEvidence objects, RouteProjectionCertificate, CheckpointReceipt, MaterializationReceipt, VerifierCertificate, and exact route command; clean external clients verify all public receipts against pinned key history. Unknown key, bad signature, wrong issuer/kind/ComputerID, expired authorization, discontinuous rotation, or missing per-computer key event fails closed."
         kind_fields:
-          PinReceipt: [computer_id, artifact_digest, media_type, length, privacy_class, pin_namespace, request_commitment]
+          PinReceipt: [computer_id, artifact_digest, media_type, length, privacy_class, pin_namespace, commitment_binding]
+          PinReceipt_commitment_binding: "A payload PinReceipt carries `pin_intent_commitment`; the event-body PinReceipt carries final `request_commitment`. The pin-intent commitment is SHA-256 of RFC 8785 canonical JSON for the complete immutable `event_intent` object plus transition input before receipts exist. The final request commitment is SHA-256 of RFC 8785 canonical JSON `{event_intent, pin_intent_commitment, payload_pin_receipt_digests}` with ordered receipt digests. The append CAS and EventHeadReceipt bind both through the final request commitment and ordered receipt digests; no receipt hashes a value that depends on its own digest."
           EventHeadReceipt: [computer_id, previous_head, event_digest, sequence, event_kind, request_commitment, pin_receipt_digests, desired_event_head, effective_event_head, pending_transition_ref, desired_state_commitment, effective_state_commitment]
           ModeReceipt: [computer_id, old_mode, new_mode, old_generation, committed_generation, operation_id, base_event_head, expected_desired_event_head, expected_effective_event_head, expected_pending_transition_ref, expected_desired_state_commitment, expected_effective_state_commitment, bundle_digest, expires_at, idempotency_key, request_commitment]
           LifecycleReceipt: [computer_id, action, prior_lifecycle_state, resulting_lifecycle_state, generation, idempotency_key, request_commitment, completed_at]
@@ -89,7 +90,7 @@ owner_ratification:
       event_kinds: [genesis_imported, trajectory_started, model_resolved, message_recorded, tool_invoked, tool_returned, artifact_produced, effect_proposed, verification_recorded, effect_accepted, effect_rejected, materialization_started, materialization_applied, materialization_failed, rollback_requested, rollback_applied, researcher_update, checkpoint_published, route_projection_updated, lifecycle_observed, key_rotated, key_revoked, recovery_recorded]
     append_and_recovery_protocol:
       - "For an initialized computer, resolve corpusd canonical head H plus derived desired/effective heads and compare the embedded index. Mismatch refuses mutation and enters projection repair."
-      - "Redact/classify payloads, obtain PinReceipts for payload artifacts, canonicalize event body E(previous=H), compute digest(E), pin E, and obtain its external PinReceipt. Orphan pins are non-authoritative and garbage-collectable after the retention floor."
+      - "Use the public two-phase guest client: redact/classify/encrypt each private payload into its final random-nonce envelope without pinning; compute every content-addressed ref and place it in immutable `event_intent`; canonicalize that intent without sequence, previous head, final request commitment, or PinReceipt digests; compute `pin_intent_commitment = SHA256(RFC8785(event_intent))`; immediately before pin, the guest appender TCB AEAD-decrypts/authenticates the exact frozen envelope against expected ComputerID/EventID using the root guest keyring, then pins those unchanged bytes; compute `request_commitment = SHA256(RFC8785({event_intent, pin_intent_commitment, payload_pin_receipt_digests}))` with ordered receipt digests; canonicalize event body E(previous=H), compute digest(E), pin E with a PinReceipt bound to the final request commitment, and continue to CAS. corpusd never receives the privacy key; it re-opens private envelopes structurally during append validation and requires metadata ComputerID/EventID to equal E. Orphan pins are non-authoritative and garbage-collectable after the retention floor."
       - "Write E and proposed semantic changes as prepared rows in one embedded-Dolt transaction keyed by idempotency key and expected heads."
       - "Call the authenticated corpusd typed endpoint to CAS `computer_event_heads` H→digest(E). corpusd validates capability scope, sequence, previous head, kind-specific desired/effective-head preconditions, request commitment, and PinReceipts, then returns signed EventHeadReceipt. Only the scoped ComputerEventAppender may request this event CAS; vmctl remains sole writer only for the separate route-slot CAS."
       - "Finalize the embedded index/materialization transaction. A crash before head CAS discards the prepared event; a crash after CAS reconstructs/finalizes from E. Acknowledgement occurs only after a verified EventHeadReceipt and embedded finalization."
@@ -375,6 +376,119 @@ now:
   status: working
   slice: "B-disabled-cutover"
   question: "Can the complete source cutover implement the accepted G0 contracts with activation off, delete every obsolete worker/candidate path, and freeze one deterministic G1 candidate without weakening the two-store/event/route authority?"
+  b_substrate_assessment:
+    observed_at: 2026-07-19T04:25:00Z
+    class: substrate
+    status: "documented before the first B repair commit; G1 remains blocked"
+    evidence: "Source-level product-path audit found that the renamed CoSuper commit tool still resolved a Super-owned lifecycle handle instead of a granted run-bound capability; `TransactionRecord` froze only classified paths/modes and no immutable runtime bytes; `choir-updater` had no runtime client/restart reconciliation; the public operation/decision/genesis/rollback CLI grammar was absent; and no checkpoint/route projection follows materialization. A proposal could therefore look frozen without being reconstructible or applyable."
+    source_refs: [internal/agentcore/tools_capsule.go, internal/capsule/executor.go, internal/capsule/transaction/builder.go, internal/updater/updater.go, internal/agentcore/api_self_development.go, cmd/choir/main.go, internal/vmctl/route_authority.go]
+    substrate_vs_symptom: "The shared substrate gap is incomplete guest effect custody from granted capsule capability through immutable release, accepted event, updater journal, checkpoint, and vmctl projection. Individual missing commands or state transitions are symptoms; B must complete the custody chain rather than patching status output."
+    existing_replacement_check: "The root-isolated `choir-updater`, canonical ComputerEventAppender, routeledger/vmctl CAS, and capsule Executor already provide intended replacement substrates but were not wired into one path. B connects those replacements and deletes the metadata-only/process-local paths rather than extending them."
+    partial_repair_state: "Run-bound CoSuper capability transfer, immutable release staging, private prompt/decision events, public CLI routing, operation/event recovery lookups, and updater apply reconciliation are implemented in the uncommitted candidate. They are not accepted evidence and may be revised."
+    remaining_error: "Checkpoint issuance, certificate-only vmctl projection, rollback selection/rematerialization, exact verifier certificate semantics, deterministic failure injection, and end-to-end product-path tests remain incomplete. No G1 review, deployment, genesis, or effect activation is admissible."
+    rollback: "Before deployment, discard the unlanded B candidate and retain R0. No platform schema, staging computer, event head, route, or effective guest state has changed."
+    heresy_delta: {discovered: 5, introduced: 0, repaired: 0}
+  discovered_blocker:
+    observed_at: 2026-07-18T23:58:00Z
+    class: substrate
+    status: "G0 contract repair required before the B candidate may freeze"
+    evidence: "`ComputeRequestCommitment` binds payload PinReceipt digests, while each PinReceipt is required to bind that same final request commitment. PinReceipt IDs/timestamps/signatures make the receipt digest unknowable before pinning, so private prompt/result payloads cannot be pinned and appended without a circular hash dependency. Existing tests inject preselected receipt digests and therefore did not execute the public pin-to-append transition."
+    source_refs: [internal/computerevent/request.go:8-48, internal/computerevent/appender.go:77-136, internal/platform/event_artifacts.go:62-91, internal/platform/event_artifacts.go:94-166]
+    belief_delta: "The two-store/single-appender topology remains sound, but the frozen V1 request/pin commitment relation is not executable as written. B must separate a pre-pin immutable intent commitment from the final append request commitment, bind both in the PinReceipt and append CAS, add an end-to-end private-payload append test, and refreeze this narrow semantic delta through G0 before G1."
+    remaining_error: "No behavior candidate may be frozen or deployed until the repaired commitment graph has deterministic evidence and independent G0 review."
+    repair:
+      implemented_at: 2026-07-19T00:42:00Z
+      mutation_class: red
+      protected_surfaces: [canonical_event_commitments, PinReceipt, EventHeadReceipt, corpusd_head_CAS, embedded_projection_recovery]
+      result: "Implemented a directed commitment graph: immutable pin intent -> payload PinReceipt digests -> final request commitment -> event PinReceipt/head CAS. `TestPrivatePayloadAppendCompletesDirectedCommitmentGraph` exercises real XChaCha20 private-envelope pinning through corpusd CAS and embedded finalization."
+      evidence: "`go test ./internal/platform -run TestPrivatePayloadAppendCompletesDirectedCommitmentGraph -count=1 -v` passed; full affected packages remain required after G0 refreeze."
+      rollback: "Before deployment, revert the unlanded candidate. No schema or deployed state changed."
+      heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+      conjecture_delta: "The single-appender/two-store architecture is retained; only the non-executable cyclic commitment edge is replaced."
+      gate: "Independent G0 review of this exact repaired contract and implementation evidence remains mandatory before B resumes."
+      first_panel:
+        frozen_diff_sha256: 1142f7ff1f87bcbfe1045de05459938d9d924da2420ca05cb7ab13bdfdc781b0
+        health: "2/8 completed; Cursor and OpenCode succeeded, four timed out, two provider/model runs failed."
+        blocker: "Cursor reproduced a Definition/code verifier divergence: prose could be read as hashing only pin_intent_commitment plus receipt digests while code hashes canonical `{event_intent,pin_intent_commitment,payload_pin_receipt_digests}`. OpenCode accepted the runtime graph but did not override the reproducible authority ambiguity."
+        disposition: "Problem recorded and Definition corrected to the exact canonical object already implemented. No runtime behavior changed. Material Definition correction invalidates the first review identity; a fresh diverse panel is required."
+      second_panel:
+        frozen_candidate_sha256: aa5fd11cafc3028f29c931e60c34cc9dea123ccafc3fb9215d1a476762025175
+        health: "4/4 completed: Codex, Claude, Cursor, and OpenCode."
+        consensus: "Claude, Cursor, and OpenCode accepted the corrected formula."
+        minority_blocker: "Codex reproduced two private-payload product-path failures. `PinPrivatePayload` encrypts with a random nonce and pins in one call but requires pin_intent_commitment before the resulting envelope digest can be placed in event_intent; the in-process test bypasses the unusable public HTTP sequence. Append validation also accepts a private envelope whose metadata EventID belongs to a different event, producing an accepted payload that later refuses decryption."
+        source_refs: [internal/computerevent/http_client.go:77-110, internal/platform/event_artifacts.go:92-171, internal/platform/event_artifacts_test.go:102-184]
+        disposition: "Reproducible minority blocker overrides agreement. G0 remains blocked. B must expose a two-phase private-envelope freeze then exact-envelope pin API, exercise it through HTTP client/handler, validate private metadata ComputerID and EventID against the appended event, and refreeze."
+        repair:
+          implemented_at: 2026-07-19T01:39:00Z
+          result: "Replaced encrypt-and-pin with public `PreparePrivatePayload` then `PinPrivatePayload` over the exact frozen envelope; append validation now rejects private envelope metadata whose ComputerID or EventID differs from the appended event."
+          evidence: "`TestPrivatePayloadAppendCompletesDirectedCommitmentGraph` now uses the authenticated HTTP client/handler for payload pin, event pin, head CAS, receipt verification, and head read, and separately proves a cross-event envelope refusal. Focused test passed."
+          rollback: "Before deployment, revert the unlanded candidate. No deployed schema or state changed."
+          heresy_delta: {discovered: 2, introduced: 0, repaired: 2}
+          gate: "A fresh frozen G0 panel must verify both repairs; the second panel remains rejected."
+      third_panel:
+        frozen_candidate_sha256: 4316ced83fd43d23288009674a362232936a29ba88c255017a5f11f02df0cf39
+        health: "4/4 completed: Codex, Claude, Cursor, and OpenCode."
+        consensus: "Claude, Cursor, and OpenCode accepted both prior repairs."
+        minority_blocker: "Codex demonstrated that both the public pin client and corpusd only parsed plaintext envelope metadata. A caller could rewrite EventID or ciphertext, re-canonicalize, and obtain structurally valid pins; append would accept content that the guest keyring later rejects as unauthentic."
+        disposition: "G0 remains blocked. Because corpusd must not receive the guest decryption key, the guest appender TCB must AEAD-decrypt/authenticate the exact frozen envelope against expected ComputerID/EventID immediately before pin; corpusd retains structural identity/content/pin validation. The authenticated public-path test must include metadata/ciphertext tamper refusal before another refreeze."
+        repair:
+          implemented_at: 2026-07-19T02:01:00Z
+          result: "`PinPrivatePayload` now requires the guest `PrivateArtifactCipher` and successfully AEAD-decrypts the exact envelope against expected ComputerID/EventID before sending any pin request. corpusd remains structurally validating and keyless."
+          evidence: "The authenticated HTTP product-path test now mutates canonical metadata and ciphertext independently; both refuse before pin. The valid private envelope still completes payload pin, event pin, corpusd CAS, EventHeadReceipt verification, embedded finalization, and head read."
+          rollback: "Before deployment, revert the unlanded candidate. No deployed schema or state changed."
+          heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+          gate: "A fresh frozen G0 panel must verify the AEAD-authenticated product path; the third panel remains rejected."
+      fourth_panel:
+        frozen_candidate_sha256: 5ea756814a3ca1ef9551c3f5d3864e985370848e69f0355e7c3378c5caf4c330
+        health: "3/4 completed; Codex, Claude, and OpenCode succeeded; Cursor timed out."
+        consensus: "Claude and OpenCode accepted the AEAD-authenticated client path."
+        minority_blocker: "Codex traced the bootstrap credential envelope through kernel argv into `/run/go-choir-sandbox.env`, which is shared with the separate root updater, and found exchange replay returns the full event:append bearer. Non-appender updater code can therefore bypass the AEAD-validating guest client, submit structurally valid invalid ciphertext over raw HTTP, and obtain an authoritative head CAS."
+        source_refs: [nix/sandbox-vm.nix:286, nix/sandbox-vm.nix:343, internal/platform/credential_envelope.go:168, internal/platform/event_handlers.go:139, internal/platform/computer_events.go:143]
+        disposition: "G0 remains blocked. Remove append credentials from kernel argv and updater/shared environment, deliver them through an appender-only root credential boundary, make consumed exchange refuse replay rather than returning the bearer, and prove a non-appender principal cannot reach append CAS."
+        repair:
+          implemented_at: 2026-07-19T02:44:00Z
+          result: "Removed the envelope from Firecracker kernel arguments and the shared runtime environment. vmmanager now formats a dedicated realization-local ext4 credential drive; the guest mounts it outside the updater namespace, trusted core enforces root/mode/regular-file bounds and unlinks before exchange, and consumed exchange replay refuses without a bearer."
+          evidence: "`TestComputerCredentialUsesDedicatedDiskNotKernelArguments`, `TestConsumeComputerCredentialEnvelopeErasesSingleUseFile`, `TestConsumeComputerCredentialEnvelopeRejectsLooseMode`, and `TestCredentialEnvelopeExchangeRefusesReplay` pass. Six affected Go package suites pass; NixOS guest toplevel evaluation succeeds."
+          rollback: "Before deployment, revert the unlanded candidate and retain pre-genesis R0. No deployed credential or event state changed."
+          heresy_delta: {discovered: 2, introduced: 0, repaired: 2}
+          gate: "A fresh frozen G0 panel must verify the appender-only credential boundary; the fourth panel remains rejected."
+      fifth_panel:
+        frozen_candidate_sha256: 1229c61e177f155c65be0d8475635474fe9ebe4f167a2eb320dc2c55af4eb5ee
+        health: "3/4 completed: Codex, Cursor, and OpenCode; Claude timed out."
+        consensus: "Cursor and OpenCode accepted the file/disk/replay boundary."
+        minority_blocker: "Codex showed the root updater still shared guest process visibility and retained CAP_SYS_PTRACE/debug syscalls. It could read the trusted sandbox's in-memory renewable append bearer and bypass AEAD-validating client code despite the credential mount mask."
+        source_refs: [nix/sandbox-vm.nix:326-356, internal/selfdev/credentials.go:20-31]
+        disposition: "G0 remains blocked. Keep the root-owned updater authority but isolate its PID namespace, empty its capability bounding set, deny debug/process-memory syscalls, and prove the generated service unit carries those restrictions."
+        repair:
+          implemented_at: 2026-07-19T03:11:00Z
+          result: "The root updater now runs in a private PID namespace with empty capability/ambient sets, invisible PID-scoped procfs, and `~@debug` syscall filtering. It cannot inspect trusted-core memory. Its only environment file contains nonsecret ComputerID/realization identity; credential mount, gateway token, and append bearer remain absent."
+          evidence: "Nix evaluation of the generated updater serviceConfig proves `PrivatePIDs=true`, `ProtectProc=invisible`, `ProcSubset=pid`, empty `CapabilityBoundingSet`/`AmbientCapabilities`, `SystemCallFilter=[~@debug]`, credential `InaccessiblePaths`, and the identity-only environment file."
+          rollback: "Before deployment, revert the unlanded candidate. No deployed service namespace or credential changed."
+          heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+          gate: "A fresh frozen G0 panel must verify updater cannot recover the appender bearer; the fifth panel remains rejected."
+      sixth_panel:
+        frozen_candidate_sha256: b4f3a3b28943fe58ba04ca0df39cd01ef93d0af9e5e2ca93e9f0eb180924880a
+        health: "Initial run completed Cursor only; retry completed Codex and OpenCode while Claude was rate-limited."
+        consensus: "Cursor accepted the process-isolated updater."
+        minority_blocker: "Codex showed root updater still had a general PID 1 control path through `systemctl`; it could create a transient unrestricted root service outside its namespace, read bootstrap credentials, or inspect trusted-core memory."
+        source_refs: [internal/updater/runtime.go:15-29, cmd/choir-updater/main_linux.go:25-43, nix/sandbox-vm.nix:337-395]
+        disposition: "G0 remains blocked. Replace general systemctl access with a fixed restart trigger and root-owned path/oneshot bridge, mask PID 1 control sockets from updater, and prove updater can name no arbitrary unit."
+        repair:
+          implemented_at: 2026-07-19T03:49:00Z
+          result: "Updater now atomically writes only `/run/choir-updater-control/restart`. A root-owned Nix-store path unit removes the trigger and restarts exactly `go-choir-sandbox.service`. Updater masks systemd/dbus control sockets and retains its empty capabilities/private PID/debug restrictions."
+          evidence: "`TestRestartRequestManagerPublishesOnlyFixedTrigger` proves the fixed trigger and arbitrary-target refusal; updater package/binary compile, NixOS toplevel evaluation, and generated path-unit evaluation pass."
+          rollback: "Before deployment, revert the unlanded candidate. No deployed service control path changed."
+          heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+          gate: "A fresh frozen G0 panel must verify no general PID 1 escape; the sixth panel remains rejected."
+      seventh_panel:
+        frozen_candidate_sha256: ec65831c1df8abf7b068e49bc6e7a1c2640a1aa327d5d1c494f065f654d2c203
+        initial_health: "OpenCode completed and accepted; Codex was interrupted by provider policy and Cursor timed out."
+        retry_health: "Codex, Cursor, and OMP GPT-5.5 completed successfully."
+        verdict: accepted_G0_repair
+        findings: "All three retry reviewers reported ACCEPT_G0_REPAIR with no reproducible blocker. They verified production has no general updater service-manager authority: fixed atomic trigger, fixed path unit, immutable exact-unit oneshot, masked systemd/dbus sockets, process/capability restrictions, and arbitrary-target refusal."
+        evidence_ref: "docs/evidence/self-development-g0-conformance-2026-07-18.md terminal repair panel receipt; prompt/manifest/output SHA-256 identities are recorded there and raw `/tmp` transcripts are diagnostic only."
+        acceptance: "G0 is re-accepted and B may resume. The only post-review mutation is this assurance receipt and matching evidence prose; it does not alter the reviewed runtime, Nix, protocol, or test content, so no rerun is required."
+        residual_risk: "The fixed path and exact unit name remain deployment invariants; G1 must verify the frozen complete B candidate and deployed R1 must prove namespace behavior in the real guest."
   reconciliation:
     observed_at: 2026-07-18T22:32:45Z
     source_ref: refs/heads/main@5483a082d0012890343deb3693eea15c53a98415_equals_refs/remotes/origin/main@5483a082d0012890343deb3693eea15c53a98415_before_G0_docs
