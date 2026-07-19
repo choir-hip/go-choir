@@ -1,63 +1,63 @@
 package agentcore
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 )
 
-// CapsuleToolCtx holds the capsule executor and current agent context
-// for capsule-related tools. This is set up by the runtime when capsule
-// mode is enabled.
+// CapsuleToolCtx is injected by guest core. Opaque handles are bound to the
+// current run; signed capabilities, raw capsule IDs, paths, sockets, and keys
+// never enter model-visible arguments or results.
 type CapsuleToolCtx struct {
-	Executor      *capsule.Executor
-	AgentRunID    string
-	Role          capsule.AgentRole
-	CapsuleHandle string // opaque handle for the current capsule
-
-	// TransactionTape is the tamper-evident append-only log of capsule
-	// transaction records. Each commit_transaction call appends one entry.
-	// The tape models the candidate branch's transaction history in the
-	// TLA+ promotion protocol spec (capsuleTxns variable).
-	TransactionTape *transaction.Tape
-
-	// TransactionBuilder classifies capsule diffs and builds structured
-	// transaction records for the tape. If nil, commit_transaction falls
-	// back to returning raw changes without classification or tape append.
+	Executor           *capsule.Executor
+	AgentRunID         string
+	ComputerID         string
+	Role               capsule.AgentRole
+	UpdaterRoot        string
+	CapsuleHandle      string
+	EventAppender      *computerevent.ComputerEventAppender
 	TransactionBuilder *transaction.TransactionBuilder
+	OperationStore     *selfdev.Store
+	EventProjection    interface {
+		Head(context.Context, string) (*computerevent.Head, error)
+		EventByIdempotency(context.Context, string, string) (computerevent.Event, bool, error)
+	}
 }
 
 type capsuleCtxKey struct{}
 
-// WithCapsuleCtx returns a context with the capsule tool context attached.
-func WithCapsuleCtx(ctx context.Context, ctc *CapsuleToolCtx) context.Context {
-	return context.WithValue(ctx, capsuleCtxKey{}, ctc)
+func WithCapsuleCtx(ctx context.Context, value *CapsuleToolCtx) context.Context {
+	return context.WithValue(ctx, capsuleCtxKey{}, value)
 }
 
-// capsuleCtxFromCtx extracts the capsule tool context from the context.
 func capsuleCtxFromCtx(ctx context.Context) *CapsuleToolCtx {
-	v, _ := ctx.Value(capsuleCtxKey{}).(*CapsuleToolCtx)
-	return v
+	value, _ := ctx.Value(capsuleCtxKey{}).(*CapsuleToolCtx)
+	return value
 }
 
-// RegisterCapsuleTools registers capsule-related tools for the super role:
-// spawn_capsule, destroy_capsule, mint_capability, list_capsules,
-// commit_transaction, inspect_capsule.
+// RegisterCapsuleTools installs conductor-only lifecycle tools. Grant minting
+// is deliberately absent: guest core grants processor handles while creating a
+// child run, never through a model-callable tool.
 func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 	for _, tool := range []toolregistry.Tool{
-		newSpawnCapsuleTool(),
-		newDestroyCapsuleTool(),
-		newListCapsulesTool(),
-		newMintCapabilityTool(),
-		newCommitTransactionTool(),
-		newInspectCapsuleTool(),
+		newSpawnCapsuleTool(), newDestroyCapsuleTool(), newListCapsulesTool(), newInspectCapsuleTool(),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
@@ -66,323 +66,475 @@ func RegisterCapsuleTools(registry *toolregistry.ToolRegistry) error {
 	return nil
 }
 
-// RegisterCapsuleExecTools registers tools that operate inside a capsule
-// for the cosuper role: capsule_exec, capsule_read_file, capsule_write_file,
-// capsule_list_dir. These route through the broker via capability-verified RPCs.
 func RegisterCapsuleExecTools(registry *toolregistry.ToolRegistry) error {
 	for _, tool := range []toolregistry.Tool{
-		newCapsuleExecTool(),
-		newCapsuleReadFileTool(),
-		newCapsuleWriteFileTool(),
-		newCapsuleListDirTool(),
+		newCapsuleExecTool(), newCapsuleReadFileTool(), newCapsuleWriteFileTool(), newCapsuleListDirTool(),
+		newCommitTransactionTool(), newInspectSelfDevelopmentBundleTool(), newRecordSelfDevelopmentVerificationTool(),
 	} {
 		if err := registry.Register(tool); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func requireCapsuleRole(ctx context.Context, role capsule.AgentRole) (*CapsuleToolCtx, error) {
+	value := capsuleCtxFromCtx(ctx)
+	if value == nil || value.Executor == nil || value.AgentRunID == "" {
+		return nil, fmt.Errorf("capsule authority unavailable")
+	}
+	if value.Role != role {
+		return nil, fmt.Errorf("capsule operation refused for role %q", value.Role)
+	}
+	return value, nil
 }
 
 func newSpawnCapsuleTool() toolregistry.Tool {
 	type args struct {
-		MemoryMaxMB int64  `json:"memory_max_mb"`
-		CpuQuota    int64  `json:"cpu_quota"`
-		PidsMax     int64  `json:"pids_max"`
-		WorkingDir  string `json:"working_dir"`
+		MemoryMaxMB int64 `json:"memory_max_mb"`
+		CPUQuota    int64 `json:"cpu_quota"`
+		PidsMax     int64 `json:"pids_max"`
 	}
-	return toolregistry.Tool{Name: "spawn_capsule",
-		Description: "Spawn a new isolated capsule (lightweight container) with the specified resource limits. Returns a capsule handle.",
+	return toolregistry.Tool{
+		Name:        "spawn_capsule",
+		Description: "Create an isolated, networkless work capsule and return an opaque lifecycle handle.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"memory_max_mb": map[string]any{"type": "integer", "description": "Memory limit in MB (default 1024)"},
-			"cpu_quota":     map[string]any{"type": "integer", "description": "CPU quota in microseconds per period (default 100000 = 1 CPU)"},
-			"pids_max":      map[string]any{"type": "integer", "description": "Max processes (default 256)"},
-			"working_dir":   map[string]any{"type": "string", "description": "Initial working directory"},
+			"memory_max_mb": map[string]any{"type": "integer"},
+			"cpu_quota":     map[string]any{"type": "integer"},
+			"pids_max":      map[string]any{"type": "integer"},
 		}, nil, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
-			}
-			if ctc.Role != capsule.RoleSuper {
-				return "", fmt.Errorf("only super role can spawn capsules")
-			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode spawn_capsule args: %w", err)
-			}
-
-			// Apply defaults.
-			memoryMax := in.MemoryMaxMB * 1024 * 1024
-			if memoryMax == 0 {
-				memoryMax = 1024 * 1024 * 1024 // 1GB default
-			}
-			cpuQuota := in.CpuQuota
-			if cpuQuota == 0 {
-				cpuQuota = 100000 // 1 CPU default
-			}
-			pidsMax := in.PidsMax
-			if pidsMax == 0 {
-				pidsMax = 256
-			}
-
-			capsuleID := generateCapsuleID()
-			spec := capsule.SpawnSpec{
-				CapsuleID:  capsuleID,
-				MemoryMax:  memoryMax,
-				CpuQuota:   cpuQuota,
-				CpuPeriod:  100000,
-				PidsMax:    pidsMax,
-				WorkingDir: in.WorkingDir,
-				OwnerRunID: ctc.AgentRunID,
-			}
-
-			caps, err := ctc.Executor.Spawn(ctx, spec)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleSuper)
 			if err != nil {
-				return "", fmt.Errorf("failed to spawn capsule: %w", err)
+				return "", err
 			}
-
-			return toolregistry.ResultJSON(map[string]any{
-				"capsule_id": caps.ID,
-				"state":      caps.State.String(),
-				"memory_max": spec.MemoryMax,
-				"cpu_quota":  spec.CpuQuota,
-				"pids_max":   spec.PidsMax,
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
+			}
+			if input.MemoryMaxMB == 0 {
+				input.MemoryMaxMB = 1024
+			}
+			if input.CPUQuota == 0 {
+				input.CPUQuota = 100000
+			}
+			if input.PidsMax == 0 {
+				input.PidsMax = 256
+			}
+			id, err := randomCapsuleID()
+			if err != nil {
+				return "", err
+			}
+			created, err := toolCtx.Executor.Spawn(ctx, capsule.SpawnSpec{
+				CapsuleID: id, OwnerRunID: toolCtx.AgentRunID,
+				MemoryMax: input.MemoryMaxMB * 1024 * 1024,
+				CpuQuota:  input.CPUQuota, CpuPeriod: 100000, PidsMax: input.PidsMax,
 			})
-		}}
+			if err != nil {
+				return "", err
+			}
+			handle, err := toolCtx.Executor.ControlHandle(toolCtx.AgentRunID, created.ID)
+			if err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(map[string]any{"handle": handle, "state": created.State.String(), "source_snapshot_digest": created.SourceSnapshotDigest})
+		},
+	}
 }
 
 func newDestroyCapsuleTool() toolregistry.Tool {
 	type args struct {
-		CapsuleID string `json:"capsule_id"`
-		Force     bool   `json:"force"`
+		Handle string `json:"handle"`
+		Force  bool   `json:"force"`
 	}
-	return toolregistry.Tool{Name: "destroy_capsule",
-		Description: "Destroy a capsule, cleaning up all resources (processes, overlayfs, cgroups).",
+	return toolregistry.Tool{
+		Name:        "destroy_capsule",
+		Description: "Destroy the capsule identified by an opaque lifecycle handle.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"capsule_id": map[string]any{"type": "string"},
-			"force":      map[string]any{"type": "boolean", "description": "Force destroy (SIGKILL)"},
-		}, []string{"capsule_id"}, false),
+			"handle": map[string]any{"type": "string"}, "force": map[string]any{"type": "boolean"},
+		}, []string{"handle"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
-			}
-			if ctc.Role != capsule.RoleSuper {
-				return "", fmt.Errorf("only super role can destroy capsules")
-			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode destroy_capsule args: %w", err)
-			}
-
-			var err error
-			if in.Force {
-				err = ctc.Executor.ForceDestroy(ctx, in.CapsuleID)
-			} else {
-				err = ctc.Executor.Destroy(ctx, in.CapsuleID)
-			}
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleSuper)
 			if err != nil {
-				return "", fmt.Errorf("failed to destroy capsule: %w", err)
+				return "", err
 			}
-
-			return toolregistry.ResultJSON(map[string]any{
-				"capsule_id": in.CapsuleID,
-				"destroyed":  true,
-			})
-		}}
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
+			}
+			if err := toolCtx.Executor.DestroyOwned(ctx, toolCtx.AgentRunID, input.Handle, input.Force); err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(map[string]any{"handle": input.Handle, "destroyed": true})
+		},
+	}
 }
 
 func newListCapsulesTool() toolregistry.Tool {
-	return toolregistry.Tool{Name: "list_capsules",
-		Description: "List all active capsules with their state and resource usage.",
-		Parameters:  toolregistry.JSONSchemaObject(map[string]any{}, nil, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
-			}
-
-			summaries := ctc.Executor.ListCapsules()
-			return toolregistry.ResultJSON(map[string]any{
-				"capsules": summaries,
-				"count":    len(summaries),
-			})
-		}}
-}
-
-func newMintCapabilityTool() toolregistry.Tool {
-	type args struct {
-		AgentRunID string `json:"agent_run_id"`
-		Role       string `json:"role"`
-		CapsuleID  string `json:"capsule_id"`
-		TTLHours   int    `json:"ttl_hours"`
-	}
-	return toolregistry.Tool{Name: "mint_capability",
-		Description: "Mint an Ed25519-signed capability for an agent to access a capsule. Super only.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"agent_run_id": map[string]any{"type": "string"},
-			"role":         map[string]any{"type": "string", "enum": []string{"cosuper", "researcher"}},
-			"capsule_id":   map[string]any{"type": "string"},
-			"ttl_hours":    map[string]any{"type": "integer", "description": "TTL in hours (max 24)"},
-		}, []string{"agent_run_id", "role", "capsule_id"}, false),
-		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
-			}
-			if ctc.Role != capsule.RoleSuper {
-				return "", fmt.Errorf("only super role can mint capabilities")
-			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode mint_capability args: %w", err)
-			}
-
-			ttl := time.Duration(in.TTLHours) * time.Hour
-			if ttl == 0 {
-				ttl = 4 * time.Hour // default 4h
-			}
-			if ttl > 24*time.Hour {
-				return "", fmt.Errorf("TTL exceeds 24h maximum")
-			}
-
-			role := capsule.AgentRole(in.Role)
-			cap, err := ctc.Executor.MintCapability(in.AgentRunID, role, in.CapsuleID, ttl)
+	return toolregistry.Tool{
+		Name: "list_capsules", Description: "List this conductor run's capsules by opaque handle.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{}, nil, false),
+		Func: func(ctx context.Context, _ json.RawMessage) (string, error) {
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleSuper)
 			if err != nil {
-				return "", fmt.Errorf("failed to mint capability: %w", err)
+				return "", err
 			}
-
-			return toolregistry.ResultJSON(map[string]any{
-				"handle":         cap.Handle,
-				"capability_id":  cap.CapabilityID,
-				"role":           cap.AgentRole,
-				"target_capsule": cap.TargetCapsule,
-				"expires_at":     cap.ExpiresAt,
-			})
-		}}
+			items := toolCtx.Executor.ListOwned(toolCtx.AgentRunID)
+			return toolregistry.ResultJSON(map[string]any{"capsules": items, "count": len(items)})
+		},
+	}
 }
 
 func newCommitTransactionTool() toolregistry.Tool {
 	type args struct {
-		CapsuleID string `json:"capsule_id"`
+		Handle string `json:"handle"`
 	}
-	return toolregistry.Tool{Name: "commit_transaction",
-		Description: "Extract the capsule diff, classify it, and commit to the tape. Super only.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"capsule_id": map[string]any{"type": "string"},
-		}, []string{"capsule_id"}, false),
+	return toolregistry.Tool{
+		Name: "commit_transaction", Description: "Classify and freeze the capsule diff for audited proposal construction.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{"handle": map[string]any{"type": "string"}}, []string{"handle"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
-			}
-			if ctc.Role != capsule.RoleSuper {
-				return "", fmt.Errorf("only super role can commit transactions")
-			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode commit_transaction args: %w", err)
-			}
-
-			changes, err := ctc.Executor.ExtractDiff(in.CapsuleID)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
 			if err != nil {
-				return "", fmt.Errorf("failed to extract diff: %w", err)
+				return "", err
 			}
-
-			// If no transaction builder is configured, fall back to raw changes.
-			// This preserves backward compatibility with existing callers.
-			if ctc.TransactionBuilder == nil {
-				return toolregistry.ResultJSON(map[string]any{
-					"capsule_id":   in.CapsuleID,
-					"change_count": len(changes),
-					"changes":      changes,
-					"tape_append":  false,
-				})
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
 			}
-
-			// Classify the diff and build a transaction record.
-			record, err := ctc.TransactionBuilder.BuildTransactionFromDiff(in.CapsuleID, changes)
+			changes, err := toolCtx.Executor.ExtractGranted(toolCtx.AgentRunID, input.Handle)
 			if err != nil {
-				return "", fmt.Errorf("build transaction: %w", err)
+				return "", err
 			}
-
-			// If the record is rejected (unknown paths), do not append to tape.
+			if toolCtx.TransactionBuilder == nil || toolCtx.EventAppender == nil || toolCtx.ComputerID == "" {
+				return "", fmt.Errorf("capsule event authority unavailable")
+			}
+			capsuleID, err := toolCtx.Executor.ResolveGrantedCapsuleID(toolCtx.AgentRunID, input.Handle)
+			if err != nil {
+				return "", err
+			}
+			record, err := toolCtx.TransactionBuilder.BuildTransactionFromDiff(capsuleID, changes)
+			if err != nil {
+				return "", err
+			}
 			if record.Rejected {
-				return toolregistry.ResultJSON(map[string]any{
-					"capsule_id":    in.CapsuleID,
-					"change_count":  len(changes),
-					"rejected":      true,
-					"reject_reason": record.RejectReason,
-					"tape_append":   false,
-				})
+				return toolregistry.ResultJSON(map[string]any{"handle": input.Handle, "rejected": true, "reject_reason": record.RejectReason})
 			}
-
-			// Append to the tamper-evident tape.
-			var tapeHash string
-			var tapeLen int
-			if ctc.TransactionTape != nil {
-				tapeHash, err = ctc.TransactionTape.Append(record)
-				if err != nil {
-					return "", fmt.Errorf("tape append: %w", err)
+			execution := toolregistry.ExecutionContextFrom(ctx)
+			trajectoryID := trajectoryIDForRun(execution.RunRecord)
+			if toolCtx.OperationStore == nil || toolCtx.EventProjection == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" || trajectoryID == "" {
+				return "", fmt.Errorf("self-development freeze authority unavailable")
+			}
+			operation, err := toolCtx.OperationStore.GetByTrajectory(ctx, toolCtx.ComputerID, trajectoryID)
+			if err != nil {
+				return "", fmt.Errorf("resolve self-development operation: %w", err)
+			}
+			if operation.State != selfdev.StateExecuting {
+				if operation.BundleDigest != "" && (operation.State == selfdev.StateFrozen || operation.State == selfdev.StateVerified || operation.State == selfdev.StateAwaitingApproval) {
+					return toolregistry.ResultJSON(map[string]any{
+						"handle": input.Handle, "bundle_digest": operation.BundleDigest,
+						"operation_id": operation.OperationID, "state": operation.State,
+					})
 				}
-				tapeLen = ctc.TransactionTape.Len()
+				return "", fmt.Errorf("self-development operation is %s, expected %s", operation.State, selfdev.StateExecuting)
 			}
-
-			return toolregistry.ResultJSON(map[string]any{
-				"capsule_id":         in.CapsuleID,
-				"change_count":       len(changes),
-				"classifier_version": record.ClassifierV,
-				"classifier_digest":  record.ClassifierDigest,
-				"groups":             record.Groups,
-				"ignored_count":      len(record.Ignored),
-				"tape_append":        ctc.TransactionTape != nil,
-				"tape_hash":          tapeHash,
-				"tape_length":        tapeLen,
+			headBefore, err := toolCtx.EventProjection.Head(ctx, toolCtx.ComputerID)
+			if err != nil || headBefore == nil || headBefore.PendingTransitionRef != "" {
+				return "", fmt.Errorf("self-development base head unavailable or pending")
+			}
+			files, temporary, err := toolCtx.Executor.StageGrantedRelease(toolCtx.AgentRunID, input.Handle, filepath.Join(toolCtx.UpdaterRoot, "incoming"))
+			if err != nil {
+				return "", err
+			}
+			defer os.RemoveAll(temporary)
+			sourceIntent, err := computerevent.CanonicalJSON(record.Groups)
+			if err != nil {
+				return "", err
+			}
+			runtimeIntent, err := computerevent.CanonicalJSON(files)
+			if err != nil {
+				return "", err
+			}
+			record.SourceTreeDigest = computerevent.DigestBytes(sourceIntent)
+			record.RuntimeArtifactDigest = computerevent.DigestBytes(runtimeIntent)
+			record.BaseEffectiveEventHead = headBefore.EffectiveEventHead
+			record.RuntimeFiles = files
+			bundle, err := computerevent.CanonicalJSON(record)
+			if err != nil {
+				return "", fmt.Errorf("canonical capsule effect bundle: %w", err)
+			}
+			bundleDigest := computerevent.DigestBytes(bundle)
+			if err := os.WriteFile(filepath.Join(temporary, "bundle.json"), bundle, 0o400); err != nil {
+				return "", err
+			}
+			frozenRoot := filepath.Join(toolCtx.UpdaterRoot, "incoming", bundleDigest)
+			if err := os.Rename(temporary, frozenRoot); err != nil {
+				existing, readErr := os.ReadFile(filepath.Join(frozenRoot, "bundle.json"))
+				if readErr != nil || !bytes.Equal(existing, bundle) {
+					return "", fmt.Errorf("freeze immutable release: %w", err)
+				}
+			}
+			eventIdempotency := computerevent.DigestBytes([]byte("capsule-effect-v1\x00" + toolCtx.AgentRunID + "\x00" + capsuleID + "\x00" + bundleDigest))
+			var receiptID string
+			pinnedDigest := bundleDigest
+			existingEvent := false
+			if toolCtx.EventProjection != nil {
+				projected, found, lookupErr := toolCtx.EventProjection.EventByIdempotency(ctx, toolCtx.ComputerID, eventIdempotency)
+				if lookupErr != nil {
+					return "", lookupErr
+				}
+				if found {
+					if projected.ProposedEffectRef != bundleDigest || projected.TrajectoryID != trajectoryID || projected.CapsuleID != capsuleID {
+						return "", fmt.Errorf("durable capsule effect event binding mismatch")
+					}
+					existingEvent = true
+				}
+			}
+			if !existingEvent {
+				eventID, eventErr := computerevent.NewEventID()
+				if eventErr != nil {
+					return "", eventErr
+				}
+				event := computerevent.Event{
+					SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: toolCtx.ComputerID,
+					EventKind: computerevent.EventEffectProposed, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+					IdempotencyKey: eventIdempotency, TrajectoryID: trajectoryID, CapsuleID: capsuleID, ActorProfile: agentprofile.CoSuper,
+					AuthorityRef: "guest-core:capsule-control", PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
+				}
+				receipt, digest, appendErr := toolCtx.EventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, bundle, "application/vnd.choir.capsule-effect+json", "public")
+				if appendErr != nil {
+					return "", appendErr
+				}
+				receiptID, pinnedDigest = receipt.ReceiptID, digest
+			}
+			head, headErr := toolCtx.EventProjection.Head(ctx, toolCtx.ComputerID)
+			if headErr != nil || head == nil {
+				return "", fmt.Errorf("resolve frozen operation head: %w", headErr)
+			}
+			operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateExecuting, selfdev.StateFrozen, func(next *selfdev.Operation) error {
+				next.CapsuleID = capsuleID
+				next.BundleDigest = pinnedDigest
+				next.DesiredHead = head.DesiredEventHead
+				next.EffectiveHead = head.EffectiveEventHead
+				return nil
 			})
-		}}
+			if err != nil {
+				return "", err
+			}
+			result := map[string]any{
+				"handle": input.Handle, "change_count": len(changes), "classifier_version": record.ClassifierV,
+				"classifier_digest": record.ClassifierDigest, "groups": record.Groups,
+				"bundle_digest": pinnedDigest, "event_head_receipt_id": receiptID,
+			}
+			result["operation_id"], result["state"] = operation.OperationID, operation.State
+			return toolregistry.ResultJSON(result)
+		},
+	}
+}
+
+func newInspectSelfDevelopmentBundleTool() toolregistry.Tool {
+	type args struct {
+		OperationID  string `json:"operation_id"`
+		BundleDigest string `json:"bundle_digest"`
+	}
+	return toolregistry.Tool{
+		Name:        "inspect_self_development_bundle",
+		Description: "Verify the immutable staged release and classifier metadata for an exact frozen self-development bundle.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
+			"operation_id":  map[string]any{"type": "string"},
+			"bundle_digest": map[string]any{"type": "string"},
+		}, []string{"operation_id", "bundle_digest"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			if err != nil {
+				return "", err
+			}
+			execution := toolregistry.ExecutionContextFrom(ctx)
+			if execution.RunRecord == nil || normalizeCoSuperSlot(metadataStringValue(execution.RunRecord.Metadata, runMetadataCoSuperSlot)) != "verifier" {
+				return "", fmt.Errorf("bundle inspection is restricted to the co-super verifier slot")
+			}
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
+			}
+			input.OperationID, input.BundleDigest = strings.TrimSpace(input.OperationID), strings.TrimSpace(input.BundleDigest)
+			if input.OperationID == "" || !computerevent.IsSHA256(input.BundleDigest) || toolCtx.OperationStore == nil || strings.TrimSpace(toolCtx.UpdaterRoot) == "" {
+				return "", fmt.Errorf("exact frozen bundle binding is required")
+			}
+			operation, err := toolCtx.OperationStore.Get(ctx, toolCtx.ComputerID, input.OperationID)
+			if err != nil || operation.BundleDigest != input.BundleDigest || operation.TrajectoryID != trajectoryIDForRun(execution.RunRecord) {
+				return "", fmt.Errorf("frozen operation binding mismatch")
+			}
+			root := filepath.Join(toolCtx.UpdaterRoot, "incoming", input.BundleDigest)
+			rawBundle, err := os.ReadFile(filepath.Join(root, "bundle.json"))
+			if err != nil || computerevent.DigestBytes(rawBundle) != input.BundleDigest {
+				return "", fmt.Errorf("immutable bundle digest mismatch")
+			}
+			var record transaction.TransactionRecord
+			decoder := json.NewDecoder(bytes.NewReader(rawBundle))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&record); err != nil || record.Rejected || record.BaseEffectiveEventHead != operation.EffectiveHead {
+				return "", fmt.Errorf("invalid frozen bundle")
+			}
+			for _, file := range record.RuntimeFiles {
+				path := filepath.Join(root, filepath.FromSlash(file.Path))
+				inputFile, err := os.Open(path)
+				if err != nil {
+					return "", fmt.Errorf("frozen runtime file unavailable: %s", file.Path)
+				}
+				hash := sha256.New()
+				_, copyErr := io.Copy(hash, inputFile)
+				closeErr := inputFile.Close()
+				if copyErr != nil || closeErr != nil || hex.EncodeToString(hash.Sum(nil)) != file.SHA256 {
+					return "", fmt.Errorf("frozen runtime file digest mismatch: %s", file.Path)
+				}
+			}
+			return toolregistry.ResultJSON(map[string]any{
+				"operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest,
+				"source_tree_digest": record.SourceTreeDigest, "runtime_artifact_digest": record.RuntimeArtifactDigest,
+				"base_effective_event_head": record.BaseEffectiveEventHead, "runtime_files": record.RuntimeFiles,
+				"classifier_version": record.ClassifierV, "classifier_digest": record.ClassifierDigest, "groups": record.Groups,
+			})
+		},
+	}
+}
+
+func newRecordSelfDevelopmentVerificationTool() toolregistry.Tool {
+	type args struct {
+		OperationID  string   `json:"operation_id"`
+		BundleDigest string   `json:"bundle_digest"`
+		Decision     string   `json:"decision"`
+		VerifierRefs []string `json:"verifier_refs"`
+	}
+	return toolregistry.Tool{
+		Name:        "record_self_development_verification",
+		Description: "Record an independent verifier decision for the exact frozen self-development bundle.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{
+			"operation_id":  map[string]any{"type": "string"},
+			"bundle_digest": map[string]any{"type": "string"},
+			"decision":      map[string]any{"type": "string", "enum": []string{"pass", "fail"}},
+			"verifier_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+		}, []string{"operation_id", "bundle_digest", "decision", "verifier_refs"}, false),
+		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			if err != nil {
+				return "", err
+			}
+			execution := toolregistry.ExecutionContextFrom(ctx)
+			if normalizeCoSuperSlot(metadataStringValue(execution.RunRecord.Metadata, runMetadataCoSuperSlot)) != "verifier" {
+				return "", fmt.Errorf("verification recording is restricted to the co-super verifier slot")
+			}
+			if toolCtx.OperationStore == nil || toolCtx.EventAppender == nil || toolCtx.EventProjection == nil {
+				return "", fmt.Errorf("self-development verification authority unavailable")
+			}
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
+			}
+			input.OperationID, input.BundleDigest, input.Decision = strings.TrimSpace(input.OperationID), strings.TrimSpace(input.BundleDigest), strings.TrimSpace(input.Decision)
+			input.VerifierRefs = trimNonEmptyStrings(input.VerifierRefs)
+			if input.OperationID == "" || !computerevent.IsSHA256(input.BundleDigest) || (input.Decision != "pass" && input.Decision != "fail") || len(input.VerifierRefs) == 0 {
+				return "", fmt.Errorf("complete exact verification binding is required")
+			}
+			operation, err := toolCtx.OperationStore.Get(ctx, toolCtx.ComputerID, input.OperationID)
+			if err != nil {
+				return "", err
+			}
+			if operation.BundleDigest != input.BundleDigest || operation.TrajectoryID != trajectoryIDForRun(execution.RunRecord) {
+				return "", fmt.Errorf("verification does not bind the frozen operation")
+			}
+			if (operation.State == selfdev.StateAwaitingApproval && input.Decision == "pass") || (operation.State == selfdev.StateFailed && input.Decision == "fail") {
+				return toolregistry.ResultJSON(map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "verifier_ref": firstString(operation.VerifierRefs)})
+			}
+			if operation.State != selfdev.StateFrozen && operation.State != selfdev.StateVerified {
+				return "", fmt.Errorf("self-development operation is %s, expected frozen verification state", operation.State)
+			}
+			record := map[string]any{
+				"schema_version": 1, "operation_id": operation.OperationID, "bundle_digest": operation.BundleDigest,
+				"decision": input.Decision, "verifier_refs": input.VerifierRefs, "verifier_run_id": toolCtx.AgentRunID,
+			}
+			payload, err := computerevent.CanonicalJSON(record)
+			if err != nil {
+				return "", err
+			}
+			eventIdempotency := computerevent.DigestBytes(append([]byte("selfdev-verification-v1\x00"), payload...))
+			verificationEvent, found, lookupErr := toolCtx.EventProjection.EventByIdempotency(ctx, toolCtx.ComputerID, eventIdempotency)
+			if lookupErr != nil {
+				return "", lookupErr
+			}
+			if !found {
+				eventID, eventErr := computerevent.NewEventID()
+				if eventErr != nil {
+					return "", eventErr
+				}
+				event := computerevent.Event{
+					SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: toolCtx.ComputerID,
+					EventKind: computerevent.EventVerificationRecorded, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+					IdempotencyKey: eventIdempotency, TrajectoryID: operation.TrajectoryID, CapsuleID: operation.CapsuleID,
+					ActorProfile: agentprofile.CoSuper, AuthorityRef: "guest-core:self-development-verifier",
+					PrivacyClass: "public", ReducerVersion: computerevent.ReducerVersionV1,
+				}
+				if _, _, appendErr := toolCtx.EventAppender.AppendNewPayload(ctx, event, computerevent.TransitionInput{}, payload, "application/vnd.choir.self-development-verification+json", "public"); appendErr != nil {
+					return "", appendErr
+				}
+				verificationEvent, found, lookupErr = toolCtx.EventProjection.EventByIdempotency(ctx, toolCtx.ComputerID, eventIdempotency)
+				if lookupErr != nil || !found {
+					return "", fmt.Errorf("verification event projection unavailable: %w", lookupErr)
+				}
+			}
+			verifierRef, err := verificationEvent.Digest()
+			if err != nil {
+				return "", err
+			}
+			if input.Decision == "fail" {
+				operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateFailed, func(next *selfdev.Operation) error {
+					next.VerifierRefs = []string{verifierRef}
+					next.TerminalError = "independent verifier rejected frozen bundle"
+					return nil
+				})
+			} else {
+				if operation.State == selfdev.StateFrozen {
+					operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateFrozen, selfdev.StateVerified, func(next *selfdev.Operation) error {
+						next.VerifierRefs = []string{verifierRef}
+						return nil
+					})
+					if err != nil {
+						return "", err
+					}
+				}
+				operation, err = toolCtx.OperationStore.Transition(ctx, toolCtx.ComputerID, operation.OperationID, selfdev.StateVerified, selfdev.StateAwaitingApproval, nil)
+			}
+			if err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(map[string]any{"operation_id": operation.OperationID, "state": operation.State, "bundle_digest": operation.BundleDigest, "decision": input.Decision, "verifier_ref": verifierRef})
+		},
+	}
 }
 
 func newInspectCapsuleTool() toolregistry.Tool {
 	type args struct {
-		CapsuleID string `json:"capsule_id"`
+		Handle string `json:"handle"`
 	}
-	return toolregistry.Tool{Name: "inspect_capsule",
-		Description: "Inspect a capsule's state, resource usage, and diagnostics. Bypasses broker.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"capsule_id": map[string]any{"type": "string"},
-		}, []string{"capsule_id"}, false),
+	return toolregistry.Tool{
+		Name: "inspect_capsule", Description: "Inspect the safe lifecycle projection for an opaque capsule handle.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{"handle": map[string]any{"type": "string"}}, []string{"handle"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
-			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode inspect_capsule args: %w", err)
-			}
-
-			diag, err := ctc.Executor.InspectCapsuleRaw(in.CapsuleID)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleSuper)
 			if err != nil {
-				return "", fmt.Errorf("failed to inspect capsule: %w", err)
+				return "", err
 			}
-
-			return toolregistry.ResultJSON(map[string]any{
-				"id":           diag.ID,
-				"state":        diag.State.String(),
-				"pid":          diag.PID,
-				"memory_usage": diag.MemoryUsage,
-				"memory_max":   diag.MemoryMax,
-				"uptime":       diag.Uptime,
-			})
-		}}
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
+			}
+			summary, err := toolCtx.Executor.InspectOwned(toolCtx.AgentRunID, input.Handle)
+			if err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(summary)
+		},
+	}
 }
-
-// Capsule exec tools (cosuper role — route through broker)
 
 func newCapsuleExecTool() toolregistry.Tool {
 	type args struct {
@@ -390,138 +542,125 @@ func newCapsuleExecTool() toolregistry.Tool {
 		Cwd       string `json:"cwd"`
 		TimeoutMS int    `json:"timeout_ms"`
 	}
-	return toolregistry.Tool{Name: "capsule_exec",
-		Description: "Execute a command inside the capsule via the broker. Requires cosuper capability.",
+	return toolregistry.Tool{
+		Name: "capsule_exec", Description: "Execute a command inside the assigned isolated capsule.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"command":    map[string]any{"type": "string"},
-			"cwd":        map[string]any{"type": "string"},
-			"timeout_ms": map[string]any{"type": "integer"},
+			"command": map[string]any{"type": "string"}, "cwd": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer"},
 		}, []string{"command"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
-			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode capsule_exec args: %w", err)
-			}
-
-			cap, err := ctc.Executor.ResolveCapability(ctc.AgentRunID, ctc.CapsuleHandle)
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
 			if err != nil {
-				return "", fmt.Errorf("failed to resolve capability: %w", err)
+				return "", err
 			}
-
-			// Resolve the capsule from the capability.
-			targets, err := ctc.Executor.ResolveTarget(cap)
-			if err != nil || len(targets) == 0 {
-				return "", fmt.Errorf("no target capsule for capability")
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
 			}
-
-			// TODO: Get the capsule and call Exec.
-			// This requires the Executor to expose a method to get a capsule
-			// and call Exec on it with the capability.
-			return toolregistry.ResultJSON(map[string]any{
-				"command": in.Command,
-				"status":  "not_implemented",
-				"message": "capsule exec routing requires broker connection setup",
-			})
-		}}
+			result, err := toolCtx.Executor.Exec(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, capsule.ExecRequest{Command: input.Command, Cwd: input.Cwd, TimeoutMS: input.TimeoutMS})
+			if err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(result)
+		},
+	}
 }
 
 func newCapsuleReadFileTool() toolregistry.Tool {
 	type args struct {
 		Path string `json:"path"`
 	}
-	return toolregistry.Tool{Name: "capsule_read_file",
-		Description: "Read a file from inside the capsule via the broker.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"path": map[string]any{"type": "string"},
-		}, []string{"path"}, false),
+	return toolregistry.Tool{Name: "capsule_read_file", Description: "Read a file inside the assigned capsule.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{"path": map[string]any{"type": "string"}}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			if err != nil {
+				return "", err
 			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode capsule_read_file args: %w", err)
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
 			}
-
-			// TODO: Route through broker.
-			return toolregistry.ResultJSON(map[string]any{
-				"path":   in.Path,
-				"status": "not_implemented",
-			})
-		}}
+			content, err := toolCtx.Executor.ReadFile(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, input.Path)
+			if err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(map[string]any{"path": input.Path, "content": content})
+		},
+	}
 }
 
 func newCapsuleWriteFileTool() toolregistry.Tool {
 	type args struct {
 		Path    string `json:"path"`
 		Content string `json:"content"`
+		Mode    uint32 `json:"mode"`
 	}
-	return toolregistry.Tool{Name: "capsule_write_file",
-		Description: "Write a file inside the capsule via the broker.",
+	return toolregistry.Tool{Name: "capsule_write_file", Description: "Write a file inside the assigned capsule.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"path":    map[string]any{"type": "string"},
-			"content": map[string]any{"type": "string"},
+			"path": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "mode": map[string]any{"type": "integer"},
 		}, []string{"path", "content"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			if err != nil {
+				return "", err
 			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode capsule_write_file args: %w", err)
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
 			}
-
-			// TODO: Route through broker.
-			return toolregistry.ResultJSON(map[string]any{
-				"path":   in.Path,
-				"status": "not_implemented",
-			})
-		}}
+			if err := toolCtx.Executor.WriteFile(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, input.Path, []byte(input.Content), input.Mode); err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(map[string]any{"path": input.Path, "written": true})
+		},
+	}
 }
 
 func newCapsuleListDirTool() toolregistry.Tool {
 	type args struct {
 		Path string `json:"path"`
 	}
-	return toolregistry.Tool{Name: "capsule_list_dir",
-		Description: "List directory contents inside the capsule via the broker.",
-		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"path": map[string]any{"type": "string"},
-		}, []string{"path"}, false),
+	return toolregistry.Tool{Name: "capsule_list_dir", Description: "List a directory inside the assigned capsule.",
+		Parameters: toolregistry.JSONSchemaObject(map[string]any{"path": map[string]any{"type": "string"}}, []string{"path"}, false),
 		Func: func(ctx context.Context, raw json.RawMessage) (string, error) {
-			ctc := capsuleCtxFromCtx(ctx)
-			if ctc == nil || ctc.Executor == nil {
-				return "", fmt.Errorf("capsule executor not configured")
+			toolCtx, err := requireCapsuleRole(ctx, capsule.RoleCoSuper)
+			if err != nil {
+				return "", err
 			}
-
-			var in args
-			if err := json.Unmarshal(raw, &in); err != nil {
-				return "", fmt.Errorf("decode capsule_list_dir args: %w", err)
+			var input args
+			if err := json.Unmarshal(raw, &input); err != nil {
+				return "", err
 			}
-
-			// TODO: Route through broker.
-			return toolregistry.ResultJSON(map[string]any{
-				"path":   in.Path,
-				"status": "not_implemented",
-			})
-		}}
+			entries, err := toolCtx.Executor.ListDir(ctx, toolCtx.AgentRunID, toolCtx.CapsuleHandle, input.Path)
+			if err != nil {
+				return "", err
+			}
+			return toolregistry.ResultJSON(map[string]any{"path": input.Path, "entries": entries})
+		},
+	}
 }
 
-// generateCapsuleID generates a unique capsule ID using crypto/rand.
-func generateCapsuleID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		// On entropy failure, fall back to timestamp (should never happen).
-		return fmt.Sprintf("capsule-%d", time.Now().UnixNano())
+func randomCapsuleID() (string, error) {
+	var value [16]byte
+	if _, err := rand.Read(value[:]); err != nil {
+		return "", fmt.Errorf("capsule identity: %w", err)
 	}
-	return "capsule-" + hex.EncodeToString(b)
+	return "capsule-" + hex.EncodeToString(value[:]), nil
+}
+
+func trimNonEmptyStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }

@@ -2,12 +2,14 @@ package sandbox
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/actorruntime"
@@ -15,7 +17,9 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
+	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/coagentowner"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/events"
@@ -24,12 +28,15 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/textureowner"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/updater"
+	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
@@ -138,6 +145,68 @@ func Run() {
 		agentcore.WithDesktopStateOwner(desktopHandler),
 		agentcore.WithContentService(contentService),
 	}
+	if updaterRoot := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")); updaterRoot != "" {
+		updaterClient, err := updater.NewClient("/run/choir/updater.sock")
+		if err != nil {
+			log.Fatalf("sandbox: configure self-development updater: %v", err)
+		}
+		coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentUpdater(updaterClient, updaterRoot, os.Getenv("CHOIR_COMPUTER_ID"), os.Getenv("CHOIR_REALIZATION_ID")))
+	}
+	if brokerPath := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_BROKER_PATH")); brokerPath != "" {
+		stateDir := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_STATE_DIR"))
+		lowerRoot := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_LOWER_ROOT"))
+		sourceRoot := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_SOURCE_ROOT"))
+		executor := capsule.NewExecutorWithSource(stateDir, lowerRoot, sourceRoot, brokerPath, 6*1024*1024*1024)
+		coreOpts = append(coreOpts, agentcore.WithCapsuleExecutor(executor))
+		log.Printf("sandbox: guest-local capsule authority configured")
+	}
+	if credentialPath := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_CREDENTIAL_FILE")); credentialPath != "" {
+		encodedEnvelope, err := consumeComputerCredentialEnvelope(credentialPath)
+		if err != nil {
+			log.Fatalf("sandbox: consume computer event credential file: %v", err)
+		}
+		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
+		realizationID := strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID"))
+		platformURL := strings.TrimSpace(os.Getenv("CHOIR_PLATFORM_URL"))
+		bootstrapCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		credentials, err := selfdev.ExchangeGuestCredential(bootstrapCtx, platformURL, encodedEnvelope, computerID, realizationID)
+		if err != nil {
+			cancel()
+			log.Fatalf("sandbox: exchange computer event credential: %v", err)
+		}
+		eventClient, err := computerevent.NewGuestHTTPClient(platformURL, credentials.Capability)
+		if err != nil {
+			cancel()
+			log.Fatalf("sandbox: configure computer event client: %v", err)
+		}
+		privacyRoot := strings.TrimSpace(os.Getenv("CHOIR_PRIVATE_ARTIFACT_KEYRING"))
+		keyring, err := computerevent.NewFilePrivacyKeyring(privacyRoot)
+		if err != nil {
+			cancel()
+			log.Fatalf("sandbox: configure private artifact keyring: %v", err)
+		}
+		privateCipher, err := computerevent.NewPrivateArtifactCipher(keyring)
+		if err != nil {
+			cancel()
+			log.Fatalf("sandbox: configure private artifact cipher: %v", err)
+		}
+		appender, err := computerevent.NewComputerEventAppender(
+			computerID, eventClient, db, eventClient,
+			computerevent.EventHeadReceiptVerifier{Keys: credentials.KeyResolver()},
+		)
+		if err == nil {
+			err = appender.Reconstruct(bootstrapCtx, eventClient)
+		}
+		cancel()
+		if err != nil {
+			log.Fatalf("sandbox: reconstruct computer event authority: %v", err)
+		}
+		coreOpts = append(coreOpts, agentcore.WithComputerEventAppender(appender), agentcore.WithPrivateArtifactCipher(privateCipher), agentcore.WithSelfDevelopmentControl(credentials))
+		if vmctlURL := strings.TrimSpace(os.Getenv("RUNTIME_VMCTL_URL")); vmctlURL != "" {
+			coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentRoute(vmctl.NewClient(vmctlURL), os.Getenv("CHOIR_OWNER_ID"), os.Getenv("CHOIR_DESKTOP_ID")))
+		}
+		log.Printf("sandbox: computer event authority reconstructed")
+	}
 	var rtOpts []actorruntime.RuntimeOption
 
 	// Mount the Dolt-backed trace observability store when enabled. The store
@@ -179,7 +248,6 @@ func Run() {
 		}
 	})
 	RegisterFileRoutes(s, fileHandler)
-	s.HandleFunc("/internal/computer-version/observations", ConstructionObservationHandler{FilesRoot: filesRoot}.ServeHTTP)
 
 	// Default-on: install the full per-profile tool registry. Set
 	// RUNTIME_DISABLE_TOOLS=1 to opt out (for stub-only tests where no tools
@@ -210,7 +278,6 @@ func Run() {
 			agentprofile.Conductor,
 			agentprofile.Super,
 			agentprofile.CoSuper,
-			agentprofile.VSuper,
 			agentprofile.Researcher,
 			agentprofile.Texture,
 			agentprofile.Processor,
@@ -318,6 +385,39 @@ func buildRuntimeConfig(cfg Config, rtRuntimeCfg provideriface.Config, filesRoot
 		rtCfg.ModelPolicyPath = provideriface.DefaultModelPolicyPath(filesRoot)
 	}
 	return rtCfg
+}
+
+func consumeComputerCredentialEnvelope(path string) (string, error) {
+	return consumeComputerCredentialEnvelopeOwned(path, 0)
+}
+
+func consumeComputerCredentialEnvelopeOwned(path string, expectedUID uint32) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("credential path must be absolute")
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != expectedUID || !info.Mode().IsRegular() || info.Mode().Perm() != 0o400 || info.Size() <= 0 || info.Size() > 128<<10 {
+		return "", fmt.Errorf("credential file must be root-owned mode-0400 regular input")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Remove(path); err != nil {
+		return "", fmt.Errorf("erase consumed credential file: %w", err)
+	}
+	encoded := strings.TrimSpace(string(raw))
+	for index := range raw {
+		raw[index] = 0
+	}
+	if encoded == "" {
+		return "", fmt.Errorf("credential file is empty")
+	}
+	return encoded, nil
 }
 
 func desktopIDFromRequest(r *http.Request) string {

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1107,7 +1105,7 @@ func TestExecuteToolsConductorTextureRouteSkipsOtherSpawn(t *testing.T) {
 	}
 }
 
-func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
+func TestExecuteToolsSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	registry := toolregistry.NewToolRegistry()
 	var mu sync.Mutex
 	counts := map[string]int{}
@@ -1130,7 +1128,7 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
 		RunID:        "vsuper-run",
 		OwnerID:      "owner",
-		AgentProfile: agentprofile.VSuper,
+		AgentProfile: agentprofile.Super,
 	}))
 	calls := []types.ToolCall{
 		{ID: "spawn-implementation-1", Name: "spawn_agent", Arguments: json.RawMessage(`{"role":"co-super","slot":"implementation","channel_id":"doc-1","objective":"implement"}`)},
@@ -1163,130 +1161,6 @@ func TestExecuteToolsVSuperSkipsDuplicateCoordinationSideEffects(t *testing.T) {
 		if results[idx].IsError {
 			t.Fatalf("result[%d] = %#v, want successful execution", idx, results[idx])
 		}
-	}
-}
-
-func TestExecuteToolsSuperSkipsDuplicateStartWorkerDelegation(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	var mu sync.Mutex
-	executions := 0
-	if err := registry.Register(toolregistry.Tool{Name: "start_worker_delegation",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			mu.Lock()
-			executions++
-			mu.Unlock()
-			return `{"status":"worker_run_started","worker_id":"worker-1","worker_run_id":"run-1","app_change_packages":[]}`, nil
-		}}); err != nil {
-		t.Fatalf("register start_worker_delegation: %v", err)
-	}
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "super-run",
-		OwnerID:      "owner",
-		AgentProfile: agentprofile.Super,
-	}))
-	args := json.RawMessage(`{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","objective":"run harmless worker proof","profile":"vsuper"}`)
-	results := toolregistry.ExecuteToolBatch(ctx, registry, []types.ToolCall{
-		{ID: "start-1", Name: "start_worker_delegation", Arguments: args},
-		{ID: "start-2", Name: "start_worker_delegation", Arguments: args},
-	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-
-	mu.Lock()
-	gotExecutions := executions
-	mu.Unlock()
-	if gotExecutions != 1 {
-		t.Fatalf("start executions = %d, want one", gotExecutions)
-	}
-	if results[0].IsError {
-		t.Fatalf("first start = %#v, want success", results[0])
-	}
-	if results[1].IsError || !strings.Contains(results[1].Output, "duplicate_start_ignored") {
-		t.Fatalf("second start = %#v, want non-error duplicate notice", results[1])
-	}
-}
-
-func TestExplicitAppChangePackageConstraintsFromRunPrompt(t *testing.T) {
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "worker-run",
-		OwnerID:      "owner",
-		AgentProfile: agentprofile.VSuper,
-		Prompt:       `Use app_id "human-proof-chyron-chyron-seq-123", visibility "unlisted", and include marker "chyron-seq-123".`,
-	}))
-	if got := explicitAppChangePackageAppID(ctx); got != "human-proof-chyron-chyron-seq-123" {
-		t.Fatalf("explicit app_id = %q", got)
-	}
-	if got := explicitAppChangePackageVisibility(ctx); got != "unlisted" {
-		t.Fatalf("explicit visibility = %q", got)
-	}
-}
-
-func TestDelegateRequiresAppChangePackageHonorsExplicitNegativeInstruction(t *testing.T) {
-	tests := []struct {
-		name      string
-		objective string
-		want      bool
-	}{
-		{
-			name:      "positive package objective",
-			objective: "commit the candidate checkout and publish_app_change_package for an owner-pullable package",
-			want:      true,
-		},
-		{
-			name:      "negative app change package objective",
-			objective: "run a harmless ephemeral verification command, report the marker, and submit a precise worker update; do not edit Choir source and do not publish an AppChangePackage.",
-			want:      false,
-		},
-		{
-			name:      "negative tool name objective",
-			objective: "collect evidence only; do not call publish_app_change_package for this probe",
-			want:      false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := delegateRequiresAppChangePackage(agentprofile.VSuper, tt.objective); got != tt.want {
-				t.Fatalf("delegateRequiresAppChangePackage() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestExecuteToolsCoSuperSkipsDuplicateAppChangePackagePublish(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	var mu sync.Mutex
-	publishes := 0
-	if err := registry.Register(toolregistry.Tool{Name: "publish_app_change_package",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			mu.Lock()
-			publishes++
-			mu.Unlock()
-			return "publish ok", nil
-		}}); err != nil {
-		t.Fatalf("register publish_app_change_package: %v", err)
-	}
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "cosuper-run",
-		OwnerID:      "owner",
-		AgentProfile: agentprofile.CoSuper,
-	}))
-	calls := []types.ToolCall{
-		{ID: "export-1", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
-		{ID: "export-2", Name: "publish_app_change_package", Arguments: json.RawMessage(`{"repo_path":"Source/candidate","base_sha":"base","snapshot_id":"snap"}`)},
-	}
-
-	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-
-	mu.Lock()
-	gotPublishes := publishes
-	mu.Unlock()
-	if gotPublishes != 1 {
-		t.Fatalf("publishes executed = %d, want one", gotPublishes)
-	}
-	if results[0].IsError {
-		t.Fatalf("first publish = %#v, want success", results[0])
-	}
-	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate publish_app_change_package") {
-		t.Fatalf("second publish = %#v, want duplicate skip", results[1])
 	}
 }
 
@@ -1327,59 +1201,6 @@ func TestExecuteToolsCoSuperSkipsDuplicateBashCommand(t *testing.T) {
 	if !results[1].IsError || !strings.Contains(results[1].Output, "duplicate bash command") {
 		t.Fatalf("second bash = %#v, want duplicate skip", results[1])
 	}
-}
-
-func TestToolCommandEnvUsesPersistentScratchRoot(t *testing.T) {
-	filesRoot := t.TempDir()
-	t.Setenv("SANDBOX_FILES_ROOT", filesRoot)
-
-	env, err := toolCommandEnv("/tmp/ignored")
-	if err != nil {
-		t.Fatalf("toolCommandEnv: %v", err)
-	}
-
-	wantRoot := filepath.Join(filesRoot, ".choir-tool-cache")
-	for _, key := range []string{"TMPDIR", "GOTMPDIR", "GOCACHE", "GOMODCACHE"} {
-		value := envValue(env, key)
-		if !strings.HasPrefix(value, wantRoot+string(os.PathSeparator)) {
-			t.Fatalf("%s = %q, want under %q", key, value, wantRoot)
-		}
-		if _, err := os.Stat(value); err != nil {
-			t.Fatalf("%s dir %q not prepared: %v", key, value, err)
-		}
-	}
-}
-
-func TestToolCommandEnvAddsConfiguredBrowserToolDirsToPath(t *testing.T) {
-	filesRoot := t.TempDir()
-	t.Setenv("SANDBOX_FILES_ROOT", filesRoot)
-	t.Setenv("PATH", "/usr/bin")
-	t.Setenv("CHOIR_OBSCURA_BIN", "/nix/store/example-obscura/bin/obscura")
-	t.Setenv("CHOIR_PLAYWRIGHT_BIN", "/nix/store/example-playwright/bin/playwright")
-
-	env, err := toolCommandEnv("/tmp/ignored")
-	if err != nil {
-		t.Fatalf("toolCommandEnv: %v", err)
-	}
-	pathValue := envValue(env, "PATH")
-	for _, want := range []string{
-		"/usr/bin",
-		"/nix/store/example-obscura/bin",
-		"/nix/store/example-playwright/bin",
-	} {
-		if !pathListContains(pathValue, want) {
-			t.Fatalf("PATH = %q, missing %q", pathValue, want)
-		}
-	}
-}
-
-func pathListContains(raw, want string) bool {
-	for _, part := range filepath.SplitList(raw) {
-		if part == want {
-			return true
-		}
-	}
-	return false
 }
 
 func envValue(env []string, key string) string {
@@ -1429,139 +1250,5 @@ func TestExecuteToolsDoesNotCapResearcherSearchBatch(t *testing.T) {
 		if result.IsError {
 			t.Fatalf("result[%d] = %#v, want success", idx, result)
 		}
-	}
-}
-
-func TestExecuteToolsDoesNotHiddenChainWorkerDelegation(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	delegated := false
-	if err := registry.Register(toolregistry.Tool{Name: "request_worker_vm",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"worker_requested","handle":{"purpose":"tiny UX copy edit","worker_id":"worker-1","vm_id":"vm-1","sandbox_url":"http://worker"},"next_tool":"start_worker_delegation","start_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
-		}}); err != nil {
-		t.Fatalf("register request_worker_vm: %v", err)
-	}
-	if err := registry.Register(toolregistry.Tool{Name: "start_worker_delegation",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			delegated = true
-			return `{"status":"worker_run_completed","app_change_packages":[{"package_id":"package-worker-1","package_manifest_sha256":"manifest-sha"}]}`, nil
-		}}); err != nil {
-		t.Fatalf("register start_worker_delegation: %v", err)
-	}
-
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "super-run",
-		OwnerID:      "owner",
-		AgentProfile: agentprofile.Super,
-		Prompt:       "Full sweep objective goes here.",
-	}))
-	var emitted []string
-	calls := []types.ToolCall{
-		{ID: "lease", Name: "request_worker_vm", Arguments: json.RawMessage(`{"purpose":"tiny UX copy edit"}`)},
-	}
-
-	results := toolregistry.ExecuteToolBatch(ctx, registry, calls, func(kind types.EventKind, phase string, payload json.RawMessage) {
-		if kind != types.EventToolResult {
-			return
-		}
-		var event struct {
-			Tool string `json:"tool"`
-		}
-		if err := json.Unmarshal(payload, &event); err == nil {
-			emitted = append(emitted, event.Tool)
-		}
-	})
-
-	if len(results) != 1 || results[0].IsError {
-		t.Fatalf("results = %#v, want one successful request result", results)
-	}
-	if delegated {
-		t.Fatalf("start_worker_delegation was hidden-chained; super must regain a model turn before starting worker work")
-	}
-	if !strings.Contains(results[0].Output, `"next_tool":"start_worker_delegation"`) ||
-		strings.Contains(results[0].Output, `"delegation_status"`) ||
-		strings.Contains(results[0].Output, `"package-worker-1"`) {
-		t.Fatalf("request output = %s, want lease-only async guidance", results[0].Output)
-	}
-	if strings.Join(emitted, ",") != "request_worker_vm" {
-		t.Fatalf("emitted tool results = %#v, want request only", emitted)
-	}
-}
-
-func TestExecuteToolsDoesNotPropagateHiddenWorkerDelegationBlocker(t *testing.T) {
-	registry := toolregistry.NewToolRegistry()
-	delegated := false
-	if err := registry.Register(toolregistry.Tool{Name: "request_worker_vm",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			return `{"status":"worker_requested","next_tool":"start_worker_delegation","start_args":{"worker_sandbox_url":"http://worker","worker_id":"worker-1","vm_id":"vm-1","profile":"vsuper"}}`, nil
-		}}); err != nil {
-		t.Fatalf("register request_worker_vm: %v", err)
-	}
-	if err := registry.Register(toolregistry.Tool{Name: "start_worker_delegation",
-		Func: func(ctx context.Context, args json.RawMessage) (string, error) {
-			delegated = true
-			return `{"status":"worker_run_incomplete","completion_blocker":"vsuper_completed_without_required_app_change_package","terminal_error":"worker vsuper completed without publish_app_change_package evidence","app_change_packages":[],"worker_event_summary":["tool.result delegate_worker_vm returned no package"]}`, nil
-		}}); err != nil {
-		t.Fatalf("register start_worker_delegation: %v", err)
-	}
-
-	ctx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(&types.RunRecord{
-		RunID:        "super-run",
-		OwnerID:      "owner",
-		AgentProfile: agentprofile.Super,
-		Prompt:       "Publish exactly one AppChangePackage.",
-	}))
-	results := toolregistry.ExecuteToolBatch(ctx, registry, []types.ToolCall{
-		{ID: "lease", Name: "request_worker_vm", Arguments: json.RawMessage(`{"purpose":"package experiment"}`)},
-	}, func(kind types.EventKind, phase string, payload json.RawMessage) {})
-	if len(results) != 1 || results[0].IsError {
-		t.Fatalf("results = %#v, want one successful request result", results)
-	}
-	var output map[string]any
-	if err := json.Unmarshal([]byte(results[0].Output), &output); err != nil {
-		t.Fatalf("decode request output: %v\n%s", err, results[0].Output)
-	}
-	if delegated {
-		t.Fatalf("start_worker_delegation was hidden-chained; blockers must come from explicit observe/finish calls")
-	}
-	if output["next_tool"] != "start_worker_delegation" {
-		t.Fatalf("next_tool = %v, want start_worker_delegation\noutput=%s", output["next_tool"], results[0].Output)
-	}
-	for _, forbidden := range []string{"delegation_status", "completion_blocker", "delegation_incomplete", "chained_delegation_output"} {
-		if _, ok := output[forbidden]; ok {
-			t.Fatalf("hidden delegation field %q present in request output: %s", forbidden, results[0].Output)
-		}
-	}
-}
-
-func TestWorkerRunEventSummaryExposesSpawnAndChannelEvidence(t *testing.T) {
-	spawnPayload, _ := json.Marshal(map[string]any{
-		"tool":     "spawn_agent",
-		"is_error": false,
-		"output":   `{"profile":"co-super","role":"co-super","loop_id":"child-worker"}`,
-	})
-	channelPayload, _ := json.Marshal(map[string]any{
-		"from_agent_id": "vsuper",
-		"to_agent_id":   "co-super-worker",
-		"role":          "worker",
-		"content":       "verify the marker and report pass/fail",
-	})
-	events := []types.EventRecord{
-		{Seq: 1, Kind: types.EventToolResult, Payload: spawnPayload},
-		{Seq: 2, Kind: types.EventChannelMessage, Payload: channelPayload},
-	}
-
-	if got := collectWorkerSpawnProfiles(events); len(got) != 1 || got[0] != agentprofile.CoSuper {
-		t.Fatalf("spawned profiles = %#v, want co-super", got)
-	}
-	if got := countWorkerChannelMessages(events); got != 1 {
-		t.Fatalf("channel message count = %d, want 1", got)
-	}
-	summary := summarizeWorkerRunEvents(events)
-	if len(summary) != 2 {
-		t.Fatalf("summary length = %d, want 2: %#v", len(summary), summary)
-	}
-	if summary[0]["tool"] != "spawn_agent" || summary[1]["role"] != "worker" {
-		t.Fatalf("summary = %#v, want spawn tool and worker channel role", summary)
 	}
 }

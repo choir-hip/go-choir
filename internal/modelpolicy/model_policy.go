@@ -316,10 +316,6 @@ provider = "chatgpt"
 model = "gpt-5.5"
 reasoning = "high"
 
-[roles.vsuper]
-provider = "deepseek"
-model = "deepseek-v4-flash"
-
 [roles.co-super]
 provider = "deepseek"
 model = "deepseek-v4-flash"
@@ -361,7 +357,6 @@ func fallbackPolicy(_ provideriface.Config) Policy {
 		Roles: map[string]provideriface.LLMSelection{
 			agentprofile.Conductor:  chatGPTMini,
 			agentprofile.Super:      chatGPTForeground,
-			agentprofile.VSuper:     {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			agentprofile.CoSuper:    {Provider: defaultDeepSeekProvider, Model: defaultConductorModel, Source: "platform_fallback"},
 			agentprofile.Researcher: chatGPTMini,
 			agentprofile.Texture:    chatGPTWire,

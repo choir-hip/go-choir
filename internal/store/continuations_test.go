@@ -16,7 +16,7 @@ func TestRunContinuationsRecordSelectedAndStartedNextGoal(t *testing.T) {
 		SourceRunID:      "run-source",
 		Objective:        "continue with uploads after launcher proof",
 		Reason:           "app adoption produced a verified candidate",
-		AuthorityProfile: "vsuper",
+		AuthorityProfile: "super",
 		LeaseSeconds:     3600,
 		Details:          map[string]any{"mission": "choir-in-choir"},
 	})
@@ -31,7 +31,7 @@ func TestRunContinuationsRecordSelectedAndStartedNextGoal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get continuation: %v", err)
 	}
-	if loaded.Status != types.RunContinuationSelected || loaded.AuthorityProfile != "vsuper" {
+	if loaded.Status != types.RunContinuationSelected || loaded.AuthorityProfile != "super" {
 		t.Fatalf("loaded continuation mismatch: %+v", loaded)
 	}
 	if _, err := s.GetRunContinuation(ctx, "owner-2", selected.ContinuationID); err != ErrNotFound {

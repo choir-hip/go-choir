@@ -61,7 +61,6 @@ func TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts(t *testing.T) 
 		MachineCPUCount:   2,
 		MachineMemSizeMib: 4096,
 		PersistentDir:     "/state/vm-stale/persist",
-		SourceVMID:        "vm-source",
 		GatewayToken:      "sandbox-token",
 		Epoch:             7,
 		ComputerKind:      "active",
@@ -74,9 +73,6 @@ func TestRefreshConfigForCurrentDeployUsesCurrentMicroVMArtifacts(t *testing.T) 
 	got := refreshConfigForCurrentDeploy(old, defaults)
 	if got.KernelImagePath != "" || got.InitrdPath != "" || got.RootfsPath != "" || got.StoreDiskPath != "" || got.KernelParams != "" {
 		t.Fatalf("refresh config kept stale boot artifacts: %+v", got)
-	}
-	if got.SourceVMID != "" {
-		t.Fatalf("refresh config kept stale source VM copy request: %+v", got)
 	}
 	// Machine shape (CPU/mem) is cleared so refresh picks up current manager
 	// defaults (e.g., when VM_MEM_MIB changes between deploys).
@@ -100,11 +96,9 @@ func TestMergeVMConfigOverridesFillsDeployRefreshIdentity(t *testing.T) {
 		VMID:              "vm-existing",
 		MachineCPUCount:   4,
 		MachineMemSizeMib: 8192,
-		ComputerKind:      "worker",
+		ComputerKind:      "active",
 		OwnerID:           "owner-1",
 		DesktopID:         "primary",
-		WorkerID:          "worker-1",
-		CandidateID:       "worker-1",
 	}
 
 	got := mergeVMConfigOverrides(old, overrides)
@@ -114,7 +108,7 @@ func TestMergeVMConfigOverridesFillsDeployRefreshIdentity(t *testing.T) {
 	if got.MachineCPUCount != 4 || got.MachineMemSizeMib != 8192 {
 		t.Fatalf("merge did not apply machine shape overrides: %+v", got)
 	}
-	if got.ComputerKind != "worker" || got.OwnerID != "owner-1" || got.DesktopID != "primary" || got.WorkerID != "worker-1" || got.CandidateID != "worker-1" {
+	if got.ComputerKind != "active" || got.OwnerID != "owner-1" || got.DesktopID != "primary" {
 		t.Fatalf("merge did not apply guest identity overrides: %+v", got)
 	}
 }
@@ -674,121 +668,6 @@ func TestDataImageSizeCoversSelfDevelopmentWorkspace(t *testing.T) {
 	}
 }
 
-func TestCopySparseFileClonesDataImageContent(t *testing.T) {
-	tmpDir := t.TempDir()
-	mgr := NewManager(DefaultManagerConfig())
-
-	src := filepath.Join(tmpDir, "source", "data.img")
-	dst := filepath.Join(tmpDir, "target", "data.img")
-	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
-		t.Fatalf("MkdirAll source: %v", err)
-	}
-	if err := os.WriteFile(src, []byte("prefix"), 0o644); err != nil {
-		t.Fatalf("WriteFile source: %v", err)
-	}
-	f, err := os.OpenFile(src, os.O_WRONLY, 0o644)
-	if err != nil {
-		t.Fatalf("OpenFile source: %v", err)
-	}
-	if _, err := f.Seek(1024*1024, 0); err != nil {
-		t.Fatalf("Seek source: %v", err)
-	}
-	if _, err := f.Write([]byte("suffix")); err != nil {
-		t.Fatalf("Write suffix: %v", err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatalf("Close source: %v", err)
-	}
-
-	if err := mgr.copySparseFile(src, dst); err != nil {
-		t.Fatalf("copySparseFile: %v", err)
-	}
-	srcData, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatalf("ReadFile source: %v", err)
-	}
-	dstData, err := os.ReadFile(dst)
-	if err != nil {
-		t.Fatalf("ReadFile destination: %v", err)
-	}
-	if string(dstData) != string(srcData) {
-		t.Fatalf("destination content mismatch")
-	}
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		t.Fatalf("Stat source: %v", err)
-	}
-	dstInfo, err := os.Stat(dst)
-	if err != nil {
-		t.Fatalf("Stat destination: %v", err)
-	}
-	if dstInfo.Size() != srcInfo.Size() {
-		t.Fatalf("destination size = %d, want %d", dstInfo.Size(), srcInfo.Size())
-	}
-}
-
-func TestBootVMRejectsRunningSourceDataImageFork(t *testing.T) {
-	tmpDir := t.TempDir()
-	cfg := DefaultManagerConfig()
-	cfg.StateDir = tmpDir
-	cfg.StoreDiskPath = "/nonexistent/store.erofs"
-	mgr := NewManager(cfg)
-
-	mgr.mu.Lock()
-	mgr.vms["source-vm"] = &VMInstance{
-		Config: VMConfig{VMID: "source-vm"},
-		State:  StateRunning,
-	}
-	mgr.mu.Unlock()
-
-	_, err := mgr.BootVM(VMConfig{
-		VMID:       "target-vm",
-		SourceVMID: "source-vm",
-	})
-	if err == nil {
-		t.Fatal("expected running source data-image fork to fail")
-	}
-	if !strings.Contains(err.Error(), "refusing unsafe live data image copy") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBootVMClonesSourceDataImageBeforeLaunch(t *testing.T) {
-	tmpDir := t.TempDir()
-	cfg := DefaultManagerConfig()
-	cfg.StateDir = tmpDir
-	cfg.StoreDiskPath = "/nonexistent/store.erofs"
-	cfg.KernelImagePath = "/nonexistent/kernel"
-	cfg.RootfsPath = "/nonexistent/rootfs"
-	mgr := NewManager(cfg)
-
-	sourceData := filepath.Join(tmpDir, "source-vm", "data.img")
-	if err := os.MkdirAll(filepath.Dir(sourceData), 0o755); err != nil {
-		t.Fatalf("MkdirAll source VM: %v", err)
-	}
-	want := []byte("source filesystem bytes")
-	if err := os.WriteFile(sourceData, want, 0o644); err != nil {
-		t.Fatalf("WriteFile source data image: %v", err)
-	}
-
-	_, err := mgr.BootVM(VMConfig{
-		VMID:       "target-vm",
-		SourceVMID: "source-vm",
-	})
-	if err == nil {
-		t.Fatal("expected launch to fail with nonexistent Firecracker inputs")
-	}
-
-	targetData := filepath.Join(tmpDir, "target-vm", "data.img")
-	got, readErr := os.ReadFile(targetData)
-	if readErr != nil {
-		t.Fatalf("ReadFile target data image: %v", readErr)
-	}
-	if string(got) != string(want) {
-		t.Fatalf("target data image = %q, want %q", string(got), string(want))
-	}
-}
-
 func TestBootVMExpandsExistingSmallDataImageBeforeLaunch(t *testing.T) {
 	tmpDir := t.TempDir()
 	binDir := filepath.Join(tmpDir, "bin")
@@ -1313,24 +1192,6 @@ func TestBuildFirecrackerConfig_LegacyBootIncludesRuntimeServiceURLs(t *testing.
 	}
 }
 
-func TestBuildFirecrackerConfigUsesConstructedDataDevice(t *testing.T) {
-	cfg := DefaultManagerConfig()
-	cfg.StateDir = t.TempDir()
-	mgr := NewManager(cfg)
-	constructed := filepath.Join(cfg.StateDir, "vm-constructed", "data.img")
-	fcConfig := mgr.buildFirecrackerConfig(VMConfig{
-		VMID:           "vm-constructed",
-		StoreDiskPath:  "/nix/store/storedisk.erofs",
-		DataDevicePath: constructed,
-		KernelParams:   "root=fstab init=/nix/store/init",
-		GuestPort:      8085,
-	}, 9000)
-	drives := fcConfig["drives"].([]map[string]interface{})
-	if got := drives[len(drives)-1]["path_on_host"]; got != constructed {
-		t.Fatalf("data drive path = %v, want constructed path %s", got, constructed)
-	}
-}
-
 func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T) {
 	cfg := DefaultManagerConfig()
 	cfg.StateDir = t.TempDir()
@@ -1350,12 +1211,9 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		MachineCPUCount:   2,
 		MachineMemSizeMib: 512,
 		Epoch:             1,
-		ComputerKind:      "worker",
+		ComputerKind:      "active",
 		OwnerID:           "owner@example.com",
 		DesktopID:         "primary",
-		WorkerID:          "worker-123",
-		CandidateID:       "worker-123",
-		CodeRef:           "code:sha256:abc123",
 	}
 
 	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9000)
@@ -1393,12 +1251,9 @@ func TestBuildFirecrackerConfig_MicrovmUsesStoreDiskAndKernelParams(t *testing.T
 		"choir.source_service_url=http://10.200.0.1:8787",
 		"choir.source_service_runtime_url=http://127.0.0.1:8085",
 		"choir.source_service_runtime_owner_id=owner@example.com",
-		"choir.computer_kind=worker",
+		"choir.computer_kind=active",
 		"choir.owner_id=owner@example.com",
 		"choir.desktop_id=primary",
-		"choir.worker_id=worker-123",
-		"choir.candidate_id=worker-123",
-		"choir.code_ref=code:sha256:abc123",
 		"ip=10.200.0.2::10.200.0.1:255.255.255.252::eth0:off",
 	} {
 		if !containsStr(bootArgs, arg) {
@@ -1635,6 +1490,60 @@ func TestBuildFirecrackerConfig_IncludesGatewayTokenBootstrapParam(t *testing.T)
 	bootArgs := fcConfig["boot-source"].(map[string]interface{})["boot_args"].(string)
 	if !containsStr(bootArgs, "choir.gateway_token=vm-gateway-token-test:abcdef123456") {
 		t.Fatalf("expected gateway token bootstrap arg in %q", bootArgs)
+	}
+}
+
+func TestComputerCredentialUsesDedicatedDiskNotKernelArguments(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+	cfg.KernelImagePath = "/opt/go-choir/guest/vmlinux"
+	cfg.StoreDiskPath = "/opt/go-choir/guest/storedisk.erofs"
+	cfg.KernelParams = "root=fstab init=/nix/store/example-init"
+	fakeMkfs := filepath.Join(cfg.StateDir, "mkfs.ext4")
+	if err := os.WriteFile(fakeMkfs, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg.MkfsExt4Path = fakeMkfs
+	mgr := NewManager(cfg)
+	vmStateDir := filepath.Join(cfg.StateDir, "vm-credential")
+	if err := os.MkdirAll(vmStateDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if os.Geteuid() != 0 || os.Getegid() != 0 {
+		if _, err := mgr.createCredentialDisk(vmStateDir, "signed-envelope-secret"); err == nil || !strings.Contains(err.Error(), "requires root") {
+			t.Fatalf("non-root credential construction error = %v", err)
+		}
+		return
+	}
+	secret := "signed-envelope-secret"
+	credentialDisk, err := mgr.createCredentialDisk(vmStateDir, secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(credentialDisk)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
+		t.Fatalf("credential disk = %#v, %v", info, err)
+	}
+	vmCfg := VMConfig{
+		VMID: "vm-credential", KernelImagePath: cfg.KernelImagePath,
+		StoreDiskPath: cfg.StoreDiskPath, KernelParams: cfg.KernelParams,
+		GuestPort: 8085, MachineCPUCount: 2, MachineMemSizeMib: 512,
+		ComputerCredentialEnvelope: secret, credentialDiskPath: credentialDisk,
+	}
+	fcConfig := mgr.buildFirecrackerConfig(vmCfg, 9000)
+	bootArgs := fcConfig["boot-source"].(map[string]interface{})["boot_args"].(string)
+	if strings.Contains(bootArgs, secret) || strings.Contains(bootArgs, "computer_credential_envelope") {
+		t.Fatalf("credential leaked into kernel arguments: %q", bootArgs)
+	}
+	var credentialDrive map[string]interface{}
+	for _, drive := range fcConfig["drives"].([]map[string]interface{}) {
+		if drive["drive_id"] == "credential" {
+			credentialDrive = drive
+			break
+		}
+	}
+	if credentialDrive == nil || credentialDrive["path_on_host"] != credentialDisk || credentialDrive["is_read_only"] != false {
+		t.Fatalf("credential drive = %#v", credentialDrive)
 	}
 }
 

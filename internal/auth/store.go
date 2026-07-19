@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 	key_hash     TEXT    NOT NULL,
 	label        TEXT    NOT NULL,
 	scopes       TEXT    NOT NULL DEFAULT '[]',
+	computer_id  TEXT,
 	created_at   DATETIME NOT NULL,
 	expires_at   DATETIME,
 	last_used_at DATETIME,
@@ -137,6 +138,8 @@ var schemaMigrations = []string{
 	`ALTER TABLE refresh_sessions ADD COLUMN device_info TEXT`,
 	// M7: Added last_used_at for session usage tracking.
 	`ALTER TABLE refresh_sessions ADD COLUMN last_used_at DATETIME`,
+	// Self-development keys are explicitly bound to one stable ComputerID.
+	`ALTER TABLE api_keys ADD COLUMN computer_id TEXT`,
 }
 
 // User represents a row in the users table.
@@ -706,6 +709,7 @@ type APIKey struct {
 	UserID     string
 	Label      string
 	Scopes     []string
+	ComputerID string
 	CreatedAt  time.Time
 	ExpiresAt  *time.Time
 	LastUsedAt *time.Time
@@ -734,19 +738,25 @@ func generateAPIKeySecret() (secret, keyHash string, err error) {
 // The secret is only returned once at creation time and is never stored in
 // plaintext.
 func (s *Store) CreateAPIKey(ctx context.Context, userID, label string, scopes []string, expiresAt *time.Time) (id, secret string, err error) {
+	return s.CreateComputerScopedAPIKey(ctx, userID, label, scopes, "", expiresAt)
+}
+
+// CreateComputerScopedAPIKey creates an API key whose authority is optionally
+// bound to one stable ComputerID. Callers must require a non-empty binding for
+// every computer-scoped scope.
+func (s *Store) CreateComputerScopedAPIKey(ctx context.Context, userID, label string, scopes []string, computerID string, expiresAt *time.Time) (id, secret string, err error) {
 	if userID == "" {
 		return "", "", errors.New("create api key: user_id is required")
 	}
 	if label == "" {
 		return "", "", errors.New("create api key: label is required")
 	}
+	computerID = strings.TrimSpace(computerID)
 
 	secret, keyHash, err := generateAPIKeySecret()
 	if err != nil {
 		return "", "", err
 	}
-
-	// Ensure scopes is a non-nil slice so json.Marshal produces "[]" not "null".
 	if scopes == nil {
 		scopes = []string{}
 	}
@@ -754,24 +764,26 @@ func (s *Store) CreateAPIKey(ctx context.Context, userID, label string, scopes [
 	if err != nil {
 		return "", "", fmt.Errorf("marshal scopes: %w", err)
 	}
-
 	id = "ak_" + uuid.NewString()
 	now := time.Now().UTC()
-
 	_, err = s.db.ExecContext(ctx,
-		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		id, userID, keyHash, label, string(scopesJSON), now, expiresAt,
+		"INSERT INTO api_keys (id, user_id, key_hash, label, scopes, computer_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		id, userID, keyHash, label, string(scopesJSON), nullableAPIKeyComputerID(computerID), now, expiresAt,
 	)
 	if err != nil {
 		return "", "", fmt.Errorf("create api key: %w", err)
 	}
-
 	return id, secret, nil
 }
 
-// GetAPIKeyByHash looks up an API key by its SHA-256 hash. It excludes revoked
-// keys (revoked_at IS NOT NULL) and returns sql.ErrNoRows if no active key
-// matches. The caller is responsible for checking expiry.
+func nullableAPIKeyComputerID(computerID string) any {
+	if computerID == "" {
+		return nil
+	}
+	return computerID
+}
+
+// GetAPIKeyByHash looks up an active API key by its SHA-256 hash.
 func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
 	var (
 		ak         APIKey
@@ -781,13 +793,12 @@ func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, e
 		revokedAt  sql.NullTime
 	)
 	err := s.db.QueryRowContext(ctx,
-		"SELECT id, user_id, label, scopes, created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL",
+		"SELECT id, user_id, label, scopes, COALESCE(computer_id, ''), created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL",
 		keyHash,
-	).Scan(&ak.ID, &ak.UserID, &ak.Label, &scopesJSON, &ak.CreatedAt, &expiresAt, &lastUsedAt, &revokedAt)
+	).Scan(&ak.ID, &ak.UserID, &ak.Label, &scopesJSON, &ak.ComputerID, &ak.CreatedAt, &expiresAt, &lastUsedAt, &revokedAt)
 	if err != nil {
 		return nil, err
 	}
-
 	if err := json.Unmarshal([]byte(scopesJSON), &ak.Scopes); err != nil {
 		return nil, fmt.Errorf("parse api key scopes: %w", err)
 	}
@@ -800,16 +811,13 @@ func (s *Store) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, e
 	if revokedAt.Valid {
 		ak.RevokedAt = &revokedAt.Time
 	}
-
 	return &ak, nil
 }
 
-// ListAPIKeys returns all API keys for the given user, ordered by created_at
-// descending. Revoked keys are included (with revoked_at set) so the user can
-// see their full key history. Secrets are never returned.
+// ListAPIKeys returns all API keys for the given user, newest first.
 func (s *Store) ListAPIKeys(ctx context.Context, userID string) ([]APIKey, error) {
 	rows, err := s.db.QueryContext(ctx,
-		"SELECT id, user_id, label, scopes, created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC",
+		"SELECT id, user_id, label, scopes, COALESCE(computer_id, ''), created_at, expires_at, last_used_at, revoked_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC",
 		userID,
 	)
 	if err != nil {
@@ -826,7 +834,7 @@ func (s *Store) ListAPIKeys(ctx context.Context, userID string) ([]APIKey, error
 			lastUsedAt sql.NullTime
 			revokedAt  sql.NullTime
 		)
-		if err := rows.Scan(&ak.ID, &ak.UserID, &ak.Label, &scopesJSON, &ak.CreatedAt, &expiresAt, &lastUsedAt, &revokedAt); err != nil {
+		if err := rows.Scan(&ak.ID, &ak.UserID, &ak.Label, &scopesJSON, &ak.ComputerID, &ak.CreatedAt, &expiresAt, &lastUsedAt, &revokedAt); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(scopesJSON), &ak.Scopes); err != nil {

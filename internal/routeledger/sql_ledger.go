@@ -2,7 +2,6 @@ package routeledger
 
 import (
 	"context"
-	"crypto/ed25519"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,10 +13,6 @@ import (
 )
 
 const routeLedgerSchema = `
-CREATE TABLE IF NOT EXISTS computer_version_route_authority_config (
-  config_id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
-  public_key_base64 VARCHAR(64) NOT NULL
-);
 CREATE TABLE IF NOT EXISTS computer_version_route_authorization_evidence (
   evidence_ref VARCHAR(96) NOT NULL PRIMARY KEY,
   evidence_kind VARCHAR(32) NOT NULL,
@@ -60,6 +55,12 @@ CREATE TABLE IF NOT EXISTS computer_version_route_transition_receipts (
   CONSTRAINT route_receipt_artifact_program_ref_fk FOREIGN KEY (new_artifact_program_ref) REFERENCES computer_version_artifact_programs(artifact_program_ref),
   CONSTRAINT route_receipt_approval_ref_fk FOREIGN KEY (approval_ref) REFERENCES computer_version_route_authorization_evidence(evidence_ref),
   CONSTRAINT route_receipt_certificate_ref_fk FOREIGN KEY (promotion_certificate_ref) REFERENCES computer_version_route_authorization_evidence(evidence_ref)
+);
+CREATE TABLE IF NOT EXISTS computer_version_route_authority_modes (
+  route_slot_id VARCHAR(512) NOT NULL PRIMARY KEY,
+  authority_mode VARCHAR(32) NOT NULL,
+  certificate_ref VARCHAR(96) NOT NULL,
+  protected_at DATETIME(6) NOT NULL
 );`
 
 type SQLLedger struct {
@@ -69,13 +70,6 @@ type SQLLedger struct {
 
 func NewSQLLedger(db *sql.DB) *SQLLedger {
 	return &SQLLedger{db: db, now: time.Now}
-}
-
-func (l *SQLLedger) ConfigurePromotionAuthority(ctx context.Context, publicKey ed25519.PublicKey) error {
-	if l == nil || l.db == nil {
-		return fmt.Errorf("route ledger: SQL database is required")
-	}
-	return configurePinnedPromotionKey(ctx, l.db, publicKey)
 }
 
 func (l *SQLLedger) EnsureSchema(ctx context.Context) error {
@@ -110,14 +104,14 @@ func (l *SQLLedger) Resolve(ctx context.Context, slotID string) (Slot, Transitio
 	return slot, receipt, nil
 }
 
-func (l *SQLLedger) ApplySignedTransition(ctx context.Context, command TransitionCommand, evidence []AuthorizationEvidence) (Slot, TransitionReceipt, error) {
+func (l *SQLLedger) ApplySelfDevelopmentTransition(ctx context.Context, command TransitionCommand, evidence []AuthorizationEvidence) (Slot, TransitionReceipt, error) {
 	if len(evidence) == 0 {
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: atomic transition evidence is required")
 	}
 	return l.transitionValidated(ctx, command, evidence, true)
 }
 
-func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionCommand, evidence []AuthorizationEvidence, requireSignedEnvelope bool) (Slot, TransitionReceipt, error) {
+func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionCommand, evidence []AuthorizationEvidence, protectSelfDevelopment bool) (Slot, TransitionReceipt, error) {
 	if l == nil || l.db == nil {
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: SQL database is required")
 	}
@@ -132,15 +126,6 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 	defer func() { _ = tx.Rollback() }()
 	if err := computerversion.VerifySQLInputsInTransition(ctx, tx, command.New); err != nil {
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: verify transition inputs: %w", err)
-	}
-	if requireSignedEnvelope {
-		publicKey, err := queryPinnedPromotionKey(ctx, tx)
-		if err != nil {
-			return Slot{}, TransitionReceipt{}, err
-		}
-		if err := validateSignedExecution(command, evidence, publicKey); err != nil {
-			return Slot{}, TransitionReceipt{}, err
-		}
 	}
 	for _, item := range evidence {
 		if _, err := pinAuthorizationEvidenceSQL(ctx, tx, item); err != nil {
@@ -242,6 +227,11 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 		VALUES (?, ?, ?, ?, ?, ?)`, command.RouteSlotID, receipt.New.CodeRef, receipt.New.ArtifactProgramRef, generation, receipt.ID, receipt.CommittedAt); err != nil {
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: bootstrap slot: %w", err)
 	}
+	if protectSelfDevelopment {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO computer_version_route_authority_modes (route_slot_id,authority_mode,certificate_ref,protected_at) VALUES (?,'self_development_certificate',?,?) ON DUPLICATE KEY UPDATE authority_mode=VALUES(authority_mode),certificate_ref=VALUES(certificate_ref),protected_at=VALUES(protected_at)`, command.RouteSlotID, command.PromotionCertificateRef, receipt.CommittedAt); err != nil {
+			return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: protect self-development route: %w", err)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return Slot{}, TransitionReceipt{}, fmt.Errorf("route ledger: commit transition: %w", err)
 	}
@@ -250,6 +240,21 @@ func (l *SQLLedger) transitionValidated(ctx context.Context, command TransitionC
 	}
 	slot := Slot{ID: command.RouteSlotID, Current: command.New, Generation: generation, LatestReceiptID: receipt.ID}
 	return slot, receipt, nil
+}
+
+func (l *SQLLedger) SelfDevelopmentRouteProtected(ctx context.Context, slotID string) (bool, error) {
+	if l == nil || l.db == nil {
+		return false, fmt.Errorf("route ledger: SQL database is required")
+	}
+	var mode string
+	err := l.db.QueryRowContext(ctx, `SELECT authority_mode FROM computer_version_route_authority_modes WHERE route_slot_id=?`, slotID).Scan(&mode)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return mode == "self_development_certificate", nil
 }
 
 type queryRower interface {

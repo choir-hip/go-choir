@@ -9,9 +9,8 @@ func TestCanonical(t *testing.T) {
 	t.Parallel()
 
 	aliases := map[string][]string{
-		Researcher: {"researcher", "researchers", "research", "research-agent", "research-worker", "web-research", "web-researcher", " WEB_RESEARCHER "},
+		Researcher: {"researcher", "researchers", "research", "research-agent", "web-research", "web-researcher", " WEB_RESEARCHER "},
 		CoSuper:    {"cosuper", "co-super", "coagent", "co-agent", " CO_AGENT "},
-		VSuper:     {"vsuper", "v-super", "virtual-super", "vm-super", "candidate-super", " CANDIDATE_SUPER "},
 		Texture:    {"texture", "texture-agent", "document-agent", " DOCUMENT_AGENT "},
 		Processor:  {"processor", "news-processor", "source-processor", "universal-wire-processor", " NEWS_PROCESSOR "},
 		Reconciler: {"reconciler", "news-reconciler", "story-reconciler", "corpus-reconciler", "universal-wire-reconciler", " STORY_RECONCILER "},
@@ -48,15 +47,6 @@ func TestCanonical(t *testing.T) {
 func TestPolicyFor(t *testing.T) {
 	t.Parallel()
 
-	allWorkerCapabilities := Policy{
-		AllowWritableFiles:        true,
-		AllowResearchTools:        true,
-		AllowEvidenceTools:        true,
-		AllowMemoryTools:          true,
-		AllowModelDiagnosticTools: true,
-		AllowCodingTools:          true,
-		AllowCoAgentTools:         true,
-	}
 	tests := map[string]Policy{
 		Conductor: {
 			Profile: Conductor, AllowCoAgentTools: true,
@@ -83,25 +73,14 @@ func TestPolicyFor(t *testing.T) {
 			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
 			AllowedDelegateTargets: []string{Texture},
 		},
-		Email: {Profile: Email},
-		CoSuper: func() Policy {
-			p := allWorkerCapabilities
-			p.Profile = CoSuper
-			p.AllowedDelegateTargets = []string{Researcher}
-			return p
-		}(),
-		VSuper: func() Policy {
-			p := allWorkerCapabilities
-			p.Profile = VSuper
-			p.AllowedDelegateTargets = []string{Researcher, CoSuper}
-			return p
-		}(),
-		Super: func() Policy {
-			p := allWorkerCapabilities
-			p.Profile = Super
-			p.AllowedDelegateTargets = []string{Researcher, CoSuper}
-			return p
-		}(),
+		Email:   {Profile: Email},
+		CoSuper: {Profile: CoSuper},
+		Super: {
+			Profile: Super, AllowReadOnlyFiles: true, AllowResearchTools: true,
+			AllowEvidenceTools: true, AllowMemoryTools: true,
+			AllowModelDiagnosticTools: true, AllowCoAgentTools: true,
+			AllowedDelegateTargets: []string{Researcher, CoSuper},
+		},
 	}
 	for profile, want := range tests {
 		if got := PolicyFor(profile); !reflect.DeepEqual(got, want) {
@@ -132,9 +111,7 @@ func TestCanDelegate(t *testing.T) {
 		{Processor, Texture, true},
 		{Reconciler, Texture, true},
 		{Texture, Researcher, true},
-		{CoSuper, Researcher, true},
-		{VSuper, Researcher, true},
-		{VSuper, "co_agent", true},
+		{CoSuper, Researcher, false},
 		{Super, Researcher, true},
 		{Super, CoSuper, true},
 		{Researcher, Texture, false},

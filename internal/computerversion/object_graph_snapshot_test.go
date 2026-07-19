@@ -174,3 +174,22 @@ func decodeObjectGraphHeadPayload(t *testing.T, value string) objectGraphHeadTes
 	}
 	return payload
 }
+
+func assertObservationBundleKinds(t *testing.T, got, want []ObservationKind) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("observation kinds = %#v, want %#v", got, want)
+	}
+	counts := make(map[ObservationKind]int, len(want))
+	for _, kind := range want {
+		counts[kind]++
+	}
+	for _, kind := range got {
+		counts[kind]--
+	}
+	for kind, count := range counts {
+		if count != 0 {
+			t.Fatalf("observation kinds = %#v, want %#v (difference %s=%d)", got, want, kind, count)
+		}
+	}
+}

@@ -258,7 +258,7 @@ func (rt *Handler) isEligibleWorkerMessage(ctx context.Context, docID string, me
 		return false, err
 	}
 	switch agentProfileForRun(&run) {
-	case agentprofile.Researcher, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
+	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
 		cache[runID] = true
 		return true, nil
 	default:

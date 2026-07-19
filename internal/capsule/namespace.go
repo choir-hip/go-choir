@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	gonso "github.com/cpuguy83/gonso"
 	"github.com/containerd/cgroups/v3/cgroup2"
+	gonso "github.com/cpuguy83/gonso"
 )
 
 // NamespaceSet creates and manages Linux namespaces for a capsule.

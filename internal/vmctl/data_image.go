@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const dataImageFileName = "data.img"
@@ -71,4 +72,36 @@ func dataImageResponseFromStats(stats DataImageStats) *dataImageResponse {
 		CapBytes:      stats.CapBytes,
 		StateDirBytes: stats.StateDirBytes,
 	}
+}
+
+func vmStateDirUsageBytes(stateDir, vmID string) int64 {
+	vmID = strings.TrimSpace(vmID)
+	if vmID == "" {
+		return 0
+	}
+	root := filepath.Clean(stateDir)
+	if root == "." || root == string(os.PathSeparator) {
+		return 0
+	}
+	dir := filepath.Clean(filepath.Join(root, vmID))
+	if dir == root || !strings.HasPrefix(dir, root+string(os.PathSeparator)) {
+		return 0
+	}
+	var total int64
+	_ = filepath.WalkDir(dir, func(_ string, d os.DirEntry, err error) error {
+		if err != nil || d == nil {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Blocks > 0 {
+			total += stat.Blocks * 512
+		} else if info.Mode().IsRegular() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }

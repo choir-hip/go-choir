@@ -3,6 +3,7 @@ package platform
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -12,7 +13,12 @@ import (
 )
 
 type Handler struct {
-	service *Service
+	service              *Service
+	eventCAS             *ComputerEventCAS
+	eventArtifacts       *EventArtifactService
+	eventAuth            EventCapabilityAuthorizer
+	selfDevelopmentModes *SelfDevelopmentModeCAS
+	checkpointAuthority  *CheckpointAuthority
 }
 
 type healthResponse struct {
@@ -28,6 +34,33 @@ type apiError struct {
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
+}
+
+type EventCapabilityAuthorizer interface {
+	Authorize(r *http.Request, computerID, requiredScope string) error
+}
+
+func (h *Handler) ConfigureComputerEvents(cas *ComputerEventCAS, artifacts *EventArtifactService, auth EventCapabilityAuthorizer) error {
+	if h == nil || cas == nil || artifacts == nil || auth == nil {
+		return fmt.Errorf("corpusd handler: complete computer event dependencies are required")
+	}
+	h.eventCAS = cas
+	h.eventArtifacts = artifacts
+	h.eventAuth = auth
+	checkpoints, err := NewCheckpointAuthority(cas, h.service)
+	if err != nil {
+		return err
+	}
+	h.checkpointAuthority = checkpoints
+	return nil
+}
+
+func (h *Handler) ConfigureSelfDevelopmentModes(modes *SelfDevelopmentModeCAS) error {
+	if h == nil || modes == nil {
+		return fmt.Errorf("corpusd handler: self-development mode authority is required")
+	}
+	h.selfDevelopmentModes = modes
+	return nil
 }
 
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
@@ -336,6 +369,17 @@ func (h *Handler) HandleInternalGetTextureRevision(w http.ResponseWriter, r *htt
 
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
+	s.HandleFunc("/internal/computers/credentials/exchange", h.HandleComputerCredentialExchange)
+	s.HandleFunc("/internal/computers/credentials/issue", h.HandleComputerCredentialIssue)
+	s.HandleFunc("/internal/computers/credentials/renew", h.HandleComputerCredentialRenew)
+	s.HandleFunc("/internal/computers/self-development/mode", h.HandleSelfDevelopmentMode)
+	s.HandleFunc("/internal/computers/events/head", h.HandleComputerEventHead)
+	s.HandleFunc("/internal/computers/events/pin", h.HandleComputerEventPin)
+	s.HandleFunc("/internal/computers/events/append", h.HandleComputerEventAppend)
+	s.HandleFunc("/internal/computers/events/replay", h.HandleComputerEventReplay)
+	s.HandleFunc("/internal/computers/checkpoints", h.HandleComputerCheckpoint)
+	s.HandleFunc("/internal/computers/route-projection-certificates", h.HandleRouteProjectionCertificate)
+	s.HandleFunc("/internal/platform/control-key", h.HandlePlatformControlPublicKey)
 	s.HandleFunc("/internal/platform/publications/texture", h.HandleInternalPublishTexture)
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)

@@ -26,9 +26,9 @@ type Tape struct {
 
 // TapeEntry is one record in the tamper-evident tape.
 type TapeEntry struct {
-	Index    int    `json:"index"`
-	PrevHash string `json:"prev_hash"` // hash of the previous entry (empty for genesis)
-	Hash     string `json:"hash"`      // hash of this entry (content + prevHash)
+	Index    int                `json:"index"`
+	PrevHash string             `json:"prev_hash"` // hash of the previous entry (empty for genesis)
+	Hash     string             `json:"hash"`      // hash of this entry (content + prevHash)
 	Record   *TransactionRecord `json:"record"`
 }
 

@@ -233,11 +233,11 @@ func (h *Handler) generateRefreshToken(user *User, deviceInfo string) (string, e
 
 	now := time.Now().UTC()
 	rs := &RefreshSession{
-		ID:        uuid.NewString(),
-		UserID:    user.ID,
-		TokenHash: hashHex,
-		CreatedAt: now,
-		ExpiresAt: now.Add(h.config.RefreshTokenTTL),
+		ID:         uuid.NewString(),
+		UserID:     user.ID,
+		TokenHash:  hashHex,
+		CreatedAt:  now,
+		ExpiresAt:  now.Add(h.config.RefreshTokenTTL),
 		DeviceInfo: deviceInfo,
 	}
 	if err := h.store.CreateRefreshSession(rs); err != nil {
@@ -1215,32 +1215,41 @@ func (h *Handler) HandleDesktopRedeem(w http.ResponseWriter, r *http.Request) {
 
 // validScopes is the set of scope strings accepted by the API key system.
 var validScopes = map[string]bool{
-	"read:texture":  true,
-	"write:texture": true,
-	"read:base":     true,
-	"write:base":    true,
-	"read:runtime":  true,
-	"write:runtime": true,
-	"manage:keys":   true,
-	"admin":         true,
+	"read:texture":                       true,
+	"write:texture":                      true,
+	"read:base":                          true,
+	"write:base":                         true,
+	"read:runtime":                       true,
+	"write:runtime":                      true,
+	"manage:keys":                        true,
+	"admin":                              true,
+	"computer:self_development:read":     true,
+	"computer:self_development:genesis":  true,
+	"computer:self_development:propose":  true,
+	"computer:self_development:approve":  true,
+	"computer:self_development:rollback": true,
+	"computer:self_development:mode":     true,
+	"computer:lifecycle":                 true,
 }
 
 // createAPIKeyRequest is the JSON body for POST /auth/api-keys.
 type createAPIKeyRequest struct {
-	Label     string    `json:"label"`
-	Scopes    []string  `json:"scopes"`
-	ExpiresAt *time.Time `json:"expires_at"`
+	Label      string     `json:"label"`
+	Scopes     []string   `json:"scopes"`
+	ComputerID string     `json:"computer_id,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at"`
 }
 
 // apiKeyResponse is the JSON response for a single API key (no secret).
 type apiKeyResponse struct {
-	ID         string     `json:"id"`
-	Label      string     `json:"label"`
-	Scopes     []string   `json:"scopes"`
-	CreatedAt  string     `json:"created_at"`
-	ExpiresAt  *string    `json:"expires_at"`
-	LastUsedAt *string    `json:"last_used_at"`
-	RevokedAt  *string    `json:"revoked_at"`
+	ID         string   `json:"id"`
+	Label      string   `json:"label"`
+	Scopes     []string `json:"scopes"`
+	ComputerID string   `json:"computer_id,omitempty"`
+	CreatedAt  string   `json:"created_at"`
+	ExpiresAt  *string  `json:"expires_at"`
+	LastUsedAt *string  `json:"last_used_at"`
+	RevokedAt  *string  `json:"revoked_at"`
 }
 
 // createAPIKeyResponse includes the secret, only returned at creation time.
@@ -1353,6 +1362,7 @@ func apiKeyToResponse(ak *APIKey) apiKeyResponse {
 		ID:         ak.ID,
 		Label:      ak.Label,
 		Scopes:     ak.Scopes,
+		ComputerID: ak.ComputerID,
 		CreatedAt:  ak.CreatedAt.UTC().Format(time.RFC3339),
 		ExpiresAt:  formatTimePtr(ak.ExpiresAt),
 		LastUsedAt: formatTimePtr(ak.LastUsedAt),
@@ -1369,6 +1379,15 @@ func validateScopes(scopes []string) error {
 		}
 	}
 	return nil
+}
+
+func hasComputerScopedAPIKeyScope(scopes []string) bool {
+	for _, scope := range scopes {
+		if strings.HasPrefix(scope, "computer:") {
+			return true
+		}
+	}
+	return false
 }
 
 // HandleCreateAPIKey handles POST /auth/api-keys.
@@ -1401,12 +1420,20 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
+	if hasComputerScopedAPIKeyScope(req.Scopes) && strings.TrimSpace(req.ComputerID) == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "computer_id is required for computer-scoped keys"})
+		return
+	}
 	if !apiKeyMayManageKeys(callerKey) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key requires manage:keys or admin to create keys"})
 		return
 	}
 	if callerKey != nil && !apiKeyScopeSubset(req.Scopes, callerKey.Scopes) {
 		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key cannot delegate requested scopes"})
+		return
+	}
+	if callerKey != nil && callerKey.ComputerID != "" && callerKey.ComputerID != strings.TrimSpace(req.ComputerID) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key cannot delegate authority for another computer"})
 		return
 	}
 
@@ -1416,7 +1443,7 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, secret, err := h.store.CreateAPIKey(r.Context(), user.ID, req.Label, req.Scopes, req.ExpiresAt)
+	id, secret, err := h.store.CreateComputerScopedAPIKey(r.Context(), user.ID, req.Label, req.Scopes, req.ComputerID, req.ExpiresAt)
 	if err != nil {
 		log.Printf("[auth] operation=create_api_key user_id=%s result=error error=%q", user.ID, err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create api key"})
@@ -1430,11 +1457,12 @@ func (h *Handler) HandleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[auth] operation=create_api_key user_id=%s key_id=%s result=warning step=readback error=%q", user.ID, id, err)
 		writeJSON(w, http.StatusCreated, createAPIKeyResponse{
 			apiKeyResponse: apiKeyResponse{
-				ID:        id,
-				Label:     req.Label,
-				Scopes:    req.Scopes,
-				CreatedAt: time.Now().UTC().Format(time.RFC3339),
-				ExpiresAt: formatTimePtr(req.ExpiresAt),
+				ID:         id,
+				Label:      req.Label,
+				Scopes:     req.Scopes,
+				ComputerID: req.ComputerID,
+				CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+				ExpiresAt:  formatTimePtr(req.ExpiresAt),
 			},
 			Secret: secret,
 		})

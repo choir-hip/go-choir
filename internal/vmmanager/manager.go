@@ -95,9 +95,7 @@ type VMConfig struct {
 	// read-only virtio-blk drive that the NixOS init mounts at /nix/store.
 	StoreDiskPath string
 
-	// KernelParams is the image-specific microvm.nix kernel parameter set.
-	// Empty means use the manager default. Special worker image classes must
-	// pass this with their store disk so init paths match the selected image.
+	// Empty means use the manager default.
 	KernelParams string
 
 	// GuestPort is the port the guest sandbox runtime listens on inside
@@ -119,17 +117,6 @@ type VMConfig struct {
 	// the guest and survives stop/resume cycles (VAL-CROSS-116).
 	PersistentDir string
 
-	// SourceVMID, when set, creates this VM's mutable data image by copying
-	// the source VM's data image. The source must be a stopped/hibernated VM
-	// or an unmanaged base snapshot on disk; live disk copying is rejected so
-	// callers cannot pretend a best-effort copy is an isolated fork.
-	SourceVMID string
-
-	// DataDevicePath binds this launch to an already-instantiated mutable block
-	// device. When set, vmmanager verifies and attaches it without creating,
-	// copying, growing, or otherwise mutating the device.
-	DataDevicePath string
-
 	// GatewayToken is the sandbox credential token for authenticating to
 	// the host-side gateway. Written to a file in the persistent directory
 	// so the guest init script can read and set RUNTIME_GATEWAY_TOKEN.
@@ -143,9 +130,11 @@ type VMConfig struct {
 	ComputerKind string
 	OwnerID      string
 	DesktopID    string
-	WorkerID     string
-	CandidateID  string
-	CodeRef      string
+	// ComputerCredentialEnvelope is a short-lived signed bootstrap envelope
+	// for guest-to-corpusd event capability exchange. It is scoped to VMID and
+	// contains no platform signing key.
+	ComputerCredentialEnvelope string
+	credentialDiskPath         string
 
 	// Epoch is the monotonically increasing boot counter for this VM.
 	// On fresh boot, the epoch increments. On resume from hibernate,
@@ -194,6 +183,8 @@ type ManagerConfig struct {
 	// FirecrackerBinPath is the path to the Firecracker binary.
 	// If empty, the manager searches $PATH.
 	FirecrackerBinPath string
+	// MkfsExt4Path formats the tiny per-realization appender credential disk.
+	MkfsExt4Path string
 
 	// KernelImagePath is the default kernel image for all VMs.
 	KernelImagePath string
@@ -254,6 +245,7 @@ type ManagerConfig struct {
 func DefaultManagerConfig() ManagerConfig {
 	return ManagerConfig{
 		FirecrackerBinPath:  "firecracker",
+		MkfsExt4Path:        "mkfs.ext4",
 		GuestPort:           8085,
 		BaseVsockPort:       6000,
 		MachineCPUCount:     2,
@@ -644,52 +636,24 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 		cfg.MachineMemSizeMib = m.cfg.MachineMemSizeMib
 	}
 
-	// Prepare per-VM disk images. A typed constructor may supply an immutable
-	// realization binding; that path is attach-only and bypasses every legacy
-	// create/copy/grow behavior below.
+	// Prepare the per-VM mutable data image.
 	if cfg.StoreDiskPath != "" {
 		vmDataDir := filepath.Join(m.cfg.StateDir, cfg.VMID)
 		if err := os.MkdirAll(vmDataDir, 0o755); err != nil {
 			return nil, fmt.Errorf("create VM data dir %s: %w", vmDataDir, err)
 		}
 		dataImg := filepath.Join(vmDataDir, "data.img")
-		if cfg.DataDevicePath != "" {
-			if cfg.SourceVMID != "" {
-				return nil, fmt.Errorf("VM %s cannot combine constructed data device with source VM clone", cfg.VMID)
-			}
-			constructedPath, err := filepath.Abs(filepath.Clean(cfg.DataDevicePath))
-			if err != nil {
-				return nil, fmt.Errorf("resolve constructed data device for VM %s: %w", cfg.VMID, err)
-			}
-			info, err := os.Lstat(constructedPath)
-			if err != nil {
-				return nil, fmt.Errorf("stat constructed data device for VM %s: %w", cfg.VMID, err)
-			}
-			if !info.Mode().IsRegular() {
-				return nil, fmt.Errorf("constructed data device for VM %s is not a regular file", cfg.VMID)
-			}
-			cfg.DataDevicePath = constructedPath
-		} else if _, err := os.Stat(dataImg); os.IsNotExist(err) {
-			if cfg.SourceVMID != "" {
-				if source, ok := m.vms[cfg.SourceVMID]; ok && source.State == StateRunning {
-					return nil, fmt.Errorf("source VM %s is running; refusing unsafe live data image copy", cfg.SourceVMID)
-				}
-				sourceDataImg := filepath.Join(m.cfg.StateDir, cfg.SourceVMID, "data.img")
-				if err := m.copySparseFile(sourceDataImg, dataImg); err != nil {
-					return nil, fmt.Errorf("clone data image for VM %s from %s: %w", cfg.VMID, cfg.SourceVMID, err)
-				}
-			} else if err := m.createDataImage(dataImg, dataImageSizeMB); err != nil {
+		if _, err := os.Stat(dataImg); os.IsNotExist(err) {
+			if err := m.createDataImage(dataImg, dataImageSizeMB); err != nil {
 				return nil, fmt.Errorf("create data image for VM %s: %w", cfg.VMID, err)
 			}
-		} else if err == nil && cfg.SourceVMID == "" {
+		} else if err == nil {
 			if err := m.ensureDataImageMinSize(dataImg, dataImageSizeMB); err != nil {
 				return nil, fmt.Errorf("resize data image for VM %s: %w", cfg.VMID, err)
 			}
-		} else if err != nil {
+		} else {
 			return nil, fmt.Errorf("stat data image for VM %s: %w", cfg.VMID, err)
 		}
-	} else if cfg.DataDevicePath != "" {
-		return nil, fmt.Errorf("constructed data device requires store-disk boot")
 	} else if cfg.RootfsPath != "" {
 		// Legacy approach: create a per-VM writable copy of the rootfs.
 		// The base rootfs image is read-only (from the Nix store or
@@ -700,6 +664,15 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 			return nil, fmt.Errorf("copy rootfs for VM %s: %w", cfg.VMID, err)
 		}
 		cfg.RootfsPath = vmRootfs
+	}
+
+	if cfg.ComputerCredentialEnvelope != "" {
+		credentialDiskPath, err := m.createCredentialDisk(vmStateDir, cfg.ComputerCredentialEnvelope)
+		if err != nil {
+			return nil, fmt.Errorf("prepare appender credential disk for VM %s: %w", cfg.VMID, err)
+		}
+		cfg.credentialDiskPath = credentialDiskPath
+		cfg.ComputerCredentialEnvelope = ""
 	}
 
 	// Build the Firecracker configuration.
@@ -1211,12 +1184,6 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	if overrides.PersistentDir != "" {
 		cfg.PersistentDir = overrides.PersistentDir
 	}
-	if overrides.SourceVMID != "" {
-		cfg.SourceVMID = overrides.SourceVMID
-	}
-	if overrides.DataDevicePath != "" {
-		cfg.DataDevicePath = overrides.DataDevicePath
-	}
 	if overrides.GatewayToken != "" {
 		cfg.GatewayToken = overrides.GatewayToken
 	}
@@ -1228,15 +1195,6 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	}
 	if overrides.DesktopID != "" {
 		cfg.DesktopID = overrides.DesktopID
-	}
-	if overrides.WorkerID != "" {
-		cfg.WorkerID = overrides.WorkerID
-	}
-	if overrides.CandidateID != "" {
-		cfg.CandidateID = overrides.CandidateID
-	}
-	if overrides.CodeRef != "" {
-		cfg.CodeRef = overrides.CodeRef
 	}
 	return cfg
 }
@@ -1251,7 +1209,6 @@ func refreshConfigForCurrentDeploy(cfg VMConfig, defaults ManagerConfig) VMConfi
 	cfg.RootfsPath = ""
 	cfg.StoreDiskPath = ""
 	cfg.KernelParams = ""
-	cfg.SourceVMID = ""
 	cfg.MachineMemSizeMib = 0
 	cfg.MachineCPUCount = 0
 	return cfg
@@ -1301,16 +1258,21 @@ func (m *Manager) buildFirecrackerConfig(cfg VMConfig, hostPort int) map[string]
 
 	// Per-VM data volume for mutable sandbox state (always present).
 	// vmmanager creates a data.img per-VM in the state directory.
-	dataImgPath := cfg.DataDevicePath
-	if dataImgPath == "" {
-		dataImgPath = filepath.Join(m.cfg.StateDir, cfg.VMID, "data.img")
-	}
+	dataImgPath := filepath.Join(m.cfg.StateDir, cfg.VMID, "data.img")
 	drives = append(drives, map[string]interface{}{
 		"drive_id":       "data",
 		"path_on_host":   dataImgPath,
 		"is_root_device": false,
 		"is_read_only":   false,
 	})
+	if cfg.credentialDiskPath != "" {
+		drives = append(drives, map[string]interface{}{
+			"drive_id":       "credential",
+			"path_on_host":   cfg.credentialDiskPath,
+			"is_root_device": false,
+			"is_read_only":   false,
+		})
+	}
 
 	// Build the guest kernel boot arguments.
 	// These contain NO provider credentials (VAL-VM-011).
@@ -1432,7 +1394,7 @@ func sourceServiceRuntimeOwnerID(cfg VMConfig) string {
 }
 
 func guestIdentityKernelParams(cfg VMConfig) []string {
-	params := make([]string, 0, 6)
+	params := make([]string, 0, 3)
 	if value := kernelParamValue(cfg.ComputerKind); value != "" {
 		params = append(params, "choir.computer_kind="+value)
 	}
@@ -1441,15 +1403,6 @@ func guestIdentityKernelParams(cfg VMConfig) []string {
 	}
 	if value := kernelParamValue(cfg.DesktopID); value != "" {
 		params = append(params, "choir.desktop_id="+value)
-	}
-	if value := kernelParamValue(cfg.WorkerID); value != "" {
-		params = append(params, "choir.worker_id="+value)
-	}
-	if value := kernelParamValue(cfg.CandidateID); value != "" {
-		params = append(params, "choir.candidate_id="+value)
-	}
-	if value := kernelParamValue(cfg.CodeRef); value != "" {
-		params = append(params, "choir.code_ref="+value)
 	}
 	return params
 }
@@ -1905,71 +1858,68 @@ func (m *Manager) copyFile(src, dst string) error {
 	return nil
 }
 
-// copySparseFile copies a disk image while preserving zero holes where
-// possible. It avoids materializing the full sparse data.img when the source
-// only contains a small amount of written state.
-func (m *Manager) copySparseFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("create dir %s: %w", filepath.Dir(dst), err)
+func (m *Manager) createCredentialDisk(vmStateDir, encodedEnvelope string) (string, error) {
+	if strings.TrimSpace(encodedEnvelope) == "" {
+		return "", fmt.Errorf("credential envelope is required")
 	}
-
-	in, err := os.Open(src)
+	if os.Geteuid() != 0 || os.Getegid() != 0 {
+		return "", fmt.Errorf("credential disk construction requires root uid/gid")
+	}
+	stagingRoot, err := os.MkdirTemp(vmStateDir, ".credential-populate-")
 	if err != nil {
-		return fmt.Errorf("open source data image %s: %w", src, err)
+		return "", err
 	}
-	defer in.Close()
-
-	info, err := in.Stat()
+	defer os.RemoveAll(stagingRoot)
+	credentialPath := filepath.Join(stagingRoot, "computer-event-envelope")
+	if err := os.WriteFile(credentialPath, []byte(encodedEnvelope+"\n"), 0o400); err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(credentialPath)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o400 {
+		return "", fmt.Errorf("credential staging inode must be a regular mode-0400 file")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || stat.Uid != 0 || stat.Gid != 0 {
+		return "", fmt.Errorf("credential staging inode must be root-owned")
+	}
+	temporaryImage, err := os.CreateTemp(vmStateDir, ".credential-*.img")
 	if err != nil {
-		return fmt.Errorf("stat source data image %s: %w", src, err)
+		return "", err
 	}
-
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("create destination data image %s: %w", dst, err)
-	}
-	defer out.Close()
-
-	buf := make([]byte, 1024*1024)
-	for {
-		n, readErr := in.Read(buf)
-		if n > 0 {
-			chunk := buf[:n]
-			if isAllZero(chunk) {
-				if _, err := out.Seek(int64(n), 1); err != nil {
-					return fmt.Errorf("seek sparse destination %s: %w", dst, err)
-				}
-			} else if _, err := out.Write(chunk); err != nil {
-				return fmt.Errorf("write destination data image %s: %w", dst, err)
-			}
+	temporaryPath := temporaryImage.Name()
+	keep := false
+	defer func() {
+		_ = temporaryImage.Close()
+		if !keep {
+			_ = os.Remove(temporaryPath)
 		}
-		if readErr != nil {
-			if readErr == io.EOF {
-				break
-			}
-			return fmt.Errorf("read source data image %s: %w", src, readErr)
-		}
+	}()
+	if err := temporaryImage.Truncate(8 << 20); err != nil {
+		return "", err
 	}
-
-	if err := out.Truncate(info.Size()); err != nil {
-		return fmt.Errorf("truncate destination data image %s: %w", dst, err)
+	if err := temporaryImage.Close(); err != nil {
+		return "", err
 	}
-	return nil
+	mkfs := strings.TrimSpace(m.cfg.MkfsExt4Path)
+	if mkfs == "" {
+		mkfs = "mkfs.ext4"
+	}
+	output, err := exec.Command(mkfs, "-F", "-q", "-b", "4096", "-m", "0", "-d", stagingRoot, "-L", "CHOIR_CRED", temporaryPath).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("format credential disk: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	finalPath := filepath.Join(vmStateDir, "credential.img")
+	if err := os.Rename(temporaryPath, finalPath); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(finalPath, 0o600); err != nil {
+		_ = os.Remove(finalPath)
+		return "", err
+	}
+	keep = true
+	return finalPath, nil
 }
 
-func isAllZero(buf []byte) bool {
-	for _, b := range buf {
-		if b != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-// createDataImage creates a sparse ext4 filesystem image for per-VM
-// mutable state. The image size is specified in megabytes.
-// This is used by the microvm.nix approach where the rootfs is read-only
-// (erofs store disk) and per-VM mutable state goes on a separate volume.
 func (m *Manager) createDataImage(path string, sizeMB int) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create data image dir %s: %w", filepath.Dir(path), err)

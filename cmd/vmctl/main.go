@@ -11,9 +11,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/yusefmosiah/go-choir/internal/base/blob"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -48,6 +46,10 @@ func main() {
 	if gwURL := os.Getenv("VMCTL_GATEWAY_URL"); gwURL != "" {
 		registry.SetGatewayURL(gwURL)
 		log.Printf("vmctl: gateway URL configured for VM token issuance")
+	}
+	if corpusdURL := os.Getenv("VMCTL_CORPUSD_URL"); corpusdURL != "" {
+		registry.SetCorpusdURL(corpusdURL)
+		log.Printf("vmctl: corpusd URL configured for guest event credentials")
 	}
 
 	// Configure idle timeout for automatic VM lifecycle management.
@@ -84,10 +86,6 @@ func main() {
 	warmnessPolicy := warmnessPolicyConfigFromEnv()
 	registry.SetWarmnessPolicyConfig(warmnessPolicy)
 	log.Printf("vmctl: warmness policy primary_keepalive_mode=%s always_on_user_count=%d", warmnessPolicy.PrimaryKeepaliveMode, len(warmnessPolicy.AlwaysOnUserIDs))
-	if profile, ok := workerImageProfileFromEnv("VM_PLAYWRIGHT"); ok {
-		registry.SetWorkerImageProfile("worker-playwright", profile)
-		log.Printf("vmctl: worker-playwright image profile configured")
-	}
 
 	// Check if Firecracker is available on this host.
 	// If so, create a VM manager for real Firecracker lifecycle management
@@ -148,47 +146,6 @@ func main() {
 			log.Fatalf("vmctl: initialize ComputerVersion route authority: %v", err)
 		}
 		handler.SetRouteAuthority(authority)
-		if encodedKey := strings.TrimSpace(os.Getenv("VMCTL_PROMOTION_AUTHORITY_PUBLIC_KEY")); encodedKey != "" {
-			publicKey, err := vmctl.ParsePromotionAuthorityPublicKey(encodedKey)
-			if err != nil {
-				log.Fatalf("vmctl: configure promotion authority: %v", err)
-			}
-			if err := ledger.ConfigurePromotionAuthority(pingCtx, publicKey); err != nil {
-				log.Fatalf("vmctl: pin promotion authority: %v", err)
-			}
-			if err := authority.SetPromotionAuthorityPublicKey(publicKey); err != nil {
-				log.Fatalf("vmctl: configure promotion authority: %v", err)
-			}
-			log.Printf("vmctl: signed promotion authority configured")
-		} else {
-			log.Printf("vmctl: promotion preparation and CAS unavailable (VMCTL_PROMOTION_AUTHORITY_PUBLIC_KEY is not configured)")
-		}
-		if blobRoot := strings.TrimSpace(os.Getenv("VMCTL_BASE_BLOB_ROOT")); blobRoot != "" {
-			blobs, err := blob.OpenStore(blobRoot)
-			if err != nil {
-				log.Fatalf("vmctl: open immutable Base blob store: %v", err)
-			}
-			stateRoot := strings.TrimSpace(os.Getenv("VM_STATE_DIR"))
-			materializer := computerversion.ProductionMaterializer{
-				Inputs:    inputs,
-				Artifacts: artifactVerifier,
-				Blobs:     blobs,
-				Disk:      diskinstantiation.Ext4Backend{WorkRoot: stateRoot},
-				DiskPlan: diskinstantiation.Plan{
-					DeviceID:     "data",
-					LogicalBytes: 32 << 30,
-					Filesystem:   diskinstantiation.FilesystemContract{Type: diskinstantiation.FilesystemExt4, Label: "choir-data", BlockSizeBytes: 4096},
-					Allocation:   diskinstantiation.AllocationContract{Mode: diskinstantiation.AllocationSparse, MaxAllocatedBytes: 2 << 30, MinimumAvailableBytes: 2 << 30},
-				},
-				Launcher: vmctl.NewVMConstructionLauncher(registry, nil),
-			}
-			handler.SetConstructionService(materializer, computerversion.CapabilityManifest{
-				Materializer: computerversion.ProductionMaterializerName,
-				Substrate:    computerversion.VMManagerSubstrateFirecracker,
-				Supported:    []computerversion.ObservationKind{computerversion.ObservationFileManifest, computerversion.ObservationBlobSet, computerversion.ObservationVMStateManifest},
-			})
-			log.Printf("vmctl: production ComputerVersion constructor configured")
-		}
 		log.Printf("vmctl: ComputerVersion route authority configured on the corpusd world-wire SQL server")
 	} else {
 		log.Printf("vmctl: ComputerVersion route authority unavailable (VMCTL_ROUTE_DSN is not configured)")
@@ -237,25 +194,21 @@ func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceI
 
 func toManagerVMConfig(cfg vmctl.VMManagerConfig) vmmanager.VMConfig {
 	return vmmanager.VMConfig{
-		VMID:              cfg.VMID,
-		KernelImagePath:   cfg.KernelImagePath,
-		InitrdPath:        cfg.InitrdPath,
-		RootfsPath:        cfg.RootfsPath,
-		StoreDiskPath:     cfg.StoreDiskPath,
-		KernelParams:      cfg.KernelParams,
-		GuestPort:         cfg.GuestPort,
-		MachineCPUCount:   cfg.MachineCPUCount,
-		MachineMemSizeMib: cfg.MachineMemSizeMib,
-		PersistentDir:     cfg.PersistentDir,
-		SourceVMID:        cfg.SourceVMID,
-		DataDevicePath:    cfg.DataDevicePath,
-		GatewayToken:      cfg.GatewayToken,
-		ComputerKind:      cfg.ComputerKind,
-		OwnerID:           cfg.OwnerID,
-		DesktopID:         cfg.DesktopID,
-		WorkerID:          cfg.WorkerID,
-		CandidateID:       cfg.CandidateID,
-		CodeRef:           cfg.CodeRef,
+		VMID:                       cfg.VMID,
+		KernelImagePath:            cfg.KernelImagePath,
+		InitrdPath:                 cfg.InitrdPath,
+		RootfsPath:                 cfg.RootfsPath,
+		StoreDiskPath:              cfg.StoreDiskPath,
+		KernelParams:               cfg.KernelParams,
+		GuestPort:                  cfg.GuestPort,
+		MachineCPUCount:            cfg.MachineCPUCount,
+		MachineMemSizeMib:          cfg.MachineMemSizeMib,
+		PersistentDir:              cfg.PersistentDir,
+		GatewayToken:               cfg.GatewayToken,
+		ComputerCredentialEnvelope: cfg.ComputerCredentialEnvelope,
+		ComputerKind:               cfg.ComputerKind,
+		OwnerID:                    cfg.OwnerID,
+		DesktopID:                  cfg.DesktopID,
 	}
 }
 
@@ -272,37 +225,6 @@ func toVMInstanceInfo(inst *vmmanager.VMInstance) *vmctl.VMInstanceInfo {
 		LastHealthCheck: inst.LastHealthCheck,
 		LastHealthyAt:   inst.LastHealthyAt,
 	}
-}
-
-func workerImageProfileFromEnv(prefix string) (vmctl.VMImageProfile, bool) {
-	profile := vmctl.VMImageProfile{
-		KernelImagePath: strings.TrimSpace(os.Getenv(prefix + "_KERNEL_IMAGE")),
-		InitrdPath:      strings.TrimSpace(os.Getenv(prefix + "_INITRD_IMAGE")),
-		RootfsPath:      strings.TrimSpace(os.Getenv(prefix + "_ROOTFS_IMAGE")),
-		StoreDiskPath:   strings.TrimSpace(os.Getenv(prefix + "_STORE_DISK_IMAGE")),
-	}
-	if paramsFile := strings.TrimSpace(os.Getenv(prefix + "_KERNEL_PARAMS_FILE")); paramsFile != "" {
-		if data, err := os.ReadFile(paramsFile); err == nil {
-			profile.KernelParams = strings.TrimSpace(string(data))
-		} else {
-			log.Printf("vmctl: could not read %s kernel params file %s: %v", prefix, paramsFile, err)
-		}
-	}
-	if params := strings.TrimSpace(os.Getenv(prefix + "_KERNEL_PARAMS")); params != "" {
-		profile.KernelParams = params
-	}
-	ok := profile.KernelImagePath != "" ||
-		profile.InitrdPath != "" ||
-		profile.RootfsPath != "" ||
-		profile.StoreDiskPath != "" ||
-		profile.KernelParams != ""
-	if ok {
-		if missing := profile.MissingRequiredFields(); len(missing) > 0 {
-			log.Printf("vmctl: incomplete %s worker image profile ignored; missing %s", prefix, strings.Join(missing, ", "))
-			return vmctl.VMImageProfile{}, false
-		}
-	}
-	return profile, ok
 }
 
 func (a *vmManagerAdapter) StopVM(vmID string) error {

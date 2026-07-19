@@ -33,7 +33,7 @@ func TestBootstrapSourceWorkspaceCreatesRootsAndLineage(t *testing.T) {
 	t.Cleanup(func() { buildinfo.Commit = originalCommit })
 
 	projection, err := BootstrapSourceWorkspace(root, SourceWorkspaceOptions{
-		ComputerID: "candidate-computer-1",
+		ComputerID: "computer-1",
 		OwnerID:    "owner@example.com",
 		SessionID:  "zot-7",
 	})
@@ -44,7 +44,6 @@ func TestBootstrapSourceWorkspaceCreatesRootsAndLineage(t *testing.T) {
 	for _, dir := range []string{
 		filepath.Join(root, "Source", "platform"),
 		filepath.Join(root, "Source", "user"),
-		filepath.Join(root, "Source", "candidate"),
 		filepath.Join(root, "Build"),
 		filepath.Join(root, ".choir"),
 	} {
@@ -57,8 +56,8 @@ func TestBootstrapSourceWorkspaceCreatesRootsAndLineage(t *testing.T) {
 		}
 	}
 
-	if projection.ComputerKind != "candidate" {
-		t.Fatalf("ComputerKind = %q, want candidate", projection.ComputerKind)
+	if projection.ComputerKind != "active" {
+		t.Fatalf("ComputerKind = %q, want active", projection.ComputerKind)
 	}
 	if projection.OwnerID != "owner@example.com" {
 		t.Fatalf("OwnerID = %q", projection.OwnerID)
@@ -68,9 +67,6 @@ func TestBootstrapSourceWorkspaceCreatesRootsAndLineage(t *testing.T) {
 	}
 	if projection.PlatformSourceMount != filepath.Join(root, "Source", "platform") {
 		t.Fatalf("PlatformSourceMount = %q", projection.PlatformSourceMount)
-	}
-	if projection.CandidateSourceRef == "" {
-		t.Fatalf("CandidateSourceRef should be populated for candidate computers")
 	}
 
 	raw, err := os.ReadFile(filepath.Join(root, ".choir", "source-lineage.json"))
@@ -116,36 +112,16 @@ func TestBootstrapSourceWorkspaceRefreshesOwnerForSuperConsoleSession(t *testing
 	}
 }
 
-func TestBootstrapSourceWorkspaceUsesGuestIdentityEnv(t *testing.T) {
+func TestBootstrapSourceWorkspaceRejectsLegacyWorkerIdentity(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("SANDBOX_ID", "vm-worker-123")
 	t.Setenv("CHOIR_COMPUTER_KIND", "worker")
-	t.Setenv("CHOIR_OWNER_ID", "owner@example.com")
-	t.Setenv("CHOIR_DESKTOP_ID", "primary")
-	t.Setenv("CHOIR_WORKER_ID", "worker-abc")
-
-	projection, err := BootstrapSourceWorkspace(root, SourceWorkspaceOptions{})
-	if err != nil {
-		t.Fatalf("BootstrapSourceWorkspace returned error: %v", err)
-	}
-	if projection.ComputerID != "vm-worker-123" {
-		t.Fatalf("ComputerID = %q", projection.ComputerID)
-	}
-	if projection.ComputerKind != "worker" {
-		t.Fatalf("ComputerKind = %q", projection.ComputerKind)
-	}
-	if projection.OwnerID != "owner@example.com" {
-		t.Fatalf("OwnerID = %q", projection.OwnerID)
-	}
-	if projection.DesktopID != "primary" {
-		t.Fatalf("DesktopID = %q", projection.DesktopID)
-	}
-	if !strings.Contains(projection.CandidateSourceRef, "/candidates/worker-abc") {
-		t.Fatalf("CandidateSourceRef = %q", projection.CandidateSourceRef)
+	if _, err := BootstrapSourceWorkspace(root, SourceWorkspaceOptions{}); err == nil || !strings.Contains(err.Error(), "unsupported computer kind") {
+		t.Fatalf("legacy worker identity error = %v", err)
 	}
 }
 
-func TestBootstrapSourceWorkspaceMaterializesPlatformAndCandidateCheckouts(t *testing.T) {
+func TestBootstrapSourceWorkspaceMaterializesPinnedPlatformCheckout(t *testing.T) {
 	root := t.TempDir()
 	repo := filepath.Join(root, "repo")
 	if _, err := runSourceGitCommand(root, "init", repo); err != nil {
@@ -187,23 +163,11 @@ func TestBootstrapSourceWorkspaceMaterializesPlatformAndCandidateCheckouts(t *te
 	if projection.PlatformCheckoutStatus != "ok_platform_at_base" {
 		t.Fatalf("PlatformCheckoutStatus = %q error=%q", projection.PlatformCheckoutStatus, projection.PlatformCheckoutError)
 	}
-	if projection.CandidateCheckoutStatus != "ok_candidate_at_base" {
-		t.Fatalf("CandidateCheckoutStatus = %q error=%q", projection.CandidateCheckoutStatus, projection.CandidateCheckoutError)
-	}
 	if projection.DirtyStateSummary != "clean" {
 		t.Fatalf("DirtyStateSummary = %q, want clean", projection.DirtyStateSummary)
 	}
-	for _, checkout := range []string{projection.PlatformSourceMount, projection.CandidateSourceMount} {
-		if _, err := os.Stat(filepath.Join(checkout, "README.md")); err != nil {
-			t.Fatalf("expected materialized README in %s: %v", checkout, err)
-		}
-	}
-	candidateBranch, err := runSourceGitCommand(projection.CandidateSourceMount, "branch", "--show-current")
-	if err != nil {
-		t.Fatalf("candidate branch: %v", err)
-	}
-	if strings.TrimSpace(candidateBranch) != "choir-candidate" {
-		t.Fatalf("candidate branch = %q, want choir-candidate", strings.TrimSpace(candidateBranch))
+	if _, err := os.Stat(filepath.Join(projection.PlatformSourceMount, "README.md")); err != nil {
+		t.Fatalf("expected materialized README: %v", err)
 	}
 
 	raw, err := os.ReadFile(filepath.Join(filesRoot, ".choir", "source-lineage.json"))
@@ -211,70 +175,25 @@ func TestBootstrapSourceWorkspaceMaterializesPlatformAndCandidateCheckouts(t *te
 		t.Fatalf("read lineage projection: %v", err)
 	}
 	if !strings.Contains(string(raw), `"platform_checkout_status": "ok_platform_at_base"`) ||
-		!strings.Contains(string(raw), `"candidate_checkout_status": "ok_candidate_at_base"`) ||
 		!strings.Contains(string(raw), `"dirty_state_summary": "clean"`) {
 		t.Fatalf("lineage missing checkout status summary: %s", string(raw))
 	}
 }
 
-func TestBootstrapSourceWorkspacePreservesDirtyCandidateCheckout(t *testing.T) {
-	root := t.TempDir()
-	platform := filepath.Join(root, "files", "Source", "platform")
-	candidate := filepath.Join(root, "files", "Source", "candidate")
-	if err := os.MkdirAll(platform, 0o755); err != nil {
-		t.Fatalf("mkdir platform: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(platform, "sentinel.txt"), []byte("do not clone here\n"), 0o644); err != nil {
-		t.Fatalf("write platform sentinel: %v", err)
-	}
-	if err := os.MkdirAll(candidate, 0o755); err != nil {
-		t.Fatalf("mkdir candidate: %v", err)
-	}
-	if _, err := runSourceGitCommand(root, "init", candidate); err != nil {
-		t.Fatalf("git init candidate: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(candidate, "local.txt"), []byte("local edit\n"), 0o644); err != nil {
-		t.Fatalf("write local edit: %v", err)
-	}
-	t.Setenv("RUNTIME_PROMOTION_SOURCE_REPO", "https://example.com/repo.git")
-
-	projection, err := BootstrapSourceWorkspace(filepath.Join(root, "files"), SourceWorkspaceOptions{
-		MaterializeGitCheckouts: true,
-	})
-	if err != nil {
-		t.Fatalf("BootstrapSourceWorkspace returned error: %v", err)
-	}
-	if projection.CandidateCheckoutStatus != "dirty_preserved" {
-		t.Fatalf("CandidateCheckoutStatus = %q", projection.CandidateCheckoutStatus)
-	}
-	if projection.DirtyStateSummary != "dirty_preserved" {
-		t.Fatalf("DirtyStateSummary = %q, want dirty_preserved", projection.DirtyStateSummary)
-	}
-	if _, err := os.Stat(filepath.Join(candidate, "local.txt")); err != nil {
-		t.Fatalf("dirty candidate file was not preserved: %v", err)
-	}
-}
-
 func TestSourceCheckoutDirtyStateSummary(t *testing.T) {
 	tests := []struct {
-		name      string
-		platform  string
-		candidate string
-		want      string
+		status string
+		want   string
 	}{
-		{name: "clean", platform: "ok_platform_at_base", candidate: "ok_candidate_at_base", want: "clean"},
-		{name: "dirty platform", platform: "dirty_preserved", candidate: "ok_candidate_at_base", want: "dirty_preserved"},
-		{name: "dirty candidate", platform: "ok_platform_at_base", candidate: "dirty_preserved", want: "dirty_preserved"},
-		{name: "blocked platform", platform: "blocked_non_git_non_empty", candidate: "ok_candidate_at_base", want: "blocked"},
-		{name: "failed candidate", platform: "ok_platform_at_base", candidate: "checkout_failed", want: "failed"},
-		{name: "not inspected", platform: "not_configured", candidate: "ok_candidate_at_base", want: "not_inspected"},
+		{status: "ok_platform_at_base", want: "clean"},
+		{status: "dirty_preserved", want: "dirty_preserved"},
+		{status: "blocked_non_git_non_empty", want: "blocked"},
+		{status: "checkout_failed", want: "failed"},
+		{status: "not_configured", want: "not_inspected"},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sourceCheckoutDirtyStateSummary(tt.platform, tt.candidate)
-			if got != tt.want {
-				t.Fatalf("sourceCheckoutDirtyStateSummary(%q, %q) = %q, want %q", tt.platform, tt.candidate, got, tt.want)
-			}
-		})
+		if got := sourceCheckoutDirtyStateSummary(tt.status); got != tt.want {
+			t.Fatalf("sourceCheckoutDirtyStateSummary(%q) = %q, want %q", tt.status, got, tt.want)
+		}
 	}
 }

@@ -67,7 +67,7 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 1_000_000,
 			Modalities:          []string{"text"},
 			AdapterModalities:   []string{"text"},
-			RecommendedFor:      []string{"super", "vsuper", "cosuper_coding", "verifier"},
+			RecommendedFor:      []string{"super", "co-super", "verifier"},
 		},
 		{
 			ID:              "glm-5.1",
@@ -89,7 +89,7 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 1_000_000,
 			Modalities:          []string{"text"},
 			AdapterModalities:   []string{"text"},
-			RecommendedFor:      []string{"super", "vsuper", "cosuper_coding", "verifier"},
+			RecommendedFor:      []string{"super", "co-super", "verifier"},
 		},
 		{
 			ID:                  "deepseek-v4-flash",
@@ -109,7 +109,7 @@ func SupportedModels() []ModelInfo {
 			ContextWindowTokens: 1_000_000,
 			Modalities:          []string{"text"},
 			AdapterModalities:   []string{"text"},
-			RecommendedFor:      []string{"super", "vsuper", "cosuper_coding", "verifier"},
+			RecommendedFor:      []string{"super", "co-super", "verifier"},
 		},
 		{
 			ID:                  "mimo-v2.5",
@@ -128,7 +128,7 @@ func SupportedModels() []ModelInfo {
 			MaxOutputTokens:   131072,
 			Modalities:        []string{"text"},
 			AdapterModalities: []string{"text"},
-			RecommendedFor:    []string{"super", "vsuper", "cosuper_coding", "verifier"},
+			RecommendedFor:    []string{"super", "co-super", "verifier"},
 		},
 		{
 			ID:                "accounts/fireworks/models/deepseek-v4-flash",

@@ -1,6 +1,5 @@
 //go:build linux
 
-
 package capsule
 
 import (
@@ -100,74 +99,10 @@ func WorkloadSeccompFilter() seccomp.Filter {
 	}
 }
 
-// BrokerSeccompFilter returns the seccomp filter for the exec-broker.
-// Default-deny with explicit allowlist (stricter than workload).
-// The broker only needs file I/O, process management, and AF_UNIX sockets.
+// BrokerSeccompFilter applies the same network, namespace, mount, ptrace,
+// module, BPF, keyring, and host-vsock denial floor inherited by workloads.
 func BrokerSeccompFilter() seccomp.Filter {
-	return seccomp.Filter{
-		NoNewPrivs: true,
-		Flag:       seccomp.FilterFlagTSync,
-		Policy: seccomp.Policy{
-			DefaultAction: denyEPERM,
-			Syscalls: []seccomp.SyscallGroup{
-				{
-					Action: seccomp.ActionAllow,
-					Names: []string{
-						// File I/O
-						"read", "write", "open", "openat", "close", "fstat",
-						"lstat", "stat", "readlink", "mkdir", "mkdirat",
-						"unlink", "unlinkat", "rename", "renameat",
-						"chmod", "fchmod", "symlink", "symlinkat",
-						"truncate", "ftruncate", "fcntl",
-						"dup", "dup2", "dup3", "pipe", "pipe2",
-						"close_range", "getdents64", "readlinkat",
-						"faccessat", "faccessat2", "newfstatat",
-						// Process management
-						"select", "poll", "epoll_wait", "wait4",
-						"kill", "tgkill",
-						// Signals
-						"rt_sigaction", "rt_sigprocmask", "sigreturn",
-						"exit", "exit_group",
-						// Memory
-						"brk", "mmap", "munmap", "mprotect", "mremap", "madvise",
-						// Threading
-						"futex", "getpid", "gettid",
-						// Identity
-						"getuid", "geteuid", "getgid", "getegid",
-						"setuid", "setgid", "setgroups",
-						// Time
-						"clock_gettime", "nanosleep",
-						// PTY
-						"ioctl",
-						// Misc
-						"getrandom", "prlimit64", "getrlimit", "setrlimit",
-						"arch_prctl",
-					},
-				},
-				// Allow AF_UNIX sockets only (broker control plane).
-				{
-					Action: seccomp.ActionAllow,
-					NamesWithCondtions: []seccomp.NameWithConditions{{
-						Name: "socket",
-						Conditions: seccomp.ArgumentConditions{{
-							Argument:  0,
-							Operation: seccomp.Equal,
-							Value:     uint64(unix.AF_UNIX), // 1
-						}},
-					}},
-				},
-				// Allow socket operations on existing AF_UNIX sockets.
-				{
-					Action: seccomp.ActionAllow,
-					Names: []string{
-						"bind", "listen", "accept", "accept4", "connect",
-						"getsockname", "getpeername", "getsockopt", "setsockopt",
-						"shutdown", "socketpair",
-					},
-				},
-			},
-		},
-	}
+	return WorkloadSeccompFilter()
 }
 
 // LoadWorkloadFilter loads the workload seccomp filter into the kernel.

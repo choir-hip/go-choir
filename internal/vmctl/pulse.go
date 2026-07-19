@@ -203,7 +203,7 @@ func pulseSummaryFromSnapshot(now time.Time, stateDir string, users []pulseAccou
 		size := vmStateDirUsageBytes(stateDir, own.VMID)
 		storage.VMStateBytesByClass[class] += size
 		storage.VMStateBytesTotal += size
-		if own.Kind != VMKindInteractive || own.DesktopID != PrimaryDesktopID || !own.Published {
+		if own.Kind != VMKindInteractive || own.DesktopID != PrimaryDesktopID {
 			continue
 		}
 		addPulseComputerClass(computers.PrimaryComputers, class, string(own.State))

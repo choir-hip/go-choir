@@ -1278,15 +1278,8 @@ func extractRequiredNextTool(calls []types.ToolCall, results []types.ToolResult)
 	return pendingRequiredTool{}, false
 }
 
-func requiredNextToolProtocolAllowed(producerTool, nextTool string, decoded map[string]any) bool {
-	producerTool = strings.TrimSpace(producerTool)
-	nextTool = strings.TrimSpace(nextTool)
-	switch producerTool {
-	case "request_worker_vm":
-		return nextTool == "start_worker_delegation" && decoded["start_args"] != nil
-	default:
-		return false
-	}
+func requiredNextToolProtocolAllowed(string, string, map[string]any) bool {
+	return false
 }
 
 func successfulTerminalToolNames(calls []types.ToolCall, results []types.ToolResult, terminalTools map[string]bool) []string {

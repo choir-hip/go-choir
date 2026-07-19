@@ -14,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
@@ -47,80 +46,39 @@ type resolveRequest struct {
 
 // resolveResponse is the JSON response for POST /internal/vmctl/resolve.
 type resolveResponse struct {
-	VMID            string `json:"vm_id"`
-	UserID          string `json:"user_id"`
-	DesktopID       string `json:"desktop_id"`
-	Kind            VMKind `json:"kind,omitempty"`
-	ParentDesktopID string `json:"parent_desktop_id,omitempty"`
-	ParentVMID      string `json:"parent_vm_id,omitempty"`
-	SnapshotKind    string `json:"snapshot_kind,omitempty"`
-	Published       bool   `json:"published"`
-	WarmnessClass   string `json:"warmness_class,omitempty"`
-	SandboxURL      string `json:"sandbox_url"`
-	State           string `json:"state"`
+	VMID          string `json:"vm_id"`
+	UserID        string `json:"user_id"`
+	DesktopID     string `json:"desktop_id"`
+	Kind          VMKind `json:"kind,omitempty"`
+	WarmnessClass string `json:"warmness_class,omitempty"`
+	SandboxURL    string `json:"sandbox_url"`
+	State         string `json:"state"`
 }
 
 // ownershipResponse is the JSON response for ownership queries.
 type ownershipResponse struct {
-	VMID                  string                           `json:"vm_id"`
-	UserID                string                           `json:"user_id"`
-	DesktopID             string                           `json:"desktop_id"`
-	Kind                  VMKind                           `json:"kind,omitempty"`
-	ParentDesktopID       string                           `json:"parent_desktop_id,omitempty"`
-	ParentVMID            string                           `json:"parent_vm_id,omitempty"`
-	SnapshotKind          string                           `json:"snapshot_kind,omitempty"`
-	WorkerID              string                           `json:"worker_id,omitempty"`
-	ParentAgentID         string                           `json:"parent_agent_id,omitempty"`
-	TrajectoryID          string                           `json:"trajectory_id,omitempty"`
-	Purpose               string                           `json:"purpose,omitempty"`
-	ObjectiveFingerprint  string                           `json:"objective_fingerprint,omitempty"`
-	MachineClass          string                           `json:"machine_class,omitempty"`
-	WarmnessClass         string                           `json:"warmness_class,omitempty"`
-	Published             bool                             `json:"published"`
-	SandboxURL            string                           `json:"sandbox_url"`
-	State                 string                           `json:"state"`
-	CreatedAt             string                           `json:"created_at"`
-	LastActiveAt          string                           `json:"last_active_at"`
-	Epoch                 int64                            `json:"epoch"`
-	StoppedBy             string                           `json:"stopped_by,omitempty"`
-	DataImage             *dataImageResponse               `json:"data_image,omitempty"`
-	ConstructionVersion   *computerversion.ComputerVersion `json:"construction_version,omitempty"`
-	ConstructionDiskID    string                           `json:"construction_disk_receipt_id,omitempty"`
-	ConstructionCommitted bool                             `json:"construction_committed,omitempty"`
-}
-
-type forkDesktopRequest struct {
-	UserID          string `json:"user_id"`
-	SourceDesktopID string `json:"source_desktop_id,omitempty"`
-	TargetDesktopID string `json:"target_desktop_id,omitempty"`
-}
-
-type requestWorkerRequest struct {
-	UserID               string `json:"user_id"`
-	DesktopID            string `json:"desktop_id,omitempty"`
-	ParentAgentID        string `json:"parent_agent_id"`
-	TrajectoryID         string `json:"trajectory_id,omitempty"`
-	Purpose              string `json:"purpose"`
-	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
-	MachineClass         string `json:"machine_class,omitempty"`
-	AllowParallel        bool   `json:"allow_parallel,omitempty"`
-}
-
-type workerActionRequest struct {
-	UserID    string `json:"user_id"`
-	DesktopID string `json:"desktop_id"`
-	WorkerID  string `json:"worker_id"`
+	VMID          string             `json:"vm_id"`
+	UserID        string             `json:"user_id"`
+	DesktopID     string             `json:"desktop_id"`
+	Kind          VMKind             `json:"kind,omitempty"`
+	WarmnessClass string             `json:"warmness_class,omitempty"`
+	SandboxURL    string             `json:"sandbox_url"`
+	State         string             `json:"state"`
+	CreatedAt     string             `json:"created_at"`
+	LastActiveAt  string             `json:"last_active_at"`
+	Epoch         int64              `json:"epoch"`
+	StoppedBy     string             `json:"stopped_by,omitempty"`
+	DataImage     *dataImageResponse `json:"data_image,omitempty"`
 }
 
 type reclaimResponse struct {
-	Status            string               `json:"status"`
-	VMsReclaimed      int                  `json:"vms_reclaimed"`
-	StaleStateDeleted int                  `json:"stale_state_deleted"`
-	RetentionPruned   int                  `json:"retention_pruned"`
-	VMsStopped        int                  `json:"vms_stopped"`
-	ReclaimBefore     PressureReclaimPlan  `json:"reclaim_before"`
-	ReclaimAfter      PressureReclaimPlan  `json:"reclaim_after"`
-	Retention         RetentionPruneResult `json:"retention"`
+	Status          string               `json:"status"`
+	VMsReclaimed    int                  `json:"vms_reclaimed"`
+	RetentionPruned int                  `json:"retention_pruned"`
+	VMsStopped      int                  `json:"vms_stopped"`
+	ReclaimBefore   PressureReclaimPlan  `json:"reclaim_before"`
+	ReclaimAfter    PressureReclaimPlan  `json:"reclaim_after"`
+	Retention       RetentionPruneResult `json:"retention"`
 }
 
 // Handler provides HTTP handlers for the vmctl service.
@@ -134,8 +92,6 @@ type Handler struct {
 	routeAuthority           *RouteAuthority
 	routeAuthorityRequired   bool
 	immutableArtifacts       immutableArtifactOpener
-	construction             *constructionService
-	routeLifecycleMu         sync.Mutex
 }
 
 // NewHandler creates a vmctl Handler with the given ownership registry.
@@ -240,23 +196,19 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-			VMID:            own.VMID,
-			UserID:          own.UserID,
-			DesktopID:       own.DesktopID,
-			Kind:            own.Kind,
-			ParentDesktopID: own.ParentDesktopID,
-			ParentVMID:      own.ParentVMID,
-			SnapshotKind:    own.SnapshotKind,
-			Published:       own.Published,
-			WarmnessClass:   string(h.registry.WarmnessClassForOwnership(own)),
-			SandboxURL:      own.SandboxURL,
-			State:           string(own.State),
+			VMID:          own.VMID,
+			UserID:        own.UserID,
+			DesktopID:     own.DesktopID,
+			Kind:          own.Kind,
+			WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
+			SandboxURL:    own.SandboxURL,
+			State:         string(own.State),
 		})
 		return
 	}
 	if req.DesktopID != PrimaryDesktopID {
 		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{
-			Error: "resolve can provision only the primary desktop; use lookup for published desktops or fork/publish for new desktops",
+			Error: "resolve can provision only the primary desktop",
 		})
 		return
 	}
@@ -269,235 +221,16 @@ func (h *Handler) HandleResolve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:            own.VMID,
-		UserID:          own.UserID,
-		DesktopID:       own.DesktopID,
-		Kind:            own.Kind,
-		ParentDesktopID: own.ParentDesktopID,
-		ParentVMID:      own.ParentVMID,
-		SnapshotKind:    own.SnapshotKind,
-		Published:       own.Published,
-		WarmnessClass:   string(h.registry.WarmnessClassForOwnership(own)),
-		SandboxURL:      own.SandboxURL,
-		State:           string(own.State),
+		VMID:          own.VMID,
+		UserID:        own.UserID,
+		DesktopID:     own.DesktopID,
+		Kind:          own.Kind,
+		WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
+		SandboxURL:    own.SandboxURL,
+		State:         string(own.State),
 	})
 }
 
-// HandleForkDesktop handles POST /internal/vmctl/fork-desktop.
-// It creates or resumes a distinct interactive VM for the target desktop, with
-// lineage back to the source desktop.
-func (h *Handler) HandleForkDesktop(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
-		return
-	}
-
-	var req forkDesktopRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-	if strings.TrimSpace(req.UserID) == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id is required"})
-		return
-	}
-	req.SourceDesktopID = normalizeDesktopID(req.SourceDesktopID)
-	req.TargetDesktopID = normalizeDesktopID(req.TargetDesktopID)
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.SourceDesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.TargetDesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	if req.TargetDesktopID == PrimaryDesktopID {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "target_desktop_id must not be primary"})
-		return
-	}
-
-	own, err := h.registry.ForkDesktop(req.UserID, req.SourceDesktopID, req.TargetDesktopID)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:            own.VMID,
-		UserID:          own.UserID,
-		DesktopID:       own.DesktopID,
-		Kind:            own.Kind,
-		ParentDesktopID: own.ParentDesktopID,
-		ParentVMID:      own.ParentVMID,
-		SnapshotKind:    own.SnapshotKind,
-		Published:       own.Published,
-		WarmnessClass:   string(h.registry.WarmnessClassForOwnership(own)),
-		SandboxURL:      own.SandboxURL,
-		State:           string(own.State),
-	})
-}
-
-// HandlePublishDesktop handles POST /internal/vmctl/publish-desktop.
-// It marks a background candidate desktop as user-switchable.
-func (h *Handler) HandlePublishDesktop(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
-		return
-	}
-
-	var req resolveRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-	if strings.TrimSpace(req.UserID) == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id is required"})
-		return
-	}
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	if req.DesktopID == PrimaryDesktopID {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "primary desktop is already published"})
-		return
-	}
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	own, err := h.registry.PublishDesktop(req.UserID, req.DesktopID)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:            own.VMID,
-		UserID:          own.UserID,
-		DesktopID:       own.DesktopID,
-		Kind:            own.Kind,
-		ParentDesktopID: own.ParentDesktopID,
-		ParentVMID:      own.ParentVMID,
-		SnapshotKind:    own.SnapshotKind,
-		Published:       own.Published,
-		WarmnessClass:   string(h.registry.WarmnessClassForOwnership(own)),
-		SandboxURL:      own.SandboxURL,
-		State:           string(own.State),
-	})
-}
-
-// HandleRequestWorker handles POST /internal/vmctl/request-worker.
-// It provisions a headless worker VM under an existing desktop and returns a
-// typed worker handle instead of a browser-routable desktop URL.
-func (h *Handler) HandleRequestWorker(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
-		return
-	}
-
-	var req requestWorkerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	own, err := h.registry.RequestWorker(WorkerRequest{
-		UserID:               req.UserID,
-		DesktopID:            req.DesktopID,
-		ParentAgentID:        req.ParentAgentID,
-		TrajectoryID:         req.TrajectoryID,
-		Purpose:              req.Purpose,
-		ObjectiveFingerprint: req.ObjectiveFingerprint,
-		MachineClass:         req.MachineClass,
-		AllowParallel:        req.AllowParallel,
-	})
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-
-	writeVMCTLJSON(w, http.StatusOK, workerHandleFromOwnership(own))
-}
-
-// HandleHibernateWorker handles POST /internal/vmctl/hibernate-worker.
-// It suspends a typed worker VM without touching the parent user desktop.
-func (h *Handler) HandleHibernateWorker(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "vmctl control endpoints are not publicly accessible"})
-		return
-	}
-
-	var req workerActionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid request body"})
-		return
-	}
-	req.UserID = strings.TrimSpace(req.UserID)
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	req.WorkerID = strings.TrimSpace(req.WorkerID)
-	if req.UserID == "" || req.WorkerID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id and worker_id are required"})
-		return
-	}
-	if err := h.requireComputerVersionRoute(r.Context(), req.UserID, req.DesktopID); err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	var worker *VMOwnership
-	for _, candidate := range h.registry.ListOwnerships() {
-		if candidate.WorkerID == req.WorkerID {
-			worker = candidate
-			break
-		}
-	}
-	if worker == nil {
-		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "worker ownership not found"})
-		return
-	}
-	if worker.UserID != req.UserID || normalizeDesktopID(worker.DesktopID) != req.DesktopID {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: "worker ownership does not match the authorized computer route"})
-		return
-	}
-	if err := h.registry.HibernateWorker(req.WorkerID); err != nil {
-		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	for _, own := range h.registry.ListOwnerships() {
-		if own.WorkerID == req.WorkerID {
-			writeVMCTLJSON(w, http.StatusOK, map[string]any{
-				"status":        "hibernated",
-				"worker_id":     own.WorkerID,
-				"vm_id":         own.VMID,
-				"user_id":       own.UserID,
-				"desktop_id":    own.DesktopID,
-				"state":         string(own.State),
-				"stopped_by":    own.StoppedBy,
-				"sandbox_url":   own.SandboxURL,
-				"machine_class": own.MachineClass,
-			})
-			return
-		}
-	}
-	writeVMCTLJSON(w, http.StatusOK, map[string]string{"status": "hibernated", "worker_id": req.WorkerID})
-}
 
 // HandleLookup handles GET /internal/vmctl/lookup?user_id=...
 // Returns the current ownership for a user without creating a new VM.
@@ -539,39 +272,19 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		dataImage = dataImageResponseFromStats(stats)
 	}
 	writeVMCTLJSON(w, http.StatusOK, ownershipResponse{
-		VMID:                  own.VMID,
-		UserID:                own.UserID,
-		DesktopID:             own.DesktopID,
-		Kind:                  own.Kind,
-		ParentDesktopID:       own.ParentDesktopID,
-		ParentVMID:            own.ParentVMID,
-		SnapshotKind:          own.SnapshotKind,
-		WorkerID:              own.WorkerID,
-		ParentAgentID:         own.ParentAgentID,
-		TrajectoryID:          own.TrajectoryID,
-		Purpose:               own.Purpose,
-		ObjectiveFingerprint:  workerObjectiveFingerprintForOwnership(own),
-		MachineClass:          own.MachineClass,
-		WarmnessClass:         string(h.registry.WarmnessClassForOwnership(own)),
-		Published:             own.Published,
-		SandboxURL:            own.SandboxURL,
-		State:                 string(own.State),
-		CreatedAt:             own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-		LastActiveAt:          own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
-		Epoch:                 own.Epoch,
-		StoppedBy:             own.StoppedBy,
-		DataImage:             dataImage,
-		ConstructionVersion:   own.ConstructionVersion,
-		ConstructionDiskID:    constructionDiskReceiptID(own),
-		ConstructionCommitted: own.ConstructionCommitted,
+		VMID:          own.VMID,
+		UserID:        own.UserID,
+		DesktopID:     own.DesktopID,
+		Kind:          own.Kind,
+		WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
+		SandboxURL:    own.SandboxURL,
+		State:         string(own.State),
+		CreatedAt:     own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+		LastActiveAt:  own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
+		Epoch:         own.Epoch,
+		StoppedBy:     own.StoppedBy,
+		DataImage:     dataImage,
 	})
-}
-
-func constructionDiskReceiptID(own *VMOwnership) string {
-	if own == nil || own.ConstructionDisk == nil {
-		return ""
-	}
-	return strings.TrimSpace(own.ConstructionDisk.ID)
 }
 
 // HandleStop handles POST /internal/vmctl/stop.
@@ -734,16 +447,12 @@ func (h *Handler) HandleResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:            own.VMID,
-		UserID:          own.UserID,
-		DesktopID:       own.DesktopID,
-		Kind:            own.Kind,
-		ParentDesktopID: own.ParentDesktopID,
-		ParentVMID:      own.ParentVMID,
-		SnapshotKind:    own.SnapshotKind,
-		Published:       own.Published,
-		SandboxURL:      own.SandboxURL,
-		State:           string(own.State),
+		VMID:       own.VMID,
+		UserID:     own.UserID,
+		DesktopID:  own.DesktopID,
+		Kind:       own.Kind,
+		SandboxURL: own.SandboxURL,
+		State:      string(own.State),
 	})
 }
 
@@ -786,16 +495,12 @@ func (h *Handler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:            own.VMID,
-		UserID:          own.UserID,
-		DesktopID:       own.DesktopID,
-		Kind:            own.Kind,
-		ParentDesktopID: own.ParentDesktopID,
-		ParentVMID:      own.ParentVMID,
-		SnapshotKind:    own.SnapshotKind,
-		Published:       own.Published,
-		SandboxURL:      own.SandboxURL,
-		State:           string(own.State),
+		VMID:       own.VMID,
+		UserID:     own.UserID,
+		DesktopID:  own.DesktopID,
+		Kind:       own.Kind,
+		SandboxURL: own.SandboxURL,
+		State:      string(own.State),
 	})
 }
 
@@ -838,16 +543,12 @@ func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeVMCTLJSON(w, http.StatusOK, resolveResponse{
-		VMID:            own.VMID,
-		UserID:          own.UserID,
-		DesktopID:       own.DesktopID,
-		Kind:            own.Kind,
-		ParentDesktopID: own.ParentDesktopID,
-		ParentVMID:      own.ParentVMID,
-		SnapshotKind:    own.SnapshotKind,
-		Published:       own.Published,
-		SandboxURL:      own.SandboxURL,
-		State:           string(own.State),
+		VMID:       own.VMID,
+		UserID:     own.UserID,
+		DesktopID:  own.DesktopID,
+		Kind:       own.Kind,
+		SandboxURL: own.SandboxURL,
+		State:      string(own.State),
 	})
 }
 
@@ -890,18 +591,16 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) runReclaimSweep(ctx context.Context) reclaimResponse {
 	before := h.registry.PressureReclaimPlan()
 	reclaimed := h.registry.ReclaimPressureVMs(ctx, h.AuthorizeComputerVersionRoute)
-	staleStateDeleted := h.registry.ReclaimStaleVMState(ctx, h.AuthorizeComputerVersionRoute)
 	retention := h.registry.PruneRetention(ctx, h.AuthorizeComputerVersionRoute)
 	stopped := h.registry.StopIdleVMs(ctx, h.AuthorizeComputerVersionRoute)
 	return reclaimResponse{
-		Status:            "ok",
-		VMsReclaimed:      reclaimed,
-		StaleStateDeleted: staleStateDeleted,
-		RetentionPruned:   retention.Deleted,
-		VMsStopped:        stopped,
-		ReclaimBefore:     before,
-		ReclaimAfter:      h.registry.PressureReclaimPlan(),
-		Retention:         retention,
+		Status:          "ok",
+		VMsReclaimed:    reclaimed,
+		RetentionPruned: retention.Deleted,
+		VMsStopped:      stopped,
+		ReclaimBefore:   before,
+		ReclaimAfter:    h.registry.PressureReclaimPlan(),
+		Retention:       retention,
 	}
 }
 
@@ -924,14 +623,13 @@ func (h *Handler) HandleIdleCheck(w http.ResponseWriter, r *http.Request) {
 
 	result := h.runReclaimSweep(r.Context())
 	writeVMCTLJSON(w, http.StatusOK, map[string]interface{}{
-		"status":              result.Status,
-		"vms_reclaimed":       result.VMsReclaimed,
-		"stale_state_deleted": result.StaleStateDeleted,
-		"retention_pruned":    result.RetentionPruned,
-		"vms_stopped":         result.VMsStopped,
-		"reclaim":             result.ReclaimAfter,
-		"reclaim_before":      result.ReclaimBefore,
-		"retention":           result.Retention,
+		"status":           result.Status,
+		"vms_reclaimed":    result.VMsReclaimed,
+		"retention_pruned": result.RetentionPruned,
+		"vms_stopped":      result.VMsStopped,
+		"reclaim":          result.ReclaimAfter,
+		"reclaim_before":   result.ReclaimBefore,
+		"retention":        result.Retention,
 	})
 }
 
@@ -1047,30 +745,17 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	result := make([]ownershipResponse, 0, len(ownerships))
 	for _, own := range ownerships {
 		result = append(result, ownershipResponse{
-			VMID:                  own.VMID,
-			UserID:                own.UserID,
-			DesktopID:             own.DesktopID,
-			Kind:                  own.Kind,
-			ParentDesktopID:       own.ParentDesktopID,
-			ParentVMID:            own.ParentVMID,
-			SnapshotKind:          own.SnapshotKind,
-			WorkerID:              own.WorkerID,
-			ParentAgentID:         own.ParentAgentID,
-			TrajectoryID:          own.TrajectoryID,
-			Purpose:               own.Purpose,
-			ObjectiveFingerprint:  workerObjectiveFingerprintForOwnership(own),
-			MachineClass:          own.MachineClass,
-			WarmnessClass:         string(h.registry.WarmnessClassForOwnership(own)),
-			Published:             own.Published,
-			SandboxURL:            own.SandboxURL,
-			State:                 string(own.State),
-			CreatedAt:             own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-			LastActiveAt:          own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
-			Epoch:                 own.Epoch,
-			StoppedBy:             own.StoppedBy,
-			ConstructionVersion:   own.ConstructionVersion,
-			ConstructionDiskID:    constructionDiskReceiptID(own),
-			ConstructionCommitted: own.ConstructionCommitted,
+			VMID:          own.VMID,
+			UserID:        own.UserID,
+			DesktopID:     own.DesktopID,
+			Kind:          own.Kind,
+			WarmnessClass: string(h.registry.WarmnessClassForOwnership(own)),
+			SandboxURL:    own.SandboxURL,
+			State:         string(own.State),
+			CreatedAt:     own.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
+			LastActiveAt:  own.LastActiveAt.Format("2006-01-02T15:04:05.000Z"),
+			Epoch:         own.Epoch,
+			StoppedBy:     own.StoppedBy,
 		})
 	}
 
@@ -1111,7 +796,7 @@ func (h *Handler) HandleRuntimePackage(w http.ResponseWriter, r *http.Request) {
 		}
 		var runtimeArtifact *computerversion.CodeArtifact
 		for i := range closure.Artifacts {
-			if closure.Artifacts[i].Name == computerversion.SandboxRuntimeArtifactName {
+			if closure.Artifacts[i].Name == "sandbox-runtime.tar" {
 				runtimeArtifact = &closure.Artifacts[i]
 				break
 			}
@@ -1482,23 +1167,9 @@ func isInternalCaller(r *http.Request) bool {
 func RegisterRoutes(s *server.Server, h *Handler) {
 	s.SetHealthHandler(h.HandleHealth)
 	s.HandleFunc("/internal/vmctl/resolve", h.HandleResolve)
-	s.HandleFunc("/internal/vmctl/computer-version-inputs/pin-code", h.HandlePinComputerVersionCode)
-	s.HandleFunc("/internal/vmctl/computer-version-inputs/pin-artifact-program", h.HandlePinComputerVersionArtifactProgram)
-	s.HandleFunc("/internal/vmctl/computer-version-routes/pin-authorization-evidence", h.HandlePinComputerVersionAuthorizationEvidence)
-	s.HandleFunc("/internal/vmctl/computer-version-realizations/dispose-unrouted", h.HandleDisposeUnroutedConstructedCandidate)
-	s.HandleFunc("/internal/vmctl/computer-version-realizations/dispose-routed", h.HandleDisposeRoutedConstructedRealization)
-	s.HandleFunc("/internal/vmctl/computer-version-realizations/detach-legacy", h.HandleDetachLegacyComputerVersionOwnership)
-	s.HandleFunc("/internal/vmctl/computer-version-realizations/restore-legacy", h.HandleRestoreLegacyComputerVersionOwnership)
-	s.HandleFunc("/internal/vmctl/computer-version-routes/prepare-bootstrap", h.HandlePrepareComputerVersionRouteBootstrap)
-	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-bootstrap", h.HandleApplyFrozenComputerVersionBootstrap)
-	s.HandleFunc("/internal/vmctl/computer-version-routes/prepare-promotion", h.HandlePrepareComputerVersionRoutePromotion)
-	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-promotion", h.HandleApplyFrozenComputerVersionPromotion)
+	s.HandleFunc("/internal/vmctl/computer-version-inputs/resolve", h.HandleResolveComputerVersionInputs)
 	s.HandleFunc("/internal/vmctl/computer-version-routes/resolve", h.HandleResolveComputerVersionRoute)
-	s.HandleFunc("/internal/vmctl/computer-version-routes/transition", h.HandleTransitionComputerVersionRoute)
-	s.HandleFunc("/internal/vmctl/fork-desktop", h.HandleForkDesktop)
-	s.HandleFunc("/internal/vmctl/publish-desktop", h.HandlePublishDesktop)
-	s.HandleFunc("/internal/vmctl/request-worker", h.HandleRequestWorker)
-	s.HandleFunc("/internal/vmctl/hibernate-worker", h.HandleHibernateWorker)
+	s.HandleFunc("/internal/vmctl/computer-version-routes/apply-self-development", h.HandleApplySelfDevelopmentRouteProjection)
 	s.HandleFunc("/internal/vmctl/lookup", h.HandleLookup)
 	s.HandleFunc("/internal/vmctl/stop", h.HandleStop)
 	s.HandleFunc("/internal/vmctl/remove", h.HandleRemove)
@@ -1515,7 +1186,6 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/vmctl/pulse", h.HandlePulse)
 	s.HandleFunc("/internal/vmctl/prune", h.HandlePrune)
 	s.HandleFunc("/internal/vmctl/runtime-package/sandbox", h.HandleRuntimePackage)
-	s.HandleFunc("/internal/vmctl/computer-version/construct", h.HandleConstructComputerVersion)
 	s.HandleFunc("/internal/vmctl/sandbox-proxy/", h.HandleSandboxProxy)
 }
 
@@ -1537,29 +1207,6 @@ func ListEndpoint(baseURL string) string {
 	return baseURL + "/internal/vmctl/list"
 }
 
-// ForkDesktopEndpoint returns the full fork-desktop endpoint URL for the vmctl
-// service at the given base URL.
-func ForkDesktopEndpoint(baseURL string) string {
-	return baseURL + "/internal/vmctl/fork-desktop"
-}
-
-// PublishDesktopEndpoint returns the full publish-desktop endpoint URL for the
-// vmctl service at the given base URL.
-func PublishDesktopEndpoint(baseURL string) string {
-	return baseURL + "/internal/vmctl/publish-desktop"
-}
-
-// RequestWorkerEndpoint returns the full request-worker endpoint URL for the
-// vmctl service at the given base URL.
-func RequestWorkerEndpoint(baseURL string) string {
-	return baseURL + "/internal/vmctl/request-worker"
-}
-
-// HibernateWorkerEndpoint returns the full hibernate-worker endpoint URL for
-// the vmctl service at the given base URL.
-func HibernateWorkerEndpoint(baseURL string) string {
-	return baseURL + "/internal/vmctl/hibernate-worker"
-}
 
 // StopEndpoint returns the full stop endpoint URL for the vmctl
 // service at the given base URL.

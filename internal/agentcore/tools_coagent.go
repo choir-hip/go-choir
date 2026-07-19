@@ -207,7 +207,7 @@ func newCancelAgentTool(rt *Runtime) toolregistry.Tool {
 			agentID := strings.TrimSpace(in.AgentID)
 			var target types.RunRecord
 			targetFromCallerSlot := false
-			if toolregistry.ExecutionContextFrom(ctx).Profile == agentprofile.VSuper {
+			if toolregistry.ExecutionContextFrom(ctx).Profile == agentprofile.Super {
 				callerTrajectoryID := trajectoryIDForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)
 				slot, found, err := rt.store.CoSuperSlotByAgentAndTrajectory(ctx, ownerID, callerTrajectoryID, agentID)
 				if err != nil {
@@ -240,20 +240,6 @@ func newCancelAgentTool(rt *Runtime) toolregistry.Tool {
 						return "", fmt.Errorf("lookup active agent run: %w", err)
 					}
 					target = latest
-				}
-			}
-			if targetFromCallerSlot {
-				eventsForRun, err := rt.store.ListEvents(ctx, target.RunID, 1000)
-				if err != nil {
-					return "", fmt.Errorf("check child export evidence before cancel: %w", err)
-				}
-				if hasSuccessfulToolResult(eventsForRun, "publish_app_change_package") {
-					return toolregistry.ResultJSON(map[string]any{
-						"agent_id": in.AgentID,
-						"loop_id":  target.RunID,
-						"status":   "not_cancelled",
-						"reason":   "child already produced publish_app_change_package evidence; incorporate the child package instead of cancelling it",
-					})
 				}
 			}
 			if err := rt.CancelRun(ctx, target.RunID, ownerID); err != nil {

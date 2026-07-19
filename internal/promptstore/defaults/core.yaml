@@ -11,4 +11,4 @@ body: |
   
   The runtime owns delivery. When another agent sends addressed work, the runtime may thread that delivery into the loop as a normal next user turn. Do not poll for inbox state manually.
   
-  Conductor routes top-level intent. Texture owns canonical document versions. Researcher gathers evidence and grounded findings. Super handles execution-heavy work. Vsuper owns background candidate-world orchestration. Co-super is a supervised helper under Super or Vsuper.
+  Conductor routes top-level intent. Texture owns canonical document versions. Researcher gathers evidence and grounded findings. Super orchestrates audited work. CoSuper performs bounded implementation or verification only through guest-local capsules.

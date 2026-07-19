@@ -155,10 +155,7 @@ func LoadConfig() Config {
 			"RUNTIME_RUN_MEMORY_KEEP_RECENT_TOKENS",
 			DefaultRunMemoryKeepRecentTokens,
 		),
-		PromotionSourceRepo: envOr(
-			"RUNTIME_PROMOTION_SOURCE_REPO",
-			os.Getenv("RUNTIME_WORKER_REPO_REMOTE"),
-		),
+		PromotionSourceRepo:    os.Getenv("RUNTIME_PROMOTION_SOURCE_REPO"),
 		SourceLedgerRepo:       envOr("RUNTIME_SOURCE_LEDGER_REPO", DefaultSourceLedgerRepo),
 		PromotionWorkspaceRoot: os.Getenv("RUNTIME_PROMOTION_WORKSPACE_ROOT"),
 		AppPromotionRuntimeBuildCommand: envOr(

@@ -413,6 +413,43 @@ func TestSQLLedgerAtomicEvidenceRollsBackOnStaleTransition(t *testing.T) {
 	}
 }
 
+func TestSQLLedgerSelfDevelopmentProtectionCommitsAtomically(t *testing.T) {
+	productStore, err := store.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = productStore.Close() }()
+	ledger, catalog := newSQLRouteLedger(t, productStore.DB())
+	slotID := mustSlotID(t, "owner-selfdev", "primary")
+	base := pinSQLVersion(t, catalog, "selfdev-base")
+	candidate := pinSQLVersion(t, catalog, "selfdev-candidate")
+	baseApproval, baseCertificate := pinSQLTransitionEvidence(t, ledger, slotID, base, "selfdev-base")
+	slot, _, err := transitionSQLForTest(ledger, t.Context(), TransitionCommand{RouteSlotID: slotID, Kind: TransitionBootstrap, New: base, ApprovalRef: baseApproval, PromotionCertificateRef: baseCertificate, IdempotencyKey: "idempotency:selfdev-bootstrap"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	approval, certificate := pinSQLTransitionEvidence(t, ledger, slotID, candidate, "selfdev-candidate")
+	command := TransitionCommand{RouteSlotID: slotID, Kind: TransitionPromote, Old: base, New: candidate, ExpectedGeneration: slot.Generation, ApprovalRef: approval, PromotionCertificateRef: certificate, IdempotencyKey: "idempotency:selfdev-promote"}
+	if _, _, err := ledger.ApplySelfDevelopmentTransition(t.Context(), command, nil); err == nil {
+		t.Fatal("self-development transition accepted missing evidence")
+	}
+	approvalEvidence, err := ledger.ResolveAuthorizationEvidence(t.Context(), string(approval))
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificateEvidence, err := ledger.ResolveAuthorizationEvidence(t.Context(), string(certificate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ledger.ApplySelfDevelopmentTransition(t.Context(), command, []AuthorizationEvidence{approvalEvidence, certificateEvidence}); err != nil {
+		t.Fatal(err)
+	}
+	protected, err := ledger.SelfDevelopmentRouteProtected(t.Context(), slotID)
+	if err != nil || !protected {
+		t.Fatalf("protected=%v err=%v", protected, err)
+	}
+}
+
 func newSQLRouteLedger(t *testing.T, db *sql.DB) (*SQLLedger, *computerversion.SQLInputCatalog) {
 	t.Helper()
 	catalog := computerversion.NewSQLInputCatalog(db, acceptingContentVerifier{})

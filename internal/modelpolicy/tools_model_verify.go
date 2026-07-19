@@ -33,7 +33,7 @@ func NewVerifyModelCapabilityTool(manager *Manager) toolregistry.Tool {
 		Name:        "verify_model_capability",
 		Description: "Run a bounded provider-backed verification prompt through a selected role/model policy, optionally with one image, and return evidence without mutating product state.",
 		Parameters: toolregistry.JSONSchemaObject(map[string]any{
-			"role":             map[string]any{"type": "string", "description": "Required model-policy role to resolve, for example verifier, verifier_multimodal, researcher, super, vsuper, co-super, or texture."},
+			"role":             map[string]any{"type": "string", "description": "Required model-policy role to resolve, for example verifier, verifier_multimodal, researcher, super, co-super, or texture."},
 			"provider":         map[string]any{"type": "string", "description": "Optional explicit provider override from the configured model catalog."},
 			"model":            map[string]any{"type": "string", "description": "Optional explicit model override from the configured model catalog."},
 			"reasoning_effort": map[string]any{"type": "string", "description": "Optional provider reasoning setting."},

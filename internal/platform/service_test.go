@@ -1591,15 +1591,15 @@ func TestPublishTextureCreatesImmutablePublicRecords(t *testing.T) {
 
 	// Count objects by kind in the object graph.
 	for kind, want := range map[string]int{
-		"choir.publication":             1,
-		"choir.publication_version":     1,
-		"choir.publication_proposal":    2, // 1 from publish + 1 reader proposal
-		"choir.public_route":            2, // 1 from publish + 1 legacy route inserted by test
-		"choir.artifact_manifest":       2, // 1 publish + 1 proposal
-		"choir.artifact_blob":           2, // 1 publish + 1 proposal
-		"choir.retrieval_source":        1,
-		"choir.retrieval_span":          1,
-		"choir.retrieval_manifest":      1,
+		"choir.publication":               1,
+		"choir.publication_version":       1,
+		"choir.publication_proposal":      2, // 1 from publish + 1 reader proposal
+		"choir.public_route":              2, // 1 from publish + 1 legacy route inserted by test
+		"choir.artifact_manifest":         2, // 1 publish + 1 proposal
+		"choir.artifact_blob":             2, // 1 publish + 1 proposal
+		"choir.retrieval_source":          1,
+		"choir.retrieval_span":            1,
+		"choir.retrieval_manifest":        1,
 		"choir.publication_source_entity": 1,
 		"choir.publication_transclusion":  1,
 		"choir.publication_policy":        1,

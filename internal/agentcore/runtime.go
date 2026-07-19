@@ -6,12 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/candidatepackage"
+	"github.com/yusefmosiah/go-choir/internal/capsule"
+	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/desktopstate"
 	"github.com/yusefmosiah/go-choir/internal/modelpolicy"
@@ -19,6 +24,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/promptstore"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
+	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/workitem"
 
 	"github.com/google/uuid"
@@ -31,6 +37,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
@@ -86,10 +93,24 @@ type Runtime struct {
 	// fallback path. The actor runtime is the only execution substrate.
 	dispatchActor func(ctx context.Context, toAgentID, kind, content, trajectoryID, fromAgentID string) error
 
-	promotion         *promotion.Service
-	candidatePackages *candidatepackage.Service
-	desktopState      *desktopstate.Handler
-	content           *contentowner.Service
+	promotion             *promotion.Service
+	candidatePackages     *candidatepackage.Service
+	desktopState          *desktopstate.Handler
+	content               *contentowner.Service
+	capsuleExecutor       *capsule.Executor
+	capsuleBuilder        *transaction.TransactionBuilder
+	eventAppender         *computerevent.ComputerEventAppender
+	selfdevOperations     *selfdev.Store
+	privateArtifactCipher *computerevent.PrivateArtifactCipher
+	selfdevUpdater        *updater.Client
+	selfdevControl        *selfdev.GuestCredentials
+	selfdevRoute          *vmctl.Client
+	selfdevRouteOwnerID   string
+	selfdevRouteDesktopID string
+	selfdevUpdaterRoot    string
+	selfdevComputerID     string
+	selfdevRealizationID  string
+	selfdevMaterializeMu  sync.Mutex
 }
 
 type textureWakeTimer interface {
@@ -130,6 +151,9 @@ func New(cfg provideriface.Config, s *store.Store, bus *events.EventBus, provide
 	rt.candidatePackages = candidatepackage.NewService(s, rt.promotion)
 	for _, opt := range opts {
 		opt(rt)
+	}
+	if operations, err := selfdev.NewStore(s, s); err == nil {
+		rt.selfdevOperations = operations
 	}
 	return rt
 }
@@ -443,6 +467,53 @@ func WithContentService(service *contentowner.Service) RuntimeOption {
 	}
 }
 
+// WithCapsuleExecutor binds the guest-local capsule authority. It is omitted
+// outside the Linux guest; capsule tools then remain uninstalled.
+func WithCapsuleExecutor(executor *capsule.Executor) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.capsuleExecutor = executor
+		if executor != nil {
+			rt.capsuleBuilder = transaction.NewTransactionBuilder(transaction.NewClassifier())
+		}
+	}
+}
+
+// WithPrivateArtifactCipher binds the guest-root private artifact authority.
+func WithPrivateArtifactCipher(cipher *computerevent.PrivateArtifactCipher) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.privateArtifactCipher = cipher
+	}
+}
+
+func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realizationID string) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.selfdevUpdater = client
+		rt.selfdevUpdaterRoot = filepath.Clean(strings.TrimSpace(root))
+		rt.selfdevComputerID = strings.TrimSpace(computerID)
+		rt.selfdevRealizationID = strings.TrimSpace(realizationID)
+	}
+}
+
+func WithSelfDevelopmentControl(credentials *selfdev.GuestCredentials) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.selfdevControl = credentials
+	}
+}
+
+func WithSelfDevelopmentRoute(client *vmctl.Client, ownerID, desktopID string) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.selfdevRoute = client
+		rt.selfdevRouteOwnerID = strings.TrimSpace(ownerID)
+		rt.selfdevRouteDesktopID = strings.TrimSpace(desktopID)
+	}
+}
+
+func WithComputerEventAppender(appender *computerevent.ComputerEventAppender) RuntimeOption {
+	return func(rt *Runtime) {
+		rt.eventAppender = appender
+	}
+}
+
 func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWakeTimer) RuntimeOption {
 	return func(rt *Runtime) {
 		if after != nil {
@@ -455,6 +526,7 @@ func withTextureWakeAfterFuncForTest(after func(time.Duration, func()) textureWa
 // in-process activations are marked passivated, then durable update backlog and
 // assigned open trajectory work are swept to re-warm cold actors.
 func (rt *Runtime) Start(ctx context.Context) {
+	go rt.reconcileSelfDevelopmentMaterialization(context.Background())
 	rt.passivateInterruptedActivations(ctx)
 	rt.recoverOpenWirePublicationClaims(ctx)
 	terminalOutcomeTargets := rt.reconcileTerminalRunOutcomes(ctx)
@@ -695,7 +767,6 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	for k, v := range constraints {
 		metadata[k] = v
 	}
-	inheritWorkerRepoMetadata(metadata, &requesterRec)
 	// A pinned model-policy overlay (e.g. an eval arm) covers the whole
 	// trajectory: a child coagent inherits the requester's overlay when it does
 	// not specify its own, so a Texture arm also pins the researchers it spawns.
@@ -704,7 +775,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 			metadata[modelpolicy.MetadataPolicyOverlayID] = overlayID
 		}
 	}
-	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
+	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" {
 		metadata[runMetadataCoSuperSlot] = slot
 	}
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
@@ -714,12 +785,12 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		if coagentProfile == "" {
 			coagentProfile = agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentRole))
 		}
-		slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))
+		slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot))
 		if strings.TrimSpace(metadataStringValue(metadata, runMetadataCoSuperSlot)) != "" && slot == "" && coagentProfile == agentprofile.CoSuper {
-			return nil, fmt.Errorf("vsuper co-super coagent requires co_super_slot to be implementation or verifier")
+			return nil, fmt.Errorf("super co-super run requires co_super_slot to be implementation or verifier")
 		}
 		if coagentProfile == agentprofile.CoSuper && slot == "" {
-			return nil, fmt.Errorf("vsuper co-super coagent requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
+			return nil, fmt.Errorf("super co-super run requires co_super_slot=\"implementation\" or co_super_slot=\"verifier\"")
 		}
 		if slot != "" && coagentProfile == agentprofile.CoSuper {
 			existing, found, err := rt.activeCoSuperSlotRun(ctx, ownerID, metadataStringValue(metadata, runMetadataTrajectoryID), slot)
@@ -736,7 +807,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 			return nil, err
 		}
 		if slot == "verifier" && coagentProfile == agentprofile.CoSuper {
-			if err := rt.enforceVSuperVerifierSequencing(ctx, &requesterRec); err != nil {
+			if err := rt.enforceSuperVerifierSequencing(ctx, &requesterRec); err != nil {
 				return nil, err
 			}
 		}
@@ -753,7 +824,7 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	claimedCoSuperSlot := false
 	claimedCoSuperTrajectoryID := ""
 	claimedCoSuperSlotName := ""
-	if slot := normalizeVSuperCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
+	if slot := normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)); slot != "" &&
 		agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
 		rt.coagentSpawnBudgetApplies(&requesterRec) {
 		trajectoryID := metadataStringValue(metadata, runMetadataTrajectoryID)
@@ -770,7 +841,13 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 		claimedCoSuperTrajectoryID = trajectoryID
 		claimedCoSuperSlotName = slot
 	}
+	grantedCapsuleHandle := ""
 	releaseCoSuperSlotClaim := func(cause error) error {
+		if grantedCapsuleHandle != "" && rt.capsuleExecutor != nil {
+			if err := rt.capsuleExecutor.RevokeCapability(runID, grantedCapsuleHandle); err != nil {
+				cause = fmt.Errorf("%w (also failed to revoke capsule capability: %v)", cause, err)
+			}
+		}
 		if !claimedCoSuperSlot {
 			return cause
 		}
@@ -778,6 +855,19 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 			return fmt.Errorf("%w (also failed to release co-super slot claim: %v)", cause, err)
 		}
 		return cause
+	}
+	if agentprofile.Canonical(metadataStringValue(metadata, runMetadataAgentProfile)) == agentprofile.CoSuper &&
+		normalizeCoSuperSlot(metadataStringValue(metadata, runMetadataCoSuperSlot)) == "implementation" {
+		controlHandle := strings.TrimSpace(metadataStringValue(metadata, "capsule_control_handle"))
+		if rt.capsuleExecutor == nil || controlHandle == "" {
+			return nil, releaseCoSuperSlotClaim(fmt.Errorf("co-super implementation capsule authority unavailable"))
+		}
+		grantedCapsuleHandle, err = rt.capsuleExecutor.GrantCoSuper(requesterRunID, controlHandle, runID, 24*time.Hour)
+		if err != nil {
+			return nil, releaseCoSuperSlotClaim(fmt.Errorf("grant co-super capsule: %w", err))
+		}
+		delete(metadata, "capsule_control_handle")
+		metadata["capsule_handle"] = grantedCapsuleHandle
 	}
 	role := firstNonEmptyString(metadataStringValue(metadata, runMetadataAgentRole), metadataStringValue(metadata, runMetadataAgentProfile))
 	metadata = rt.modelPolicy.EnrichMetadata(ctx, ownerID, role, metadata)
@@ -965,7 +1055,7 @@ func (rt *Runtime) ensureSpawnedCoagentWorkItem(ctx context.Context, rec *types.
 
 func spawnedCoagentWorkItemProfile(profile string) bool {
 	switch agentprofile.Canonical(profile) {
-	case agentprofile.Researcher, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
+	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
 		return true
 	default:
 		return false
@@ -994,13 +1084,13 @@ func appendUniqueString(existing []string, values ...string) []string {
 	return out
 }
 
-const maxVSuperActiveCoSuperSlots = 2
+const maxSuperActiveCoSuperSlots = 2
 
 func (rt *Runtime) coagentSpawnBudgetApplies(requesterRec *types.RunRecord) bool {
 	if requesterRec == nil {
 		return false
 	}
-	return agentprofile.Canonical(agentProfileForRun(requesterRec)) == agentprofile.VSuper
+	return agentprofile.Canonical(agentProfileForRun(requesterRec)) == agentprofile.Super
 }
 
 func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, requesterRec *types.RunRecord) error {
@@ -1010,10 +1100,10 @@ func (rt *Runtime) enforceCoSuperSlotBudget(ctx context.Context, requesterRec *t
 	trajectoryID := trajectoryIDForRun(requesterRec)
 	active, err := rt.store.CountActiveCoSuperSlots(ctx, requesterRec.OwnerID, trajectoryID)
 	if err != nil {
-		return fmt.Errorf("check active co-super slots for vsuper trajectory budget: %w", err)
+		return fmt.Errorf("check active co-super slots for super trajectory budget: %w", err)
 	}
-	if active >= maxVSuperActiveCoSuperSlots {
-		return fmt.Errorf("vsuper active co-super slot limit reached for trajectory %s (%d/%d); coordinate existing worker/verifier agents over channels, cancel or wait for a co-super slot, or submit a precise blocker instead of spawning more", trajectoryID, active, maxVSuperActiveCoSuperSlots)
+	if active >= maxSuperActiveCoSuperSlots {
+		return fmt.Errorf("super active co-super slot limit reached for trajectory %s (%d/%d); coordinate existing implementation/verifier agents over channels, cancel or wait for a co-super slot, or submit a precise blocker instead of spawning more", trajectoryID, active, maxSuperActiveCoSuperSlots)
 	}
 	return nil
 }
@@ -1022,7 +1112,7 @@ func (rt *Runtime) activeCoSuperSlotRun(ctx context.Context, ownerID, trajectory
 	if rt == nil || rt.store == nil {
 		return types.RunRecord{}, false, nil
 	}
-	slot = normalizeVSuperCoSuperSlot(slot)
+	slot = normalizeCoSuperSlot(slot)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	if slot == "" || trajectoryID == "" {
 		return types.RunRecord{}, false, nil
@@ -1030,7 +1120,7 @@ func (rt *Runtime) activeCoSuperSlotRun(ctx context.Context, ownerID, trajectory
 	return rt.store.ActiveCoSuperSlotRun(ctx, ownerID, trajectoryID, slot)
 }
 
-func (rt *Runtime) enforceVSuperVerifierSequencing(ctx context.Context, requesterRec *types.RunRecord) error {
+func (rt *Runtime) enforceSuperVerifierSequencing(ctx context.Context, requesterRec *types.RunRecord) error {
 	if rt == nil || rt.store == nil || requesterRec == nil {
 		return nil
 	}
@@ -1040,47 +1130,12 @@ func (rt *Runtime) enforceVSuperVerifierSequencing(ctx context.Context, requeste
 		return fmt.Errorf("lookup implementation co-super slot for verifier sequencing: %w", err)
 	}
 	if found && impl.State.Active() {
-		return fmt.Errorf("vsuper verifier spawn blocked until implementation co-super %s reports commit/package/blocker evidence and finishes; wait for update_coagent evidence before spawning slot=\"verifier\"", impl.RunID)
+		return fmt.Errorf("super verifier spawn blocked until implementation co-super %s reports commit/package/blocker evidence and finishes; wait for update_coagent evidence before spawning slot=\"verifier\"", impl.RunID)
 	}
 	if found && impl.State.Terminal() {
 		return nil
 	}
-	return fmt.Errorf("vsuper verifier spawn requires prior implementation co-super evidence; spawn slot=\"implementation\" first, wait for commit/package/blocker evidence, then spawn slot=\"verifier\" with the exact evidence to inspect")
-}
-
-func (rt *Runtime) latestTrajectoryCoSuperAppChangePackage(ctx context.Context, requesterRec *types.RunRecord) (map[string]any, bool, error) {
-	if rt == nil || rt.store == nil {
-		return nil, false, nil
-	}
-	if requesterRec == nil {
-		return nil, false, nil
-	}
-	trajectoryID := trajectoryIDForRun(requesterRec)
-	if trajectoryID == "" || strings.TrimSpace(requesterRec.OwnerID) == "" {
-		return nil, false, nil
-	}
-	child, found, err := rt.store.CoSuperSlotRun(ctx, requesterRec.OwnerID, trajectoryID, "implementation")
-	if err != nil {
-		return nil, false, fmt.Errorf("lookup implementation co-super slot for app package reuse: %w", err)
-	}
-	if !found {
-		return nil, false, nil
-	}
-	childEvents, err := rt.store.ListEvents(ctx, child.RunID, 1000)
-	if err != nil {
-		return nil, false, fmt.Errorf("list implementation co-super events for export reuse: %w", err)
-	}
-	_, output, ok := latestSuccessfulToolResultOutput(childEvents, "publish_app_change_package")
-	if !ok {
-		return nil, false, nil
-	}
-	output["loop_id"] = child.RunID
-	output["child_loop_id"] = child.RunID
-	output["child_agent_id"] = child.AgentID
-	if slot := metadataStringValue(child.Metadata, runMetadataCoSuperSlot); slot != "" {
-		output["child_slot"] = slot
-	}
-	return output, true, nil
+	return fmt.Errorf("super verifier spawn requires prior implementation co-super evidence; spawn slot=\"implementation\" first, wait for commit/package/blocker evidence, then spawn slot=\"verifier\" with the exact evidence to inspect")
 }
 
 func (rt *Runtime) createAgentMutationForRun(ctx context.Context, rec *types.RunRecord) {
@@ -1763,6 +1818,22 @@ func (rt *Runtime) executeWithToolLoop(ctx context.Context, rec *types.RunRecord
 		return
 	}
 	ctx = toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(rec))
+	if rt.capsuleExecutor != nil {
+		switch agentProfileForRun(rec) {
+		case agentprofile.Super:
+			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
+				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.cfg.SandboxID, Role: capsule.RoleSuper,
+				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
+			})
+		case agentprofile.CoSuper:
+			ctx = WithCapsuleCtx(ctx, &CapsuleToolCtx{
+				Executor: rt.capsuleExecutor, AgentRunID: rec.RunID, ComputerID: rt.cfg.SandboxID, Role: capsule.RoleCoSuper,
+				UpdaterRoot: os.Getenv("CHOIR_UPDATER_ROOT"), CapsuleHandle: metadataStringValue(rec.Metadata, "capsule_handle"),
+				EventAppender: rt.eventAppender, TransactionBuilder: rt.capsuleBuilder,
+				OperationStore: rt.selfdevOperations, EventProjection: rt.store,
+			})
+		}
+	}
 	reactivateExistingMemory := metadataBoolValue(rec.Metadata, "actor_reactivate_existing_memory")
 	appendInitialMailboxTurns := shouldAppendInitialCoagentMailboxTurns(rec)
 	if !reactivateExistingMemory && !appendInitialMailboxTurns {
@@ -2875,12 +2946,6 @@ func (rt *Runtime) handleExecutionError(ctx context.Context, rec *types.RunRecor
 	}
 	errPayload, _ := json.Marshal(map[string]string{"error": err.Error()})
 	rt.emitEvent(persistCtx, rec, kind, cause, errPayload)
-	if synthErr := rt.synthesizeDelegateWorkerUpdateOnSuperFailure(persistCtx, rec, err); synthErr != nil {
-		log.Printf("runtime: synthesize delegate worker update for run %s: %v", rec.RunID, synthErr)
-	}
-	if synthErr := rt.synthesizeSuperFailureUpdate(persistCtx, rec, err); synthErr != nil {
-		log.Printf("runtime: synthesize super failure update for run %s: %v", rec.RunID, synthErr)
-	}
 	if bindErr := rt.bindTerminalRunOutcome(persistCtx, rec, true); bindErr != nil {
 		log.Printf("runtime: bind terminal outcome for run %s: %v", rec.RunID, bindErr)
 	}

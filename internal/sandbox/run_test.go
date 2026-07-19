@@ -54,6 +54,33 @@ func TestBuildRuntimeConfigDerivesCanonicalModelPolicyPath(t *testing.T) {
 	}
 }
 
+func TestConsumeComputerCredentialEnvelopeErasesSingleUseFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "computer-event-envelope")
+	if err := os.WriteFile(path, []byte("encoded-envelope\n"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := consumeComputerCredentialEnvelopeOwned(path, uint32(os.Getuid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded != "encoded-envelope" {
+		t.Fatalf("credential = %q", encoded)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("consumed credential remains readable: %v", err)
+	}
+}
+
+func TestConsumeComputerCredentialEnvelopeRejectsLooseMode(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "computer-event-envelope")
+	if err := os.WriteFile(path, []byte("encoded-envelope\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := consumeComputerCredentialEnvelopeOwned(path, uint32(os.Getuid())); err == nil {
+		t.Fatal("mode-0600 bootstrap credential was accepted")
+	}
+}
+
 func TestRunZotSessionUsesProcessConfiguration(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("ZOT_SESSION_ID", "entry-test")

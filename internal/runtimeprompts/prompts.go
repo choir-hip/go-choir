@@ -30,23 +30,6 @@ type RunContextOptions struct {
 	ChannelID              string
 }
 
-// WorkerRepoBootstrapOptions carries worker VM repo bootstrap parameters.
-type WorkerRepoBootstrapOptions struct {
-	RemoteURL string
-	BaseSHA   string
-	Bootstrap string
-}
-
-// VSuperRuntimeOptions carries vsuper runtime overlay context.
-type VSuperRuntimeOptions struct {
-	RepoBootstrap string
-}
-
-// CoSuperRuntimeOptions carries co-super runtime overlay context.
-type CoSuperRuntimeOptions struct {
-	RepoBootstrap string
-}
-
 func TemporalContext(opts TemporalContextOptions) string {
 	return mustRenderOverlay("temporal_context", opts)
 }
@@ -67,12 +50,8 @@ func SuperRuntimeOverlay() string {
 	return mustRenderOverlay("super_runtime", nil)
 }
 
-func VSuperRuntimeOverlay(opts VSuperRuntimeOptions) string {
-	return mustRenderOverlay("vsuper_runtime", opts)
-}
-
-func CoSuperRuntimeOverlay(opts CoSuperRuntimeOptions) string {
-	return mustRenderOverlay("co_super_runtime", opts)
+func CoSuperRuntimeOverlay() string {
+	return mustRenderOverlay("co_super_runtime", nil)
 }
 
 func ResearcherRuntimeOverlay() string {
@@ -81,16 +60,6 @@ func ResearcherRuntimeOverlay() string {
 
 func RunContextOverlay(opts RunContextOptions) string {
 	return mustRenderOverlay("run_context", opts)
-}
-
-func WorkerRepoBootstrap(opts WorkerRepoBootstrapOptions) string {
-	if strings.TrimSpace(opts.RemoteURL) == "" || strings.TrimSpace(opts.BaseSHA) == "" {
-		return ""
-	}
-	if strings.TrimSpace(opts.Bootstrap) == "" {
-		opts.Bootstrap = "remote_git_clone"
-	}
-	return mustRenderOverlay("worker_repo_bootstrap", opts)
 }
 
 func mustRenderOverlay(name string, data any) string {

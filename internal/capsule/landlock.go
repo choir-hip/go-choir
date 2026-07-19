@@ -1,6 +1,5 @@
 //go:build linux
 
-
 package capsule
 
 import (
@@ -61,7 +60,7 @@ func NewWorkloadLandlock(mergedDir string) *LandlockRestrictor {
 
 // Apply applies the Landlock restrictions to the current process.
 // Must be called after fork, before exec. Requires Linux 5.13+.
-// Uses the best available Landlock ABI with best-effort fallback.
+// The V5 contract is mandatory; unsupported or boot-disabled Landlock fails closed.
 func (r *LandlockRestrictor) Apply() error {
 	if len(r.paths) == 0 {
 		return fmt.Errorf("no paths configured for Landlock restriction")
@@ -84,8 +83,9 @@ func (r *LandlockRestrictor) Apply() error {
 		),
 	}
 
-	// Restrict to the best available Landlock ABI (best-effort).
-	err := landlock.V5.BestEffort().RestrictPaths(rules...)
+	// Require the complete V5 contract. Downgrading would make isolation depend
+	// on the host kernel instead of the frozen capsule policy.
+	err := landlock.V5.RestrictPaths(rules...)
 	if err != nil {
 		return fmt.Errorf("failed to apply Landlock restrictions: %w", err)
 	}

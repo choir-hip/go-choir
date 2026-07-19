@@ -13,10 +13,10 @@ const (
 )
 
 type Config struct {
-	Port            string
-	DoltDSN         string
-	ArtifactsRoot   string
-	SigningKeyPath  string
+	Port           string
+	DoltDSN        string
+	ArtifactsRoot  string
+	SigningKeyPath string
 }
 
 func LoadConfig() (*Config, error) {

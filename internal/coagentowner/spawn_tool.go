@@ -31,6 +31,7 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 		Profile              string   `json:"profile,omitempty"`
 		ChannelID            string   `json:"channel_id,omitempty"`
 		Slot                 string   `json:"slot,omitempty"`
+		CapsuleHandle        string   `json:"capsule_handle,omitempty"`
 		Model                string   `json:"model,omitempty"`
 		ModelPolicyOverlayID string   `json:"model_policy_overlay_id,omitempty"`
 		Title                string   `json:"title,omitempty"`
@@ -51,7 +52,8 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			"role":                    map[string]any{"type": "string", "enum": allowed, "description": roleDescription},
 			"profile":                 map[string]any{"type": "string", "enum": allowed, "description": "Optional canonical profile override. Usually omit; if set, it must be one of the allowed target roles for this caller."},
 			"channel_id":              map[string]any{"type": "string"},
-			"slot":                    map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For vsuper spawning co-super children: use implementation for the candidate writer first; use verifier only after implementation commit/package/blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
+			"slot":                    map[string]any{"type": "string", "enum": []string{"implementation", "verifier"}, "description": "For super spawning co-super children: use implementation for the capsule writer first; use verifier only after frozen-bundle or blocker evidence exists. Reusing a live slot returns the existing child instead of launching a duplicate."},
+			"capsule_handle":          map[string]any{"type": "string", "description": "Opaque handle returned by spawn_capsule; required for a co-super implementation slot and never used for a verifier slot."},
 			"model":                   map[string]any{"type": "string"},
 			"model_policy_overlay_id": map[string]any{"type": "string", "description": "Optional owner-visible model policy overlay id from System/model-policy-overlays/<id>.toml. Use this for eval/model arms instead of passing provider metadata directly."},
 			"title":                   map[string]any{"type": "string", "description": "For role=texture from processor or reconciler: optional Texture document title for a new article."},
@@ -88,8 +90,16 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			if strings.TrimSpace(in.Slot) != "" && slot == "" {
 				return "", fmt.Errorf("spawn_agent slot must be implementation or verifier")
 			}
-			if callerProfile == agentprofile.VSuper && profile == agentprofile.CoSuper && slot == "" {
-				return "", fmt.Errorf("vsuper spawn_agent role=co-super requires slot=\"implementation\" or slot=\"verifier\"")
+			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper && slot == "" {
+				return "", fmt.Errorf("super spawn_agent role=co-super requires slot=\"implementation\" or slot=\"verifier\"")
+			}
+			if callerProfile == agentprofile.Super && profile == agentprofile.CoSuper {
+				if slot == "implementation" && strings.TrimSpace(in.CapsuleHandle) == "" {
+					return "", fmt.Errorf("co-super implementation requires capsule_handle from spawn_capsule")
+				}
+				if slot == "verifier" && strings.TrimSpace(in.CapsuleHandle) != "" {
+					return "", fmt.Errorf("co-super verifier must inspect the frozen bundle, not a live capsule")
+				}
 			}
 			if profile == agentprofile.Texture {
 				parent := exec.RunRecord
@@ -129,6 +139,9 @@ func newSpawnAgentTool(core *agentcore.Runtime, texture *textureowner.Handler, p
 			constraints := map[string]any{"agent_role": role, "agent_profile": profile}
 			if slot != "" {
 				constraints["co_super_slot"] = slot
+			}
+			if value := strings.TrimSpace(in.CapsuleHandle); value != "" {
+				constraints["capsule_control_handle"] = value
 			}
 			if value := strings.TrimSpace(in.ChannelID); value != "" {
 				constraints["channel_id"] = value

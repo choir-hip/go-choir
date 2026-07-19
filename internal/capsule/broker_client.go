@@ -1,6 +1,5 @@
 //go:build linux
 
-
 package capsule
 
 import (

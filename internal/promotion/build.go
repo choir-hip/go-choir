@@ -181,7 +181,6 @@ func appPromotionBaseRef(pkg types.AppChangePackageRecord, rec types.AppAdoption
 		rec.TargetActiveSourceRefAtCandidateStart,
 		cutoverRef,
 		pkg.SourceActiveRef,
-		os.Getenv("RUNTIME_WORKER_REPO_BASE_SHA"),
 		"origin/main",
 		"HEAD",
 	} {

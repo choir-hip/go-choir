@@ -460,276 +460,6 @@ func TestOwnershipRegistry_ListOwnerships(t *testing.T) {
 	}
 }
 
-func TestOwnershipRegistry_RequestWorkerIncludedInList(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-	if _, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "user-1",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		TrajectoryID:  "traj-1",
-		Purpose:       "Run tests",
-		MachineClass:  "worker-small",
-	}); err != nil {
-		t.Fatalf("RequestWorker: %v", err)
-	}
-
-	list := reg.ListOwnerships()
-	if len(list) != 2 {
-		t.Fatalf("expected interactive + worker ownerships, got %d", len(list))
-	}
-	if reg.ActiveCount() != 2 {
-		t.Fatalf("active count = %d, want 2", reg.ActiveCount())
-	}
-}
-
-func TestOwnershipRegistry_RequestWorkerReusesActiveLeaseUnlessParallelAllowed(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-	req := WorkerRequest{
-		UserID:        "user-1",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		TrajectoryID:  "traj-1",
-		Purpose:       "Run the launch/upload/theme patch",
-		MachineClass:  "worker-small",
-	}
-	first, err := reg.RequestWorker(req)
-	if err != nil {
-		t.Fatalf("RequestWorker first: %v", err)
-	}
-	secondReq := req
-	secondReq.Purpose = " run THE LAUNCH/upload/theme patch!! "
-	second, err := reg.RequestWorker(secondReq)
-	if err != nil {
-		t.Fatalf("RequestWorker second: %v", err)
-	}
-	if second.WorkerID != first.WorkerID || second.VMID != first.VMID {
-		t.Fatalf("second worker = %s/%s, want reused %s/%s", second.WorkerID, second.VMID, first.WorkerID, first.VMID)
-	}
-	if first.ObjectiveFingerprint == "" || second.ObjectiveFingerprint != first.ObjectiveFingerprint {
-		t.Fatalf("objective fingerprints = first %q second %q, want same non-empty fingerprint", first.ObjectiveFingerprint, second.ObjectiveFingerprint)
-	}
-
-	req.AllowParallel = true
-	parallel, err := reg.RequestWorker(req)
-	if err != nil {
-		t.Fatalf("RequestWorker parallel: %v", err)
-	}
-	if parallel.WorkerID == first.WorkerID || parallel.VMID == first.VMID {
-		t.Fatalf("parallel worker reused %s/%s unexpectedly", parallel.WorkerID, parallel.VMID)
-	}
-}
-
-func TestOwnershipRegistry_RequestWorkerReturnsSnapshot(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-
-	if _, err := reg.ResolveOrAssignDesktop("user-worker-snapshot", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-	req := WorkerRequest{
-		UserID:        "user-worker-snapshot",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		TrajectoryID:  "traj-worker-snapshot",
-		Purpose:       "Run a worker snapshot test",
-		MachineClass:  "worker-small",
-	}
-	first, err := reg.RequestWorker(req)
-	if err != nil {
-		t.Fatalf("RequestWorker first: %v", err)
-	}
-	first.SandboxURL = "http://caller-mutated"
-	first.State = VMStateFailed
-
-	stored := reg.GetOwnershipByVMID(first.VMID)
-	if stored == nil {
-		t.Fatal("expected stored worker ownership")
-	}
-	if stored.SandboxURL == "http://caller-mutated" || stored.State != VMStateActive {
-		t.Fatalf("stored worker was mutated through returned pointer: url=%q state=%s", stored.SandboxURL, stored.State)
-	}
-
-	reused, err := reg.RequestWorker(req)
-	if err != nil {
-		t.Fatalf("RequestWorker reused: %v", err)
-	}
-	reused.State = VMStateFailed
-
-	stored = reg.GetOwnershipByVMID(reused.VMID)
-	if stored == nil {
-		t.Fatal("expected reused worker ownership")
-	}
-	if stored.State != VMStateActive {
-		t.Fatalf("reused worker return was a live pointer: state=%s", stored.State)
-	}
-}
-
-func TestNormalizeWorkerMachineClassResourceEnvelope(t *testing.T) {
-	tests := []struct {
-		name      string
-		raw       string
-		wantClass string
-		wantCPU   int
-		wantMem   int
-	}{
-		{name: "default", raw: "", wantClass: "worker-small", wantCPU: 1, wantMem: 1024},
-		{name: "standard alias", raw: "standard", wantClass: "worker-small", wantCPU: 1, wantMem: 1024},
-		{name: "small", raw: "worker-small", wantClass: "worker-small", wantCPU: 1, wantMem: 1024},
-		{name: "medium", raw: "worker-medium", wantClass: "worker-medium", wantCPU: 2, wantMem: 4096},
-		{name: "medium alias", raw: " medium ", wantClass: "worker-medium", wantCPU: 2, wantMem: 4096},
-		{name: "large", raw: "worker-large", wantClass: "worker-large", wantCPU: 4, wantMem: 8192},
-		{name: "playwright evidence worker", raw: "worker-playwright", wantClass: "worker-playwright", wantCPU: 4, wantMem: 8192},
-		{name: "playwright alias", raw: "verifier-browser", wantClass: "worker-playwright", wantCPU: 4, wantMem: 8192},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotClass, gotCPU, gotMem, err := normalizeWorkerMachineClass(tt.raw)
-			if err != nil {
-				t.Fatalf("normalizeWorkerMachineClass(%q): %v", tt.raw, err)
-			}
-			if gotClass != tt.wantClass || gotCPU != tt.wantCPU || gotMem != tt.wantMem {
-				t.Fatalf("normalizeWorkerMachineClass(%q) = (%q, %d, %d), want (%q, %d, %d)", tt.raw, gotClass, gotCPU, gotMem, tt.wantClass, tt.wantCPU, tt.wantMem)
-			}
-		})
-	}
-}
-
-func TestOwnershipRegistry_RequestWorkerBootsWithNormalizedMachineShape(t *testing.T) {
-	mock := &mockVMManager{}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-	mock.boots = nil
-
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "user-1",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		TrajectoryID:  "traj-1",
-		Purpose:       "Run a repo mutation and export verifier task",
-		MachineClass:  "medium",
-	})
-	if err != nil {
-		t.Fatalf("RequestWorker: %v", err)
-	}
-	if worker.MachineClass != "worker-medium" {
-		t.Fatalf("worker machine_class = %q, want worker-medium", worker.MachineClass)
-	}
-	if len(mock.boots) != 1 {
-		t.Fatalf("BootVM calls = %d, want 1", len(mock.boots))
-	}
-	got := mock.boots[0]
-	if got.MachineCPUCount != 2 || got.MachineMemSizeMib != 4096 {
-		t.Fatalf("BootVM shape = %d cpu / %d MiB, want 2 cpu / 4096 MiB", got.MachineCPUCount, got.MachineMemSizeMib)
-	}
-	if got.ComputerKind != "worker" || got.OwnerID != "user-1" || got.DesktopID != PrimaryDesktopID || got.WorkerID != worker.WorkerID || got.CandidateID != worker.WorkerID {
-		t.Fatalf("BootVM guest identity = %+v, want worker identity for %s", got, worker.WorkerID)
-	}
-}
-
-func TestOwnershipRegistry_RequestPlaywrightWorkerUsesDedicatedImageProfile(t *testing.T) {
-	mock := &mockVMManager{}
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(mock)
-	reg.SetWorkerImageProfile("worker-playwright", VMImageProfile{
-		KernelImagePath: "/var/lib/go-choir/guest-playwright/vmlinux",
-		InitrdPath:      "/var/lib/go-choir/guest-playwright/initrd",
-		RootfsPath:      "/var/lib/go-choir/guest-playwright/rootfs.ext4",
-		StoreDiskPath:   "/var/lib/go-choir/guest-playwright/storedisk.erofs",
-		KernelParams:    "root=fstab init=/nix/store/playwright-init/init",
-	})
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-	mock.boots = nil
-
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "user-1",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		TrajectoryID:  "traj-1",
-		Purpose:       "Capture browser screenshots and video evidence",
-		MachineClass:  "worker-playwright",
-	})
-	if err != nil {
-		t.Fatalf("RequestWorker: %v", err)
-	}
-	if worker.MachineClass != "worker-playwright" {
-		t.Fatalf("worker machine_class = %q, want worker-playwright", worker.MachineClass)
-	}
-	if len(mock.boots) != 1 {
-		t.Fatalf("BootVM calls = %d, want 1", len(mock.boots))
-	}
-	got := mock.boots[0]
-	if got.MachineCPUCount != 4 || got.MachineMemSizeMib != 8192 {
-		t.Fatalf("BootVM shape = %d cpu / %d MiB, want 4 cpu / 8192 MiB", got.MachineCPUCount, got.MachineMemSizeMib)
-	}
-	if got.KernelImagePath != "/var/lib/go-choir/guest-playwright/vmlinux" ||
-		got.InitrdPath != "/var/lib/go-choir/guest-playwright/initrd" ||
-		got.RootfsPath != "/var/lib/go-choir/guest-playwright/rootfs.ext4" ||
-		got.StoreDiskPath != "/var/lib/go-choir/guest-playwright/storedisk.erofs" ||
-		!strings.Contains(got.KernelParams, "playwright-init") {
-		t.Fatalf("BootVM did not use playwright image profile: %+v", got)
-	}
-}
-
-func TestOwnershipRegistry_RequestPlaywrightWorkerRequiresDedicatedImageProfile(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(&mockVMManager{})
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-
-	_, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "user-1",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		TrajectoryID:  "traj-1",
-		Purpose:       "Capture browser screenshots and video evidence",
-		MachineClass:  "worker-playwright",
-	})
-	if err == nil || !strings.Contains(err.Error(), "requires a configured worker image profile") {
-		t.Fatalf("RequestWorker error = %v, want missing image profile error", err)
-	}
-}
-
-func TestOwnershipRegistry_RequestPlaywrightWorkerRejectsIncompleteImageProfile(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(&mockVMManager{})
-	reg.SetWorkerImageProfile("worker-playwright", VMImageProfile{
-		KernelImagePath: "/var/lib/go-choir/guest-playwright/vmlinux",
-		RootfsPath:      "/var/lib/go-choir/guest-playwright/rootfs.ext4",
-	})
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop: %v", err)
-	}
-
-	_, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "user-1",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		TrajectoryID:  "traj-1",
-		Purpose:       "Capture browser screenshots and video evidence",
-		MachineClass:  "worker-playwright",
-	})
-	if err == nil || !strings.Contains(err.Error(), "worker image profile is incomplete") {
-		t.Fatalf("RequestWorker error = %v, want incomplete image profile error", err)
-	}
-}
-
 func TestOwnershipRegistry_InteractiveVMUsesBuildCapableMemoryEnvelope(t *testing.T) {
 	mock := &mockVMManager{}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
@@ -823,10 +553,6 @@ func newTestServer(t *testing.T) (*httptest.Server, *OwnershipRegistry) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handler.HandleHealth)
 	mux.HandleFunc("/internal/vmctl/resolve", handler.HandleResolve)
-	mux.HandleFunc("/internal/vmctl/fork-desktop", handler.HandleForkDesktop)
-	mux.HandleFunc("/internal/vmctl/publish-desktop", handler.HandlePublishDesktop)
-	mux.HandleFunc("/internal/vmctl/request-worker", handler.HandleRequestWorker)
-	mux.HandleFunc("/internal/vmctl/hibernate-worker", handler.HandleHibernateWorker)
 	mux.HandleFunc("/internal/vmctl/lookup", handler.HandleLookup)
 	mux.HandleFunc("/internal/vmctl/stop", handler.HandleStop)
 	mux.HandleFunc("/internal/vmctl/remove", handler.HandleRemove)
@@ -949,16 +675,6 @@ func TestHandler_Health(t *testing.T) {
 	if _, err := reg.ResolveOrAssign("health-user"); err != nil {
 		t.Fatalf("resolve health user: %v", err)
 	}
-	if _, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "health-user",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "agent-health",
-		TrajectoryID:  "trace-health",
-		Purpose:       "health telemetry worker",
-		MachineClass:  "worker-small",
-	}); err != nil {
-		t.Fatalf("request health worker: %v", err)
-	}
 
 	resp, err := http.Get(srv.URL + "/health")
 	if err != nil {
@@ -981,14 +697,14 @@ func TestHandler_Health(t *testing.T) {
 	if result.Service != "vmctl" {
 		t.Errorf("expected vmctl service, got %s", result.Service)
 	}
-	if result.ActiveVMs != 2 || result.TotalOwnerships != 2 {
-		t.Fatalf("health counts active=%d total=%d, want 2/2", result.ActiveVMs, result.TotalOwnerships)
+	if result.ActiveVMs != 1 || result.TotalOwnerships != 1 {
+		t.Fatalf("health counts active=%d total=%d, want 1/1", result.ActiveVMs, result.TotalOwnerships)
 	}
-	if result.ByKind[string(VMKindInteractive)] != 1 || result.ByKind[string(VMKindWorker)] != 1 {
-		t.Fatalf("health kind counts = %+v, want interactive and worker", result.ByKind)
+	if result.ByKind[string(VMKindInteractive)] != 1 {
+		t.Fatalf("health kind counts = %+v, want one interactive computer", result.ByKind)
 	}
-	if result.ByState[string(VMStateActive)] != 2 {
-		t.Fatalf("health state counts = %+v, want two active", result.ByState)
+	if result.ByState[string(VMStateActive)] != 1 {
+		t.Fatalf("health state counts = %+v, want one active computer", result.ByState)
 	}
 	if result.Reclaim.Mode != PressureReclaimModeOff {
 		t.Fatalf("default reclaim mode = %s, want off", result.Reclaim.Mode)
@@ -996,131 +712,8 @@ func TestHandler_Health(t *testing.T) {
 	if result.Warmness.Policy.PrimaryKeepaliveMode != PrimaryKeepaliveModeOff {
 		t.Fatalf("default warmness mode = %s, want off", result.Warmness.Policy.PrimaryKeepaliveMode)
 	}
-	if result.Warmness.ByClass[string(WarmnessClassPrimary)] != 1 || result.Warmness.ByClass[string(WarmnessClassWorker)] != 1 {
-		t.Fatalf("warmness class counts = %+v, want primary and worker", result.Warmness.ByClass)
-	}
-}
-
-func TestOwnershipRegistry_PressureReclaimDryRunOrdersIdleWorkersBeforeInteractive(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetPressureReclaimConfig(PressureReclaimConfig{
-		Mode:                      PressureReclaimModeDryRun,
-		MinIdle:                   10 * time.Minute,
-		MinMemoryAvailableBytes:   2 * 1024 * 1024 * 1024,
-		MinMemoryAvailablePercent: 15,
-		MaxMemorySomeAvg10:        1,
-		MaxIOSomeAvg10:            5,
-		StateDir:                  t.TempDir(),
-		MaxCandidates:             5,
-	})
-	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
-		return HostPressureSample{
-			SampledAt:              "2026-05-14T12:00:00Z",
-			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
-			MemoryAvailableBytes:   512 * 1024 * 1024,
-			MemoryAvailablePercent: 6.25,
-			MemorySomeAvg10:        2.5,
-		}
-	})
-
-	if _, err := reg.ResolveOrAssign("interactive-old"); err != nil {
-		t.Fatalf("resolve interactive-old: %v", err)
-	}
-	if _, err := reg.ResolveOrAssign("interactive-recent"); err != nil {
-		t.Fatalf("resolve interactive-recent: %v", err)
-	}
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "interactive-old",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "agent-1",
-		Purpose:       "background indexing",
-		MachineClass:  "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("request worker: %v", err)
-	}
-
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey("interactive-old", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-2 * time.Hour)
-	reg.ownerships[ownershipKey("interactive-recent", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Minute)
-	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-3 * time.Hour)
-	reg.mu.Unlock()
-
-	plan := reg.PressureReclaimPlan()
-	if plan.Mode != PressureReclaimModeDryRun {
-		t.Fatalf("mode = %s, want dry-run", plan.Mode)
-	}
-	if plan.Decision != "would_reclaim" {
-		t.Fatalf("decision = %s, want would_reclaim (plan=%+v)", plan.Decision, plan)
-	}
-	if !plan.Pressure.Pressure || !plan.Pressure.MemoryPressure {
-		t.Fatalf("expected memory pressure in plan: %+v", plan.Pressure)
-	}
-	if plan.Inventory.Eligible != 2 || plan.Inventory.Protected != 1 {
-		t.Fatalf("inventory eligible/protected = %d/%d, want 2/1", plan.Inventory.Eligible, plan.Inventory.Protected)
-	}
-	if len(plan.Candidates) < 3 {
-		t.Fatalf("expected at least 3 candidates, got %+v", plan.Candidates)
-	}
-	if plan.Candidates[0].Kind != VMKindWorker || plan.Candidates[0].Protected {
-		t.Fatalf("first candidate = %+v, want eligible worker", plan.Candidates[0])
-	}
-	if plan.Candidates[1].Kind != VMKindInteractive || plan.Candidates[1].Protected {
-		t.Fatalf("second candidate = %+v, want eligible interactive", plan.Candidates[1])
-	}
-	if !plan.Candidates[2].Protected || !containsString(plan.Candidates[2].ProtectedReasons, "recent_activity") {
-		t.Fatalf("third candidate = %+v, want recent_activity protected", plan.Candidates[2])
-	}
-}
-
-func TestOwnershipRegistry_PressureReclaimProtectsCriticalWorkerPurpose(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetPressureReclaimConfig(PressureReclaimConfig{
-		Mode:          PressureReclaimModeDryRun,
-		MinIdle:       10 * time.Minute,
-		MaxCandidates: 5,
-	})
-	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
-		return HostPressureSample{
-			SampledAt:              "2026-05-14T12:00:00Z",
-			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
-			MemoryAvailableBytes:   512 * 1024 * 1024,
-			MemoryAvailablePercent: 6.25,
-		}
-	})
-	if _, err := reg.ResolveOrAssign("user-promote"); err != nil {
-		t.Fatalf("resolve user-promote: %v", err)
-	}
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "user-promote",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "agent-promote",
-		Purpose:       "promotion verifier with rollback evidence",
-		MachineClass:  "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("request worker: %v", err)
-	}
-	reg.mu.Lock()
-	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-2 * time.Hour)
-	reg.mu.Unlock()
-
-	plan := reg.PressureReclaimPlan()
-	if plan.Inventory.Protected != 2 || plan.Inventory.Eligible != 0 {
-		t.Fatalf("inventory protected/eligible = %d/%d, want 2/0", plan.Inventory.Protected, plan.Inventory.Eligible)
-	}
-	if len(plan.Candidates) < 1 {
-		t.Fatalf("expected candidates, got %+v", plan.Candidates)
-	}
-	foundCriticalWorker := false
-	for _, candidate := range plan.Candidates {
-		if candidate.Kind == VMKindWorker && containsString(candidate.ProtectedReasons, "critical_worker_purpose") {
-			foundCriticalWorker = true
-			break
-		}
-	}
-	if !foundCriticalWorker {
-		t.Fatalf("candidates = %+v, want protected critical worker", plan.Candidates)
+	if result.Warmness.ByClass[string(WarmnessClassPrimary)] != 1 {
+		t.Fatalf("warmness class counts = %+v, want primary", result.Warmness.ByClass)
 	}
 }
 
@@ -1152,249 +745,6 @@ func TestOwnershipRegistry_StateDirPressureTriggersReclaimPlan(t *testing.T) {
 	}
 	if plan.Decision != "would_reclaim" {
 		t.Fatalf("decision = %s, want would_reclaim", plan.Decision)
-	}
-}
-
-func TestOwnershipRegistry_ReclaimStaleVMStateDestroysOnlyTerminalWorkersAndUnpublishedCandidates(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetPressureReclaimConfig(PressureReclaimConfig{
-		Mode:                      PressureReclaimModeActive,
-		MinStateDirAvailableBytes: 10 * 1024 * 1024 * 1024,
-		StaleStateMinAge:          time.Hour,
-		MaxStateDeletes:           5,
-		MaxCandidates:             5,
-	})
-	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
-		return HostPressureSample{
-			SampledAt:                "2026-05-20T12:00:00Z",
-			StateDirAvailableBytes:   512 * 1024 * 1024,
-			StateDirAvailablePercent: 2,
-		}
-	})
-	if _, err := reg.ResolveOrAssign("stale-user"); err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
-	unpublished, err := reg.ForkDesktop("stale-user", PrimaryDesktopID, "candidate-old")
-	if err != nil {
-		t.Fatalf("fork unpublished: %v", err)
-	}
-	published, err := reg.ForkDesktop("stale-user", PrimaryDesktopID, "candidate-published")
-	if err != nil {
-		t.Fatalf("fork published: %v", err)
-	}
-	if _, err := reg.PublishDesktop("stale-user", "candidate-published"); err != nil {
-		t.Fatalf("publish candidate: %v", err)
-	}
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "stale-user",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "agent-stale",
-		Purpose:       "experiment cleanup worker",
-		MachineClass:  "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("request worker: %v", err)
-	}
-	recentWorker, err := reg.RequestWorker(WorkerRequest{
-		UserID:               "stale-user",
-		DesktopID:            PrimaryDesktopID,
-		ParentAgentID:        "agent-recent",
-		Purpose:              "recent experiment worker",
-		ObjectiveFingerprint: "recent",
-		MachineClass:         "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("request recent worker: %v", err)
-	}
-
-	old := time.Now().Add(-3 * time.Hour)
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey("stale-user", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("stale-user", "candidate-old")].State = VMStateHibernated
-	reg.ownerships[ownershipKey("stale-user", "candidate-old")].LastActiveAt = old
-	reg.ownerships[ownershipKey("stale-user", "candidate-published")].State = VMStateHibernated
-	reg.ownerships[ownershipKey("stale-user", "candidate-published")].LastActiveAt = old
-	reg.workerVMs[worker.WorkerID].State = VMStateHibernated
-	reg.workerVMs[worker.WorkerID].LastActiveAt = old
-	reg.workerVMs[recentWorker.WorkerID].State = VMStateHibernated
-	reg.workerVMs[recentWorker.WorkerID].LastActiveAt = time.Now()
-	reg.mu.Unlock()
-	mgr := &mockVMManager{}
-	reg.SetVMManager(mgr)
-
-	denyRoute := func(context.Context, string, string) error { return errors.New("route missing") }
-	if destroyed := reg.ReclaimStaleVMState(context.Background(), denyRoute); destroyed != 0 {
-		t.Fatalf("route-refused stale reclaim destroyed = %d, want 0", destroyed)
-	}
-	destroyed := reg.ReclaimStaleVMState(context.Background(), allowLifecycleRoute)
-	if destroyed != 2 {
-		t.Fatalf("destroyed = %d, want 2 (destroy calls=%v)", destroyed, mgr.destroys)
-	}
-	if !containsString(mgr.destroys, unpublished.VMID) || !containsString(mgr.destroys, worker.VMID) {
-		t.Fatalf("destroyed VMs = %v, want unpublished candidate %s and worker %s", mgr.destroys, unpublished.VMID, worker.VMID)
-	}
-	if reg.GetOwnershipForDesktop("stale-user", "candidate-old") != nil {
-		t.Fatalf("unpublished candidate ownership should be removed")
-	}
-	if reg.GetOwnershipByVMID(worker.VMID) != nil {
-		t.Fatalf("worker ownership should be removed")
-	}
-	if reg.GetOwnershipForDesktop("stale-user", "candidate-published") == nil {
-		t.Fatalf("published candidate should be protected (vm=%s)", published.VMID)
-	}
-	if reg.GetOwnershipByVMID(recentWorker.VMID) == nil {
-		t.Fatalf("recent worker should be protected")
-	}
-	if reg.GetOwnership("stale-user") == nil {
-		t.Fatalf("primary ownership should be protected")
-	}
-}
-
-func TestOwnershipRegistry_RetentionPlanTargetsOnlyOrphansAndEphemeralPrimaries(t *testing.T) {
-	stateDir := t.TempDir()
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetRetentionPruneConfig(RetentionPruneConfig{
-		Mode:                    RetentionPruneModeDryRun,
-		StateDir:                stateDir,
-		EphemeralEmailDomains:   []string{"example.com", "example.test"},
-		EphemeralUserIDPrefixes: []string{"diagnostic-", "sourcemaxx-proof-"},
-		OrphanMinAge:            time.Hour,
-		EphemeralMinAge:         time.Hour,
-		MaxDeletes:              10,
-		MaxBytes:                1024 * 1024 * 1024,
-	})
-	reg.setRetentionUserEmailsForTest(map[string]string{
-		"test-user":         "playwright@example.com",
-		"example-test-user": "load@example.test",
-		"real-user":         "yusefnathanson@me.com",
-		"owner-test-a":      "a@b.com",
-		"owner-test-b":      "b@c.com",
-		"active-user":       "active@example.com",
-		"branch-user":       "branch@example.test",
-	})
-	testOwn, err := reg.ResolveOrAssign("test-user")
-	if err != nil {
-		t.Fatalf("resolve test user: %v", err)
-	}
-	exampleTestOwn, err := reg.ResolveOrAssign("example-test-user")
-	if err != nil {
-		t.Fatalf("resolve example.test user: %v", err)
-	}
-	syntheticOwn, err := reg.ResolveOrAssign("diagnostic-1778792614")
-	if err != nil {
-		t.Fatalf("resolve synthetic user: %v", err)
-	}
-	sourcemaxxOwn, err := reg.ResolveOrAssign("sourcemaxx-proof-85751dc5")
-	if err != nil {
-		t.Fatalf("resolve sourcemaxx synthetic user: %v", err)
-	}
-	realOwn, err := reg.ResolveOrAssign("real-user")
-	if err != nil {
-		t.Fatalf("resolve real user: %v", err)
-	}
-	ownerTestAOwn, err := reg.ResolveOrAssign("owner-test-a")
-	if err != nil {
-		t.Fatalf("resolve owner test a: %v", err)
-	}
-	ownerTestBOwn, err := reg.ResolveOrAssign("owner-test-b")
-	if err != nil {
-		t.Fatalf("resolve owner test b: %v", err)
-	}
-	activeOwn, err := reg.ResolveOrAssign("active-user")
-	if err != nil {
-		t.Fatalf("resolve active user: %v", err)
-	}
-	if _, err := reg.ResolveOrAssign("branch-user"); err != nil {
-		t.Fatalf("resolve branch user primary: %v", err)
-	}
-	branchOwn, err := reg.ForkDesktop("branch-user", PrimaryDesktopID, "candidate-a")
-	if err != nil {
-		t.Fatalf("fork branch user: %v", err)
-	}
-	old := time.Now().Add(-3 * time.Hour)
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].State = VMStateHibernated
-	reg.ownerships[ownershipKey("test-user", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("example-test-user", PrimaryDesktopID)].State = VMStateHibernated
-	reg.ownerships[ownershipKey("example-test-user", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("diagnostic-1778792614", PrimaryDesktopID)].State = VMStateHibernated
-	reg.ownerships[ownershipKey("diagnostic-1778792614", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("sourcemaxx-proof-85751dc5", PrimaryDesktopID)].State = VMStateHibernated
-	reg.ownerships[ownershipKey("sourcemaxx-proof-85751dc5", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("real-user", PrimaryDesktopID)].State = VMStateHibernated
-	reg.ownerships[ownershipKey("real-user", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("owner-test-a", PrimaryDesktopID)].State = VMStateHibernated
-	reg.ownerships[ownershipKey("owner-test-a", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("owner-test-b", PrimaryDesktopID)].State = VMStateHibernated
-	reg.ownerships[ownershipKey("owner-test-b", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("active-user", PrimaryDesktopID)].State = VMStateActive
-	reg.ownerships[ownershipKey("active-user", PrimaryDesktopID)].LastActiveAt = old
-	reg.ownerships[ownershipKey("branch-user", "candidate-a")].State = VMStateHibernated
-	reg.ownerships[ownershipKey("branch-user", "candidate-a")].LastActiveAt = old
-	reg.mu.Unlock()
-
-	for _, vmID := range []string{
-		testOwn.VMID,
-		exampleTestOwn.VMID,
-		syntheticOwn.VMID,
-		sourcemaxxOwn.VMID,
-		realOwn.VMID,
-		ownerTestAOwn.VMID,
-		ownerTestBOwn.VMID,
-		activeOwn.VMID,
-		branchOwn.VMID,
-		"vm-orphan-old",
-		"vm-orphan-recent",
-	} {
-		dir := filepath.Join(stateDir, vmID)
-		if err := os.MkdirAll(dir, 0o750); err != nil {
-			t.Fatalf("mkdir %s: %v", vmID, err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "data"), []byte("state"), 0o600); err != nil {
-			t.Fatalf("write %s: %v", vmID, err)
-		}
-	}
-	oldTime := time.Now().Add(-3 * time.Hour)
-	if err := os.Chtimes(filepath.Join(stateDir, "vm-orphan-old"), oldTime, oldTime); err != nil {
-		t.Fatalf("chtimes orphan old: %v", err)
-	}
-
-	plan := reg.RetentionPrunePlan()
-	if plan.Decision != "would_prune" {
-		t.Fatalf("decision = %s, want would_prune: %+v", plan.Decision, plan)
-	}
-	if !retentionPlanHasVM(plan, testOwn.VMID) {
-		t.Fatalf("plan missing ephemeral test primary %s: %+v", testOwn.VMID, plan.Candidates)
-	}
-	if !retentionPlanHasVM(plan, exampleTestOwn.VMID) {
-		t.Fatalf("plan missing example.test primary %s: %+v", exampleTestOwn.VMID, plan.Candidates)
-	}
-	if !retentionPlanHasVM(plan, syntheticOwn.VMID) {
-		t.Fatalf("plan missing synthetic-prefix primary %s: %+v", syntheticOwn.VMID, plan.Candidates)
-	}
-	if !retentionPlanHasVM(plan, sourcemaxxOwn.VMID) {
-		t.Fatalf("plan missing sourcemaxx synthetic-prefix primary %s: %+v", sourcemaxxOwn.VMID, plan.Candidates)
-	}
-	if !retentionPlanHasVM(plan, "vm-orphan-old") {
-		t.Fatalf("plan missing old orphan: %+v", plan.Candidates)
-	}
-	if retentionPlanHasVM(plan, realOwn.VMID) {
-		t.Fatalf("plan must not include real user primary %s: %+v", realOwn.VMID, plan.Candidates)
-	}
-	if retentionPlanHasVM(plan, ownerTestAOwn.VMID) {
-		t.Fatalf("plan must not include owner test account a %s: %+v", ownerTestAOwn.VMID, plan.Candidates)
-	}
-	if retentionPlanHasVM(plan, ownerTestBOwn.VMID) {
-		t.Fatalf("plan must not include owner test account b %s: %+v", ownerTestBOwn.VMID, plan.Candidates)
-	}
-	if retentionPlanHasVM(plan, activeOwn.VMID) {
-		t.Fatalf("plan must not include active ephemeral primary %s: %+v", activeOwn.VMID, plan.Candidates)
-	}
-	if retentionPlanHasVM(plan, branchOwn.VMID) {
-		t.Fatalf("plan must not include unpublished non-primary desktop %s: %+v", branchOwn.VMID, plan.Candidates)
-	}
-	if retentionPlanHasVM(plan, "vm-orphan-recent") {
-		t.Fatalf("plan must not include recent orphan: %+v", plan.Candidates)
 	}
 }
 
@@ -1626,169 +976,6 @@ func retentionPlanHasVM(plan RetentionPrunePlan, vmID string) bool {
 	return false
 }
 
-func TestOwnershipRegistry_ReclaimStaleVMStateRequiresStoragePressure(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetPressureReclaimConfig(PressureReclaimConfig{
-		Mode:                      PressureReclaimModeActive,
-		MinStateDirAvailableBytes: 10 * 1024 * 1024 * 1024,
-		StaleStateMinAge:          time.Hour,
-		MaxStateDeletes:           5,
-		MaxCandidates:             5,
-	})
-	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
-		return HostPressureSample{
-			SampledAt:                "2026-05-20T12:00:00Z",
-			StateDirAvailableBytes:   20 * 1024 * 1024 * 1024,
-			StateDirAvailablePercent: 20,
-		}
-	})
-	if _, err := reg.ResolveOrAssign("no-storage-pressure-user"); err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
-	candidate, err := reg.ForkDesktop("no-storage-pressure-user", PrimaryDesktopID, "candidate-old")
-	if err != nil {
-		t.Fatalf("fork: %v", err)
-	}
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey("no-storage-pressure-user", "candidate-old")].State = VMStateHibernated
-	reg.ownerships[ownershipKey("no-storage-pressure-user", "candidate-old")].LastActiveAt = time.Now().Add(-3 * time.Hour)
-	reg.mu.Unlock()
-	mgr := &mockVMManager{}
-	reg.SetVMManager(mgr)
-
-	if destroyed := reg.ReclaimStaleVMState(context.Background(), allowLifecycleRoute); destroyed != 0 {
-		t.Fatalf("destroyed = %d, want 0", destroyed)
-	}
-	if len(mgr.destroys) != 0 {
-		t.Fatalf("destroy calls = %v, want none", mgr.destroys)
-	}
-	if reg.GetOwnershipByVMID(candidate.VMID) == nil {
-		t.Fatalf("candidate should remain when storage pressure is absent")
-	}
-}
-
-func TestOwnershipRegistry_PressureReclaimExpiresStaleCriticalWorkerProtection(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetPressureReclaimConfig(PressureReclaimConfig{
-		Mode:                      PressureReclaimModeActive,
-		MinIdle:                   10 * time.Minute,
-		MinMemoryAvailablePercent: 15,
-		MaxCandidates:             1,
-	})
-	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
-		return HostPressureSample{
-			SampledAt:              "2026-05-18T18:30:00Z",
-			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
-			MemoryAvailableBytes:   512 * 1024 * 1024,
-			MemoryAvailablePercent: 6.25,
-		}
-	})
-	if _, err := reg.ResolveOrAssign("user-stale-promote"); err != nil {
-		t.Fatalf("resolve user-stale-promote: %v", err)
-	}
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "user-stale-promote",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "agent-promote",
-		Purpose:       "promotion verifier with rollback evidence",
-		MachineClass:  "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("request worker: %v", err)
-	}
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey("user-stale-promote", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Minute)
-	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-(criticalWorkerProtectionMaxIdle + time.Hour))
-	reg.mu.Unlock()
-
-	plan := reg.PressureReclaimPlan()
-	if plan.Inventory.Eligible != 1 {
-		t.Fatalf("eligible = %d, want stale critical worker reclaimable (plan=%+v)", plan.Inventory.Eligible, plan)
-	}
-	if len(plan.Candidates) == 0 || plan.Candidates[0].Kind != VMKindWorker || plan.Candidates[0].Protected {
-		t.Fatalf("first candidate = %+v, want unprotected stale critical worker", plan.Candidates)
-	}
-	if containsString(plan.Candidates[0].ProtectedReasons, "critical_worker_purpose") {
-		t.Fatalf("stale critical worker should not keep critical protection: %+v", plan.Candidates[0])
-	}
-	denyRoute := func(context.Context, string, string) error { return errors.New("route missing") }
-	if got := reg.ReclaimPressureVMs(context.Background(), denyRoute); got != 0 {
-		t.Fatalf("route-refused pressure reclaim = %d, want 0", got)
-	}
-	if got := reg.ReclaimPressureVMs(context.Background(), allowLifecycleRoute); got != 1 {
-		t.Fatalf("reclaimed = %d, want 1", got)
-	}
-	if workerOwn := reg.GetOwnershipByVMID(worker.VMID); workerOwn == nil || workerOwn.State != VMStateHibernated || workerOwn.StoppedBy != "pressure" {
-		t.Fatalf("worker ownership after pressure reclaim = %+v, want hibernated by pressure", workerOwn)
-	}
-}
-
-func TestOwnershipRegistry_ActivePressureReclaimHibernatesBoundedEligibleCandidates(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetPressureReclaimConfig(PressureReclaimConfig{
-		Mode:                      PressureReclaimModeActive,
-		MinIdle:                   10 * time.Minute,
-		MinMemoryAvailableBytes:   2 * 1024 * 1024 * 1024,
-		MinMemoryAvailablePercent: 15,
-		MaxCandidates:             1,
-	})
-	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PrimaryKeepaliveMode: PrimaryKeepaliveModeUnderCapacity})
-	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
-		return HostPressureSample{
-			SampledAt:              "2026-05-17T16:56:38Z",
-			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
-			MemoryAvailableBytes:   256 * 1024 * 1024,
-			MemoryAvailablePercent: 3.125,
-		}
-	})
-
-	if _, err := reg.ResolveOrAssign("pressure-user"); err != nil {
-		t.Fatalf("resolve pressure-user: %v", err)
-	}
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "pressure-user",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "agent-worker",
-		Purpose:       "background indexing",
-		MachineClass:  "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("request worker: %v", err)
-	}
-	critical, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "pressure-user",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "agent-verifier",
-		Purpose:       "promotion verifier with rollback evidence",
-		MachineClass:  "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("request critical worker: %v", err)
-	}
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey("pressure-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-3 * time.Hour)
-	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-4 * time.Hour)
-	reg.workerVMs[critical.WorkerID].LastActiveAt = time.Now().Add(-5 * time.Hour)
-	reg.mu.Unlock()
-
-	plan := reg.PressureReclaimPlan()
-	if plan.Mode != PressureReclaimModeActive || plan.Decision != "reclaim" {
-		t.Fatalf("plan mode/decision = %s/%s, want active/reclaim", plan.Mode, plan.Decision)
-	}
-	if got := reg.ReclaimPressureVMs(context.Background(), allowLifecycleRoute); got != 1 {
-		t.Fatalf("reclaimed = %d, want 1", got)
-	}
-	if workerOwn := reg.GetOwnershipByVMID(worker.VMID); workerOwn == nil || workerOwn.State != VMStateHibernated || workerOwn.StoppedBy != "pressure" {
-		t.Fatalf("worker ownership after pressure reclaim = %+v, want hibernated by pressure", workerOwn)
-	}
-	if primary := reg.GetOwnership("pressure-user"); primary == nil || primary.State != VMStateActive {
-		t.Fatalf("primary should stay active while lower-priority worker was reclaimable, got %+v", primary)
-	}
-	if criticalOwn := reg.GetOwnershipByVMID(critical.VMID); criticalOwn == nil || criticalOwn.State != VMStateActive {
-		t.Fatalf("critical worker should stay active, got %+v", criticalOwn)
-	}
-}
-
 func TestOwnershipRegistry_PressureReclaimNoPressureObservesOnly(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetPressureReclaimConfig(PressureReclaimConfig{
@@ -1866,62 +1053,6 @@ func TestOwnershipRegistry_PrimaryKeepaliveSkipsIdlePrimaryUnderCapacity(t *test
 	}
 }
 
-func TestOwnershipRegistry_PrimaryKeepaliveReclaimsLowerPriorityFirstUnderPressure(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetIdleTimeout(10 * time.Millisecond)
-	reg.SetPressureReclaimConfig(PressureReclaimConfig{
-		Mode:                      PressureReclaimModeDryRun,
-		MinIdle:                   time.Millisecond,
-		MinMemoryAvailableBytes:   2 * 1024 * 1024 * 1024,
-		MinMemoryAvailablePercent: 15,
-	})
-	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{PrimaryKeepaliveMode: PrimaryKeepaliveModeUnderCapacity})
-	reg.setPressureSamplerForTest(func(cfg PressureReclaimConfig) HostPressureSample {
-		return HostPressureSample{
-			SampledAt:              "2026-05-14T12:00:00Z",
-			MemoryTotalBytes:       8 * 1024 * 1024 * 1024,
-			MemoryAvailableBytes:   512 * 1024 * 1024,
-			MemoryAvailablePercent: 6.25,
-		}
-	})
-
-	if _, err := reg.ResolveOrAssign("pressure-user"); err != nil {
-		t.Fatalf("resolve pressure-user: %v", err)
-	}
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "pressure-user",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "agent-pressure",
-		Purpose:       "background indexing",
-		MachineClass:  "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("request worker: %v", err)
-	}
-	reg.mu.Lock()
-	reg.ownerships[ownershipKey("pressure-user", PrimaryDesktopID)].LastActiveAt = time.Now().Add(-time.Hour)
-	reg.workerVMs[worker.WorkerID].LastActiveAt = time.Now().Add(-2 * time.Hour)
-	reg.mu.Unlock()
-
-	idle := reg.CheckIdleOwnerships()
-	if len(idle) != 1 || idle[0].Kind != VMKindWorker {
-		t.Fatalf("idle candidates = %+v, want only lower-priority worker", idle)
-	}
-	denyRoute := func(context.Context, string, string) error { return errors.New("route missing") }
-	if stopped := reg.StopIdleVMs(context.Background(), denyRoute); stopped != 0 {
-		t.Fatalf("route-refused idle stop = %d, want 0", stopped)
-	}
-	if stopped := reg.StopIdleVMs(context.Background(), allowLifecycleRoute); stopped != 1 {
-		t.Fatalf("stopped = %d, want 1", stopped)
-	}
-	if own := reg.GetOwnership("pressure-user"); own == nil || own.State != VMStateActive {
-		t.Fatalf("primary should remain active while worker was reclaimable, got %+v", own)
-	}
-	if workerOwn := reg.GetOwnershipByVMID(worker.VMID); workerOwn == nil || workerOwn.State != VMStateHibernated {
-		t.Fatalf("worker should be hibernated, got %+v", workerOwn)
-	}
-}
-
 func TestOwnershipRegistry_PremiumAlwaysOnIsModeledAndProtected(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetIdleTimeout(10 * time.Millisecond)
@@ -1973,57 +1104,6 @@ func TestOwnershipRegistry_PremiumAlwaysOnIsModeledAndProtected(t *testing.T) {
 	}
 	if summary.ByClass[string(WarmnessClassPremiumAlwaysOn)] != 1 {
 		t.Fatalf("warmness summary = %+v, want one premium class", summary)
-	}
-}
-
-func TestOwnershipRegistry_WarmAlwaysOnResumesHibernatedPrimaryOnly(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	mock := &mockVMManager{}
-	reg.SetVMManager(mock)
-	reg.SetWarmnessPolicyConfig(WarmnessPolicyConfig{
-		AlwaysOnUserIDs: map[string]bool{"premium-user": true},
-	})
-
-	premium, err := reg.ResolveOrAssign("premium-user")
-	if err != nil {
-		t.Fatalf("resolve premium-user: %v", err)
-	}
-	if err := reg.HibernateVM("premium-user"); err != nil {
-		t.Fatalf("hibernate premium-user: %v", err)
-	}
-	if _, err := reg.ResolveOrAssign("ordinary-user"); err != nil {
-		t.Fatalf("resolve ordinary-user: %v", err)
-	}
-	if err := reg.HibernateVM("ordinary-user"); err != nil {
-		t.Fatalf("hibernate ordinary-user: %v", err)
-	}
-	if _, err := reg.ForkDesktop("premium-user", PrimaryDesktopID, "candidate-a"); err != nil {
-		t.Fatalf("fork candidate: %v", err)
-	}
-	if err := reg.HibernateVMForDesktop("premium-user", "candidate-a"); err != nil {
-		t.Fatalf("hibernate candidate: %v", err)
-	}
-
-	if warmed := reg.WarmAlwaysOnDesktops(context.Background(), func(context.Context, string, string) error { return fmt.Errorf("route missing") }); warmed != 0 {
-		t.Fatalf("warmed without D-ROUTE = %d, want 0", warmed)
-	}
-	if len(mock.resumes) != 0 {
-		t.Fatalf("route-refused warmer resumed VMs: %+v", mock.resumes)
-	}
-	if warmed := reg.WarmAlwaysOnDesktops(context.Background(), func(context.Context, string, string) error { return nil }); warmed != 1 {
-		t.Fatalf("warmed = %d, want 1", warmed)
-	}
-	if len(mock.resumes) != 1 || mock.resumes[0] != premium.VMID {
-		t.Fatalf("resumes = %+v, want only premium primary %s", mock.resumes, premium.VMID)
-	}
-	if got := reg.GetOwnership("premium-user"); got == nil || got.State != VMStateActive {
-		t.Fatalf("premium primary = %+v, want active", got)
-	}
-	if got := reg.GetOwnership("ordinary-user"); got == nil || got.State != VMStateHibernated {
-		t.Fatalf("ordinary primary = %+v, want hibernated", got)
-	}
-	if got := reg.GetOwnershipForDesktop("premium-user", "candidate-a"); got == nil || got.State != VMStateHibernated {
-		t.Fatalf("premium candidate = %+v, want hibernated", got)
 	}
 }
 
@@ -2204,235 +1284,6 @@ func TestHandler_LookupNonexistent(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
-	}
-}
-
-func TestHandler_ForkDesktop(t *testing.T) {
-	srv, reg := newTestServer(t)
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
-	}
-
-	body := `{"user_id":"user-1","source_desktop_id":"primary","target_desktop_id":"branch-a"}`
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/fork-desktop", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("fork request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var result resolveResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-	if result.DesktopID != "branch-a" {
-		t.Fatalf("desktop_id = %q, want branch-a", result.DesktopID)
-	}
-	if result.ParentDesktopID != PrimaryDesktopID {
-		t.Fatalf("parent_desktop_id = %q, want %q", result.ParentDesktopID, PrimaryDesktopID)
-	}
-	if result.Published {
-		t.Fatal("forked desktop should not be published yet")
-	}
-}
-
-func TestOwnershipRegistry_ForkDesktopWithVMManagerUsesSourceDataImage(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	mock := &mockVMManager{
-		bootResponse: &VMInstanceInfo{
-			HostURL: "http://127.0.0.1:9090",
-			Epoch:   2,
-			Healthy: true,
-			State:   "running",
-		},
-	}
-	reg.SetVMManager(mock)
-
-	source, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID)
-	if err != nil {
-		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
-	}
-	if err := reg.StopVMForDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("StopVMForDesktop primary: %v", err)
-	}
-
-	branch, err := reg.ForkDesktop("user-1", PrimaryDesktopID, "branch-a")
-	if err != nil {
-		t.Fatalf("ForkDesktop: %v", err)
-	}
-	if branch.ParentVMID != source.VMID {
-		t.Fatalf("ParentVMID = %q, want %q", branch.ParentVMID, source.VMID)
-	}
-	if branch.SnapshotKind != "data_img_copy" {
-		t.Fatalf("SnapshotKind = %q, want data_img_copy", branch.SnapshotKind)
-	}
-	if len(mock.boots) != 2 {
-		t.Fatalf("expected source boot plus fork boot, got %d", len(mock.boots))
-	}
-	forkBoot := mock.boots[1]
-	if forkBoot.SourceVMID != source.VMID {
-		t.Fatalf("fork SourceVMID = %q, want %q", forkBoot.SourceVMID, source.VMID)
-	}
-	if forkBoot.VMID != branch.VMID {
-		t.Fatalf("fork boot VMID = %q, want branch VMID %q", forkBoot.VMID, branch.VMID)
-	}
-	if forkBoot.ComputerKind != "candidate" || forkBoot.OwnerID != "user-1" || forkBoot.DesktopID != "branch-a" || forkBoot.CandidateID != "branch-a" {
-		t.Fatalf("fork boot guest identity = %+v", forkBoot)
-	}
-}
-
-func TestOwnershipRegistry_ForkDesktopRejectsActiveSourceWithVMManager(t *testing.T) {
-	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
-	reg.SetVMManager(&mockVMManager{})
-
-	source, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID)
-	if err != nil {
-		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
-	}
-	if _, err := reg.ForkDesktop("user-1", PrimaryDesktopID, "branch-a"); err == nil {
-		t.Fatal("expected active source fork to fail with VM manager")
-	} else if !strings.Contains(err.Error(), source.VMID) || !strings.Contains(err.Error(), "unsafe live data image fork") {
-		t.Fatalf("unexpected fork error: %v", err)
-	}
-}
-
-func TestHandler_PublishDesktop(t *testing.T) {
-	srv, reg := newTestServer(t)
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
-	}
-	if _, err := reg.ForkDesktop("user-1", PrimaryDesktopID, "branch-a"); err != nil {
-		t.Fatalf("ForkDesktop: %v", err)
-	}
-
-	body := `{"user_id":"user-1","desktop_id":"branch-a"}`
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/publish-desktop", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("publish request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	var result resolveResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-	if !result.Published {
-		t.Fatal("published desktop should be marked published")
-	}
-}
-
-func TestHandler_RequestWorker(t *testing.T) {
-	srv, reg := newTestServer(t)
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
-	}
-
-	body := `{"user_id":"user-1","desktop_id":"primary","parent_agent_id":"super:primary","trajectory_id":"traj-1","purpose":"Run background coding task","machine_class":"worker-medium"}`
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/request-worker", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request-worker request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	var result WorkerVMHandle
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-	if result.Kind != VMKindWorker {
-		t.Fatalf("kind = %q, want %q", result.Kind, VMKindWorker)
-	}
-	if result.WorkerID == "" || result.VMID == "" {
-		t.Fatalf("expected non-empty worker identifiers: %+v", result)
-	}
-	if result.DesktopID != PrimaryDesktopID {
-		t.Fatalf("desktop_id = %q, want %q", result.DesktopID, PrimaryDesktopID)
-	}
-	if result.ParentAgentID != "super:primary" {
-		t.Fatalf("parent_agent_id = %q, want super:primary", result.ParentAgentID)
-	}
-	if result.TrajectoryID != "traj-1" {
-		t.Fatalf("trajectory_id = %q, want traj-1", result.TrajectoryID)
-	}
-	if result.Purpose != "Run background coding task" {
-		t.Fatalf("purpose = %q, want background coding task", result.Purpose)
-	}
-	if result.MachineClass != "worker-medium" {
-		t.Fatalf("machine_class = %q, want worker-medium", result.MachineClass)
-	}
-}
-
-func TestHandler_HibernateWorker(t *testing.T) {
-	srv, reg := newTestServer(t)
-
-	if _, err := reg.ResolveOrAssignDesktop("user-1", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveOrAssignDesktop primary: %v", err)
-	}
-	worker, err := reg.RequestWorker(WorkerRequest{
-		UserID:        "user-1",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		Purpose:       "Run background proof task",
-		MachineClass:  "worker-small",
-		AllowParallel: true,
-	})
-	if err != nil {
-		t.Fatalf("RequestWorker: %v", err)
-	}
-
-	body := fmt.Sprintf(`{"user_id":"user-1","desktop_id":"primary","worker_id":%q}`, worker.WorkerID)
-	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/internal/vmctl/hibernate-worker", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("hibernate-worker request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode result: %v", err)
-	}
-	if result["status"] != "hibernated" {
-		t.Fatalf("status = %q, want hibernated", result["status"])
-	}
-	if result["worker_id"] != worker.WorkerID {
-		t.Fatalf("worker_id = %q, want %q", result["worker_id"], worker.WorkerID)
-	}
-	own := reg.GetOwnershipByVMID(worker.VMID)
-	if own == nil {
-		t.Fatalf("worker ownership missing after hibernate")
-	}
-	if own.State != VMStateHibernated {
-		t.Fatalf("worker state = %q, want %q", own.State, VMStateHibernated)
-	}
-	if own.StoppedBy != "idle" {
-		t.Fatalf("stopped_by = %q, want idle", own.StoppedBy)
 	}
 }
 
@@ -2643,38 +1494,6 @@ func TestClient_DifferentUsersIsolatedVMs(t *testing.T) {
 	}
 }
 
-func TestClient_ResolveDesktopAndLookupDesktop(t *testing.T) {
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	primary, err := client.ResolveDesktop("user-desktop", PrimaryDesktopID)
-	if err != nil {
-		t.Fatalf("ResolveDesktop primary: %v", err)
-	}
-	branch, err := client.ForkDesktop("user-desktop", PrimaryDesktopID, "branch-a")
-	if err != nil {
-		t.Fatalf("ForkDesktop branch: %v", err)
-	}
-	branch, err = client.PublishDesktop("user-desktop", "branch-a")
-	if err != nil {
-		t.Fatalf("PublishDesktop branch: %v", err)
-	}
-	if primary.VMID == branch.VMID {
-		t.Fatalf("expected different VM IDs per desktop, got %s", primary.VMID)
-	}
-
-	lookup, err := client.LookupDesktop("user-desktop", "branch-a")
-	if err != nil {
-		t.Fatalf("LookupDesktop branch: %v", err)
-	}
-	if lookup == nil || lookup.VMID != branch.VMID {
-		t.Fatalf("branch lookup mismatch: %+v", lookup)
-	}
-	if lookup.DesktopID != "branch-a" {
-		t.Errorf("lookup DesktopID = %q, want %q", lookup.DesktopID, "branch-a")
-	}
-}
-
 func TestClient_ResolveDesktopContextCancelsRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
@@ -2687,82 +1506,6 @@ func TestClient_ResolveDesktopContextCancelsRequest(t *testing.T) {
 
 	if _, err := client.ResolveDesktopContext(ctx, "user-cancel", PrimaryDesktopID); err == nil {
 		t.Fatal("expected canceled resolve request to fail")
-	}
-}
-
-func TestClient_ForkDesktop(t *testing.T) {
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	if _, err := client.ResolveDesktop("user-desktop", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveDesktop primary: %v", err)
-	}
-	branch, err := client.ForkDesktop("user-desktop", PrimaryDesktopID, "branch-a")
-	if err != nil {
-		t.Fatalf("ForkDesktop: %v", err)
-	}
-	if branch.DesktopID != "branch-a" {
-		t.Fatalf("desktop_id = %q, want branch-a", branch.DesktopID)
-	}
-	if branch.ParentDesktopID != PrimaryDesktopID {
-		t.Fatalf("parent_desktop_id = %q, want %q", branch.ParentDesktopID, PrimaryDesktopID)
-	}
-	if branch.Published {
-		t.Fatal("forked desktop should not be published yet")
-	}
-}
-
-func TestClient_PublishDesktop(t *testing.T) {
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	if _, err := client.ResolveDesktop("user-desktop", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveDesktop primary: %v", err)
-	}
-	if _, err := client.ForkDesktop("user-desktop", PrimaryDesktopID, "branch-a"); err != nil {
-		t.Fatalf("ForkDesktop: %v", err)
-	}
-	published, err := client.PublishDesktop("user-desktop", "branch-a")
-	if err != nil {
-		t.Fatalf("PublishDesktop: %v", err)
-	}
-	if !published.Published {
-		t.Fatal("published desktop should be marked published")
-	}
-}
-
-func TestClient_RequestWorker(t *testing.T) {
-	srv, _ := newTestServer(t)
-	client := NewClient(srv.URL)
-
-	if _, err := client.ResolveDesktop("user-desktop", PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveDesktop primary: %v", err)
-	}
-	handle, err := client.RequestWorker(WorkerRequest{
-		UserID:        "user-desktop",
-		DesktopID:     PrimaryDesktopID,
-		ParentAgentID: "super:primary",
-		TrajectoryID:  "traj-1",
-		Purpose:       "Run background coding task",
-		MachineClass:  "worker-small",
-	})
-	if err != nil {
-		t.Fatalf("RequestWorker: %v", err)
-	}
-	if handle.Kind != VMKindWorker {
-		t.Fatalf("kind = %q, want %q", handle.Kind, VMKindWorker)
-	}
-	if handle.WorkerID == "" || handle.VMID == "" {
-		t.Fatalf("expected non-empty worker identifiers: %+v", handle)
-	}
-	if handle.DesktopID != PrimaryDesktopID {
-		t.Fatalf("desktop_id = %q, want %q", handle.DesktopID, PrimaryDesktopID)
-	}
-	if handle.ParentAgentID != "super:primary" {
-		t.Fatalf("parent_agent_id = %q, want super:primary", handle.ParentAgentID)
-	}
-	if handle.Purpose != "Run background coding task" {
-		t.Fatalf("purpose = %q, want background coding task", handle.Purpose)
 	}
 }
 
@@ -2877,18 +1620,6 @@ func TestEndpointURLs(t *testing.T) {
 	if got := LookupEndpoint(base); got != "http://localhost:8083/internal/vmctl/lookup" {
 		t.Errorf("LookupEndpoint = %s", got)
 	}
-	if got := ForkDesktopEndpoint(base); got != "http://localhost:8083/internal/vmctl/fork-desktop" {
-		t.Errorf("ForkDesktopEndpoint = %s", got)
-	}
-	if got := PublishDesktopEndpoint(base); got != "http://localhost:8083/internal/vmctl/publish-desktop" {
-		t.Errorf("PublishDesktopEndpoint = %s", got)
-	}
-	if got := RequestWorkerEndpoint(base); got != "http://localhost:8083/internal/vmctl/request-worker" {
-		t.Errorf("RequestWorkerEndpoint = %s", got)
-	}
-	if got := HibernateWorkerEndpoint(base); got != "http://localhost:8083/internal/vmctl/hibernate-worker" {
-		t.Errorf("HibernateWorkerEndpoint = %s", got)
-	}
 	if got := StopEndpoint(base); got != "http://localhost:8083/internal/vmctl/stop" {
 		t.Errorf("StopEndpoint = %s", got)
 	}
@@ -2964,10 +1695,10 @@ func TestPulseSummaryAggregatesWithoutIdentityOutput(t *testing.T) {
 		userByID[user.UserID] = user
 	}
 	ownerships := []*VMOwnership{
-		{VMID: "vm-real-1", UserID: "real-1", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, Published: true, State: VMStateActive, LastActiveAt: now.Add(-time.Hour)},
-		{VMID: "vm-real-2", UserID: "real-2", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, Published: true, State: VMStateFailed, LastActiveAt: now.Add(-8 * 24 * time.Hour)},
-		{VMID: "vm-codex-1", UserID: "codex-1", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, Published: true, State: VMStateHibernated, LastActiveAt: now.Add(-time.Hour)},
-		{VMID: "vm-protected-a", UserID: "protected-a", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, Published: true, State: VMStateHibernated, LastActiveAt: now.Add(-time.Hour)},
+		{VMID: "vm-real-1", UserID: "real-1", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateActive, LastActiveAt: now.Add(-time.Hour)},
+		{VMID: "vm-real-2", UserID: "real-2", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateFailed, LastActiveAt: now.Add(-8 * 24 * time.Hour)},
+		{VMID: "vm-codex-1", UserID: "codex-1", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateHibernated, LastActiveAt: now.Add(-time.Hour)},
+		{VMID: "vm-protected-a", UserID: "protected-a", DesktopID: PrimaryDesktopID, Kind: VMKindInteractive, State: VMStateHibernated, LastActiveAt: now.Add(-time.Hour)},
 	}
 	for _, own := range ownerships {
 		dir := filepath.Join(stateDir, own.VMID)
@@ -3633,9 +2364,6 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 		method string
 		body   string
 	}{
-		{"/internal/vmctl/fork-desktop", "POST", `{"user_id":"user-1","source_desktop_id":"primary","target_desktop_id":"branch-a"}`},
-		{"/internal/vmctl/publish-desktop", "POST", `{"user_id":"user-1","desktop_id":"branch-a"}`},
-		{"/internal/vmctl/request-worker", "POST", `{"user_id":"user-1","desktop_id":"primary","parent_agent_id":"super:primary","purpose":"Run tests"}`},
 		{"/internal/vmctl/hibernate", "POST", `{"user_id":"user-1"}`},
 		{"/internal/vmctl/resume", "POST", `{"user_id":"user-1"}`},
 		{"/internal/vmctl/recover", "POST", `{"user_id":"user-1"}`},
@@ -3877,8 +2605,7 @@ func TestOwnershipRegistry_ResolveReconcilesExistingGatewayCredential(t *testing
 	})
 
 	now := time.Now()
-	own := &VMOwnership{
-		VMID:         "vm-existing-old-account",
+	own := &VMOwnership{VMID: "vm-existing-old-account",
 		UserID:       "user-old-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
@@ -3886,9 +2613,7 @@ func TestOwnershipRegistry_ResolveReconcilesExistingGatewayCredential(t *testing
 		State:        VMStateActive,
 		CreatedAt:    now,
 		LastActiveAt: now,
-		Epoch:        3,
-		Published:    true,
-	}
+		Epoch:        3}
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
 	reg.vmByID[own.VMID] = own
@@ -3911,8 +2636,7 @@ func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *test
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
 	now := time.Now().Add(-time.Hour)
-	own := &VMOwnership{
-		VMID:         "vm-stale-active",
+	own := &VMOwnership{VMID: "vm-stale-active",
 		UserID:       "user-old-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
@@ -3920,9 +2644,7 @@ func TestOwnershipRegistry_ResolveRecoversUnhealthyActiveVMBeforeRouting(t *test
 		State:        VMStateActive,
 		CreatedAt:    now,
 		LastActiveAt: now,
-		Epoch:        3,
-		Published:    true,
-	}
+		Epoch:        3}
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
 	reg.vmByID[own.VMID] = own
@@ -3978,8 +2700,7 @@ func TestOwnershipRegistry_ResolvePreservesRecentlyHealthyActiveVM(t *testing.T)
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
 	now := time.Now()
-	own := &VMOwnership{
-		VMID:         "vm-busy-active",
+	own := &VMOwnership{VMID: "vm-busy-active",
 		UserID:       "user-busy",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
@@ -3987,9 +2708,7 @@ func TestOwnershipRegistry_ResolvePreservesRecentlyHealthyActiveVM(t *testing.T)
 		State:        VMStateActive,
 		CreatedAt:    now.Add(-time.Hour),
 		LastActiveAt: now.Add(-time.Minute),
-		Epoch:        3,
-		Published:    true,
-	}
+		Epoch:        3}
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
 	reg.vmByID[own.VMID] = own
@@ -4032,8 +2751,7 @@ func TestOwnershipRegistry_ResolvePreservesPendingActiveBoot(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
 	now := time.Now()
-	own := &VMOwnership{
-		VMID:         "vm-pending-active",
+	own := &VMOwnership{VMID: "vm-pending-active",
 		UserID:       "user-pending",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
@@ -4041,9 +2759,7 @@ func TestOwnershipRegistry_ResolvePreservesPendingActiveBoot(t *testing.T) {
 		State:        VMStateActive,
 		CreatedAt:    now.Add(-time.Hour),
 		LastActiveAt: now.Add(-time.Minute),
-		Epoch:        3,
-		Published:    true,
-	}
+		Epoch:        3}
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
 	reg.vmByID[own.VMID] = own
@@ -4081,8 +2797,7 @@ func TestOwnershipRegistry_ResolveStartsActiveOwnershipMissingFromManager(t *tes
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
 	now := time.Now().Add(-time.Minute)
-	own := &VMOwnership{
-		VMID:         "vm-missing-manager-instance",
+	own := &VMOwnership{VMID: "vm-missing-manager-instance",
 		UserID:       "user-old-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
@@ -4090,9 +2805,7 @@ func TestOwnershipRegistry_ResolveStartsActiveOwnershipMissingFromManager(t *tes
 		State:        VMStateActive,
 		CreatedAt:    now,
 		LastActiveAt: now,
-		Epoch:        3,
-		Published:    true,
-	}
+		Epoch:        3}
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
 	reg.vmByID[own.VMID] = own
@@ -4131,8 +2844,7 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
 	now := time.Now().Add(-time.Hour)
-	own := &VMOwnership{
-		VMID:         "vm-failed-cold-resume",
+	own := &VMOwnership{VMID: "vm-failed-cold-resume",
 		UserID:       "user-existing-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
@@ -4140,10 +2852,7 @@ func TestOwnershipRegistry_ResolveRecoversFailedManagerInstanceForHibernatedDesk
 		State:        VMStateHibernated,
 		CreatedAt:    now,
 		LastActiveAt: now,
-		Epoch:        7,
-		Published:    true,
-		StoppedBy:    "idle",
-	}
+		Epoch:        7, StoppedBy: "idle"}
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
 	reg.vmByID[own.VMID] = own
@@ -4885,8 +3594,7 @@ func TestOwnershipRegistry_ReattachReconcilesGatewayCredential(t *testing.T) {
 	now := time.Now()
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetGatewayURL(gateway.URL)
-	own := &VMOwnership{
-		VMID:         "vm-reattach-old-token",
+	own := &VMOwnership{VMID: "vm-reattach-old-token",
 		UserID:       "user-old-account",
 		DesktopID:    PrimaryDesktopID,
 		Kind:         VMKindInteractive,
@@ -4894,10 +3602,7 @@ func TestOwnershipRegistry_ReattachReconcilesGatewayCredential(t *testing.T) {
 		State:        VMStateStopped,
 		CreatedAt:    now,
 		LastActiveAt: now,
-		Epoch:        3,
-		Published:    true,
-		StoppedBy:    "vmctl-restart",
-	}
+		Epoch:        3, StoppedBy: "vmctl-restart"}
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
 	reg.vmByID[own.VMID] = own

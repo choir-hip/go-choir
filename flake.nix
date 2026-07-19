@@ -246,6 +246,14 @@
           pname = "corpusd";
           subPackage = "cmd/corpusd";
         };
+        updater = mkGoService {
+          pname = "choir-updater";
+          subPackage = "cmd/choir-updater";
+        };
+        capsuleBroker = mkGoService {
+          pname = "capsule-broker";
+          subPackage = "cmd/capsule-broker";
+        };
         sourcecycled = mkGoService {
           pname = "sourcecycled";
           subPackage = "cmd/sourcecycled";
@@ -277,7 +285,6 @@
       #   nix build .#guest-image
       #   install to a temp dir, then mv artifacts into /var/lib/go-choir/guest/
       guestVmConfig = self.nixosConfigurations.go-choir-sandbox-vm.config;
-      playwrightGuestVmConfig = self.nixosConfigurations.go-choir-sandbox-vm-playwright.config;
 
       mkGuestImage = name: vmConfig:
         let
@@ -308,11 +315,8 @@ ${builtins.concatStringsSep " " vmConfig.microvm.kernelParams}
 EOF
       '';
 
-      # Convenience packages that bundle guest artifacts together. The ordinary
-      # image stays light and Obscura-backed; worker-playwright gets its own
-      # image so high-fidelity screenshot/video proof does not inflate every VM.
+      # Convenience package that bundles the canonical guest artifacts.
       guest-image = mkGuestImage "go-choir-guest-image" guestVmConfig;
-      guest-image-playwright = mkGuestImage "go-choir-guest-image-playwright" playwrightGuestVmConfig;
 
       # Desktop dev shell — for building Choir Desktop with Wails v3.
       # Separate from the default shell so it doesn't pull in ICU/Dolt
@@ -343,7 +347,7 @@ EOF
         default = self.packages.${system}.auth;
         # Expose the guest image as a top-level package for easy building:
         #   nix build .#guest-image
-        inherit guest-image guest-image-playwright;
+        inherit guest-image;
       };
 
       # ── SBOM outputs ─────────────────────────────────────────────────
@@ -382,7 +386,6 @@ EOF
         specialArgs = {
           goChoirPackages = goChoirPackages;
           inherit buildCommit sourceRepoRemote;
-          includePlaywright = false;
         };
         modules = [
           microvm.nixosModules.microvm
@@ -390,18 +393,6 @@ EOF
         ];
       };
 
-      nixosConfigurations.go-choir-sandbox-vm-playwright = nixpkgs.lib.nixosSystem {
-        system = "x86_64-linux";
-        specialArgs = {
-          goChoirPackages = goChoirPackages;
-          inherit buildCommit sourceRepoRemote;
-          includePlaywright = true;
-        };
-        modules = [
-          microvm.nixosModules.microvm
-          ./nix/sandbox-vm.nix
-        ];
-      };
 
       # ── Node B host configuration ─────────────────────────────────────
       nixosConfigurations.go-choir-b = nixpkgs.lib.nixosSystem {

@@ -19,43 +19,9 @@
 # the kernel, rootfs, and store disk from the microvm runner outputs.
 # It does NOT use the microvm runner scripts directly because vmmanager
 # needs per-VM networking, port assignment, and lifecycle control.
-{ config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", includePlaywright ? false, ... }:
+{ config, lib, pkgs, goChoirPackages, sourceRepoRemote ? "https://github.com/choir-hip/go-choir.git", buildCommit ? "local", ... }:
 
 let
-  playwrightCli = pkgs.writeShellApplication {
-    name = "playwright";
-    runtimeInputs = [ pkgs.nodejs ];
-    text = ''
-      export PLAYWRIGHT_BROWSERS_PATH="''${PLAYWRIGHT_BROWSERS_PATH:-${pkgs.playwright-driver.browsers}}"
-      export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD="''${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-1}"
-      exec ${pkgs.nodejs}/bin/node ${pkgs.playwright}/cli.js "$@"
-    '';
-  };
-
-  playwrightCoreCli = pkgs.writeShellApplication {
-    name = "playwright-core";
-    runtimeInputs = [ pkgs.nodejs ];
-    text = ''
-      export PLAYWRIGHT_BROWSERS_PATH="''${PLAYWRIGHT_BROWSERS_PATH:-${pkgs.playwright-driver.browsers}}"
-      export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD="''${PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD:-1}"
-      exec ${pkgs.nodejs}/bin/node ${pkgs.playwright}/cli.js "$@"
-    '';
-  };
-
-  playwrightNodeModules = pkgs.runCommand "go-choir-playwright-node-modules" { } ''
-    mkdir -p "$out/lib/node_modules"
-    ln -s ${pkgs.playwright} "$out/lib/node_modules/playwright-core"
-    ln -s ${pkgs.playwright} "$out/lib/node_modules/playwright"
-  '';
-
-  playwrightTools = pkgs.symlinkJoin {
-    name = "go-choir-playwright-tools";
-    paths = [
-      playwrightCli
-      playwrightCoreCli
-      playwrightNodeModules
-    ];
-  };
 
   documentPython = pkgs.python3.withPackages (ps: with ps; [
     beautifulsoup4
@@ -65,67 +31,16 @@ let
     pypdf
     python-docx
   ]);
-
-  sandboxRuntimeInstall = pkgs.writeShellScript "go-choir-install-sandbox-runtime" ''
-    set -euo pipefail
-
-    env_file="/run/go-choir-sandbox.env"
-    if [ -f "$env_file" ]; then
-      set -a
-      # shellcheck disable=SC1090
-      . "$env_file"
-      set +a
-    fi
-
-    runtime_url="''${RUNTIME_VMCTL_URL:-}"
-    runtime_root="/mnt/persistent/runtime"
-    current="$runtime_root/sandbox"
-    previous="$runtime_root/sandbox-previous"
-    next="$runtime_root/.sandbox-next"
-
-    if [ -z "$runtime_url" ]; then
-      if [ -n "''${CHOIR_CODE_REF:-}" ]; then
-        echo "go-choir-sandbox: immutable CodeRef requires RUNTIME_VMCTL_URL" >&2
-        exit 1
-      fi
-      echo "go-choir-sandbox: RUNTIME_VMCTL_URL is unavailable; using baked sandbox runtime" >&2
-      exit 0
-    fi
-
-    mkdir -p "$runtime_root"
-    rm -rf "$next"
-    mkdir -p "$next"
-
-    package_url="$runtime_url/internal/vmctl/runtime-package/sandbox"
-    if [ -n "''${CHOIR_CODE_REF:-}" ]; then
-      package_url="$package_url?code_ref=''${CHOIR_CODE_REF}"
-    fi
-    if ${pkgs.curl}/bin/curl -fsS --retry 3 --retry-delay 1 --retry-all-errors \
-      -H "X-Internal-Caller: true" \
-      "$package_url" |
-      ${pkgs.gnutar}/bin/tar -x -C "$next"; then
-      if [ ! -x "$next/bin/sandbox" ]; then
-        echo "go-choir-sandbox: downloaded runtime package lacks bin/sandbox" >&2
-        rm -rf "$next"
-        if [ -n "''${CHOIR_CODE_REF:-}" ]; then
-          exit 1
-        fi
-        exit 0
-      fi
-      rm -rf "$previous"
-      if [ -e "$current" ]; then
-        mv "$current" "$previous"
-      fi
-      mv "$next" "$current"
-      echo "go-choir-sandbox: installed host-provided sandbox runtime package"
-    else
-      echo "go-choir-sandbox: runtime package download failed" >&2
-      rm -rf "$next"
-      if [ -n "''${CHOIR_CODE_REF:-}" ]; then
-        exit 1
-      fi
-    fi
+  guestImageManifest = pkgs.writeText "choir-immutable-guest-image-manifest" ''
+    contract=choir-guest-image-v1
+    build_commit=${buildCommit}
+    sandbox=${goChoirPackages.sandbox}
+    updater=${goChoirPackages.updater}
+    capsule_broker=${goChoirPackages.capsuleBroker}
+    kernel=${config.boot.kernelPackages.kernel}
+    kernel_config=${config.boot.kernelPackages.kernel.configfile}
   '';
+
 
   sandboxRuntimeExec = pkgs.writeShellScript "go-choir-run-sandbox-runtime" ''
     set -euo pipefail
@@ -159,43 +74,20 @@ let
       echo "go-choir-sandbox: wire publish URL not configured" >&2
     fi
 
-    dynamic="/mnt/persistent/runtime/sandbox/bin/sandbox"
+    current="/mnt/persistent/choir-updater/current"
+    dynamic="$current/bin/sandbox"
     if [ -x "$dynamic" ]; then
-      if [ -f /mnt/persistent/runtime/sandbox/choir-runtime.env ]; then
-        set -a
-        # shellcheck disable=SC1091
-        . /mnt/persistent/runtime/sandbox/choir-runtime.env
-        set +a
-      fi
-      if [ -z "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
-        for param in $(cat /proc/cmdline); do
-          case "$param" in
-            choir.wire_publish_url=*)
-              export RUNTIME_WIRE_PUBLISH_URL="''${param#choir.wire_publish_url=}"
-              ;;
-            choir.vmctl_url=*)
-              vmctl_url="''${param#choir.vmctl_url=}"
-              if [ -n "$vmctl_url" ]; then
-                export RUNTIME_WIRE_PUBLISH_URL="$(printf '%s' "$vmctl_url" | sed 's/:8083$/:8082/')"
-              fi
-              ;;
-          esac
-        done
-      fi
-      export RUNTIME_SKILLS_ROOT="/mnt/persistent/runtime/sandbox/share/go-choir/skills"
+      export RUNTIME_SKILLS_ROOT="$current/share/go-choir/skills"
+      export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
       exec "$dynamic" "$@"
     fi
-
-    if [ -n "''${CHOIR_CODE_REF:-}" ]; then
-      echo "go-choir-sandbox: immutable CodeRef runtime is unavailable" >&2
-      exit 1
-    fi
+    export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
     export RUNTIME_SKILLS_ROOT="${goChoirPackages.sandbox}/share/go-choir/skills"
     exec ${goChoirPackages.sandbox}/bin/sandbox "$@"
   '';
 in
 {
-  networking.hostName = if includePlaywright then "go-choir-playwright-worker" else "go-choir-sandbox";
+  networking.hostName = "go-choir-sandbox";
 
   # ── microvm configuration ────────────────────────────────────────────
   microvm = {
@@ -245,6 +137,15 @@ in
     # - erofs disk is a single shared file referenced by all VMs
     # - Combined with KSM (shared=off), identical pages are deduplicated
     shares = [];
+  };
+
+  # Per-realization bootstrap credential disk. vmmanager creates this tiny
+  # ext4 device outside kernel argv; the trusted guest core consumes and
+  # unlinks its sole mode-0400 envelope before agent runtime starts.
+  fileSystems."/run/choir-bootstrap" = {
+    device = "/dev/disk/by-label/CHOIR_CRED";
+    fsType = "ext4";
+    options = [ "rw" "nosuid" "nodev" "noexec" ];
   };
 
   # ── Guest services ───────────────────────────────────────────────────
@@ -302,7 +203,7 @@ EOF
   systemd.services.go-choir-extract-cmdline = {
     description = "Extract go-choir secrets from kernel cmdline";
     wantedBy = [ "multi-user.target" ];
-    before = [ "go-choir-sandbox.service" ];
+    before = [ "go-choir-updater.service" "go-choir-sandbox.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -311,6 +212,8 @@ EOF
       set -euo pipefail
       ENV_FILE="/run/go-choir-sandbox.env"
       : > "$ENV_FILE"
+      UPDATER_ENV_FILE="/run/go-choir-updater.env"
+      : > "$UPDATER_ENV_FILE"
 
       # Parse kernel cmdline parameters from vmmanager.
       for param in $(cat /proc/cmdline); do
@@ -320,9 +223,13 @@ EOF
             ;;
           vm_id=*)
             echo "SANDBOX_ID=''${param#vm_id=}" >> "$ENV_FILE"
+            echo "CHOIR_REALIZATION_ID=''${param#vm_id=}" >> "$ENV_FILE"
+            echo "SANDBOX_ID=''${param#vm_id=}" >> "$UPDATER_ENV_FILE"
+            echo "CHOIR_REALIZATION_ID=''${param#vm_id=}" >> "$UPDATER_ENV_FILE"
             ;;
           epoch=*)
             echo "VM_EPOCH=''${param#epoch=}" >> "$ENV_FILE"
+            echo "VM_EPOCH=''${param#epoch=}" >> "$UPDATER_ENV_FILE"
             ;;
           choir.gateway_url=*)
             echo "RUNTIME_GATEWAY_URL=''${param#choir.gateway_url=}" >> "$ENV_FILE"
@@ -335,6 +242,7 @@ EOF
             ;;
           choir.wire_publish_url=*)
             echo "RUNTIME_WIRE_PUBLISH_URL=''${param#choir.wire_publish_url=}" >> "$ENV_FILE"
+            echo "CHOIR_PLATFORM_URL=''${param#choir.wire_publish_url=}" >> "$ENV_FILE"
             ;;
           choir.source_service_url=*)
             echo "SOURCE_SERVICE_BASE_URL=''${param#choir.source_service_url=}" >> "$ENV_FILE"
@@ -353,15 +261,8 @@ EOF
             ;;
           choir.desktop_id=*)
             echo "CHOIR_DESKTOP_ID=''${param#choir.desktop_id=}" >> "$ENV_FILE"
-            ;;
-          choir.worker_id=*)
-            echo "CHOIR_WORKER_ID=''${param#choir.worker_id=}" >> "$ENV_FILE"
-            ;;
-          choir.candidate_id=*)
-            echo "CHOIR_CANDIDATE_ID=''${param#choir.candidate_id=}" >> "$ENV_FILE"
-            ;;
-          choir.code_ref=*)
-            echo "CHOIR_CODE_REF=''${param#choir.code_ref=}" >> "$ENV_FILE"
+            echo "CHOIR_COMPUTER_ID=''${param#choir.desktop_id=}" >> "$ENV_FILE"
+            echo "CHOIR_COMPUTER_ID=''${param#choir.desktop_id=}" >> "$UPDATER_ENV_FILE"
             ;;
           choir.gateway_token=*)
             echo "RUNTIME_GATEWAY_TOKEN=''${param#choir.gateway_token=}" >> "$ENV_FILE"
@@ -393,7 +294,108 @@ EOF
       fi
 
       chmod 0640 "$ENV_FILE"
+      chmod 0644 "$UPDATER_ENV_FILE"
     '';
+  };
+
+  systemd.tmpfiles.rules = [
+    "d /mnt/persistent/choir-updater 0700 root root -"
+    "d /run/choir-updater-control 0700 root root -"
+    "d /run/choir 0700 root root -"
+  ];
+
+  # Fixed privileged restart bridge. The updater may create only the trigger;
+  # it has no access to PID 1's control sockets or arbitrary unit names.
+  systemd.paths.go-choir-sandbox-restart = {
+    description = "Watch for a verified Choir restart request";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig.PathExists = "/run/choir-updater-control/restart";
+  };
+
+  systemd.services.go-choir-sandbox-restart = {
+    description = "Restart only the Choir sandbox service";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "go-choir-sandbox-restart" ''
+        set -euo pipefail
+        rm -f /run/choir-updater-control/restart
+        exec ${pkgs.systemd}/bin/systemctl restart go-choir-sandbox.service
+      '';
+    };
+  };
+
+  systemd.services.go-choir-kernel-capability-probe = {
+    description = "Probe mandatory guest kernel isolation capabilities";
+    before = [ "go-choir-updater.service" ];
+    requiredBy = [ "go-choir-updater.service" ];
+    environment.CHOIR_KERNEL_CAPABILITY_PROBE_OUTPUT = "/run/choir/kernel-capabilities.json";
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root";
+      Group = "root";
+      ExecStart = "${goChoirPackages.updater}/bin/choir-updater";
+      UMask = "0077";
+      CapabilityBoundingSet = [ "CAP_SYS_ADMIN" "CAP_SETUID" "CAP_SETGID" ];
+      AmbientCapabilities = [ "CAP_SYS_ADMIN" "CAP_SETUID" "CAP_SETGID" ];
+      Delegate = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      ProtectHome = true;
+      ProtectSystem = "strict";
+      ProtectControlGroups = false;
+      ReadWritePaths = [ "/run/choir" ];
+      RestrictAddressFamilies = [ "AF_UNIX" ];
+      LockPersonality = true;
+      RestrictSUIDSGID = true;
+    };
+  };
+
+  systemd.timers.go-choir-kernel-capability-probe = {
+    description = "Refresh guest kernel isolation capability evidence";
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnUnitActiveSec = "5min";
+      Unit = "go-choir-kernel-capability-probe.service";
+    };
+  };
+
+  systemd.services.go-choir-updater = {
+    description = "Choir guest release updater";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network-online.target" "go-choir-extract-cmdline.service" ];
+    before = [ "go-choir-sandbox.service" ];
+    wants = [ "network-online.target" ];
+    requires = [ "go-choir-extract-cmdline.service" ];
+    environment.CHOIR_UPDATER_ROOT = "/mnt/persistent/choir-updater";
+    environment.CHOIR_GUEST_IMAGE_MANIFEST = guestImageManifest;
+    environment.CHOIR_KERNEL_CONFIG = config.boot.kernelPackages.kernel.configfile;
+    serviceConfig = {
+      Type = "simple";
+      User = "root";
+      Group = "root";
+      ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --health-url http://127.0.0.1:8085/health --signing-key /mnt/persistent/choir-updater/keys/guest-core.ed25519 --verifier-signing-key /mnt/persistent/choir-updater/keys/verifier.ed25519 --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
+      Restart = "on-failure";
+      RestartSec = 1;
+      UMask = "0077";
+      NoNewPrivileges = true;
+      CapabilityBoundingSet = [ ];
+      AmbientCapabilities = [ ];
+      PrivatePIDs = true;
+      ProtectProc = "invisible";
+      ProcSubset = "pid";
+      EnvironmentFile = [ "-/run/go-choir-updater.env" ];
+      SystemCallFilter = [ "~@debug" ];
+      PrivateTmp = true;
+      PrivateDevices = true;
+      ProtectHome = true;
+      ProtectSystem = "strict";
+      ProtectControlGroups = true;
+      ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" ];
+      InaccessiblePaths = [ "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" ];
+      LockPersonality = true;
+      RestrictSUIDSGID = true;
+    };
   };
 
   # Sandbox runtime service.
@@ -403,28 +405,26 @@ EOF
   systemd.services.go-choir-sandbox = {
     description = "go-choir Sandbox Runtime (VM guest)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-extract-cmdline.service" ];
+    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" ];
     wants = [ "network-online.target" ];
-    requires = [ "go-choir-extract-cmdline.service" ];
+    requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" ];
     environment = {
-      # Direct Go exec paths (for example, git-backed export tools) do not
-      # run through an interactive shell. Give the sandbox service an explicit
-      # guest PATH so tool implementations and shell tools see the same basic
-      # runtime utilities.
-      PATH = lib.mkForce (lib.makeBinPath ((with pkgs; [
+      CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
+      PATH = lib.mkForce (lib.makeBinPath (with pkgs; [
         bash
         coreutils
-        findutils
         curl
-        gcc
+        findutils
         git
-        go
-        gnumake
         gnugrep
+        gnumake
         gnused
-        icu
+        go
+        jq
         nodejs
-        perl
+        gcc
+        binutils
+        icu
         pkg-config
         gnutar
         systemd
@@ -436,9 +436,7 @@ EOF
         poppler-utils
         goChoirPackages.obscura
         goChoirPackages.zot
-      ]) ++ lib.optionals includePlaywright (with pkgs; [
-        playwrightTools
-      ])));
+      ]));
       # VM health checks and host forwarding reach the guest via its tap IP,
       # so the sandbox must listen on all guest interfaces, not loopback only.
       SERVER_HOST = "0.0.0.0";
@@ -451,37 +449,33 @@ EOF
       # the sandbox falls back to its process-local default, which can disappear
       # across guest reboot/recovery even when runtime DB state survives.
       SANDBOX_FILES_ROOT = "/mnt/persistent/files";
-      # Dolt/go-mysql-server transitively requires ICU headers for CGO builds.
-      # Worker verification commands are plain `go test`; surface the Nix ICU
-      # dev output through standard compiler/pkg-config environment variables.
+      # Guest-local capsule verification uses the standard Go toolchain; expose
+      # the Nix ICU development closure through standard compiler variables.
       CGO_CFLAGS = "-I${pkgs.icu.dev}/include";
       CGO_CXXFLAGS = "-I${pkgs.icu.dev}/include";
       CGO_LDFLAGS = "-L${pkgs.icu}/lib";
       PKG_CONFIG_PATH = "${pkgs.icu.dev}/lib/pkgconfig";
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.sandbox}/share/go-choir/skills";
-      RUNTIME_WORKER_REPO_REMOTE = sourceRepoRemote;
-      RUNTIME_WORKER_REPO_BASE_SHA = buildCommit;
+      CHOIR_CAPSULE_BROKER_PATH = "${goChoirPackages.capsuleBroker}/bin/capsule-broker";
+      CHOIR_CAPSULE_STATE_DIR = "/run/choir/capsules";
+      CHOIR_CAPSULE_SOURCE_ROOT = "/mnt/persistent/files/Source/platform";
+      CHOIR_CAPSULE_LOWER_ROOT = "/";
       RUNTIME_PROMOTION_SOURCE_REPO = sourceRepoRemote;
       RUNTIME_PROMOTION_WORKSPACE_ROOT = "/mnt/persistent/promotion-workspaces";
       # Guest health is part of staging acceptance. Stamp the source revision
       # into the VM runtime so refreshed active computers can prove which guest
       # image they are serving, even though they do not mount host deploy.env.
       CHOIR_DEPLOYED_COMMIT = buildCommit;
-      # Worker candidate repos need non-interactive commits for export proof.
-      GIT_AUTHOR_NAME = "Choir Worker";
-      GIT_AUTHOR_EMAIL = "worker@choir.local";
-      GIT_COMMITTER_NAME = "Choir Worker";
-      GIT_COMMITTER_EMAIL = "worker@choir.local";
-      # Keep Go build/module caches on the writable data volume. The shared
-      # Nix store is intentionally read-only inside guest worker VMs.
+      GIT_AUTHOR_NAME = "Choir Capsule";
+      GIT_AUTHOR_EMAIL = "capsule@choir.local";
+      GIT_COMMITTER_NAME = "Choir Capsule";
+      GIT_COMMITTER_EMAIL = "capsule@choir.local";
+      # Keep Go build/module caches on the writable data volume.
       GOPATH = "/mnt/persistent/go";
       GOMODCACHE = "/mnt/persistent/go/pkg/mod";
       GOCACHE = "/mnt/persistent/go-build-cache";
       GOTOOLCHAIN = "local";
-      # Worker VMs use Obscura as their lightweight VM-local browser,
-      # extraction, and bounded-control substrate. Heavy Chrome/Playwright
-      # browser bundles stay out of ordinary user/candidate VMs. The separate
-      # worker-playwright image is the opt-in evidence/verifier exception.
+      # Obscura is the guest-local browser and extraction substrate.
       CHOIR_OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
       OBSCURA_BIN = "${goChoirPackages.obscura}/bin/obscura";
       CHOIR_ZOT_PATH = "${goChoirPackages.zot}/bin/zot";
@@ -490,16 +484,9 @@ EOF
       RUNTIME_LLM_PROVIDER = "deepseek";
       RUNTIME_LLM_MODEL = "deepseek-v4-flash";
       RUNTIME_LLM_REASONING_EFFORT = "medium";
-    } // lib.optionalAttrs includePlaywright {
-      CHOIR_WORKER_BROWSER_CLASS = "playwright";
-      CHOIR_PLAYWRIGHT_BIN = "${playwrightTools}/bin/playwright";
-      NODE_PATH = "${playwrightTools}/lib/node_modules";
-      PLAYWRIGHT_BROWSERS_PATH = "${pkgs.playwright-driver.browsers}";
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-      PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
     };
     serviceConfig = {
-      ExecStartPre = "${sandboxRuntimeInstall}";
+      ExecStartPre = "";
       ExecStart = "${sandboxRuntimeExec}";
       Restart = "on-failure";
       RestartSec = 1;
@@ -525,13 +512,14 @@ EOF
 
   # ── System packages ──────────────────────────────────────────────────
   # Minimal set for debugging and runtime support.
-  environment.systemPackages = (with pkgs; [
+  environment.systemPackages = with pkgs; [
     coreutils
     curl
-    gnutar
-    gcc
+    findutils
     git
     go
+    jq
+    gnutar
     gnumake
     gnugrep
     gnused
@@ -546,9 +534,7 @@ EOF
     pandoc
     poppler-utils
     bash
-  ]) ++ lib.optionals includePlaywright (with pkgs; [
-    playwrightTools
-  ]);
+  ];
 
   system.stateVersion = "25.11";
 }

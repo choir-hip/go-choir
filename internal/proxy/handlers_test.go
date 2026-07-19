@@ -2645,8 +2645,6 @@ func testVMctlProxyEnv(t *testing.T) (*Handler, ed25519.PrivateKey, *httptest.Se
 
 	vmctlMux := http.NewServeMux()
 	vmctlMux.HandleFunc("/internal/vmctl/resolve", vmctlHandler.HandleResolve)
-	vmctlMux.HandleFunc("/internal/vmctl/fork-desktop", vmctlHandler.HandleForkDesktop)
-	vmctlMux.HandleFunc("/internal/vmctl/publish-desktop", vmctlHandler.HandlePublishDesktop)
 	vmctlMux.HandleFunc("/internal/vmctl/lookup", vmctlHandler.HandleLookup)
 	vmctlMux.HandleFunc("/internal/vmctl/stop", vmctlHandler.HandleStop)
 	vmctlMux.HandleFunc("/internal/vmctl/list", vmctlHandler.HandleList)
@@ -2837,51 +2835,6 @@ func TestVMctlRouting_DifferentUsersGetDifferentVMs(t *testing.T) {
 	}
 }
 
-func TestVMctlRouting_SameUserDifferentDesktopsGetDifferentVMs(t *testing.T) {
-	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
-
-	accessToken := issueTestAccessJWT(priv, "alice")
-	client := vmctl.NewClient(vmctlSrv.URL)
-	if _, err := client.ResolveDesktop("alice", vmctl.PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveDesktop primary: %v", err)
-	}
-	if _, err := client.ForkDesktop("alice", vmctl.PrimaryDesktopID, "branch-a"); err != nil {
-		t.Fatalf("ForkDesktop branch-a: %v", err)
-	}
-	if _, err := client.PublishDesktop("alice", "branch-a"); err != nil {
-		t.Fatalf("PublishDesktop branch-a: %v", err)
-	}
-
-	reqA := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap?desktop_id=primary", nil)
-	reqA.Header.Set("Cookie", "choir_access="+accessToken)
-	wA := httptest.NewRecorder()
-	handler.HandleBootstrap(wA, reqA)
-
-	reqB := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap?desktop_id=branch-a", nil)
-	reqB.Header.Set("Cookie", "choir_access="+accessToken)
-	wB := httptest.NewRecorder()
-	handler.HandleBootstrap(wB, reqB)
-
-	if wA.Code != http.StatusOK || wB.Code != http.StatusOK {
-		t.Fatalf("expected both 200, got %d and %d", wA.Code, wB.Code)
-	}
-
-	primary, err := client.LookupDesktop("alice", vmctl.PrimaryDesktopID)
-	if err != nil {
-		t.Fatalf("LookupDesktop primary: %v", err)
-	}
-	branch, err := client.LookupDesktop("alice", "branch-a")
-	if err != nil {
-		t.Fatalf("LookupDesktop branch: %v", err)
-	}
-	if primary == nil || branch == nil {
-		t.Fatalf("expected ownerships for both desktops, got primary=%+v branch=%+v", primary, branch)
-	}
-	if primary.VMID == branch.VMID {
-		t.Fatalf("expected different VM IDs per desktop, got %s", primary.VMID)
-	}
-}
-
 func TestVMctlRouting_UnknownDesktopSelectorDoesNotMintVM(t *testing.T) {
 	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
 
@@ -3002,28 +2955,6 @@ func TestResolveSandboxURLUsesResolveForUniversalWirePlatformComputer(t *testing
 	}
 	if resolveCalls != 1 || lookupCalls != 0 {
 		t.Fatalf("vmctl calls: resolve=%d lookup=%d, want resolve-only", resolveCalls, lookupCalls)
-	}
-}
-
-func TestVMctlRouting_UnpublishedDesktopRejected(t *testing.T) {
-	handler, priv, _, vmctlSrv := testVMctlProxyEnv(t)
-
-	client := vmctl.NewClient(vmctlSrv.URL)
-	if _, err := client.ResolveDesktop("alice", vmctl.PrimaryDesktopID); err != nil {
-		t.Fatalf("ResolveDesktop primary: %v", err)
-	}
-	if _, err := client.ForkDesktop("alice", vmctl.PrimaryDesktopID, "branch-a"); err != nil {
-		t.Fatalf("ForkDesktop branch-a: %v", err)
-	}
-
-	accessToken := issueTestAccessJWT(priv, "alice")
-	req := httptest.NewRequest(http.MethodGet, "/api/shell/bootstrap?desktop_id=branch-a", nil)
-	req.Header.Set("Cookie", "choir_access="+accessToken)
-	w := httptest.NewRecorder()
-	handler.HandleBootstrap(w, req)
-
-	if w.Code != http.StatusBadGateway {
-		t.Fatalf("expected 502 for unpublished desktop, got %d", w.Code)
 	}
 }
 
@@ -3317,7 +3248,7 @@ func TestCurrentImmutableIdentityJoinsRedactedProductEvidence(t *testing.T) {
 	}))
 	defer srv.Close()
 	h := &Handler{vmctlClient: vmctl.NewClient(srv.URL)}
-	identity, err := h.currentImmutableIdentity(t.Context(), "owner-private", "primary", &version, "disk-instantiation:sha256:"+strings.Repeat("e", 64), true)
+	identity, err := h.currentImmutableIdentity(t.Context(), "owner-private", "primary")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3328,14 +3259,10 @@ func TestCurrentImmutableIdentityJoinsRedactedProductEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, forbidden := range []string{"owner-private", slotID, "vm_id", "sandbox_url", "device_path"} {
+	for _, forbidden := range []string{"owner-private", slotID, "vm_id", "sandbox_url", "device_path", "construction_disk_receipt_id"} {
 		if strings.Contains(string(body), forbidden) {
 			t.Fatalf("immutable identity leaked %q in %s", forbidden, body)
 		}
-	}
-	mismatched := computerversion.ComputerVersion{CodeRef: version.CodeRef, ArtifactProgramRef: computerversion.ArtifactProgramRef("artifact-program:sha256:" + strings.Repeat("f", 64))}
-	if _, err := h.currentImmutableIdentity(t.Context(), "owner-private", "primary", &mismatched, "disk-instantiation:sha256:"+strings.Repeat("e", 64), true); err == nil {
-		t.Fatal("mismatched ownership and route identity was accepted")
 	}
 }
 
@@ -3423,9 +3350,6 @@ func TestComputeStatusListsOnlyUserComputers(t *testing.T) {
 	if _, err := client.ResolveDesktop("compute-list-user", vmctl.PrimaryDesktopID); err != nil {
 		t.Fatalf("resolve primary: %v", err)
 	}
-	if _, err := client.ForkDesktop("compute-list-user", vmctl.PrimaryDesktopID, "candidate-one"); err != nil {
-		t.Fatalf("fork candidate: %v", err)
-	}
 	if _, err := client.ResolveDesktop("other-compute-user", vmctl.PrimaryDesktopID); err != nil {
 		t.Fatalf("resolve other user: %v", err)
 	}
@@ -3441,20 +3365,17 @@ func TestComputeStatusListsOnlyUserComputers(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
 		t.Fatalf("decode compute status: %v", err)
 	}
-	if len(result.Computers) != 2 {
-		t.Fatalf("computers len = %d, want 2: %+v", len(result.Computers), result.Computers)
+	if len(result.Computers) != 1 {
+		t.Fatalf("computers len = %d, want 1: %+v", len(result.Computers), result.Computers)
 	}
-	var sawPrimary, sawCandidate bool
+	var sawPrimary bool
 	for _, computer := range result.Computers {
 		if computer.DesktopID == vmctl.PrimaryDesktopID && computer.Role == "primary" {
 			sawPrimary = true
 		}
-		if computer.DesktopID == "candidate-one" && computer.Role == "candidate" {
-			sawCandidate = true
-		}
 	}
-	if !sawPrimary || !sawCandidate {
-		t.Fatalf("missing primary/candidate computers: %+v", result.Computers)
+	if !sawPrimary {
+		t.Fatalf("missing primary computer: %+v", result.Computers)
 	}
 	body := w.Body.String()
 	for _, forbidden := range []string{"other-compute-user", "compute-list-user", "vm_id", "sandbox_url", "user_id"} {

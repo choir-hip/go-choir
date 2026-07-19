@@ -305,9 +305,9 @@ func (s *Service) PublishTexture(ctx context.Context, req PublishTextureRequest)
 			"route_path":           routePath,
 			"source_revision_hash": sourceRevisionHash,
 		})),
-		AccessPolicy:  sourceMetadata.AccessPolicy,
-		ExportPolicy:  sourceMetadata.ExportPolicy,
-		Now:           now,
+		AccessPolicy: sourceMetadata.AccessPolicy,
+		ExportPolicy: sourceMetadata.ExportPolicy,
+		Now:          now,
 	}
 	for _, se := range sourceMetadata.SourceEntities {
 		graphParams.SourceEntities = append(graphParams.SourceEntities, GraphSourceEntity{
@@ -539,7 +539,7 @@ func (s *Service) SubmitPublicationProposal(ctx context.Context, req SubmitPubli
 			continue
 		}
 		citationEdges = append(citationEdges, ProposalCitationEdge{
-			ToID:       toID,
+			ToID:        toID,
 			EvidenceRef: firstNonEmpty(citation.Title, toID),
 		})
 		citationIDs = append(citationIDs, toID)

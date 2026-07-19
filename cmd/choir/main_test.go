@@ -8,11 +8,18 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestMain(m *testing.M) {
+	_ = os.Setenv(apiKeyEnvVar, "choir_sk_test")
+	os.Exit(m.Run())
+}
 
 func TestClientTimeoutPrecedence(t *testing.T) {
 	tests := []struct {
@@ -30,8 +37,7 @@ func TestClientTimeoutPrecedence(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(timeoutEnvVar, tt.env)
 			fs := flag.NewFlagSet("test", flag.ContinueOnError)
-			args := append([]string{"--api-key=choir_sk_test"}, tt.args...)
-			c, err := newClient(fs, args, io.Discard, io.Discard)
+			c, err := newClient(fs, tt.args, io.Discard, io.Discard)
 			if err != nil {
 				t.Fatalf("newClient() error = %v", err)
 			}
@@ -58,8 +64,7 @@ func TestClientRejectsInvalidTimeout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv(timeoutEnvVar, tt.env)
 			fs := flag.NewFlagSet("test", flag.ContinueOnError)
-			args := append([]string{"--api-key=choir_sk_test"}, tt.args...)
-			_, err := newClient(fs, args, io.Discard, io.Discard)
+			_, err := newClient(fs, tt.args, io.Discard, io.Discard)
 			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("newClient() error = %v, want containing %q", err, tt.wantErr)
 			}
@@ -76,7 +81,7 @@ func TestRequestTimeoutCancelsDelayedServer(t *testing.T) {
 
 	started := time.Now()
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories", "--api-key=choir_sk_test", "--host=" + stub.URL, "--timeout=30ms"}, &out, &errOut)
+	code := run([]string{"wire", "stories", "--host=" + stub.URL, "--timeout=30ms"}, &out, &errOut)
 	elapsed := time.Since(started)
 	if code != 1 {
 		t.Fatalf("code = %d, want 1; stderr=%s", code, errOut.String())
@@ -109,13 +114,42 @@ func TestRunRequiresAPIKey(t *testing.T) {
 // TestRunRejectsBadKeyPrefix asserts the CLI rejects a key without the
 // choir_sk_ prefix before any network call.
 func TestRunRejectsBadKeyPrefix(t *testing.T) {
+	t.Setenv(apiKeyEnvVar, "not-a-choir-key")
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories", "--api-key=not-a-choir-key"}, &out, &errOut)
+	code := run([]string{"wire", "stories"}, &out, &errOut)
 	if code != 2 {
 		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
 	}
 	if !strings.Contains(errOut.String(), "must start with") {
 		t.Fatalf("stderr = %q, want it to mention prefix requirement", errOut.String())
+	}
+}
+
+func TestCLIAPIKeyFileRequiresMode0600AndRetiredPlaintextFlagRefuses(t *testing.T) {
+	keyPath := filepath.Join(t.TempDir(), "key")
+	if err := os.WriteFile(keyPath, []byte("choir_sk_from_file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readCLISecretFile(keyPath, nil); err == nil {
+		t.Fatal("group-readable API key file was accepted")
+	}
+	if err := os.Chmod(keyPath, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	key, err := readCLISecretFile(keyPath, nil)
+	if err != nil || key != "choir_sk_from_file" {
+		t.Fatalf("mode-0600 key = %q, %v", key, err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"wire", "stories", "--api-key=choir_sk_plaintext"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "flag provided but not defined") {
+		t.Fatalf("retired plaintext flag code=%d stderr=%q", code, stderr.String())
+	}
+}
+
+func TestCLIAPIKeyFileDashReadsStdin(t *testing.T) {
+	key, err := readCLISecretFile("-", strings.NewReader("choir_sk_stdin\n"))
+	if err != nil || key != "choir_sk_stdin" {
+		t.Fatalf("stdin key = %q, %v", key, err)
 	}
 }
 
@@ -136,7 +170,7 @@ func TestWireStoriesHitsAPI(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"wire", "stories", "--host=" + stub.URL}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -162,7 +196,7 @@ func TestWireDiagnosticsPrintsOnlyDiagnostics(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "diagnostics", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"wire", "diagnostics", "--host=" + stub.URL}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -188,7 +222,7 @@ func TestTrajectoriesHitsAPI(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectories", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"trajectories", "--host=" + stub.URL}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -212,7 +246,7 @@ func TestTrajectoriesDecodesObjectSettlementRule(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectories", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"trajectories", "--host=" + stub.URL}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -250,7 +284,7 @@ func TestTrajectoryCancelPostsBodylessEscapedRequest(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectory", "cancel", "--api-key=choir_sk_test", "--host=" + stub.URL, "traj/with space"}, &out, &errOut)
+	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "traj/with space"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -264,7 +298,7 @@ func TestTrajectoryCancelPrintsServerJSON(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectory", "cancel", "--api-key=choir_sk_test", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
+	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -283,7 +317,7 @@ func TestTrajectoryCancelPrintsServerJSON(t *testing.T) {
 
 func TestTrajectoryCancelRequiresID(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectory", "cancel", "--api-key=choir_sk_test"}, &out, &errOut)
+	code := run([]string{"trajectory", "cancel"}, &out, &errOut)
 	if code != 2 {
 		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
 	}
@@ -302,7 +336,7 @@ func TestTrajectoryCancelReportsServerError(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectory", "cancel", "--api-key=choir_sk_test", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
+	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
 	if code != 1 {
 		t.Fatalf("code = %d, want 1; stderr=%s", code, errOut.String())
 	}
@@ -327,7 +361,7 @@ func TestTrajectoryGetCompatibility(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectory", "--api-key=choir_sk_test", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
+	code := run([]string{"trajectory", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -353,7 +387,7 @@ func TestTextureRevisionsHitsAPI(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"texture", "revisions", "--api-key=choir_sk_test", "--host=" + stub.URL, "doc-1"}, &out, &errOut)
+	code := run([]string{"texture", "revisions", "--host=" + stub.URL, "doc-1"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -425,7 +459,7 @@ func TestNon2xxReturnsError(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"wire", "stories", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"wire", "stories", "--host=" + stub.URL}, &out, &errOut)
 	if code != 1 {
 		t.Fatalf("code = %d, want 1; stderr=%s", code, errOut.String())
 	}
@@ -476,7 +510,7 @@ func TestRunStartPostsToPromptBar(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"run", "start", "--api-key=choir_sk_test", "--host=" + stub.URL, "hello", "world"}, &out, &errOut)
+	code := run([]string{"run", "start", "--host=" + stub.URL, "hello", "world"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -493,7 +527,7 @@ func TestRunStartPostsToPromptBar(t *testing.T) {
 // text is provided.
 func TestRunStartRequiresText(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := run([]string{"run", "start", "--api-key=choir_sk_test"}, &out, &errOut)
+	code := run([]string{"run", "start"}, &out, &errOut)
 	if code != 2 {
 		t.Fatalf("code = %d, want 2; stderr=%s", code, errOut.String())
 	}
@@ -518,7 +552,7 @@ func TestRunStatusHitsSubmissionEndpoint(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"run", "status", "--api-key=choir_sk_test", "--host=" + stub.URL, "sub-123"}, &out, &errOut)
+	code := run([]string{"run", "status", "--host=" + stub.URL, "sub-123"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -547,7 +581,7 @@ func TestRunListHitsAgentLoopsEndpoint(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"run", "list", "--api-key=choir_sk_test", "--host=" + stub.URL, "--limit=7"}, &out, &errOut)
+	code := run([]string{"run", "list", "--host=" + stub.URL, "--limit=7"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -580,7 +614,7 @@ func TestRunCancelPostsAgentCancelRequest(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"run", "cancel", "--api-key=choir_sk_test", "--host=" + stub.URL, "run-123"}, &out, &errOut)
+	code := run([]string{"run", "cancel", "--host=" + stub.URL, "run-123"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -619,7 +653,7 @@ func TestComputerLifecycleCommandsUseProductComputeAPI(t *testing.T) {
 
 	for _, command := range []string{"status", "stop", "start"} {
 		var out, errOut bytes.Buffer
-		code := run([]string{"computer", command, "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+		code := run([]string{"computer", command, "--host=" + stub.URL}, &out, &errOut)
 		if code != 0 {
 			t.Fatalf("computer %s code = %d, stderr=%s", command, code, errOut.String())
 		}
@@ -657,7 +691,7 @@ func TestAPIKeyListHitsAuthEndpoint(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"api-key", "list", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"api-key", "list", "--host=" + stub.URL}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -698,7 +732,7 @@ func TestAPIKeyCreatePostsToAuthEndpoint(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"api-key", "create", "--label=Devin CLI", "--scopes=read:texture", "--api-key=choir_sk_test", "--host=" + stub.URL}, &out, &errOut)
+	code := run([]string{"api-key", "create", "--label=Devin CLI", "--scopes=read:texture", "--host=" + stub.URL}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -726,11 +760,134 @@ func TestAPIKeyRevokeDeletesKey(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"api-key", "revoke", "--api-key=choir_sk_test", "--host=" + stub.URL, "ak_123"}, &out, &errOut)
+	code := run([]string{"api-key", "revoke", "--host=" + stub.URL, "ak_123"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
 	if !strings.Contains(out.String(), "ak_123") {
 		t.Fatalf("stdout = %q, want it to mention ak_123", out.String())
+	}
+}
+
+func TestSelfDevelopmentModeCLIUsesExplicitComputerAndCASBody(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/computers/computer-exact/self-development/mode" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body["mode"] != "propose_only" || body["idempotency_key"] != "mode-1" || body["expected_generation"] != float64(4) {
+			t.Fatalf("mode body = %#v", body)
+		}
+		_, _ = io.WriteString(w, `{"computer_id":"computer-exact","mode":"propose_only","generation":5}`)
+	}))
+	defer stub.Close()
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"self-dev", "mode", "set", "--computer=computer-exact", "--mode=propose_only", "--expected-generation=4", "--idempotency-key=mode-1", "--host=" + stub.URL}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"generation": 5`) {
+		t.Fatalf("stdout=%s", stdout.String())
+	}
+}
+
+func TestSelfDevelopmentCLIUsesExplicitTargetAndImmutableBindings(t *testing.T) {
+	var requests []map[string]any
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/computers/computer-exact/self-development/operations":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			requests = append(requests, body)
+			_, _ = io.WriteString(w, `{"operation_id":"operation-1","state":"executing"}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/computers/computer-exact/self-development/operations/operation-1":
+			_, _ = io.WriteString(w, `{"operation_id":"operation-1","state":"awaiting_approval"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/computers/computer-exact/self-development/operations/operation-1/decision":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			requests = append(requests, body)
+			_, _ = io.WriteString(w, `{"operation_id":"operation-1","state":"accepted"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/computers/computer-exact/self-development/rollbacks":
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			requests = append(requests, body)
+			_, _ = io.WriteString(w, `{"operation_id":"rollback-1","state":"rollback_pending"}`)
+		default:
+			t.Fatalf("unexpected request = %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer stub.Close()
+	promptPath := filepath.Join(t.TempDir(), "prompt.txt")
+	if err := os.WriteFile(promptPath, []byte("repair the updater"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"self-dev", "start", "--computer=computer-exact", "--idempotency-key=start-1", "--prompt-file=" + promptPath, "--host=" + stub.URL}, &stdout, &stderr); code != 0 {
+		t.Fatalf("start code=%d stderr=%s", code, stderr.String())
+	}
+	if requests[0]["prompt"] != "repair the updater" || requests[0]["idempotency_key"] != "start-1" {
+		t.Fatalf("start body = %#v", requests[0])
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"self-dev", "status", "--computer=computer-exact", "--host=" + stub.URL, "operation-1"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("status code=%d stderr=%s", code, stderr.String())
+	}
+	digest := strings.Repeat("a", 64)
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{
+		"self-dev", "approve", "--computer=computer-exact", "--idempotency-key=approve-1",
+		"--expected-desired-head=" + digest, "--expected-effective-head=" + digest,
+		"--expected-desired-commitment=" + digest, "--expected-effective-commitment=" + digest,
+		"--bundle=" + digest, "--verifier=verification:1", "--host=" + stub.URL, "operation-1",
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("approve code=%d stderr=%s", code, stderr.String())
+	}
+	decision := requests[1]
+	if decision["decision"] != "approve" || decision["bundle_digest"] != digest || decision["verifier_ref"] != "verification:1" ||
+		decision["expected_desired_state_commitment"] != digest || decision["expected_effective_state_commitment"] != digest {
+		t.Fatalf("decision body = %#v", decision)
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{
+		"self-dev", "rollback", "--computer=computer-exact", "--expected-desired-head=" + digest,
+		"--current-applied-head=" + digest, "--to-applied-head=" + digest,
+		"--prior-materialization=receipt:prior", "--prior-checkpoint=checkpoint:prior",
+		"--expected-route-generation=9", "--idempotency-key=rollback-1", "--host=" + stub.URL,
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("rollback code=%d stderr=%s", code, stderr.String())
+	}
+	rollback := requests[2]
+	if rollback["to_applied_head"] != digest || rollback["prior_materialization"] != "receipt:prior" || rollback["prior_checkpoint"] != "checkpoint:prior" || rollback["expected_route_generation"] != float64(9) {
+		t.Fatalf("rollback body = %#v", rollback)
+	}
+}
+
+func TestSelfDevelopmentKernelCapabilitiesUsesPublicComputerAPI(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/api/computers/computer-exact/self-development/kernel-capabilities" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = io.WriteString(w, `{"receipt":{"receipt_kind":"KernelCapabilityReceipt"}}`)
+	}))
+	defer stub.Close()
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"self-dev", "kernel-capabilities", "--computer=computer-exact", "--host=" + stub.URL}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "KernelCapabilityReceipt") {
+		t.Fatalf("stdout=%s", stdout.String())
 	}
 }

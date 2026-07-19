@@ -250,7 +250,6 @@ func (th *TerminalHandler) sessionCommand(sessionID, user string) (*exec.Cmd, er
 			"CHOIR_SOURCE_ROOT="+filepath.Join(rootDir, "Source"),
 			"CHOIR_PLATFORM_SOURCE_MOUNT="+sourceProjection.PlatformSourceMount,
 			"CHOIR_USER_SOURCE_MOUNT="+sourceProjection.UserSourceMount,
-			"CHOIR_CANDIDATE_SOURCE_MOUNT="+sourceProjection.CandidateSourceMount,
 			"CHOIR_BUILD_MOUNT="+sourceProjection.BuildMount,
 		)
 		if !isFallbackZotSessionCommand(th.command) {

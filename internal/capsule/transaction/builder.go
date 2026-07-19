@@ -23,15 +23,19 @@ func NewTransactionBuilder(classifier *Classifier) *TransactionBuilder {
 // TransactionRecord is the structured output of the transaction builder.
 // It represents a single capsule's diff as a tape-appendable record.
 type TransactionRecord struct {
-	CapsuleID        string                    `json:"capsule_id"`
-	Timestamp        time.Time                 `json:"timestamp"`
-	ClassifierV      string                    `json:"classifier_version"`
-	ClassifierDigest string                    `json:"classifier_digest"`
-	Groups           map[string][]ChangeRecord `json:"groups"`
-	Ignored          []ChangeRecord            `json:"ignored"`
-	Unknown          []ChangeRecord            `json:"unknown,omitempty"`
-	Rejected         bool                      `json:"rejected"` // true if unknown paths present
-	RejectReason     string                    `json:"reject_reason,omitempty"`
+	CapsuleID              string                      `json:"capsule_id"`
+	Timestamp              time.Time                   `json:"timestamp"`
+	ClassifierV            string                      `json:"classifier_version"`
+	ClassifierDigest       string                      `json:"classifier_digest"`
+	Groups                 map[string][]ChangeRecord   `json:"groups"`
+	Ignored                []ChangeRecord              `json:"ignored"`
+	Unknown                []ChangeRecord              `json:"unknown,omitempty"`
+	Rejected               bool                        `json:"rejected"` // true if unknown paths present
+	RejectReason           string                      `json:"reject_reason,omitempty"`
+	SourceTreeDigest       string                      `json:"source_tree_digest"`
+	RuntimeArtifactDigest  string                      `json:"runtime_artifact_digest"`
+	BaseEffectiveEventHead string                      `json:"base_effective_event_head"`
+	RuntimeFiles           []capsule.FrozenReleaseFile `json:"runtime_files"`
 }
 
 // ChangeRecord is a single file change in the transaction record.

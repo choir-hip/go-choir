@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/types"
@@ -94,6 +95,28 @@ func normalizeRouteProfile(profile, ownerID, computerID string) string {
 	return safeRefPart(ownerID) + "/" + safeRefPart(computerID)
 }
 
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyString(values ...string) string {
+	return firstNonEmpty(values...)
+}
+
+func firstNonEmptyEnv(keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func firstNonEmptyPromotion(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -156,7 +179,7 @@ func metadataStringSlice(value any) []string {
 	return out
 }
 
-func normalizeVSuperCoSuperSlot(raw string) string {
+func normalizeCoSuperSlot(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "implementation", "implementer", "worker", "writer", "builder":
 		return "implementation"
@@ -254,4 +277,41 @@ func decodeRevisionMetadata(raw json.RawMessage) map[string]any {
 		return nil
 	}
 	return metadata
+}
+
+func sanitizeExportPart(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "run"
+	}
+	var b strings.Builder
+	for _, r := range raw {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else if b.Len() > 0 && b.String()[b.Len()-1] != '-' {
+			b.WriteByte('-')
+		}
+	}
+	if out := strings.Trim(b.String(), "-"); out != "" {
+		return out
+	}
+	return "run"
+}
+
+func intMapValue(values map[string]any, key string) int {
+	switch value := values[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case uint64:
+		return int(value)
+	case float64:
+		return int(value)
+	case json.Number:
+		parsed, _ := value.Int64()
+		return int(parsed)
+	default:
+		return 0
+	}
 }

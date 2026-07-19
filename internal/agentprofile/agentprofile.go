@@ -8,7 +8,6 @@ const (
 	Conductor  = "conductor"
 	Super      = "super"
 	CoSuper    = "co-super"
-	VSuper     = "vsuper"
 	Researcher = "researcher"
 	Texture    = "texture"
 	Processor  = "processor"
@@ -20,12 +19,10 @@ const (
 type Policy struct {
 	Profile                   string
 	AllowReadOnlyFiles        bool
-	AllowWritableFiles        bool
 	AllowResearchTools        bool
 	AllowEvidenceTools        bool
 	AllowMemoryTools          bool
 	AllowModelDiagnosticTools bool
-	AllowCodingTools          bool
 	AllowCoAgentTools         bool
 	AllowedDelegateTargets    []string
 }
@@ -86,38 +83,15 @@ func PolicyFor(profile string) Policy {
 	case Email:
 		return Policy{Profile: Email}
 	case CoSuper:
-		return Policy{
-			Profile:                   CoSuper,
-			AllowWritableFiles:        true,
-			AllowResearchTools:        true,
-			AllowEvidenceTools:        true,
-			AllowMemoryTools:          true,
-			AllowModelDiagnosticTools: true,
-			AllowCodingTools:          true,
-			AllowCoAgentTools:         true,
-			AllowedDelegateTargets:    []string{Researcher},
-		}
-	case VSuper:
-		return Policy{
-			Profile:                   VSuper,
-			AllowWritableFiles:        true,
-			AllowResearchTools:        true,
-			AllowEvidenceTools:        true,
-			AllowMemoryTools:          true,
-			AllowModelDiagnosticTools: true,
-			AllowCodingTools:          true,
-			AllowCoAgentTools:         true,
-			AllowedDelegateTargets:    []string{Researcher, CoSuper},
-		}
+		return Policy{Profile: CoSuper}
 	case Super:
 		return Policy{
 			Profile:                   Super,
-			AllowWritableFiles:        true,
+			AllowReadOnlyFiles:        true,
 			AllowResearchTools:        true,
 			AllowEvidenceTools:        true,
 			AllowMemoryTools:          true,
 			AllowModelDiagnosticTools: true,
-			AllowCodingTools:          true,
 			AllowCoAgentTools:         true,
 			AllowedDelegateTargets:    []string{Researcher, CoSuper},
 		}
@@ -131,12 +105,10 @@ func Canonical(profile string) string {
 	profile = strings.TrimSpace(profile)
 	normalized := strings.ToLower(strings.ReplaceAll(profile, "_", "-"))
 	switch normalized {
-	case "researcher", "researchers", "research", "research-agent", "research-worker", "web-research", "web-researcher":
+	case "researcher", "researchers", "research", "research-agent", "web-research", "web-researcher":
 		return Researcher
 	case "cosuper", "co-super", "coagent", "co-agent":
 		return CoSuper
-	case "vsuper", "v-super", "virtual-super", "vm-super", "candidate-super":
-		return VSuper
 	case "texture", "texture-agent", "document-agent":
 		return Texture
 	case "processor", "news-processor", "source-processor", "universal-wire-processor":

@@ -621,6 +621,106 @@ CREATE TABLE IF NOT EXISTS desktop_window_placements (
 	PRIMARY KEY (owner_id, desktop_id, session_id, app_instance_id)
 );
 
+CREATE TABLE IF NOT EXISTS computer_event_projection_heads (
+	computer_id                    VARCHAR(128) PRIMARY KEY,
+	sequence                       BIGINT UNSIGNED NOT NULL,
+	canonical_event_head           CHAR(64) NOT NULL,
+	desired_event_head             CHAR(64) NOT NULL,
+	effective_event_head           CHAR(64) NOT NULL,
+	pending_transition_ref         CHAR(64) NULL,
+	desired_state_commitment       CHAR(64) NOT NULL,
+	effective_state_commitment     CHAR(64) NOT NULL,
+	reducer_version                BIGINT UNSIGNED NOT NULL,
+	credential_revocation_epoch    BIGINT UNSIGNED NOT NULL,
+	updated_at                     DATETIME(6) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS computer_event_index (
+	event_digest                   CHAR(64) PRIMARY KEY,
+	computer_id                    VARCHAR(128) NOT NULL,
+	sequence                       BIGINT UNSIGNED NOT NULL,
+	previous_head                  CHAR(64) NOT NULL,
+	event_kind                     VARCHAR(64) NOT NULL,
+	event_json                     LONGTEXT NOT NULL,
+	event_artifact_digest          CHAR(64) NOT NULL,
+	event_pin_receipt_digest       CHAR(64) NOT NULL,
+	payload_pin_receipt_digests_json LONGTEXT NOT NULL,
+	request_commitment             CHAR(64) NOT NULL,
+	idempotency_key                VARCHAR(255) NOT NULL,
+	status                         VARCHAR(32) NOT NULL,
+	next_desired_event_head        CHAR(64) NOT NULL,
+	next_effective_event_head      CHAR(64) NOT NULL,
+	next_pending_transition_ref    CHAR(64) NULL,
+	next_desired_state_commitment  CHAR(64) NOT NULL,
+	next_effective_state_commitment CHAR(64) NOT NULL,
+	next_reducer_version           BIGINT UNSIGNED NOT NULL,
+	next_credential_revocation_epoch BIGINT UNSIGNED NOT NULL,
+	target_state_commitment        CHAR(64) NULL,
+	restored_prior_effective       BOOLEAN NOT NULL DEFAULT FALSE,
+	event_head_receipt_json        LONGTEXT NULL,
+	event_head_receipt_digest      CHAR(64) NULL,
+	prepared_at                    DATETIME(6) NOT NULL,
+	finalized_at                   DATETIME(6) NULL,
+	UNIQUE(computer_id, sequence),
+	UNIQUE(computer_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_computer_event_index_status ON computer_event_index(computer_id, status, sequence);
+
+CREATE TABLE IF NOT EXISTS computer_effective_state (
+	computer_id                    VARCHAR(128) PRIMARY KEY,
+	canonical_event_head           CHAR(64) NOT NULL,
+	desired_event_head             CHAR(64) NOT NULL,
+	effective_event_head           CHAR(64) NOT NULL,
+	desired_state_commitment       CHAR(64) NOT NULL,
+	effective_state_commitment     CHAR(64) NOT NULL,
+	pending_transition_ref         CHAR(64) NULL,
+	reducer_version                BIGINT UNSIGNED NOT NULL,
+	effective_code_ref             LONGTEXT NOT NULL,
+	effective_artifact_program_ref LONGTEXT NOT NULL,
+	embedded_state_ref             LONGTEXT NOT NULL,
+	release_digest                 CHAR(64) NOT NULL,
+	checkpoint_ref                 LONGTEXT NOT NULL,
+	last_receipt_digest            CHAR(64) NOT NULL,
+	updated_at                     DATETIME(6) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS self_development_operations (
+	operation_id                   VARCHAR(255) PRIMARY KEY,
+	computer_id                    VARCHAR(128) NOT NULL,
+	idempotency_key                VARCHAR(255) NOT NULL,
+	request_commitment             CHAR(64) NOT NULL,
+	trajectory_id                  VARCHAR(255) NOT NULL,
+	capsule_id                     VARCHAR(255) NOT NULL DEFAULT '',
+	base_head                      CHAR(64) NOT NULL,
+	prompt_artifact_ref            LONGTEXT NOT NULL,
+	bundle_digest                  CHAR(64) NOT NULL DEFAULT '',
+	release_digest                  CHAR(64) NOT NULL DEFAULT '',
+	code_ref                        VARCHAR(96) NOT NULL DEFAULT '',
+	artifact_program_ref            VARCHAR(128) NOT NULL DEFAULT '',
+	verifier_refs_json             LONGTEXT NOT NULL DEFAULT '[]',
+	decision_actor                 VARCHAR(255) NOT NULL DEFAULT '',
+	decision_event                 CHAR(64) NOT NULL DEFAULT '',
+	desired_head                   CHAR(64) NOT NULL,
+	effective_head                 CHAR(64) NOT NULL,
+	materialization_receipt        LONGTEXT NOT NULL DEFAULT '',
+	checkpoint_ref                 LONGTEXT NOT NULL DEFAULT '',
+	route_certificate              LONGTEXT NOT NULL DEFAULT '',
+	route_generation               BIGINT UNSIGNED NULL,
+	route_receipt                   VARCHAR(128) NOT NULL DEFAULT '',
+	mode_receipt                   LONGTEXT NOT NULL DEFAULT '',
+	lifecycle_receipt              LONGTEXT NOT NULL DEFAULT '',
+	state                          VARCHAR(32) NOT NULL,
+	terminal_error                 LONGTEXT NOT NULL DEFAULT '',
+	created_at                     DATETIME(6) NOT NULL,
+	updated_at                     DATETIME(6) NOT NULL,
+	UNIQUE(computer_id, idempotency_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_self_development_operations_trajectory ON self_development_operations(trajectory_id);
+CREATE INDEX IF NOT EXISTS idx_self_development_operations_state ON self_development_operations(computer_id, state, updated_at);
+CREATE INDEX IF NOT EXISTS idx_self_development_operations_bundle ON self_development_operations(computer_id, bundle_digest);
+
 CREATE INDEX IF NOT EXISTS idx_desktop_workspaces_owner_id ON desktop_workspaces(owner_id);
 CREATE INDEX IF NOT EXISTS idx_desktop_sessions_driver ON desktop_sessions(owner_id, desktop_id, driver_until);
 CREATE INDEX IF NOT EXISTS idx_desktop_app_instances_stack ON desktop_app_instances(owner_id, desktop_id, shared_stack_rank);
@@ -743,6 +843,10 @@ func (s *Store) bootstrap() error {
 		{"worker_updates", "packet_json", "LONGTEXT NOT NULL DEFAULT '{}'"},
 		{"worker_updates", "delivered_to_loop_id", "VARCHAR(255) NOT NULL DEFAULT ''"},
 		{"worker_updates", "delivered_at", "DATETIME"},
+		{"self_development_operations", "route_receipt", "VARCHAR(128) NOT NULL DEFAULT ''"},
+		{"self_development_operations", "release_digest", "CHAR(64) NOT NULL DEFAULT ''"},
+		{"self_development_operations", "code_ref", "VARCHAR(96) NOT NULL DEFAULT ''"},
+		{"self_development_operations", "artifact_program_ref", "VARCHAR(128) NOT NULL DEFAULT ''"},
 	} {
 		if err := s.ensureColumn(migration.table, migration.name, migration.ddl); err != nil {
 			return err
@@ -1076,6 +1180,38 @@ func (s *Store) ListRunsByIngestionHandoff(ctx context.Context, ownerID, profile
 		runs = append(runs, rec)
 		if len(runs) >= limit {
 			break
+		}
+	}
+	return runs, nil
+}
+
+// ListRunsBySelfDevelopmentOperation returns the unique top-level Super run
+// bound to a durable self-development operation.
+func (s *Store) ListRunsBySelfDevelopmentOperation(ctx context.Context, ownerID, operationID string, limit int) ([]types.RunRecord, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	operationID = strings.TrimSpace(operationID)
+	if ownerID == "" || operationID == "" {
+		return nil, nil
+	}
+	if limit <= 0 {
+		limit = 2
+	}
+	objects, err := s.ogListByOwnerAndBody(ctx, ogKindRun, ownerID, []objectgraph.JSONFieldMatch{
+		{JSONPath: "$.metadata.self_development_operation_id", Value: operationID},
+		{JSONPath: "$.requested_by_run_id", Value: "", MissingMatchesEmpty: true},
+	}, limit)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]types.RunRecord, 0, min(limit, len(objects)))
+	for _, object := range objects {
+		var rec types.RunRecord
+		if err := ogDecode(object, &rec); err != nil {
+			return nil, err
+		}
+		boundID, _ := rec.Metadata["self_development_operation_id"].(string)
+		if strings.TrimSpace(rec.OwnerID) == ownerID && strings.TrimSpace(rec.RequestedByRunID) == "" && strings.TrimSpace(boundID) == operationID {
+			runs = append(runs, rec)
 		}
 	}
 	return runs, nil

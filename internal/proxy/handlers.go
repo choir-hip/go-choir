@@ -89,6 +89,7 @@ type AuthResult struct {
 	Email      string
 	Valid      bool
 	Scopes     []string // empty for cookie auth = full access
+	ComputerID string   // optional stable-computer binding for API keys
 	AuthMethod string   // "cookie" or "api_key"
 }
 
@@ -480,6 +481,7 @@ func (h *Handler) validateAPIKey(r *http.Request) (*AuthResult, error) {
 		Email:      user.Email,
 		Valid:      true,
 		Scopes:     ak.Scopes,
+		ComputerID: ak.ComputerID,
 		AuthMethod: "api_key",
 	}, nil
 }
@@ -626,6 +628,12 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	case path == "/api/compute/recovery":
 		h.HandleComputeRecovery(w, r)
+		return
+	case isSelfDevelopmentModePath(path):
+		h.HandleSelfDevelopmentMode(w, r)
+		return
+	case isSelfDevelopmentTarget(path, r.Method):
+		h.HandleSelfDevelopmentOperation(w, r)
 		return
 	case path == "/api/pulse/summary":
 		h.HandlePulseSummary(w, r)
@@ -1037,43 +1045,17 @@ func (h *Handler) resolveSandboxURLOnce(ctx context.Context, userID, desktopID s
 	if desktopID == "" {
 		desktopID = vmctl.PrimaryDesktopID
 	}
+	if desktopID != vmctl.PrimaryDesktopID &&
+		!(userID == vmctl.UniversalWirePlatformOwnerID && desktopID == vmctl.UniversalWirePlatformDesktopID) {
+		return "", fmt.Errorf("desktop %s is not a routable computer", desktopID)
+	}
 	if err := h.ensureComputerVersionRoute(ctx, userID, desktopID); err != nil {
 		return "", err
 	}
-
-	if desktopID == vmctl.PrimaryDesktopID {
-		resp, err := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
-		if err != nil {
-			return "", err
-		}
-		if !resp.Published {
-			return "", fmt.Errorf("desktop %s is not published", desktopID)
-		}
-		return resp.SandboxURL, nil
-	}
-
-	if userID == vmctl.UniversalWirePlatformOwnerID && desktopID == vmctl.UniversalWirePlatformDesktopID {
-		resp, err := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
-		if err != nil {
-			return "", err
-		}
-		if !resp.Published {
-			return "", fmt.Errorf("desktop %s is not published", desktopID)
-		}
-		return resp.SandboxURL, nil
-	}
-
-	resp, err := h.vmctlClient.LookupDesktopContext(ctx, userID, desktopID)
+	resp, err := h.vmctlClient.ResolveDesktopContext(ctx, userID, desktopID)
 	if err != nil {
 		return "", err
 	}
-	if resp == nil {
-		return "", fmt.Errorf("desktop %s is not published", desktopID)
-	}
-	if !resp.Published {
-		return "", fmt.Errorf("desktop %s is not published", desktopID)
-	}
-
 	return resp.SandboxURL, nil
 }
 

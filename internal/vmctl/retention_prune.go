@@ -66,7 +66,6 @@ type RetentionPruneCandidate struct {
 	Kind           VMKind  `json:"kind,omitempty"`
 	State          VMState `json:"state,omitempty"`
 	DesktopID      string  `json:"desktop_id,omitempty"`
-	Published      bool    `json:"published,omitempty"`
 	LastActiveAt   string  `json:"last_active_at,omitempty"`
 	AgeSeconds     int64   `json:"age_seconds"`
 	SizeBytes      int64   `json:"size_bytes"`
@@ -245,7 +244,6 @@ func retentionPrunePlanFromSnapshot(cfg RetentionPruneConfig, ownerships []*VMOw
 			Kind:           own.Kind,
 			State:          own.State,
 			DesktopID:      own.DesktopID,
-			Published:      own.Published,
 			LastActiveAt:   own.LastActiveAt.UTC().Format(time.RFC3339Nano),
 			AgeSeconds:     int64(now.Sub(own.LastActiveAt).Seconds()),
 			SizeBytes:      size,
@@ -283,18 +281,15 @@ func (r *OwnershipRegistry) retentionSnapshot() (RetentionPruneConfig, []*VMOwne
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	cfg := normalizeRetentionPruneConfig(r.retentionPrune)
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	for _, own := range r.workerVMs {
 		ownerships = append(ownerships, cloneOwnership(own))
 	}
 	emails := make(map[string]string, len(r.retentionUserEmails))
 	for userID, email := range r.retentionUserEmails {
 		emails[userID] = email
 	}
-	detached := r.retentionDetachedProtectedLocked()
+	detached := map[string]RetentionProtectedState{}
 	return cfg, ownerships, emails, detached
 }
 
@@ -308,34 +303,16 @@ func (r *OwnershipRegistry) retentionShadowSnapshot() (RetentionPruneConfig, []*
 	if cfg.Mode != RetentionPruneModeOff {
 		cfg.Mode = RetentionPruneModeDryRun
 	}
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	for _, own := range r.workerVMs {
 		ownerships = append(ownerships, cloneOwnership(own))
 	}
 	emails := make(map[string]string, len(r.retentionUserEmails))
 	for userID, email := range r.retentionUserEmails {
 		emails[userID] = email
 	}
-	detached := r.retentionDetachedProtectedLocked()
+	detached := map[string]RetentionProtectedState{}
 	return cfg, ownerships, emails, detached, true
-}
-
-func (r *OwnershipRegistry) retentionDetachedProtectedLocked() map[string]RetentionProtectedState {
-	detached := make(map[string]RetentionProtectedState, len(r.detachedLegacy))
-	for _, receipt := range r.detachedLegacy {
-		if receipt.Validate() != nil {
-			continue
-		}
-		vmID := strings.TrimSpace(receipt.Ownership.VMID)
-		if vmID == "" {
-			continue
-		}
-		detached[vmID] = RetentionProtectedState{ReceiptID: receipt.ID, RouteSlotID: receipt.RouteSlotID, VMID: vmID}
-	}
-	return detached
 }
 
 func retentionOrphanCandidates(cfg RetentionPruneConfig, ownedVMs map[string]bool, now time.Time) ([]RetentionPruneCandidate, int, int, []string) {
@@ -411,7 +388,7 @@ func retentionOwnershipReclaimable(own *VMOwnership, email string, cfg Retention
 	if !retentionOwnershipEphemeral(own, email, cfg) {
 		return false
 	}
-	if own.Kind != VMKindInteractive || own.DesktopID != PrimaryDesktopID || !own.Published {
+	if own.Kind != VMKindInteractive || own.DesktopID != PrimaryDesktopID {
 		return false
 	}
 	switch own.State {
@@ -521,7 +498,7 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	mgr := r.vmManager
 	cfg := normalizeRetentionPruneConfig(r.retentionPrune)
 	current := cloneOwnership(r.vmByID[candidate.VMID])
-	detached := r.detachedLegacyHasVMIDLocked(candidate.VMID)
+	detached := false
 	email := strings.TrimSpace(r.retentionUserEmails[candidate.UserID])
 	r.mu.RUnlock()
 	if mgr == nil || detached {
@@ -544,7 +521,7 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	if current == nil {
 		r.mu.RLock()
 		defer r.mu.RUnlock()
-		if r.vmByID[candidate.VMID] != nil || r.detachedLegacyHasVMIDLocked(candidate.VMID) {
+		if r.vmByID[candidate.VMID] != nil {
 			return false
 		}
 		if err := mgr.DestroyVMState(candidate.VMID); err != nil {
@@ -563,24 +540,10 @@ func (r *OwnershipRegistry) destroyRetentionCandidate(candidate RetentionPruneCa
 	if current == nil {
 		return true
 	}
-	if current.Kind == VMKindWorker {
-		delete(r.workerVMs, strings.TrimSpace(current.WorkerID))
-	} else {
-		delete(r.ownerships, ownershipKey(current.UserID, current.DesktopID))
-	}
+	delete(r.ownerships, ownershipKey(current.UserID, current.DesktopID))
 	delete(r.vmByID, current.VMID)
 	r.saveLocked()
 	return true
-}
-
-func (r *OwnershipRegistry) detachedLegacyHasVMIDLocked(vmID string) bool {
-	vmID = strings.TrimSpace(vmID)
-	for _, receipt := range r.detachedLegacy {
-		if receipt.Validate() == nil && strings.TrimSpace(receipt.Ownership.VMID) == vmID {
-			return true
-		}
-	}
-	return false
 }
 
 func loadRetentionEmailsFromAuthDB(path string) (map[string]string, []string) {

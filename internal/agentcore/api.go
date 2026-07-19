@@ -23,6 +23,7 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/persistentdisk"
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
+	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/workitem"
 )
 
@@ -48,9 +49,9 @@ type internalChannelCastResponse struct {
 	Cursor uint64 `json:"cursor"`
 }
 
-// internalRunSubmitRequest is the service-to-service payload for starting a
-// run inside another sandbox runtime, such as a background worker VM. It is not
-// registered under /api/* and must never become browser-public.
+// internalRunSubmitRequest is the private service payload for typed ingestion
+// processor and reconciler handoffs. It is never a delegated-agent transport
+// and must not become browser-public.
 type internalRunSubmitRequest struct {
 	OwnerID  string         `json:"owner_id"`
 	Prompt   string         `json:"prompt"`
@@ -241,16 +242,20 @@ type internalRunEventAppendResponse struct {
 // (VAL-RUNTIME-001). The active provider name is included so operators
 // can distinguish real-provider paths from stub/canned paths.
 type runtimeHealthResponse struct {
-	Status               string                   `json:"status"`
-	Service              string                   `json:"service"`
-	SandboxID            string                   `json:"sandbox_id"`
-	RuntimeHealth        types.RuntimeHealthState `json:"runtime_health"`
-	RunningRuns          int                      `json:"running_runs"`
-	RunningProcessorRuns int                      `json:"running_processor_runs"`
-	ResearcherCount      int                      `json:"researcher_count"`
-	ActiveProvider       string                   `json:"active_provider"`
-	PersistentDisk       *persistentdisk.Status   `json:"persistent_disk,omitempty"`
-	Build                buildinfo.Info           `json:"build"`
+	Status                string                   `json:"status"`
+	Service               string                   `json:"service"`
+	SandboxID             string                   `json:"sandbox_id"`
+	RuntimeHealth         types.RuntimeHealthState `json:"runtime_health"`
+	RunningRuns           int                      `json:"running_runs"`
+	RunningProcessorRuns  int                      `json:"running_processor_runs"`
+	ResearcherCount       int                      `json:"researcher_count"`
+	ActiveProvider        string                   `json:"active_provider"`
+	PersistentDisk        *persistentdisk.Status   `json:"persistent_disk,omitempty"`
+	Build                 buildinfo.Info           `json:"build"`
+	SelfDevelopmentMarker string                   `json:"self_development_marker,omitempty"`
+	EventSchemaVersion    uint64                   `json:"event_schema_version,omitempty"`
+	ReducerVersion        uint64                   `json:"reducer_version,omitempty"`
+	ReleaseDigest         string                   `json:"release_digest,omitempty"`
 }
 
 // APIHandler provides HTTP handlers for the runtime API endpoints.
@@ -516,10 +521,8 @@ func (h *APIHandler) HandleRunAcceptanceDetail(w http.ResponseWriter, r *http.Re
 	writeAPIJSON(w, http.StatusOK, rec)
 }
 
-// HandleInternalRunSubmission handles POST /internal/runtime/runs.
-// This is a service-to-service worker VM bridge: platform/runtime components
-// can start a constrained run inside a sandbox without exposing raw run control
-// to the browser route table.
+// HandleInternalRunSubmission handles private typed ingestion handoffs. Durable
+// agent delegation stays inside the guest runtime and never crosses this route.
 func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
@@ -555,9 +558,9 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		return
 	}
 	switch profile {
-	case agentprofile.CoSuper, agentprofile.Researcher, agentprofile.VSuper, agentprofile.Processor, agentprofile.Reconciler:
+	case agentprofile.Processor, agentprofile.Reconciler:
 	default:
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal worker runs may only start co-super, researcher, vsuper, processor, or reconciler profiles"})
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "internal runs may only start processor or reconciler profiles"})
 		return
 	}
 	req.Metadata[runMetadataAgentProfile] = profile
@@ -565,7 +568,7 @@ func (h *APIHandler) HandleInternalRunSubmission(w http.ResponseWriter, r *http.
 		req.Metadata[runMetadataAgentRole] = profile
 	}
 	if metadataStringValue(req.Metadata, "request_source") == "" {
-		req.Metadata["request_source"] = "internal_worker_vm"
+		req.Metadata["request_source"] = "internal_ingestion_handoff"
 	}
 
 	rawRequestID, hasRequestID := req.Metadata["ingestion_handoff_request_id"]
@@ -1034,6 +1037,14 @@ func (h *APIHandler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		ResearcherCount:      h.rt.cfg.ResearcherCount,
 		ActiveProvider:       h.rt.provider.ProviderName(),
 		Build:                buildinfo.Snapshot("sandbox"),
+	}
+	if root := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")); root != "" {
+		if manifest, err := updater.ReadCurrentManifest(root); err == nil {
+			resp.SelfDevelopmentMarker = manifest.Marker
+			resp.EventSchemaVersion = manifest.EventSchemaVersion
+			resp.ReducerVersion = manifest.ReducerVersion
+			resp.ReleaseDigest = manifest.ContentDigest
+		}
 	}
 	if usage, err := persistentdisk.Statfs(filepath.Dir(h.rt.cfg.StorePath)); err == nil {
 		status := persistentdisk.StatusFromGuestUsage(usage)

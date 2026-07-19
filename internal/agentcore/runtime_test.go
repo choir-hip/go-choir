@@ -400,8 +400,8 @@ func TestSystemPromptForTextureDefaultsToResearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("systemPromptForRun: %v", err)
 	}
-	if !strings.Contains(prompt, "open worker work first") {
-		t.Fatalf("texture system prompt should bias toward opening worker work first for factual requests, got %q", prompt)
+	if !strings.Contains(prompt, "Probe (researcher)") {
+		t.Fatalf("texture system prompt should classify factual requests as researcher probes, got %q", prompt)
 	}
 	if !strings.Contains(prompt, "`spawn_agent` with `role=\"researcher\"`") {
 		t.Fatalf("texture system prompt should route research through spawn_agent researcher, got %q", prompt)
@@ -412,23 +412,23 @@ func TestSystemPromptForTextureDefaultsToResearch(t *testing.T) {
 	if !strings.Contains(prompt, "Current coordination channel: doc-1.") {
 		t.Fatalf("texture system prompt should include coordination channel, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "ask super to lease a worker VM and delegate a `vsuper`") ||
-		!strings.Contains(prompt, "For bounded local scratch work such as API calls") {
-		t.Fatalf("texture system prompt should preserve sweep substrate topology in super requests, got %q", prompt)
+	if !strings.Contains(prompt, "guest-local capsule") ||
+		!strings.Contains(prompt, "scoped CoSuper roles") {
+		t.Fatalf("texture system prompt should preserve capsule execution topology, got %q", prompt)
 	}
 }
 
-func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
+func TestSystemPromptForSuperEnforcesCapsuleDevelopment(t *testing.T) {
 	t.Parallel()
 	rt := testPromptRuntime(t)
 
 	rec := &types.RunRecord{
-		RunID:        "run-super-sweep",
+		RunID:        "run-super-capsule",
 		AgentID:      "agent-super-user-alice",
-		ChannelID:    "doc-sweep",
+		ChannelID:    "doc-capsule",
 		OwnerID:      "user-alice",
 		AgentProfile: agentprofile.Super,
-		Prompt:       "Run a MissionGradient sweep substrate proof with worker/verifier cosupers.",
+		Prompt:       "Implement and verify a Choir change.",
 	}
 
 	prompt, err := rt.systemPromptForRun(rec)
@@ -436,18 +436,13 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 		t.Fatalf("systemPromptForRun: %v", err)
 	}
 	for _, want := range []string{
-		"Super authority boundary",
-		"bounded local scratch work is allowed",
-		"API calls, curl fetches",
-		"product_api_request",
-		"instead of asking a worker VM to impersonate a browser session",
-		"Delegate work that changes Choir/app/harness behavior",
-		"first call request_worker_vm",
-		"start_worker_delegation` using the returned `start_args",
-		"observe_worker_delegation",
-		"finish_worker_delegation",
-		"Do not answer that class of request only with update_coagent",
-		"worker-small",
+		"Super is the orchestration and decision-proposal role",
+		"guest-local capsules",
+		"no direct shell",
+		"implementation CoSuper",
+		"slot=\"implementation\"",
+		"slot=\"verifier\"",
+		"public self-development API",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("super system prompt missing %q in %q", want, prompt)
@@ -455,90 +450,7 @@ func TestSystemPromptForSuperDelegatesChoirDevButAllowsScratch(t *testing.T) {
 	}
 }
 
-func TestWorkerRepoBootstrapContextReachesVSuperAndCoSuper(t *testing.T) {
-	t.Parallel()
-	rt := testPromptRuntime(t)
-	metadata := map[string]any{
-		runMetadataWorkerRepoRemote:    "https://github.com/yusefmosiah/go-choir.git",
-		runMetadataWorkerRepoBaseSHA:   "abc123",
-		runMetadataWorkerRepoBootstrap: "remote_git_clone",
-	}
 
-	for _, tc := range []struct {
-		name    string
-		profile string
-	}{
-		{name: "vsuper", profile: agentprofile.VSuper},
-		{name: "co-super", profile: agentprofile.CoSuper},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			rec := &types.RunRecord{
-				RunID:        "run-" + tc.name,
-				AgentID:      tc.name + ":agent",
-				ChannelID:    "doc-1",
-				OwnerID:      "user-alice",
-				AgentProfile: tc.profile,
-				Metadata:     metadata,
-				Prompt:       "candidate repo work",
-			}
-			prompt, err := rt.systemPromptForRun(rec)
-			if err != nil {
-				t.Fatalf("systemPromptForRun: %v", err)
-			}
-			for _, want := range []string{
-				"Worker candidate repo bootstrap context",
-				"repo_path: Source/candidate",
-				"base_sha: abc123",
-				"mkdir -p Source/platform Source/user Source/candidate Build .choir",
-				"git clone https://github.com/yusefmosiah/go-choir.git Source/platform",
-				"git clone https://github.com/yusefmosiah/go-choir.git Source/candidate",
-				"git config user.name \"Choir Worker\"",
-				"git reset --hard abc123",
-				"Use set -euo pipefail",
-			} {
-				if !strings.Contains(prompt, want) {
-					t.Fatalf("prompt missing %q in %q", want, prompt)
-				}
-			}
-		})
-	}
-}
-
-func TestStartCoagentRunInheritsWorkerRepoMetadata(t *testing.T) {
-	t.Parallel()
-	rt, _ := testRuntime(t)
-	ctx := context.Background()
-	parent, err := rt.StartRun(ctx, "delegate worker", "user-alice")
-	if err != nil {
-		t.Fatalf("start parent: %v", err)
-	}
-	parent.Metadata = map[string]any{
-		runMetadataAgentProfile:        agentprofile.VSuper,
-		runMetadataWorkerRepoRemote:    "https://github.com/yusefmosiah/go-choir.git",
-		runMetadataWorkerRepoBaseSHA:   "abc123",
-		runMetadataWorkerRepoBootstrap: "remote_git_clone",
-	}
-	if err := rt.store.UpdateRun(ctx, *parent); err != nil {
-		t.Fatalf("update parent metadata: %v", err)
-	}
-
-	child, err := rt.StartCoagentRun(ctx, parent.RunID, "implementation child", "user-alice", map[string]any{
-		runMetadataAgentProfile: agentprofile.CoSuper,
-		runMetadataAgentRole:    agentprofile.CoSuper,
-	})
-	if err != nil {
-		t.Fatalf("start child: %v", err)
-	}
-	for _, key := range []string{
-		runMetadataWorkerRepoRemote,
-		runMetadataWorkerRepoBaseSHA,
-		runMetadataWorkerRepoBootstrap,
-	} {
-		if got, want := metadataStringValue(child.Metadata, key), metadataStringValue(parent.Metadata, key); got != want {
-			t.Fatalf("child metadata %s = %q, want %q", key, got, want)
-		}
-	}
-}
 
 func TestSystemPromptForResearcherForcesEarlyHandoff(t *testing.T) {
 	t.Parallel()
@@ -749,12 +661,12 @@ func TestSystemPromptIncludesRepoSkillContext(t *testing.T) {
 	rt.cfg.SkillsRoot = skillsRoot
 
 	rec := &types.RunRecord{
-		RunID:        "run-vsuper-skills",
-		AgentID:      "vsuper:worker-1",
+		RunID:        "run-super-skills",
+		AgentID:      "super:user-alice",
 		ChannelID:    "doc-1",
 		OwnerID:      "user-alice",
-		AgentProfile: agentprofile.VSuper,
-		Prompt:       "run a sweep",
+		AgentProfile: agentprofile.Super,
+		Prompt:       "run a capsule-scoped implementation",
 	}
 
 	prompt, err := rt.systemPromptForRun(rec)

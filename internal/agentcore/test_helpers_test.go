@@ -22,7 +22,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
 	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -277,53 +276,6 @@ func testPromptRuntime(t *testing.T) *Runtime {
 	}
 }
 
-func executeWorkerDelegationUntilSettled(t *testing.T, registry *toolregistry.ToolRegistry, ctx context.Context, raw json.RawMessage) (string, error) {
-	t.Helper()
-	startRaw, err := registry.Execute(ctx, "start_worker_delegation", raw)
-	if err != nil {
-		return "", err
-	}
-	var start map[string]any
-	if err := json.Unmarshal([]byte(startRaw), &start); err != nil {
-		t.Fatalf("decode async worker start: %v\n%s", err, startRaw)
-	}
-	if stringMapValue(start, "status") != "worker_run_started" {
-		return startRaw, nil
-	}
-	var original delegateWorkerVMArgs
-	_ = json.Unmarshal(raw, &original)
-	workerRunID := firstNonEmpty(stringMapValue(start, "worker_run_id"), stringMapValue(start, "loop_id"))
-	workerSandboxURL := firstNonEmpty(stringMapValue(start, "worker_sandbox_url"), original.WorkerSandboxURL)
-	finishArgs := map[string]any{
-		"worker_sandbox_url": workerSandboxURL,
-		"worker_run_id":      workerRunID,
-		"worker_id":          firstNonEmpty(stringMapValue(start, "worker_id"), original.WorkerID),
-		"vm_id":              firstNonEmpty(stringMapValue(start, "worker_vm_id"), original.VMID),
-		"profile":            firstNonEmpty(stringMapValue(start, "profile"), original.Profile),
-		"objective":          original.Objective,
-		"timeout_seconds":    original.TimeoutSeconds,
-	}
-	deadline := time.Now().Add(10 * time.Second)
-	var lastRaw string
-	for {
-		finishRaw, err := registry.Execute(ctx, "finish_worker_delegation", mustJSON(t, finishArgs))
-		if err != nil {
-			return "", err
-		}
-		lastRaw = finishRaw
-		var finish map[string]any
-		if err := json.Unmarshal([]byte(finishRaw), &finish); err != nil {
-			t.Fatalf("decode async worker finish: %v\n%s", err, finishRaw)
-		}
-		if stringMapValue(finish, "status") != "worker_run_active" {
-			return finishRaw, nil
-		}
-		if time.Now().After(deadline) {
-			return lastRaw, nil
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-}
 
 func mustJSON(t *testing.T, value any) json.RawMessage {
 	t.Helper()

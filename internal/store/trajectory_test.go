@@ -170,7 +170,7 @@ func TestWorkItemFingerprintDedupAndOpenObligationsQuery(t *testing.T) {
 		OwnerID:              "user-alice",
 		TrajectoryID:         "traj-wi",
 		Objective:            "port the continuation mechanics to work items",
-		AuthorityProfile:     "vsuper",
+		AuthorityProfile:     "super",
 		StepBudget:           50,
 		TokenBudget:          200000,
 		ObjectiveFingerprint: "fp-1",

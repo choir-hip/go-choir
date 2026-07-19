@@ -1,6 +1,5 @@
 //go:build linux
 
-
 package main
 
 import (
@@ -10,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"io"
 	"log"
 	"net"
@@ -44,13 +44,13 @@ type Broker struct {
 
 // Session represents a long-lived shell session.
 type Session struct {
-	ID       string
-	Cmd      *exec.Cmd
-	Stdin    io.WriteCloser
-	Stdout   io.ReadCloser
-	Stderr   io.ReadCloser
-	Cwd      string
-	Env      []string
+	ID        string
+	Cmd       *exec.Cmd
+	Stdin     io.WriteCloser
+	Stdout    io.ReadCloser
+	Stderr    io.ReadCloser
+	Cwd       string
+	Env       []string
 	CreatedAt time.Time
 }
 
@@ -96,26 +96,27 @@ func main() {
 		log.Fatalf("invalid public key size: %d (expected %d)", len(pubKeyBytes), ed25519.PublicKeySize)
 	}
 
-	// Apply seccomp filter (broker: default-deny allowlist).
+	if err := unix.Mount("proc", "/proc", "proc", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, "hidepid=2"); err != nil {
+		log.Fatalf("failed to mount capsule procfs: %v", err)
+	}
+	if err := os.WriteFile("/run/capsule/empty", nil, 0o400); err != nil {
+		log.Fatalf("failed to create procfs mask: %v", err)
+	}
+	if err := unix.Mount("/run/capsule/empty", "/proc/cmdline", "", unix.MS_BIND, ""); err != nil {
+		log.Fatalf("failed to mask guest kernel command line: %v", err)
+	}
+
+	// Apply the filesystem boundary before the syscall filter, then make every
+	// hardening failure fatal. The broker is guest TCB and must fail closed.
+	landlock := capsule.NewBrokerLandlock(mergedDir, "/run/capsule/broker")
+	if err := landlock.Apply(); err != nil {
+		log.Fatalf("failed to apply Landlock restrictions: %v", err)
+	}
+	if err := capsule.DropBrokerCapabilities(); err != nil {
+		log.Fatalf("failed to drop capabilities: %v", err)
+	}
 	if err := capsule.LoadBrokerFilter(); err != nil {
 		log.Fatalf("failed to load seccomp filter: %v", err)
-	}
-
-	// Apply Landlock restrictions.
-	landlock := capsule.NewBrokerLandlock(mergedDir, "/var/lib/capsule-broker")
-	if err := landlock.Apply(); err != nil {
-		log.Printf("warning: failed to apply Landlock restrictions: %v", err)
-		// Non-fatal — may not be supported on all kernels.
-	}
-
-	// Drop unnecessary capabilities.
-	if err := capsule.DropBrokerCapabilities(); err != nil {
-		log.Printf("warning: failed to drop capabilities: %v", err)
-	}
-
-	// FD hygiene: close all non-stdio fds.
-	if err := closeNonStdioFDs(); err != nil {
-		log.Printf("warning: failed to close non-stdio fds: %v", err)
 	}
 
 	broker := &Broker{
@@ -136,6 +137,10 @@ func main() {
 		log.Fatalf("failed to listen on %s: %v", socketPath, err)
 	}
 	broker.listener = listener
+	if err := os.Chmod(socketPath, 0o600); err != nil {
+		listener.Close()
+		log.Fatalf("failed to secure broker socket: %v", err)
+	}
 
 	// Handle signals for clean shutdown.
 	sigCh := make(chan os.Signal, 1)
@@ -173,25 +178,33 @@ func resolveWithin(base, rel string) (string, error) {
 	return cleaned, nil
 }
 
-// handleConnection handles a single client connection.
+// handleConnection accepts only guest-core peers. A process inside the user
+// namespace maps to host UID 65534 and cannot impersonate guest core UID 0.
 func (b *Broker) handleConnection(conn net.Conn) {
 	defer conn.Close()
-
+	unixConn, ok := conn.(*net.UnixConn)
+	if !ok {
+		return
+	}
+	raw, err := unixConn.SyscallConn()
+	if err != nil {
+		return
+	}
+	var credential *unix.Ucred
+	var controlErr error
+	if err := raw.Control(func(fd uintptr) {
+		credential, controlErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+	}); err != nil || controlErr != nil || credential == nil || credential.Uid != 0 {
+		return
+	}
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
-
 	for {
 		var req BrokerRPCRequest
 		if err := decoder.Decode(&req); err != nil {
-			if err != io.EOF {
-				log.Printf("failed to decode request: %v", err)
-			}
 			return
 		}
-
-		resp := b.handleRPC(req)
-		if err := encoder.Encode(resp); err != nil {
-			log.Printf("failed to encode response: %v", err)
+		if err := encoder.Encode(b.handleRPC(req)); err != nil {
 			return
 		}
 	}
@@ -199,22 +212,6 @@ func (b *Broker) handleConnection(conn net.Conn) {
 
 // handleRPC dispatches a broker RPC request.
 func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
-	// sync_revoked_caps requires a super capability (not unauthenticated).
-	// This prevents any process that can reach the socket from wiping
-	// the revoked set.
-	if req.Verb == "sync_revoked_caps" {
-		var cap capsule.Capability
-		if err := json.Unmarshal(req.Capability, &cap); err != nil {
-			return BrokerRPCResponse{Error: fmt.Sprintf("sync_revoked_caps requires super capability: %v", err)}
-		}
-		if err := cap.Verify(b.publicKey); err != nil {
-			return BrokerRPCResponse{Error: fmt.Sprintf("capability verification failed: %v", err)}
-		}
-		if cap.AgentRole != capsule.RoleSuper {
-			return BrokerRPCResponse{Error: "sync_revoked_caps requires super role"}
-		}
-		return b.handleSyncRevokedCaps(req.Params)
-	}
 
 	// Verify the capability.
 	var cap capsule.Capability
@@ -233,14 +230,12 @@ func (b *Broker) handleRPC(req BrokerRPCRequest) BrokerRPCResponse {
 		return BrokerRPCResponse{Error: fmt.Sprintf("capability %s has been revoked", cap.CapabilityID)}
 	}
 
-	// Capsule binding check: capability must be for THIS capsule.
-	// Prevents a cap minted for capsule A from being used on capsule B.
-	if cap.TargetCapsule != b.capsuleID {
-		return BrokerRPCResponse{Error: fmt.Sprintf("capability target capsule %s does not match this broker %s", cap.TargetCapsule, b.capsuleID)}
+	// Bind every request to this capsule and to the fixed role policy. The
+	// signed payload's Verbs field is evidence only and never authority.
+	if cap.CapsuleID != b.capsuleID || cap.TargetCapsule != b.capsuleID || cap.AgentRunID == "" {
+		return BrokerRPCResponse{Error: "capability binding mismatch"}
 	}
-
-	// Check verb authorization.
-	if !cap.AgentRole.HasVerb(req.Verb) {
+	if !capsule.RoleVerbSets[cap.AgentRole][req.Verb] {
 		return BrokerRPCResponse{Error: fmt.Sprintf("role %s does not allow verb %s", cap.AgentRole, req.Verb)}
 	}
 

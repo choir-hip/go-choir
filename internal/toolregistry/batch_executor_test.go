@@ -135,13 +135,11 @@ func TestExecuteToolBatchSideEffectSkipPolicies(t *testing.T) {
 		notice                    bool
 	}{
 		{"super bash", agentprofile.Super, "bash", `{"command":"echo x"}`, false},
-		{"vsuper bash", agentprofile.VSuper, "bash", `{"command":"echo x"}`, false},
 		{"cosuper bash", agentprofile.CoSuper, "bash", `{"command":"echo x"}`, false},
-		{"vsuper spawn", agentprofile.VSuper, "spawn_agent", `{"profile":"co-super","slot":"implementation","channel_id":"c"}`, false},
+		{"super co-super spawn", agentprofile.Super, "spawn_agent", `{"profile":"co-super","slot":"implementation","channel_id":"c"}`, false},
 		{"texture researcher", agentprofile.Texture, "spawn_agent", `{"profile":"researcher","channel_id":"c","objective":"find facts"}`, true},
 		{"publish", agentprofile.CoSuper, "publish_app_change_package", `{"candidate":"x"}`, false},
 		{"update", agentprofile.Researcher, "update_coagent", `{"summary":"x"}`, false},
-		{"start", agentprofile.Super, "start_worker_delegation", `{"worker_id":"w"}`, true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

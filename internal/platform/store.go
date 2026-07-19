@@ -421,6 +421,9 @@ func (s *Store) Bootstrap(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, schemaDDL); err != nil {
 		return fmt.Errorf("platform store: bootstrap schema: %w", err)
 	}
+	if _, err := s.db.ExecContext(ctx, computerEventSchemaDDL); err != nil {
+		return fmt.Errorf("platform store: bootstrap computer event schema: %w", err)
+	}
 	if err := s.ensurePlatformTextureRevisionColumn(ctx, "body_doc", "ALTER TABLE platform_texture_revisions ADD COLUMN body_doc LONGTEXT NOT NULL DEFAULT '' AFTER content"); err != nil {
 		return fmt.Errorf("platform store: bootstrap body_doc migration: %w", err)
 	}

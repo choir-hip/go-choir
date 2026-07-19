@@ -12,8 +12,6 @@ const (
 	WarmnessClassPublicPlatform    WarmnessClass = "public_platform"
 	WarmnessClassPrimary           WarmnessClass = "primary"
 	WarmnessClassPremiumAlwaysOn   WarmnessClass = "premium_always_on"
-	WarmnessClassCandidate         WarmnessClass = "candidate"
-	WarmnessClassWorker            WarmnessClass = "worker"
 	WarmnessClassCriticalProtected WarmnessClass = "critical_protected"
 )
 
@@ -21,8 +19,6 @@ const (
 	PrimaryKeepaliveModeOff           = "off"
 	PrimaryKeepaliveModeUnderCapacity = "under-capacity"
 )
-
-const criticalWorkerProtectionMaxIdle = 12 * time.Hour
 
 type WarmnessPolicyConfig struct {
 	PrimaryKeepaliveMode string
@@ -97,28 +93,15 @@ func warmnessClassForOwnership(own *VMOwnership, cfg WarmnessPolicyConfig) Warmn
 	}
 	if own.WarmnessClass != "" {
 		switch own.WarmnessClass {
-		case WarmnessClassPremiumAlwaysOn, WarmnessClassPrimary, WarmnessClassCandidate, WarmnessClassWorker, WarmnessClassCriticalProtected, WarmnessClassPublicPlatform:
+		case WarmnessClassPremiumAlwaysOn, WarmnessClassPrimary, WarmnessClassCriticalProtected, WarmnessClassPublicPlatform:
 			return own.WarmnessClass
 		}
-	}
-	if own.Kind == VMKindWorker {
-		if criticalWorkerPurpose(own) {
-			return WarmnessClassCriticalProtected
-		}
-		return WarmnessClassWorker
-	}
-	if own.DesktopID != PrimaryDesktopID {
-		return WarmnessClassCandidate
 	}
 	return WarmnessClassPrimary
 }
 
 func warmnessPriority(class WarmnessClass) int {
 	switch class {
-	case WarmnessClassWorker:
-		return 5
-	case WarmnessClassCandidate:
-		return 10
 	case WarmnessClassPrimary:
 		return 20
 	case WarmnessClassPublicPlatform:
@@ -187,9 +170,6 @@ func idleOwnershipCandidates(ownerships []*VMOwnership, cfg WarmnessPolicyConfig
 			continue
 		}
 		class := warmnessClassForOwnership(own, cfg)
-		if class == WarmnessClassCriticalProtected && staleCriticalWorkerIdle(idle) {
-			class = WarmnessClassWorker
-		}
 		if warmnessClassProtected(class) {
 			continue
 		}

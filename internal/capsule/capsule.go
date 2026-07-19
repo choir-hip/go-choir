@@ -1,11 +1,11 @@
 //go:build linux
 
-
 package capsule
 
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -13,26 +13,32 @@ import (
 // Capsule represents a single capsule instance — an isolated execution
 // environment with its own namespaces, cgroups, overlayfs, and broker.
 type Capsule struct {
-	mu           sync.RWMutex
-	ID           string
-	PID          int
-	UpperDir     string
-	WorkDir      string
-	MergedDir    string
-	MemoryMax    int64          // memory budget for admission control accounting
-	State        CapsuleState
-	CommitEpoch  uint64         // audit metadata (not enforced for exec/read/write)
-	LastManifest []FileManifest // last committed snapshot
-	Pinned       bool
-	PinExpiry    *time.Time
-	inflightOps  int
-	inflightMu   sync.Mutex
+	mu                   sync.RWMutex
+	ID                   string
+	PID                  int
+	UpperDir             string
+	WorkDir              string
+	SourceSnapshotDigest string
+	MergedDir            string
+	MemoryMax            int64 // memory budget for admission control accounting
+	State                CapsuleState
+	CommitEpoch          uint64         // audit metadata (not enforced for exec/read/write)
+	LastManifest         []FileManifest // last committed snapshot
+	OwnerRunID           string
+	StartedAt            time.Time
+	Spec                 SpawnSpec
+	Process              *os.Process
+	Cgroup               *CgroupManager
+	wait                 func() error
+	Pinned               bool
+	PinExpiry            *time.Time
+	inflightOps          int
+	inflightMu           sync.Mutex
 
 	// broker is the client for communicating with this capsule's broker.
 	broker *BrokerClient
 
-	// revokedCaps is the set of revoked CapabilityIDs for this capsule.
-	// Synced from HostAuthority via sync_revoked_caps.
+	// revokedCaps is the guest-core revocation set mirrored for local checks.
 	revokedCaps map[string]bool
 }
 
@@ -137,29 +143,10 @@ func (c *Capsule) CommitManifest(ctx context.Context) error {
 	return nil
 }
 
-// Destroy cleans up the capsule — kills broker, unmounts overlay, removes
-// upperdir, destroys cgroup.
+// Destroy is intentionally owned by Executor, which tears down the process,
+// overlay mount, cgroup, and ephemeral grants as one lifecycle transition.
 func (c *Capsule) Destroy(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.State == StateDestroyed {
-		return nil
-	}
-
-	c.State = StateDestroying
-
-	// Close broker client.
-	if c.broker != nil {
-		c.broker.Close()
-	}
-
-	// TODO: kill broker process, unmount overlayfs, remove upperdir,
-	// destroy cgroup. These require kernel syscalls and will be
-	// implemented in executor.go's Destroy method which calls this.
-
-	c.State = StateDestroyed
-	return nil
+	return fmt.Errorf("capsule destruction must be performed by Executor")
 }
 
 // acquireOp increments the inflight operation counter. Must be paired
@@ -185,8 +172,7 @@ func (c *Capsule) releaseOp() {
 	c.inflightMu.Unlock()
 }
 
-// UpdateRevokedCaps updates the capsule's revoked capability set.
-// Called by the Executor when sync_revoked_caps is received from HostAuthority.
+// UpdateRevokedCaps replaces the guest-core revocation view.
 func (c *Capsule) UpdateRevokedCaps(revokedIDs []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -427,11 +427,8 @@ func (r *OwnershipRegistry) PressureReclaimPlan() PressureReclaimPlan {
 	cfg := r.pressureReclaim
 	warmnessPolicy := r.warmnessPolicy
 	sampler := r.pressureSampler
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	for _, own := range r.workerVMs {
 		ownerships = append(ownerships, cloneOwnership(own))
 	}
 	r.mu.RUnlock()
@@ -498,11 +495,8 @@ func (r *OwnershipRegistry) pressureReclaimActionCandidates() []pressureCandidat
 	cfg := r.pressureReclaim
 	warmnessPolicy := r.warmnessPolicy
 	sampler := r.pressureSampler
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	for _, own := range r.workerVMs {
 		ownerships = append(ownerships, cloneOwnership(own))
 	}
 	r.mu.RUnlock()
@@ -555,11 +549,7 @@ func pressureInventory(ownerships []*VMOwnership, candidates []pressureCandidate
 		if own.State == VMStateActive {
 			inv.Active++
 		}
-		if own.Kind == VMKindWorker {
-			inv.Workers++
-		} else {
-			inv.Interactive++
-		}
+		inv.Interactive++
 	}
 	for _, candidate := range candidates {
 		if candidate.public.Protected {
@@ -604,9 +594,6 @@ func pressureCandidateForOwnership(own *VMOwnership, cfg PressureReclaimConfig, 
 	warmnessClass := warmnessClassForOwnership(own, warmnessPolicy)
 	reasons := protectedReclaimReasons(own, cfg, warmnessPolicy, idle)
 	priority := warmnessPriority(warmnessClass)
-	if warmnessClass == WarmnessClassCriticalProtected && staleCriticalWorkerIdle(idle) {
-		priority = warmnessPriority(WarmnessClassWorker)
-	}
 	desktop := "primary"
 	if own.Kind == VMKindInteractive && own.DesktopID != PrimaryDesktopID {
 		desktop = "published"
@@ -637,9 +624,7 @@ func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmne
 	case WarmnessClassPremiumAlwaysOn:
 		reasons = append(reasons, "premium_always_on")
 	case WarmnessClassCriticalProtected:
-		if !staleCriticalWorkerIdle(idle) {
-			reasons = append(reasons, "critical_protected")
-		}
+		reasons = append(reasons, "critical_protected")
 	}
 	if own.LastActiveAt.IsZero() {
 		reasons = append(reasons, "unknown_last_active")
@@ -647,30 +632,5 @@ func protectedReclaimReasons(own *VMOwnership, cfg PressureReclaimConfig, warmne
 	if cfg.MinIdle > 0 && idle < cfg.MinIdle {
 		reasons = append(reasons, "recent_activity")
 	}
-	if own.Kind == VMKindWorker && criticalWorkerPurpose(own) && !staleCriticalWorkerIdle(idle) {
-		reasons = append(reasons, "critical_worker_purpose")
-	}
 	return reasons
-}
-
-func staleCriticalWorkerIdle(idle time.Duration) bool {
-	return idle >= criticalWorkerProtectionMaxIdle
-}
-
-func criticalWorkerPurpose(own *VMOwnership) bool {
-	if own == nil {
-		return false
-	}
-	text := strings.ToLower(strings.Join([]string{
-		own.Purpose,
-		own.TrajectoryID,
-		own.ObjectiveFingerprint,
-		own.ParentAgentID,
-	}, " "))
-	for _, marker := range []string{"verifier", "verify", "promotion", "rollback", "publication"} {
-		if strings.Contains(text, marker) {
-			return true
-		}
-	}
-	return false
 }

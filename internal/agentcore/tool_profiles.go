@@ -17,26 +17,19 @@ import (
 )
 
 const (
-	runMetadataAgentProfile        = "agent_profile"
-	runMetadataChannelID           = "channel_id"
-	runMetadataAgentRole           = "agent_role"
-	runMetadataAgentID             = "agent_id"
-	runMetadataModel               = "model"
-	runMetadataDesktopID           = "desktop_id"
-	runMetadataToolCWD             = "tool_cwd"
-	runMetadataOwnerEmail          = "owner_email"
-	runMetadataWorkerIsolation     = "worker_isolation"
-	runMetadataWorkerBaseSHA       = "worker_base_sha"
-	runMetadataWorkerBranch        = "worker_branch"
-	runMetadataWorkerWorktree      = "worker_worktree_path"
-	runMetadataWorkerRepoRemote    = "worker_repo_remote_url"
-	runMetadataWorkerRepoBaseSHA   = "worker_repo_base_sha"
-	runMetadataWorkerRepoBootstrap = "worker_repo_bootstrap"
-	runMetadataCoSuperSlot         = "co_super_slot"
-	runMetadataSpawnReused         = "spawn_reused_existing_child"
-	runMetadataProcessorKey        = "processor_key"
-	runMetadataReconcilerScope     = "reconciler_scope"
-	runMetadataExplicitResearcher  = "explicit_researcher_request"
+	runMetadataAgentProfile       = "agent_profile"
+	runMetadataChannelID          = "channel_id"
+	runMetadataAgentRole          = "agent_role"
+	runMetadataAgentID            = "agent_id"
+	runMetadataModel              = "model"
+	runMetadataDesktopID          = "desktop_id"
+	runMetadataToolCWD            = "tool_cwd"
+	runMetadataOwnerEmail         = "owner_email"
+	runMetadataCoSuperSlot        = "co_super_slot"
+	runMetadataSpawnReused        = "spawn_reused_existing_child"
+	runMetadataProcessorKey       = "processor_key"
+	runMetadataReconcilerScope    = "reconciler_scope"
+	runMetadataExplicitResearcher = "explicit_researcher_request"
 )
 
 func toolExecutionContextForRun(rec *types.RunRecord) toolregistry.ExecutionContext {
@@ -249,16 +242,8 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	if profile == agentprofile.Super {
 		b.WriteString(runtimeprompts.SuperRuntimeOverlay())
 	}
-	repoBootstrap := workerRepoBootstrapForRun(rec)
-	if profile == agentprofile.VSuper {
-		b.WriteString(runtimeprompts.VSuperRuntimeOverlay(runtimeprompts.VSuperRuntimeOptions{
-			RepoBootstrap: repoBootstrap,
-		}))
-	}
 	if profile == agentprofile.CoSuper {
-		b.WriteString(runtimeprompts.CoSuperRuntimeOverlay(runtimeprompts.CoSuperRuntimeOptions{
-			RepoBootstrap: repoBootstrap,
-		}))
+		b.WriteString(runtimeprompts.CoSuperRuntimeOverlay())
 	}
 	if profile == agentprofile.Researcher {
 		b.WriteString(runtimeprompts.ResearcherRuntimeOverlay())
@@ -280,39 +265,6 @@ func (rt *Runtime) systemPromptForRun(rec *types.RunRecord) (string, error) {
 	return b.String(), nil
 }
 
-func workerRepoBootstrapForRun(rec *types.RunRecord) string {
-	if rec == nil || rec.Metadata == nil {
-		return ""
-	}
-	return runtimeprompts.WorkerRepoBootstrap(runtimeprompts.WorkerRepoBootstrapOptions{
-		RemoteURL: metadataStringValue(rec.Metadata, runMetadataWorkerRepoRemote),
-		BaseSHA:   metadataStringValue(rec.Metadata, runMetadataWorkerRepoBaseSHA),
-		Bootstrap: metadataStringValue(rec.Metadata, runMetadataWorkerRepoBootstrap),
-	})
-}
-
-func workerRepoContextForRun(rec *types.RunRecord) string {
-	return workerRepoBootstrapForRun(rec)
-}
-
-func inheritWorkerRepoMetadata(metadata map[string]any, parent *types.RunRecord) {
-	if metadata == nil || parent == nil || parent.Metadata == nil {
-		return
-	}
-	for _, key := range []string{
-		runMetadataWorkerRepoRemote,
-		runMetadataWorkerRepoBaseSHA,
-		runMetadataWorkerRepoBootstrap,
-	} {
-		if strings.TrimSpace(metadataStringValue(metadata, key)) != "" {
-			continue
-		}
-		if value := metadataStringValue(parent.Metadata, key); value != "" {
-			metadata[key] = value
-		}
-	}
-}
-
 func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 	systemPrompt, err := rt.systemPromptForRun(rec)
 	if err != nil {
@@ -330,17 +282,8 @@ func (rt *Runtime) providerPromptForRun(rec *types.RunRecord) (string, error) {
 
 func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, searchClient search.Client, sourceClient researchtools.SourceSearchClient, httpClient *http.Client) (*toolregistry.ToolRegistry, error) {
 	registry := toolregistry.MustNewToolRegistry()
-	if spec.AllowWritableFiles {
-		if err := RegisterFileTools(registry, cwd); err != nil {
-			return nil, err
-		}
-	} else if spec.AllowReadOnlyFiles {
+	if spec.AllowReadOnlyFiles {
 		if err := RegisterReadOnlyFileTools(registry, cwd); err != nil {
-			return nil, err
-		}
-	}
-	if spec.AllowCodingTools {
-		if err := RegisterCodingTools(registry, cwd); err != nil {
 			return nil, err
 		}
 	}
@@ -374,11 +317,10 @@ func (rt *Runtime) buildRegistryForRole(spec agentprofile.Policy, cwd string, se
 	return registry, nil
 }
 
-// InstallDefaultAgentTools installs the default profile registries used by the
-// local MAS. Capabilities are enforced by role spec, not by prompt warnings.
-// Super is the privileged execution root, co-super is its supervised helper,
-// researcher gets read-only local files plus research/evidence tools, and
-// conductor/texture get lighter coordination-oriented registries.
+// InstallDefaultAgentTools installs role-bound registries. Super receives
+// read/orchestration and capsule lifecycle tools; CoSuper receives only typed
+// update plus broker-backed capsule effects. Neither role receives direct host
+// mutation, shipper, route, or VM tools.
 func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if strings.TrimSpace(cwd) == "" {
 		wd, err := os.Getwd()
@@ -396,14 +338,13 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err != nil {
 		return err
 	}
-	if err := RegisterVMControlTools(superRegistry, rt, cwd); err != nil {
-		return err
-	}
 	if err := RegisterCoagentUpdateTools(superRegistry, rt); err != nil {
 		return err
 	}
-	if err := RegisterShipperTools(superRegistry, rt, cwd); err != nil {
-		return err
+	if rt.capsuleExecutor != nil {
+		if err := RegisterCapsuleTools(superRegistry); err != nil {
+			return err
+		}
 	}
 	coSuperRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.CoSuper), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
@@ -412,18 +353,10 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	if err := RegisterCoagentUpdateTools(coSuperRegistry, rt); err != nil {
 		return err
 	}
-	if err := RegisterShipperTools(coSuperRegistry, rt, cwd); err != nil {
-		return err
-	}
-	vSuperRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.VSuper), cwd, searchClient, sourceClient, httpClient)
-	if err != nil {
-		return err
-	}
-	if err := RegisterCoagentUpdateTools(vSuperRegistry, rt); err != nil {
-		return err
-	}
-	if err := RegisterShipperTools(vSuperRegistry, rt, cwd); err != nil {
-		return err
+	if rt.capsuleExecutor != nil {
+		if err := RegisterCapsuleExecTools(coSuperRegistry); err != nil {
+			return err
+		}
 	}
 	researcherRegistry, err := rt.buildRegistryForRole(agentprofile.PolicyFor(agentprofile.Researcher), cwd, searchClient, sourceClient, httpClient)
 	if err != nil {
@@ -469,7 +402,6 @@ func (rt *Runtime) InstallDefaultAgentTools(cwd string) error {
 	rt.toolProfiles[agentprofile.Conductor] = conductorRegistry
 	rt.toolProfiles[agentprofile.Super] = superRegistry
 	rt.toolProfiles[agentprofile.CoSuper] = coSuperRegistry
-	rt.toolProfiles[agentprofile.VSuper] = vSuperRegistry
 	rt.toolProfiles[agentprofile.Researcher] = researcherRegistry
 	rt.toolProfiles[agentprofile.Processor] = processorRegistry
 	rt.toolProfiles[agentprofile.Reconciler] = reconcilerRegistry

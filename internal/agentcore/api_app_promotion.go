@@ -83,6 +83,8 @@ func (h *APIHandler) HandleComputersRouter(w http.ResponseWriter, r *http.Reques
 	}
 	computerID := strings.TrimSpace(parts[0])
 	switch {
+	case len(parts) >= 3 && parts[1] == "self-development":
+		h.handleSelfDevelopmentRoute(w, r, ownerID, computerID, parts)
 	case len(parts) == 2 && parts[1] == "source-lineage":
 		if r.Method != http.MethodGet {
 			writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})

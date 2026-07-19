@@ -2118,9 +2118,9 @@ func (h *Handler) HandleTestTextureWorkerUpdate(w http.ResponseWriter, r *http.R
 		role = agentprofile.Super
 	}
 	switch role {
-	case agentprofile.Researcher, agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper:
+	case agentprofile.Researcher, agentprofile.Super, agentprofile.CoSuper:
 	default:
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "role must be researcher, super, vsuper, or co-super"})
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "role must be researcher, super, or co-super"})
 		return
 	}
 

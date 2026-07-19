@@ -9,7 +9,7 @@ func TestRoleVerbSets(t *testing.T) {
 	}
 
 	// Cosuper should have exec, read_file, write_file, etc.
-	cosuper := RoleVerbSets[RoleCosuper]
+	cosuper := RoleVerbSets[RoleCoSuper]
 	if !cosuper["exec"] {
 		t.Error("cosuper should have exec verb")
 	}
@@ -37,7 +37,7 @@ func TestRoleVerbSets(t *testing.T) {
 }
 
 func TestHasVerb(t *testing.T) {
-	if !RoleCosuper.HasVerb("exec") {
+	if !RoleCoSuper.HasVerb("exec") {
 		t.Error("cosuper should have exec verb")
 	}
 	if RoleResearcher.HasVerb("exec") {

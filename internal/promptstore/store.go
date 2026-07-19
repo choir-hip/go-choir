@@ -41,7 +41,6 @@ func promptRoles() []string {
 		agentprofile.Reconciler,
 		agentprofile.Super,
 		agentprofile.CoSuper,
-		agentprofile.VSuper,
 	}
 }
 

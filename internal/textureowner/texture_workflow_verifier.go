@@ -120,7 +120,7 @@ func (rt *Handler) VerifyTextureWorkflow(ctx context.Context, opts TextureWorkfl
 		if err := verifyCoSuperParents(trajectoryRuns); err != nil {
 			return report, err
 		}
-		guarantee("co-super execution was spawned only by super or vsuper")
+		guarantee("co-super execution was spawned only by super")
 	}
 
 	if opts.RequireSearchToolEvent && !eventsContainSuccessfulWebSearch(events) {
@@ -290,8 +290,8 @@ func verifyCoSuperParents(runs []types.RunRecord) error {
 		coSuperCount++
 		parent, ok := runByID[run.RequestedByRunID]
 		parentProfile := agentProfileForRun(&parent)
-		if !ok || (parentProfile != agentprofile.Super && parentProfile != agentprofile.VSuper) {
-			return fmt.Errorf("co-super run %s parent profile = %q, want super or vsuper", run.RunID, parentProfile)
+		if !ok || parentProfile != agentprofile.Super {
+			return fmt.Errorf("co-super run %s parent profile = %q, want super", run.RunID, parentProfile)
 		}
 	}
 	if coSuperCount == 0 {
@@ -327,10 +327,6 @@ func verifyWorkerRunToolCausality(runs []types.RunRecord, events []types.EventRe
 		case parentProfile == agentprofile.Super && (childProfile == agentprofile.CoSuper || childProfile == agentprofile.Researcher):
 			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
 				return fmt.Errorf("%s run %s lacks parent super spawn_agent result", childProfile, run.RunID)
-			}
-		case parentProfile == agentprofile.VSuper && (childProfile == agentprofile.CoSuper || childProfile == agentprofile.Researcher):
-			if !toolResultOutputLoopID(events, parent.RunID, "spawn_agent", run.RunID) {
-				return fmt.Errorf("%s run %s lacks parent vsuper spawn_agent result", childProfile, run.RunID)
 			}
 		case parentProfile == agentprofile.Conductor && childProfile == agentprofile.Texture:
 			// Initial texture setup is product orchestration, not worker delegation.

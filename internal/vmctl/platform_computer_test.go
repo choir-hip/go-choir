@@ -90,8 +90,8 @@ func TestHandleResolveEnsuresUniversalWirePlatformComputer(t *testing.T) {
 	if resp.UserID != UniversalWirePlatformOwnerID || resp.DesktopID != UniversalWirePlatformDesktopID {
 		t.Fatalf("resolve identity = (%q, %q), want platform computer", resp.UserID, resp.DesktopID)
 	}
-	if resp.SandboxURL != "http://10.203.141.2:8085" || !resp.Published || resp.State != string(VMStateActive) {
-		t.Fatalf("resolve response = %+v, want active published platform sandbox", resp)
+	if resp.SandboxURL != "http://10.203.141.2:8085" || resp.State != string(VMStateActive) {
+		t.Fatalf("resolve response = %+v, want active platform sandbox", resp)
 	}
 	if len(mgr.boots) != 1 || mgr.boots[0].VMID != UniversalWirePlatformVMID {
 		t.Fatalf("platform boot calls = %#v, want stable platform VM", mgr.boots)
@@ -119,17 +119,13 @@ func TestEnsureUniversalWirePlatformComputerRecoversPersistedBootingWithoutWaite
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mgr)
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
-	reg.ownerships[key] = &VMOwnership{
-		VMID:          UniversalWirePlatformVMID,
+	reg.ownerships[key] = &VMOwnership{VMID: UniversalWirePlatformVMID,
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform,
-		Published:     true,
-		SandboxURL:    "http://10.200.17.2:8085",
-		State:         VMStateBooting,
-		Epoch:         58,
-	}
+		WarmnessClass: WarmnessClassPublicPlatform, SandboxURL: "http://10.200.17.2:8085",
+		State: VMStateBooting,
+		Epoch: 58}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
 
 	err := reg.EnsureUniversalWirePlatformComputer(t.Context())
@@ -174,17 +170,13 @@ func TestEnsureUniversalWirePlatformComputerCoalescesPersistedBootingRecovery(t 
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mgr)
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
-	reg.ownerships[key] = &VMOwnership{
-		VMID:          UniversalWirePlatformVMID,
+	reg.ownerships[key] = &VMOwnership{VMID: UniversalWirePlatformVMID,
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform,
-		Published:     true,
-		SandboxURL:    "http://10.200.17.2:8085",
-		State:         VMStateBooting,
-		Epoch:         58,
-	}
+		WarmnessClass: WarmnessClassPublicPlatform, SandboxURL: "http://10.200.17.2:8085",
+		State: VMStateBooting,
+		Epoch: 58}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
 
 	errs := make(chan error, 2)
@@ -239,17 +231,13 @@ func TestSandboxProxyEnsuresUniversalWirePlatformBeforeProxying(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.SetVMManager(mgr)
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
-	reg.ownerships[key] = &VMOwnership{
-		VMID:          UniversalWirePlatformVMID,
+	reg.ownerships[key] = &VMOwnership{VMID: UniversalWirePlatformVMID,
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform,
-		Published:     true,
-		SandboxURL:    "http://10.200.17.2:8085",
-		State:         VMStateBooting,
-		Epoch:         58,
-	}
+		WarmnessClass: WarmnessClassPublicPlatform, SandboxURL: "http://10.200.17.2:8085",
+		State: VMStateBooting,
+		Epoch: 58}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
 
 	req := httptest.NewRequest(
@@ -292,16 +280,12 @@ func TestSandboxProxyForwardsInternalRuntimeStatusGET(t *testing.T) {
 
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
-	reg.ownerships[key] = &VMOwnership{
-		VMID:       UniversalWirePlatformVMID,
-		UserID:     UniversalWirePlatformOwnerID,
-		DesktopID:  UniversalWirePlatformDesktopID,
-		Kind:       VMKindInteractive,
-		Published:  true,
-		SandboxURL: runtime.URL,
-		State:      VMStateActive,
-		Epoch:      60,
-	}
+	reg.ownerships[key] = &VMOwnership{VMID: UniversalWirePlatformVMID,
+		UserID:    UniversalWirePlatformOwnerID,
+		DesktopID: UniversalWirePlatformDesktopID,
+		Kind:      VMKindInteractive, SandboxURL: runtime.URL,
+		State: VMStateActive,
+		Epoch: 60}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
 
 	req := httptest.NewRequest(
@@ -322,17 +306,13 @@ func TestSandboxProxyForwardsInternalRuntimeStatusGET(t *testing.T) {
 func TestSandboxProxyPlatformEnsureFailureReturnsBoundedError(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
-	reg.ownerships[key] = &VMOwnership{
-		VMID:          UniversalWirePlatformVMID,
+	reg.ownerships[key] = &VMOwnership{VMID: UniversalWirePlatformVMID,
 		UserID:        UniversalWirePlatformOwnerID,
 		DesktopID:     UniversalWirePlatformDesktopID,
 		Kind:          VMKindInteractive,
-		WarmnessClass: WarmnessClassPublicPlatform,
-		Published:     true,
-		SandboxURL:    "http://10.200.17.2:8085",
-		State:         VMStateBooting,
-		Epoch:         58,
-	}
+		WarmnessClass: WarmnessClassPublicPlatform, SandboxURL: "http://10.200.17.2:8085",
+		State: VMStateBooting,
+		Epoch: 58}
 	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
 
 	req := httptest.NewRequest(

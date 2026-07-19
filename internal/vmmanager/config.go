@@ -19,6 +19,9 @@ func LoadConfigFromEnv() ManagerConfig {
 	if v := os.Getenv("VM_FIRECRACKER_BIN"); v != "" {
 		cfg.FirecrackerBinPath = v
 	}
+	if v := os.Getenv("VM_MKFS_EXT4_BIN"); v != "" {
+		cfg.MkfsExt4Path = v
+	}
 
 	if v := os.Getenv("VM_KERNEL_IMAGE"); v != "" {
 		cfg.KernelImagePath = v

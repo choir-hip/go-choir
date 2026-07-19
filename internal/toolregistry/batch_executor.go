@@ -119,7 +119,7 @@ func shouldExecuteToolsSequentially(calls []types.ToolCall) bool {
 
 func toolRequiresSequentialTurnExecution(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "request_worker_vm", "product_api_request", "start_worker_delegation", "observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation", "publish_app_change_package", "update_coagent", "save_evidence":
+	case "bash", "write_file", "patch_texture", "rewrite_texture", "spawn_agent", "cancel_agent", "request_super_execution", "request_email_draft", "product_api_request", "publish_app_change_package", "update_coagent", "save_evidence":
 		return true
 	default:
 		return false
@@ -178,18 +178,17 @@ func plannedToolSkips(ctx context.Context, calls []types.ToolCall) map[int]strin
 }
 
 func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip func(index int, reason string)) {
-	seenVSuperSpawn := map[string]int{}
+	seenSuperSpawn := map[string]int{}
 	seenCoagentUpdate := map[string]int{}
 	seenExport := map[string]int{}
 	seenBash := map[string]int{}
-	seenDelegateWorker := map[string]int{}
 	seenTextureResearcherSpawn := map[string]int{}
 
 	for i, call := range calls {
 		switch call.Name {
 		case "patch_texture", "rewrite_texture":
 		case "bash":
-			if profile != agentprofile.Super && profile != agentprofile.VSuper && profile != agentprofile.CoSuper {
+			if profile != agentprofile.Super && profile != agentprofile.CoSuper {
 				continue
 			}
 			key := normalizedToolCallArgs(call)
@@ -213,19 +212,19 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 					continue
 				}
 				seenTextureResearcherSpawn[key] = i
-			case agentprofile.VSuper:
-				key, ok := toolCallVSuperCoSuperSpawnKey(call)
+			case agentprofile.Super:
+				key, ok := toolCallSuperCoSuperSpawnKey(call)
 				if !ok {
 					continue
 				}
-				if previous, exists := seenVSuperSpawn[key]; exists {
+				if previous, exists := seenSuperSpawn[key]; exists {
 					setSkip(i, fmt.Sprintf("tool_error: duplicate spawn_agent for %s already planned in this turn at call %s; reuse that child instead of launching or reusing it again", key, calls[previous].ID))
 					continue
 				}
-				seenVSuperSpawn[key] = i
+				seenSuperSpawn[key] = i
 			}
 		case "publish_app_change_package":
-			if profile != agentprofile.Super && profile != agentprofile.VSuper && profile != agentprofile.CoSuper {
+			if profile != agentprofile.Super && profile != agentprofile.CoSuper {
 				continue
 			}
 			key := normalizedToolCallArgs(call)
@@ -247,33 +246,11 @@ func planSideEffectToolSkips(profile string, calls []types.ToolCall, setSkip fun
 				continue
 			}
 			seenCoagentUpdate[key] = i
-		case "start_worker_delegation":
-			if profile != agentprofile.Super {
-				continue
-			}
-			key := normalizedToolCallArgs(call)
-			if key == "" {
-				continue
-			}
-			if previous, exists := seenDelegateWorker[key]; exists {
-				if call.Name == "start_worker_delegation" {
-					notice, _ := json.Marshal(map[string]any{
-						"status": "duplicate_start_ignored", "state": "pending", "deduped": true,
-						"dedupe_reason": "start_worker_delegation_already_planned_in_turn", "previous_call_id": calls[previous].ID,
-						"next_tools": []string{"observe_worker_delegation", "finish_worker_delegation", "cancel_worker_delegation"},
-					})
-					setSkip(i, "tool_notice:"+string(notice))
-					continue
-				}
-				setSkip(i, fmt.Sprintf("tool_error: duplicate %s payload already planned in this turn at call %s; wait for the first worker result instead of starting the same worker delegation twice", call.Name, calls[previous].ID))
-				continue
-			}
-			seenDelegateWorker[key] = i
 		}
 	}
 }
 
-func toolCallVSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
+func toolCallSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 	var in struct {
 		Role      string `json:"role"`
 		Profile   string `json:"profile"`
@@ -290,7 +267,7 @@ func toolCallVSuperCoSuperSpawnKey(call types.ToolCall) (string, bool) {
 	if profile != agentprofile.CoSuper {
 		return "", false
 	}
-	slot := normalizeVSuperCoSuperSlot(in.Slot)
+	slot := normalizeCoSuperSlot(in.Slot)
 	if slot == "" {
 		return "", false
 	}
@@ -353,7 +330,7 @@ func toolCallSpawnProfile(call types.ToolCall) string {
 	return profile
 }
 
-func normalizeVSuperCoSuperSlot(raw string) string {
+func normalizeCoSuperSlot(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "implementation", "implementer", "worker", "writer", "builder":
 		return "implementation"

@@ -37,6 +37,20 @@ func main() {
 
 	svc := platform.NewService(store, cfg.ArtifactsRoot, cfg.SigningKeyPath)
 	handler := platform.NewHandler(svc)
+	eventCAS, eventArtifacts, eventAuth, err := svc.ComputerEventRuntime()
+	if err != nil {
+		log.Fatalf("corpusd computer event runtime: %v", err)
+	}
+	if err := handler.ConfigureComputerEvents(eventCAS, eventArtifacts, eventAuth); err != nil {
+		log.Fatalf("corpusd computer event routes: %v", err)
+	}
+	modeCAS, err := svc.SelfDevelopmentModeRuntime()
+	if err != nil {
+		log.Fatalf("corpusd self-development mode runtime: %v", err)
+	}
+	if err := handler.ConfigureSelfDevelopmentModes(modeCAS); err != nil {
+		log.Fatalf("corpusd self-development mode routes: %v", err)
+	}
 	s := server.NewServer("corpusd", cfg.Port)
 	platform.RegisterRoutes(s, handler)
 

@@ -37,7 +37,6 @@ type computeComputer struct {
 	Kind              string                    `json:"kind"`
 	State             string                    `json:"state"`
 	WarmnessClass     string                    `json:"warmness_class"`
-	Published         bool                      `json:"published"`
 	Epoch             int64                     `json:"epoch,omitempty"`
 	StoppedBy         string                    `json:"stopped_by,omitempty"`
 	LastActiveAt      string                    `json:"last_active_at,omitempty"`
@@ -50,7 +49,6 @@ type computeComputer struct {
 
 type computeImmutableIdentity struct {
 	ComputerVersion         computerversion.ComputerVersion `json:"computer_version"`
-	ConstructionDiskReceipt string                          `json:"construction_disk_receipt_id"`
 	RouteGeneration         uint64                          `json:"route_generation"`
 	RouteReceiptID          string                          `json:"route_receipt_id"`
 	TransitionKind          routeledger.TransitionKind      `json:"transition_kind"`
@@ -195,7 +193,6 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		Kind:             string(own.Kind),
 		State:            own.State,
 		WarmnessClass:    own.WarmnessClass,
-		Published:        own.Published,
 		Epoch:            own.Epoch,
 		StoppedBy:        own.StoppedBy,
 		LastActiveAt:     own.LastActiveAt,
@@ -209,7 +206,7 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 		resp.CurrentComputer.Protection = protectionText(resp.CurrentComputer.WarmnessClass)
 		resp.CurrentComputer.Reclaimable = reclaimableWarmness(resp.CurrentComputer.WarmnessClass)
 	}
-	identity, identityErr := h.currentImmutableIdentity(r.Context(), authResult.UserID, desktopID, own.ConstructionVersion, own.ConstructionDiskID, own.ConstructionCommitted)
+	identity, identityErr := h.currentImmutableIdentity(r.Context(), authResult.UserID, desktopID)
 	if identityErr != nil {
 		resp.Status = "degraded"
 		resp.Warnings = append(resp.Warnings, "immutable identity evidence unavailable")
@@ -233,12 +230,9 @@ func (h *Handler) HandleComputeStatus(w http.ResponseWriter, r *http.Request) {
 	h.writeComputeStatus(w, &resp, authResult.UserID, desktopID)
 }
 
-func (h *Handler) currentImmutableIdentity(ctx context.Context, userID, desktopID string, version *computerversion.ComputerVersion, diskReceiptID string, committed bool) (*computeImmutableIdentity, error) {
-	if !committed && version == nil && strings.TrimSpace(diskReceiptID) == "" {
-		return nil, nil
-	}
-	if h == nil || h.vmctlClient == nil || !committed || version == nil || !version.Valid() || strings.TrimSpace(diskReceiptID) == "" {
-		return nil, fmt.Errorf("constructed ownership identity is incomplete")
+func (h *Handler) currentImmutableIdentity(ctx context.Context, userID, desktopID string) (*computeImmutableIdentity, error) {
+	if h == nil || h.vmctlClient == nil {
+		return nil, fmt.Errorf("route identity authority is unavailable")
 	}
 	slotID, err := routeledger.RouteSlotID(userID, desktopID)
 	if err != nil {
@@ -249,12 +243,13 @@ func (h *Handler) currentImmutableIdentity(ctx context.Context, userID, desktopI
 		return nil, err
 	}
 	receipt := resolution.LatestReceipt
-	if receipt.Validate() != nil || resolution.Slot.ID != slotID || resolution.Slot.Current != *version || receipt.ID != resolution.Slot.LatestReceiptID || receipt.New != *version || receipt.CommittedGeneration != resolution.Slot.Generation {
-		return nil, fmt.Errorf("constructed ownership and route evidence do not join")
+	version := resolution.Slot.Current
+	if !version.Valid() || receipt.Validate() != nil || resolution.Slot.ID != slotID || receipt.ID != resolution.Slot.LatestReceiptID || receipt.New != version || receipt.CommittedGeneration != resolution.Slot.Generation {
+		return nil, fmt.Errorf("route slot and receipt evidence do not join")
 	}
 	return &computeImmutableIdentity{
-		ComputerVersion: *version, ConstructionDiskReceipt: strings.TrimSpace(diskReceiptID),
-		RouteGeneration: resolution.Slot.Generation, RouteReceiptID: string(receipt.ID), TransitionKind: receipt.Kind,
+		ComputerVersion: version, RouteGeneration: resolution.Slot.Generation,
+		RouteReceiptID: string(receipt.ID), TransitionKind: receipt.Kind,
 		ApprovalRef: string(receipt.ApprovalRef), PromotionCertificateRef: string(receipt.PromotionCertificateRef), Joined: true,
 	}, nil
 }
@@ -302,7 +297,6 @@ func (h *Handler) userComputersForStatus(ctx context.Context, userID string, cur
 			Kind:             string(own.Kind),
 			State:            own.State,
 			WarmnessClass:    own.WarmnessClass,
-			Published:        own.Published,
 			Epoch:            own.Epoch,
 			StoppedBy:        own.StoppedBy,
 			LastActiveAt:     own.LastActiveAt,
@@ -406,7 +400,6 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 					string(vmctl.VMKindInteractive),
 					"refreshing",
 					currentWarmnessFallback(desktopID),
-					desktopID == vmctl.PrimaryDesktopID,
 					0,
 					"",
 					"",
@@ -431,7 +424,6 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 			string(vmctl.VMKindInteractive),
 			string(vmctl.VMStateStopped),
 			currentWarmnessFallback(desktopID),
-			desktopID == vmctl.PrimaryDesktopID,
 			0,
 			"user",
 			"",
@@ -442,7 +434,6 @@ func (h *Handler) HandleComputeRecovery(w http.ResponseWriter, r *http.Request) 
 				string(own.Kind),
 				own.State,
 				own.WarmnessClass,
-				own.Published,
 				own.Epoch,
 				own.StoppedBy,
 				own.LastActiveAt,
@@ -478,7 +469,6 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 			string(resolved.Kind),
 			resolved.State,
 			resolved.WarmnessClass,
-			resolved.Published,
 			0,
 			"",
 			"",
@@ -494,7 +484,6 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 				string(resolved.Kind),
 				resolved.State,
 				resolved.WarmnessClass,
-				resolved.Published,
 				0,
 				"",
 				"",
@@ -514,7 +503,6 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 				string(refreshed.Kind),
 				refreshed.State,
 				refreshed.WarmnessClass,
-				refreshed.Published,
 				0,
 				"",
 				"",
@@ -529,7 +517,6 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 			string(own.Kind),
 			own.State,
 			own.WarmnessClass,
-			own.Published,
 			own.Epoch,
 			own.StoppedBy,
 			own.LastActiveAt,
@@ -555,7 +542,6 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 				string(refreshed.Kind),
 				refreshed.State,
 				refreshed.WarmnessClass,
-				refreshed.Published,
 				0,
 				"",
 				"",
@@ -568,7 +554,7 @@ func (h *Handler) runComputeRecovery(ctx context.Context, userID, desktopID stri
 	return current, runtimeStatus, nil
 }
 
-func computeComputerFromFields(desktopID, kind, state, warmnessClass string, published bool, epoch int64, stoppedBy, lastActiveAt string) computeComputer {
+func computeComputerFromFields(desktopID, kind, state, warmnessClass string, epoch int64, stoppedBy, lastActiveAt string) computeComputer {
 	current := computeComputer{
 		DesktopID:        desktopID,
 		Role:             computerRole(desktopID),
@@ -576,7 +562,6 @@ func computeComputerFromFields(desktopID, kind, state, warmnessClass string, pub
 		Kind:             kind,
 		State:            state,
 		WarmnessClass:    warmnessClass,
-		Published:        published,
 		Epoch:            epoch,
 		StoppedBy:        stoppedBy,
 		LastActiveAt:     lastActiveAt,
@@ -659,17 +644,17 @@ func appendPersistentDiskWarnings(warnings []string, disk *persistentdisk.Status
 }
 
 func computerRole(desktopID string) string {
-	if strings.TrimSpace(desktopID) == "" || desktopID == vmctl.PrimaryDesktopID {
-		return "primary"
+	if desktopID == vmctl.UniversalWirePlatformDesktopID {
+		return "platform"
 	}
-	return "candidate"
+	return "primary"
 }
 
 func currentWarmnessFallback(desktopID string) string {
-	if strings.TrimSpace(desktopID) == "" || desktopID == vmctl.PrimaryDesktopID {
-		return string(vmctl.WarmnessClassPrimary)
+	if desktopID == vmctl.UniversalWirePlatformDesktopID {
+		return string(vmctl.WarmnessClassPublicPlatform)
 	}
-	return string(vmctl.WarmnessClassCandidate)
+	return string(vmctl.WarmnessClassPrimary)
 }
 
 func protectionText(class string) string {
@@ -677,15 +662,11 @@ func protectionText(class string) string {
 	case string(vmctl.WarmnessClassPremiumAlwaysOn):
 		return "protected always-on primary computer"
 	case string(vmctl.WarmnessClassCriticalProtected):
-		return "protected critical background work"
+		return "protected critical computer"
 	case string(vmctl.WarmnessClassPrimary):
 		return "primary computer kept warm while capacity allows"
 	case string(vmctl.WarmnessClassPublicPlatform):
 		return "public platform computer lane"
-	case string(vmctl.WarmnessClassCandidate):
-		return "candidate computer; hibernates before primary desktops"
-	case string(vmctl.WarmnessClassWorker):
-		return "worker computer; lowest retention priority"
 	case "static":
 		return "static sandbox routing"
 	default:
@@ -693,11 +674,6 @@ func protectionText(class string) string {
 	}
 }
 
-func reclaimableWarmness(class string) bool {
-	switch strings.TrimSpace(class) {
-	case string(vmctl.WarmnessClassCandidate), string(vmctl.WarmnessClassWorker):
-		return true
-	default:
-		return false
-	}
+func reclaimableWarmness(string) bool {
+	return false
 }

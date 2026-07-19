@@ -272,7 +272,6 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		VMID:          vmID,
 		Kind:          VMKindInteractive,
 		WarmnessClass: WarmnessClassPublicPlatform,
-		Published:     true,
 	}, issueGatewayTokenAt(r.gatewayURL, vmID)))
 	if err != nil {
 		r.mu.Lock()
@@ -294,7 +293,6 @@ func (r *OwnershipRegistry) ensureUniversalWirePlatformOwnership(ctx context.Con
 		Epoch:         info.Epoch,
 		Kind:          VMKindInteractive,
 		WarmnessClass: WarmnessClassPublicPlatform,
-		Published:     true,
 		State:         VMStateActive,
 		CreatedAt:     time.Now(),
 		LastActiveAt:  time.Now(),

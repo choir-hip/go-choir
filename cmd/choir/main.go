@@ -3,7 +3,7 @@
 // scripts can read Texture documents, observe trajectories, search,
 // start runs, and verify the Universal Wire news feed without a browser.
 //
-// Auth: CHOIR_API_KEY env var or --api-key flag. Host: CHOIR_HOST env var
+// Auth: CHOIR_API_KEY env var or --api-key-file. Host: CHOIR_HOST env var
 // or --host flag (defaults to https://choir.news). Request timeout:
 // CHOIR_TIMEOUT env var or --timeout flag (defaults to 75 seconds).
 //
@@ -36,6 +36,8 @@ const (
 	defaultListLimit = 50
 )
 
+var cliStdin io.Reader = os.Stdin
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -65,6 +67,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runComputer(rest, stdout, stderr)
 	case "api-key":
 		return runAPIKey(rest, stdout, stderr)
+	case "self-dev":
+		return runSelfDevelopment(rest, stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, "choir v0 (Phase 1: existing /api/ routes)")
 		return 0
@@ -104,13 +108,15 @@ Commands:
   api-key list        List your API keys
   api-key create      Create a delegated API key (requires manage:keys or admin)
   api-key revoke <id> Revoke this key, or a delegated key with manage:keys/admin
+  self-dev mode get|set  Read or generation-CAS the explicit computer mode
   version             Print CLI version
   help                Print this usage
 
 Auth:
-  --api-key string    API key (choir_sk_...). Defaults to $CHOIR_API_KEY.
-  --host string       Choir host. Defaults to $CHOIR_HOST or https://choir.news.
-  --timeout duration  Request timeout. Defaults to $CHOIR_TIMEOUT or 75s.
+  --api-key-file path  Read API key from a mode-0600 file; "-" reads stdin.
+                       Defaults to $CHOIR_API_KEY when omitted.
+  --host string        Choir host. Defaults to $CHOIR_HOST or https://choir.news.
+  --timeout duration   Request timeout. Defaults to $CHOIR_TIMEOUT or 75s.
 
 Output is JSON to stdout; diagnostics and errors go to stderr.`)
 }
@@ -125,18 +131,22 @@ type client struct {
 }
 
 func newClient(flags *flag.FlagSet, args []string, stdout, stderr io.Writer) (*client, error) {
-	apiKey := flags.String("api-key", "", "API key (choir_sk_...); defaults to $"+apiKeyEnvVar)
+	apiKeyFile := flags.String("api-key-file", "", "Read API key from a mode-0600 file; '-' reads stdin; defaults to $"+apiKeyEnvVar)
 	host := flags.String("host", envOr(hostEnvVar, defaultHost), "Choir host")
 	timeout := flags.String("timeout", "", "Request timeout (for example 75s or 2m)")
 	if err := flags.Parse(args); err != nil {
 		return nil, err
 	}
-	key := strings.TrimSpace(*apiKey)
-	if key == "" {
-		key = strings.TrimSpace(os.Getenv(apiKeyEnvVar))
+	key := strings.TrimSpace(os.Getenv(apiKeyEnvVar))
+	if strings.TrimSpace(*apiKeyFile) != "" {
+		var err error
+		key, err = readCLISecretFile(*apiKeyFile, cliStdin)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if key == "" {
-		return nil, fmt.Errorf("api key required: set --api-key or $%s", apiKeyEnvVar)
+		return nil, fmt.Errorf("api key required: set --api-key-file or $%s", apiKeyEnvVar)
 	}
 	if !strings.HasPrefix(key, apiKeyPrefix) {
 		return nil, fmt.Errorf("api key must start with %q", apiKeyPrefix)
@@ -156,6 +166,35 @@ func newClient(flags *flag.FlagSet, args []string, stdout, stderr io.Writer) (*c
 		stdout: stdout,
 		stderr: stderr,
 	}, nil
+}
+
+func readCLISecretFile(path string, stdin io.Reader) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "-" {
+		if stdin == nil {
+			return "", fmt.Errorf("api key stdin is unavailable")
+		}
+		raw, err := io.ReadAll(io.LimitReader(stdin, 64<<10))
+		if err != nil {
+			return "", fmt.Errorf("read api key from stdin: %w", err)
+		}
+		return strings.TrimSpace(string(raw)), nil
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", fmt.Errorf("read api key file: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
+		return "", fmt.Errorf("api key file must be a regular mode-0600 file")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read api key file: %w", err)
+	}
+	if len(raw) > 64<<10 {
+		return "", fmt.Errorf("api key file is too large")
+	}
+	return strings.TrimSpace(string(raw)), nil
 }
 
 func resolveTimeout(flagValue, envValue string) (time.Duration, error) {
@@ -489,6 +528,372 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return writeJSON(stdout, resp)
+}
+
+// ---- self-development ----
+
+func runSelfDevelopment(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "choir self-dev: subcommand required (start|status|inspect|approve|reject|rollback|wait|genesis|kernel-capabilities|mode)")
+		return 2
+	}
+	switch args[0] {
+	case "start":
+		return runSelfDevelopmentStart(args[1:], stdout, stderr)
+	case "status", "inspect":
+		return runSelfDevelopmentStatus(args[0], args[1:], stdout, stderr)
+	case "approve", "reject":
+		return runSelfDevelopmentDecision(args[0], args[1:], stdout, stderr)
+	case "wait":
+		return runSelfDevelopmentWait(args[1:], stdout, stderr)
+	case "genesis":
+		return runSelfDevelopmentGenesis(args[1:], stdout, stderr)
+	case "rollback":
+		return runSelfDevelopmentRollback(args[1:], stdout, stderr)
+	case "kernel-capabilities":
+		return runSelfDevelopmentKernelCapabilities(args[1:], stdout, stderr)
+	case "mode":
+		if len(args) < 2 {
+			fmt.Fprintln(stderr, "choir self-dev mode: subcommand required (get|set)")
+			return 2
+		}
+		switch args[1] {
+		case "get":
+			return runSelfDevelopmentModeGet(args[2:], stdout, stderr)
+		case "set":
+			return runSelfDevelopmentModeSet(args[2:], stdout, stderr)
+		default:
+			fmt.Fprintf(stderr, "choir self-dev mode: unknown subcommand %q\n", args[1])
+			return 2
+		}
+	default:
+		fmt.Fprintf(stderr, "choir self-dev: unknown subcommand %q\n", args[0])
+		return 2
+	}
+}
+
+func runSelfDevelopmentStart(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev start", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
+	promptFile := fs.String("prompt-file", "", "Prompt file path; '-' reads stdin")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev start: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*idempotencyKey) == "" || strings.TrimSpace(*promptFile) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir self-dev start: --computer, --idempotency-key, and --prompt-file are required; positional arguments are forbidden")
+		return 2
+	}
+	prompt, err := readCLIInputFile(*promptFile, 1<<20)
+	if err != nil || strings.TrimSpace(prompt) == "" {
+		fmt.Fprintf(stderr, "choir self-dev start: invalid prompt file: %v\n", err)
+		return 2
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations"
+	if err := c.do(http.MethodPost, path, map[string]any{"idempotency_key": strings.TrimSpace(*idempotencyKey), "prompt": prompt}, &response); err != nil {
+		fmt.Fprintf(stderr, "choir self-dev start: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runSelfDevelopmentStatus(command string, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev "+command, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 1 || strings.TrimSpace(fs.Args()[0]) == "" {
+		fmt.Fprintf(stderr, "choir self-dev %s: --computer and one operation id are required\n", command)
+		return 2
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations/" + url.PathEscape(strings.TrimSpace(fs.Args()[0]))
+	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runSelfDevelopmentDecision(command string, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev "+command, flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
+	desiredHead := fs.String("expected-desired-head", "", "Expected desired event head")
+	effectiveHead := fs.String("expected-effective-head", "", "Expected effective event head")
+	desiredCommitment := fs.String("expected-desired-commitment", "", "Expected desired state commitment")
+	effectiveCommitment := fs.String("expected-effective-commitment", "", "Expected effective state commitment")
+	bundle := fs.String("bundle", "", "Exact frozen bundle digest")
+	verifier := fs.String("verifier", "", "Exact verifier evidence reference")
+	reasonFile := fs.String("reason-file", "", "Rejection reason file; '-' reads stdin")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*idempotencyKey) == "" || strings.TrimSpace(*desiredHead) == "" ||
+		strings.TrimSpace(*effectiveHead) == "" || strings.TrimSpace(*desiredCommitment) == "" || strings.TrimSpace(*effectiveCommitment) == "" ||
+		strings.TrimSpace(*bundle) == "" || strings.TrimSpace(*verifier) == "" || len(fs.Args()) != 1 {
+		fmt.Fprintf(stderr, "choir self-dev %s: exact computer, operation, heads, state commitments, bundle, verifier, and idempotency key are required\n", command)
+		return 2
+	}
+	body := map[string]any{
+		"decision": command, "idempotency_key": strings.TrimSpace(*idempotencyKey), "bundle_digest": strings.TrimSpace(*bundle),
+		"verifier_ref": strings.TrimSpace(*verifier), "expected_desired_event_head": strings.TrimSpace(*desiredHead),
+		"expected_effective_event_head":       strings.TrimSpace(*effectiveHead),
+		"expected_desired_state_commitment":   strings.TrimSpace(*desiredCommitment),
+		"expected_effective_state_commitment": strings.TrimSpace(*effectiveCommitment),
+	}
+	if command == "reject" {
+		if strings.TrimSpace(*reasonFile) == "" {
+			fmt.Fprintln(stderr, "choir self-dev reject: --reason-file is required")
+			return 2
+		}
+		reason, readErr := readCLIInputFile(*reasonFile, 256<<10)
+		if readErr != nil || strings.TrimSpace(reason) == "" {
+			fmt.Fprintf(stderr, "choir self-dev reject: invalid reason file: %v\n", readErr)
+			return 2
+		}
+		body["reason"] = reason
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations/" + url.PathEscape(strings.TrimSpace(fs.Args()[0])) + "/decision"
+	if err := c.do(http.MethodPost, path, body, &response); err != nil {
+		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runSelfDevelopmentWait(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev wait", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	pollInterval := fs.Duration("poll-interval", 2*time.Second, "Status polling interval")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev wait: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 1 || *pollInterval <= 0 {
+		fmt.Fprintln(stderr, "choir self-dev wait: --computer, one operation id, and a positive --poll-interval are required")
+		return 2
+	}
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations/" + url.PathEscape(strings.TrimSpace(fs.Args()[0]))
+	for {
+		var response json.RawMessage
+		if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+			fmt.Fprintf(stderr, "choir self-dev wait: %v\n", err)
+			return 1
+		}
+		var status struct {
+			State string `json:"state"`
+		}
+		if err := json.Unmarshal(response, &status); err != nil {
+			fmt.Fprintln(stderr, "choir self-dev wait: invalid operation response")
+			return 1
+		}
+		switch status.State {
+		case "applied", "rejected", "rolled_back", "failed", "degraded":
+			return writeJSON(stdout, response)
+		}
+		time.Sleep(*pollInterval)
+	}
+}
+
+func runSelfDevelopmentGenesis(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev genesis", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	baselineVersion := fs.String("baseline-version", "", "Baseline ComputerVersion digest")
+	baselineState := fs.String("baseline-state", "", "Baseline effective state digest")
+	expectedAbsent := fs.Bool("expected-absent", false, "Require absent event head")
+	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev genesis: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*baselineVersion) == "" || strings.TrimSpace(*baselineState) == "" || strings.TrimSpace(*idempotencyKey) == "" || !*expectedAbsent || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir self-dev genesis: --computer, --baseline-version, --baseline-state, --expected-absent, and --idempotency-key are required")
+		return 2
+	}
+	body := map[string]any{"baseline_version": strings.TrimSpace(*baselineVersion), "baseline_state": strings.TrimSpace(*baselineState), "expected_absent": true, "idempotency_key": strings.TrimSpace(*idempotencyKey)}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/genesis"
+	if err := c.do(http.MethodPost, path, body, &response); err != nil {
+		fmt.Fprintf(stderr, "choir self-dev genesis: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runSelfDevelopmentRollback(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev rollback", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	expectedDesired := fs.String("expected-desired-head", "", "Expected desired event head")
+	currentApplied := fs.String("current-applied-head", "", "Current applied event head")
+	toApplied := fs.String("to-applied-head", "", "Prior applied event head")
+	priorMaterialization := fs.String("prior-materialization", "", "Prior materialization receipt digest")
+	priorCheckpoint := fs.String("prior-checkpoint", "", "Prior checkpoint digest")
+	expectedRouteGeneration := fs.Uint64("expected-route-generation", 0, "Expected route generation")
+	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev rollback: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*expectedDesired) == "" || strings.TrimSpace(*currentApplied) == "" || strings.TrimSpace(*toApplied) == "" || strings.TrimSpace(*priorMaterialization) == "" || strings.TrimSpace(*priorCheckpoint) == "" || strings.TrimSpace(*idempotencyKey) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir self-dev rollback: complete computer, head, materialization, checkpoint, route generation, and idempotency bindings are required")
+		return 2
+	}
+	body := map[string]any{
+		"expected_desired_head": strings.TrimSpace(*expectedDesired), "current_applied_head": strings.TrimSpace(*currentApplied),
+		"to_applied_head": strings.TrimSpace(*toApplied), "prior_materialization": strings.TrimSpace(*priorMaterialization),
+		"prior_checkpoint": strings.TrimSpace(*priorCheckpoint), "expected_route_generation": *expectedRouteGeneration,
+		"idempotency_key": strings.TrimSpace(*idempotencyKey),
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/rollbacks"
+	if err := c.do(http.MethodPost, path, body, &response); err != nil {
+		fmt.Fprintf(stderr, "choir self-dev rollback: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runSelfDevelopmentKernelCapabilities(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev kernel-capabilities", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev kernel-capabilities: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir self-dev kernel-capabilities: --computer is required")
+		return 2
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/kernel-capabilities"
+	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+		fmt.Fprintf(stderr, "choir self-dev kernel-capabilities: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func readCLIInputFile(path string, maximum int64) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("file path is required")
+	}
+	var reader io.Reader
+	if path == "-" {
+		if cliStdin == nil {
+			return "", fmt.Errorf("stdin is unavailable")
+		}
+		reader = cliStdin
+	} else {
+		info, err := os.Lstat(path)
+		if err != nil {
+			return "", err
+		}
+		if !info.Mode().IsRegular() {
+			return "", fmt.Errorf("input must be a regular file")
+		}
+		file, err := os.Open(path)
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+		reader = file
+	}
+	raw, err := io.ReadAll(io.LimitReader(reader, maximum+1))
+	if err != nil {
+		return "", err
+	}
+	if int64(len(raw)) > maximum {
+		return "", fmt.Errorf("input exceeds %d bytes", maximum)
+	}
+	return string(raw), nil
+}
+
+func runSelfDevelopmentModeGet(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev mode get", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev mode get: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir self-dev mode get: --computer is required and positional arguments are forbidden")
+		return 2
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/mode"
+	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
+		fmt.Fprintf(stderr, "choir self-dev mode get: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
+}
+
+func runSelfDevelopmentModeSet(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("choir self-dev mode set", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	computerID := fs.String("computer", "", "Stable ComputerID")
+	mode := fs.String("mode", "", "off, audit_only, propose_only, or accept_once")
+	expectedGeneration := fs.Uint64("expected-generation", 0, "Expected mode generation")
+	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
+	expiresAt := fs.String("expires-at", "", "Canonical UTC expiry for accept_once")
+	operationID := fs.String("operation", "", "Exact operation ID for accept_once")
+	desiredHead := fs.String("expected-desired-head", "", "Expected desired event head for accept_once")
+	effectiveHead := fs.String("expected-effective-head", "", "Expected effective event head for accept_once")
+	desiredCommitment := fs.String("expected-desired-commitment", "", "Expected desired state commitment for accept_once")
+	effectiveCommitment := fs.String("expected-effective-commitment", "", "Expected effective state commitment for accept_once")
+	bundle := fs.String("bundle", "", "Exact bundle digest for accept_once")
+	c, err := newClient(fs, args, stdout, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "choir self-dev mode set: %v\n", err)
+		return 2
+	}
+	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*mode) == "" || strings.TrimSpace(*idempotencyKey) == "" || len(fs.Args()) != 0 {
+		fmt.Fprintln(stderr, "choir self-dev mode set: --computer, --mode, and --idempotency-key are required; positional arguments are forbidden")
+		return 2
+	}
+	body := map[string]any{
+		"mode": *mode, "expected_generation": *expectedGeneration, "idempotency_key": *idempotencyKey,
+	}
+	if *mode == "accept_once" {
+		body["expires_at"] = *expiresAt
+		body["operation_id"] = *operationID
+		body["expected_desired_event_head"] = *desiredHead
+		body["expected_effective_event_head"] = *effectiveHead
+		body["expected_desired_state_commitment"] = *desiredCommitment
+		body["expected_effective_state_commitment"] = *effectiveCommitment
+		body["bundle_digest"] = *bundle
+	}
+	var response json.RawMessage
+	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/mode"
+	if err := c.do(http.MethodPost, path, body, &response); err != nil {
+		fmt.Fprintf(stderr, "choir self-dev mode set: %v\n", err)
+		return 1
+	}
+	return writeJSON(stdout, response)
 }
 
 // ---- computer ----

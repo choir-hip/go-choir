@@ -26,13 +26,13 @@ import (
 type LedgerKind int
 
 const (
-	LedgerVM LedgerKind = iota       // V: /boot, /lib/modules, /etc/systemd
-	LedgerDolt LedgerKind = iota     // D: /var/lib/dolt
-	LedgerSource LedgerKind = iota   // S: /home/user/src, /workspace
-	LedgerBlob LedgerKind = iota     // B: /var/lib/blob
+	LedgerVM       LedgerKind = iota // V: /boot, /lib/modules, /etc/systemd
+	LedgerDolt     LedgerKind = iota // D: /var/lib/dolt
+	LedgerSource   LedgerKind = iota // S: /home/user/src, /workspace
+	LedgerBlob     LedgerKind = iota // B: /var/lib/blob
 	LedgerArtifact LedgerKind = iota // A: /var/lib/artifact
-	LedgerRoute LedgerKind = iota    // R: /etc/choir/route
-	LedgerUnknown LedgerKind = iota  // rejected at commit time (v7 decision)
+	LedgerRoute    LedgerKind = iota // R: /etc/choir/route
+	LedgerUnknown  LedgerKind = iota // rejected at commit time (v7 decision)
 )
 
 func (k LedgerKind) String() string {
@@ -139,11 +139,11 @@ func NewClassifier() *Classifier {
 
 // ClassifyResult is the output of classification.
 type ClassifyResult struct {
-	Version string                          `json:"version"`
+	Version string                              `json:"version"`
 	Groups  map[LedgerKind][]capsule.FileChange `json:"groups"`
-	Ignored []capsule.FileChange            `json:"ignored"`
-	Unknown []capsule.FileChange            `json:"unknown"`
-	Digest  string                          `json:"digest"` // SHA-256 of the classification
+	Ignored []capsule.FileChange                `json:"ignored"`
+	Unknown []capsule.FileChange                `json:"unknown"`
+	Digest  string                              `json:"digest"` // SHA-256 of the classification
 }
 
 // Classify groups file changes by ledger kind. Ephemeral paths are ignored.

@@ -600,3 +600,23 @@ func TestSeedBootstrapAdminAPIKeyRejectsBadPrefix(t *testing.T) {
 		t.Error("seeded = true, want false on error")
 	}
 }
+
+func TestCreateComputerScopedAPIKeyPersistsExactBinding(t *testing.T) {
+	store := TestStore(t)
+	user, err := store.CreateUser("ak-selfdev-user", "selfdev@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "Self development", []string{"computer:self_development:read"}, "computer-exact", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256([]byte(secret))
+	key, err := store.GetAPIKeyByHash(context.Background(), fmt.Sprintf("%x", hash))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key.ComputerID != "computer-exact" {
+		t.Fatalf("computer binding = %q, want computer-exact", key.ComputerID)
+	}
+}

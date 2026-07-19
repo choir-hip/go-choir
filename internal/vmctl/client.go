@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -143,136 +142,6 @@ func (c *Client) RefreshDesktopContext(ctx context.Context, userID, desktopID st
 	return &result, nil
 }
 
-// ForkDesktop creates or resumes a distinct interactive VM for the target
-// desktop, derived from the source desktop.
-func (c *Client) ForkDesktop(userID, sourceDesktopID, targetDesktopID string) (*resolveResponse, error) {
-	reqBody := forkDesktopRequest{
-		UserID:          userID,
-		SourceDesktopID: normalizeDesktopID(sourceDesktopID),
-		TargetDesktopID: normalizeDesktopID(targetDesktopID),
-	}
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: marshal fork request: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, ForkDesktopEndpoint(c.baseURL), bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: create fork request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: fork call failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: read fork response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		var errResp vmctlErrorResponse
-		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("vmctl client: fork failed: %s", errResp.Error)
-		}
-		return nil, fmt.Errorf("vmctl client: fork failed with status %s", resp.Status)
-	}
-
-	var result resolveResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("vmctl client: decode fork response: %w", err)
-	}
-	return &result, nil
-}
-
-// PublishDesktop marks a candidate desktop as user-switchable.
-func (c *Client) PublishDesktop(userID, desktopID string) (*resolveResponse, error) {
-	reqBody := resolveRequest{UserID: userID, DesktopID: normalizeDesktopID(desktopID)}
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: marshal publish request: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, PublishDesktopEndpoint(c.baseURL), bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: create publish request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: publish call failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: read publish response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		var errResp vmctlErrorResponse
-		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("vmctl client: publish failed: %s", errResp.Error)
-		}
-		return nil, fmt.Errorf("vmctl client: publish failed with status %s", resp.Status)
-	}
-
-	var result resolveResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("vmctl client: decode publish response: %w", err)
-	}
-	return &result, nil
-}
-
-// RequestWorker provisions a headless worker VM under the given desktop and
-// returns a typed worker handle.
-func (c *Client) RequestWorker(req WorkerRequest) (*WorkerVMHandle, error) {
-	req.UserID = strings.TrimSpace(req.UserID)
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	req.ParentAgentID = strings.TrimSpace(req.ParentAgentID)
-	req.TrajectoryID = strings.TrimSpace(req.TrajectoryID)
-	req.Purpose = strings.TrimSpace(req.Purpose)
-	req.MachineClass = strings.TrimSpace(req.MachineClass)
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: marshal request-worker request: %w", err)
-	}
-	httpReq, err := http.NewRequest(http.MethodPost, RequestWorkerEndpoint(c.baseURL), bytes.NewReader(data))
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: create request-worker request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("X-Internal-Caller", "true")
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: request-worker call failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("vmctl client: read request-worker response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		var errResp vmctlErrorResponse
-		if err := json.Unmarshal(body, &errResp); err == nil && errResp.Error != "" {
-			return nil, fmt.Errorf("vmctl client: request-worker failed: %s", errResp.Error)
-		}
-		return nil, fmt.Errorf("vmctl client: request-worker failed with status %s", resp.Status)
-	}
-
-	var result WorkerVMHandle
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("vmctl client: decode request-worker response: %w", err)
-	}
-	return &result, nil
-}
 
 // Lookup returns the current ownership for a user without creating a VM.
 // Returns nil if no ownership exists.
@@ -426,35 +295,6 @@ func (c *Client) StopDesktop(userID, desktopID string) error {
 // user/desktop pair.
 func (c *Client) RemoveDesktop(userID, desktopID string) error {
 	return c.postAction(RemoveEndpoint(c.baseURL), userID, desktopID)
-}
-
-// HibernateWorker requests vmctl to hibernate a typed worker VM without
-// touching the parent user desktop.
-func (c *Client) HibernateWorker(userID, desktopID, workerID string) error {
-	reqBody := workerActionRequest{UserID: strings.TrimSpace(userID), DesktopID: normalizeDesktopID(desktopID), WorkerID: strings.TrimSpace(workerID)}
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("vmctl client: marshal hibernate-worker request: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, HibernateWorkerEndpoint(c.baseURL), bytes.NewReader(data))
-	if err != nil {
-		return fmt.Errorf("vmctl client: create hibernate-worker request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Caller", "true")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("vmctl client: hibernate-worker call failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("vmctl client: hibernate-worker failed with status %s", resp.Status)
-	}
-	return nil
 }
 
 // postAction sends a POST request with a user_id/desktop_id body to the given

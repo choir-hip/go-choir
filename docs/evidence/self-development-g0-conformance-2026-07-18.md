@@ -149,9 +149,9 @@ Indexes cover trajectory, parent event, capsule, operation state, bundle digest,
 
 ## Canonical event and receipt protocol
 
-Event V1 uses the exact minimum hashed envelope and event kinds in the active Definition. `event_id` is UUIDv7. `canonical_event_head = SHA256(RFC8785(event body))`; the body contains no digest of itself. Payloads and event bodies are pinned before CAS. Signed receipts use `choir-receipt-v1`, the exact omitted-field digest rule, ordered required signers, Ed25519 signatures, trust roots, rotation/revocation, kind fields, and verifier matrix in the Definition. Unknown fields are retained by V1 readers. Unknown versions refuse mutation.
+Event V1 uses the exact minimum hashed envelope and event kinds in the active Definition. `event_id` is UUIDv7. `canonical_event_head = SHA256(RFC8785(event body))`; the body contains no digest of itself. The repaired commitment graph is directed: `pin_intent_commitment = SHA256(RFC8785(immutable event intent + transition input))`, excluding sequence, previous head, final request commitment, and receipt digests; payload PinReceipts bind that intent; `request_commitment = SHA256(RFC8785(event intent + pin_intent_commitment + ordered payload PinReceipt digests))`; the event-body PinReceipt binds the final request commitment; append CAS and EventHeadReceipt bind the ordered receipts. No signed receipt depends on its own digest. Signed receipts otherwise use `choir-receipt-v1`, the exact omitted-field digest rule, ordered required signers, Ed25519 signatures, trust roots, rotation/revocation, kind fields, and verifier matrix in the Definition. Unknown fields are retained by V1 readers. Unknown versions refuse mutation.
 
-Append order is: reconcile corpusd and embedded projections; classify/redact/encrypt and pin payloads; pin event body; commit embedded prepare; authenticated corpusd head CAS; verify EventHeadReceipt; finalize embedded index/materialization; acknowledge. Crash recovery and stale causal rebase follow the Definition exactly. Decision/effective events never rebase across changed state projections. At most one pending transition exists.
+Append order is: reconcile corpusd and embedded projections; classify/redact/encrypt each private payload into its final random-nonce envelope through the public guest client; freeze content refs in immutable event intent; compute immutable pin intent; have the guest appender TCB AEAD-decrypt/authenticate each exact frozen envelope against expected ComputerID/EventID with the root guest keyring immediately before pin; pin unchanged bytes against that intent; compute the final request commitment over canonical `{event_intent,pin_intent_commitment,payload_pin_receipt_digests}`; pin the final event body against the final commitment; commit embedded prepare; authenticated corpusd head CAS; have keyless corpusd structurally re-open private envelopes and require their ComputerID/EventID to match the event; verify EventHeadReceipt; finalize embedded index/materialization; acknowledge. Crash recovery and stale causal rebase follow the Definition exactly. Decision/effective events never rebase across changed state projections. At most one pending transition exists.
 
 `GenesisImported` is the sole absent-row transition and freezes baseline ComputerVersion, source tree, embedded state, effective marker, reducer, updater key, ComputerID, and disposable authorization. It initializes canonical, desired, and effective heads/commitments together and leaves mode off. Pre-genesis data remains `legacy_unproven`; no history is synthesized or rewritten.
 
@@ -190,6 +190,94 @@ A deletion inventory check must search code, tests, prompts, `docs/`, `specs/`, 
 ## Rollback and gate refs
 
 R0 is source/deploy identity before the certificate-enforcing cutover and is valid only before genesis. R1 is the exact deployed certificate-only route-refusal, event/key-reader, updater-recovery, and kernel-receipt security floor and is the minimum platform rollback after genesis. Before acceptance, destroy/revoke the capsule and retain audit. After acceptance, event-roll back with `choir-updater` to a prior compatible applied head. Schema/event history is never deleted or reset. If R1 or a later compatible release cannot serve safely after genesis, stop the disposable computer and forward-repair from immutable inputs.
+
+### G0 repair receipt: cyclic pin/request commitment
+
+The first B implementation pass exposed a substrate blocker in the frozen G0
+contract: payload PinReceipts were required both to bind the final request
+commitment and to contribute their signed receipt digests to that commitment.
+Receipt IDs, times, and signatures made the graph cyclic and non-executable.
+The active Definition recorded the blocker before repair code.
+
+The repaired graph above preserves every immutable binding without a cycle.
+`TestPrivatePayloadAppendCompletesDirectedCommitmentGraph` encrypts a real
+private payload with XChaCha20-Poly1305, pins its envelope against the immutable
+intent, computes the final request from the signed payload receipt, pins the
+event, executes corpusd CAS, verifies EventHeadReceipt, and finalizes embedded
+Dolt. The focused command
+`go test ./internal/platform -run TestPrivatePayloadAppendCompletesDirectedCommitmentGraph -count=1 -v`
+passed on 2026-07-19. This packet is not re-accepted until an independent
+diverse G0 panel reviews the exact repair and reports no reproducible blocker.
+
+The first corrected-formula panel completed 4/4 reviewers. Three accepted, but
+Codex reproduced two product-path blockers: the public client attempted to
+encrypt and pin before the random-nonce envelope digest could enter event
+intent, and corpusd did not reject an envelope created for a different EventID.
+The minority blocker governed. The repair separates public envelope preparation
+from exact-envelope pinning, drives the focused test through authenticated HTTP
+client/handler pin and CAS routes, and rejects cross-event private envelopes.
+The focused test passed after repair; a fresh frozen panel remains required.
+
+A subsequent 4/4 panel again had a three-to-one accept/block split. Codex
+demonstrated that structural envelope parsing did not authenticate AEAD
+metadata or ciphertext. The guest appender now decrypts/authenticates the exact
+frozen bytes with its root keyring before issuing any pin request; corpusd stays
+keyless and structurally validates identity/content joins. The HTTP product-path
+test independently corrupts metadata and ciphertext and proves both refuse
+before pin while the unmodified envelope completes append. A fresh frozen panel
+remains required.
+
+The next panel again found one decisive minority blocker: kernel-argv delivery
+copied the envelope into the shared sandbox/updater environment, and consumed
+exchange replay returned the same full append bearer. The repair replaces that
+path with a dedicated realization-local ext4 credential drive, removes the
+secret from kernel arguments and shared environment, masks the mount from the
+updater, requires trusted core to consume a root-owned mode-0400 regular file
+and unlink it before exchange, and refuses all consumed-envelope replay without
+a bearer. Focused drive/config, consume/erase/mode, replay-refusal, private HTTP
+append tests, six affected package suites, and NixOS guest evaluation pass. A
+fresh frozen panel remains required.
+
+The following panel found that a root updater sharing guest process visibility
+could still ptrace trusted core and steal its in-memory renewable bearer. The
+updater now has a private PID namespace, empty capability and ambient sets,
+invisible PID-scoped procfs, and `~@debug` syscall filtering; its identity-only
+environment contains no credential or gateway token, and its credential mount
+remains masked. Generated NixOS service configuration confirms every setting.
+A fresh frozen panel remains required.
+
+The retry review found updater's general `systemctl` access could escape every
+namespace restriction through a transient root service. Updater no longer
+invokes or reaches PID 1: it may atomically create only a fixed restart trigger.
+A root-owned path/oneshot bridge from the immutable Nix store removes that
+trigger and restarts exactly `go-choir-sandbox.service`; systemd and dbus
+control sockets are masked from updater. Fixed-trigger/arbitrary-target tests,
+updater compile, NixOS toplevel evaluation, and path-unit evaluation pass. A
+fresh frozen panel remains required.
+
+### Terminal G0 repair panel receipt
+
+The final frozen runtime/Nix/test candidate used complete candidate SHA-256
+`ec65831c1df8abf7b068e49bc6e7a1c2640a1aa327d5d1c494f065f654d2c203`
+over base `fa3721e511179a937fef4d9328b36f9e2a96d886`, tracked binary diff,
+and 37 sorted untracked files with the Definition's length framing. An initial
+panel yielded one OpenCode acceptance while Codex was provider-interrupted and
+Cursor timed out. A tightly scoped retry completed Codex, Cursor, and OMP
+GPT-5.5; all three returned `ACCEPT_G0_REPAIR` with no reproducible blocker.
+
+The accepted retry artifacts are content-bound as follows:
+
+- prompt SHA-256 `1bd6f61713e120234b541b73e9832017b28d966fbc54b9f88ff73d456ac16b39`;
+- manifest SHA-256 `18a9a05416a6cf50703af5e2e31efe43657909386515ca7b8e297c2a2f6a8a6c`;
+- Codex output SHA-256 `a3bcd7f969968b9473955de44819f43c81a73b9b22977a1b3abecd1d128759ed`;
+- Cursor output SHA-256 `2d2a1323c5d796532a0a6d173eef1e7f07eeac965ba38d0fbf7ae002c927e6dd`;
+- OMP GPT-5.5 output SHA-256 `455869251c29f6245caac0e3d21bb8cc3912b7baa7020808b9bd296f29a45838`.
+
+G0 is re-accepted. B may resume. Adding this receipt changes only assurance
+prose, not the reviewed runtime, Nix, protocol, or tests, so the accepted
+candidate review remains current. G1 must review the complete frozen B
+candidate; deployed R1 must prove the service namespace and credential
+boundary in the exact guest realization.
 
 ## G0 deterministic checklist
 

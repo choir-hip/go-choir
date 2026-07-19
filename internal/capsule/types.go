@@ -7,16 +7,16 @@ import (
 
 // SpawnSpec describes the desired state of a new capsule.
 type SpawnSpec struct {
-	CapsuleID    string        // unique capsule identifier (UUID)
-	MemoryMax    int64         // total budget: RSS + tmpfs + kmem (bytes)
-	CpuQuota     int64         // CPU quota (microseconds per period)
-	CpuPeriod    int64         // CPU period (default 100000)
-	PidsMax      int64         // max processes in capsule
-	DiskMax      int64         // tmpfs sub-budget of MemoryMax (bytes)
-	Env          []string      // environment variables for broker/workload
-	WorkingDir   string        // initial working directory
-	OwnerRunID   string        // agent run that owns this capsule
-	Tier         ResourceTier  // resource tier preset
+	CapsuleID  string       // unique capsule identifier (UUID)
+	MemoryMax  int64        // total budget: RSS + tmpfs + kmem (bytes)
+	CpuQuota   int64        // CPU quota (microseconds per period)
+	CpuPeriod  int64        // CPU period (default 100000)
+	PidsMax    int64        // max processes in capsule
+	DiskMax    int64        // tmpfs sub-budget of MemoryMax (bytes)
+	Env        []string     // environment variables for broker/workload
+	WorkingDir string       // initial working directory
+	OwnerRunID string       // agent run that owns this capsule
+	Tier       ResourceTier // resource tier preset
 }
 
 // ResourceTier is a preset for resource limits.
@@ -61,13 +61,13 @@ func (s CapsuleState) String() string {
 
 // ExecRequest is a request to execute a command in a capsule.
 type ExecRequest struct {
-	SessionID string        // broker-minted random ID (NOT agentRunID)
-	Command   string        // command to execute
-	Cwd       string        // working directory for command
-	Env       []string      // environment overrides
-	Stdin     string        // stdin content (empty for no input)
-	TimeoutMS int           // timeout in milliseconds (0 = no timeout)
-	PTY       bool          // use PTY for command
+	SessionID string   // broker-minted random ID (NOT agentRunID)
+	Command   string   // command to execute
+	Cwd       string   // working directory for command
+	Env       []string // environment overrides
+	Stdin     string   // stdin content (empty for no input)
+	TimeoutMS int      // timeout in milliseconds (0 = no timeout)
+	PTY       bool     // use PTY for command
 }
 
 // ExecResult is the result of executing a command in a capsule.
@@ -108,6 +108,12 @@ type FileChange struct {
 	Mode os.FileMode
 }
 
+type FrozenReleaseFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Mode   uint32 `json:"mode"`
+}
+
 // FileManifest is a snapshot of a file's metadata at commit time.
 type FileManifest struct {
 	Path  string
@@ -120,12 +126,22 @@ type FileManifest struct {
 
 // CapsuleSummary is a lightweight view of a capsule for listing.
 type CapsuleSummary struct {
-	ID        string
-	State     CapsuleState
-	PID       int
-	MemoryMax int64
-	Pinned    bool
+	ID         string
+	State      CapsuleState
+	PID        int
+	MemoryMax  int64
+	Pinned     bool
 	OwnerRunID string
+}
+
+// CapsuleControlSummary is the agent-safe lifecycle projection. It exposes no
+// raw capsule identity, host path, namespace PID, socket, key, or credential.
+type CapsuleControlSummary struct {
+	Handle               string        `json:"handle"`
+	State                CapsuleState  `json:"state"`
+	MemoryMax            int64         `json:"memory_max"`
+	SourceSnapshotDigest string        `json:"source_snapshot_digest"`
+	Uptime               time.Duration `json:"uptime"`
 }
 
 // CapsuleDiagnostics is the result of a host-side diagnostic inspection.

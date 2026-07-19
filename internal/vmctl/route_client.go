@@ -8,10 +8,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
+	"github.com/yusefmosiah/go-choir/internal/selfdevprotocol"
 )
 
 func (c *Client) ResolveComputerVersionRoute(ctx context.Context, routeSlotID string) (RouteResolution, error) {
@@ -75,38 +75,31 @@ func validateRouteResolution(routeSlotID string, resolution RouteResolution) err
 	return nil
 }
 
-func (c *Client) PinComputerVersionCode(ctx context.Context, closure computerversion.CodeClosure) (computerversion.CodeClosure, error) {
-	var pinned computerversion.CodeClosure
-	if err := c.postComputerVersionControl(ctx, PinComputerVersionCodeEndpoint(c.baseURL), closure, &pinned); err != nil {
-		return computerversion.CodeClosure{}, err
+func (c *Client) ResolveComputerVersionInputs(ctx context.Context, version computerversion.ComputerVersion) (ComputerVersionInputs, error) {
+	var inputs ComputerVersionInputs
+	if !version.Valid() {
+		return inputs, fmt.Errorf("vmctl client: invalid ComputerVersion")
 	}
-	if pinned.Ref != closure.Ref || pinned.Verify() != nil {
-		return computerversion.CodeClosure{}, fmt.Errorf("vmctl client: pinned CodeRef response failed verification")
+	if err := c.postComputerVersionControl(ctx, ResolveComputerVersionInputsEndpoint(c.baseURL), version, &inputs); err != nil {
+		return ComputerVersionInputs{}, err
 	}
-	return pinned, nil
+	if inputs.CodeClosure.Ref != version.CodeRef || inputs.ArtifactProgram.Ref != version.ArtifactProgramRef ||
+		inputs.CodeClosure.Verify() != nil || inputs.ArtifactProgram.Verify() != nil {
+		return ComputerVersionInputs{}, fmt.Errorf("vmctl client: resolved immutable inputs failed authority joins")
+	}
+	return inputs, nil
 }
 
-func (c *Client) PinComputerVersionArtifactProgram(ctx context.Context, program computerversion.ArtifactProgram) (computerversion.ArtifactProgram, error) {
-	var pinned computerversion.ArtifactProgram
-	if err := c.postComputerVersionControl(ctx, PinComputerVersionArtifactProgramEndpoint(c.baseURL), program, &pinned); err != nil {
-		return computerversion.ArtifactProgram{}, err
-	}
-	if pinned.Ref != program.Ref || pinned.Verify() != nil {
-		return computerversion.ArtifactProgram{}, fmt.Errorf("vmctl client: pinned ArtifactProgramRef response failed verification")
-	}
-	return pinned, nil
-}
-
-func (c *Client) TransitionComputerVersionRoute(ctx context.Context, command routeledger.TransitionCommand) (RouteResolution, error) {
+func (c *Client) ApplySelfDevelopmentRouteProjection(ctx context.Context, request selfdevprotocol.ApplyRouteProjectionRequest) (RouteResolution, error) {
 	var resolution RouteResolution
-	if err := c.postComputerVersionControl(ctx, TransitionComputerVersionRouteEndpoint(c.baseURL), command, &resolution); err != nil {
+	if err := c.postComputerVersionControl(ctx, ApplySelfDevelopmentRouteProjectionEndpoint(c.baseURL), request, &resolution); err != nil {
 		return RouteResolution{}, err
 	}
-	if err := validateRouteResolution(strings.TrimSpace(command.RouteSlotID), resolution); err != nil {
+	if err := validateRouteResolution(request.Projection.Command.RouteSlotID, resolution); err != nil {
 		return RouteResolution{}, err
 	}
-	if resolution.TransitionReceipt == nil || !routeledger.ReceiptMatchesCommand(*resolution.TransitionReceipt, command) {
-		return RouteResolution{}, fmt.Errorf("vmctl client: route transition receipt failed command join")
+	if resolution.TransitionReceipt == nil || !routeledger.ReceiptMatchesCommand(*resolution.TransitionReceipt, request.Projection.Command) {
+		return RouteResolution{}, fmt.Errorf("vmctl client: self-development route receipt failed command join")
 	}
 	return resolution, nil
 }

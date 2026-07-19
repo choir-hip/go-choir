@@ -636,7 +636,7 @@ func runSupportsCoagentUpdateInjection(rec *types.RunRecord) bool {
 		return false
 	}
 	switch agentProfileForRun(rec) {
-	case agentprofile.Super, agentprofile.VSuper, agentprofile.CoSuper, agentprofile.Researcher, agentprofile.Texture:
+	case agentprofile.Super, agentprofile.CoSuper, agentprofile.Researcher, agentprofile.Texture:
 		return strings.TrimSpace(rec.AgentID) != ""
 	default:
 		return false

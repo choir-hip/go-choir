@@ -346,8 +346,8 @@ func (o *ObjectGraphStore) PutBatch(ctx context.Context, batch objectgraph.Batch
 
 // Compile-time assertion that ObjectGraphStore satisfies objectgraph interfaces.
 var (
-	_ objectgraph.Store       = (*ObjectGraphStore)(nil)
-	_ objectgraph.BatchStore  = (*ObjectGraphStore)(nil)
+	_ objectgraph.Store      = (*ObjectGraphStore)(nil)
+	_ objectgraph.BatchStore = (*ObjectGraphStore)(nil)
 )
 
 type ogRowScanner interface {

@@ -23,8 +23,6 @@ type SourceWorkspaceOptions struct {
 	OwnerID                 string
 	DesktopID               string
 	SessionID               string
-	CandidateID             string
-	WorkerID                string
 	MaterializeGitCheckouts bool
 }
 
@@ -43,8 +41,6 @@ type SourceWorkspaceProjection struct {
 	PlatformSourceMount     string    `json:"platform_source_mount"`
 	UserSourceRef           string    `json:"user_source_ref"`
 	UserSourceMount         string    `json:"user_source_mount"`
-	CandidateSourceRef      string    `json:"candidate_source_ref,omitempty"`
-	CandidateSourceMount    string    `json:"candidate_source_mount"`
 	BuildMount              string    `json:"build_mount"`
 	PromotionWorkspaceRoot  string    `json:"promotion_workspace_root,omitempty"`
 	SourceLedgerRepo        string    `json:"source_ledger_repo,omitempty"`
@@ -53,8 +49,6 @@ type SourceWorkspaceProjection struct {
 	DirtyStateSummary       string    `json:"dirty_state_summary"`
 	PlatformCheckoutStatus  string    `json:"platform_checkout_status,omitempty"`
 	PlatformCheckoutError   string    `json:"platform_checkout_error,omitempty"`
-	CandidateCheckoutStatus string    `json:"candidate_checkout_status,omitempty"`
-	CandidateCheckoutError  string    `json:"candidate_checkout_error,omitempty"`
 	RollbackRef             string    `json:"rollback_ref,omitempty"`
 	LastVerifiedAt          time.Time `json:"last_verified_at"`
 	LineagePath             string    `json:"lineage_path"`
@@ -70,10 +64,12 @@ func BootstrapSourceWorkspace(filesRoot string, opts SourceWorkspaceOptions) (So
 	root = filepath.Clean(root)
 	sourceRoot := filepath.Join(root, "Source")
 	projection := sourceWorkspaceProjection(root, sourceRoot, opts)
+	if projection.ComputerKind != "active" && projection.ComputerKind != "platform" {
+		return SourceWorkspaceProjection{}, fmt.Errorf("source workspace: unsupported computer kind %q", projection.ComputerKind)
+	}
 	for _, dir := range []string{
 		filepath.Join(sourceRoot, "platform"),
 		filepath.Join(sourceRoot, "user"),
-		filepath.Join(sourceRoot, "candidate"),
 		filepath.Join(root, "Build"),
 		filepath.Join(root, ".choir"),
 	} {
@@ -100,19 +96,6 @@ func sourceWorkspaceProjection(root, sourceRoot string, opts SourceWorkspaceOpti
 		"unknown",
 	)
 	userRef := activeSourceRefForComputer(computerID, kind)
-	candidateRef := ""
-	if kind == "candidate" || kind == "worker" {
-		candidateID := firstNonEmptySourceWorkspace(
-			opts.CandidateID,
-			os.Getenv("CHOIR_CANDIDATE_ID"),
-			opts.WorkerID,
-			os.Getenv("CHOIR_WORKER_ID"),
-			opts.SessionID,
-			os.Getenv("SANDBOX_ID"),
-			computerID,
-		)
-		candidateRef = "refs/computers/" + safeSourceRefPart(computerID) + "/candidates/" + safeSourceRefPart(candidateID)
-	}
 	return SourceWorkspaceProjection{
 		SchemaVersion:           sourceLineageSchemaVersion,
 		ComputerID:              computerID,
@@ -121,12 +104,10 @@ func sourceWorkspaceProjection(root, sourceRoot string, opts SourceWorkspaceOpti
 		DesktopID:               desktopID,
 		SuperConsoleSessionID:   strings.TrimSpace(opts.SessionID),
 		PlatformBaseCommit:      baseCommit,
-		PlatformSourceRepo:      firstNonEmptySourceWorkspace(os.Getenv("RUNTIME_PROMOTION_SOURCE_REPO"), os.Getenv("RUNTIME_WORKER_REPO_REMOTE")),
+		PlatformSourceRepo:      os.Getenv("RUNTIME_PROMOTION_SOURCE_REPO"),
 		PlatformSourceMount:     filepath.Join(sourceRoot, "platform"),
 		UserSourceRef:           userRef,
 		UserSourceMount:         filepath.Join(sourceRoot, "user"),
-		CandidateSourceRef:      candidateRef,
-		CandidateSourceMount:    filepath.Join(sourceRoot, "candidate"),
 		BuildMount:              filepath.Join(root, "Build"),
 		PromotionWorkspaceRoot:  os.Getenv("RUNTIME_PROMOTION_WORKSPACE_ROOT"),
 		SourceLedgerRepo:        os.Getenv("RUNTIME_SOURCE_LEDGER_REPO"),
@@ -162,16 +143,8 @@ func writeSourceLineageProjection(projection SourceWorkspaceProjection) error {
 	return nil
 }
 
-func inferComputerKind(computerID string) string {
-	id := strings.ToLower(strings.TrimSpace(computerID))
-	switch {
-	case strings.Contains(id, "worker"):
-		return "worker"
-	case strings.Contains(id, "candidate"):
-		return "candidate"
-	default:
-		return "active"
-	}
+func inferComputerKind(string) string {
+	return "active"
 }
 
 func activeSourceRefForComputer(computerID, kind string) string {
@@ -214,43 +187,31 @@ func materializeSourceCheckouts(projection *SourceWorkspaceProjection) {
 	}
 	repo := strings.TrimSpace(projection.PlatformSourceRepo)
 	baseCommit := strings.TrimSpace(projection.PlatformBaseCommit)
-	platformStatus, platformErr := ensureSourceCheckout(projection.PlatformSourceMount, repo, baseCommit, false)
+	platformStatus, platformErr := ensureSourceCheckout(projection.PlatformSourceMount, repo, baseCommit)
 	projection.PlatformCheckoutStatus = platformStatus
 	if platformErr != nil {
 		projection.PlatformCheckoutError = platformErr.Error()
 	}
-	candidateStatus, candidateErr := ensureSourceCheckout(projection.CandidateSourceMount, repo, baseCommit, true)
-	projection.CandidateCheckoutStatus = candidateStatus
-	if candidateErr != nil {
-		projection.CandidateCheckoutError = candidateErr.Error()
-	}
-	projection.DirtyStateSummary = sourceCheckoutDirtyStateSummary(platformStatus, candidateStatus)
+	projection.DirtyStateSummary = sourceCheckoutDirtyStateSummary(platformStatus)
 }
 
-func sourceCheckoutDirtyStateSummary(platformStatus, candidateStatus string) string {
-	statuses := []string{strings.TrimSpace(platformStatus), strings.TrimSpace(candidateStatus)}
-	if strings.HasPrefix(statuses[0], "ok_") && strings.HasPrefix(statuses[1], "ok_") {
+func sourceCheckoutDirtyStateSummary(status string) string {
+	status = strings.TrimSpace(status)
+	switch {
+	case strings.HasPrefix(status, "ok_"):
 		return "clean"
+	case status == "dirty_preserved":
+		return "dirty_preserved"
+	case strings.HasPrefix(status, "blocked_"):
+		return "blocked"
+	case strings.Contains(status, "failed"):
+		return "failed"
+	default:
+		return "not_inspected"
 	}
-	for _, status := range statuses {
-		if status == "dirty_preserved" {
-			return "dirty_preserved"
-		}
-	}
-	for _, status := range statuses {
-		if strings.HasPrefix(status, "blocked_") {
-			return "blocked"
-		}
-	}
-	for _, status := range statuses {
-		if strings.Contains(status, "failed") {
-			return "failed"
-		}
-	}
-	return "not_inspected"
 }
 
-func ensureSourceCheckout(dir, repo, baseCommit string, writable bool) (string, error) {
+func ensureSourceCheckout(dir, repo, baseCommit string) (string, error) {
 	dir = filepath.Clean(strings.TrimSpace(dir))
 	repo = strings.TrimSpace(repo)
 	baseCommit = strings.TrimSpace(baseCommit)
@@ -292,12 +253,6 @@ func ensureSourceCheckout(dir, repo, baseCommit string, writable bool) (string, 
 	}
 	if baseCommit == "" || baseCommit == "unknown" {
 		return "ok_default_ref", nil
-	}
-	if writable {
-		if _, err := runSourceGitCommand(dir, "checkout", "-B", "choir-candidate", baseCommit); err != nil {
-			return "checkout_failed", err
-		}
-		return "ok_candidate_at_base", nil
 	}
 	if _, err := runSourceGitCommand(dir, "checkout", "--detach", baseCommit); err != nil {
 		return "checkout_failed", err

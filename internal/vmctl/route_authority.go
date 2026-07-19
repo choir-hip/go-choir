@@ -2,14 +2,12 @@ package vmctl
 
 import (
 	"context"
-	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
@@ -26,8 +24,6 @@ type RouteResolution struct {
 
 type routeAuthorityReader interface {
 	Resolve(context.Context, string) (routeledger.Slot, routeledger.TransitionReceipt, error)
-	PinAuthorizationEvidence(context.Context, routeledger.AuthorizationEvidence) (routeledger.AuthorizationEvidence, error)
-	VerifyTransitionEvidence(context.Context, routeledger.TransitionCommand) error
 }
 
 type RouteAuthority struct {
@@ -35,7 +31,6 @@ type RouteAuthority struct {
 	sqlLedger    *routeledger.SQLLedger
 	memoryLedger *routeledger.MemoryLedger
 	inputs       computerversion.ImmutableInputResolver
-	promotionKey ed25519.PublicKey
 	mutationMu   sync.Mutex
 }
 
@@ -53,14 +48,6 @@ func newMemoryRouteAuthority(ledger *routeledger.MemoryLedger, inputs computerve
 		return nil, fmt.Errorf("vmctl route authority: memory route/evidence ledger and immutable input resolver are required")
 	}
 	return &RouteAuthority{ledger: ledger, memoryLedger: ledger, inputs: inputs}, nil
-}
-
-func (a *RouteAuthority) SetPromotionAuthorityPublicKey(publicKey ed25519.PublicKey) error {
-	if len(publicKey) != ed25519.PublicKeySize {
-		return fmt.Errorf("vmctl promotion authority: Ed25519 public key is required")
-	}
-	a.promotionKey = append(ed25519.PublicKey(nil), publicKey...)
-	return nil
 }
 
 func (a *RouteAuthority) Resolve(ctx context.Context, slotID string) (RouteResolution, error) {
@@ -102,103 +89,11 @@ func (a *RouteAuthority) resolveVersionInputs(ctx context.Context, version compu
 	return closure, program, nil
 }
 
-func (a *RouteAuthority) prepareBootstrap(slotID string, verification computerversion.RealizationVerificationReceipt, approval OwnerPromotionApproval, preparedAt time.Time) (FrozenRouteBootstrapCandidate, error) {
-	if err := approval.verify(a.promotionKey, slotID, verification); err != nil {
-		return FrozenRouteBootstrapCandidate{}, err
-	}
-	ownerID, _, err := routeledger.ParseRouteSlotID(slotID)
-	if err != nil || approval.RouteSlotID != slotID || approval.OwnerID != ownerID {
-		return FrozenRouteBootstrapCandidate{}, fmt.Errorf("vmctl promotion authority: approval does not bind bootstrap route owner")
-	}
-	payload, err := json.Marshal(approval)
-	if err != nil {
-		return FrozenRouteBootstrapCandidate{}, err
-	}
-	evidence, err := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, slotID, verification.Version, payload, approval.ApprovedAt)
-	if err != nil {
-		return FrozenRouteBootstrapCandidate{}, err
-	}
-	return buildFrozenRouteBootstrapCandidate(slotID, verification, evidence, preparedAt)
-}
-
-func (a *RouteAuthority) preparePromotion(ctx context.Context, slotID string, verification computerversion.RealizationVerificationReceipt, approval OwnerPromotionApproval, preparedAt time.Time) (FrozenRoutePromotionCandidate, error) {
-	if err := approval.verify(a.promotionKey, slotID, verification); err != nil {
-		return FrozenRoutePromotionCandidate{}, err
-	}
-	ownerID, _, err := routeledger.ParseRouteSlotID(slotID)
-	if err != nil || approval.RouteSlotID != slotID || approval.OwnerID != ownerID {
-		return FrozenRoutePromotionCandidate{}, fmt.Errorf("vmctl promotion authority: approval does not bind route owner")
-	}
-	payload, err := json.Marshal(approval)
-	if err != nil {
-		return FrozenRoutePromotionCandidate{}, err
-	}
-	approvalEvidence, err := routeledger.NewAuthorizationEvidence(routeledger.AuthorizationEvidenceApproval, slotID, verification.Version, payload, approval.ApprovedAt)
-	if err != nil {
-		return FrozenRoutePromotionCandidate{}, err
-	}
-	current, err := a.Resolve(ctx, slotID)
-	if err != nil {
-		return FrozenRoutePromotionCandidate{}, fmt.Errorf("vmctl promotion: resolve current route: %w", err)
-	}
-	return buildFrozenRoutePromotionCandidate(current, verification, approvalEvidence, preparedAt)
-}
-
-func decodeOwnerApproval(evidence routeledger.AuthorizationEvidence) (OwnerPromotionApproval, error) {
-	var approval OwnerPromotionApproval
-	if err := json.Unmarshal(evidence.Payload, &approval); err != nil {
-		return OwnerPromotionApproval{}, fmt.Errorf("vmctl route authority: decode owner approval: %w", err)
-	}
-	return approval, nil
-}
-
-func (a *RouteAuthority) verifyFrozenOwnerApproval(slotID string, verification computerversion.RealizationVerificationReceipt, evidence routeledger.AuthorizationEvidence) error {
-	var approval OwnerPromotionApproval
-	if err := json.Unmarshal(evidence.Payload, &approval); err != nil {
-		return fmt.Errorf("vmctl route authority: decode owner approval: %w", err)
-	}
-	if err := approval.verify(a.promotionKey, slotID, verification); err != nil {
-		return err
-	}
-	if evidence.Kind != routeledger.AuthorizationEvidenceApproval || evidence.RouteSlotID != slotID || evidence.ComputerVersion != verification.Version || !evidence.CreatedAt.Equal(approval.ApprovedAt) {
-		return fmt.Errorf("vmctl route authority: owner approval evidence bindings are invalid")
-	}
-	return nil
-}
-
 func (a *RouteAuthority) Transition(ctx context.Context, command routeledger.TransitionCommand) (RouteResolution, error) {
 	return RouteResolution{}, fmt.Errorf("vmctl route authority: every route CAS requires a signed frozen candidate")
 }
 
-func (a *RouteAuthority) transitionAuthorized(ctx context.Context, command routeledger.TransitionCommand) (RouteResolution, error) {
-	if a == nil || a.ledger == nil || a.inputs == nil {
-		return RouteResolution{}, fmt.Errorf("vmctl route authority: not configured")
-	}
-	if err := command.Validate(); err != nil {
-		return RouteResolution{}, err
-	}
-	if err := a.ledger.VerifyTransitionEvidence(ctx, command); err != nil {
-		return RouteResolution{}, fmt.Errorf("vmctl route authority: transition evidence is not pinned: %w", err)
-	}
-	if _, _, err := a.resolveVersionInputs(ctx, command.New); err != nil {
-		return RouteResolution{}, fmt.Errorf("vmctl route authority: new ComputerVersion inputs are not pinned: %w", err)
-	}
-	if a.memoryLedger == nil {
-		return RouteResolution{}, fmt.Errorf("vmctl route authority: raw transition is unavailable on the durable authority")
-	}
-	_, receipt, err := a.memoryLedger.Transition(ctx, command)
-	if err != nil {
-		return RouteResolution{}, err
-	}
-	resolution, err := a.Resolve(ctx, command.RouteSlotID)
-	if err != nil {
-		return RouteResolution{}, fmt.Errorf("vmctl route authority: resolve committed route: %w", err)
-	}
-	resolution.TransitionReceipt = &receipt
-	return resolution, nil
-}
-
-func (a *RouteAuthority) transitionAuthorizedWithEvidence(ctx context.Context, command routeledger.TransitionCommand, evidence []routeledger.AuthorizationEvidence) (RouteResolution, error) {
+func (a *RouteAuthority) transitionSelfDevelopmentWithEvidence(ctx context.Context, command routeledger.TransitionCommand, evidence []routeledger.AuthorizationEvidence) (RouteResolution, error) {
 	if a == nil || a.ledger == nil || a.inputs == nil {
 		return RouteResolution{}, fmt.Errorf("vmctl route authority: not configured")
 	}
@@ -214,7 +109,7 @@ func (a *RouteAuthority) transitionAuthorizedWithEvidence(ctx context.Context, c
 	var receipt routeledger.TransitionReceipt
 	var err error
 	if a.sqlLedger != nil {
-		slot, receipt, err = a.sqlLedger.ApplySignedTransition(ctx, command, evidence)
+		slot, receipt, err = a.sqlLedger.ApplySelfDevelopmentTransition(ctx, command, evidence)
 	} else if a.memoryLedger != nil {
 		slot, receipt, err = a.memoryLedger.TransitionWithEvidence(ctx, command, evidence)
 	} else {
@@ -222,18 +117,6 @@ func (a *RouteAuthority) transitionAuthorizedWithEvidence(ctx context.Context, c
 	}
 	if err != nil {
 		return RouteResolution{}, err
-	}
-	if command.Kind == routeledger.TransitionBootstrapRollback {
-		if slot != (routeledger.Slot{}) {
-			return RouteResolution{}, fmt.Errorf("vmctl route authority: bootstrap rollback returned a route slot")
-		}
-		if _, _, err := a.ledger.Resolve(ctx, command.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
-			if err == nil {
-				return RouteResolution{}, fmt.Errorf("vmctl route authority: bootstrap rollback left route present")
-			}
-			return RouteResolution{}, err
-		}
-		return RouteResolution{TransitionReceipt: &receipt, RouteAbsent: true}, nil
 	}
 	resolution, err := a.Resolve(ctx, command.RouteSlotID)
 	if err != nil {
@@ -244,111 +127,6 @@ func (a *RouteAuthority) transitionAuthorizedWithEvidence(ctx context.Context, c
 	}
 	resolution.TransitionReceipt = &receipt
 	return resolution, nil
-}
-
-func (a *RouteAuthority) applyFrozenBootstrap(ctx context.Context, candidate FrozenRouteBootstrapCandidate, acceptance G3PromotionAcceptance, rollback bool) (RouteResolution, error) {
-	if err := candidate.Validate(); err != nil {
-		return RouteResolution{}, err
-	}
-	if err := a.verifyFrozenOwnerApproval(candidate.RouteSlotID, candidate.Verification, candidate.ApprovalEvidence); err != nil {
-		return RouteResolution{}, err
-	}
-	if err := acceptance.verifyBootstrap(a.promotionKey, candidate); err != nil {
-		return RouteResolution{}, err
-	}
-	plan := candidate.Bootstrap
-	companion := candidate.Rollback
-	if rollback {
-		companion = candidate.Bootstrap
-		current, err := a.Resolve(ctx, candidate.RouteSlotID)
-		if err == nil {
-			bootstrapCommand := candidate.Bootstrap.command(routeledger.ApprovalRef(current.LatestReceipt.ApprovalRef))
-			if current.Slot.Generation != 1 || !routeledger.SameVersion(current.Slot.Current, candidate.Verification.Version) || current.Slot.LatestReceiptID != candidate.Rollback.RollbackTargetReceiptID || !transitionReceiptMatchesCommand(current.LatestReceipt, bootstrapCommand) {
-				return RouteResolution{}, routeledger.ErrStaleTransition
-			}
-		} else if !errors.Is(err, routeledger.ErrSlotNotFound) {
-			return RouteResolution{}, err
-		}
-		plan = candidate.Rollback
-	} else {
-		current, err := a.Resolve(ctx, candidate.RouteSlotID)
-		if err == nil {
-			bootstrapCommand := candidate.Bootstrap.command(routeledger.ApprovalRef(current.LatestReceipt.ApprovalRef))
-			if current.Slot.Generation != 1 || !routeledger.SameVersion(current.Slot.Current, candidate.Verification.Version) || current.Slot.LatestReceiptID != candidate.Rollback.RollbackTargetReceiptID || !transitionReceiptMatchesCommand(current.LatestReceipt, bootstrapCommand) {
-				return RouteResolution{}, routeledger.ErrStaleTransition
-			}
-		} else if !errors.Is(err, routeledger.ErrSlotNotFound) {
-			return RouteResolution{}, err
-		}
-	}
-	approval, err := decodeOwnerApproval(candidate.ApprovalEvidence)
-	if err != nil {
-		return RouteResolution{}, err
-	}
-	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(plan.Kind), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, plan, companion)
-	if err != nil {
-		return RouteResolution{}, err
-	}
-	command := execution.command(gate)
-	return a.transitionAuthorizedWithEvidence(ctx, command, []routeledger.AuthorizationEvidence{gate, candidate.ApprovalEvidence, candidate.CertificateEvidence})
-}
-
-func (a *RouteAuthority) applyFrozenPromotion(ctx context.Context, candidate FrozenRoutePromotionCandidate, acceptance G3PromotionAcceptance, rollback bool) (RouteResolution, error) {
-	if err := candidate.Validate(); err != nil {
-		return RouteResolution{}, err
-	}
-	if err := a.verifyFrozenOwnerApproval(candidate.Route.Slot.ID, candidate.Verification, candidate.ApprovalEvidence); err != nil {
-		return RouteResolution{}, err
-	}
-	if err := acceptance.verify(a.promotionKey, candidate); err != nil {
-		return RouteResolution{}, err
-	}
-	current, err := a.Resolve(ctx, candidate.Route.Slot.ID)
-	if err != nil {
-		return RouteResolution{}, err
-	}
-	plan := candidate.Promote
-	companion := candidate.Rollback
-	if rollback {
-		if err := verifyPromotedSuccessor(current, candidate, acceptance); err != nil {
-			return RouteResolution{}, err
-		}
-		plan = candidate.Rollback
-		companion = candidate.Promote
-	} else if current.Slot.Generation != candidate.Route.Slot.Generation || !routeledger.SameVersion(current.Slot.Current, candidate.Route.Slot.Current) || current.Slot.LatestReceiptID != candidate.Route.Slot.LatestReceiptID {
-		return RouteResolution{}, routeledger.ErrStaleTransition
-	}
-	approval, err := decodeOwnerApproval(candidate.ApprovalEvidence)
-	if err != nil {
-		return RouteResolution{}, err
-	}
-	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(plan.Kind), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, plan, companion)
-	if err != nil {
-		return RouteResolution{}, err
-	}
-	command := execution.command(gate)
-	evidence := []routeledger.AuthorizationEvidence{gate, candidate.ApprovalEvidence, candidate.CertificateEvidence}
-	return a.transitionAuthorizedWithEvidence(ctx, command, evidence)
-}
-
-func verifyPromotedSuccessor(current RouteResolution, candidate FrozenRoutePromotionCandidate, acceptance G3PromotionAcceptance) error {
-	approval, err := decodeOwnerApproval(candidate.ApprovalEvidence)
-	if err != nil {
-		return err
-	}
-	execution, gate, err := newAuthorizedRouteExecution(candidate.ID, string(routeledger.TransitionPromote), approval, candidate.Verification, candidate.CertificateEvidence.Ref, acceptance, candidate.PreparedAt, candidate.Promote, candidate.Rollback)
-	if err != nil {
-		return err
-	}
-	command := execution.command(gate)
-	receipt := current.LatestReceipt
-	if current.TransitionReceipt != nil {
-		receipt = *current.TransitionReceipt
-	}
-	if current.Slot.Generation != candidate.Route.Slot.Generation+1 || !routeledger.SameVersion(current.Slot.Current, candidate.Verification.Version) || current.Slot.LatestReceiptID != receipt.ID || !transitionReceiptMatchesCommand(receipt, command) {
-		return routeledger.ErrStaleTransition
-	}
-	return nil
 }
 
 func (a *RouteAuthority) PinCode(ctx context.Context, closure computerversion.CodeClosure) (computerversion.CodeClosure, error) {
@@ -367,10 +145,6 @@ func (a *RouteAuthority) PinArtifactProgram(ctx context.Context, program compute
 	return catalog.PinArtifactProgram(ctx, program)
 }
 
-func (a *RouteAuthority) PinAuthorizationEvidence(ctx context.Context, evidence routeledger.AuthorizationEvidence) (routeledger.AuthorizationEvidence, error) {
-	return a.ledger.PinAuthorizationEvidence(ctx, evidence)
-}
-
 func (h *Handler) requireComputerVersionRoute(ctx context.Context, userID, desktopID string) error {
 	if h.routeAuthority == nil {
 		if h.routeAuthorityRequired {
@@ -382,17 +156,8 @@ func (h *Handler) requireComputerVersionRoute(ctx context.Context, userID, deskt
 	if err != nil {
 		return err
 	}
-	resolution, err := h.routeAuthority.Resolve(ctx, slotID)
-	if err != nil {
+	if _, err := h.routeAuthority.Resolve(ctx, slotID); err != nil {
 		return fmt.Errorf("vmctl: immutable ComputerVersion route %s unavailable: %w", slotID, err)
-	}
-	if own := h.registry.GetOwnershipForDesktop(userID, desktopID); own != nil && own.SnapshotKind == "constructed-computer-version" {
-		if !own.ConstructionCommitted || validateConstructedOwnership(own) != nil {
-			return fmt.Errorf("vmctl: constructed lifecycle is not finalized for D-ROUTE")
-		}
-		if *own.ConstructionVersion != resolution.Slot.Current {
-			return fmt.Errorf("vmctl: constructed realization ComputerVersion does not match D-ROUTE")
-		}
 	}
 	return nil
 }
@@ -409,36 +174,12 @@ func (h *Handler) SetRouteAuthority(authority *RouteAuthority) {
 	h.routeAuthority = authority
 }
 
-func (h *Handler) HandlePinComputerVersionCode(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
-		return
-	}
-	if h.routeAuthority == nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "ComputerVersion route authority unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var closure computerversion.CodeClosure
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&closure); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid code closure"})
-		return
-	}
-	pinned, err := h.routeAuthority.PinCode(r.Context(), closure)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, pinned)
+type ComputerVersionInputs struct {
+	CodeClosure     computerversion.CodeClosure     `json:"code_closure"`
+	ArtifactProgram computerversion.ArtifactProgram `json:"artifact_program"`
 }
 
-func (h *Handler) HandlePinComputerVersionArtifactProgram(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleResolveComputerVersionInputs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
 		return
@@ -452,369 +193,19 @@ func (h *Handler) HandlePinComputerVersionArtifactProgram(w http.ResponseWriter,
 		return
 	}
 	defer r.Body.Close()
-	var program computerversion.ArtifactProgram
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&program); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid artifact program"})
-		return
-	}
-	pinned, err := h.routeAuthority.PinArtifactProgram(r.Context(), program)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, pinned)
-}
-
-func (h *Handler) HandlePinComputerVersionAuthorizationEvidence(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
-		return
-	}
-	if h.routeAuthority == nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "ComputerVersion route authority unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var evidence routeledger.AuthorizationEvidence
+	var version computerversion.ComputerVersion
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&evidence); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid authorization evidence"})
+	if err := decoder.Decode(&version); err != nil {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid ComputerVersion"})
 		return
 	}
-	pinned, err := h.routeAuthority.PinAuthorizationEvidence(r.Context(), evidence)
+	closure, program, err := h.routeAuthority.resolveVersionInputs(r.Context(), version)
 	if err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: err.Error()})
 		return
 	}
-	writeVMCTLJSON(w, http.StatusOK, pinned)
-}
-
-type prepareRoutePromotionRequest struct {
-	RouteSlotID  string                             `json:"route_slot_id"`
-	Construction computerversion.ConstructionResult `json:"construction"`
-	Approval     OwnerPromotionApproval             `json:"approval"`
-}
-
-type disposeConstructedCandidateRequest struct {
-	RouteSlotID   string                          `json:"route_slot_id"`
-	RealizationID string                          `json:"realization_id"`
-	Version       computerversion.ComputerVersion `json:"computer_version"`
-	DiskReceiptID string                          `json:"disk_receipt_id"`
-}
-
-type ConstructedCandidateDisposalReceipt struct {
-	RouteSlotID   string                          `json:"route_slot_id"`
-	RealizationID string                          `json:"realization_id"`
-	Version       computerversion.ComputerVersion `json:"computer_version"`
-	DiskReceiptID string                          `json:"disk_receipt_id"`
-	PriorState    VMState                         `json:"prior_state"`
-	DisposedAt    time.Time                       `json:"disposed_at"`
-	RouteAbsent   bool                            `json:"route_absent"`
-}
-
-type disposeRoutedConstructedRealizationRequest struct {
-	RouteSlotID             string                          `json:"route_slot_id"`
-	ExpectedGeneration      uint64                          `json:"expected_generation"`
-	ExpectedLatestReceiptID string                          `json:"expected_latest_receipt_id"`
-	RealizationID           string                          `json:"realization_id"`
-	Version                 computerversion.ComputerVersion `json:"computer_version"`
-	DiskReceiptID           string                          `json:"disk_receipt_id"`
-}
-
-type RoutedConstructedRealizationDisposalReceipt struct {
-	RouteSlotID     string                          `json:"route_slot_id"`
-	RouteGeneration uint64                          `json:"route_generation"`
-	LatestReceiptID string                          `json:"latest_receipt_id"`
-	RealizationID   string                          `json:"realization_id"`
-	Version         computerversion.ComputerVersion `json:"computer_version"`
-	DiskReceiptID   string                          `json:"disk_receipt_id"`
-	PriorState      VMState                         `json:"prior_state"`
-	DisposedAt      time.Time                       `json:"disposed_at"`
-	RoutePreserved  bool                            `json:"route_preserved"`
-}
-
-func (a *RouteAuthority) disposeUnroutedConstructedCandidate(ctx context.Context, registry *OwnershipRegistry, request disposeConstructedCandidateRequest, disposedAt time.Time) (ConstructedCandidateDisposalReceipt, error) {
-	if a == nil || a.ledger == nil || registry == nil {
-		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route authority and ownership registry are required")
-	}
-	a.mutationMu.Lock()
-	defer a.mutationMu.Unlock()
-	if _, _, err := a.ledger.Resolve(ctx, request.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
-		if err == nil {
-			return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route slot is present")
-		}
-		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: resolve route slot: %w", err)
-	}
-	priorState, err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID, true)
-	if err != nil {
-		return ConstructedCandidateDisposalReceipt{}, err
-	}
-	if _, _, err := a.ledger.Resolve(ctx, request.RouteSlotID); !errors.Is(err, routeledger.ErrSlotNotFound) {
-		return ConstructedCandidateDisposalReceipt{}, fmt.Errorf("vmctl candidate disposal: route absence changed during disposal")
-	}
-	return ConstructedCandidateDisposalReceipt{RouteSlotID: request.RouteSlotID, RealizationID: request.RealizationID, Version: request.Version, DiskReceiptID: request.DiskReceiptID, PriorState: priorState, DisposedAt: disposedAt.UTC(), RouteAbsent: true}, nil
-}
-
-func (a *RouteAuthority) disposeRoutedConstructedRealization(ctx context.Context, registry *OwnershipRegistry, request disposeRoutedConstructedRealizationRequest, disposedAt time.Time) (RoutedConstructedRealizationDisposalReceipt, error) {
-	if a == nil || a.ledger == nil || registry == nil {
-		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: route authority and ownership registry are required")
-	}
-	if request.ExpectedGeneration == 0 || strings.TrimSpace(request.ExpectedLatestReceiptID) == "" {
-		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: exact route receipt binding is required")
-	}
-	a.mutationMu.Lock()
-	defer a.mutationMu.Unlock()
-	beforeSlot, beforeReceipt, err := a.ledger.Resolve(ctx, request.RouteSlotID)
-	if err != nil {
-		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: resolve route slot: %w", err)
-	}
-	if beforeSlot.ID != request.RouteSlotID || beforeSlot.Generation != request.ExpectedGeneration || string(beforeSlot.LatestReceiptID) != request.ExpectedLatestReceiptID || !routeledger.SameVersion(beforeSlot.Current, request.Version) || beforeReceipt.ID != beforeSlot.LatestReceiptID || beforeReceipt.RouteSlotID != beforeSlot.ID || beforeReceipt.CommittedGeneration != beforeSlot.Generation || !routeledger.SameVersion(beforeReceipt.New, beforeSlot.Current) {
-		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: route receipt bindings do not match")
-	}
-	priorState, err := registry.disposeConstructedCandidateExact(request.RouteSlotID, request.RealizationID, request.Version, request.DiskReceiptID, false)
-	if err != nil {
-		return RoutedConstructedRealizationDisposalReceipt{}, err
-	}
-	afterSlot, afterReceipt, err := a.ledger.Resolve(ctx, request.RouteSlotID)
-	if err != nil || afterSlot != beforeSlot || afterReceipt != beforeReceipt {
-		return RoutedConstructedRealizationDisposalReceipt{}, fmt.Errorf("vmctl routed realization disposal: route receipt changed during disposal")
-	}
-	return RoutedConstructedRealizationDisposalReceipt{
-		RouteSlotID: request.RouteSlotID, RouteGeneration: beforeSlot.Generation, LatestReceiptID: string(beforeSlot.LatestReceiptID),
-		RealizationID: request.RealizationID, Version: request.Version, DiskReceiptID: request.DiskReceiptID,
-		PriorState: priorState, DisposedAt: disposedAt.UTC(), RoutePreserved: true,
-	}, nil
-}
-
-func (h *Handler) HandleDisposeRoutedConstructedRealization(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil || h.registry == nil {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "exact routed realization disposal unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var request disposeRoutedConstructedRealizationRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid routed realization disposal request"})
-		return
-	}
-	receipt, err := h.routeAuthority.disposeRoutedConstructedRealization(r.Context(), h.registry, request, time.Now().UTC())
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, receipt)
-}
-
-func (h *Handler) HandleDisposeUnroutedConstructedCandidate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil || h.registry == nil {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "exact constructed candidate disposal unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var request disposeConstructedCandidateRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid constructed candidate disposal request"})
-		return
-	}
-	receipt, err := h.routeAuthority.disposeUnroutedConstructedCandidate(r.Context(), h.registry, request, time.Now().UTC())
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, receipt)
-}
-
-func (h *Handler) HandlePrepareComputerVersionRouteBootstrap(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil || h.construction == nil {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "signed bootstrap preparation unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var request prepareRoutePromotionRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid route bootstrap request"})
-		return
-	}
-	ownerID, computerID, err := routeledger.ParseRouteSlotID(request.RouteSlotID)
-	if err != nil || request.Construction.Identity.OwnerID != ownerID || request.Construction.Identity.DesktopID != computerID || request.Construction.Identity.CandidateID != computerID {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "construction identity does not bind route slot"})
-		return
-	}
-	verification, err := h.construction.verify(r.Context(), request.Construction)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	candidate, err := h.routeAuthority.prepareBootstrap(request.RouteSlotID, verification, request.Approval, time.Now().UTC())
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, candidate)
-}
-
-func (h *Handler) HandlePrepareComputerVersionRoutePromotion(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
-		return
-	}
-	if h.routeAuthority == nil || h.construction == nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "ComputerVersion route authority or verifier unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var request prepareRoutePromotionRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid route promotion request"})
-		return
-	}
-	ownerID, computerID, err := routeledger.ParseRouteSlotID(request.RouteSlotID)
-	if err != nil || request.Construction.Identity.OwnerID != ownerID || request.Construction.Identity.DesktopID != computerID || request.Construction.Identity.CandidateID != computerID {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "construction identity does not bind route slot"})
-		return
-	}
-	verification, err := h.construction.verify(r.Context(), request.Construction)
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	candidate, err := h.routeAuthority.preparePromotion(r.Context(), request.RouteSlotID, verification, request.Approval, time.Now().UTC())
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, candidate)
-}
-
-type applyFrozenPromotionRequest struct {
-	Candidate  FrozenRoutePromotionCandidate `json:"candidate"`
-	Acceptance G3PromotionAcceptance         `json:"acceptance"`
-	Action     string                        `json:"action"`
-}
-
-type applyFrozenBootstrapRequest struct {
-	Candidate  FrozenRouteBootstrapCandidate `json:"candidate"`
-	Acceptance G3PromotionAcceptance         `json:"acceptance"`
-	Action     string                        `json:"action"`
-}
-
-func (h *Handler) applyFrozenBootstrapWithOwnership(ctx context.Context, candidate FrozenRouteBootstrapCandidate, acceptance G3PromotionAcceptance, rollback bool) (RouteResolution, error) {
-	h.routeLifecycleMu.Lock()
-	defer h.routeLifecycleMu.Unlock()
-	if h.registry == nil || h.routeAuthority == nil {
-		return RouteResolution{}, fmt.Errorf("vmctl constructed route lifecycle is not configured")
-	}
-	if err := candidate.Validate(); err != nil {
-		return RouteResolution{}, err
-	}
-	if err := h.routeAuthority.verifyFrozenOwnerApproval(candidate.RouteSlotID, candidate.Verification, candidate.ApprovalEvidence); err != nil {
-		return RouteResolution{}, err
-	}
-	if err := acceptance.verifyBootstrap(h.routeAuthority.promotionKey, candidate); err != nil {
-		return RouteResolution{}, err
-	}
-	verification := candidate.Verification
-	if rollback {
-		resolution, err := h.routeAuthority.applyFrozenBootstrap(ctx, candidate, acceptance, true)
-		if err != nil {
-			return RouteResolution{}, err
-		}
-		if err := h.registry.setConstructedCandidatePublishedExact(candidate.RouteSlotID, verification.VMID, verification.Version, verification.DiskReceiptID, false); err != nil {
-			return resolution, fmt.Errorf("vmctl bootstrap rollback removed route but could not unpublish exact ownership: %w", err)
-		}
-		return resolution, nil
-	}
-	current, err := h.routeAuthority.Resolve(ctx, candidate.RouteSlotID)
-	if err == nil {
-		bootstrapCommand := candidate.Bootstrap.command(routeledger.ApprovalRef(current.LatestReceipt.ApprovalRef))
-		if current.Slot.Generation != 1 || !routeledger.SameVersion(current.Slot.Current, verification.Version) || current.Slot.LatestReceiptID != candidate.Rollback.RollbackTargetReceiptID || !transitionReceiptMatchesCommand(current.LatestReceipt, bootstrapCommand) {
-			return RouteResolution{}, routeledger.ErrStaleTransition
-		}
-	} else if !errors.Is(err, routeledger.ErrSlotNotFound) {
-		return RouteResolution{}, err
-	}
-	if err := h.registry.setConstructedCandidatePublishedExact(candidate.RouteSlotID, verification.VMID, verification.Version, verification.DiskReceiptID, true); err != nil {
-		return RouteResolution{}, err
-	}
-	resolution, err := h.routeAuthority.applyFrozenBootstrap(ctx, candidate, acceptance, false)
-	if err == nil {
-		return resolution, nil
-	}
-	if compensationErr := h.registry.setConstructedCandidatePublishedExact(candidate.RouteSlotID, verification.VMID, verification.Version, verification.DiskReceiptID, false); compensationErr != nil {
-		return RouteResolution{}, errors.Join(err, fmt.Errorf("vmctl bootstrap refusal could not restore unpublished ownership: %w", compensationErr))
-	}
-	return RouteResolution{}, err
-}
-
-func (h *Handler) HandleApplyFrozenComputerVersionBootstrap(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost || !isInternalCaller(r) || h.routeAuthority == nil {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "signed bootstrap unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var request applyFrozenBootstrapRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || (request.Action != "bootstrap" && request.Action != "rollback") {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid frozen bootstrap request"})
-		return
-	}
-	resolution, err := h.applyFrozenBootstrapWithOwnership(r.Context(), request.Candidate, request.Acceptance, request.Action == "rollback")
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, resolution)
-}
-
-func (h *Handler) HandleApplyFrozenComputerVersionPromotion(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
-		return
-	}
-	if h.routeAuthority == nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "ComputerVersion route authority unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var request applyFrozenPromotionRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || (request.Action != "promote" && request.Action != "rollback") {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid frozen promotion request"})
-		return
-	}
-	h.routeLifecycleMu.Lock()
-	resolution, err := h.routeAuthority.applyFrozenPromotion(r.Context(), request.Candidate, request.Acceptance, request.Action == "rollback")
-	h.routeLifecycleMu.Unlock()
-	if err != nil {
-		writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, resolution)
+	writeVMCTLJSON(w, http.StatusOK, ComputerVersionInputs{CodeClosure: closure, ArtifactProgram: program})
 }
 
 func (h *Handler) HandleResolveComputerVersionRoute(w http.ResponseWriter, r *http.Request) {
@@ -842,72 +233,14 @@ func (h *Handler) HandleResolveComputerVersionRoute(w http.ResponseWriter, r *ht
 	writeVMCTLJSON(w, http.StatusOK, resolution)
 }
 
-func (h *Handler) HandleTransitionComputerVersionRoute(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeVMCTLJSON(w, http.StatusMethodNotAllowed, vmctlErrorResponse{Error: "method not allowed"})
-		return
-	}
-	if !isInternalCaller(r) {
-		writeVMCTLJSON(w, http.StatusForbidden, vmctlErrorResponse{Error: "internal caller required"})
-		return
-	}
-	if h.routeAuthority == nil {
-		writeVMCTLJSON(w, http.StatusServiceUnavailable, vmctlErrorResponse{Error: "ComputerVersion route authority unavailable"})
-		return
-	}
-	defer r.Body.Close()
-	var command routeledger.TransitionCommand
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&command); err != nil {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "invalid route transition"})
-		return
-	}
-	resolution, err := h.routeAuthority.Transition(r.Context(), command)
-	if err != nil {
-		status := http.StatusBadRequest
-		if errors.Is(err, routeledger.ErrStaleTransition) || errors.Is(err, routeledger.ErrIdempotencyReuse) {
-			status = http.StatusConflict
-		} else if errors.Is(err, routeledger.ErrSlotNotFound) || errors.Is(err, computerversion.ErrInputNotFound) {
-			status = http.StatusNotFound
-		}
-		writeVMCTLJSON(w, status, vmctlErrorResponse{Error: err.Error()})
-		return
-	}
-	writeVMCTLJSON(w, http.StatusOK, resolution)
-}
-
-func PinComputerVersionCodeEndpoint(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-inputs/pin-code"
-}
-
-func PinComputerVersionArtifactProgramEndpoint(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-inputs/pin-artifact-program"
-}
-
-func PinComputerVersionAuthorizationEvidenceEndpoint(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/pin-authorization-evidence"
-}
-
-func PrepareComputerVersionRouteBootstrapEndpoint(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/prepare-bootstrap"
-}
-func ApplyFrozenComputerVersionBootstrapEndpoint(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/apply-bootstrap"
-}
-
-func ApplyFrozenComputerVersionPromotionEndpoint(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/apply-promotion"
-}
-
-func PrepareComputerVersionRoutePromotionEndpoint(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/prepare-promotion"
+func ResolveComputerVersionInputsEndpoint(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-inputs/resolve"
 }
 
 func ResolveComputerVersionRouteEndpoint(baseURL string) string {
 	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/resolve"
 }
 
-func TransitionComputerVersionRouteEndpoint(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/transition"
+func ApplySelfDevelopmentRouteProjectionEndpoint(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/internal/vmctl/computer-version-routes/apply-self-development"
 }

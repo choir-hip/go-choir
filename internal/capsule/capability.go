@@ -12,18 +12,18 @@ import (
 // Capability is an Ed25519-signed token minted by HostAuthority.
 // The cosuper never sees the raw capsule ID — it gets an opaque handle.
 type Capability struct {
-	CapabilityID   string    `json:"capability_id"`    // stable unique ID (used in revocation + session binding)
-	Handle         string    `json:"handle"`           // opaque handle, e.g. "build-a" (agent-facing)
-	CapsuleID      string    `json:"capsule_id"`       // real capsule UUID, or "" for wildcard (researcher)
-	AgentRunID     string    `json:"agent_run_id"`     // which agent run this cap is for
-	AgentRole      AgentRole `json:"agent_role"`       // determines verb set
-	TargetCapsule  string    `json:"target_capsule"`   // capsule ID, or "*" for all (researcher)
-	Verbs          VerbSet   `json:"verbs"`            // role-defined verb set
-	ExternalAccess []string  `json:"external_access"`  // e.g. ["dolt:write", "message:send"] for researcher
-	CommitEpoch    uint64    `json:"commit_epoch"`     // audit metadata only (NOT enforced for exec/read/write)
-	ExpiresAt      time.Time `json:"expires_at"`       // capability expiry
-	KeyID          string    `json:"key_id"`           // which signing key was used (for rotation)
-	Signature      []byte    `json:"signature"`        // Ed25519 signature over all fields
+	CapabilityID   string    `json:"capability_id"`   // stable unique ID (used in revocation + session binding)
+	Handle         string    `json:"handle"`          // opaque handle, e.g. "build-a" (agent-facing)
+	CapsuleID      string    `json:"capsule_id"`      // real capsule UUID, or "" for wildcard (researcher)
+	AgentRunID     string    `json:"agent_run_id"`    // which agent run this cap is for
+	AgentRole      AgentRole `json:"agent_role"`      // determines verb set
+	TargetCapsule  string    `json:"target_capsule"`  // capsule ID, or "*" for all (researcher)
+	Verbs          VerbSet   `json:"verbs"`           // role-defined verb set
+	ExternalAccess []string  `json:"external_access"` // e.g. ["dolt:write", "message:send"] for researcher
+	CommitEpoch    uint64    `json:"commit_epoch"`    // audit metadata only (NOT enforced for exec/read/write)
+	ExpiresAt      time.Time `json:"expires_at"`      // capability expiry
+	KeyID          string    `json:"key_id"`          // which signing key was used (for rotation)
+	Signature      []byte    `json:"signature"`       // Ed25519 signature over all fields
 }
 
 // signingPayload returns the canonical bytes that are signed by HostAuthority.

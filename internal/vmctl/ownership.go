@@ -19,8 +19,9 @@ package vmctl
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -32,13 +33,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
-	"unicode"
 
-	"github.com/yusefmosiah/go-choir/internal/computerversion"
-	"github.com/yusefmosiah/go-choir/internal/diskinstantiation"
-	"github.com/yusefmosiah/go-choir/internal/routeledger"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 // VMState represents the lifecycle state of a VM.
@@ -76,12 +73,11 @@ const (
 	PrimaryDesktopID = "primary"
 )
 
-// VMKind distinguishes interactive desktop VMs from headless worker VMs.
+// VMKind classifies persistent computer implementations.
 type VMKind string
 
 const (
 	VMKindInteractive VMKind = "interactive"
-	VMKindWorker      VMKind = "worker"
 )
 
 // VMOwnership represents the assignment of a user to a specific VM.
@@ -92,54 +88,15 @@ type VMOwnership struct {
 	// UserID is the authenticated user who owns this VM.
 	UserID string `json:"user_id"`
 
-	// DesktopID is the desktop/workspace selector this interactive VM belongs to.
-	// For worker VMs, this is the parent desktop selector the worker belongs to.
+	// DesktopID is the stable workspace selector for this computer.
 	DesktopID string `json:"desktop_id"`
 
-	// Kind distinguishes interactive desktops from headless worker VMs.
+	// Kind identifies the interactive computer implementation.
 	Kind VMKind `json:"kind,omitempty"`
-
-	// ParentDesktopID records the source desktop when this desktop was forked
-	// from another interactive desktop.
-	ParentDesktopID string `json:"parent_desktop_id,omitempty"`
-
-	// ParentVMID records the source VM whose persistent data image was used to
-	// create this VM. It is empty for primary desktops and host-process fallback
-	// forks that cannot materialize a separate disk image.
-	ParentVMID string `json:"parent_vm_id,omitempty"`
-
-	// SnapshotKind describes the fork materialization semantics. This makes
-	// metadata-only copies visibly different from data-disk snapshots.
-	SnapshotKind string `json:"snapshot_kind,omitempty"`
-
-	// WorkerID is the typed handle identifier for worker VMs. Empty for
-	// interactive desktop VMs.
-	WorkerID string `json:"worker_id,omitempty"`
-
-	// ParentAgentID is the durable super/agent identity that requested a worker.
-	ParentAgentID string `json:"parent_agent_id,omitempty"`
-
-	// TrajectoryID ties a worker request back to the user-visible workflow.
-	TrajectoryID string `json:"trajectory_id,omitempty"`
-
-	// Purpose is the caller-provided reason for this worker VM.
-	Purpose string `json:"purpose,omitempty"`
-
-	// ObjectiveFingerprint is a normalized objective identity used to collapse
-	// accidental duplicate worker requests without hiding explicit portfolios.
-	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
-
-	// MachineClass is the requested resource envelope for this VM.
-	MachineClass string `json:"machine_class,omitempty"`
 
 	// WarmnessClass is the typed lifecycle policy class for keepalive and
 	// reclaim decisions. Public health exposes only aggregate counts.
 	WarmnessClass WarmnessClass `json:"warmness_class,omitempty"`
-
-	// Published indicates whether this desktop is user-switchable through the
-	// normal browser/proxy routing path. Background candidate desktops stay
-	// unpublished until explicitly published by the control plane.
-	Published bool `json:"published"`
 
 	// SandboxURL is the URL where this VM's sandbox runtime is reachable.
 	SandboxURL string `json:"sandbox_url"`
@@ -167,41 +124,6 @@ type VMOwnership struct {
 	// StoppedBy indicates why the VM was stopped. Empty if running.
 	// Valid values: "idle", "logout", "recovery", "manual".
 	StoppedBy string `json:"stopped_by,omitempty"`
-
-	// ConstructionVersion and ConstructionDisk bind constructor-created
-	// candidates to the exact immutable computer and attach-only device across
-	// vmctl restarts. They are absent on legacy ownerships.
-	ConstructionVersion   *computerversion.ComputerVersion `json:"construction_version,omitempty"`
-	ConstructionDisk      *diskinstantiation.Receipt       `json:"construction_disk,omitempty"`
-	ConstructionCommitted bool                             `json:"construction_committed,omitempty"`
-}
-
-// WorkerRequest is the typed internal vmctl request for a background worker VM.
-type WorkerRequest struct {
-	UserID               string `json:"user_id"`
-	DesktopID            string `json:"desktop_id,omitempty"`
-	ParentAgentID        string `json:"parent_agent_id"`
-	TrajectoryID         string `json:"trajectory_id,omitempty"`
-	Purpose              string `json:"purpose"`
-	ObjectiveFingerprint string `json:"objective_fingerprint,omitempty"`
-	MachineClass         string `json:"machine_class,omitempty"`
-	AllowParallel        bool   `json:"allow_parallel,omitempty"`
-}
-
-// WorkerVMHandle is the typed result returned when vmctl provisions a worker VM.
-type WorkerVMHandle struct {
-	Kind                 VMKind  `json:"kind"`
-	WorkerID             string  `json:"worker_id"`
-	VMID                 string  `json:"vm_id"`
-	UserID               string  `json:"user_id"`
-	DesktopID            string  `json:"desktop_id"`
-	ParentAgentID        string  `json:"parent_agent_id,omitempty"`
-	TrajectoryID         string  `json:"trajectory_id,omitempty"`
-	Purpose              string  `json:"purpose"`
-	ObjectiveFingerprint string  `json:"objective_fingerprint,omitempty"`
-	MachineClass         string  `json:"machine_class"`
-	SandboxURL           string  `json:"sandbox_url"`
-	State                VMState `json:"state"`
 }
 
 // IsReady returns true if the VM is in a state that can serve routed requests.
@@ -214,9 +136,6 @@ func (o *VMOwnership) IsReady() bool {
 // the registry delegates VM boot/stop/resume/recover operations to the
 // concrete vmmanager.Manager. When Firecracker is not available, the
 // registry runs in host-process mode with no-op VM lifecycle calls.
-type configuredVMReattacher interface {
-	ReattachVMWithConfig(vmID, hostURL string, epoch int64, cfg VMManagerConfig) (*VMInstanceInfo, error)
-}
 
 type VMManager interface {
 	// BootVM launches a new Firecracker VM and returns its instance info.
@@ -270,52 +189,14 @@ type VMManagerConfig struct {
 	MachineCPUCount   int
 	MachineMemSizeMib int
 	PersistentDir     string
-	SourceVMID        string
-	DataDevicePath    string
 	// GatewayToken is the credential token for the sandbox to authenticate
 	// to the host-side gateway. Written to the persistent directory so the
 	// guest init script can read it and set RUNTIME_GATEWAY_TOKEN.
-	GatewayToken string
-	ComputerKind string
-	OwnerID      string
-	DesktopID    string
-	WorkerID     string
-	CandidateID  string
-	CodeRef      string
-}
-
-// VMImageProfile points a VM boot at a non-default guest image. Ordinary
-// workers use the manager defaults; evidence/verifier classes such as
-// worker-playwright use explicit profile paths so their heavy browser closure
-// does not leak into every user/candidate VM.
-type VMImageProfile struct {
-	KernelImagePath string
-	InitrdPath      string
-	RootfsPath      string
-	StoreDiskPath   string
-	KernelParams    string
-}
-
-// MissingRequiredFields returns required boot artifact fields that are absent
-// from a non-default image profile.
-func (p VMImageProfile) MissingRequiredFields() []string {
-	var missing []string
-	if strings.TrimSpace(p.KernelImagePath) == "" {
-		missing = append(missing, "kernel_image")
-	}
-	if strings.TrimSpace(p.InitrdPath) == "" {
-		missing = append(missing, "initrd")
-	}
-	if strings.TrimSpace(p.RootfsPath) == "" {
-		missing = append(missing, "rootfs")
-	}
-	if strings.TrimSpace(p.StoreDiskPath) == "" {
-		missing = append(missing, "store_disk")
-	}
-	if strings.TrimSpace(p.KernelParams) == "" {
-		missing = append(missing, "kernel_params")
-	}
-	return missing
+	GatewayToken               string
+	ComputerCredentialEnvelope string
+	ComputerKind               string
+	OwnerID                    string
+	DesktopID                  string
 }
 
 // VMInstanceInfo holds the information returned by the VM manager
@@ -347,9 +228,6 @@ type OwnershipRegistry struct {
 
 	// ownerships maps user/desktop composite keys to their active VM ownership.
 	ownerships map[string]*VMOwnership
-
-	// workerVMs maps typed worker handles to their active headless child VMs.
-	workerVMs map[string]*VMOwnership
 
 	// vmByID maps VM ID to ownership for reverse lookup.
 	vmByID map[string]*VMOwnership
@@ -401,24 +279,16 @@ type OwnershipRegistry struct {
 	// VM lifecycle operations to this manager for real Firecracker VMs.
 	vmManager VMManager
 
-	// workerImageProfiles maps worker machine classes to alternate guest image
-	// artifacts. This keeps heavyweight evidence workers (for example
-	// worker-playwright) out of the default VM image.
-	workerImageProfiles map[string]VMImageProfile
-
 	// gatewayURL is the URL of the host-side gateway service. When set,
 	// the registry issues gateway tokens for VM sandboxes before booting
 	// so the guest sandbox can authenticate to the gateway.
 	gatewayURL string
+	corpusdURL string
 
 	// persistencePath stores ownership metadata across vmctl restarts. The
 	// Firecracker data disks live under the VM manager state dir; this file is
 	// the durable routing index that lets vmctl reattach to those disks.
 	persistencePath string
-
-	// detachedLegacy holds restart-durable, restorable legacy ownership receipts.
-	// The detached VM state remains under its existing VM ID and is never copied.
-	detachedLegacy map[string]LegacyOwnershipDetachReceipt
 }
 
 // NewOwnershipRegistry creates a new ownership registry.
@@ -430,7 +300,6 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 	}
 	return &OwnershipRegistry{
 		ownerships:                 make(map[string]*VMOwnership),
-		workerVMs:                  make(map[string]*VMOwnership),
 		vmByID:                     make(map[string]*VMOwnership),
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
 		gatewayCredentialNextCheck: make(map[string]time.Time),
@@ -441,17 +310,14 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		retentionPrune:             DefaultRetentionPruneConfig(),
 		retentionUserEmails:        make(map[string]string),
 		warmnessPolicy:             DefaultWarmnessPolicyConfig(),
-		workerImageProfiles:        make(map[string]VMImageProfile),
-		detachedLegacy:             make(map[string]LegacyOwnershipDetachReceipt),
 		epochCounter:               1,
 	}
 }
 
 type persistedOwnershipState struct {
-	SavedAt        time.Time                               `json:"saved_at"`
-	EpochCounter   int64                                   `json:"epoch_counter"`
-	Ownerships     []*VMOwnership                          `json:"ownerships"`
-	DetachedLegacy map[string]LegacyOwnershipDetachReceipt `json:"detached_legacy_receipts,omitempty"`
+	SavedAt      time.Time      `json:"saved_at"`
+	EpochCounter int64          `json:"epoch_counter"`
+	Ownerships   []*VMOwnership `json:"ownerships"`
 }
 
 // SetPersistencePath enables durable ownership metadata. Existing metadata is
@@ -492,19 +358,8 @@ func (r *OwnershipRegistry) loadLocked() error {
 	}
 
 	r.ownerships = make(map[string]*VMOwnership)
-	r.workerVMs = make(map[string]*VMOwnership)
 	r.vmByID = make(map[string]*VMOwnership)
 	r.pendingWaiters = make(map[string][]chan *VMOwnership)
-	r.detachedLegacy = make(map[string]LegacyOwnershipDetachReceipt, len(state.DetachedLegacy))
-	for id, receipt := range state.DetachedLegacy {
-		if id != receipt.ID {
-			return fmt.Errorf("load legacy detach receipt %s: key does not match receipt", id)
-		}
-		if err := receipt.Validate(); err != nil {
-			return fmt.Errorf("load legacy detach receipt %s: %w", id, err)
-		}
-		r.detachedLegacy[id] = receipt
-	}
 	maxEpoch := r.epochCounter
 	for _, loaded := range state.Ownerships {
 		if loaded == nil || strings.TrimSpace(loaded.VMID) == "" || strings.TrimSpace(loaded.UserID) == "" {
@@ -514,15 +369,6 @@ func (r *OwnershipRegistry) loadLocked() error {
 		own.UserID = strings.TrimSpace(own.UserID)
 		own.VMID = strings.TrimSpace(own.VMID)
 		own.DesktopID = normalizeDesktopID(own.DesktopID)
-		if own.SnapshotKind == "constructed-computer-version" {
-			if err := validateConstructedOwnership(&own); err != nil {
-				return fmt.Errorf("load constructed ownership %s: %w", own.VMID, err)
-			}
-			if !own.ConstructionCommitted {
-				own.State = VMStateFailed
-				own.StoppedBy = "construction-incomplete"
-			}
-		}
 		if own.Kind == "" {
 			own.Kind = VMKindInteractive
 		}
@@ -542,28 +388,8 @@ func (r *OwnershipRegistry) loadLocked() error {
 			maxEpoch = own.Epoch
 		}
 		ptr := &own
-		if own.Kind == VMKindWorker && strings.TrimSpace(own.WorkerID) != "" {
-			r.workerVMs[own.WorkerID] = ptr
-		} else {
-			r.ownerships[ownershipKey(own.UserID, own.DesktopID)] = ptr
-		}
+		r.ownerships[ownershipKey(own.UserID, own.DesktopID)] = ptr
 		r.vmByID[own.VMID] = ptr
-	}
-	detachedRoutes := make(map[string]string, len(r.detachedLegacy))
-	for id, receipt := range r.detachedLegacy {
-		if existingID, exists := detachedRoutes[receipt.RouteSlotID]; exists {
-			return fmt.Errorf("load legacy detach receipts %s and %s: duplicate route %s", existingID, id, receipt.RouteSlotID)
-		}
-		detachedRoutes[receipt.RouteSlotID] = id
-		if r.vmByID[receipt.Ownership.VMID] != nil {
-			return fmt.Errorf("load legacy detach receipt %s: VM %s is also registered", id, receipt.Ownership.VMID)
-		}
-		if owner := r.ownerships[ownershipKey(receipt.Ownership.UserID, receipt.Ownership.DesktopID)]; owner != nil {
-			constructedRollbackPair := owner.SnapshotKind == "constructed-computer-version" && owner.VMID != receipt.Ownership.VMID && owner.ConstructionCommitted && validateConstructedOwnership(owner) == nil
-			if !constructedRollbackPair {
-				return fmt.Errorf("load legacy detach receipt %s: owner desktop is also registered", id)
-			}
-		}
 	}
 	if state.EpochCounter > maxEpoch {
 		maxEpoch = state.EpochCounter
@@ -583,26 +409,18 @@ func (r *OwnershipRegistry) writePersistenceLocked() error {
 	if r.persistencePath == "" {
 		return nil
 	}
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		cp := *own
-		ownerships = append(ownerships, &cp)
-	}
-	for _, own := range r.workerVMs {
 		cp := *own
 		ownerships = append(ownerships, &cp)
 	}
 	sort.Slice(ownerships, func(i, j int) bool {
 		a, b := ownerships[i], ownerships[j]
-		ak := string(a.Kind) + "|" + a.UserID + "|" + a.DesktopID + "|" + a.WorkerID + "|" + a.VMID
-		bk := string(b.Kind) + "|" + b.UserID + "|" + b.DesktopID + "|" + b.WorkerID + "|" + b.VMID
+		ak := string(a.Kind) + "|" + a.UserID + "|" + a.DesktopID + "|" + a.VMID
+		bk := string(b.Kind) + "|" + b.UserID + "|" + b.DesktopID + "|" + b.VMID
 		return ak < bk
 	})
-	detached := make(map[string]LegacyOwnershipDetachReceipt, len(r.detachedLegacy))
-	for id, receipt := range r.detachedLegacy {
-		detached[id] = receipt
-	}
-	state := persistedOwnershipState{SavedAt: time.Now().UTC(), EpochCounter: r.epochCounter, Ownerships: ownerships, DetachedLegacy: detached}
+	state := persistedOwnershipState{SavedAt: time.Now().UTC(), EpochCounter: r.epochCounter, Ownerships: ownerships}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
@@ -630,228 +448,6 @@ func (r *OwnershipRegistry) SetVMManager(mgr VMManager) {
 	r.mu.Unlock()
 }
 
-func validateConstructedOwnership(own *VMOwnership) error {
-	if own == nil || own.ConstructionVersion == nil || !own.ConstructionVersion.Valid() || own.ConstructionDisk == nil {
-		return fmt.Errorf("constructed lifecycle binding is incomplete")
-	}
-	if err := diskinstantiation.VerifyReceiptIntegrity(*own.ConstructionDisk); err != nil {
-		return fmt.Errorf("constructed disk receipt: %w", err)
-	}
-	if own.ConstructionDisk.RealizationID != own.VMID || strings.TrimSpace(own.ConstructionDisk.DevicePath) == "" {
-		return fmt.Errorf("constructed disk receipt does not match VM identity")
-	}
-	return nil
-}
-
-func (r *OwnershipRegistry) beginConstructedCandidate(vmID, userID, desktopID, credential string, version computerversion.ComputerVersion, disk diskinstantiation.Receipt) error {
-	vmID = strings.TrimSpace(vmID)
-	userID = strings.TrimSpace(userID)
-	desktopID = strings.TrimSpace(desktopID)
-	if vmID == "" || userID == "" || desktopID == "" || !version.Valid() || disk.RealizationID != vmID {
-		return fmt.Errorf("vmctl: constructed candidate lifecycle identity is incomplete")
-	}
-	if err := diskinstantiation.VerifyReceiptIntegrity(disk); err != nil {
-		return fmt.Errorf("vmctl: constructed candidate disk receipt: %w", err)
-	}
-	key := ownershipKey(userID, desktopID)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.persistencePath == "" {
-		return fmt.Errorf("vmctl: constructed candidate requires durable ownership persistence")
-	}
-	if _, exists := r.vmByID[vmID]; exists {
-		return fmt.Errorf("vmctl: constructed candidate VM %s is already registered", vmID)
-	}
-	if _, exists := r.ownerships[key]; exists {
-		return fmt.Errorf("vmctl: constructed candidate desktop %s already exists for owner %s", desktopID, userID)
-	}
-	now := time.Now().UTC()
-	own := &VMOwnership{
-		VMID: vmID, UserID: userID, DesktopID: desktopID, Kind: VMKindInteractive,
-		SnapshotKind: "constructed-computer-version", Published: false,
-		State: VMStateBooting, CreatedAt: now, LastActiveAt: now,
-		SandboxCredential: credential, ConstructionVersion: &version, ConstructionDisk: &disk,
-	}
-	r.ownerships[key] = own
-	r.vmByID[vmID] = own
-	if err := r.writePersistenceLocked(); err != nil {
-		delete(r.ownerships, key)
-		delete(r.vmByID, vmID)
-		return fmt.Errorf("vmctl: persist constructed candidate intent: %w", err)
-	}
-	return nil
-}
-
-func (r *OwnershipRegistry) activateConstructedCandidate(vmID, sandboxURL string, epoch int64) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	own := r.vmByID[strings.TrimSpace(vmID)]
-	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.ConstructionCommitted || epoch <= 0 || strings.TrimSpace(sandboxURL) == "" {
-		return fmt.Errorf("vmctl: constructed candidate activation does not match durable intent")
-	}
-	priorURL, priorEpoch, priorState := own.SandboxURL, own.Epoch, own.State
-	own.SandboxURL = strings.TrimSpace(sandboxURL)
-	own.Epoch = epoch
-	own.State = VMStateActive
-	if err := r.writePersistenceLocked(); err != nil {
-		own.SandboxURL, own.Epoch, own.State = priorURL, priorEpoch, priorState
-		return fmt.Errorf("vmctl: persist constructed candidate activation: %w", err)
-	}
-	return nil
-}
-
-func (r *OwnershipRegistry) commitConstructedCandidate(vmID string, version computerversion.ComputerVersion, disk diskinstantiation.Receipt) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	own := r.vmByID[strings.TrimSpace(vmID)]
-	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.ConstructionVersion == nil || *own.ConstructionVersion != version || own.ConstructionDisk == nil || own.ConstructionDisk.DevicePath != disk.DevicePath {
-		return fmt.Errorf("vmctl: constructed candidate lifecycle binding mismatch")
-	}
-	if err := diskinstantiation.VerifyReceiptIntegrity(disk); err != nil || disk.RealizationID != own.VMID {
-		return fmt.Errorf("vmctl: final constructed candidate disk receipt is invalid: %v", err)
-	}
-	prior, priorCommitted := own.ConstructionDisk, own.ConstructionCommitted
-	own.ConstructionDisk = &disk
-	own.ConstructionCommitted = true
-	if err := r.writePersistenceLocked(); err != nil {
-		own.ConstructionDisk, own.ConstructionCommitted = prior, priorCommitted
-		return fmt.Errorf("vmctl: persist final constructed candidate evidence: %w", err)
-	}
-	return nil
-}
-
-func (r *OwnershipRegistry) setConstructedCandidatePublishedExact(routeSlotID, vmID string, version computerversion.ComputerVersion, diskReceiptID string, published bool) error {
-	ownerID, desktopID, err := routeledger.ParseRouteSlotID(routeSlotID)
-	if err != nil || strings.TrimSpace(vmID) == "" || !version.Valid() || strings.TrimSpace(diskReceiptID) == "" {
-		return fmt.Errorf("vmctl constructed route publication: exact identity bindings are required")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	own := r.vmByID[strings.TrimSpace(vmID)]
-	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.UserID != ownerID || own.DesktopID != desktopID || !own.ConstructionCommitted || validateConstructedOwnership(own) != nil || *own.ConstructionVersion != version || own.ConstructionDisk.ID != diskReceiptID {
-		return fmt.Errorf("vmctl constructed route publication: ownership bindings do not match")
-	}
-	if published && own.State != VMStateActive && own.State != VMStateDegraded {
-		return fmt.Errorf("vmctl constructed route publication: candidate is not active")
-	}
-	if own.Published == published {
-		return nil
-	}
-	priorPublished, priorActiveAt := own.Published, own.LastActiveAt
-	own.Published = published
-	own.LastActiveAt = time.Now().UTC()
-	if err := r.writePersistenceLocked(); err != nil {
-		own.Published, own.LastActiveAt = priorPublished, priorActiveAt
-		return fmt.Errorf("vmctl constructed route publication: persist state: %w", err)
-	}
-	return nil
-}
-
-func (r *OwnershipRegistry) markConstructedCandidateFailed(vmID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	own := r.vmByID[strings.TrimSpace(vmID)]
-	if own == nil || own.SnapshotKind != "constructed-computer-version" {
-		return nil
-	}
-	priorState, priorStoppedBy := own.State, own.StoppedBy
-	own.State = VMStateFailed
-	own.StoppedBy = "construction-failed"
-	if err := r.writePersistenceLocked(); err != nil {
-		own.State, own.StoppedBy = priorState, priorStoppedBy
-		return fmt.Errorf("vmctl: persist constructed candidate failure: %w", err)
-	}
-	return nil
-}
-
-func (r *OwnershipRegistry) disposeConstructedCandidateExact(routeSlotID, vmID string, version computerversion.ComputerVersion, diskReceiptID string, stopActive bool) (VMState, error) {
-	ownerID, desktopID, err := routeledger.ParseRouteSlotID(routeSlotID)
-	if err != nil || strings.TrimSpace(vmID) == "" || !version.Valid() || strings.TrimSpace(diskReceiptID) == "" {
-		return "", fmt.Errorf("vmctl candidate disposal: exact identity bindings are required")
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	own := r.vmByID[strings.TrimSpace(vmID)]
-	if own == nil || own.SnapshotKind != "constructed-computer-version" || own.UserID != ownerID || own.DesktopID != desktopID || own.Published || !own.ConstructionCommitted || validateConstructedOwnership(own) != nil || *own.ConstructionVersion != version || own.ConstructionDisk.ID != diskReceiptID {
-		return "", fmt.Errorf("vmctl candidate disposal: constructed ownership bindings do not match")
-	}
-	manager := r.vmManager
-	if manager == nil {
-		return "", fmt.Errorf("vmctl candidate disposal: candidate process state is not safely stopped")
-	}
-	priorState := own.State
-	instance := manager.GetVM(own.VMID)
-	switch own.State {
-	case VMStateActive, VMStateDegraded:
-		if !stopActive || instance == nil {
-			return "", fmt.Errorf("vmctl candidate disposal: candidate must be non-active")
-		}
-		switch strings.TrimSpace(instance.State) {
-		case "running", "active", "degraded":
-		default:
-			return "", fmt.Errorf("vmctl candidate disposal: candidate process state does not match active ownership")
-		}
-		// Exact ownership, version, disk, publication, and route bindings are
-		// validated before this side effect. Generic stop remains route-gated;
-		// only the unrouted disposal authority opts into this fate-sharing stop.
-		if err := manager.StopVM(own.VMID); err != nil {
-			return "", fmt.Errorf("vmctl candidate disposal: stop active candidate: %w", err)
-		}
-		own.State = VMStateStopped
-		own.StoppedBy = "candidate-disposal"
-		own.LastActiveAt = time.Now()
-	case VMStateStopped, VMStateHibernated, VMStateFailed:
-		if instance != nil {
-			switch strings.TrimSpace(instance.State) {
-			case "stopped", "hibernated", "failed":
-				// DestroyVMState is the existing terminal-state cleanup boundary.
-			default:
-				return "", fmt.Errorf("vmctl candidate disposal: candidate process state is not safely stopped")
-			}
-		}
-	default:
-		return "", fmt.Errorf("vmctl candidate disposal: candidate must be non-active")
-	}
-	key := ownershipKey(own.UserID, own.DesktopID)
-	delete(r.ownerships, key)
-	delete(r.vmByID, own.VMID)
-	if err := r.writePersistenceLocked(); err != nil {
-		r.ownerships[key] = own
-		r.vmByID[own.VMID] = own
-		if restoreErr := r.writePersistenceLocked(); restoreErr != nil {
-			return "", fmt.Errorf("vmctl candidate disposal: persist ownership removal: %v; persist stopped ownership: %w", err, restoreErr)
-		}
-		return "", fmt.Errorf("vmctl candidate disposal: persist ownership removal: %w", err)
-	}
-	if err := manager.DestroyVMState(own.VMID); err != nil {
-		r.ownerships[key] = own
-		r.vmByID[own.VMID] = own
-		if restoreErr := r.writePersistenceLocked(); restoreErr != nil {
-			return "", fmt.Errorf("vmctl candidate disposal: destroy state: %v; restore ownership: %w", err, restoreErr)
-		}
-		return "", fmt.Errorf("vmctl candidate disposal: destroy state: %w", err)
-	}
-	return priorState, nil
-}
-
-func (r *OwnershipRegistry) removeConstructedCandidate(vmID string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	own := r.vmByID[strings.TrimSpace(vmID)]
-	if own == nil || own.SnapshotKind != "constructed-computer-version" {
-		return nil
-	}
-	key := ownershipKey(own.UserID, own.DesktopID)
-	delete(r.ownerships, key)
-	delete(r.vmByID, own.VMID)
-	if err := r.writePersistenceLocked(); err != nil {
-		r.ownerships[key] = own
-		r.vmByID[own.VMID] = own
-		return fmt.Errorf("vmctl: persist constructed candidate removal: %w", err)
-	}
-	return nil
-}
-
 // ReattachManagedVMs adopts VM processes that survived vmctl restart only
 // after their owner/computer D-ROUTE has been independently authorized.
 func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard ComputerVersionRouteGuard) int {
@@ -860,11 +456,6 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 	candidates := make([]VMOwnership, 0)
 	if mgr != nil {
 		for _, own := range r.ownerships {
-			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.SandboxURL) != "" {
-				candidates = append(candidates, *own)
-			}
-		}
-		for _, own := range r.workerVMs {
 			if own.State == VMStateStopped && own.StoppedBy == "vmctl-restart" && strings.TrimSpace(own.SandboxURL) != "" {
 				candidates = append(candidates, *own)
 			}
@@ -882,18 +473,7 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 			log.Printf("vmctl: reattach refused for VM %s: %v", own.VMID, err)
 			continue
 		}
-		var info *VMInstanceInfo
-		var err error
-		if own.SnapshotKind == "constructed-computer-version" {
-			reattacher, ok := mgr.(configuredVMReattacher)
-			if !ok || !own.ConstructionCommitted || validateConstructedOwnership(&own) != nil {
-				log.Printf("vmctl: constructed reattach skipped for VM %s: finalized configured reattach unavailable", own.VMID)
-				continue
-			}
-			info, err = reattacher.ReattachVMWithConfig(own.VMID, own.SandboxURL, own.Epoch, vmManagerConfigForOwnership(&own, ""))
-		} else {
-			info, err = mgr.ReattachVM(own.VMID, own.SandboxURL, own.Epoch)
-		}
+		info, err := mgr.ReattachVM(own.VMID, own.SandboxURL, own.Epoch)
 		if err != nil {
 			log.Printf("vmctl: reattach skipped for VM %s: %v", own.VMID, err)
 			continue
@@ -918,27 +498,6 @@ func (r *OwnershipRegistry) ReattachManagedVMs(ctx context.Context, guard Comput
 	return reattached
 }
 
-// SetWorkerImageProfile registers an alternate guest image for a worker
-// machine class. It is intended for bounded evidence/verifier classes such as
-// worker-playwright, not for ordinary user or candidate computers.
-func (r *OwnershipRegistry) SetWorkerImageProfile(machineClass string, profile VMImageProfile) {
-	machineClass = strings.ToLower(strings.TrimSpace(machineClass))
-	if machineClass == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if strings.TrimSpace(profile.KernelImagePath) == "" &&
-		strings.TrimSpace(profile.InitrdPath) == "" &&
-		strings.TrimSpace(profile.RootfsPath) == "" &&
-		strings.TrimSpace(profile.StoreDiskPath) == "" &&
-		strings.TrimSpace(profile.KernelParams) == "" {
-		delete(r.workerImageProfiles, machineClass)
-		return
-	}
-	r.workerImageProfiles[machineClass] = profile
-}
-
 // SetGatewayURL configures the gateway URL for issuing sandbox tokens.
 // When set, the registry will issue a gateway token for each VM before
 // booting so the guest sandbox can authenticate to the gateway.
@@ -950,6 +509,14 @@ func (r *OwnershipRegistry) SetGatewayURL(url string) {
 	if len(vmIDs) > 0 {
 		go r.reconcileGatewayCredentialsForVMs(vmIDs)
 	}
+}
+
+// SetCorpusdURL configures the platform event service used to mint a
+// realization-bound guest bootstrap envelope before each fresh primary boot.
+func (r *OwnershipRegistry) SetCorpusdURL(url string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.corpusdURL = strings.TrimSpace(url)
 }
 
 // SetIdleTimeout configures the idle timeout for automatic VM lifecycle
@@ -1057,9 +624,6 @@ func (r *OwnershipRegistry) StartIdleSweeper(ctx context.Context, interval time.
 			if reclaimed := r.ReclaimPressureVMs(ctx, guard); reclaimed > 0 {
 				log.Printf("vmctl: pressure reclaim hibernated %d VM(s)", reclaimed)
 			}
-			if destroyed := r.ReclaimStaleVMState(ctx, guard); destroyed > 0 {
-				log.Printf("vmctl: pressure reclaim destroyed %d stale worker/candidate VM state directories", destroyed)
-			}
 		}
 		if result := r.PruneRetention(ctx, guard); result.Deleted > 0 {
 			log.Printf("vmctl: retention prune deleted %d VM state directorie(s), reclaimed %.1f MiB", result.Deleted, float64(result.BytesDeleted)/(1024*1024))
@@ -1104,91 +668,7 @@ func ownershipKey(userID, desktopID string) string {
 	return strings.TrimSpace(userID) + "|" + normalizeDesktopID(desktopID)
 }
 
-func workerHandleFromOwnership(own *VMOwnership) *WorkerVMHandle {
-	if own == nil {
-		return nil
-	}
-	return &WorkerVMHandle{
-		Kind:                 VMKindWorker,
-		WorkerID:             own.WorkerID,
-		VMID:                 own.VMID,
-		UserID:               own.UserID,
-		DesktopID:            own.DesktopID,
-		ParentAgentID:        own.ParentAgentID,
-		TrajectoryID:         own.TrajectoryID,
-		Purpose:              own.Purpose,
-		ObjectiveFingerprint: workerObjectiveFingerprintForOwnership(own),
-		MachineClass:         own.MachineClass,
-		SandboxURL:           own.SandboxURL,
-		State:                own.State,
-	}
-}
-
-func workerObjectiveFingerprintForOwnership(own *VMOwnership) string {
-	if own == nil {
-		return ""
-	}
-	if strings.TrimSpace(own.ObjectiveFingerprint) != "" {
-		return strings.TrimSpace(own.ObjectiveFingerprint)
-	}
-	return workerObjectiveFingerprint(own.UserID, own.DesktopID, own.ParentAgentID, own.TrajectoryID, own.Purpose)
-}
-
-func workerObjectiveFingerprint(userID, desktopID, parentAgentID, trajectoryID, purpose string) string {
-	parts := []string{
-		strings.TrimSpace(userID),
-		normalizeDesktopID(desktopID),
-		strings.TrimSpace(parentAgentID),
-		strings.TrimSpace(trajectoryID),
-		normalizeObjectiveText(purpose),
-	}
-	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(sum[:])
-}
-
-func normalizeObjectiveText(raw string) string {
-	var b strings.Builder
-	lastSpace := false
-	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-			lastSpace = false
-			continue
-		}
-		if !lastSpace && b.Len() > 0 {
-			b.WriteByte(' ')
-			lastSpace = true
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func normalizeWorkerMachineClass(raw string) (string, int, int, error) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "default", "standard", "worker", "worker-standard", "worker-default", "worker-small", "small":
-		return "worker-small", 1, 1024, nil
-	case "worker-medium", "medium":
-		return "worker-medium", 2, 4096, nil
-	case "worker-large", "large":
-		return "worker-large", 4, 8192, nil
-	case "worker-playwright", "playwright", "evidence", "evidence-browser", "verifier-browser":
-		return "worker-playwright", 4, 8192, nil
-	default:
-		return "", 0, 0, fmt.Errorf("unsupported machine_class %q", strings.TrimSpace(raw))
-	}
-}
-
-func workerMachineClassRequiresImageProfile(machineClass string) bool {
-	return strings.TrimSpace(machineClass) == "worker-playwright"
-}
-
 func machineShapeForOwnership(own *VMOwnership) (int, int) {
-	if own != nil && own.Kind == VMKindWorker {
-		_, cpu, mem, err := normalizeWorkerMachineClass(own.MachineClass)
-		if err == nil {
-			return cpu, mem
-		}
-	}
 	if own != nil && isPlatformOwnership(own) {
 		return platformVMCPUCount, platformVMMemSizeMib
 	}
@@ -1207,29 +687,10 @@ func computerKindForOwnership(own *VMOwnership) string {
 	if own == nil {
 		return "active"
 	}
-	if own.Kind == VMKindWorker {
-		return "worker"
-	}
 	if isPlatformOwnership(own) {
 		return "platform"
 	}
-	if own.ParentVMID != "" || own.ParentDesktopID != "" || normalizeDesktopID(own.DesktopID) != PrimaryDesktopID || own.WarmnessClass == WarmnessClassCandidate {
-		return "candidate"
-	}
 	return "active"
-}
-
-func candidateIDForOwnership(own *VMOwnership) string {
-	if own == nil {
-		return ""
-	}
-	if own.Kind == VMKindWorker {
-		return strings.TrimSpace(own.WorkerID)
-	}
-	if computerKindForOwnership(own) == "candidate" {
-		return normalizeDesktopID(own.DesktopID)
-	}
-	return ""
 }
 
 func activeOwnershipNeedsReadinessCheck(own *VMOwnership, mgr VMManager) bool {
@@ -1360,7 +821,9 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 		}
 		return nil, err
 	}
-	return mgr.BootVM(vmManagerConfigForOwnership(own, r.issueGatewayToken(own.VMID)))
+	cfg := vmManagerConfigForOwnership(own, r.issueGatewayToken(own.VMID))
+	cfg.ComputerCredentialEnvelope = r.issueComputerCredentialEnvelope(own.DesktopID, own.VMID, own.Epoch+1)
+	return mgr.BootVM(cfg)
 }
 
 func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManagerConfig {
@@ -1377,12 +840,6 @@ func vmManagerConfigForOwnership(own *VMOwnership, gatewayToken string) VMManage
 		ComputerKind:      computerKindForOwnership(own),
 		OwnerID:           own.UserID,
 		DesktopID:         own.DesktopID,
-		WorkerID:          own.WorkerID,
-		CandidateID:       candidateIDForOwnership(own),
-	}
-	if own.ConstructionCommitted && validateConstructedOwnership(own) == nil {
-		cfg.DataDevicePath = own.ConstructionDisk.DevicePath
-		cfg.CodeRef = string(own.ConstructionVersion.CodeRef)
 	}
 	return cfg
 }
@@ -1397,6 +854,85 @@ func (r *OwnershipRegistry) issueGatewayToken(sandboxID string) string {
 	gwURL := r.gatewayURL
 	r.mu.RUnlock()
 	return issueGatewayTokenAt(gwURL, sandboxID)
+}
+
+func (r *OwnershipRegistry) platformControlPublicKey(ctx context.Context, signer computerevent.SignerRef) (ed25519.PublicKey, error) {
+	r.mu.RLock()
+	corpusdURL := r.corpusdURL
+	r.mu.RUnlock()
+	if corpusdURL == "" || signer.SignerDomain != "platform-control" || signer.KeyID == "" {
+		return nil, fmt.Errorf("vmctl: platform control key authority unavailable")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(corpusdURL, "/")+"/internal/platform/control-key", nil)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("X-Internal-Caller", "true")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	var result struct {
+		SignerDomain string `json:"signer_domain"`
+		KeyID        string `json:"key_id"`
+		PublicKey    string `json:"public_key"`
+	}
+	if response.StatusCode != http.StatusOK || json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&result) != nil || result.SignerDomain != signer.SignerDomain || result.KeyID != signer.KeyID {
+		return nil, fmt.Errorf("vmctl: platform control key response refused")
+	}
+	publicKey, err := base64.RawStdEncoding.DecodeString(result.PublicKey)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("vmctl: platform control public key invalid")
+	}
+	return ed25519.PublicKey(publicKey), nil
+}
+
+func (r *OwnershipRegistry) issueComputerCredentialEnvelope(computerID, realizationID string, epoch int64) string {
+	r.mu.RLock()
+	corpusdURL := r.corpusdURL
+	r.mu.RUnlock()
+	if corpusdURL == "" || computerID == "" || realizationID == "" {
+		return ""
+	}
+	body, _ := json.Marshal(map[string]string{
+		"computer_id":     computerID,
+		"realization_id":  realizationID,
+		"idempotency_key": fmt.Sprintf("guest-credential:%s:%d", realizationID, epoch),
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), gatewayCredentialRequestTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(corpusdURL, "/")+"/internal/computers/credentials/issue", strings.NewReader(string(body)))
+	if err != nil {
+		return ""
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Internal-Caller", "true")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		log.Printf("vmctl: computer credential request failed for %s: %v", realizationID, err)
+		return ""
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		log.Printf("vmctl: computer credential issue returned %d for %s", response.StatusCode, realizationID)
+		return ""
+	}
+	var result struct {
+		Envelope json.RawMessage `json:"envelope"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 128<<10)).Decode(&result); err != nil {
+		return ""
+	}
+	var envelope any
+	if err := json.Unmarshal(result.Envelope, &envelope); err != nil {
+		return ""
+	}
+	canonical, err := computerevent.CanonicalJSON(envelope)
+	if err != nil {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(canonical)
 }
 
 func issueGatewayTokenAt(gwURL, sandboxID string) string {
@@ -1544,13 +1080,8 @@ func (r *OwnershipRegistry) ReconcileReadyGatewayCredentials() int {
 }
 
 func (r *OwnershipRegistry) readyVMIDsLocked() []string {
-	vmIDs := make([]string, 0, len(r.ownerships)+len(r.workerVMs))
+	vmIDs := make([]string, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		if own != nil && own.IsReady() {
-			vmIDs = append(vmIDs, own.VMID)
-		}
-	}
-	for _, own := range r.workerVMs {
 		if own != nil && own.IsReady() {
 			vmIDs = append(vmIDs, own.VMID)
 		}
@@ -1713,11 +1244,6 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 			// same way as a failed/degraded ownership.
 		}
 
-		if own.SnapshotKind == "constructed-computer-version" {
-			r.mu.Unlock()
-			return nil, fmt.Errorf("constructed VM %s requires audited reconstruction after lifecycle failure", own.VMID)
-		}
-
 		// VM exists but failed or is degraded. Create a new one
 		// with a fresh epoch. Clean up the old mapping.
 		delete(r.vmByID, own.VMID)
@@ -1750,7 +1276,6 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 		CreatedAt:    time.Now(),
 		LastActiveAt: time.Now(),
 		Epoch:        epoch,
-		Published:    true,
 	}
 
 	// Register pending waiters map before unlocking so other callers can find it.
@@ -1774,14 +1299,15 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 		gwToken := r.issueGatewayToken(vmID)
 
 		info, err := mgr.BootVM(VMManagerConfig{
-			VMID:              vmID,
-			GuestPort:         8085,
-			MachineCPUCount:   interactiveVMCPUCount,
-			MachineMemSizeMib: interactiveVMMemSizeMib,
-			GatewayToken:      gwToken,
-			ComputerKind:      "active",
-			OwnerID:           userID,
-			DesktopID:         desktopID,
+			VMID:                       vmID,
+			GuestPort:                  8085,
+			MachineCPUCount:            interactiveVMCPUCount,
+			MachineMemSizeMib:          interactiveVMMemSizeMib,
+			GatewayToken:               gwToken,
+			ComputerCredentialEnvelope: r.issueComputerCredentialEnvelope(desktopID, vmID, epoch),
+			ComputerKind:               "active",
+			OwnerID:                    userID,
+			DesktopID:                  desktopID,
 		})
 		if err != nil {
 			log.Printf("vmctl: Firecracker boot failed for VM %s: %v", vmID, err)
@@ -1854,317 +1380,6 @@ func (r *OwnershipRegistry) removePendingWaiter(key string, target chan *VMOwner
 		}
 	}
 	r.pendingWaiters[key] = waiters
-}
-
-// ForkDesktop creates or resumes a distinct interactive VM for a target desktop
-// derived from an existing source desktop. The target desktop must differ from
-// the source desktop and the source desktop must already exist.
-func (r *OwnershipRegistry) ForkDesktop(userID, sourceDesktopID, targetDesktopID string) (*VMOwnership, error) {
-	sourceDesktopID = normalizeDesktopID(sourceDesktopID)
-	targetDesktopID = normalizeDesktopID(targetDesktopID)
-	if sourceDesktopID == targetDesktopID {
-		return nil, fmt.Errorf("target desktop must differ from source desktop")
-	}
-
-	sourceKey := ownershipKey(userID, sourceDesktopID)
-	targetKey := ownershipKey(userID, targetDesktopID)
-
-	r.mu.Lock()
-	source := r.ownerships[sourceKey]
-	if source == nil {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("no source VM found for user %s desktop %s", userID, sourceDesktopID)
-	}
-	if source.State != VMStateActive && source.State != VMStateStopped && source.State != VMStateHibernated {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("source VM %s is not forkable while state=%s", source.VMID, source.State)
-	}
-
-	if own, ok := r.ownerships[targetKey]; ok {
-		own.ParentDesktopID = sourceDesktopID
-		if own.ParentVMID == "" {
-			own.ParentVMID = source.VMID
-		}
-		if own.SnapshotKind == "" {
-			own.SnapshotKind = "existing_target"
-		}
-		own.LastActiveAt = time.Now()
-		own.Published = false
-		r.saveLocked()
-		r.mu.Unlock()
-		log.Printf("vmctl: fork target desktop %s already exists for user %s on VM %s", targetDesktopID, userID, own.VMID)
-		return own, nil
-	}
-
-	if waiters, ok := r.pendingWaiters[targetKey]; ok {
-		ch := make(chan *VMOwnership, 1)
-		r.pendingWaiters[targetKey] = append(waiters, ch)
-		r.mu.Unlock()
-
-		own := <-ch
-		if own == nil {
-			return nil, fmt.Errorf("fork VM assignment failed for user %s desktop %s", userID, targetDesktopID)
-		}
-		return own, nil
-	}
-
-	mgr := r.vmManager
-	if mgr != nil && source.State == VMStateActive {
-		r.mu.Unlock()
-		return nil, fmt.Errorf("source VM %s is active; refusing unsafe live data image fork", source.VMID)
-	}
-
-	sourceVMID := source.VMID
-	now := time.Now()
-	vmID := generateVMID()
-	snapshotKind := "metadata_only"
-	if mgr != nil {
-		snapshotKind = "data_img_copy"
-	}
-	own := &VMOwnership{
-		VMID:            vmID,
-		UserID:          userID,
-		DesktopID:       targetDesktopID,
-		Kind:            VMKindInteractive,
-		WarmnessClass:   WarmnessClassCandidate,
-		ParentDesktopID: sourceDesktopID,
-		ParentVMID:      sourceVMID,
-		SnapshotKind:    snapshotKind,
-		SandboxURL:      r.sandboxURLForVM(vmID),
-		State:           VMStateBooting,
-		CreatedAt:       now,
-		LastActiveAt:    now,
-		Epoch:           r.nextEpoch(),
-		Published:       false,
-	}
-	r.pendingWaiters[targetKey] = nil
-	r.ownerships[targetKey] = own
-	r.vmByID[vmID] = own
-	r.saveLocked()
-	r.mu.Unlock()
-
-	if mgr != nil {
-		info, err := mgr.BootVM(VMManagerConfig{
-			VMID:              vmID,
-			GuestPort:         8085,
-			MachineCPUCount:   interactiveVMCPUCount,
-			MachineMemSizeMib: interactiveVMMemSizeMib,
-			SourceVMID:        sourceVMID,
-			GatewayToken:      r.issueGatewayToken(vmID),
-			ComputerKind:      "candidate",
-			OwnerID:           userID,
-			DesktopID:         targetDesktopID,
-			CandidateID:       targetDesktopID,
-		})
-		if err != nil {
-			log.Printf("vmctl: Firecracker fork boot failed for VM %s from %s: %v", vmID, sourceVMID, err)
-			r.mu.Lock()
-			own.State = VMStateFailed
-			r.saveLocked()
-			waiters := r.pendingWaiters[targetKey]
-			delete(r.pendingWaiters, targetKey)
-			r.mu.Unlock()
-			for _, ch := range waiters {
-				ch <- nil
-			}
-			return nil, fmt.Errorf("failed to boot fork VM %s from %s: %w", vmID, sourceVMID, err)
-		}
-		r.mu.Lock()
-		own.SandboxURL = info.HostURL
-		own.Epoch = info.Epoch
-		r.mu.Unlock()
-	}
-
-	r.transitionVM(vmID, VMStateActive)
-
-	r.mu.Lock()
-	waiters := r.pendingWaiters[targetKey]
-	delete(r.pendingWaiters, targetKey)
-	r.mu.Unlock()
-	for _, ch := range waiters {
-		ch <- own
-	}
-
-	log.Printf("vmctl: forked desktop %s from %s for user %s onto VM %s", targetDesktopID, sourceDesktopID, userID, own.VMID)
-	return own, nil
-}
-
-// RequestWorker provisions a headless child VM under an existing desktop and
-// returns a typed worker handle. Workers are keyed by worker_id, not by desktop
-// routing state, because multiple workers may belong to one desktop.
-func (r *OwnershipRegistry) RequestWorker(req WorkerRequest) (*VMOwnership, error) {
-	req.UserID = strings.TrimSpace(req.UserID)
-	req.DesktopID = normalizeDesktopID(req.DesktopID)
-	req.ParentAgentID = strings.TrimSpace(req.ParentAgentID)
-	req.TrajectoryID = strings.TrimSpace(req.TrajectoryID)
-	req.Purpose = strings.TrimSpace(req.Purpose)
-	req.ObjectiveFingerprint = strings.TrimSpace(req.ObjectiveFingerprint)
-	if req.UserID == "" {
-		return nil, fmt.Errorf("user_id is required")
-	}
-	if req.ParentAgentID == "" {
-		return nil, fmt.Errorf("parent_agent_id is required")
-	}
-	if req.Purpose == "" {
-		return nil, fmt.Errorf("purpose is required")
-	}
-	machineClass, cpuCount, memSizeMib, err := normalizeWorkerMachineClass(req.MachineClass)
-	if err != nil {
-		return nil, err
-	}
-	if req.ObjectiveFingerprint == "" {
-		req.ObjectiveFingerprint = workerObjectiveFingerprint(req.UserID, req.DesktopID, req.ParentAgentID, req.TrajectoryID, req.Purpose)
-	}
-
-	r.mu.RLock()
-	parent := r.ownerships[ownershipKey(req.UserID, req.DesktopID)]
-	if parent != nil && !req.AllowParallel {
-		for _, worker := range r.workerVMs {
-			if reusableWorkerLease(worker, req, machineClass) {
-				result := cloneOwnership(worker)
-				r.mu.RUnlock()
-				log.Printf("vmctl: reused worker VM %s for user %s desktop %s (worker_id=%s purpose=%q)", result.VMID, req.UserID, req.DesktopID, result.WorkerID, req.Purpose)
-				return result, nil
-			}
-		}
-	}
-	r.mu.RUnlock()
-	if parent == nil {
-		return nil, fmt.Errorf("no parent desktop VM found for user %s desktop %s", req.UserID, req.DesktopID)
-	}
-	var imageProfile VMImageProfile
-	hasImageProfile := false
-	r.mu.RLock()
-	mgrConfigured := r.vmManager != nil
-	if mgrConfigured {
-		imageProfile, hasImageProfile = r.workerImageProfiles[machineClass]
-	}
-	r.mu.RUnlock()
-	if mgrConfigured {
-		if workerMachineClassRequiresImageProfile(machineClass) && !hasImageProfile {
-			return nil, fmt.Errorf("%s requires a configured worker image profile", machineClass)
-		}
-		if hasImageProfile {
-			if missing := imageProfile.MissingRequiredFields(); len(missing) > 0 {
-				return nil, fmt.Errorf("%s worker image profile is incomplete: missing %s", machineClass, strings.Join(missing, ", "))
-			}
-		}
-	}
-
-	now := time.Now()
-	vmID := generateVMID()
-	workerID := generateWorkerID()
-	own := &VMOwnership{
-		VMID:                 vmID,
-		UserID:               req.UserID,
-		DesktopID:            req.DesktopID,
-		Kind:                 VMKindWorker,
-		WorkerID:             workerID,
-		ParentAgentID:        req.ParentAgentID,
-		TrajectoryID:         req.TrajectoryID,
-		Purpose:              req.Purpose,
-		ObjectiveFingerprint: req.ObjectiveFingerprint,
-		MachineClass:         machineClass,
-		WarmnessClass: warmnessClassForOwnership(&VMOwnership{
-			UserID:               req.UserID,
-			DesktopID:            req.DesktopID,
-			Kind:                 VMKindWorker,
-			ParentAgentID:        req.ParentAgentID,
-			TrajectoryID:         req.TrajectoryID,
-			Purpose:              req.Purpose,
-			ObjectiveFingerprint: req.ObjectiveFingerprint,
-			MachineClass:         machineClass,
-		}, r.warmnessPolicy),
-		SandboxURL:      r.sandboxURLForVM(vmID),
-		State:           VMStateBooting,
-		CreatedAt:       now,
-		LastActiveAt:    now,
-		Published:       false,
-		ParentDesktopID: "",
-	}
-
-	r.mu.Lock()
-	own.Epoch = r.nextEpoch()
-	r.workerVMs[workerID] = own
-	r.vmByID[vmID] = own
-	mgr := r.vmManager
-	r.saveLocked()
-	r.mu.Unlock()
-
-	if mgr != nil {
-		gwToken := r.issueGatewayToken(vmID)
-		bootCfg := VMManagerConfig{
-			VMID:              vmID,
-			KernelImagePath:   imageProfile.KernelImagePath,
-			InitrdPath:        imageProfile.InitrdPath,
-			RootfsPath:        imageProfile.RootfsPath,
-			StoreDiskPath:     imageProfile.StoreDiskPath,
-			KernelParams:      imageProfile.KernelParams,
-			GuestPort:         8085,
-			MachineCPUCount:   cpuCount,
-			MachineMemSizeMib: memSizeMib,
-			GatewayToken:      gwToken,
-			ComputerKind:      "worker",
-			OwnerID:           req.UserID,
-			DesktopID:         req.DesktopID,
-			WorkerID:          workerID,
-			CandidateID:       workerID,
-		}
-		info, err := mgr.BootVM(bootCfg)
-		if err != nil {
-			log.Printf("vmctl: Firecracker boot failed for worker VM %s: %v", vmID, err)
-			r.mu.Lock()
-			own.State = VMStateFailed
-			r.saveLocked()
-			r.mu.Unlock()
-			return nil, fmt.Errorf("failed to boot worker VM %s: %w", vmID, err)
-		}
-		r.mu.Lock()
-		own.SandboxURL = info.HostURL
-		own.Epoch = info.Epoch
-		r.mu.Unlock()
-		log.Printf("vmctl: booted worker VM %s for user %s desktop %s (worker_id=%s class=%s epoch=%d)", vmID, req.UserID, req.DesktopID, workerID, machineClass, own.Epoch)
-	}
-
-	r.transitionVM(vmID, VMStateActive)
-	log.Printf("vmctl: assigned worker VM %s for user %s desktop %s (worker_id=%s purpose=%q)", vmID, req.UserID, req.DesktopID, workerID, req.Purpose)
-	r.mu.RLock()
-	result := cloneOwnership(r.vmByID[vmID])
-	r.mu.RUnlock()
-	return result, nil
-}
-
-func reusableWorkerLease(worker *VMOwnership, req WorkerRequest, machineClass string) bool {
-	if worker == nil {
-		return false
-	}
-	switch worker.State {
-	case VMStateBooting, VMStateActive, VMStateDegraded:
-	default:
-		return false
-	}
-	return worker.UserID == req.UserID &&
-		worker.DesktopID == req.DesktopID &&
-		worker.ParentAgentID == req.ParentAgentID &&
-		worker.TrajectoryID == req.TrajectoryID &&
-		workerObjectiveFingerprintForOwnership(worker) == req.ObjectiveFingerprint &&
-		worker.MachineClass == machineClass
-}
-
-// PublishDesktop marks a background candidate desktop as user-switchable.
-func (r *OwnershipRegistry) PublishDesktop(userID, desktopID string) (*VMOwnership, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
-	if !ok {
-		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
-	}
-	own.Published = true
-	own.LastActiveAt = time.Now()
-	r.saveLocked()
-	log.Printf("vmctl: published desktop %s for user %s on VM %s", own.DesktopID, userID, own.VMID)
-	return own, nil
 }
 
 // GetOwnership returns the current ownership for a user's primary desktop, or
@@ -2243,12 +1458,8 @@ func (r *OwnershipRegistry) ListOwnerships() []*VMOwnership {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	result := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		snap := *own
-		result = append(result, &snap)
-	}
-	for _, own := range r.workerVMs {
 		snap := *own
 		result = append(result, &snap)
 	}
@@ -2260,11 +1471,8 @@ func (r *OwnershipRegistry) ListOwnerships() []*VMOwnership {
 func (r *OwnershipRegistry) WarmnessSummary(idleEligible []*VMOwnership) WarmnessHealthSummary {
 	r.mu.RLock()
 	cfg := r.warmnessPolicy
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	for _, own := range r.workerVMs {
 		ownerships = append(ownerships, cloneOwnership(own))
 	}
 	idle := make([]*VMOwnership, 0, len(idleEligible))
@@ -2339,17 +1547,6 @@ func (r *OwnershipRegistry) RemoveOwnershipForDesktop(userID, desktopID string) 
 	own.State = VMStateStopped
 	delete(r.ownerships, key)
 	delete(r.vmByID, own.VMID)
-	for workerID, worker := range r.workerVMs {
-		if worker.UserID != userID || worker.DesktopID != normalizeDesktopID(desktopID) {
-			continue
-		}
-		if r.vmManager != nil && (worker.State == VMStateActive || worker.State == VMStateDegraded) {
-			_ = r.vmManager.StopVM(worker.VMID)
-		}
-		worker.State = VMStateStopped
-		delete(r.workerVMs, workerID)
-		delete(r.vmByID, worker.VMID)
-	}
 	r.saveLocked()
 	log.Printf("vmctl: removed VM %s ownership for user %s desktop %s", own.VMID, userID, own.DesktopID)
 	return nil
@@ -2418,34 +1615,6 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 	return nil
 }
 
-// HibernateWorker transitions the worker VM with the given typed handle to
-// hibernated state.
-func (r *OwnershipRegistry) HibernateWorker(workerID string) error {
-	return r.hibernateWorkerWithReason(workerID, "idle")
-}
-
-func (r *OwnershipRegistry) hibernateWorkerWithReason(workerID, reason string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	own, ok := r.workerVMs[strings.TrimSpace(workerID)]
-	if !ok {
-		return fmt.Errorf("no worker VM found for worker_id %s", strings.TrimSpace(workerID))
-	}
-	if own.State != VMStateActive && own.State != VMStateDegraded {
-		return fmt.Errorf("worker VM %s cannot be hibernated (state=%s)", own.VMID, own.State)
-	}
-	if r.vmManager != nil {
-		_ = r.vmManager.HibernateVM(own.VMID)
-	}
-	own.State = VMStateHibernated
-	own.LastActiveAt = time.Now()
-	own.StoppedBy = normalizeStopReason(reason)
-	r.saveLocked()
-	log.Printf("vmctl: hibernated worker VM %s for user %s desktop %s worker_id %s reason=%s", own.VMID, own.UserID, own.DesktopID, own.WorkerID, own.StoppedBy)
-	return nil
-}
-
 func normalizeStopReason(reason string) string {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
@@ -2454,10 +1623,8 @@ func normalizeStopReason(reason string) string {
 	return reason
 }
 
-// ReclaimPressureVMs hibernates the top ranked pressure-reclaim candidates
-// when active pressure reclaim is enabled and the host is currently under
-// pressure. Candidate selection is bounded by MaxCandidates and excludes
-// protected computers such as premium always-on and critical verifier workers.
+// ReclaimPressureVMs hibernates bounded eligible computers when active
+// pressure reclaim is enabled and the host is currently under pressure.
 func (r *OwnershipRegistry) ReclaimPressureVMs(ctx context.Context, guard ComputerVersionRouteGuard) int {
 	candidates := r.pressureReclaimActionCandidates()
 	reclaimed := 0
@@ -2465,210 +1632,12 @@ func (r *OwnershipRegistry) ReclaimPressureVMs(ctx context.Context, guard Comput
 		if candidate.own == nil || candidate.public.Protected || !authorizeLifecycleRoute(ctx, guard, candidate.own.UserID, candidate.own.DesktopID) {
 			continue
 		}
-		var err error
-		if candidate.own.Kind == VMKindWorker {
-			err = r.hibernateWorkerWithReason(candidate.own.WorkerID, "pressure")
-		} else {
-			err = r.hibernateVMForDesktopWithReason(candidate.own.UserID, candidate.own.DesktopID, "pressure")
-		}
+		err := r.hibernateVMForDesktopWithReason(candidate.own.UserID, candidate.own.DesktopID, "pressure")
 		if err == nil {
 			reclaimed++
 		}
 	}
 	return reclaimed
-}
-
-// ReclaimStaleVMState deletes terminal worker/candidate VM state only when
-// state-dir storage pressure is present. It intentionally excludes active,
-// primary, published, premium, and recent work; package/source evidence must
-// survive outside these disposable producer machines before their VM state is
-// eligible for deletion.
-func (r *OwnershipRegistry) ReclaimStaleVMState(ctx context.Context, guard ComputerVersionRouteGuard) int {
-	candidates := r.staleStateReclaimCandidates()
-	destroyed := 0
-	for _, candidate := range candidates {
-		if candidate == nil || !authorizeLifecycleRoute(ctx, guard, candidate.UserID, candidate.DesktopID) {
-			continue
-		}
-		if r.destroyStaleVMState(candidate) {
-			destroyed++
-		}
-	}
-	return destroyed
-}
-
-func (r *OwnershipRegistry) staleStateReclaimCandidates() []*VMOwnership {
-	r.mu.RLock()
-	cfg := normalizePressureReclaimConfig(r.pressureReclaim)
-	warmnessPolicy := r.warmnessPolicy
-	sampler := r.pressureSampler
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
-	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	for _, own := range r.workerVMs {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	r.mu.RUnlock()
-
-	if cfg.Mode != PressureReclaimModeActive || cfg.MaxStateDeletes <= 0 {
-		return nil
-	}
-	if sampler == nil {
-		sampler = sampleHostPressure
-	}
-	sample := sampler(cfg)
-	annotatePressure(&sample, cfg)
-	if !sample.StateDirPressure {
-		return nil
-	}
-
-	now := time.Now()
-	candidates := make([]*VMOwnership, 0, len(ownerships))
-	for _, own := range ownerships {
-		if staleVMStateReclaimable(own, cfg, warmnessPolicy, now) {
-			candidates = append(candidates, own)
-		}
-	}
-	stateSizes := make(map[string]int64, len(candidates))
-	for _, own := range candidates {
-		stateSizes[own.VMID] = vmStateDirUsageBytes(cfg.StateDir, own.VMID)
-	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		left, right := candidates[i], candidates[j]
-		leftSize := stateSizes[left.VMID]
-		rightSize := stateSizes[right.VMID]
-		if leftSize != rightSize {
-			return leftSize > rightSize
-		}
-		if left.Kind != right.Kind {
-			return left.Kind == VMKindWorker
-		}
-		leftIdle := now.Sub(left.LastActiveAt)
-		rightIdle := now.Sub(right.LastActiveAt)
-		if leftIdle != rightIdle {
-			return leftIdle > rightIdle
-		}
-		return left.VMID < right.VMID
-	})
-	if len(candidates) > cfg.MaxStateDeletes {
-		candidates = candidates[:cfg.MaxStateDeletes]
-	}
-	return candidates
-}
-
-func vmStateDirUsageBytes(stateDir, vmID string) int64 {
-	vmID = strings.TrimSpace(vmID)
-	if vmID == "" {
-		return 0
-	}
-	root := filepath.Clean(stateDir)
-	if root == "." || root == string(os.PathSeparator) {
-		return 0
-	}
-	dir := filepath.Clean(filepath.Join(root, vmID))
-	if dir == root || !strings.HasPrefix(dir, root+string(os.PathSeparator)) {
-		return 0
-	}
-	var total int64
-	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d == nil {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			return nil
-		}
-		if stat, ok := info.Sys().(*syscall.Stat_t); ok && stat.Blocks > 0 {
-			total += stat.Blocks * 512
-			return nil
-		}
-		if info.Mode().IsRegular() {
-			total += info.Size()
-		}
-		return nil
-	})
-	return total
-}
-
-func staleVMStateReclaimable(own *VMOwnership, cfg PressureReclaimConfig, warmnessPolicy WarmnessPolicyConfig, now time.Time) bool {
-	if own == nil || strings.TrimSpace(own.VMID) == "" || own.LastActiveAt.IsZero() {
-		return false
-	}
-	switch own.State {
-	case VMStateStopped, VMStateHibernated, VMStateFailed:
-	default:
-		return false
-	}
-	if now.Sub(own.LastActiveAt) < cfg.StaleStateMinAge {
-		return false
-	}
-	switch warmnessClassForOwnership(own, warmnessPolicy) {
-	case WarmnessClassPremiumAlwaysOn:
-		return false
-	case WarmnessClassCriticalProtected:
-		if !staleCriticalWorkerIdle(now.Sub(own.LastActiveAt)) {
-			return false
-		}
-	}
-	if own.Kind == VMKindWorker {
-		return true
-	}
-	if own.Kind != VMKindInteractive {
-		return false
-	}
-	if own.DesktopID == PrimaryDesktopID || own.Published {
-		return false
-	}
-	return true
-}
-
-func (r *OwnershipRegistry) destroyStaleVMState(candidate *VMOwnership) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	cfg := normalizePressureReclaimConfig(r.pressureReclaim)
-	warmnessPolicy := r.warmnessPolicy
-	now := time.Now()
-	current, key := r.currentOwnershipForCandidateLocked(candidate)
-	if !staleVMStateReclaimable(current, cfg, warmnessPolicy, now) {
-		return false
-	}
-	if r.vmManager == nil {
-		return false
-	}
-	if err := r.vmManager.DestroyVMState(current.VMID); err != nil {
-		log.Printf("vmctl: stale VM state destroy skipped for %s: %v", current.VMID, err)
-		return false
-	}
-	if current.Kind == VMKindWorker {
-		delete(r.workerVMs, strings.TrimSpace(current.WorkerID))
-	} else if key != "" {
-		delete(r.ownerships, key)
-	}
-	delete(r.vmByID, current.VMID)
-	r.saveLocked()
-	log.Printf("vmctl: destroyed stale %s VM state %s for desktop %s", current.Kind, current.VMID, current.DesktopID)
-	return true
-}
-
-func (r *OwnershipRegistry) currentOwnershipForCandidateLocked(candidate *VMOwnership) (*VMOwnership, string) {
-	if candidate == nil {
-		return nil, ""
-	}
-	if candidate.Kind == VMKindWorker {
-		own := r.workerVMs[strings.TrimSpace(candidate.WorkerID)]
-		if own != nil && own.VMID == candidate.VMID {
-			return own, ""
-		}
-		return nil, ""
-	}
-	key := ownershipKey(candidate.UserID, candidate.DesktopID)
-	own := r.ownerships[key]
-	if own != nil && own.VMID == candidate.VMID {
-		return own, key
-	}
-	return nil, ""
 }
 
 // ResumeVM resumes a stopped or hibernated VM for the given user,
@@ -2907,11 +1876,8 @@ func (r *OwnershipRegistry) CheckIdleOwnerships() []*VMOwnership {
 	warmnessPolicy := r.warmnessPolicy
 	pressureCfg := r.pressureReclaim
 	sampler := r.pressureSampler
-	ownerships := make([]*VMOwnership, 0, len(r.ownerships)+len(r.workerVMs))
+	ownerships := make([]*VMOwnership, 0, len(r.ownerships))
 	for _, own := range r.ownerships {
-		ownerships = append(ownerships, cloneOwnership(own))
-	}
-	for _, own := range r.workerVMs {
 		ownerships = append(ownerships, cloneOwnership(own))
 	}
 	r.mu.RUnlock()
@@ -2945,12 +1911,7 @@ func (r *OwnershipRegistry) StopIdleVMs(ctx context.Context, guard ComputerVersi
 		if own == nil || !authorizeLifecycleRoute(ctx, guard, own.UserID, own.DesktopID) {
 			continue
 		}
-		var err error
-		if own.Kind == VMKindWorker {
-			err = r.HibernateWorker(own.WorkerID)
-		} else {
-			err = r.HibernateVMForDesktop(own.UserID, own.DesktopID)
-		}
+		err := r.HibernateVMForDesktop(own.UserID, own.DesktopID)
 		if err == nil {
 			stopped++
 		}
@@ -2958,10 +1919,8 @@ func (r *OwnershipRegistry) StopIdleVMs(ctx context.Context, guard ComputerVersi
 	return stopped
 }
 
-// WarmAlwaysOnDesktops resumes explicitly configured always-on primary
-// desktops that already have an ownership record. It intentionally does not
-// create new ownerships for configured users and does not warm candidate
-// desktops or worker VMs.
+// WarmAlwaysOnDesktops resumes configured primary computers that already have
+// an ownership record; it never creates ownerships.
 func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard ComputerVersionRouteGuard) int {
 	r.mu.RLock()
 	cfg := normalizeWarmnessPolicyConfig(r.warmnessPolicy)
@@ -2979,7 +1938,7 @@ func (r *OwnershipRegistry) WarmAlwaysOnDesktops(ctx context.Context, guard Comp
 		if own == nil {
 			continue
 		}
-		if own.Kind == VMKindWorker || own.DesktopID != PrimaryDesktopID || !own.Published {
+		if own.DesktopID != PrimaryDesktopID {
 			continue
 		}
 		if !cfg.AlwaysOnUserIDs[strings.TrimSpace(own.UserID)] {
@@ -3040,11 +1999,6 @@ func (r *OwnershipRegistry) ActiveCount() int {
 			count++
 		}
 	}
-	for _, own := range r.workerVMs {
-		if own.IsReady() {
-			count++
-		}
-	}
 	return count
 }
 
@@ -3076,10 +2030,4 @@ func generateVMID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
 	return "vm-" + hex.EncodeToString(b)
-}
-
-func generateWorkerID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return "worker-" + hex.EncodeToString(b)
 }

@@ -273,11 +273,15 @@ func enforceCoagentUpdateAuthority(ctx context.Context, rt *Runtime, target type
 	if !found {
 		return nil
 	}
-	owningVSuper := strings.TrimSpace(slot.TrajectoryID)
-	if owningVSuper == "" {
-		owningVSuper = strings.TrimSpace(slot.Slot)
+	callerTrajectory := trajectoryIDForRun(toolregistry.ExecutionContextFrom(ctx).RunRecord)
+	if callerTrajectory != "" && callerTrajectory == strings.TrimSpace(slot.TrajectoryID) {
+		return nil
 	}
-	return fmt.Errorf("skip-level directive blocked: super must address co-super %s through owning vsuper trajectory %s with update_coagent", target.AgentID, owningVSuper)
+	owningTrajectory := strings.TrimSpace(slot.TrajectoryID)
+	if owningTrajectory == "" {
+		owningTrajectory = strings.TrimSpace(slot.Slot)
+	}
+	return fmt.Errorf("skip-level directive blocked: super must address co-super %s through owning trajectory %s with update_coagent", target.AgentID, owningTrajectory)
 }
 
 func stringArraySchema() map[string]any {

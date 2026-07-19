@@ -14,12 +14,12 @@ import (
 
 // GetPublicationBundleByRoute resolves a public route path to the full
 // publication bundle using the object graph. The graph path is:
-//   1. Find choir.public_route object by metadata route_path
-//   2. Follow routes_to edge to choir.publication
-//   3. Follow has_version edge to choir.publication_version
-//   4. Follow has_manifest edge to choir.artifact_manifest
-//   5. Follow contains_blob edge to choir.artifact_blob (for storage_ref)
-//   6. Follow edges to retrieval, citations, source entities, transclusions, policy, provenance
+//  1. Find choir.public_route object by metadata route_path
+//  2. Follow routes_to edge to choir.publication
+//  3. Follow has_version edge to choir.publication_version
+//  4. Follow has_manifest edge to choir.artifact_manifest
+//  5. Follow contains_blob edge to choir.artifact_blob (for storage_ref)
+//  6. Follow edges to retrieval, citations, source entities, transclusions, policy, provenance
 func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath string) (*PublicationBundle, error) {
 	if s == nil || s.store == nil {
 		return nil, fmt.Errorf("platform service unavailable")
@@ -39,9 +39,9 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		return nil, fmt.Errorf("platform bundle: find route: %w", err)
 	}
 	var routeMeta struct {
-		State            string `json:"state"`
-		TargetID         string `json:"target_id"`
-		TargetVersionID  string `json:"target_version_id"`
+		State           string `json:"state"`
+		TargetID        string `json:"target_id"`
+		TargetVersionID string `json:"target_version_id"`
 	}
 	if err := json.Unmarshal(routeObj.Metadata, &routeMeta); err != nil {
 		return nil, fmt.Errorf("platform bundle: parse route metadata: %w", err)
@@ -67,10 +67,10 @@ func (s *Service) GetPublicationBundleByRoute(ctx context.Context, routePath str
 		pubObj = pubObjs[0]
 	}
 	var pubMeta struct {
-		Slug             string `json:"slug"`
-		Title            string `json:"title"`
-		State            string `json:"state"`
-		LatestVersionID  string `json:"latest_version_id"`
+		Slug            string `json:"slug"`
+		Title           string `json:"title"`
+		State           string `json:"state"`
+		LatestVersionID string `json:"latest_version_id"`
 	}
 	if err := json.Unmarshal(pubObj.Metadata, &pubMeta); err != nil {
 		return nil, fmt.Errorf("platform bundle: parse publication metadata: %w", err)
@@ -225,12 +225,12 @@ func (s *Service) graphRetrievalSpans(ctx context.Context, og *ObjectGraphStore,
 						continue
 					}
 					var spanMeta struct {
-						SourceVersionID string          `json:"source_version_id"`
-						SelectorKind    string          `json:"selector_kind"`
-						SelectorJSON    string          `json:"selector_json"`
-						TextHash        string          `json:"text_hash"`
-						ChunkHash       string          `json:"chunk_hash"`
-						TokenCount      json.Number     `json:"token_count"`
+						SourceVersionID string      `json:"source_version_id"`
+						SelectorKind    string      `json:"selector_kind"`
+						SelectorJSON    string      `json:"selector_json"`
+						TextHash        string      `json:"text_hash"`
+						ChunkHash       string      `json:"chunk_hash"`
+						TokenCount      json.Number `json:"token_count"`
 					}
 					spans = append(spans, RetrievalSpan{
 						SourceID:        srcMeta.SourceID,
@@ -263,12 +263,12 @@ func (s *Service) graphRetrievalSpans(ctx context.Context, og *ObjectGraphStore,
 			continue
 		}
 		var spanMeta struct {
-			SourceVersionID string          `json:"source_version_id"`
-			SelectorKind    string          `json:"selector_kind"`
-			SelectorJSON    string          `json:"selector_json"`
-			TextHash        string          `json:"text_hash"`
-			ChunkHash       string          `json:"chunk_hash"`
-			TokenCount      json.Number     `json:"token_count"`
+			SourceVersionID string      `json:"source_version_id"`
+			SelectorKind    string      `json:"selector_kind"`
+			SelectorJSON    string      `json:"selector_json"`
+			TextHash        string      `json:"text_hash"`
+			ChunkHash       string      `json:"chunk_hash"`
+			TokenCount      json.Number `json:"token_count"`
 		}
 		if err := json.Unmarshal(spanObj.Metadata, &spanMeta); err != nil {
 			continue
