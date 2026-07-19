@@ -666,17 +666,17 @@ now:
     heresy_delta: {discovered: "Host build identity and guest image/config identity can diverge because the canonical guest package is not deployed.", introduced: none, repaired: none}
 
   node_a_exact_guest_receipt:
-    observed_at: 2026-07-19T21:33:54Z
-    status: rejected_kernel_probe_overlay_mount
-    source_identity: e0b98598d2f5f6814dc573aeab3531f2814dc89f
-    guest_image_ref: /tmp/g1-capset-probe
+    observed_at: 2026-07-19T21:41:03Z
+    status: rejected_kernel_probe_seccomp_policy
+    source_identity: c97e01044b35da53f9dd6d7cf3ca0fe87610348b
+    guest_image_ref: /tmp/g1-overlay-probe
     managed_guest_rollback: /nix/store/mmkgcsg58nfca1hzscd2jw4ss861b4yl-go-choir-guest-image
     pre_managed_guest_rollback: /var/lib/go-choir/guest-pre-managed-rollback
-    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=capsete0b CHOIR_G1_EXPECTED_COMMIT=e0b98598d2f5f6814dc573aeab3531f2814dc89f CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-capset-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
-    evidence: "With CAP_SETFCAP, the deterministic namespace stage completed and the next stage failed `kernel capability probe: overlayfs_loaded_and_mountable: exit status 1: permission denied`. The module is loaded; the mount helper is denied. Fail-closed boot and disposable cleanup remained correct."
-    problem: "The overlay probe enters only a new mount namespace before exec, unlike the capsule path and namespace probe which pair a mapped user namespace with the mount namespace. The receipt also does not identify whether private-root propagation or the overlay mount returned EPERM. The current helper therefore does not yet prove mountability under the actual capsule authority model."
-    next_probe: "Run the overlay helper inside a mapped user+mount namespace, matching the guest capsule authority boundary, and add operation context to both mount failures. Rebuild and rerun in deterministic order; do not weaken overlay enforcement."
-    heresy_delta: {discovered: "The mandatory overlay probe did not execute under the same mapped user+mount namespace authority used by capsules.", introduced: none, repaired: "Exact guest deployment, boot-loaded overlay, deterministic probe order/errors, and UID-0 namespace mapping are repaired; later mandatory probes remain open."}
+    command: "CHOIR_G1_LINUX_HARNESS=1 CHOIR_G1_RUN_ID=overlayc97 CHOIR_G1_EXPECTED_COMMIT=c97e01044b35da53f9dd6d7cf3ca0fe87610348b CHOIR_G1_{KERNEL,INITRD,ROOTFS,STORE_DISK,KERNEL_PARAMS}=/tmp/g1-overlay-probe/... go test ./internal/vmmanager -run '^TestSelfDevelopmentEffectsOffGuestHarness$' -count=1 -v"
+    evidence: "The deterministic namespace and mapped user+mount overlay stages completed. Seccomp then failed before load with `failed to assemble policy: invalid default_action value 327681`. Fail-closed boot and disposable cleanup remained correct."
+    problem: "internal/capsule/seccomp.go manually ORs EPERM into elastic/go-seccomp-bpf ActionErrno. That library validates policy actions against bare enum values and its assembler already adds EPERM for ActionErrno, so the encoded 327681 default is invalid and the production capsule filter has never been loadable."
+    next_probe: "Use the library's bare ActionErrno default, add a Linux test that assembles and loads the filter then observes AF_INET=EPERM, rebuild, and rerun the exact guest. Do not broaden the allowlist."
+    heresy_delta: {discovered: "The capsule seccomp policy encoded errno twice and could not assemble.", introduced: none, repaired: "Exact guest deployment, boot-loaded overlay, deterministic probe receipts, UID-0 mapping, and capsule-scoped overlay probing are repaired; seccomp and later mandatory probes remain open."}
 
 successor:
   status: selected_draft_non_executable
