@@ -4,6 +4,7 @@ package capsule
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/landlock-lsm/go-landlock/landlock"
 	ll "github.com/landlock-lsm/go-landlock/landlock/syscall"
@@ -66,21 +67,38 @@ func (r *LandlockRestrictor) Apply() error {
 		return fmt.Errorf("no paths configured for Landlock restriction")
 	}
 
-	// Use PathAccess with the full read+write access set.
-	// The landlock library handles ABI version negotiation.
-	rules := []landlock.Rule{
-		landlock.PathAccess(
-			landlock.AccessFSSet(ll.AccessFSWriteFile|
-				ll.AccessFSReadFile|
-				ll.AccessFSReadDir|
-				ll.AccessFSMakeDir|
-				ll.AccessFSRemoveFile|
-				ll.AccessFSRemoveDir|
-				ll.AccessFSMakeSym|
-				ll.AccessFSTruncate|
-				ll.AccessFSExecute),
-			r.paths...,
-		),
+	directoryAccess := landlock.AccessFSSet(ll.AccessFSWriteFile |
+		ll.AccessFSReadFile |
+		ll.AccessFSReadDir |
+		ll.AccessFSMakeDir |
+		ll.AccessFSRemoveFile |
+		ll.AccessFSRemoveDir |
+		ll.AccessFSMakeSym |
+		ll.AccessFSTruncate |
+		ll.AccessFSExecute)
+	fileAccess := landlock.AccessFSSet(ll.AccessFSWriteFile |
+		ll.AccessFSReadFile |
+		ll.AccessFSTruncate |
+		ll.AccessFSExecute)
+	directories := make([]string, 0, len(r.paths))
+	files := make([]string, 0, len(r.paths))
+	for _, path := range r.paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("inspect Landlock allow path %q: %w", path, err)
+		}
+		if info.IsDir() {
+			directories = append(directories, path)
+		} else {
+			files = append(files, path)
+		}
+	}
+	rules := make([]landlock.Rule, 0, 2)
+	if len(directories) > 0 {
+		rules = append(rules, landlock.PathAccess(directoryAccess, directories...))
+	}
+	if len(files) > 0 {
+		rules = append(rules, landlock.PathAccess(fileAccess, files...))
 	}
 
 	// Require the complete V5 contract. Downgrading would make isolation depend
