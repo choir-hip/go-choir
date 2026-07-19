@@ -118,7 +118,10 @@ func TestSelfDevelopmentEffectsOffGuestHarness(t *testing.T) {
 	}
 
 	capabilities := harnessRequest(t, http.MethodGet, instance.HostURL+"/api/computers/"+computerID+"/self-development/kernel-capabilities", nil, headers)
-	t.Logf("exact_guest=%s build=%s effects_off_status=%d kernel_capability_status=%d", instance.HostURL, healthBody.Build.Commit, start.StatusCode, capabilities.StatusCode)
+	if capabilities.StatusCode != http.StatusServiceUnavailable || !bytes.Contains(capabilities.Body, []byte("computer route identity unavailable")) {
+		t.Fatalf("unrouted harness kernel receipt status = %d body=%s", capabilities.StatusCode, capabilities.Body)
+	}
+	t.Logf("exact_guest=%s build=%s effects_off_status=%d kernel_probe=admitted public_kernel_receipt_status=%d body=%s", instance.HostURL, healthBody.Build.Commit, start.StatusCode, capabilities.StatusCode, capabilities.Body)
 }
 
 type harnessResponse struct {
