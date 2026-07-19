@@ -652,32 +652,43 @@ func (h *APIHandler) decideSelfDevelopmentOperation(w http.ResponseWriter, r *ht
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current signed mode does not authorize this decision"})
 		return
 	}
+	if currentMode.Receipt == nil || currentMode.Receipt.ReceiptKind != "ModeReceipt" ||
+		currentMode.Receipt.Verify(h.rt.selfdevControl.KeyResolver()) != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "current mode receipt is invalid"})
+		return
+	}
 	if request.Decision == "approve" {
-		expectedPending := strings.TrimSpace(*request.ExpectedPendingTransitionRef)
-		if currentMode.Mode != platform.SelfDevelopmentModeAcceptOnce || currentMode.OperationID != operationID ||
-			currentMode.BundleDigest != request.BundleDigest ||
-			currentMode.ExpectedDesiredEventHead != request.ExpectedDesiredEventHead ||
-			currentMode.ExpectedEffectiveEventHead != request.ExpectedEffectiveEventHead ||
-			currentMode.ExpectedPendingTransitionRef != expectedPending ||
-			currentMode.ExpectedDesiredStateCommitment != request.ExpectedDesiredStateCommitment ||
-			currentMode.ExpectedEffectiveStateCommitment != request.ExpectedEffectiveStateCommitment {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "current accept_once mode does not bind this decision"})
+		switch currentMode.Mode {
+		case platform.SelfDevelopmentModeProposeOnly:
+			request.ModeReceipt = currentMode.Receipt
+			if h.verifyConsumedModeReceipt(currentMode.Receipt, operationID, request) != nil {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "current proposal mode does not carry this consumed accept_once decision"})
+				return
+			}
+		case platform.SelfDevelopmentModeAcceptOnce:
+			expectedPending := strings.TrimSpace(*request.ExpectedPendingTransitionRef)
+			if currentMode.OperationID != operationID || currentMode.BundleDigest != request.BundleDigest ||
+				currentMode.ExpectedDesiredEventHead != request.ExpectedDesiredEventHead ||
+				currentMode.ExpectedEffectiveEventHead != request.ExpectedEffectiveEventHead ||
+				currentMode.ExpectedPendingTransitionRef != expectedPending ||
+				currentMode.ExpectedDesiredStateCommitment != request.ExpectedDesiredStateCommitment ||
+				currentMode.ExpectedEffectiveStateCommitment != request.ExpectedEffectiveStateCommitment {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "current accept_once mode does not bind this decision"})
+				return
+			}
+			consumptionDigest, digestErr := selfdevprotocol.DecisionBindingDigest(selfDevelopmentDecisionBinding(operationID, request))
+			if digestErr != nil {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: "decision mode binding is invalid"})
+				return
+			}
+			currentMode, modeErr = h.rt.selfdevControl.SetSelfDevelopmentMode(r.Context(), platform.SetSelfDevelopmentModeRequest{
+				Mode: platform.SelfDevelopmentModeProposeOnly, ExpectedGeneration: currentMode.Generation,
+				IdempotencyKey: "accept-once-consumed:" + operationID + ":" + consumptionDigest,
+			})
+		default:
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "current mode does not authorize approval"})
 			return
 		}
-		consumptionDigest, digestErr := selfdevprotocol.DecisionBindingDigest(selfDevelopmentDecisionBinding(operationID, request))
-		if digestErr != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: "decision mode binding is invalid"})
-			return
-		}
-		currentMode, modeErr = h.rt.selfdevControl.SetSelfDevelopmentMode(r.Context(), platform.SetSelfDevelopmentModeRequest{
-			Mode: platform.SelfDevelopmentModeProposeOnly, ExpectedGeneration: currentMode.Generation,
-			OperationID: operationID, BundleDigest: request.BundleDigest,
-			ExpectedDesiredEventHead: request.ExpectedDesiredEventHead, ExpectedEffectiveEventHead: request.ExpectedEffectiveEventHead,
-			ExpectedPendingTransitionRef:     request.ExpectedPendingTransitionRef,
-			ExpectedDesiredStateCommitment:   request.ExpectedDesiredStateCommitment,
-			ExpectedEffectiveStateCommitment: request.ExpectedEffectiveStateCommitment,
-			IdempotencyKey:                   "accept-once-consumed:" + operationID + ":" + consumptionDigest,
-		})
 	}
 	request.ModeReceipt = currentMode.Receipt
 	if modeErr != nil || h.verifyDecisionModeReceipt(computerID, operationID, currentMode.Mode, currentMode.Receipt, request) != nil {
