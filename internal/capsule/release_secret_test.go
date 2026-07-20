@@ -83,7 +83,7 @@ func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
 			if err := os.Chmod(incoming, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			_, _, err = executor.StageGrantedRelease("cosuper-1", "grant-1", incoming)
+			_, _, err = executor.StageGrantedRelease(context.Background(), "cosuper-1", "grant-1", incoming)
 			if err == nil || !strings.Contains(err.Error(), "refuses secret") {
 				t.Fatalf("secret release error = %v", err)
 			}
@@ -126,7 +126,7 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	if err := os.Chmod(incoming, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	files, staged, err := executor.StageGrantedRelease("cosuper-success", "grant-success", incoming)
+	files, staged, err := executor.StageGrantedRelease(context.Background(), "cosuper-success", "grant-success", incoming)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,6 +135,11 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 	}
 	if content, err := os.ReadFile(filepath.Join(staged, "bin/sandbox")); err != nil || string(content) != "sandbox" {
 		t.Fatalf("staged sandbox = %q, %v", content, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := executor.StageGrantedRelease(ctx, "cosuper-success", "grant-success", incoming); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled release staging error = %v", err)
 	}
 }
 
@@ -158,7 +163,7 @@ func TestExtractGrantedFreezesBeforeDiff(t *testing.T) {
 		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-freeze", Handle: "grant-freeze"}: capability},
 		revokedCaps:  map[string]bool{}, publicKey: publicKey,
 	}
-	if _, _, err := executor.StageGrantedRelease("cosuper-freeze", "grant-freeze", t.TempDir()); err == nil || !strings.Contains(err.Error(), "requires frozen capsule") {
+	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-freeze", "grant-freeze", t.TempDir()); err == nil || !strings.Contains(err.Error(), "requires frozen capsule") {
 		t.Fatalf("active capsule stage error = %v", err)
 	}
 	if _, err := executor.ExtractGranted(context.Background(), "cosuper-freeze", "grant-freeze"); err != nil {
@@ -211,7 +216,7 @@ func TestStageGrantedReleaseRefusesSymlinkComponents(t *testing.T) {
 	if err := os.Chmod(incoming, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := executor.StageGrantedRelease("cosuper-symlink", "grant-symlink", incoming); err == nil || !strings.Contains(err.Error(), "unavailable") {
+	if _, _, err := executor.StageGrantedRelease(context.Background(), "cosuper-symlink", "grant-symlink", incoming); err == nil || !strings.Contains(err.Error(), "unavailable") {
 		t.Fatalf("symlink component stage error = %v", err)
 	}
 }

@@ -1,6 +1,7 @@
 package capsule
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ func InspectUpperDir(upperDir string) ([]FileManifest, error) {
 		return nil, fmt.Errorf("upperdir %s is not a directory", upperDir)
 	}
 
-	return walkUpperdir(upperDir)
+	return walkUpperdir(context.Background(), upperDir)
 }
 
 // SafeOpenFile opens a file within the capsule's upperdir using

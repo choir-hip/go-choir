@@ -1,6 +1,7 @@
 package capsule
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -13,10 +14,13 @@ import (
 // walkUpperdir walks the overlay upperdir and records the manifest of every
 // file/directory present. This is the "current state" snapshot used for
 // diff computation.
-func walkUpperdir(upperDir string) ([]FileManifest, error) {
+func walkUpperdir(ctx context.Context, upperDir string) ([]FileManifest, error) {
 	var manifests []FileManifest
 
 	err := filepath.Walk(upperDir, func(path string, info os.FileInfo, err error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil // file was deleted between walk steps
@@ -43,7 +47,7 @@ func walkUpperdir(upperDir string) ([]FileManifest, error) {
 
 		// Compute hash for regular files only.
 		if mt == "file" && info.Mode().IsRegular() {
-			hash, err := hashFile(path)
+			hash, err := hashFile(ctx, path)
 			if err != nil {
 				return fmt.Errorf("failed to hash %s: %w", path, err)
 			}
@@ -140,7 +144,7 @@ func manifestsEqual(a, b FileManifest) bool {
 }
 
 // hashFile computes the SHA-256 hash of a file and returns it as hex.
-func hashFile(path string) (string, error) {
+func hashFile(ctx context.Context, path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -148,11 +152,29 @@ func hashFile(path string) (string, error) {
 	defer f.Close()
 
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+	if _, err := io.Copy(h, &contextReader{ctx: ctx, reader: f}); err != nil {
 		return "", err
 	}
 
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r *contextReader) Read(buffer []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := r.reader.Read(buffer)
+	if err == nil {
+		if contextErr := r.ctx.Err(); contextErr != nil {
+			return n, contextErr
+		}
+	}
+	return n, err
 }
 
 // fileTypeString returns a string representation of the file type.

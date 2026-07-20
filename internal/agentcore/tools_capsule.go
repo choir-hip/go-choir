@@ -273,7 +273,7 @@ func newCommitTransactionTool() toolregistry.Tool {
 			if err != nil || headBefore == nil || headBefore.PendingTransitionRef != "" || headBefore.CanonicalEventHead != operation.BaseHead {
 				return "", fmt.Errorf("self-development base head unavailable, stale, or pending")
 			}
-			files, temporary, err := toolCtx.Executor.StageGrantedRelease(toolCtx.AgentRunID, input.Handle, filepath.Join(toolCtx.UpdaterRoot, "incoming"))
+			files, temporary, err := toolCtx.Executor.StageGrantedRelease(ctx, toolCtx.AgentRunID, input.Handle, filepath.Join(toolCtx.UpdaterRoot, "incoming"))
 			if err != nil {
 				return "", err
 			}

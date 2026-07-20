@@ -1,8 +1,11 @@
 package capsule
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -15,7 +18,7 @@ func TestWalkUpperdir(t *testing.T) {
 	os.WriteFile(filepath.Join(upperDir, "file1.txt"), []byte("hello"), 0o644)
 	os.WriteFile(filepath.Join(upperDir, "subdir", "file2.txt"), []byte("world"), 0o644)
 
-	manifests, err := walkUpperdir(upperDir)
+	manifests, err := walkUpperdir(context.Background(), upperDir)
 	if err != nil {
 		t.Fatalf("walkUpperdir failed: %v", err)
 	}
@@ -115,5 +118,26 @@ func TestDiffManifestsEmptyLastCommit(t *testing.T) {
 		if c.Kind != ChangeAdded {
 			t.Errorf("expected all changes to be 'added', got %s for %s", c.Kind, c.Path)
 		}
+	}
+}
+
+func TestWalkUpperdirHonorsCancellation(t *testing.T) {
+	upperDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(upperDir, "large"), make([]byte, 1<<20), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := walkUpperdir(ctx, upperDir); !errors.Is(err, context.Canceled) {
+		t.Fatalf("walkUpperdir error = %v, want context canceled", err)
+	}
+}
+
+func TestContextReaderHonorsCancellationBetweenChunks(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	reader := &contextReader{ctx: ctx, reader: strings.NewReader("payload")}
+	cancel()
+	if _, err := reader.Read(make([]byte, 8)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("contextReader error = %v, want context canceled", err)
 	}
 }

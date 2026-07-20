@@ -762,7 +762,7 @@ func (e *Executor) ResolveGrantedFreezeBindings(agentRunID, handle string) (stri
 	return computerevent.DigestBytes(capabilityBytes), "resource:sha256:" + computerevent.DigestBytes(resourceBytes), nil
 }
 
-func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) ([]FrozenReleaseFile, string, error) {
+func (e *Executor) StageGrantedRelease(ctx context.Context, agentRunID, handle, incomingRoot string) ([]FrozenReleaseFile, string, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
 	if err != nil || capability.AgentRole != RoleCoSuper {
 		return nil, "", fmt.Errorf("capsule release staging unavailable")
@@ -789,7 +789,7 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 	if info, err := os.Stat(incomingRoot); err != nil || info.Mode().Perm()&0o077 != 0 {
 		return nil, "", fmt.Errorf("capsule release incoming root must be private")
 	}
-	changes, err := caps.Diff(context.Background())
+	changes, err := caps.Diff(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -812,6 +812,9 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 	var files []FrozenReleaseFile
 	var total int64
 	for _, change := range changes {
+		if err := ctx.Err(); err != nil {
+			return nil, "", err
+		}
 		if !strings.HasPrefix(change.Path, releasePrefix) {
 			continue
 		}
@@ -867,7 +870,7 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 			_ = input.Close()
 			return nil, "", fmt.Errorf("capsule release refuses secret-bearing path %q", change.Path)
 		}
-		scanner := bufio.NewScanner(input)
+		scanner := bufio.NewScanner(&contextReader{ctx: ctx, reader: input})
 		scanner.Buffer(make([]byte, 64<<10), 1<<20)
 		for scanner.Scan() {
 			if findings := computerevent.DetectPrivateSecrets(scanner.Bytes()); len(findings) != 0 {
@@ -889,7 +892,7 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 			return nil, "", err
 		}
 		hash := sha256.New()
-		_, copyErr := io.Copy(io.MultiWriter(output, hash), input)
+		_, copyErr := io.Copy(io.MultiWriter(output, hash), &contextReader{ctx: ctx, reader: input})
 		closeErr := errors.Join(input.Close(), output.Sync(), output.Close())
 		if copyErr != nil || closeErr != nil {
 			return nil, "", errors.Join(copyErr, closeErr)

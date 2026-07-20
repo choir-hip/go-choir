@@ -138,7 +138,7 @@ func (c *Capsule) Diff(ctx context.Context) ([]FileChange, error) {
 		return nil, fmt.Errorf("capsule %s is destroyed", c.ID)
 	}
 
-	current, err := walkUpperdir(c.UpperDir)
+	current, err := walkUpperdir(ctx, c.UpperDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to walk upperdir: %w", err)
 	}
@@ -157,7 +157,7 @@ func (c *Capsule) CommitManifest(ctx context.Context) error {
 		return fmt.Errorf("capsule %s is destroyed", c.ID)
 	}
 
-	current, err := walkUpperdir(c.UpperDir)
+	current, err := walkUpperdir(ctx, c.UpperDir)
 	if err != nil {
 		return fmt.Errorf("failed to walk upperdir for commit: %w", err)
 	}
