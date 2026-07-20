@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-refresh-realization-round-43
-    state: frozen_G1_review
+    state: accepted_G1
     ref: aa42a793485086cef973ab7a174ac95e8bd17106
     owner: integration-authority
     base: 1dc482c0386ddd83f12e0b0ca1daf37544e4206f
@@ -595,7 +595,15 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [2b13fd88d5a3dbed85945d835c3a9ee738f07534, 1dc482c0386ddd83f12e0b0ca1daf37544e4206f]
     verification: "Run 29747648700 remains the exact deployed missing-bootstrap/global-lock reproducer. Full `internal/vmmanager` and `internal/vmctl` package tests pass. Focused and race-enabled regressions prove the production merge and current-deploy normalization preserve stable ComputerID, new RealizationID/Epoch, and nonempty envelope; blocked Firecracker refresh leaves ownership reads live; concurrent same-ownership refresh/stop and all resolve/lifecycle mutations refuse; manager failure projects the unchanged ownership failed; active, hibernated, stopped-missing, live-URL, and resolve/refresh cases pass."
-    disposition: "Effects remain OFF. Round-43 G1 must review the exact production credential-drive path, manager epoch/identity behavior, global availability, complete same-ownership lifecycle exclusion, failure/rejoin state, opaque legacy VMID treatment, and rollback preservation before main may advance or deployment may retry."
+    disposition: "Round-43 G1 accepted unanimously across three substantive terminal reviewers: Cursor, OpenCode, and OMP Gemini 3.5. No reproducible blocker remained. Claude failed immediately because its account was out of usage credits; Devin timed out; supplemental Codex and OMP GPT-5.5 also hit usage limits. Effects remain OFF. Candidate may land, then exact main requires forced C deployment and live credential-disk/guest boot proof."
+    g1_round_43_probe:
+      reviewed_at: 2026-07-20T15:06:20Z
+      source_ref: aa42a793485086cef973ab7a174ac95e8bd17106
+      authority_ref: 46f2cf1208f6551d965ed9577b88e31984ea2e5f
+      verdicts: {cursor: ACCEPT_G1, opencode: ACCEPT_G1, omp_gemini35: ACCEPT_G1, claude: usage_credits_exhausted, devin: timed_out, codex_supplement: usage_limit, omp_gpt55_supplement: usage_limit}
+      adjudication: "Accept. Three independent substantive reviewers traced the production path, executed focused/full/race tests, and found no blocker. The Round-42 production merge, global availability, failure projection, and concurrent lifecycle findings are closed. Failed panel members produced no competing technical finding."
+      residual_risks: "Live root-owned credential image construction, Firecracker drive attachment, guest mount/consume/unlink, retained realization restart, and complete receipt remain mandatory deployed C gates. Manager-local epoch can advance past the registry-computed realization suffix after a failed boot, but the guest credential and kernel identity remain joined on exact RealizationID; this is non-blocking for the reproduced boot contract and remains observable during deployed retry."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round43-panel/manifest.tsv, manifest_sha256: 5b107fa34dd4d571539125b94dfcde2f7c0ebcd94135c0ccb890e45e18f05a7d, cursor_sha256: 925c6e96dc293f56dcef65169dec95f83ea2d59d58fdf336ce30bd5adea98039, opencode_sha256: 099cc89da9ff39bdf954d2808cb8364387efe6a6fdee15d35f5d8677b2ef6b39, omp_gemini35_sha256: 9a45ea75fc12d751bccca34d564864c3071ca98d291edf20b6f54132501c2c28, claude_failure_sha256: 563d58c0d50876fe903e94ec0863f394bb8a92e24ed58a9c577801887d91a26a, supplement_manifest_sha256: dc58a8ea326bd76fbd14c6a779e7aa95fb737c4c9613735571506d1fa2c3059b}
     g1_round_42_probe:
       reviewed_at: 2026-07-20T14:33:00Z
       source_ref: 2b13fd88d5a3dbed85945d835c3a9ee738f07534
@@ -739,8 +747,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "Forced C run 29747648700 activated exact main but exposed a retained realization that booted without the newly mandatory credential drive and held the global ownership lock until timeout. Round-43 closes the production merge, availability, and lifecycle-state gaps in frozen source; C remains incomplete until G1 acceptance, landing, selected CI, a complete forced exact-main receipt, healthy public identity, successful active refresh, and no-SSH effects-OFF/kernel acceptance."
-  next_action: "Run Round-43 G1 on frozen source aa42a793485086cef973ab7a174ac95e8bd17106. If accepted, land exact authority, monitor selected CI, force exact-main staging deployment, then verify complete receipt, public identity, active refresh, effects-OFF behavior, and signed route-bound kernel capability receipt."
+  blocker_or_risk: "Round-43 G1 accepted the production credential/identity merge, global availability, and lifecycle-state repair. C remains incomplete until accepted authority lands, selected source CI passes, forced exact-main deployment publishes a complete receipt, public identity matches, every active refresh succeeds without vmctl unavailability, and no-SSH effects-OFF/kernel receipt acceptance passes."
+  next_action: "Land accepted Round-43 authority on main, monitor selected CI, force exact-main staging deployment, then verify complete receipt, public identity, active refresh, effects-OFF behavior, and signed route-bound kernel capability receipt."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -1063,7 +1071,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   c_deploy_failure_5:
     observed_at: 2026-07-20T14:10:30Z
-    status: blocked_C_active_refresh_guest_emergency
+    status: accepted_G1_pending_land
     mutation_class: red
     protected_surfaces: [Node_B_NixOS_activation, immutable_guest_boot_contract, active_computer_refresh, persistent_computer_state, vmctl_availability, deploy_receipt]
     admissible_evidence_class: "Exact forced workflow-dispatch logs, incomplete deployment receipt, public health/build identity, ownership/lifecycle source inspection, focused deterministic contracts, refrozen G1 review, and a complete deployed receipt with no-SSH product acceptance."
