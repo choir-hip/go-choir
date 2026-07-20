@@ -586,15 +586,15 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-19
-    state: rejected_G1_release_staging_repair
-    ref: fe5b854f9c73356fe51fe2b5f53e4d931695db80
+    id: self-development-B-disabled-cutover-round-20
+    state: frozen_G1_review
+    ref: 7657fa325064b0ede56e6cd964fec1dc5a1c1ade
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete effects-OFF source cutover plus exact immutable Node B disposable-ComputerID deployment binding; Node A remains fail-closed."
-    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e]
-    verification: "Prior effects-OFF package and exact Node A guest/capsule evidence remains unchanged. Exact Node B x86_64-linux closure build passed on Node A; the realized proxy launcher exports the exact target immediately before exec. R0 is restored and healthy. Round-19 returned three independent accepts; Codex's sole rejection claimed the exact SHA-256 reproduction yields `b52c…`, but executing its quoted command yields `4c20ff4a…`, exactly matching source and the other reviewers' independent calculations."
-    disposition: "Accepted at G1 with effects OFF. C may dispatch one fresh deployment from current origin/main, then must verify exact build identity, mode-off behavior, signed kernel receipt, R0 rollback availability, and frozen/rehearsed R1 before genesis."
+    scope: "Complete effects-OFF cutover, immutable Node B disposable target, explicit Linux test fixtures, and capsule release admission that ignores structural directories while refusing every unsafe/non-regular artifact."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
+    verification: "Prior effects-OFF, Node B closure, immutable target, and R0 recovery evidence remains unchanged. On Node A x86_64-linux, the exact focused tests and full `internal/capsule` package pass with `-race`; safe directory-plus-file release staging, secret refusal, and immutable snapshot cleanup are exercised."
+    disposition: "Effects remain OFF and R0 serves staging. Round-20 G1 must accept this runtime repair before the candidate branch is fast-forwarded to main or any deployment runs."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -663,8 +663,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round19-panel/manifest.tsv]
-  blocker_or_risk: "G1 is reopened: the exact Node A race reproduction passed snapshot cleanup but exposed that production `StageGrantedRelease` rejects safe overlay directory entries before reaching regular release files. R0 remains healthy; no deployment or genesis occurred."
-  next_action: "Teach release staging to ignore structural directories while retaining fail-closed rejection of symlinks and non-regular objects; retain the fixture permission/cleanup repairs; run focused Linux race tests and a new frozen G1 panel before another deploy."
+  blocker_or_risk: "The release admission repair passes the full capsule Linux race suite on Node A and is isolated on `origin/selfdev/g1-round20-release`; R0 remains healthy. G1 review is the remaining pre-deploy gate."
+  next_action: "Run frozen round-20 G1 against the exact candidate branch, focusing on directory traversal/symlink/device refusal and retained prior authority. Only after acceptance, fast-forward main and monitor the resulting CI/deploy."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -708,7 +708,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 1, repaired: 1}
   c_ci_failure_1:
     observed_at: 2026-07-20T03:28:00Z
-    status: fixture_repair_exposed_production_blocker
+    status: repaired_in_round_20_candidate
     mutation_class: yellow
     protected_surfaces: [G1_gate_integrity, capsule_release_privacy, immutable_source_snapshot]
     evidence_class: "GitHub Actions run 29714324950 attempts 1 and 2, exact race-shard JSON output."
@@ -717,19 +717,20 @@ now:
     repair: "Register cleanup that restores owner write permission on the immutable snapshot before TempDir cleanup, explicitly chmod each release incoming root to 0700, and rerun the exact focused tests with `-race` on Linux before publishing."
     rollback: "Revert the test-only fixture commit; no staging deployment was attempted by failed run 29714324950 and R0 remains active."
     conjecture_delta: "The source invariants are sound, but their tests relied on ambient TempDir cleanup/mode behavior instead of declaring the boundary."
-    heresy_delta: {discovered: 0, introduced: 0, repaired: 0}
+    heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
   c_ci_failure_2:
     observed_at: 2026-07-20T03:34:00Z
-    status: documented_before_repair
+    status: repaired_in_round_20_candidate
     mutation_class: orange
     protected_surfaces: [capsule_release_admission, frozen_effect_bundle, secret_scan]
     evidence_class: "Exact Node A x86_64-linux `go test -race` reproduction after applying only the documented fixture repair."
     problem: "`StageGrantedRelease` iterates overlay diff entries below `var/lib/artifact/release/` and rejects every non-regular entry. Normal upperdirs contain structural directory entries such as `bin`, so a safe release cannot reach its regular file even though the same function creates parent directories in the frozen staging tree. The focused success test fails with `capsule release file \"var/lib/artifact/release/bin\" is not regular`; the secret-content test fails before scanning its file."
     substrate_classification: "Symptom in release admission atop the working overlay diff substrate; no replacement implementation exists."
     repair: "After path normalization and Lstat, ignore real directories as structural entries; continue to reject symlinks, devices, sockets, deleted/unsafe paths, and every other non-regular object. Add/retain behavior tests proving a directory plus regular file stages, secrets still refuse, and symlink/non-regular entries refuse. Refreeze G1 because runtime behavior changes."
+    repair_result: "The candidate ignores only `Lstat`-confirmed real directories after safe path validation, then applies the existing regular-file/symlink refusal, resource bound, secret path/content scan, hash, mode, and staging logic to every file. Focused and full capsule race suites pass on Node A."
     rollback: "Revert the focused release-admission commit; effects remain OFF, workflow 29714324950 never deployed, and R0 remains active."
     conjecture_delta: "The release scanner correctly constrains files but conflated overlay directory metadata with releasable artifacts, making every realistic release impossible."
-    heresy_delta: {discovered: 0, introduced: 0, repaired: 0}
+    heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
