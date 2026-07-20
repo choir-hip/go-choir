@@ -609,6 +609,17 @@ now:
     disposition: "Documented before repair. G1 remains rejected and effects remain OFF. This is a capsule substrate blocker, not a deployment or product-acceptance gap."
     next_probe: "Keep absolute `/capsule/<id>`, implement and test ordered user-then-PID/mount/network/UTS/IPC/cgroup namespace creation without weakening isolation, retain parent listener ownership and authenticated readiness, and rerun the exact Node A Executor.Spawn integration through reconnect and complete cgroup/mount/socket cleanup."
     rollback: "Revert the focused cgroup path commit; no deployed state or production cgroup was mutated by the failed disposable probe."
+  g1_round_12_probe:
+    observed_at: 2026-07-20T00:23:00Z
+    status: rejected_checkpoint_reference_and_stale_authority
+    source_identity: 00d25827e249ec9d59052b5b3e5a28eaf546b662
+    mutation_class: red
+    protected_surfaces: [checkpoint_reconstruction, canonical_artifact_authority, current_product_guidance]
+    evidence_class: "Frozen-source independent review plus local source confirmation. The candidate passed focused authority packages, exact Nix guest-image construction, and the Node A Executor.Spawn capsule lifecycle proof before review."
+    success_before_blocker: "Finalized start events now repair missing operation projections before current-mode gating and bind the original public request commitment; immutable event artifact refs and downstream authority joins require canonical typed refs; the production capsule path passes namespace, cgroup, inherited-listener reconnect, and cleanup proof."
+    problem: "`CheckpointAuthority.Publish` still stores `checkpoint_artifact_ref` as the invented, unresolvable `artifact://sha256/<digest>` form rather than canonical `artifact:sha256:<digest>`. Separately, current authority text in `docs/computer-ontology.md` and `docs/current-architecture.md` still says the now-wired event/updater/public API/capsule substrate is absent or inert and retains deleted direct-role/worker/package/host-authority paths as current. These violate the owner-settled typed-reference and deletion-citer contracts."
+    disposition: "Documented before repair. G1 remains rejected and effects remain OFF. Replace the checkpoint reference through the canonical constructor, update only the stale current-state claims to the exact effects-OFF cutover state, add focused reconstruction/reference coverage, and freeze a new candidate for a clean round-13 panel."
+    rollback: "Revert the future focused checkpoint/current-guidance repair; no deployed effect or route was enabled by this rejected candidate."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
