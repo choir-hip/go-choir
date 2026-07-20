@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-27
-    state: rejected_G1_mutable_source_TOCTOU
-    ref: 074edfd52509255d9e764569bfbda8eb4c34db8a
+    id: self-development-B-disabled-cutover-round-28
+    state: frozen_G1_review
+    ref: 50c634909bc1793d3c50160eec630c42816833c2
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete effects-OFF cutover with one request-lifecycle contract from immutable source admission through capsule execution, physical freeze, evidence binding, and release staging; every O(tree/bytes) step is cancellable and physical ambiguity remains fail-closed."
+    scope: "Complete effects-OFF cutover whose immutable capsule input is one exact Git commit/tree/blob projection; no post-check worktree path is read. Request cancellation spans object streaming through physical freeze, evidence binding, and release staging."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [ad54c0b8e351be055ff18e40806b25204451110a, 6067db8d792ecd9fd87013ac3c83c78d32381184]
-    verification: "Node A x86_64-linux focused source-snapshot tests and full capsule race suite pass. Git probes use CommandContext, tracked entry/copy uses ctx/contextReader, and pre-canceled snapshot returns context.Canceled without creating target. Production Executor.Spawn cgroup integration with immutable Nix broker passes again; all prior freeze/evidence/release receipts remain."
-    disposition: "Round-27 is rejected under the severe-minority rule: cleanliness is checked before bytes are copied from a mutable worktree, so source mutation can race admission. Effects remain OFF and R0 serves staging."
+    immediate_predecessors: [6067db8d792ecd9fd87013ac3c83c78d32381184, 074edfd52509255d9e764569bfbda8eb4c34db8a]
+    verification: "Node A x86_64-linux focused object-snapshot tests and full capsule race suite pass. Snapshot resolves/validates HEAD commit, enumerates ls-tree blob OIDs, streams cat-file blobs, and hashes commit/mode/path/OID metadata. A deterministic test mutates the worktree after commit and proves copyImmutableCommitTree still emits committed bytes. Production Spawn integration passes again; all cancellation/freeze/release proofs remain."
+    disposition: "Effects remain OFF and R0 serves staging. Round-28 G1 must accept exact Git-resolved source/doc identities before any fast-forward or deployment."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -663,9 +663,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round27-panel/manifest.tsv, "sha256:2ea47d8b4faaeaf4ac439e0eac55d0489d7de1c7745c647f7dbd3c0a0b9246e9", 074edfd52509255d9e764569bfbda8eb4c34db8a]
-  blocker_or_risk: "Five reviewers accept, but Codex identifies a critical immutable-source TOCTOU: ls-files object IDs are discarded and later reads come from mutable worktree paths after cleanliness probes."
-  next_action: "Resolve one exact HEAD commit, enumerate its immutable tree/blob object IDs, stream symlink and regular bytes via cancellable git cat-file from those objects, never reopen worktree files, and add mutation-resistant snapshot proof before refreezing G1."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round27-panel/manifest.tsv, "sha256:2ea47d8b4faaeaf4ac439e0eac55d0489d7de1c7745c647f7dbd3c0a0b9246e9", 50c634909bc1793d3c50160eec630c42816833c2]
+  blocker_or_risk: "Round-27's immutable-source TOCTOU is repaired by deleting worktree reads from the copy path. The red G1 gate remains closed pending independent review."
+  next_action: "Commit and Git-resolve round-28 authority, rerun the diverse G1 panel against the exact object-pinning delta and Node A proofs, and proceed to C only on acceptance."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -827,16 +827,17 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_ci_failure_10:
     observed_at: 2026-07-20T06:12:00Z
-    status: blocked_mutable_source_TOCTOU
+    status: repaired_in_round_28_candidate
     mutation_class: red
     protected_surfaces: [immutable_source_snapshot, git_object_binding, capsule_spawn_admission]
     evidence_class: "Frozen round-27 panel; Codex supplied exact critical TOCTOU proof while five reviewers accepted."
     problem: "copyImmutableSourceTree checks worktree/index cleanliness, parses staged blob IDs, then discards those IDs and Lstat/Open/Readlink the mutable persistent worktree. A concurrent mutation after probes changes admitted bytes without changing the claimed immutable-source authority."
     existing_replacement: "Git already provides immutable commit/tree/blob object custody. Resolve one HEAD commit, enumerate `git ls-tree -rz --full-tree <commit>`, and read every declared blob through `git cat-file blob <oid>`."
     repair: "Retain cancellable cleanliness refusal, resolve and validate one exact HEAD commit, bind the snapshot digest to it, enumerate only its stage-free blob entries, stream regular and symlink content from immutable object IDs with CommandContext/contextReader, and delete all worktree Lstat/Open/Readlink reads from the snapshot copy."
+    repair_result: "Snapshot resolves one validated HEAD commit, enumerates its ls-tree blob OIDs, streams regular/symlink content via cancellable cat-file, and digests commit/mode/path/OID. No Lstat/Open/Readlink of source worktree remains. Mutation-resistant, cancellation, full race, and production Spawn tests pass."
     rollback: "Discard the unmerged branch and retain R0; no deploy or genesis occurred."
     conjecture_delta: "An immutable source snapshot is a commit/tree/blob projection, never a cleanliness check followed by mutable pathname reads."
-    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
