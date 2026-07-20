@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-platform-warm-failure-round-53
-    state: frozen_G1_review
+    state: accepted_G1
     ref: d0f8f785de25c9f4cae8d7da6def4047c31940f4
     owner: integration-authority
     base: f381841a620a9abca4a0a40bb9a4acf4b669d757
@@ -595,7 +595,14 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [928fbf13715228b41dfbe7f6b9df7e7e6af56012, 00dca496fbdff502560754f6706043da97144d9c]
     verification: "The production-shaped test first reproduced booting instead of failed, then reproduced split lookup as ownerships=failed versus vmByID=stopped. The final candidate proves both indexes immediately return the same retained identity in failed/recovery_failed state and registry reload preserves it. Focused platform race tests and full `go test -race ./internal/vmctl -count=1` pass."
-    disposition: "Pending proportionate independent G1 review of the one-pointer coherence repair. Effects remain OFF. Deployment, public retained-computer recovery, and the exact signed kernel receipt remain mandatory."
+    disposition: "Round-53 accepted unanimously by OMP Gemini 3.5, OMP Cursor/Grok 4.5, and OpenCode. All confirmed both indexes share one snapshot, guarded failure cannot clobber an Active or replaced ownership, failed/recovery_failed remains recoverable without identity mint, and the diff is limited to the protected warm path plus regression. Devin timed out empty; Codex exhausted usage. Effects remain OFF; deployment, public retained-computer recovery, and exact signed kernel receipt remain mandatory."
+    g1_round_53_probe:
+      reviewed_at: 2026-07-20T20:53:25Z
+      source_ref: d0f8f785de25c9f4cae8d7da6def4047c31940f4
+      authority_ref: 9e970258c015b24659e9f2ef448279e1beed1964
+      outcome: accept_G1
+      adjudication: "Three independent reviewers found no blocker. Each checked the exact source diff and the round-52 rejection; all agreed the shared snapshot repairs immediate `ownerships`/`vmByID` coherence on success and failure while the state/VMID guards preserve concurrent transitions."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round53-panel/manifest.tsv, manifest_sha256: 9db3ee0e0a617c2ec4fd5d166e6a2c025009ae2547421eab42f6e8d2f9073de8, omp_gemini35_sha256: a064e74db403af86fcf8d3231ada52cc2aca2f06aeac6323b281fb37932d4301, omp_cursor_grok45_sha256: fd794f938801d549f9ca26e3707a8c7f5aaf34ea9c3253ba977b3f88b3fa95b7, opencode_sha256: e4419b7c45229bad48f619a2a2f528610415e36cec2aee6ebb707cec5738e300, devin_empty_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, codex_failure_sha256: 86dcac857e6cadec9773be289905c3225867f0780ae6111b7b6b8f25a1fcbfef}
     g1_round_52_probe:
       reviewed_at: 2026-07-20T20:33:42Z
       source_ref: b5c51d008acd009b04c0c0ed66ff5a8029d4e5ec
@@ -1256,7 +1263,7 @@ now:
     heresy_delta: {discovered: 6, introduced: 1, repaired: 1}
   c_deploy_failure_11:
     observed_at: 2026-07-20T20:11:20Z
-    status: frozen_G1_round_53
+    status: accepted_G1_round_53_pending_land
     mutation_class: red
     protected_surfaces: [vmctl_restart_recovery, retained_computer, realization_epoch, lifecycle_acceptance, kernel_capability_receipt]
     admissible_evidence_class: "Exact main CI/deploy receipt, public scoped lifecycle/kernel responses, source transition trace, focused production-shaped tests, refrozen G1, and deployed no-SSH acceptance."
@@ -1270,9 +1277,9 @@ now:
     repair_evidence: "The initial regression failed before round 52 with booting at epoch 1146. Its new VMID lookup assertion then failed against round 52 with stopped versus failed. Against round 53, both immediate indexes and reload return the exact retained failed identity; focused platform race tests and full vmctl race pass."
     rollback_candidate: "Revert d0f8f785de25c9f4cae8d7da6def4047c31940f4 before landing or its eventual main landing commit. Preserve deployed 928fbf13, retained target/epoch/data, and effects OFF."
     round_52_rejection: "The source candidate correctly persists failed/recovery_failed, but the warm path first replaces only `ownerships[key]` with a snapshot pointer. `vmByID[VMID]` remains attached to the prior stopped object, so GetOwnershipByVMID and any VMID-directed transition observe or mutate a different ownership in-process. Reload repairs the pointer graph, but requiring restart for consistency is inadmissible."
-    next_repair: "Satisfied in round 53; await proportionate independent review before landing."
+    next_repair: "Satisfied and accepted in round 53; land and run the deployed no-SSH recovery/kernel receipt gate."
     conjecture_delta: "A durable boot-epoch reservation is necessary but insufficient: every caller that begins a boot must terminalize failed attempts, or restart recovery can strand the retained Computer in a transient state."
-    heresy_delta: {discovered: 7, introduced: 1, repaired: 1}
+    heresy_delta: {discovered: 7, introduced: 1, repaired: 2}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
