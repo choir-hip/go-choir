@@ -664,8 +664,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "G1 accepted. Remaining evidence is deliberately deployed-only: pushed main/CI/deploy identity, effects-OFF behavior, exact signed KernelCapabilityReceipt, and R0/R1 recovery before genesis."
-  next_action: "Fast-forward the accepted source/authority to main, push, monitor selected CI and staging deployment, verify exact staging identity and effects-OFF behavior, retrieve the route-bound signed kernel receipt, and complete C/R1 before any genesis."
+  blocker_or_risk: "C landing is blocked by CI run 29722126220. The new immutable-object test passes assertions but its read-only snapshot defeats TempDir cleanup; separately, a pre-existing agentcore trajectory test exceeded its Dolt lookup deadline. Staging deploy was correctly skipped; R0 still serves."
+  next_action: "Repair only the deterministic test cleanup, reproduce the agentcore timeout independently, push the documented repair, rerun selected CI, and deploy effects-OFF only after all selected gates pass."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -838,6 +838,17 @@ now:
     rollback: "Discard the unmerged branch and retain R0; no deploy or genesis occurred."
     conjecture_delta: "An immutable source snapshot is a commit/tree/blob projection, never a cleanliness check followed by mutable pathname reads."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+  c_ci_failure_11:
+    observed_at: 2026-07-20T06:47:00Z
+    status: blocked_C_ci
+    mutation_class: yellow
+    protected_surfaces: [G1_regression_fixture, C_landing_gate]
+    evidence_class: "GitHub Actions run 29722126220 exact failed logs."
+    problem: "`TestCopyImmutableCommitTreeIgnoresMutableWorktree` proves the object-pinned bytes correctly but leaves the snapshot directory/file read-only, so testing.TempDir cleanup fails with permission denied. Separately `TestCancelRunTrajectoryDrainsMoreThanOneActivePage` failed after 48.53s because an objectgraph Dolt scan exceeded context deadline; no changed capsule path is in that call graph."
+    repair: "Register the same recursive test-only chmod cleanup already used by the neighboring source snapshot success test. Run the focused agentcore timeout locally; treat it as unrelated only if it passes without source repair, then rerun the exact selected CI gates."
+    rollback: "R0 remains deployed; CI skipped staging. Revert the focused fixture cleanup if needed."
+    conjecture_delta: "The immutable snapshot behavior is correct; its test must explicitly undo intentional read-only modes before TempDir cleanup."
+    heresy_delta: {discovered: 0, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
