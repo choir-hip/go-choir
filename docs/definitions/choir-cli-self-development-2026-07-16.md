@@ -586,16 +586,22 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-kernel-receipt-diagnostics-round-54
-    state: accepted_G1
-    ref: 6a196d8a5893ab911bc03cef16ba6c5f443ac2c7
+    id: self-development-C-lookup-readiness-round-55
+    state: frozen_G1_review
+    ref: ca4774f8362970ed7230b91b52d30e54c72a3fc3
     owner: integration-authority
-    base: 714f6a3057172ab41d4d7c07daeaa6548d4e22af
-    scope: "Protected no-SSH diagnostic cutover only: preserve authenticated kernel receipt endpoint status/error while adding stable non-secret reason codes for updater unavailable/unreachable, probe unavailable, receipt refused, invalid response, and post-signature verification refusal. Do not expose raw errors, alter admission/verification, change lifecycle behavior, enable effects, or touch route/event/capsule/credential authority."
+    base: adc44d19f42aeca0f2848f792b17ffcd80c6a6ad
+    scope: "Protected lookup/readiness repair only: before returning an Active ownership, the existing internal lookup checks the VM manager's guest health. An unhealthy/erroring active realization is durably demoted to degraded; a lookup concurrent with explicit refresh projects booting without altering the lifecycle transaction. Lookup never boots, replaces, recovers, or reroutes a VM. Preserve ComputerID/VMID/epoch/data, lifecycle authority, API grammar, mode OFF, and all event/capsule/credential behavior."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [6f841ec4e5c699997bd262c7a00b12d9e63fc80c, 714f6a3057172ab41d4d7c07daeaa6548d4e22af]
-    verification: "Focused race tests prove updater refusal bodies map only to stable reason codes and the public error remains generic with 503 plus typed reason. Full updater race and all runtime shards pass. Existing error envelopes omit reason unchanged."
-    disposition: "Round-54 accepted unanimously by OMP Gemini 3.5, OMP Cursor/Grok 4.5, Devin, and OpenCode. All confirmed raw causes are never serialized, updater text only selects exact known constants, authorization/503/verification remain unchanged, and scope is diagnostic only. Cursor and Devin note a nonblocking future hardening: allowlist the helper input even though both current call sites are closed constants. Codex exhausted usage. Effects remain OFF; deployment is solely to recover the no-SSH failure class."
+    immediate_predecessors: [e5eeefd5f7cd190711737addbf1c31939a102347, adc44d19f42aeca0f2848f792b17ffcd80c6a6ad]
+    verification: "The production-shaped handler regression starts with Active ownership plus a running-but-unhealthy manager realization; lookup now returns degraded, persists degraded, and reloads as the existing stopped recovery state. The same test would return Active before the candidate. Focused lookup race tests, full vmctl race, cmd/vmctl build, and proxy tests pass."
+    disposition: "Frozen for independent G1 review. The change reuses VMManager.CheckHealth and the existing ownership state/persistence authority; it adds no store or recovery action. Effects remain OFF. Review must reject if GET lookup can construct/recover a VM, race an explicit refresh, change identity/epoch, or return Active after observed unhealthy."
+    g1_round_55_probe:
+      reviewed_at: 2026-07-20T22:45:24Z
+      source_ref: ca4774f8362970ed7230b91b52d30e54c72a3fc3
+      authority_ref: pending_freeze_commit
+      outcome: pending
+      adjudication: "Pending independent review of the frozen lookup/readiness candidate."
     g1_round_54_probe:
       reviewed_at: 2026-07-20T22:00:05Z
       source_ref: 6a196d8a5893ab911bc03cef16ba6c5f443ac2c7
@@ -1307,7 +1313,7 @@ now:
     heresy_delta: {discovered: 8, introduced: 1, repaired: 3}
   c_deploy_failure_13:
     observed_at: 2026-07-20T22:37:45Z
-    status: documented_pending_repair
+    status: frozen_G1_round_55
     mutation_class: red
     protected_surfaces: [retained_computer_recovery, lifecycle_intent, guest_readiness, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main deploy identity, public scoped lifecycle/status/guest-proxy responses, source readiness/ownership joins, production-shaped Linux and Go tests, refrozen G1, and deployed no-SSH acceptance."
@@ -1317,6 +1323,9 @@ now:
     existing_replacement_check: "`ensureActiveVMReady`, `VMManager.IsHealthy`, boot health probes, `LiveSandboxURL`, ownership lookup, and the proxy's upstream dial already exist. Join Active publication to the same successful guest health/route evidence and demote a formerly Active ownership when that evidence is absent; do not add another state store, lengthen deadlines, accept Active alone, bypass the proxy, mint a replacement computer, or use SSH as product proof."
     rollback: "Preserve R0/R1, deployed e5eeefd5, retained ComputerID/data image, epochs 1176 and 1183, exact replay intent, scoped-key metadata, and effects OFF. Revert only a future readiness-authority repair if it regresses stable lifecycle behavior."
     next_action: "Trace the one authority transition that publishes Active and the proxy route used for that same ownership; add a production-shaped regression in which manager/ownership says active but guest health or routing is unavailable, and make the existing readiness authority fail closed before refreezing G1. Do not issue another lifecycle mutation until that source-level join is repaired and deployed."
+    candidate_repair: "ca4774f8362970ed7230b91b52d30e54c72a3fc3 makes internal ownership lookup validate an Active realization through the configured VM manager before returning it. Failed health evidence atomically demotes the unchanged ownership to degraded and persists it; an explicit concurrent refresh is represented as booting without mutating its transaction."
+    repair_evidence: "The new handler regression reproduces Active ownership joined to a running-but-unhealthy manager, then proves lookup response degraded, in-memory state degraded, persisted state degraded, and safe restart projection stopped. Focused lookup race tests, full `go test -race ./internal/vmctl`, `go test ./cmd/vmctl`, and proxy tests pass."
+    rollback_candidate: "Revert ca4774f8362970ed7230b91b52d30e54c72a3fc3 before landing or its eventual main landing commit; preserve e5eeefd5 deployment, the exact retained target and scoped authority metadata, and effects OFF."
     conjecture_delta: "Typed updater diagnostics worked as a discriminator: no typed updater reason appeared because the request never crossed the guest transport. The remaining error is now localized to vmctl lifecycle/ownership readiness versus proxy reachability, before updater report or signature verification."
     heresy_delta: {discovered: 9, introduced: 1, repaired: 3}
   dead_end_assessment:
