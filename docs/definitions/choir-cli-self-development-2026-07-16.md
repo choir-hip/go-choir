@@ -586,15 +586,15 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-18
-    state: rejected_C_deploy_race_recovering
+    id: self-development-B-disabled-cutover-round-19
+    state: frozen_G1_review
     ref: fe5b854f9c73356fe51fe2b5f53e4d931695db80
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
     scope: "Complete effects-OFF source cutover plus exact immutable Node B disposable-ComputerID deployment binding; Node A remains fail-closed."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e]
-    verification: "Prior effects-OFF package and exact Node A guest/capsule evidence remains unchanged. Exact Node B x86_64-linux closure build passed on Node A; the realized proxy launcher exports the intended target immediately before exec. Round-18 review was stopped because the now card carried a mistyped full source SHA and staging had already changed."
-    disposition: "C is rejected and effects must remain OFF. Restore frozen R0 before another G1 review; do not create genesis."
+    verification: "Prior effects-OFF package and exact Node A guest/capsule evidence remains unchanged. Exact Node B x86_64-linux closure build passed on Node A; the realized proxy launcher exports the exact target immediately before exec. The pre-gate deploy race was rolled back to R0: system, built-in service packages, deployment receipt, immutable guest image, public health, route generation 1, ComputerVersion, and routed platform guest health all match the frozen baseline."
+    disposition: "Effects remain OFF and R0 serves staging. Round-19 G1 must accept the exact corrected candidate before any new deployment; genesis remains forbidden."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -663,8 +663,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, /tmp/choir-selfdev-g1-round16-panel/manifest.tsv]
-  blocker_or_risk: "G1 is accepted with effects OFF. The next risk is deployment identity and rollback ratchet integrity: staging must serve the exact accepted cutover, preserve R0, expose a route-bound signed KernelCapabilityReceipt matching the immutable-image receipt, and refuse legacy route authority before genesis."
-  next_action: "Apply the pre-genesis gate-rejection disposition: restore the exact frozen R0 system/service pointers and verify public build identity, health, route generation 1, and absent self-development state. Correct the candidate identity and freeze a new G1 review only after R0 is serving."
+  blocker_or_risk: "R0 has been restored after a cancelled-workflow deployment race. The current risk is exact source/configuration gate integrity: round-19 must accept the corrected immutable-target candidate before a fresh C deploy is dispatched."
+  next_action: "Run a frozen round-19 G1 review against the corrected source identity and R0 recovery evidence. Only if accepted, dispatch one fresh CI/deploy and verify exact R1 identity with mode off before GenesisImported."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -695,7 +695,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_deploy_failure_1:
     observed_at: 2026-07-20T02:40:00Z
-    status: rejected_cancel_race_and_partial_deploy
+    status: recovered_R0
     mutation_class: red
     protected_surfaces: [staging_deployment, deploy_receipt, disposable_ComputerID, R0_R1_ratchet]
     evidence_class: "Node B deployment receipt, service manifests, checkout/system identities, and public `/health` after cancellation requests."
@@ -703,8 +703,9 @@ now:
     prior_R0: {system: /nix/store/xnz8798ai2sccs73n8c1mykwx9zmxzdn-nixos-system-go-choir-b-26.05.20260409.4c1018d, deploy_receipt_commit: ab6dc4a957627acff8c15c10f4a8f5855a3eab69, proxy_release_commit: 2bc1799f72ce437b35d4606a23d14e62b7239ac5, guest_image_commit: e6fa53f10db3ba9499175d7a1d7912a0cbe2f876, route_slot: "computer:universal-wire-platform:platform", route_generation: 1, route_receipt: 9f0e13fc-fa7e-5bdc-9620-6720477ace4f, computer_version: {code_ref: "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380", artifact_program_ref: "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d"}}
     observed_mixed_state: {checkout: fe5b854f9c73356fe51fe2b5f53e4d931695db80, system: /nix/store/1zs243y324fp9b8srlz9g1i1xsj5a8by-nixos-system-go-choir-b-26.05.20260409.4c1018d, published_deploy_receipt: 7365376aced9c633aa3a993feceee1f1e150b66e, public_proxy_build: 7365376aced9c633aa3a993feceee1f1e150b66e}
     rollback: "Before genesis, restore the exact R0 system and previous service pointers, restart/verify health, and preserve the failed deployment receipts. Do not use route mutation or delete any event/schema row."
+    recovery_result: "Preserved the mixed deployment under `/var/lib/go-choir/deploy-failures/selfdev-pre-gate-20260720T0240Z`; switched NixOS generation 561; removed mutable service pointers from authority so the R0 closure packages serve; restored the prior deploy receipt; rebuilt and installed guest image `e6fa53f10db3ba9499175d7a1d7912a0cbe2f876`; reconstructed the platform realization at epoch 615; and verified public proxy `2bc1799f72ce437b35d4606a23d14e62b7239ac5`, route generation 1/receipt `9f0e13fc-fa7e-5bdc-9620-6720477ace4f`, exact baseline ComputerVersion, direct guest health, and routed platform health."
     conjecture_delta: "CI cancellation is not a deployment barrier once the deploy job has begun. Future gates must prevent workflow dispatch/landing before authorization rather than rely on cancellation."
-    heresy_delta: {discovered: 1, introduced: 1, repaired: 0}
+    heresy_delta: {discovered: 1, introduced: 1, repaired: 1}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
