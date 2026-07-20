@@ -52,6 +52,11 @@ let
       set +a
     fi
 
+    # Reassert the immutable baseline after mutable kernel-derived environment
+    # expansion. Pristine updater roots need this exact release to produce a
+    # route-bound kernel capability receipt before genesis.
+    export CHOIR_BASELINE_RELEASE_ROOT="${goChoirPackages.sandbox}"
+
     if [ -z "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
       for param in $(cat /proc/cmdline); do
         case "$param" in
@@ -590,6 +595,7 @@ EOF
       CGO_LDFLAGS = "-L${pkgs.icu}/lib";
       PKG_CONFIG_PATH = "${pkgs.icu.dev}/lib/pkgconfig";
       RUNTIME_SKILLS_ROOT = "${goChoirPackages.sandbox}/share/go-choir/skills";
+      CHOIR_BASELINE_RELEASE_ROOT = "${goChoirPackages.sandbox}";
       CHOIR_CAPSULE_BROKER_PATH = "${goChoirPackages.capsuleBroker}/bin/capsule-broker";
       CHOIR_CAPSULE_STATE_DIR = "/run/choir/capsules";
       CHOIR_CAPSULE_SOURCE_ROOT = "/mnt/persistent/files/Source/platform";
