@@ -754,16 +754,26 @@ in
       restore_saved_trap INT "$saved_int"
       restore_saved_trap TERM "$saved_term"
     }
+    invoke_saved_signal() (
+      local signal="$1"
+      local saved="$2"
+      set +e
+      restore_saved_trap "$signal" "$saved"
+      kill -s "$signal" "$BASHPID"
+      exit 0
+    )
     on_cutover_signal() {
       local signal="$1"
+      local saved=
+      local status=
       restore_moved_guest || true
-      restore_cutover_traps
-      kill -s "$signal" "$$"
       case "$signal" in
-        HUP) exit 129 ;;
-        INT) exit 130 ;;
-        TERM) exit 143 ;;
+        HUP) saved="$saved_hup"; status=129 ;;
+        INT) saved="$saved_int"; status=130 ;;
+        TERM) saved="$saved_term"; status=143 ;;
       esac
+      invoke_saved_signal "$signal" "$saved" || true
+      exit "$status"
     }
     move_to=
     preserved_conflict=false
