@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-canonical-guest-deploy-round-40
-    state: accepted_G1
+    state: accepted_G1_landed_C_blocked_legacy_guest_installer
     ref: a97bf5a2fa26463f55b1bc4e56288d0b157a1c5b
     owner: integration-authority
     base: 275d819b
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [198fad983747cc5f14c027fc739fd1f4ee7b5700, 539207aa79111db8f238ab0c45ba956422f87b5a]
     verification: "Classifier, deploy workflow, CI workflow, pointer resolver, and Bash syntax contracts pass. Active `.github`, `nix`, and flake inventory contains removed Playwright guest tokens only as explicit negative workflow contracts. Pointer sync selects host OS/vmctl restart and no guest. Run 29740013073 remains the deployed stale-selection reproducer."
-    disposition: "Round-40 G1 accepted unanimously across four substantive terminal reviewers; Devin timed out. Complete active deletion, canonical guest preservation, negative contracts, pointer classification, and retained evidence boundaries have no reproducible blocker. Effects remain OFF; candidate may land and retry C."
+    disposition: "Round-40 G1 accepted and landed as exact main d0307585. All selected source gates passed. Deployment 29744232989 correctly removed the second guest path but selected the canonical guest because the accepted diff touched sandbox-vm.nix, then failed before activation on the legacy direct installer writing through the new immutable `/var/lib/go-choir/guest` symlink. Effects remain OFF."
     g1_round_36_probe:
       reviewed_at: 2026-07-20T11:16:00Z
       source_ref: cc380712f941f7b88e06240e108024e329bfc511
@@ -719,8 +719,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "Round-40 G1 accepted complete deletion of obsolete second-guest deploy authority and framing. C remains incomplete until exact main lands, selected CI passes, deployment publishes a complete receipt, staging identity matches, active guest refresh requirements are satisfied, and no-SSH effects-OFF/kernel receipt acceptance passes."
-  next_action: "Land accepted Round-40 authority on main, monitor selected CI, run exact staging deployment, then verify complete receipt, public identity, effects-OFF behavior, and signed route-bound kernel capability receipt."
+  blocker_or_risk: "C deployment 29744232989 proves second-guest deletion, but the canonical guest still has two deployment writers: NixOS activation owns the immutable symlink, while workflow `install_guest_image` tries to chmod/copy through it and fails read-only. Public health remains exact 87432535; effects remain OFF and incomplete receipts remain authoritative."
+  next_action: "Delete the direct ordinary-guest deploy class/installer/receipt path; route every canonical guest change through the existing Node B NixOS activation plus active-computer refresh, add negative contracts, refreeze G1, then retry C deployment."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -1015,7 +1015,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   c_deploy_failure_3:
     observed_at: 2026-07-20T12:10:45Z
-    status: accepted_G1_pending_land
+    status: accepted_G1_landed_deployment_blocked_by_legacy_guest_installer
     mutation_class: red
     protected_surfaces: [deployment_routing, guest_image_authority, deploy_receipt, Node_B_activation]
     admissible_evidence_class: "Exact GitHub deploy logs, negative caller inventory, classifier/workflow contracts, refrozen G1 review, complete deploy receipt, public identity, and no-SSH acceptance."
@@ -1026,6 +1026,19 @@ now:
     repair_result: "Round-40 rewrites the load-bearing sandbox Nix comment to one canonical guest image and adds deploy-workflow contract refusals for every removed Playwright guest environment/output/package token. Focused classifier/workflow/pointer/Bash checks pass; active `.github`, `nix`, and flake inventory contains only those negative contract literals. Retained host/report/archive evidence remains untouched."
     rollback: "Revert the source deletion if G1 rejects it. Node B remains on host identity 87432535 with canonical immutable guest and both preserved rollback trees; retain incomplete receipt 29740013073-1 and any legacy guest-playwright data."
     conjecture_delta: "Deleting a package output is incomplete until deploy classifiers, workflow receipts, and selection tests lose the same authority; otherwise conservative fallbacks resurrect the deleted topology."
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
+  c_deploy_failure_4:
+    observed_at: 2026-07-20T13:10:56Z
+    status: blocked_C_legacy_direct_guest_installer
+    mutation_class: red
+    protected_surfaces: [immutable_guest_image, Node_B_NixOS_activation, deployment_routing, deploy_receipt, active_computer_refresh]
+    admissible_evidence_class: "Exact GitHub deploy logs, single-writer negative inventory, classifier/workflow contracts, refrozen G1 review, complete deploy receipt, public identity, and no-SSH acceptance."
+    evidence: "Run 29744232989 passed all selected source gates. Deployment selected only the canonical guest, built `.#guest-image`, skipped host NixOS activation, then `install_guest_image /tmp/guest-image-result /var/lib/go-choir/guest` failed: `install: cannot change permissions of /var/lib/go-choir/guest: Read-only file system`. It wrote `/var/lib/go-choir/deploy-failures/29744232989-1.json`; public health remained 874325352b202baf6692d1abb4ca03ac1ff1ea85."
+    problem: "The first-cutover repair made `/var/lib/go-choir/guest` an activation-owned immutable Nix-store symlink, but the workflow retains an older second writer that copies artifacts into that path. Canonical guest inputs still select the old direct build/install/ordinary_guest receipt route, bypassing the activation transaction and violating single state authority."
+    existing_replacement: "`nix/node-b.nix` activation already owns atomic canonical guest pointer replacement, rollback-tree preservation, signal/error restoration, and idempotent convergence. The Node B host closure includes `guestImage`; active-computer refresh already consumes the resulting boot contract."
+    authorized_repair: "Delete the `deploy_ordinary_guest` classifier output and all workflow environment/log/build/direct-install/ordinary_guest receipt branches, including the now-unused `install_guest_image` helper. Make canonical guest-affecting classifier paths select host OS activation, vmctl restart, and active-computer refresh. Refresh wording must use the VM boot-contract path. Add negative workflow contracts for removed ordinary-guest tokens and focused classifier assertions that `nix/sandbox-vm.nix` selects host OS + refresh with no guest output. Preserve `/var/lib/go-choir/guest`, rollback trees, temp/report/archive refs, and incomplete receipts. Refreeze G1."
+    rollback: "Revert the source deletion if G1 rejects it. Node B remains on 87432535 with activation-owned canonical guest pointer, pre-managed/conflict rollback trees, and incomplete receipts 29740013073-1 and 29744232989-1."
+    conjecture_delta: "A canonical artifact cannot have both an activation transaction and a deploy-time copier; selection, materialization, and receipt authority must move together to the single writer."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
