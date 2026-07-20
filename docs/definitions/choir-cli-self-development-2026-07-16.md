@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-service-pointer-repair-round-38
-    state: accepted_G1
+    state: accepted_G1_landed_C_blocked_obsolete_playwright
     ref: 692a68d0642b6bfc8f85ba6c926ca01f4e9819e8
     owner: integration-authority
     base: ea1f8d12
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [9e56b19b2d598d4e8e79398d6ec82688d2e46cb5, d188ddca1b207b668df67e0f681a802edb8044af]
     verification: "Focused resolver, deploy workflow, CI workflow, and Bash syntax contracts pass. Exact Round-37 symlink wrapper/package reproducers and an executable symlink to mutable bytes now fail closed; direct and nested generated wrapper cases still resolve. Run 29735841371 remains the deployed nested-wrapper reproducer."
-    disposition: "Round-38 G1 accepted unanimously across four substantive terminal reviewers. Exact symlink reproducers are closed, no reproducible source blocker remains, and effects remain OFF. Candidate may land on main and retry C deployment."
+    disposition: "Round-38 G1 accepted and landed as exact main 5433db21. All selected source gates passed, including the focused wrapper fixture. Deployment 29740013073 failed before activation because the stale deploy graph selected removed `.#guest-image-playwright`; pointer resolution was not reached. Effects remain OFF."
     g1_round_36_probe:
       reviewed_at: 2026-07-20T11:16:00Z
       source_ref: cc380712f941f7b88e06240e108024e329bfc511
@@ -697,8 +697,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "Round-38 G1 accepted the canonical immutable-store wrapper resolver. C remains incomplete until accepted authority lands on main, selected CI including the focused fixture passes, deployment publishes a complete receipt, staging identity matches, active guest refresh succeeds, and no-SSH effects-OFF/kernel receipt acceptance passes."
-  next_action: "Land accepted Round-38 authority on main, monitor selected CI, run exact staging deployment, then verify complete receipt, public identity, active guest refresh, effects-OFF behavior, and signed route-bound kernel capability receipt."
+  blocker_or_risk: "C deployment run 29740013073 passed all selected source gates but failed before activation: the deploy classifier/workflow still select `.#guest-image-playwright`, while flake.nix exposes only the canonical `.#guest-image`. This stale second guest authority survived the worker/candidate cutover. Public health remains exact 87432535; effects remain OFF and incomplete receipts are authoritative."
+  next_action: "Delete the obsolete Playwright guest deploy class/build/install/receipt path, classify `scripts/node-b-sync-service-pointers` explicitly as host-OS-only, preserve legacy host data/reporting without selecting it, refreeze G1, then retry C deployment."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -979,7 +979,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_deploy_failure_2:
     observed_at: 2026-07-20T10:51:22Z
-    status: accepted_G1_pending_land
+    status: accepted_G1_landed_deployment_blocked_before_pointer_sync
     mutation_class: red
     protected_surfaces: [Node_B_deployment, service_package_pointers, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deploy logs, focused wrapper-resolution fixtures, refrozen G1 review, complete deploy receipt, public build identity, and no-SSH acceptance."
@@ -990,6 +990,19 @@ now:
     repair_result: "Round-38 requires every wrapper and package root to be a readable canonical non-symlink path in addition to direct-store lexical membership. It resolves the final executable and rejects any symlink target outside the immutable store, while allowing immutable in-store executable links. Focused fixtures now reproduce and refuse symlink wrapper, symlink package root, and executable symlink to mutable bytes, plus all prior cases. Focused deploy/CI contracts and Bash syntax pass."
     rollback: "The exact main host generation and immutable guest pointer are active; pre-managed and conflict recovery trees remain. No complete deployment receipt or active-computer refresh was published. Revert only the synchronizer repair if rejected; retain incomplete receipts and all guest rollback refs."
     conjecture_delta: "Service package authority may be wrapped for immutable environment injection; deployment discovery must resolve bounded generated wrapper composition, not assume one textual wrapper shape."
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
+  c_deploy_failure_3:
+    observed_at: 2026-07-20T12:10:45Z
+    status: blocked_C_obsolete_playwright_guest_selection
+    mutation_class: red
+    protected_surfaces: [deployment_routing, guest_image_authority, deploy_receipt, Node_B_activation]
+    admissible_evidence_class: "Exact GitHub deploy logs, negative caller inventory, classifier/workflow contracts, refrozen G1 review, complete deploy receipt, public identity, and no-SSH acceptance."
+    evidence: "Run 29740013073 passed Plan CI, all race shards, vet/build, frontend, docs truth, heresy, rolling flake, and the focused pointer fixture. Deploy impact treated `scripts/node-b-sync-service-pointers` as an unknown deployed path, selected host OS plus ordinary and Playwright guests, built the host closure and canonical guest, then failed: `flake ... does not provide attribute ... guest-image-playwright`. It wrote `/var/lib/go-choir/deploy-failures/29740013073-1.json`; public health remained 874325352b202baf6692d1abb4ca03ac1ff1ea85."
+    problem: "The canonical flake deleted the second Playwright guest image, but deploy classification, workflow environment/output, build/install/receipt branches, and classifier assertions still model it as an active deploy authority. The accepted service-pointer script also lacks an explicit deploy class, causing the stale full-deploy fallback."
+    existing_replacement: "flake.nix exposes one canonical `guest-image`; Playwright/browser proof no longer has a separate VM image package. The current ordinary guest and public browser acceptance paths supersede the removed image. Historical `/var/lib/go-choir/guest-playwright` data and report classifications are rollback/retention evidence, not deploy authority."
+    authorized_repair: "Delete `deploy_playwright_guest` from the classifier outputs and all workflow input/log/build/install/receipt branches. Remove stale classifier assertions and add a focused assertion that `scripts/node-b-sync-service-pointers` selects host OS/vmctl restart only, with both guest selections absent. Do not delete or mutate retained host paths, reports, receipts, or archives. Refreeze G1 because deployment routing is protected."
+    rollback: "Revert the source deletion if G1 rejects it. Node B remains on host identity 87432535 with canonical immutable guest and both preserved rollback trees; retain incomplete receipt 29740013073-1 and any legacy guest-playwright data."
+    conjecture_delta: "Deleting a package output is incomplete until deploy classifiers, workflow receipts, and selection tests lose the same authority; otherwise conservative fallbacks resurrect the deleted topology."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
