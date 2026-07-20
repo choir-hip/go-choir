@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-service-pointer-repair-round-36
-    state: frozen_G1_review
+    state: rejected_G1_mutable_package_authority
     ref: cc380712f941f7b88e06240e108024e329bfc511
     owner: integration-authority
     base: ea1f8d12
@@ -595,7 +595,18 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [de9412284cb4cd23846b9b7223329fdd479f038a, ea1f8d12]
     verification: "`.github/scripts/node-b-sync-service-pointers-test`, `.github/scripts/deploy-workflow-contract-test`, `.github/scripts/ci-workflow-contract-test`, and `bash -n` pass. Run 29735841371 is the exact nested-wrapper reproducer."
-    disposition: "Effects remain OFF. Round-36 G1 must review exact source and authority before main may advance or deployment may retry."
+    disposition: "Round-36 is rejected under the severe-minority rule. Four reviewers accepted, but Devin reproduced a high-severity mutable-package authority gap: any executable absolute `/bin/<service>` leaf outside `/nix/store` is accepted, and the positive fixture itself uses `/tmp`. Effects remain OFF and main does not advance."
+    g1_round_36_probe:
+      reviewed_at: 2026-07-20T11:16:00Z
+      source_ref: cc380712f941f7b88e06240e108024e329bfc511
+      authority_ref: 8b9372a082ce75cb4bc672f71932992f6226c4b6
+      manifest: /tmp/choir-selfdev-g1-round36-panel/manifest.tsv
+      manifest_sha256: afa956c02a7893a5d096a675eb51fc78901be9ced60501222516d4d52801fbdf
+      panel_health: "Claude, Cursor, OpenCode, and omp-gemini35 completed substantive ACCEPT reviews; Devin completed a substantive REJECT; Codex and omp-gpt55 failed immediately on provider limits."
+      verdicts: [devin:REJECT_G1, claude:ACCEPT_G1, cursor:ACCEPT_G1, opencode:ACCEPT_G1, omp_gemini35:ACCEPT_G1]
+      blocker: "scripts/node-b-sync-service-pointers:70-73 accepts a mutable absolute package leaf such as `/tmp/mutable-package/bin/proxy`; `.github/scripts/node-b-sync-service-pointers-test:11-29` encodes that unsafe path as the expected positive case. The review prompt explicitly forbade alternate mutable package authority."
+      adjudication: "Reproducible high-severity authority blocker; reject despite accepting majority. Production resolution must constrain the start wrapper, every intermediate wrapper, and final package root to canonical direct children of `/nix/store`. Focused tests may inject a disposable store root explicitly, but main must always use `/nix/store`."
+      output_sha256: {devin: 435a48afd29232e706eb08db034b904183022d8dbd0372f41b01b7cbcb55da58, claude: d898dccfd4454676d405cae45bc0ae8ec2243380381162df5696238befdf3fdc, cursor: a05a5ce9d1292eca65cad552b2b017cf86a701a28cb8e41f6a43bbbcfd758300, opencode: 4793bac83c17a3e53d8e89d5d62e81f93c8c6778174bcdc51ff20181854b4358, omp_gemini35: db31463c543972c40724970103447b1d630df288414f0c6c27759a237f798e9c}
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -664,8 +675,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "C deployment run 29735841371 passed selected CI and repaired the guest cutover on Node B: both rollback trees were preserved and the immutable guest pointer installed. Deployment then failed before service refresh/receipt because `node-b-sync-service-pointers` cannot follow proxyExec's nested unquoted Nix wrapper. Public health serves exact 87432535, but the incomplete receipt remains authoritative."
-  next_action: "Teach the service-pointer synchronizer to resolve a bounded chain of generated Nix exec wrappers to the final `/bin/<service>` package, reject cycles/missing or wrong binaries, refreeze the focused deploy repair, then rerun exact main deployment and C acceptance."
+  blocker_or_risk: "C deployment run 29735841371 repaired the guest cutover but failed at nested proxy wrapper resolution. Round-36 resolver source is rejected: it follows the chain but would accept a mutable absolute package leaf outside `/nix/store`. Public health serves exact 87432535; effects remain OFF and the incomplete receipt remains authoritative."
+  next_action: "Constrain the start wrapper, every intermediate wrapper, and the final package root to canonical direct children of `/nix/store`; use an explicit disposable store root only in focused tests. Refreeze G1, then rerun exact main deployment and C acceptance."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -946,15 +957,15 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_deploy_failure_2:
     observed_at: 2026-07-20T10:51:22Z
-    status: repair_implemented_pending_G1
+    status: rejected_G1_mutable_package_authority
     mutation_class: red
     protected_surfaces: [Node_B_deployment, service_package_pointers, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deploy logs, focused wrapper-resolution fixtures, refrozen G1 review, complete deploy receipt, public build identity, and no-SSH acceptance."
     evidence: "Run 29735841371 passed its selected CI gates. NixOS activation preserved the ambiguous active guest at `/var/lib/go-choir/guest-cutover-conflict-recovery`, installed `/var/lib/go-choir/guest -> /nix/store/s49115dzzpq0ybm9idhqv17nmy4338yf-go-choir-guest-image`, and completed the switch. Pointer sync then failed: `Could not find Nix fallback binary in wrapper /nix/store/06r0mqvvcpwwkxf51pijf2p1l8iw2055-go-choir-proxy-exec for go-choir-proxy.service`. It wrote `/var/lib/go-choir/deploy-failures/29735841371-1.json`; public health reports 874325352b202baf6692d1abb4ca03ac1ff1ea85."
     problem: "`node-b-sync-service-pointers` parses only a quoted final `exec` directly in the systemd ExecStart wrapper. `proxyExec` instead has an unquoted exec to the generated serviceExec wrapper, whose final quoted exec reaches the immutable proxy package. The package authority exists but the synchronizer stops one wrapper too early."
     existing_replacement: "The generated wrapper chain already contains the exact immutable package path. Resolve that chain with a small bounded/cycle-detecting parser rather than adding another proxy-specific package authority or duplicating serviceExec."
-    authorized_repair: "Resolve quoted or unquoted literal exec targets recursively for a strict small depth. Accept only an executable ending in `/bin/<service>` and install its package root. Reject variables, cycles, unreadable targets, wrong binary names, and depth exhaustion. Add focused disposable fixtures for direct, nested, unquoted, cycle, variable, wrong-binary, and missing targets; refreeze G1 before deployment."
-    repair_result: "`resolve_service_package` follows at most four absolute literal exec targets, detects cycles, and accepts only an executable `/bin/<service>` leaf. The main script remains sourceable for direct contract testing. Focused fixtures prove direct quoted and nested unquoted resolution plus refusal of variable-only, cyclic, wrong-binary, missing-target, and over-depth chains; both Plan CI and deploy preflight execute the regression."
+    authorized_repair: "Resolve quoted or unquoted literal exec targets recursively for a strict small depth. In production, require the start wrapper and every intermediate wrapper to be canonical direct children of `/nix/store`, and accept only an executable direct store package leaf `/nix/store/<entry>/bin/<service>`. Reject variables, traversal/noncanonical paths, mutable paths, cycles, unreadable targets, wrong binary names, and depth exhaustion. Focused tests may pass an explicit disposable store root; main must not. Refreeze G1 before deployment."
+    repair_result: "Round-36 implemented bounded resolution and focused refusals, but G1 reproduced acceptance of `/tmp/mutable-package/bin/proxy`; its positive fixture normalized the unsafe authority. That source is rejected. Round-37 must add direct-store-child validation for every hop and make mutable/noncanonical refusal observable."
     rollback: "The exact main host generation and immutable guest pointer are active; pre-managed and conflict recovery trees remain. No complete deployment receipt or active-computer refresh was published. Revert only the synchronizer repair if rejected; retain incomplete receipts and all guest rollback refs."
     conjecture_delta: "Service package authority may be wrapped for immutable environment injection; deployment discovery must resolve bounded generated wrapper composition, not assume one textual wrapper shape."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
