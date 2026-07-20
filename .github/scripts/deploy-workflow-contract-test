@@ -38,6 +38,11 @@ reject 'git reset --hard origin/main'
 reject 'fast_build_host_service'
 reject 'active computer refresh failed; continuing'
 reject 'if [ "$commit" = "$DEPLOY_COMMIT" ]; then'
+reject 'DEPLOY_PLAYWRIGHT_GUEST'
+reject 'deploy_playwright_guest'
+reject 'guest-image-playwright'
+reject 'guest-playwright'
+reject 'playwright_guest'
 
 identity_line=$(grep -nF 'selected service build identity mismatch' "$workflow" | cut -d: -f1)
 receipt_line=$(grep -nF 'Published activation receipt' "$workflow" | cut -d: -f1)

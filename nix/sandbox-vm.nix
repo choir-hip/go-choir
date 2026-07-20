@@ -128,10 +128,10 @@ in
     # Favor deploy-loop speed over maximum image compaction. microvm.nix's
     # default EROFS flags include fragments/dedupe on newer kernels, which
     # force the single-threaded mkfs.erofs path; keeping only fast LZ4 lets the
-    # builder use the multithread-capable tool. CI lets Node B build these guest
-    # images, including selected ordinary/playwright roots in parallel, so its
-    # persistent Nix store absorbs the cost instead of rebuilding and copying
-    # large image outputs from each ephemeral runner.
+    # builder use the multithread-capable tool. CI lets Node B build the
+    # canonical guest image so its persistent Nix store absorbs the cost
+    # instead of rebuilding and copying the large image output from each
+    # ephemeral runner.
     storeDiskErofsFlags = [ "-zlz4" ];
 
     # No virtiofs or 9p shares. With shares = [], microvm.nix
