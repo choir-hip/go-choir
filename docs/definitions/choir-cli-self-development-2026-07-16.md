@@ -631,6 +631,17 @@ now:
     problem: "Event-first start recovery reconstructs a requested operation and returns before `ensureSelfDevelopmentRun`; every later retry takes the existing-operation fast path, so a crash after `TrajectoryStarted` can strand the proposal without a durable run. The deletion-citer sweep also missed current `specs/README.md` and `specs/promotion_protocol.tla` candidate-branch/route-flip authority plus README/capsule comments that still name deleted `capsule-host`/HostAuthority surfaces as current."
     disposition: "Documented before repair. G1 remains rejected and effects remain OFF. Reuse the normal run-binding path after deterministic operation repair, strengthen the event-first crash regression to require one executing bound run, and remove or rewrite every obsolete current citer without preserving a compatibility path."
     rollback: "Revert the future focused recovery/citer repair; no deployed effect, run, or route was enabled by this rejected candidate."
+  g1_round_14_probe:
+    observed_at: 2026-07-20T01:08:00Z
+    status: rejected_remaining_atomicity_and_obsolete_promotion
+    source_identity: 2fdd63f9078a8c6400d1852c693603e382c52bb6
+    mutation_class: red
+    protected_surfaces: [durable_run_binding, credential_scope, updater_recovery, bundle_identity, obsolete_promotion]
+    evidence_class: "Frozen-source independent review with focused reproducible tests and local source confirmation; exact guest-image/effects-OFF boot and unchanged capsule lifecycle proofs passed."
+    success_before_blocker: "Event-only proposal recovery creates one executing operation/run in the covered path; obsolete promotion TLA gate and host capability citers are removed."
+    problem: "Five source joins remain incomplete: an existing requested operation still returns before missing-run repair and concurrent list-then-create can duplicate runs; event-read alone authorizes credential renewal that mints append/pin scope; updater restart failure after pointer swap neither restores the prior release nor returns signed recovery; materialization does not compare bundle ComputerID/TrajectoryRef/CapsuleIdentity to the durable operation; and the exported DoltPromotionAdapter plus guest env/current citers still preserve callable tag/commit/reset candidate promotion."
+    disposition: "Documented before repair. G1 remains rejected and effects remain OFF. Repair all five at their shared authority boundaries: serialize and repair exactly-one operation/run binding, require append scope for renewal, make post-swap restart failure rollback-and-receipt complete, bind every bundle identity, and delete the obsolete promotion adapter/config/citers without a shim."
+    rollback: "Revert the future coherent authority repair; no deployed self-development mode, run, route, or release was enabled by this rejected candidate."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
