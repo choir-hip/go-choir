@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-guest-single-writer-round-41
-    state: frozen_G1_review
+    state: accepted_G1
     ref: c2725f3b7318c010a31c0d8a7bbf71288fa2deb1
     owner: integration-authority
     base: 0418d4c9
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [a97bf5a2fa26463f55b1bc4e56288d0b157a1c5b, 0418d4c9]
     verification: "Classifier, deploy workflow, CI workflow, pointer resolver, Bash syntax, and YAML parse pass. Active workflow inventory contains removed ordinary-guest tokens only as negative contracts. `nix/sandbox-vm.nix` selects host OS + vmctl restart + active refresh with no guest class. Run 29744232989 is the deployed dual-writer reproducer."
-    disposition: "Effects remain OFF. Round-41 G1 must review single-writer deletion, activation/refresh route, negative inventory/contracts, and rollback preservation before main may advance or deployment may retry."
+    disposition: "Round-41 G1 accepted unanimously across four substantive terminal reviewers; Devin timed out. Single-writer deletion, host activation/refresh routing, negative contracts, and rollback preservation have no reproducible blocker. Effects remain OFF; candidate may land, then exact main requires a forced C deployment because its changed source paths are intentionally deploy-ignored."
     g1_round_36_probe:
       reviewed_at: 2026-07-20T11:16:00Z
       source_ref: cc380712f941f7b88e06240e108024e329bfc511
@@ -651,6 +651,17 @@ now:
       adjudication: "No reproducible blocker. Active classifier/workflow/Nix/flake authority is single-guest; removed tokens are protected by negative contracts; pointer sync selects host OS/vmctl restart without either guest selection; canonical ordinary guest behavior remains; retained legacy paths survive only in ignored operator reports/archives."
       residual_risks: "Main CI and live Node B activation/pointer synchronization remain C gates. Legacy guest-playwright data and incomplete receipt 29740013073-1 must remain unmutated."
       output_sha256: {claude: 785f9204f641bff95c478784c77690d8a5c866d469ae822403752f359a4f4647, cursor: 670e5cde56e066072ac965456c93e7eebb31ea2c3885dac6465b1d336180a2f9, opencode: 2e50b4916081731c461762d394b5851d3406071f83a184ecbbd7a1f6ff7c7ae4, omp_gemini35: 42401d6465ac77b47cdeb7d26b009eb1d463eea9a67178135883d3499c645eed}
+    g1_round_41_probe:
+      reviewed_at: 2026-07-20T13:36:00Z
+      source_ref: c2725f3b7318c010a31c0d8a7bbf71288fa2deb1
+      authority_ref: 302a7730c9b52941aa550faea0710081bc85fb88
+      manifest: /tmp/choir-selfdev-g1-round41-panel/manifest.tsv
+      manifest_sha256: b263d08cf9cbc299fc2791f8f326c15c8d3fe221094f8a12233a084631d0ae6a
+      panel_health: "Claude, Cursor, OpenCode, and omp-gemini35 completed substantive ACCEPT reviews; Devin timed out."
+      verdicts: [claude:ACCEPT_G1, cursor:ACCEPT_G1, opencode:ACCEPT_G1, omp_gemini35:ACCEPT_G1]
+      adjudication: "No reproducible blocker. Direct guest build/copy/receipt authority is gone; every canonical guest input selects host closure activation, vmctl restart, and active refresh; nix/node-b.nix remains sole pointer writer; forced dispatch preserves that route; rollback data and incomplete receipts are untouched."
+      residual_risks: "A forced exact-main dispatch, live activation/pointer update, vmctl restart, active refresh, complete receipt, and public identity are mandatory C gates."
+      output_sha256: {claude: 8d3237b463f5ae96c5b61a8b7e592463553d545014869d216efc7cb8951ed461, cursor: ca86fba2de516bc5039ebe269c86a0a46d418b19974e325a6435db9aecff1efa, opencode: 726337dfecec1ea566297b1fd53a306004abecee7bbc755eb305e43b519b8e1b, omp_gemini35: d5940bd74c13d39c6a5ea3d66ff672d401a9bdf1094f11e7595262c1a08e8ba2}
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -719,8 +730,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "C deployment 29744232989 proves second-guest deletion, but the canonical guest still has two deployment writers: NixOS activation owns the immutable symlink, while workflow `install_guest_image` tries to chmod/copy through it and fails read-only. Public health remains exact 87432535; effects remain OFF and incomplete receipts remain authoritative."
-  next_action: "Delete the direct ordinary-guest deploy class/installer/receipt path; route every canonical guest change through the existing Node B NixOS activation plus active-computer refresh, add negative contracts, refreeze G1, then retry C deployment."
+  blocker_or_risk: "Round-41 G1 accepted activation as the single canonical guest writer. C remains incomplete until accepted authority lands, selected source CI passes, forced exact-main deployment publishes a complete receipt, public identity matches, active refresh succeeds, and no-SSH effects-OFF/kernel receipt acceptance passes."
+  next_action: "Land accepted Round-41 authority on main, monitor source CI, force staging deployment from exact main, then verify complete receipt, public identity, active refresh, effects-OFF behavior, and signed route-bound kernel capability receipt."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -1029,7 +1040,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   c_deploy_failure_4:
     observed_at: 2026-07-20T13:10:56Z
-    status: activation_single_writer_repair_implemented_pending_G1
+    status: accepted_G1_pending_land
     mutation_class: red
     protected_surfaces: [immutable_guest_image, Node_B_NixOS_activation, deployment_routing, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deploy logs, single-writer negative inventory, classifier/workflow contracts, refrozen G1 review, complete deploy receipt, public identity, and no-SSH acceptance."
