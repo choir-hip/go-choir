@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-kernel-baseline-release-round-51
-    state: frozen_G1_review
+    state: accepted_G1
     ref: f6a5b9235a76594e5fd401cfacc79e52f4366a92
     owner: integration-authority
     base: e2986162ac74113d3222cbab2d0255bd42ef1891
@@ -595,7 +595,15 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [bbcbf914d3f2c14a19f022a9f264ff00350f432c, e2986162ac74113d3222cbab2d0255bd42ef1891]
     verification: "Nix evaluation yields sandbox environment `CHOIR_BASELINE_RELEASE_ROOT=/nix/store/...-sandbox-0.1.0`. The evaluated launcher derivation shows the exact immutable export after `/run/go-choir-sandbox.env` sourcing and before both dynamic/static exec paths. Local realization is unavailable from the aarch64 builder; selected x86_64 CI/full closure is the realization gate."
-    disposition: "Frozen for Round-51 G1. Review must confirm this is the exact baseline package consumed by `BuildBaselineManifest`, launcher precedence prevents mutable override, dynamic releases still use their own current manifest, no mutable symlink is trusted, and no receipt verifier is weakened. Effects remain OFF."
+    disposition: "Round-51 accepted unanimously by OMP Gemini 3.5, OMP Cursor/Grok 4.5, and OpenCode. All confirmed `${goChoirPackages.sandbox}` is the exact immutable baseline package, the launcher re-export wins after mutable env expansion, dynamic signed manifests still take precedence, and no verifier/authority boundary changes. Devin timed out empty; Codex exhausted usage. Effects remain OFF; x86_64 realization, deployment, and public signed kernel receipt remain mandatory."
+    g1_round_51_probe:
+      reviewed_at: 2026-07-20T19:54:22Z
+      source_ref: f6a5b9235a76594e5fd401cfacc79e52f4366a92
+      authority_ref: 5e6dc2043a15607aca9e7e95bcbc35ce9582e87c
+      verdicts: {omp_gemini35: ACCEPT_G1, omp_cursor_grok45: ACCEPT_G1, opencode: ACCEPT_G1, devin: timed_out_empty, codex: usage_limit}
+      adjudication: "Accept. The candidate connects existing immutable package identity to existing baseline fallback, protects precedence in the launcher, and leaves signed current-manifest preference plus route/kernel receipt verification intact."
+      residual_risks: "Selected x86_64 guest closure realization, Node B activation/refresh, exact public target route binding, fresh signed kernel capability report, and mode OFF remain deployed gates."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round51-panel/manifest.tsv, manifest_sha256: 30463abeffb9d636cfe82e950381551b835ffff69e327c8b8bd6e4691d2f1b9c, omp_gemini35_sha256: 92f1cdcb7200a56583e5064748813d4b5c00aff94f5eea33c986a8cb29fcb0d3, omp_cursor_grok45_sha256: 2aaa186d86abcb4ffb4b25175fc5aebd772c4a57c842a964e5677aeb80a64aa0, opencode_sha256: cbc6aff66441d96c0e90c749a95a51849d94ab6be78fc7653439eca1ccd1fc16, devin_empty_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, codex_failure_sha256: 579e0fa03a889aefe0cbb4be99fd2b48256b1b321cd6e90c528ae7125935f531}
     g1_round_50_probe:
       reviewed_at: 2026-07-20T19:12:10Z
       source_ref: bbbb34f32a22a79b5e4ca7caea0096bf789e58aa
@@ -1223,7 +1231,7 @@ now:
     heresy_delta: {discovered: 5, introduced: 0, repaired: 0}
   c_deploy_failure_10:
     observed_at: 2026-07-20T19:37:09Z
-    status: frozen_G1_round_51_kernel_baseline_release
+    status: accepted_G1_round_51_pending_land
     mutation_class: red
     protected_surfaces: [kernel_capability_receipt, immutable_release_identity, guest_runtime_environment, deployed_acceptance]
     admissible_evidence_class: "Public scoped API receipt, exact guest/Nix environment evaluation, focused launcher contract, refrozen G1, and deployed no-SSH kernel receipt verification."
