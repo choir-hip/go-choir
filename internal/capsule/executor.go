@@ -583,6 +583,10 @@ func (e *Executor) ReadFile(ctx context.Context, agentRunID, handle, path string
 	if err != nil {
 		return nil, err
 	}
+	if err := caps.acquireOp(); err != nil {
+		return nil, err
+	}
+	defer caps.releaseOp()
 	return caps.broker.ReadFile(ctx, capability, path)
 }
 
@@ -591,6 +595,10 @@ func (e *Executor) WriteFile(ctx context.Context, agentRunID, handle, path strin
 	if err != nil {
 		return err
 	}
+	if err := caps.acquireOp(); err != nil {
+		return err
+	}
+	defer caps.releaseOp()
 	return caps.broker.WriteFile(ctx, capability, path, content, mode)
 }
 
@@ -599,6 +607,10 @@ func (e *Executor) ListDir(ctx context.Context, agentRunID, handle, path string)
 	if err != nil {
 		return nil, err
 	}
+	if err := caps.acquireOp(); err != nil {
+		return nil, err
+	}
+	defer caps.releaseOp()
 	return caps.broker.ListDir(ctx, capability, path)
 }
 

@@ -11,6 +11,13 @@ import (
 	"time"
 )
 
+type capsuleCgroup interface {
+	Open() (*os.File, error)
+	Delete() error
+	Freeze(context.Context) error
+	Thaw(context.Context) error
+}
+
 // Capsule represents a single capsule instance — an isolated execution
 // environment with its own namespaces, cgroups, overlayfs, and broker.
 type Capsule struct {
@@ -29,7 +36,7 @@ type Capsule struct {
 	StartedAt            time.Time
 	Spec                 SpawnSpec
 	Process              *os.Process
-	Cgroup               *CgroupManager
+	Cgroup               capsuleCgroup
 	wait                 func() error
 	listener             net.Listener
 	processDone          chan struct{}
@@ -65,8 +72,8 @@ func (c *Capsule) Exec(ctx context.Context, cap *Capability, req ExecRequest) (E
 	return c.broker.Exec(ctx, cap, req)
 }
 
-// Quiesce freezes the capsule — no new operations accepted, existing
-// operations complete. Used before snapshot/commit.
+// Quiesce closes operation admission, drains all broker RPCs, and freezes the
+// capsule cgroup so detached descendants cannot mutate the filesystem.
 func (c *Capsule) Quiesce(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -74,27 +81,36 @@ func (c *Capsule) Quiesce(ctx context.Context) error {
 	if c.State != StateActive {
 		return fmt.Errorf("capsule %s is not active (state=%s)", c.ID, c.State)
 	}
+	if c.Cgroup == nil {
+		return fmt.Errorf("capsule %s cgroup is unavailable", c.ID)
+	}
 
 	c.State = StateQuiescing
-	// Wait for inflight operations to complete.
-	c.inflightMu.Lock()
-	for c.inflightOps > 0 {
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		c.inflightMu.Lock()
+		inflight := c.inflightOps
 		c.inflightMu.Unlock()
+		if inflight == 0 {
+			break
+		}
 		select {
 		case <-ctx.Done():
-			c.inflightMu.Lock()
+			c.State = StateActive
 			return ctx.Err()
-		default:
-			c.inflightMu.Lock()
+		case <-ticker.C:
 		}
 	}
-	c.inflightMu.Unlock()
-
+	if err := c.Cgroup.Freeze(ctx); err != nil {
+		c.State = StateActive
+		return fmt.Errorf("freeze capsule %s cgroup: %w", c.ID, err)
+	}
 	c.State = StateFrozen
 	return nil
 }
 
-// Thaw unfreezes a quiesced capsule — operations resume.
+// Thaw resumes every task in a frozen capsule before reopening operations.
 func (c *Capsule) Thaw(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -102,7 +118,12 @@ func (c *Capsule) Thaw(ctx context.Context) error {
 	if c.State != StateFrozen {
 		return fmt.Errorf("capsule %s is not frozen (state=%s)", c.ID, c.State)
 	}
-
+	if c.Cgroup == nil {
+		return fmt.Errorf("capsule %s cgroup is unavailable", c.ID)
+	}
+	if err := c.Cgroup.Thaw(ctx); err != nil {
+		return fmt.Errorf("thaw capsule %s cgroup: %w", c.ID, err)
+	}
 	c.State = StateActive
 	return nil
 }

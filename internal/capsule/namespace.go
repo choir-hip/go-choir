@@ -3,11 +3,13 @@
 package capsule
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/containerd/cgroups/v3/cgroup2"
 	gonso "github.com/cpuguy83/gonso"
@@ -118,6 +120,53 @@ func (c *CgroupManager) Open() (*os.File, error) {
 // AddPID adds a process to the cgroup.
 func (c *CgroupManager) AddPID(pid int) error {
 	return c.manager.AddProc(uint64(pid))
+}
+
+func (c *CgroupManager) Freeze(ctx context.Context) error {
+	if err := c.setFrozen(ctx, true); err != nil {
+		rollbackCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = c.setFrozen(rollbackCtx, false)
+		return err
+	}
+	return nil
+}
+
+func (c *CgroupManager) Thaw(ctx context.Context) error {
+	return c.setFrozen(ctx, false)
+}
+
+func (c *CgroupManager) setFrozen(ctx context.Context, frozen bool) error {
+	if c == nil || c.path == "" {
+		return fmt.Errorf("capsule cgroup is unavailable")
+	}
+	value := "0"
+	if frozen {
+		value = "1"
+	}
+	root := filepath.Join("/sys/fs/cgroup", strings.TrimPrefix(c.path, "/"))
+	if err := os.WriteFile(filepath.Join(root, "cgroup.freeze"), []byte(value), 0o600); err != nil {
+		return fmt.Errorf("set capsule cgroup freeze=%s: %w", value, err)
+	}
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		events, err := os.ReadFile(filepath.Join(root, "cgroup.events"))
+		if err != nil {
+			return fmt.Errorf("read capsule cgroup events: %w", err)
+		}
+		for _, line := range strings.Split(string(events), "\n") {
+			fields := strings.Fields(line)
+			if len(fields) == 2 && fields[0] == "frozen" && fields[1] == value {
+				return nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 // Delete removes the cgroup.

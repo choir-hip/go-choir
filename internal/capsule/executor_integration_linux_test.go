@@ -82,6 +82,52 @@ func TestExecutorInheritedBrokerListenerEndToEnd(t *testing.T) {
 		t.Fatalf("authenticated reconnect readiness: %v", err)
 	}
 	_ = reconnected.Close()
+	detachedPath := filepath.Join(caps.MergedDir, "var/lib/artifact/release/detached-writer")
+	if err := os.MkdirAll(filepath.Dir(detachedPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writer := exec.Command("sh", "-c", `while :; do printf x >> "$DETACHED_PATH"; done`)
+	writer.Env = append(os.Environ(), "DETACHED_PATH="+detachedPath)
+	if err := writer.Start(); err != nil {
+		t.Fatalf("start detached writer: %v", err)
+	}
+	t.Cleanup(func() { _ = writer.Process.Kill() })
+	cgroup, ok := caps.Cgroup.(*CgroupManager)
+	if !ok {
+		t.Fatal("production capsule cgroup manager unavailable")
+	}
+	if err := cgroup.AddPID(writer.Process.Pid); err != nil {
+		t.Fatalf("join detached writer to capsule cgroup: %v", err)
+	}
+	var before os.FileInfo
+	deadline := time.Now().Add(time.Second)
+	for before == nil || before.Size() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("detached writer did not produce proof file")
+		}
+		before, _ = os.Stat(detachedPath)
+		time.Sleep(time.Millisecond)
+	}
+	if err := caps.Quiesce(ctx); err != nil {
+		t.Fatalf("freeze capsule cgroup: %v", err)
+	}
+	before, err = os.Stat(detachedPath)
+	if err != nil || before.Size() == 0 {
+		t.Fatalf("detached writer did not produce proof file: info=%v err=%v", before, err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	after, err := os.Stat(detachedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		t.Fatalf("detached writer mutated after freeze: before=%+v after=%+v", before, after)
+	}
+	if err := caps.Thaw(ctx); err != nil {
+		t.Fatalf("thaw capsule cgroup: %v", err)
+	}
+	_ = writer.Process.Kill()
+	_ = writer.Wait()
 	if err := executor.ForceDestroy(ctx, capsuleID); err != nil {
 		t.Fatalf("destroy integrated capsule: %v", err)
 	}

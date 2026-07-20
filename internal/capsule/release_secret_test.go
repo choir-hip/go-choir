@@ -15,6 +15,27 @@ import (
 	"time"
 )
 
+type testCapsuleCgroup struct {
+	frozen bool
+}
+
+func (c *testCapsuleCgroup) Open() (*os.File, error) { return nil, nil }
+func (c *testCapsuleCgroup) Delete() error           { return nil }
+func (c *testCapsuleCgroup) Freeze(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.frozen = true
+	return nil
+}
+func (c *testCapsuleCgroup) Thaw(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.frozen = false
+	return nil
+}
+
 func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
 	for name, relative := range map[string]struct {
 		path    string
@@ -128,7 +149,7 @@ func TestExtractGrantedFreezesBeforeDiff(t *testing.T) {
 	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
 		t.Fatal(err)
 	}
-	caps := &Capsule{ID: "capsule-freeze", State: StateActive, UpperDir: upper}
+	caps := &Capsule{ID: "capsule-freeze", State: StateActive, UpperDir: upper, Cgroup: &testCapsuleCgroup{}}
 	executor := &Executor{
 		capsules:     map[string]*Capsule{"capsule-freeze": caps},
 		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-freeze", Handle: "grant-freeze"}: capability},
@@ -210,9 +231,10 @@ func TestQuiesceWaitsForBrokerExecution(t *testing.T) {
 		_ = client.Close()
 		_ = server.Close()
 	})
+	cgroup := &testCapsuleCgroup{}
 	caps := &Capsule{
-		ID: "capsule-exec", State: StateActive, broker: &BrokerClient{conn: client, publicKey: publicKey},
-		revokedCaps: map[string]bool{},
+		ID: "capsule-exec", State: StateActive, Cgroup: cgroup,
+		broker: &BrokerClient{conn: client, publicKey: publicKey}, revokedCaps: map[string]bool{},
 	}
 	requestSeen := make(chan struct{})
 	releaseResponse := make(chan struct{})
@@ -252,5 +274,74 @@ func TestQuiesceWaitsForBrokerExecution(t *testing.T) {
 	}
 	if caps.State != StateFrozen {
 		t.Fatalf("capsule state = %s, want %s", caps.State, StateFrozen)
+	}
+	if !cgroup.frozen {
+		t.Fatal("capsule cgroup was not frozen")
+	}
+	if err := caps.Thaw(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if caps.State != StateActive || cgroup.frozen {
+		t.Fatalf("thawed capsule state=%s cgroup_frozen=%t", caps.State, cgroup.frozen)
+	}
+}
+
+func TestQuiesceCancellationRestoresActiveAndUnlocksInflight(t *testing.T) {
+	caps := &Capsule{ID: "capsule-cancel", State: StateActive, Cgroup: &testCapsuleCgroup{}}
+	if err := caps.acquireOp(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := caps.Quiesce(ctx); err == nil {
+		t.Fatal("canceled quiesce succeeded")
+	}
+	if caps.State != StateActive {
+		t.Fatalf("capsule state = %s, want %s", caps.State, StateActive)
+	}
+	released := make(chan struct{})
+	go func() {
+		caps.releaseOp()
+		close(released)
+	}()
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("releaseOp remained deadlocked after canceled quiesce")
+	}
+	if err := caps.acquireOp(); err != nil {
+		t.Fatalf("operation admission did not recover: %v", err)
+	}
+	caps.releaseOp()
+}
+
+func TestFrozenCapsuleRefusesEveryBrokerOperation(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := &Capability{
+		CapabilityID: "cap-frozen", Handle: "grant-frozen", CapsuleID: "capsule-frozen",
+		TargetCapsule: "capsule-frozen", AgentRunID: "cosuper-frozen", AgentRole: RoleCoSuper,
+		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
+		t.Fatal(err)
+	}
+	executor := &Executor{
+		capsules: map[string]*Capsule{"capsule-frozen": {
+			ID: "capsule-frozen", State: StateFrozen, Cgroup: &testCapsuleCgroup{frozen: true},
+		}},
+		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-frozen", Handle: "grant-frozen"}: capability},
+		revokedCaps:  map[string]bool{}, publicKey: publicKey,
+	}
+	if _, err := executor.ReadFile(context.Background(), "cosuper-frozen", "grant-frozen", "file"); err == nil {
+		t.Fatal("ReadFile admitted after freeze")
+	}
+	if err := executor.WriteFile(context.Background(), "cosuper-frozen", "grant-frozen", "file", []byte("changed"), 0o600); err == nil {
+		t.Fatal("WriteFile admitted after freeze")
+	}
+	if _, err := executor.ListDir(context.Background(), "cosuper-frozen", "grant-frozen", "."); err == nil {
+		t.Fatal("ListDir admitted after freeze")
 	}
 }
