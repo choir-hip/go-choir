@@ -2,10 +2,12 @@ package vmctl
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -26,6 +28,48 @@ func TestComputerKindForOwnershipPlatform(t *testing.T) {
 func TestWarmnessClassProtectedIncludesPublicPlatform(t *testing.T) {
 	if !warmnessClassProtected(WarmnessClassPublicPlatform) {
 		t.Fatal("expected public_platform warmness class to be protected from idle reclaim")
+	}
+}
+
+func TestWarmUniversalWirePlatformComputerPersistsResumeFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ownership.json")
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := reg.SetPersistencePath(path); err != nil {
+		t.Fatalf("SetPersistencePath: %v", err)
+	}
+	reg.SetVMManager(&mockVMManager{resumeError: errors.New("missing managed instance")})
+	key := ownershipKey(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	reg.mu.Lock()
+	reg.ownerships[key] = &VMOwnership{
+		VMID:          UniversalWirePlatformVMID,
+		UserID:        UniversalWirePlatformOwnerID,
+		DesktopID:     UniversalWirePlatformDesktopID,
+		ComputerID:    stableComputerID(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID, ""),
+		Kind:          VMKindInteractive,
+		WarmnessClass: WarmnessClassPublicPlatform,
+		State:         VMStateStopped,
+		Epoch:         1146,
+	}
+	reg.vmByID[UniversalWirePlatformVMID] = reg.ownerships[key]
+	reg.saveLocked()
+	reg.mu.Unlock()
+
+	allowRoute := func(context.Context, string, string) error { return nil }
+	if warmed := reg.WarmUniversalWirePlatformComputer(t.Context(), allowRoute); warmed != 0 {
+		t.Fatalf("warmed = %d, want 0 after resume failure", warmed)
+	}
+	own := reg.GetOwnershipForDesktop(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	if own == nil || own.State != VMStateFailed || own.StoppedBy != "recovery_failed" {
+		t.Fatalf("ownership after resume failure = %#v, want durable recovery_failed state", own)
+	}
+
+	restarted := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := restarted.SetPersistencePath(path); err != nil {
+		t.Fatalf("restart SetPersistencePath: %v", err)
+	}
+	loaded := restarted.GetOwnershipForDesktop(UniversalWirePlatformOwnerID, UniversalWirePlatformDesktopID)
+	if loaded == nil || loaded.State != VMStateFailed || loaded.StoppedBy != "recovery_failed" {
+		t.Fatalf("persisted ownership after resume failure = %#v, want durable recovery_failed state", loaded)
 	}
 }
 

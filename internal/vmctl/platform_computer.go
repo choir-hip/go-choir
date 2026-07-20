@@ -63,6 +63,14 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 		if mgr != nil {
 			info, err := mgr.ResumeVM(snapshot.VMID)
 			if err != nil {
+				r.mu.Lock()
+				current, ok := r.ownerships[key]
+				if ok && current != nil && current.VMID == snapshot.VMID && current.State == VMStateBooting {
+					current.State = VMStateFailed
+					current.StoppedBy = "recovery_failed"
+					r.saveLocked()
+				}
+				r.mu.Unlock()
 				log.Printf("vmctl: resume platform computer %s: %v", snapshot.VMID, err)
 				return 0
 			}
