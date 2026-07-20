@@ -759,6 +759,11 @@ in
       restore_moved_guest || true
       restore_cutover_traps
       kill -s "$signal" "$$"
+      case "$signal" in
+        HUP) exit 129 ;;
+        INT) exit 130 ;;
+        TERM) exit 143 ;;
+      esac
     }
     move_to=
     preserved_conflict=false
