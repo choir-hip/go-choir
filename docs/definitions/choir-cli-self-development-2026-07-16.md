@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-route-first-readiness-round-57
-    state: frozen_G1_review
+    state: accepted_G1
     ref: b1e580472c99b01aa826e337c6411656dbba99a5
     owner: integration-authority
     base: 5801a0c78c3cc560cda8df8756a77401ace73f7d
@@ -595,13 +595,14 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [a3477b8739275fc7097b49d4014ff43415c494e4, 5801a0c78c3cc560cda8df8756a77401ace73f7d]
     verification: "All Round-56 transition proofs remain. New regressions prove route-authority refusal returns 409 while leaving Active identity/epoch unchanged and issuing zero health calls; and a same-VMID RecoverVM error returns failure while retaining degraded state, identity, and epoch without publishing Active. Focused/full vmctl race, cmd/vmctl build, and proxy tests pass."
-    disposition: "Frozen for proportionate Round-57 G1 review. The only source delta after Round 56 moves reconciliation after route acceptance and adds the two demanded negative contracts. Effects remain OFF. Reject if route refusal mutates, lookup constructs, recovery changes identity/data, refresh races, or failed recovery publishes Active."
+    disposition: "Round-57 accepted unanimously by Devin, OMP Cursor/Grok 4.5, OMP Gemini 3.5, and OpenCode. All confirmed route acceptance precedes health/lifecycle mutation, lookup remains non-constructive, same-identity recovery removes the Round-55 replacement path, explicit refresh is not raced, and failed recovery cannot publish Active. Residuals are deployed-only guest/data fate-sharing, live-ledger refusal coverage, bounded health-probe availability, and pre-existing persistence-error reporting. Effects remain OFF."
     g1_round_57_probe:
-      reviewed_at: 2026-07-20T23:33:19Z
+      reviewed_at: 2026-07-20T23:45:47Z
       source_ref: b1e580472c99b01aa826e337c6411656dbba99a5
-      authority_ref: pending_freeze_commit
-      outcome: pending
-      adjudication: "Pending independent review of the frozen route-first readiness candidate."
+      authority_ref: 0bacad6868f08cc47c16383d609216e464d5b6eb
+      outcome: accept_G1
+      adjudication: "Four substantive independent reviewers found no blocker. The exact Round-56 authority-order finding is repaired; composite tracing confirms degraded/failed resolve retains ComputerID/VMID/data and advances realization epoch, while all refusal/error paths remain non-Active. G1 accepts landing solely for deployed no-SSH diagnosis/recovery with effects OFF."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round57-panel/manifest.tsv, manifest_sha256: df733a1238382b68ffe2643766184a09ddb4aebcda1e62e6fbb3ba1040fe64a3, devin_sha256: 3a4b103c28474e96a156774b51ebc5522da0c10d7038ab9f2dbcc6aef23fbf9c, omp_cursor_grok45_sha256: 72c14c1eaaf8d665f824e5cca0de9abedb52893e5af0f9ec4029c232d0808af5, omp_gemini35_sha256: 065c80e7345bc6c2ee1ff89611d814fe57bd675e9d696b70c6c07fb093614d70, opencode_sha256: 8bc5bd97a6d84df3e1a3e0143729bcc3f449fd81572471d25cb34d0e03aba94c}
     g1_round_56_probe:
       reviewed_at: 2026-07-20T23:30:31Z
       source_ref: a3477b8739275fc7097b49d4014ff43415c494e4
@@ -1327,7 +1328,7 @@ now:
     heresy_delta: {discovered: 8, introduced: 1, repaired: 3}
   c_deploy_failure_13:
     observed_at: 2026-07-20T22:37:45Z
-    status: frozen_G1_round_57
+    status: accepted_G1_round_57_pending_land
     mutation_class: red
     protected_surfaces: [retained_computer_recovery, lifecycle_intent, guest_readiness, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main deploy identity, public scoped lifecycle/status/guest-proxy responses, source readiness/ownership joins, production-shaped Linux and Go tests, refrozen G1, and deployed no-SSH acceptance."
