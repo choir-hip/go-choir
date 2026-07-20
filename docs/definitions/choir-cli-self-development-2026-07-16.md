@@ -678,6 +678,20 @@ now:
     rollback: "Revert the tracked environment/test repair before deployment. No mode, event head, route, release pointer, realization, or deployed service has changed."
     conjecture_delta: "Discovered that source-level fail-closed target enforcement was not connected to the staging deployment configuration; no product behavior has yet changed."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
+  c_preflight_2:
+    observed_at: 2026-07-20T02:28:00Z
+    status: rejected_G1_mutable_target_override
+    source_identity: 7365376aced9c633aa3a993feceee1f1e150b66e
+    mutation_class: red
+    protected_surfaces: [disposable_ComputerID, GenesisImported, deployment_configuration, host_authority, R0_R1_ratchet]
+    evidence_class: "Frozen-source diverse G1 review; Codex supplied a reproducible critical minority blocker before deployment."
+    success_before_blocker: "The candidate derives and binds the intended Node B ComputerID, leaves Node A empty/fail-closed, and preserves the prior effects-OFF source cutover. Local Nix evaluation confirms the intended values."
+    problem: "The proxy also imports mutable `/var/lib/go-choir/deploy.env`; systemd EnvironmentFile values override Environment assignments, and the deployment workflow preserves operator-managed keys. A stale or operator-written disposable-target variable could therefore replace the tracked ComputerID after evaluation. The added assertion checks only the local value's shape, not the exact identity or its presence in the proxy service environment. The Definition now card also remained bound to the prior accepted candidate instead of the rejected freeze."
+    existing_replacement_check: "The Nix-closure service launcher, exact stable ComputerID, proxy equality refusal, and evaluated service environment already exist. The repair must make the immutable launcher overwrite any inherited target value and make the module assertion join the exact identity to the proxy environment; no new store, host file, or override path is needed."
+    repair: "Export the exact target from the Nix-closure proxy launcher after systemd has loaded mutable environment files; assert the exact Node B identity and exact proxy Environment assignment; keep Node A empty; update the now card; rerun local Nix evaluation and a new frozen G1 panel."
+    rollback: "Revert the un-deployed target commits to R0. CI run 29712192632 was explicitly cancelled before deployment; no staging service, mode, event head, route, release pointer, or realization changed."
+    conjecture_delta: "Discovered that an apparently tracked environment assignment was not runtime authority because a later mutable source had precedence. The security boundary must end at the final exec environment."
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
