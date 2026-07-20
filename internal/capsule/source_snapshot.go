@@ -28,15 +28,32 @@ func copyImmutableSourceTree(ctx context.Context, source, target string) (string
 			return "", fmt.Errorf("source snapshot refuses dirty tracked files")
 		}
 	}
-	raw, err := exec.CommandContext(ctx, "git", "-C", source, "ls-files", "-z", "--stage").Output()
+	rawCommit, err := exec.CommandContext(ctx, "git", "-C", source, "rev-parse", "--verify", "HEAD^{commit}").Output()
 	if err != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
 			return "", contextErr
 		}
-		return "", fmt.Errorf("source snapshot tracked inventory: %w", err)
+		return "", fmt.Errorf("source snapshot commit identity: %w", err)
+	}
+	commit := strings.TrimSpace(string(rawCommit))
+	decodedCommit, decodeErr := hex.DecodeString(commit)
+	if decodeErr != nil || (len(decodedCommit) != 20 && len(decodedCommit) != 32) {
+		return "", fmt.Errorf("source snapshot commit identity is invalid")
+	}
+	return copyImmutableCommitTree(ctx, source, commit, target)
+}
+
+func copyImmutableCommitTree(ctx context.Context, source, commit, target string) (string, error) {
+	raw, err := exec.CommandContext(ctx, "git", "-C", source, "ls-tree", "-rz", "--full-tree", commit).Output()
+	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return "", contextErr
+		}
+		return "", fmt.Errorf("source snapshot tree inventory: %w", err)
 	}
 	type trackedFile struct {
 		mode string
+		oid  string
 		path string
 	}
 	var tracked []trackedFile
@@ -46,31 +63,36 @@ func copyImmutableSourceTree(ctx context.Context, source, target string) (string
 		}
 		tab := strings.IndexByte(record, '\t')
 		if tab <= 0 {
-			return "", fmt.Errorf("source snapshot malformed tracked inventory")
+			return "", fmt.Errorf("source snapshot malformed tree inventory")
 		}
 		fields := strings.Fields(record[:tab])
 		path := record[tab+1:]
 		clean := filepath.Clean(filepath.FromSlash(path))
-		if len(fields) != 3 || (fields[0] != "100644" && fields[0] != "100755" && fields[0] != "120000") ||
+		if len(fields) != 3 || fields[1] != "blob" ||
+			(fields[0] != "100644" && fields[0] != "100755" && fields[0] != "120000") ||
 			clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
-			return "", fmt.Errorf("source snapshot refuses tracked path %q", path)
+			return "", fmt.Errorf("source snapshot refuses tree path %q", path)
 		}
-		tracked = append(tracked, trackedFile{mode: fields[0], path: clean})
+		decodedOID, decodeErr := hex.DecodeString(fields[2])
+		if decodeErr != nil || (len(decodedOID) != 20 && len(decodedOID) != 32) {
+			return "", fmt.Errorf("source snapshot refuses tree object for %q", path)
+		}
+		tracked = append(tracked, trackedFile{mode: fields[0], oid: fields[2], path: clean})
 	}
 	sort.Slice(tracked, func(i, j int) bool { return tracked[i].path < tracked[j].path })
 	if len(tracked) == 0 {
-		return "", fmt.Errorf("source snapshot tracked inventory is empty")
+		return "", fmt.Errorf("source snapshot tree inventory is empty")
 	}
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		return "", err
 	}
 	hash := sha256.New()
+	_, _ = fmt.Fprintf(hash, "commit\x00%s\x00", commit)
 	directories := map[string]bool{target: true}
 	for _, file := range tracked {
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		sourcePath := filepath.Join(source, file.path)
 		targetPath := filepath.Join(target, file.path)
 		parent := filepath.Dir(targetPath)
 		if err := os.MkdirAll(parent, 0o755); err != nil {
@@ -82,33 +104,25 @@ func copyImmutableSourceTree(ctx context.Context, source, target string) (string
 				break
 			}
 		}
-		info, err := os.Lstat(sourcePath)
-		if err != nil {
-			return "", err
-		}
-		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%d\x00", file.mode, filepath.ToSlash(file.path), info.Size())
+		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%s\x00", file.mode, filepath.ToSlash(file.path), file.oid)
 		if file.mode == "120000" {
-			if info.Mode()&os.ModeSymlink == 0 {
-				return "", fmt.Errorf("source snapshot tracked symlink changed type: %q", file.path)
+			rawLink, err := exec.CommandContext(ctx, "git", "-C", source, "cat-file", "blob", file.oid).Output()
+			if err != nil {
+				if contextErr := ctx.Err(); contextErr != nil {
+					return "", contextErr
+				}
+				return "", fmt.Errorf("source snapshot read symlink object %q: %w", file.path, err)
 			}
-			link, err := os.Readlink(sourcePath)
+			link := string(rawLink)
 			cleanLink := filepath.Clean(link)
-			if err != nil || (filepath.IsAbs(cleanLink) && !strings.HasPrefix(cleanLink, "/nix/store/")) ||
+			if (filepath.IsAbs(cleanLink) && !strings.HasPrefix(cleanLink, "/nix/store/")) ||
 				(!filepath.IsAbs(cleanLink) && (cleanLink == ".." || strings.HasPrefix(cleanLink, ".."+string(os.PathSeparator)))) {
 				return "", fmt.Errorf("source snapshot refuses escaping symlink %q", file.path)
 			}
 			if err := os.Symlink(link, targetPath); err != nil {
 				return "", err
 			}
-			_, _ = io.WriteString(hash, link+"\x00")
 			continue
-		}
-		if !info.Mode().IsRegular() {
-			return "", fmt.Errorf("source snapshot tracked file changed type: %q", file.path)
-		}
-		input, err := os.Open(sourcePath)
-		if err != nil {
-			return "", err
 		}
 		mode := os.FileMode(0o444)
 		if file.mode == "100755" {
@@ -116,13 +130,26 @@ func copyImmutableSourceTree(ctx context.Context, source, target string) (string
 		}
 		output, err := os.OpenFile(targetPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 		if err != nil {
-			input.Close()
 			return "", err
 		}
-		_, copyErr := io.Copy(io.MultiWriter(output, hash), &contextReader{ctx: ctx, reader: input})
-		closeInputErr, closeOutputErr := input.Close(), output.Close()
-		if copyErr != nil || closeInputErr != nil || closeOutputErr != nil {
-			return "", errors.Join(copyErr, closeInputErr, closeOutputErr)
+		command := exec.CommandContext(ctx, "git", "-C", source, "cat-file", "blob", file.oid)
+		input, err := command.StdoutPipe()
+		if err != nil {
+			_ = output.Close()
+			return "", err
+		}
+		if err := command.Start(); err != nil {
+			_ = output.Close()
+			return "", err
+		}
+		_, copyErr := io.Copy(output, &contextReader{ctx: ctx, reader: input})
+		waitErr := command.Wait()
+		closeErr := output.Close()
+		if copyErr != nil || waitErr != nil || closeErr != nil {
+			if contextErr := ctx.Err(); contextErr != nil {
+				return "", errors.Join(contextErr, copyErr, waitErr, closeErr)
+			}
+			return "", errors.Join(copyErr, waitErr, closeErr)
 		}
 	}
 	orderedDirectories := make([]string, 0, len(directories))

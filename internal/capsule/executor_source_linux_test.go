@@ -84,6 +84,34 @@ func TestCopyImmutableSourceTreeRefusesDirtyTrackedFiles(t *testing.T) {
 	}
 }
 
+func TestCopyImmutableCommitTreeIgnoresMutableWorktree(t *testing.T) {
+	source := t.TempDir()
+	mustRunGit(t, source, "init")
+	mustRunGit(t, source, "config", "user.name", "Capsule Test")
+	mustRunGit(t, source, "config", "user.email", "capsule@test.invalid")
+	path := filepath.Join(source, "tracked")
+	if err := os.WriteFile(path, []byte("committed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustRunGit(t, source, "add", "tracked")
+	mustRunGit(t, source, "commit", "-m", "fixture")
+	rawCommit, err := exec.Command("git", "-C", source, "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("mutated-after-commit"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(t.TempDir(), "snapshot")
+	if _, err := copyImmutableCommitTree(context.Background(), source, strings.TrimSpace(string(rawCommit)), target); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(filepath.Join(target, "tracked"))
+	if err != nil || string(content) != "committed" {
+		t.Fatalf("object-pinned snapshot content = %q, %v", content, err)
+	}
+}
+
 func TestCopyImmutableSourceTreeHonorsCancellation(t *testing.T) {
 	source := t.TempDir()
 	target := filepath.Join(t.TempDir(), "snapshot")
