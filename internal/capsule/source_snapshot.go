@@ -1,6 +1,7 @@
 package capsule
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -13,19 +14,25 @@ import (
 	"strings"
 )
 
-func copyImmutableSourceTree(source, target string) (string, error) {
+func copyImmutableSourceTree(ctx context.Context, source, target string) (string, error) {
 	source, target = filepath.Clean(source), filepath.Clean(target)
 	if !filepath.IsAbs(source) || !filepath.IsAbs(target) || strings.Contains(source, ":") || strings.Contains(target, ":") {
 		return "", fmt.Errorf("source snapshot requires absolute colon-free paths")
 	}
 	for _, args := range [][]string{{"diff", "--quiet", "--"}, {"diff", "--cached", "--quiet", "--"}} {
-		command := exec.Command("git", append([]string{"-C", source}, args...)...)
+		command := exec.CommandContext(ctx, "git", append([]string{"-C", source}, args...)...)
 		if err := command.Run(); err != nil {
+			if contextErr := ctx.Err(); contextErr != nil {
+				return "", contextErr
+			}
 			return "", fmt.Errorf("source snapshot refuses dirty tracked files")
 		}
 	}
-	raw, err := exec.Command("git", "-C", source, "ls-files", "-z", "--stage").Output()
+	raw, err := exec.CommandContext(ctx, "git", "-C", source, "ls-files", "-z", "--stage").Output()
 	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return "", contextErr
+		}
 		return "", fmt.Errorf("source snapshot tracked inventory: %w", err)
 	}
 	type trackedFile struct {
@@ -60,6 +67,9 @@ func copyImmutableSourceTree(source, target string) (string, error) {
 	hash := sha256.New()
 	directories := map[string]bool{target: true}
 	for _, file := range tracked {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		sourcePath := filepath.Join(source, file.path)
 		targetPath := filepath.Join(target, file.path)
 		parent := filepath.Dir(targetPath)
@@ -109,7 +119,7 @@ func copyImmutableSourceTree(source, target string) (string, error) {
 			input.Close()
 			return "", err
 		}
-		_, copyErr := io.Copy(io.MultiWriter(output, hash), input)
+		_, copyErr := io.Copy(io.MultiWriter(output, hash), &contextReader{ctx: ctx, reader: input})
 		closeInputErr, closeOutputErr := input.Close(), output.Close()
 		if copyErr != nil || closeInputErr != nil || closeOutputErr != nil {
 			return "", errors.Join(copyErr, closeInputErr, closeOutputErr)

@@ -167,7 +167,7 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 	}()
 
 	sourceLower := filepath.Join(base, "source-lower")
-	sourceDigest, err := copyImmutableSourceTree(e.sourceDir, filepath.Join(sourceLower, "workspace", "platform"))
+	sourceDigest, err := copyImmutableSourceTree(ctx, e.sourceDir, filepath.Join(sourceLower, "workspace", "platform"))
 	if err != nil {
 		return nil, fmt.Errorf("capsule pin source: %w", err)
 	}

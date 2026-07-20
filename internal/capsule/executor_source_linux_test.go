@@ -1,6 +1,8 @@
 package capsule
 
 import (
+	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,7 +42,7 @@ func TestCopyImmutableSourceTreePinsTrackedCleanFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	digest, err := copyImmutableSourceTree(source, target)
+	digest, err := copyImmutableSourceTree(context.Background(), source, target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,9 +78,22 @@ func TestCopyImmutableSourceTreeRefusesDirtyTrackedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := copyImmutableSourceTree(source, filepath.Join(t.TempDir(), "snapshot"))
+	_, err := copyImmutableSourceTree(context.Background(), source, filepath.Join(t.TempDir(), "snapshot"))
 	if err == nil || !strings.Contains(err.Error(), "dirty tracked files") {
 		t.Fatalf("dirty source error = %v", err)
+	}
+}
+
+func TestCopyImmutableSourceTreeHonorsCancellation(t *testing.T) {
+	source := t.TempDir()
+	target := filepath.Join(t.TempDir(), "snapshot")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := copyImmutableSourceTree(ctx, source, target); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled source snapshot error = %v", err)
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Fatalf("canceled source snapshot created target: %v", err)
 	}
 }
 
