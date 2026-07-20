@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-23
-    state: rejected_G1_uncancellable_freeze
-    ref: 90e35b5e655c5e77b7cae934fce99c83c3cb05f7
+    id: self-development-B-disabled-cutover-round-24
+    state: frozen_G1_review
+    ref: c756fc131b91420a3308ec492ca559a2f0ba42a0
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete effects-OFF cutover with one fail-closed freeze/evidence transaction: close broker admission, drain RPCs, confirm cgroup frozen, bind receipts and diff to that tree, then stage via rooted openat2. Ambiguous physical transitions remain Quiescing and admit nothing."
+    scope: "Complete effects-OFF cutover with one cancellable, fail-closed freeze/evidence transaction: request context reaches admission drain, cgroup confirmation, frozen diff, receipt binding, and rooted release staging."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [2944ae5bdc44f3f85fc671fb08f247e2a1a15838, 956a3bd1e0495c2086915652949c494dc670e366]
-    verification: "Node A x86_64-linux focused and full capsule race suites pass; focused proof now includes ambiguous post-write Freeze/Thaw failures remaining Quiescing, active receipt validation refusing, every frozen broker operation refusing, cancellation-before-freezer restoring Active, and successful descendant-complete cgroup freeze/thaw. The production Executor.Spawn integration with the immutable Nix broker still passes."
-    disposition: "Round-23 is rejected under the severe-minority rule: the production freeze call discards request cancellation. Effects remain OFF and R0 serves staging."
+    immediate_predecessors: [956a3bd1e0495c2086915652949c494dc670e366, 90e35b5e655c5e77b7cae934fce99c83c3cb05f7]
+    verification: "Node A x86_64-linux focused and full capsule race suites pass. `TestExtractGrantedPropagatesCancellation` now holds an inflight operation, cancels the caller context, proves ExtractGranted returns and StateActive is restored before the freezer; all prior ambiguity, descendant, broker-refusal, openat2, secret, and integration proofs remain passing. The cross-platform stub and sole production caller compile; focused agentcore test passes locally."
+    disposition: "Effects remain OFF and R0 serves staging. Round-24 G1 must accept exact Git-resolved source/doc identities before any fast-forward or deployment."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -663,9 +663,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round23-panel/manifest.tsv, "sha256:dca60b6a99f7838a7cbfba92f97d6d894ff11a552d7000cf05e34e6fb95834dc", 90e35b5e655c5e77b7cae934fce99c83c3cb05f7]
-  blocker_or_risk: "Six reviewers accepted round-23, but Codex found the severe production blocker: ExtractGranted uses context.Background for Quiesce and Diff, so commit_transaction cancellation cannot stop a stalled inflight RPC or freezer confirmation."
-  next_action: "Thread the request context through ExtractGranted on Linux, non-Linux, tests, and commit_transaction; prove canceled extraction restores Active before the freezer and does not hang; refreeze G1."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round23-panel/manifest.tsv, "sha256:dca60b6a99f7838a7cbfba92f97d6d894ff11a552d7000cf05e34e6fb95834dc", c756fc131b91420a3308ec492ca559a2f0ba42a0]
+  blocker_or_risk: "Round-23's sole severe blocker is repaired across the Linux implementation, non-Linux stub, production caller, and tests. The red G1 gate remains closed pending independent review."
+  next_action: "Commit and Git-resolve round-24 authority, rerun the diverse G1 panel against the exact context-propagation delta and retained Node A proofs, and proceed to C only on acceptance."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -779,15 +779,16 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_ci_failure_6:
     observed_at: 2026-07-20T05:02:00Z
-    status: blocked_uncancellable_freeze
+    status: repaired_in_round_24_candidate
     mutation_class: red
     protected_surfaces: [freeze_request_lifecycle, inflight_drain, cgroup_event_wait]
     evidence_class: "Frozen round-23 diverse panel; Codex supplied exact call-graph reproduction while six other reviewers accepted."
     problem: "`commit_transaction` passes ctx to receipt resolution but calls `ExtractGranted` without it. ExtractGranted uses context.Background for both Quiesce and Diff. A stuck broker RPC or missing cgroup event therefore blocks the request indefinitely and bypasses the newly repaired pre-freezer cancellation transition."
     repair: "Add context.Context to ExtractGranted, propagate the transaction request context through every platform implementation and test caller, and use it for Quiesce and Diff. Preserve fail-closed Quiescing after a freezer write starts."
+    repair_result: "ExtractGranted now requires context.Context and uses it for both Quiesce and Diff; commit_transaction passes its request context; non-Linux and test callers migrated. Focused cancellation proof and the full Node A capsule race suite pass."
     rollback: "Discard the unmerged branch and retain R0; no deploy or genesis occurred."
     conjecture_delta: "A correct freeze state machine is insufficient unless the public transaction's cancellation authority reaches its blocking lifecycle waits."
-    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
