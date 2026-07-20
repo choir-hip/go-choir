@@ -730,29 +730,79 @@ in
     moved_to=
     restore_moved_guest() {
       if [ -n "$moved_to" ] && [ ! -e "$target" ] && [ ! -L "$target" ]; then
-        mv "$moved_to" "$target"
+        if ! mv -T "$moved_to" "$target"; then
+          echo "go-choir guest image cutover could not restore $moved_to to $target" >&2
+          return 1
+        fi
+        moved_to=
       fi
     }
-    trap restore_moved_guest ERR
+    saved_hup=$(trap -p HUP)
+    saved_int=$(trap -p INT)
+    saved_term=$(trap -p TERM)
+    restore_saved_trap() {
+      local signal="$1"
+      local saved="$2"
+      if [ -n "$saved" ]; then
+        eval "$saved"
+      else
+        trap - "$signal"
+      fi
+    }
+    restore_cutover_traps() {
+      restore_saved_trap HUP "$saved_hup"
+      restore_saved_trap INT "$saved_int"
+      restore_saved_trap TERM "$saved_term"
+    }
+    on_cutover_signal() {
+      local signal="$1"
+      restore_moved_guest || true
+      restore_cutover_traps
+      kill -s "$signal" "$$"
+    }
+    move_to=
     if [ -e "$target" ] && [ ! -L "$target" ]; then
       if [ -e "$legacy" ] || [ -L "$legacy" ]; then
         if [ -e "$conflict" ] || [ -L "$conflict" ]; then
           echo "go-choir guest image cutover refuses a second ambiguous guest tree; recovery already exists at $conflict" >&2
           exit 1
         fi
-        mv "$target" "$conflict"
-        moved_to="$conflict"
-        echo "go-choir guest image cutover preserved ambiguous active tree at $conflict"
+        move_to="$conflict"
       else
-        mv "$target" "$legacy"
-        moved_to="$legacy"
+        move_to="$legacy"
       fi
     fi
     rm -f "$next"
     ln -s "$src" "$next"
-    mv -Tf "$next" "$target"
+    trap 'on_cutover_signal HUP' HUP
+    trap 'on_cutover_signal INT' INT
+    trap 'on_cutover_signal TERM' TERM
+    if [ -n "$move_to" ]; then
+      moved_to="$move_to"
+      if mv -T "$target" "$moved_to"; then
+        :
+      else
+        status=$?
+        moved_to=
+        restore_cutover_traps
+        rm -f "$next" || true
+        exit "$status"
+      fi
+      if [ "$moved_to" = "$conflict" ]; then
+        echo "go-choir guest image cutover preserved ambiguous active tree at $conflict"
+      fi
+    fi
+    if mv -Tf "$next" "$target"; then
+      :
+    else
+      status=$?
+      restore_moved_guest || status=1
+      restore_cutover_traps
+      rm -f "$next" || true
+      exit "$status"
+    fi
     moved_to=
-    trap - ERR
+    restore_cutover_traps
     echo "go-choir guest image pointer updated to $src"
   '';
 
