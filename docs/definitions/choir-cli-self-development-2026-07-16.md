@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-credential-authority-round-47
-    state: accepted_G1
+    state: accepted_G1_landed_wiring_repaired_C_actuation_failed
     ref: 6777a66062cd60684eb846e7d4c1dfac7e602492
     owner: integration-authority
     base: 30bf9f075ba4ac055fb2f8ab0f22edb2f35509bb
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [f55414cbabcb47e93e61f7067337f04f5bbc5390, 30bf9f075ba4ac055fb2f8ab0f22edb2f35509bb]
     verification: "The Node B service contract and Bash syntax pass. Nix evaluation yields vmctl ExecStart `/nix/store/...-go-choir-vmctl-exec`, EnvironmentFile unchanged, and exact after/wants arrays including corpusd. Direct Environment evaluation retains `VMCTL_CORPUSD_URL=http://127.0.0.1:8086`. Local x86_64-linux launcher realization is unavailable from the aarch64-darwin builder and remains a selected CI host-closure proof."
-    disposition: "Round-47 accepted unanimously by three substantive reviewers: Devin, OMP Cursor/Grok 4.5, and OMP Gemini 3.5. Each confirmed EnvironmentFile precedence is closed by immutable launcher re-export, only credential authority is fixed, corpusd ordering is acyclic, guest routing remains 8082, and Nix eval/contracts pass. OpenCode stopped after a denied temporary-directory probe without a verdict; Codex exhausted usage. Effects remain OFF. Candidate may land; selected x86_64 host closure, Node B activation, and same-idempotency public replay are mandatory."
+    disposition: "Round-47 landed as main e50c55989faeea406a39dcc512999fea716fd8fd; CI/deploy run 29763351273 passed, realized and activated the protected launcher/host closure, and public health reports the exact SHA. Replaying the same pending lifecycle start still returned immediate 502 in 165 ms; target remains failed at epoch 804. Credential port/precedence is repaired but was not the sole blocker. C remains blocked and effects OFF."
     g1_round_47_probe:
       reviewed_at: 2026-07-20T17:24:00Z
       source_ref: 6777a66062cd60684eb846e7d4c1dfac7e602492
@@ -1141,7 +1141,7 @@ now:
     heresy_delta: {discovered: 2, introduced: 0, repaired: 0}
   c_deploy_failure_7:
     observed_at: 2026-07-20T16:50:06Z
-    status: accepted_G1_pending_land
+    status: deployed_wiring_repaired_superseded_by_failure_8
     mutation_class: red
     protected_surfaces: [public_lifecycle_API, scoped_API_key, vmctl_refresh, retained_persistent_computer, credential_envelope, Firecracker_boot, lifecycle_intent, deploy_acceptance]
     admissible_evidence_class: "Exact main CI/deploy receipt, public health/build identity, public exact-key lifecycle responses, non-secret key metadata, source boot/credential/persistence trace, focused production-shaped reproduction, refrozen G1 review, and deployed no-SSH acceptance."
@@ -1158,6 +1158,20 @@ now:
     round_47_evidence: "Focused contract and Bash parse pass. Nix evaluation confirms the new immutable ExecStart store path, unchanged priority EnvironmentFile, after/wants corpusd edges, and direct corpusd Environment. x86_64-linux realization is correctly deferred to selected CI because the local builder set is aarch64."
     conjecture_delta: "Correct capability routing and method selection are necessary but insufficient; a retained Computer can still lack a production-valid reconstruction input even when source-level VMID preservation is correct."
     heresy_delta: {discovered: 3, introduced: 0, repaired: 0}
+  c_deploy_failure_8:
+    observed_at: 2026-07-20T17:34:30Z
+    status: blocked_C_post_credential_wiring_actuation_failure
+    mutation_class: red
+    protected_surfaces: [credential_issuance_idempotency, realization_epoch, vmmanager_boot_epoch, retained_persistent_computer, lifecycle_intent, public_acceptance]
+    admissible_evidence_class: "Exact main CI/deploy receipt, public same-idempotency response/status, source credential/epoch persistence trace, deterministic platform+vmctl reproduction, refrozen G1 review, and deployed no-SSH acceptance."
+    success_before_blocker: "Main e50c55989faeea406a39dcc512999fea716fd8fd passed CI/deploy run 29763351273. Node B activated the x86_64 host closure with immutable vmctl credential authority on corpusd 8086; public proxy/vmctl health are OK and public build identity equals e50c5598."
+    evidence: "The exact pending start idempotency key `c-reconstruct-1784566206810` was replayed through the public scoped API after deployment. It returned 502 `lifecycle actuation failed` in 165 ms. Public status remains 200 for the exact ComputerID with state failed and epoch 804. The response is still pre-readiness-fast, so credential issuance refusal or an early retained-state boot check remains likely; no replacement, new lifecycle idempotency, SSH, or raw vmctl was used."
+    problem: "Correcting credential endpoint routing and immutable environment precedence did not complete reconstruction. Source now narrows the next boundary to corpusd credential mint/replay or immediate vmmanager prelaunch. Credential issuance uses idempotency key `guest-credential:<realization_id>:<epoch>` but includes a moving absolute expiry in its request commitment; failed boots leave ownership epoch unchanged while vmmanager's durable epoch may advance. A later reconstruction can therefore request the same issuance key with a different commitment or mint identity for an epoch that BootVM will overwrite. This source-level hypothesis must be reproduced before repair; the generic public 502 alone does not prove which branch fired."
+    existing_replacement_check: "The platform lifecycle receipt store already enforces idempotency commitments; vmmanager already owns a durable per-VM boot epoch file; ownership already has a global epoch counter. Do not weaken idempotency or mint multiple unconstrained credentials. Reconcile to one durable boot-attempt epoch/realization authority and ensure the credential commitment is retry-stable, or expose a safe typed failure class if evidence disproves the hypothesis."
+    rollback: "Preserve main e50c5598 activation receipt, R0/R1, failed ownership/VMID/data image, pending lifecycle intent, credential lifecycle receipts, and the scoped key until expiry/revocation. Effects remain OFF. No new public lifecycle key or replacement allocation is authorized."
+    next_action: "Build a deterministic production-shaped reproduction joining failed ownership epoch 804, durable vmmanager epoch advancement, credential issuance/retry commitment, and missing manager instance. Establish the exact refusal and existing single-authority repair, document it, then freeze any source candidate through G1 before deployment."
+    conjecture_delta: "A correct endpoint can still reject because credential idempotency and boot epoch are split authorities; retries must bind one durable realization identity across platform, vmctl, vmmanager, and guest."
+    heresy_delta: {discovered: 4, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
