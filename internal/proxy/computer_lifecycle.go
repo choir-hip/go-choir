@@ -44,13 +44,17 @@ type resolvedComputerTarget struct {
 	Epoch      int64
 }
 
+func (h *Handler) hasConfiguredDisposableCapability(authResult *AuthResult, computerID string) bool {
+	return authResult.AuthMethod == "api_key" &&
+		authResult.ComputerID == computerID &&
+		computerID == h.cfg.SelfDevelopmentDisposableComputerID
+}
+
 func (h *Handler) resolveAuthorizedComputer(ctx context.Context, authResult *AuthResult, computerID string) (*resolvedComputerTarget, error) {
 	if h.vmctlClient == nil {
 		return nil, fmt.Errorf("computer ownership authority unavailable")
 	}
-	if authResult.AuthMethod == "api_key" &&
-		authResult.ComputerID == computerID &&
-		computerID == h.cfg.SelfDevelopmentDisposableComputerID {
+	if h.hasConfiguredDisposableCapability(authResult, computerID) {
 		global, err := h.vmctlClient.LookupComputerByIDContext(ctx, computerID)
 		if err != nil || global == nil {
 			return nil, err
@@ -128,6 +132,7 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		return
 	}
 	control.PriorState, control.PriorEpoch = prepared.PriorState, prepared.PriorEpoch
+	reconstruct := h.hasConfiguredDisposableCapability(authResult, computerID)
 	switch action {
 	case "stop":
 		if ownership.State != "stopped" {
@@ -135,11 +140,23 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 		}
 	case "start":
 		if ownership.State != "active" {
-			_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+			if reconstruct {
+				_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+			} else {
+				_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+			}
 		}
 	case "restart":
-		if ownership.Epoch <= control.PriorEpoch {
-			_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+		if reconstruct {
+			if ownership.Epoch <= control.PriorEpoch {
+				_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+			}
+		} else if ownership.State == "stopped" {
+			_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+		} else if ownership.Epoch <= control.PriorEpoch {
+			if err = h.vmctlClient.StopDesktop(ownership.UserID, ownership.DesktopID); err == nil {
+				_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
+			}
 		}
 	}
 	if err != nil {

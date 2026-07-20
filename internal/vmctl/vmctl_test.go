@@ -1281,6 +1281,19 @@ func TestHandler_Lookup(t *testing.T) {
 	}
 }
 
+func TestOwnershipRegistry_ComputerIDLookupFailsClosedOnAmbiguity(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.ownerships[ownershipKey("owner-a", "primary")] = &VMOwnership{
+		UserID: "owner-a", DesktopID: "primary", VMID: "vm-a", ComputerID: "computer-duplicate",
+	}
+	reg.ownerships[ownershipKey("owner-b", "primary")] = &VMOwnership{
+		UserID: "owner-b", DesktopID: "primary", VMID: "vm-b", ComputerID: "computer-duplicate",
+	}
+	if got := reg.GetOwnershipByComputerID("computer-duplicate"); got != nil {
+		t.Fatalf("ambiguous ComputerID resolved to %+v", got)
+	}
+}
+
 func TestHandler_LookupNonexistent(t *testing.T) {
 	srv, _ := newTestServer(t)
 
@@ -3360,6 +3373,56 @@ func TestOwnershipRegistry_RefreshStoppedVMWithoutManagerInstanceBootsFromOwners
 	}
 	if own.SandboxURL != "http://127.0.0.1:9047" {
 		t.Fatalf("sandbox URL = %s, want boot response URL", own.SandboxURL)
+	}
+}
+
+func TestOwnershipRegistry_RefreshFailedPersistedVMWithoutManagerInstanceBootsRetainedComputer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "ownership.json")
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := reg.SetPersistencePath(path); err != nil {
+		t.Fatalf("SetPersistencePath: %v", err)
+	}
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
+	reg.SetVMManager(&mockVMManager{})
+	initial, err := reg.ResolveOrAssign("user-refresh-failed-missing")
+	if err != nil {
+		t.Fatalf("ResolveOrAssign: %v", err)
+	}
+	retainedVMID := initial.VMID
+	reg.mu.Lock()
+	reg.ownerships[ownershipKey(initial.UserID, initial.DesktopID)].State = VMStateFailed
+	reg.saveLocked()
+	reg.mu.Unlock()
+
+	restarted := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := restarted.SetPersistencePath(path); err != nil {
+		t.Fatalf("restart SetPersistencePath: %v", err)
+	}
+	loaded := restarted.GetOwnershipForDesktop(initial.UserID, initial.DesktopID)
+	if loaded == nil || loaded.State != VMStateFailed || loaded.VMID != retainedVMID {
+		t.Fatalf("reloaded ownership = %+v, want failed retained VM %s", loaded, retainedVMID)
+	}
+	mock := &mockVMManager{bootResponse: &VMInstanceInfo{
+		HostURL: "http://127.0.0.1:9049", Epoch: loaded.Epoch + 1, Healthy: true, State: "running",
+	}}
+	restarted.SetCorpusdURL(testComputerCredentialIssuerURL(t))
+	restarted.SetVMManager(mock)
+
+	refreshed, err := restarted.RefreshVMForDesktop(initial.UserID, initial.DesktopID)
+	if err != nil {
+		t.Fatalf("RefreshVMForDesktop: %v", err)
+	}
+	if len(mock.boots) != 1 || len(mock.refreshes) != 0 {
+		t.Fatalf("missing failed instance used boots=%d refreshes=%d, want 1/0", len(mock.boots), len(mock.refreshes))
+	}
+	if mock.boots[0].VMID != retainedVMID || refreshed.VMID != retainedVMID {
+		t.Fatalf("refresh replaced retained VMID: boot=%s ownership=%s want=%s", mock.boots[0].VMID, refreshed.VMID, retainedVMID)
+	}
+	if mock.boots[0].ComputerID != loaded.ComputerID || mock.boots[0].ComputerCredentialEnvelope == "" {
+		t.Fatalf("boot config lost retained identity or fresh credential: %+v", mock.boots[0])
+	}
+	if refreshed.State != VMStateActive || refreshed.SandboxURL != "http://127.0.0.1:9049" {
+		t.Fatalf("refreshed ownership = %+v", refreshed)
 	}
 }
 

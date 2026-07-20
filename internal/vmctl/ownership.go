@@ -1468,13 +1468,21 @@ func (r *OwnershipRegistry) GetOwnershipForComputer(userID, computerID string) *
 func (r *OwnershipRegistry) GetOwnershipByComputerID(computerID string) *VMOwnership {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+	var match *VMOwnership
 	for _, own := range r.ownerships {
-		if own != nil && stableComputerID(own.UserID, own.DesktopID, own.ComputerID) == computerID {
-			snapshot := *own
-			return &snapshot
+		if own == nil || stableComputerID(own.UserID, own.DesktopID, own.ComputerID) != computerID {
+			continue
 		}
+		if match != nil {
+			return nil
+		}
+		match = own
 	}
-	return nil
+	if match == nil {
+		return nil
+	}
+	snapshot := *match
+	return &snapshot
 }
 
 // LiveSandboxURL returns the live sandbox URL for the given user/desktop pair.
@@ -1893,8 +1901,8 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 
 	snapshot := *own
 	mgr := r.vmManager
-	missingStoppedInstance := mgr != nil && mgr.GetVM(own.VMID) == nil &&
-		(own.State == VMStateStopped || own.State == VMStateHibernated)
+	missingManagerInstance := mgr != nil && mgr.GetVM(own.VMID) == nil &&
+		(own.State == VMStateStopped || own.State == VMStateHibernated || own.State == VMStateFailed)
 	r.refreshing[key] = struct{}{}
 	r.mu.Unlock()
 	defer func() {
@@ -1910,7 +1918,7 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 			return nil, fmt.Errorf("failed to refresh VM %s: realization credential unavailable", snapshot.VMID)
 		}
 		var err error
-		if missingStoppedInstance {
+		if missingManagerInstance {
 			info, err = mgr.BootVM(cfg)
 		} else {
 			info, err = mgr.RefreshVM(snapshot.VMID, cfg)
