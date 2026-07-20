@@ -586,15 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-21
-    state: rejected_G1_complete_freeze_custody
-    ref: 2944ae5bdc44f3f85fc671fb08f247e2a1a15838
+    id: self-development-B-disabled-cutover-round-22
+    state: frozen_G1_review
+    ref: 956a3bd1e0495c2086915652949c494dc670e366
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete effects-OFF cutover plus one freeze custody boundary: granted extraction quiesces and drains broker operations, staging requires Frozen, openat2 resolves beneath the merged root without symlinks, and secret classification covers every path component."
+    scope: "Complete effects-OFF cutover plus descendant-complete freeze custody: every broker operation shares Active/inflight admission, Quiesce drains RPCs then freezes cgroup v2, Thaw resumes the cgroup before reopening admission, release reads use rooted no-symlink openat2, and secret policy covers every component."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    verification: "On Node A x86_64-linux, focused freeze tests and the full `go test -race ./internal/capsule -count=1` suite pass. Proof covers active-stage refusal, active→frozen granted extraction, quiesce waiting for an in-flight broker execution, safe directory-plus-file staging, intermediate-symlink refusal, secret directory-component refusal, secret-content refusal, and immutable snapshot cleanup."
-    disposition: "Round-21 is rejected. Effects remain OFF and R0 serves staging. The prior frozen card named a nonexistent long SHA; the actual runtime commit is recorded above. No fast-forward or deployment is authorized."
+    immediate_predecessors: [7657fa325064b0ede56e6cd964fec1dc5a1c1ade, 2944ae5bdc44f3f85fc671fb08f247e2a1a15838]
+    verification: "Node A x86_64-linux passes the focused freeze/admission tests and full `go test -race ./internal/capsule -count=1`. The opt-in production `Executor.Spawn` integration also passes with the immutable Nix capsule broker: an independently detached writer is joined to the real capsule cgroup, Quiesce waits for `frozen 1`, its file remains byte/time-stable, Thaw reaches `frozen 0`, and destruction leaves no process/cgroup/mount/socket state."
+    disposition: "Effects remain OFF and R0 serves staging. Round-22 G1 must accept the exact Git-resolved source/doc identities before any fast-forward or deployment."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -662,9 +663,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round21-panel/manifest.tsv, "sha256:77e475a0bbf98cf32bc88756f20e30f4c8cc36e91844693a5880f0bac518ebdb"]
-  blocker_or_risk: "Round-21 is rejected by four independent reviewers. The card invented a nonexistent long SHA from an observed prefix; ReadFile/WriteFile/ListDir bypass lifecycle custody; detached broker descendants survive RPC completion; Quiesce cancellation deadlocks and strands StateQuiescing."
-  next_action: "Repair the whole capsule freeze substrate: bind every broker operation to inflight custody, freeze the capsule cgroup after RPC drain so descendants cannot mutate, make cancellation unlock and restore Active, prove thaw symmetry and all negative transitions, then resolve and verify exact commit identities from Git before refreezing G1."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round21-panel/manifest.tsv, "sha256:77e475a0bbf98cf32bc88756f20e30f4c8cc36e91844693a5880f0bac518ebdb", 956a3bd1e0495c2086915652949c494dc670e366]
+  blocker_or_risk: "Round-21's four blockers are repaired in the Git-resolved round-22 candidate. The red gate remains closed pending independent review of the complete operation/cgroup freeze transaction and its exact Node A proof."
+  next_action: "Commit and Git-resolve the round-22 Definition identity, rerun the diverse G1 panel against the exact round-21→round-22 delta and real cgroup integration receipt, and proceed to C only on acceptance."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -751,7 +752,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_ci_failure_4:
     observed_at: 2026-07-20T04:18:00Z
-    status: blocked_complete_freeze_custody
+    status: repaired_in_round_22_candidate
     mutation_class: red
     protected_surfaces: [capsule_operation_admission, inflight_drain, cgroup_freezer, freeze_retry, source_identity]
     evidence_class: "Frozen round-21 panel: Codex, Cursor, Devin, and omp-gpt55 independently rejected; exact source inspection and Git object lookup reproduce all findings."
@@ -759,9 +760,10 @@ now:
     substrate_classification: "One capsule lifecycle substrate failure, not four isolated symptoms: operation admission, process containment, state rollback, and identity binding did not share one authoritative freeze transaction."
     existing_replacement: "Every broker wrapper already resolves the Capsule and can use acquireOp/releaseOp. Each spawned capsule already owns a cgroup v2 manager, whose `cgroup.freeze` and `cgroup.events` provide descendant-complete freeze/thaw. Git rev-parse/cat-file provide exact identity authority."
     repair: "Route Exec, ReadFile, WriteFile, and ListDir through the same Active-only inflight gate. After all RPCs drain, write `cgroup.freeze=1` and wait for `frozen 1` before StateFrozen; thaw by writing 0 and waiting for `frozen 0`. On context/error, release every mutex and restore Active. Add deterministic broker-operation, cancellation, descendant-freezer, retry, and thaw tests. Never hand-compose object IDs."
+    repair_result: "Exec, ReadFile, WriteFile, and ListDir now use one Active-only inflight gate. Quiesce drains without a lock leak, restores Active on cancellation/error, freezes the real cgroup and waits for its event; Thaw waits for the inverse event before Active. Focused tests cover all broker refusals, cancellation recovery, inflight wait, freeze retry, and thaw. The opt-in production integration proves a detached cgroup task stops mutating and resumes safely."
     rollback: "Discard the unmerged branch and keep R0; no deploy or genesis occurred."
     conjecture_delta: "A frozen capsule is a cgroup state plus closed operation admission, not a Go enum plus completed RPC count."
-    heresy_delta: {discovered: 2, introduced: 1, repaired: 0}
+    heresy_delta: {discovered: 2, introduced: 1, repaired: 3}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
