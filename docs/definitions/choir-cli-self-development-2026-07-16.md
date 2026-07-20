@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-19
-    state: accepted_G1_C_ci_repairing
+    state: rejected_G1_release_staging_repair
     ref: fe5b854f9c73356fe51fe2b5f53e4d931695db80
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
@@ -663,8 +663,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round19-panel/manifest.tsv]
-  blocker_or_risk: "G1 is accepted and R0 is healthy, but fresh deploy workflow 29714324950 failed twice before deployment because Linux capsule tests did not preserve their own private/writable temporary-directory preconditions. This is a test-fixture blocker, not deployed behavior."
-  next_action: "Repair only the deterministic Linux test fixtures, reproduce them with `-race` on Node A, rerun the exact CI workflow, and deploy only after all selected gates pass. Keep R0 serving and genesis forbidden."
+  blocker_or_risk: "G1 is reopened: the exact Node A race reproduction passed snapshot cleanup but exposed that production `StageGrantedRelease` rejects safe overlay directory entries before reaching regular release files. R0 remains healthy; no deployment or genesis occurred."
+  next_action: "Teach release staging to ignore structural directories while retaining fail-closed rejection of symlinks and non-regular objects; retain the fixture permission/cleanup repairs; run focused Linux race tests and a new frozen G1 panel before another deploy."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -708,7 +708,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 1, repaired: 1}
   c_ci_failure_1:
     observed_at: 2026-07-20T03:28:00Z
-    status: documented_before_repair
+    status: fixture_repair_exposed_production_blocker
     mutation_class: yellow
     protected_surfaces: [G1_gate_integrity, capsule_release_privacy, immutable_source_snapshot]
     evidence_class: "GitHub Actions run 29714324950 attempts 1 and 2, exact race-shard JSON output."
@@ -717,6 +717,18 @@ now:
     repair: "Register cleanup that restores owner write permission on the immutable snapshot before TempDir cleanup, explicitly chmod each release incoming root to 0700, and rerun the exact focused tests with `-race` on Linux before publishing."
     rollback: "Revert the test-only fixture commit; no staging deployment was attempted by failed run 29714324950 and R0 remains active."
     conjecture_delta: "The source invariants are sound, but their tests relied on ambient TempDir cleanup/mode behavior instead of declaring the boundary."
+    heresy_delta: {discovered: 0, introduced: 0, repaired: 0}
+  c_ci_failure_2:
+    observed_at: 2026-07-20T03:34:00Z
+    status: documented_before_repair
+    mutation_class: orange
+    protected_surfaces: [capsule_release_admission, frozen_effect_bundle, secret_scan]
+    evidence_class: "Exact Node A x86_64-linux `go test -race` reproduction after applying only the documented fixture repair."
+    problem: "`StageGrantedRelease` iterates overlay diff entries below `var/lib/artifact/release/` and rejects every non-regular entry. Normal upperdirs contain structural directory entries such as `bin`, so a safe release cannot reach its regular file even though the same function creates parent directories in the frozen staging tree. The focused success test fails with `capsule release file \"var/lib/artifact/release/bin\" is not regular`; the secret-content test fails before scanning its file."
+    substrate_classification: "Symptom in release admission atop the working overlay diff substrate; no replacement implementation exists."
+    repair: "After path normalization and Lstat, ignore real directories as structural entries; continue to reject symlinks, devices, sockets, deleted/unsafe paths, and every other non-regular object. Add/retain behavior tests proving a directory plus regular file stages, secrets still refuse, and symlink/non-regular entries refuse. Refreeze G1 because runtime behavior changes."
+    rollback: "Revert the focused release-admission commit; effects remain OFF, workflow 29714324950 never deployed, and R0 remains active."
+    conjecture_delta: "The release scanner correctly constrains files but conflated overlay directory metadata with releasable artifacts, making every realistic release impossible."
     heresy_delta: {discovered: 0, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
