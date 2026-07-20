@@ -664,8 +664,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "The deterministic capsule fixture cleanup is repaired locally. The agentcore trajectory scale test is pre-existing/unrelated and locally self-skips under race because its calibrated runtime exceeds the production drain deadline. C remains blocked until rerun CI passes and deploys."
-  next_action: "Push the focused fixture cleanup, monitor selected CI, and accept the unrelated trajectory result only if the fresh workflow passes without source changes."
+  blocker_or_risk: "C is blocked after forced deployment run 29723644656 partially activated host services at a704d390 but failed the NixOS switch before guest refresh/receipt. The guest-image activation guard found both a physical `/var/lib/go-choir/guest` and the preserved `/var/lib/go-choir/guest-pre-managed-rollback`; it refused to overwrite either. Public health serves a704d390, but incomplete-deploy evidence exists and no C acceptance is authorized."
+  next_action: "Preserve both conflicting guest directories, make first-cutover reconciliation idempotent without deleting rollback evidence, refreeze the source through G1, then rerun the forced deployment from exact main. Do not accept the partially activated host identity."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -840,16 +840,29 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_ci_failure_11:
     observed_at: 2026-07-20T06:47:00Z
-    status: repair_pending_C_ci
+    status: repaired_C_ci
     mutation_class: yellow
     protected_surfaces: [G1_regression_fixture, C_landing_gate]
-    evidence_class: "GitHub Actions run 29722126220 exact failed logs."
+    evidence_class: "GitHub Actions failed run 29722126220, focused local race proof, and successful rerun 29723308309."
     problem: "`TestCopyImmutableCommitTreeIgnoresMutableWorktree` proves the object-pinned bytes correctly but leaves the snapshot directory/file read-only, so testing.TempDir cleanup fails with permission denied. Separately `TestCancelRunTrajectoryDrainsMoreThanOneActivePage` failed after 48.53s because an objectgraph Dolt scan exceeded context deadline; no changed capsule path is in that call graph."
     repair: "Register the same recursive test-only chmod cleanup already used by the neighboring source snapshot success test. Run the focused agentcore timeout locally; treat it as unrelated only if it passes without source repair, then rerun the exact selected CI gates."
     repair_result: "The object-pinned test now recursively restores directory write modes during Cleanup and passes under race. Focused local agentcore execution self-skips with its explicit scale guard (`scale regression exceeds the production drain deadline under race instrumentation`), confirming no capsule repair is implicated; fresh CI remains authoritative."
     rollback: "R0 remains deployed; CI skipped staging. Revert the focused fixture cleanup if needed."
     conjecture_delta: "The immutable snapshot behavior is correct; its test must explicitly undo intentional read-only modes before TempDir cleanup."
     heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
+  c_deploy_failure_1:
+    observed_at: 2026-07-20T07:29:00Z
+    status: blocked_C_guest_rollback_guard
+    mutation_class: red
+    protected_surfaces: [Node_B_NixOS_activation, immutable_guest_image, rollback_realizations, deploy_receipt, active_computer_refresh]
+    admissible_evidence_class: "Exact GitHub deployment logs, incomplete-deploy receipt, public build identity, refrozen source review, successful deployment receipt, and deployed no-SSH acceptance."
+    evidence: "Forced workflow 29723644656 passed all CI gates, built the selected closure, then activation emitted `go-choir guest image cutover refuses to replace existing rollback /var/lib/go-choir/guest-pre-managed-rollback` and exited 2. The workflow recorded `/var/lib/go-choir/deploy-failures/29723644656-1.json`. Public `/health` subsequently reported host proxy commit a704d390, but guest refresh and activation receipt did not complete."
+    problem: "The first-cutover activation guard handles either a physical active guest or an existing preserved pre-managed rollback, but not both. That fail-closed ambiguity is correct; the transition is not idempotently recoverable and leaves a partially activated host generation."
+    existing_replacement: "The exact immutable Nix guest output and its build manifest already provide managed image custody. Reconciliation should preserve the unexpected physical tree under one explicit conflict-recovery ref, retain the pre-managed rollback untouched, then atomically install the immutable store pointer."
+    authorized_repair: "Add one deterministic conflict-recovery path. When both physical target and pre-managed rollback exist, fail if that recovery path already exists; otherwise atomically move the physical target there, leave the pre-managed rollback untouched, and install the immutable symlink. Never delete or overwrite any of the three refs. Refreeze G1 because this changes a protected deployment surface."
+    rollback: "Current R0 guest realization and pre-managed rollback remain present; public route remains effects-OFF. On failed repair activation, restore the conflict-recovery directory to `/var/lib/go-choir/guest` and retain the prior NixOS generation and incomplete-deploy receipt."
+    conjecture_delta: "Fail-closed ambiguity needs a bounded, named preservation transition; refusal alone is not restart-durable convergence."
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
