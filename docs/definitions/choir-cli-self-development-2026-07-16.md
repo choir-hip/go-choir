@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-single-boot-epoch-authority-round-49
-    state: accepted_G1_landed_deploy_incomplete_guest_closure
-    ref: 26a449de5c956c801a8501c5e7406ce7e159da79
+    id: self-development-C-guest-closure-fate-sharing-round-50
+    state: frozen_G1_review
+    ref: bbbb34f32a22a79b5e4ca7caea0096bf789e58aa
     owner: integration-authority
-    base: 850ba6f6aa13eb061bf5d9025912ae4af1360f8d
-    scope: "Protected C boot-attempt identity cutover only: vmmanager's durable per-VM epoch file becomes the sole reservation authority before credential issuance; vmctl mirrors the reserved epoch to its durable registry, binds RealizationID and strict credential idempotency to it, and manager boot consumes the exact reservation without overwrite. Migrate initial boot, start-existing, active recovery, explicit recovery, and refresh. Refuse configured credential issuance if either manager or registry reservation persistence fails. Preserve stable ComputerID/VMID/data, published ownership state until success, lifecycle intent, strict TTL/idempotency, effects OFF, and all public API/event/capsule/route behavior."
+    base: 37409fa657c0928b61ff9495ce5938ea69364726
+    scope: "Protected deployment-classification cutover only: production changes under `cmd/vmctl`, `internal/vmmanager`, or `internal/vmctl` must invoke the existing canonical guest-boot-contract class, selecting a host NixOS/guest closure, vmctl restart, and active VM refresh as one fate-sharing unit. Retain existing affected host service selections. Do not change runtime code, acceptance identity, timeouts, rollback, active Computer selection, guest contents, or effects mode."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [707c28cae59694fd97c81ca01700f4171516a459, ee6d8da20d86225b8f955f251a91d19cf2a0fb77]
-    verification: "The pre-repair retry test failed with the same `vm-...-epoch-2` realization after failed boot. Round-49 retains the restart retry proof, adds fail-closed no-issuance proof when registry persistence fails, and uses real vmmanager tests to reserve epoch 804, restart, reserve 805, consume exactly 805, and reject stale 804. `go test -race ./internal/vmctl ./internal/vmmanager ./cmd/vmctl -count=1` passes; gopls diagnostics are clean for manager and ownership."
-    disposition: "Round-49 landed as main 9ed2b49fb9a9b29a5b70ddb061ca1b02c2782a51. CI run 29768497657 passed all source/race/build/heresy lanes but deployment attempt 1 ended incomplete: service-pointer activation installed the new vmctl/proxy/gateway/sandbox host packages, then active refresh booted retained VMs from the previous immutable guest closure. Candidate `e15cb...` returned from refresh but continued reporting sandbox commit e50c5598, so exact deployed identity timed out. Public proxy reports runtime commit 9ed2b49f while durable deployed_commit remains e50c5598. C remains blocked; effects OFF."
+    immediate_predecessors: [9ed2b49fb9a9b29a5b70ddb061ca1b02c2782a51, 37409fa657c0928b61ff9495ce5938ea69364726]
+    verification: "Before repair, the classifier contract reproduced `internal/vmmanager/manager.go` with `deploy_host_os=false`. The repaired classifier asserts both vmmanager and vmctl production paths select deploy_host_os, vmctl restart, active refresh, and the existing host-service set. `.github/scripts/deploy-impact-classify-test` and `.github/scripts/deploy-workflow-contract-test` pass."
+    disposition: "Frozen for proportionate Round-50 G1. Review must confirm the existing `mark_guest_boot_contract` is the correct closure path, no lighter route can satisfy exact refreshed sandbox identity, test files remain ignored before production patterns, and the broader full closure is necessary rather than accidental over-deployment. Effects remain OFF."
     g1_round_49_probe:
       reviewed_at: 2026-07-20T18:35:44Z
       source_ref: 26a449de5c956c801a8501c5e7406ce7e159da79
@@ -1198,7 +1198,7 @@ now:
     heresy_delta: {discovered: 4, introduced: 0, repaired: 0}
   c_deploy_failure_9:
     observed_at: 2026-07-20T18:55:21Z
-    status: blocked_C_service_pointer_refresh_without_guest_closure
+    status: frozen_G1_round_50_guest_closure_fate_sharing
     mutation_class: red
     protected_surfaces: [deployment_routing, immutable_guest_image, active_computer_refresh, retained_persistent_computer, deploy_acceptance]
     admissible_evidence_class: "Exact CI/deploy receipt, public health/build identity, deploy classifier/closure source trace, refrozen G1 review if runtime code changes, and no-SSH deployed acceptance."
@@ -1208,6 +1208,9 @@ now:
     existing_replacement_check: "`.github/scripts/deploy-impact-classify` already defines `mark_guest_boot_contract`, which selects host OS closure, vmctl restart, and active refresh. The affected classifier branches currently duplicate only the latter two. Connect the existing guest-boot-contract class rather than weakening exact runtime identity, extending timeouts, accepting stale guest builds, or manually mutating Node B."
     rollback: "The deployment remains intentionally incomplete with previous durable deployed_commit e50c5598 and receipt 29768497657-1. Preserve service rollback pointers, prior guest closure, failed target Computer, and R0/R1. Effects remain OFF. A rerun without classifier correction would repeat stale-guest refresh and is not acceptance."
     next_action: "Add a deterministic classifier contract that vmmanager/vmctl production changes select `deploy_host_os=true` and a guest closure before active refresh; connect those branches to `mark_guest_boot_contract`, run classifier/workflow contracts, freeze any source candidate through proportionate G1, then redeploy 9ed2b49f plus the classifier repair."
+    candidate_repair: "bbbb34f32a22a79b5e4ca7caea0096bf789e58aa replaces duplicated vmctl restart/active-refresh flags with the existing `mark_guest_boot_contract` helper in both vmmanager and vmctl production classifier branches. Deterministic cases require deploy_host_os and preserve exact host service sets."
+    repair_evidence: "The new contract failed before repair with `deploy_host_os=false` for `internal/vmmanager/manager.go`; both classifier and deploy-workflow contracts pass after repair."
+    rollback_candidate: "Revert bbbb34f32a22a79b5e4ca7caea0096bf789e58aa before landing or its eventual main landing commit. Do not rerun the incomplete deployment through the old classifier."
     conjecture_delta: "A correct lifecycle repair cannot deploy through a host-service-only route when acceptance requires a new guest runtime identity; refresh and guest closure must fate-share."
     heresy_delta: {discovered: 5, introduced: 0, repaired: 0}
   dead_end_assessment:
