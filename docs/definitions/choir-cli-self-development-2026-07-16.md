@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-realization-reservation-round-48
-    state: frozen_G1_review
+    state: rejected_G1_split_epoch_authority_and_unmigrated_paths
     ref: 707c28cae59694fd97c81ca01700f4171516a459
     owner: integration-authority
     base: 850ba6f6aa13eb061bf5d9025912ae4af1360f8d
@@ -595,7 +595,15 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [e50c55989faeea406a39dcc512999fea716fd8fd, 850ba6f6aa13eb061bf5d9025912ae4af1360f8d]
     verification: "Before repair, `TestRefreshManagerFailureProjectsFailedOwnershipAndAdvancesRetryIdentity` reproduced the defect: retry reused `vm-...-epoch-2` after failed boot. The repaired test persists ownership, restarts vmctl, retries the same failed Computer, and requires a different realization while retaining the failed ownership. Focused production-shaped tests and the full `go test -race ./internal/vmctl -count=1` pass; gopls diagnostics are clean."
-    disposition: "Frozen for Round-48 G1. Review must verify the registry epoch reservation is durable before credential issuance, does not publish a failed realization as active, cannot regress identity/ownership, and does not invent a second credential or manager authority. Main remains e50c5598 plus code-free failure record 850ba6f6; effects remain OFF."
+    disposition: "Round-48 rejected on Devin's reproducible high-severity structural findings despite Gemini acceptance. vmmanager still overwrites the registry-selected epoch from a second per-VM file while retaining the registry RealizationID/credential; startExistingVM, recoverOrRestartActiveVM, and RecoverVMForDesktop still issue own.Epoch+1 credentials without durable reservation; and the proof mocks away manager boot epoch behavior. Cursor transport failed, Codex exhausted usage, and OpenCode produced no terminal verdict after confirming the second authority. Severe identity/persistence findings reject regardless of majority."
+    g1_round_48_probe:
+      reviewed_at: 2026-07-20T18:02:00Z
+      source_ref: 707c28cae59694fd97c81ca01700f4171516a459
+      authority_ref: 4b86140418976bb346dad99f647490f84ff5d9cc
+      verdicts: {devin: REJECT_G1, omp_gemini35: ACCEPT_G1, opencode: incomplete_no_verdict, omp_cursor_grok45: transport_failure, codex: usage_limit}
+      adjudication: "Reject. The severe finding is source-confirmed: manager.bootVM loads/increments/saves its own epoch and overwrites cfg.Epoch after vmctl already signed a credential/RealizationID from another counter. Three credential-bearing recovery call paths also bypass the new reservation. The mock-only test cannot exercise either defect. Round-49 must select one durable boot-attempt authority, migrate every credential-bearing boot/recovery path, fail closed if reservation persistence fails, and test the real manager handoff."
+      residual_risks: "A manager reservation API/interface expansion touches mocks and production adapter; legacy direct manager callers need defined auto-reservation behavior; existing per-VM epoch may exceed registry state; all issuance must occur only after durable reservation. Effects remain OFF."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round48-panel/manifest.tsv, manifest_sha256: 46182c1b1ae8709b9b48d80190ab0100429263b79526facbd343d47e89e298d6, devin_sha256: f4c3c91da91ff9a548ba99c9f06883bbd0eae92d7166269074778d4b981d7b2d, omp_gemini35_sha256: 1b20b63eade13d30e96a8fcd91725ce563a1c87aff4127822ee903e7e87e9dee, opencode_incomplete_sha256: b8acb8d28ba0c9670f93de4b5ea9db10d58225f3f28a6f1b54cc5d80481b39dd, omp_cursor_failure_sha256: 40d5e1d2624e261afa475b38189ecca72f765fab0ad74fce0a9dd523b61c9d49, codex_failure_sha256: 3d15b7dc01eba4af41ec8af3435bc2646c5f790869b4b7ca3143a6fce73cdd36}
     g1_round_47_probe:
       reviewed_at: 2026-07-20T17:24:00Z
       source_ref: 6777a66062cd60684eb846e7d4c1dfac7e602492
@@ -1160,7 +1168,7 @@ now:
     heresy_delta: {discovered: 3, introduced: 0, repaired: 0}
   c_deploy_failure_8:
     observed_at: 2026-07-20T17:34:30Z
-    status: frozen_G1_round_48_realization_reservation
+    status: rejected_G1_round_48_single_epoch_authority_required
     mutation_class: red
     protected_surfaces: [credential_issuance_idempotency, realization_epoch, vmmanager_boot_epoch, retained_persistent_computer, lifecycle_intent, public_acceptance]
     admissible_evidence_class: "Exact main CI/deploy receipt, public same-idempotency response/status, source credential/epoch persistence trace, deterministic platform+vmctl reproduction, refrozen G1 review, and deployed no-SSH acceptance."
@@ -1174,6 +1182,7 @@ now:
     candidate_repair: "707c28cae59694fd97c81ca01700f4171516a459 reserves `OwnershipRegistry.epochCounter` under the registry lock and persists it before calling the credential issuer. Credential RealizationID and idempotency bind that reserved attempt. Ownership epoch/state remain unchanged until manager success, so failed realization publication is not introduced. The regression restarts the registry from disk before retry and observes a distinct credential realization."
     repair_evidence: "The focused retry/identity/retained-computer race tests pass, the complete vmctl race suite passes, and gopls reports no diagnostics. No manager API, platform idempotency semantics, credential lifetime, public route, or lifecycle intent changed."
     rollback_candidate: "Revert 707c28cae59694fd97c81ca01700f4171516a459 before landing or revert its eventual main landing commit; main e50c5598/850ba6f6 remains effects OFF and retains the failed Computer."
+    round_48_rejection: "G1 source review found two authoritative counters in series: vmctl mints a credential for its reserved attempt, then vmmanager overwrites `cfg.Epoch` from a per-VM file without re-binding RealizationID. It also found credential-bearing start/recover paths still using unpersisted `own.Epoch+1`. The repair must be substrate-wide rather than another Refresh-only exception."
     conjecture_delta: "A correct endpoint can still reject because credential idempotency and boot epoch are split authorities; retries must bind one durable realization identity across platform, vmctl, vmmanager, and guest."
     heresy_delta: {discovered: 4, introduced: 0, repaired: 0}
   dead_end_assessment:
