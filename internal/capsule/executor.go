@@ -144,7 +144,9 @@ func (e *Executor) Spawn(ctx context.Context, spec SpawnSpec) (_ *Capsule, retEr
 		var cleanupErr error
 		if caps.Process != nil {
 			_ = caps.Process.Kill()
-			_, _ = caps.Process.Wait()
+			if caps.wait != nil {
+				_ = caps.wait()
+			}
 		}
 		if caps.listener != nil {
 			cleanupErr = errors.Join(cleanupErr, caps.listener.Close())
@@ -212,29 +214,47 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 	if err != nil {
 		return fmt.Errorf("capsule duplicate broker listener: %w", err)
 	}
-	args := []string{"--socket", "/run/capsule/broker.sock", "--listener-fd", "3", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/", "--authorized-peer-uid", fmt.Sprint(capsuleNamespaceHostID)}
+	cgroupFile, err := caps.Cgroup.Open()
+	if err != nil {
+		_ = inheritedListener.Close()
+		return err
+	}
+	args := []string{"--socket", "/run/capsule/broker.sock", "--listener-fd", "3", "--isolation-stage", "launcher", "--capsule-id", caps.ID, "--pubkey", hex.EncodeToString(e.publicKey), "--merged", "/", "--authorized-peer-uid", fmt.Sprint(capsuleNamespaceHostID)}
 	cmd := exec.Command("/run/capsule/broker", args...)
 	cmd.ExtraFiles = []*os.File{inheritedListener}
 	cmd.Env = []string{"PATH=/bin:/usr/bin:/run/current-system/sw/bin", "HOME=/root", "TMPDIR=/tmp"}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Chroot:                     caps.MergedDir,
-		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWPID | unix.CLONE_NEWNS | unix.CLONE_NEWNET | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP,
+		Cloneflags:                 unix.CLONE_NEWUSER,
+		Unshareflags:               unix.CLONE_NEWNS | unix.CLONE_NEWNET | unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP,
 		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: capsuleNamespaceHostID, Size: 1}},
 		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: capsuleNamespaceHostID, Size: 1}},
+		AmbientCaps:                []uintptr{unix.CAP_SYS_ADMIN, unix.CAP_SETPCAP, unix.CAP_DAC_OVERRIDE, unix.CAP_FOWNER, unix.CAP_CHOWN, unix.CAP_SETUID, unix.CAP_SETGID},
 		GidMappingsEnableSetgroups: false,
+		UseCgroupFD:                true,
+		CgroupFD:                   int(cgroupFile.Fd()),
 		Pdeathsig:                  syscall.SIGKILL,
 	}
 	if err := cmd.Start(); err != nil {
 		_ = inheritedListener.Close()
-		return fmt.Errorf("capsule start broker: %w", err)
+		_ = cgroupFile.Close()
+		return fmt.Errorf("capsule start broker launcher: %w", err)
 	}
 	_ = inheritedListener.Close()
+	_ = cgroupFile.Close()
 	caps.Process = cmd.Process
-	caps.wait = cmd.Wait
 	caps.PID = cmd.Process.Pid
-	if err := caps.Cgroup.AddPID(caps.PID); err != nil {
-		return fmt.Errorf("capsule admit broker to cgroup: %w", err)
+	caps.processDone = make(chan struct{})
+	caps.wait = func() error {
+		<-caps.processDone
+		return caps.processErr
 	}
+	go func() {
+		caps.processErr = cmd.Wait()
+		close(caps.processDone)
+	}()
 	readinessCapability := &Capability{
 		CapabilityID: "broker-readiness-" + caps.ID, Handle: "broker-readiness", CapsuleID: caps.ID,
 		AgentRunID: "guest-core-readiness", AgentRole: RoleResearcher, TargetCapsule: caps.ID,
@@ -253,13 +273,12 @@ func (e *Executor) startBrokerLocked(ctx context.Context, caps *Capsule) error {
 			}
 			_ = client.Close()
 		}
-		if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
-			return fmt.Errorf("capsule broker exited before readiness")
-		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("capsule broker readiness timed out")
 		}
 		select {
+		case <-caps.processDone:
+			return fmt.Errorf("capsule broker exited before readiness: %v", caps.processErr)
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(25 * time.Millisecond):
@@ -884,6 +903,7 @@ func (e *Executor) ExtractDiff(id string) ([]FileChange, error) {
 func (e *Executor) ListCapsules() []CapsuleSummary {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+
 	out := make([]CapsuleSummary, 0, len(e.capsules))
 	for _, caps := range e.capsules {
 		out = append(out, CapsuleSummary{ID: caps.ID, State: caps.State, PID: caps.PID, MemoryMax: caps.MemoryMax, Pinned: caps.Pinned, OwnerRunID: caps.OwnerRunID})

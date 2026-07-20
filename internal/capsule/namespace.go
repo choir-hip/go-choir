@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/containerd/cgroups/v3/cgroup2"
@@ -70,7 +71,7 @@ type CgroupManager struct {
 // CreateCgroup creates a cgroup v2 hierarchy for a capsule with the
 // specified resource limits.
 func CreateCgroup(capsuleID string, spec SpawnSpec) (*CgroupManager, error) {
-	cgPath := filepath.Join("capsule", capsuleID)
+	cgPath := filepath.Join("/capsule", capsuleID)
 
 	// Build CPU max string: "quota period" (e.g. "100000 100000" = 1 CPU).
 	cpuMax := cgroup2.CPUMax(fmt.Sprintf("%d %d", spec.CpuQuota, spec.CpuPeriod))
@@ -101,6 +102,17 @@ func CreateCgroup(capsuleID string, spec SpawnSpec) (*CgroupManager, error) {
 		manager: mgr,
 		path:    cgPath,
 	}, nil
+}
+
+func (c *CgroupManager) Open() (*os.File, error) {
+	if c == nil || c.path == "" {
+		return nil, fmt.Errorf("capsule cgroup is unavailable")
+	}
+	file, err := os.Open(filepath.Join("/sys/fs/cgroup", strings.TrimPrefix(c.path, "/")))
+	if err != nil {
+		return nil, fmt.Errorf("open capsule cgroup: %w", err)
+	}
+	return file, nil
 }
 
 // AddPID adds a process to the cgroup.

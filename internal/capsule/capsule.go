@@ -32,6 +32,8 @@ type Capsule struct {
 	Cgroup               *CgroupManager
 	wait                 func() error
 	listener             net.Listener
+	processDone          chan struct{}
+	processErr           error
 	Pinned               bool
 	PinExpiry            *time.Time
 	inflightOps          int

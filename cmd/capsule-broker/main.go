@@ -75,11 +75,13 @@ func main() {
 		pubKeyHex         string
 		mergedDir         string
 		listenerFD        int
+		isolationStage    string
 		authorizedPeerUID uint
 	)
 
 	flag.StringVar(&socketPath, "socket", "/tmp/capsule-broker.sock", "Unix socket path")
 	flag.IntVar(&listenerFD, "listener-fd", -1, "inherited parent-owned Unix listener file descriptor")
+	flag.StringVar(&isolationStage, "isolation-stage", "broker", "internal namespace launch stage")
 	flag.StringVar(&capsuleID, "capsule-id", "", "Capsule ID this broker serves (binding check)")
 	flag.StringVar(&pubKeyHex, "pubkey", "", "Ed25519 public key (hex)")
 	flag.StringVar(&mergedDir, "merged", "/mnt/merged", "Merged overlayfs mount point")
@@ -87,6 +89,18 @@ func main() {
 	flag.Parse()
 	if uint64(authorizedPeerUID) > uint64(^uint32(0)) {
 		log.Fatal("--authorized-peer-uid exceeds uint32")
+	}
+	if isolationStage == "launcher" {
+		if listenerFD != 3 {
+			log.Fatal("capsule broker launcher requires listener fd 3")
+		}
+		if err := runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir, authorizedPeerUID, listenerFD); err != nil {
+			log.Fatalf("capsule broker launcher: %v", err)
+		}
+		return
+	}
+	if isolationStage != "broker" {
+		log.Fatal("invalid capsule broker isolation stage")
 	}
 
 	if pubKeyHex == "" {
@@ -174,6 +188,42 @@ func main() {
 			continue
 		}
 		go broker.handleConnection(conn)
+	}
+}
+
+func runNamespaceLauncher(socketPath, capsuleID, pubKeyHex, mergedDir string, authorizedPeerUID uint, listenerFD int) error {
+	listenerFile := os.NewFile(uintptr(listenerFD), "capsule-broker-listener")
+	if listenerFile == nil {
+		return fmt.Errorf("inherited listener is unavailable")
+	}
+	args := []string{
+		"--socket", socketPath, "--listener-fd", "3", "--isolation-stage", "broker",
+		"--capsule-id", capsuleID, "--pubkey", pubKeyHex, "--merged", mergedDir,
+		"--authorized-peer-uid", fmt.Sprint(authorizedPeerUID),
+	}
+	command := exec.Command("/run/capsule/broker", args...)
+	command.ExtraFiles = []*os.File{listenerFile}
+	command.Env = []string{"PATH=/bin:/usr/bin:/run/current-system/sw/bin", "HOME=/root", "TMPDIR=/tmp"}
+	command.Stdout = os.Stdout
+	command.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWPID, Pdeathsig: syscall.SIGKILL}
+	if err := command.Start(); err != nil {
+		_ = listenerFile.Close()
+		return fmt.Errorf("start isolated broker: %w", err)
+	}
+	_ = listenerFile.Close()
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+	defer signal.Stop(signals)
+	select {
+	case err := <-done:
+		return err
+	case received := <-signals:
+		if err := command.Process.Signal(received); err != nil {
+			_ = command.Process.Kill()
+		}
+		return <-done
 	}
 }
 
