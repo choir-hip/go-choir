@@ -1300,6 +1300,7 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 		State:      VMStateActive,
 		Epoch:      7,
 	}
+	initialEpoch := own.Epoch
 	key := ownershipKey(own.UserID, own.DesktopID)
 	reg.ownerships[key] = own
 	reg.vmByID[own.VMID] = own
@@ -1314,6 +1315,12 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 			},
 		},
 		checkHealthOK: &unhealthy,
+		recoverResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9002",
+			Epoch:   initialEpoch + 1,
+			Healthy: true,
+			State:   "running",
+		},
 	}
 	reg.SetVMManager(manager)
 	handler := NewHandler(reg)
@@ -1356,8 +1363,95 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 	if reloaded == nil || reloaded.State != VMStateStopped {
 		t.Fatalf("reloaded ownership = %+v, want stopped recovery state", reloaded)
 	}
+	recovered, err := reg.ResolveOrAssignDesktop(own.UserID, own.DesktopID)
+	if err != nil {
+		t.Fatalf("resolve degraded ownership: %v", err)
+	}
+	if recovered.VMID != own.VMID || recovered.ComputerID != own.ComputerID {
+		t.Fatalf("recovered identity = %+v, want retained VMID %s ComputerID %s", recovered, own.VMID, own.ComputerID)
+	}
+	if recovered.Epoch != initialEpoch+1 {
+		t.Fatalf("recovered epoch = %d, want %d", recovered.Epoch, initialEpoch+1)
+	}
+	if len(manager.recovers) != 1 || manager.recovers[0] != own.VMID {
+		t.Fatalf("manager recovers = %v, want [%s]", manager.recovers, own.VMID)
+	}
 	if len(manager.checkHealthCalls) != 1 || manager.checkHealthCalls[0] != own.VMID {
 		t.Fatalf("health checks = %v, want [%s]", manager.checkHealthCalls, own.VMID)
+	}
+}
+
+func TestHandler_LookupProjectsBootingWithoutRacingRefresh(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	own := &VMOwnership{
+		VMID:       "vm-refreshing",
+		ComputerID: "computer-refreshing",
+		UserID:     "user-refreshing",
+		DesktopID:  PrimaryDesktopID,
+		SandboxURL: "http://127.0.0.1:9001",
+		State:      VMStateActive,
+		Epoch:      7,
+	}
+	initialEpoch := own.Epoch
+	key := ownershipKey(own.UserID, own.DesktopID)
+	reg.ownerships[key] = own
+	reg.vmByID[own.VMID] = own
+	manager := &mockVMManager{
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL: own.SandboxURL,
+				Epoch:   own.Epoch,
+				Healthy: true,
+				State:   "running",
+			},
+		},
+		refreshResponse: &VMInstanceInfo{
+			HostURL: "http://127.0.0.1:9002",
+			Epoch:   initialEpoch + 1,
+			Healthy: true,
+			State:   "running",
+		},
+		refreshStarted: make(chan struct{}),
+		refreshRelease: make(chan struct{}),
+	}
+	reg.SetVMManager(manager)
+	refreshDone := make(chan error, 1)
+	go func() {
+		_, err := reg.RefreshVMForDesktop(own.UserID, own.DesktopID)
+		refreshDone <- err
+	}()
+	<-manager.refreshStarted
+
+	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/lookup?computer_id="+own.ComputerID, nil)
+	request.Header.Set("X-Internal-Caller", "true")
+	response := httptest.NewRecorder()
+	NewHandler(reg).HandleLookup(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("lookup status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	var result ownershipResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode lookup response: %v", err)
+	}
+	if result.State != string(VMStateBooting) {
+		t.Fatalf("lookup state = %q, want %q during refresh", result.State, VMStateBooting)
+	}
+	stored := reg.GetOwnershipForDesktop(own.UserID, own.DesktopID)
+	if stored == nil || stored.State != VMStateActive || stored.Epoch != initialEpoch {
+		t.Fatalf("lookup mutated refresh transaction: %+v", stored)
+	}
+	if len(manager.checkHealthCalls) != 0 {
+		t.Fatalf("lookup health checks during refresh = %v, want none", manager.checkHealthCalls)
+	}
+
+	close(manager.refreshRelease)
+	if err := <-refreshDone; err != nil {
+		t.Fatalf("refresh completion: %v", err)
+	}
+	refreshed := reg.GetOwnershipForDesktop(own.UserID, own.DesktopID)
+	if refreshed == nil || refreshed.VMID != own.VMID || refreshed.ComputerID != own.ComputerID ||
+		refreshed.State != VMStateActive || refreshed.Epoch != initialEpoch+1 {
+		t.Fatalf("refreshed ownership = %+v, want retained active identity at epoch %d", refreshed, initialEpoch+1)
 	}
 }
 
@@ -2116,26 +2210,30 @@ func TestOwnershipRegistry_EpochTracksBootGeneration(t *testing.T) {
 	}
 }
 
-func TestOwnershipRegistry_FailedVMGetsNewAssignment(t *testing.T) {
-	// Failed VMs should get a new assignment (new VMID, new epoch).
+func TestOwnershipRegistry_FailedVMPreservesIdentityOnRecovery(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 
-	own1, _ := reg.ResolveOrAssign("user-1")
+	own1, err := reg.ResolveOrAssign("user-1")
+	if err != nil {
+		t.Fatalf("initial resolve: %v", err)
+	}
 	oldVMID := own1.VMID
+	oldComputerID := own1.ComputerID
 	oldEpoch := own1.Epoch
 
-	// Simulate a failure.
 	reg.mu.Lock()
 	reg.ownerships[ownershipKey("user-1", PrimaryDesktopID)].State = VMStateFailed
 	reg.mu.Unlock()
 
-	// ResolveOrAssign should create a new VM for the failed state.
-	own2, _ := reg.ResolveOrAssign("user-1")
-	if own2.VMID == oldVMID {
-		t.Error("expected new VM ID for failed VM")
+	own2, err := reg.ResolveOrAssign("user-1")
+	if err != nil {
+		t.Fatalf("recover failed ownership: %v", err)
+	}
+	if own2.VMID != oldVMID || own2.ComputerID != oldComputerID {
+		t.Fatalf("recovered identity = %+v, want VMID %s ComputerID %s", own2, oldVMID, oldComputerID)
 	}
 	if own2.Epoch <= oldEpoch {
-		t.Errorf("expected new epoch > %d for new VM, got %d", oldEpoch, own2.Epoch)
+		t.Fatalf("recovered epoch = %d, want greater than %d", own2.Epoch, oldEpoch)
 	}
 }
 

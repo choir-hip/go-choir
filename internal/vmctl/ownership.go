@@ -1247,15 +1247,24 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 			return result, nil
 		}
 
-		// VM exists but is stopped or hibernated. Resume it instead
-		// of creating a new VM, preserving the user's state and epoch
-		// (VAL-CROSS-116, VAL-CROSS-117).
-		if own.State == VMStateStopped || own.State == VMStateHibernated {
+		if own.State == VMStateBooting {
+			if waiters, ok := r.pendingWaiters[key]; ok {
+				return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
+			}
+		}
+
+		// A retained VM that is stopped, unhealthy, failed, or stranded in a
+		// stale boot is started again under the same VMID and data root. Failed
+		// realizations receive a fresh epoch; no replacement computer is minted.
+		if own.State == VMStateStopped || own.State == VMStateHibernated ||
+			own.State == VMStateDegraded || own.State == VMStateFailed ||
+			own.State == VMStateBooting {
 			if waiters, ok := r.pendingWaiters[key]; ok {
 				return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
 			}
 			mgr := r.vmManager
 			pending := cloneOwnership(own)
+			recovering := pending.State == VMStateDegraded || pending.State == VMStateFailed || pending.State == VMStateBooting
 			r.pendingWaiters[key] = nil
 			r.mu.Unlock()
 
@@ -1290,6 +1299,8 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 			if info != nil {
 				current.SandboxURL = info.HostURL
 				current.Epoch = info.Epoch
+			} else if recovering {
+				current.Epoch = r.nextEpoch()
 			}
 			current.State = VMStateActive
 			current.LastActiveAt = time.Now()
@@ -1303,22 +1314,10 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 			for _, ch := range waiters {
 				ch <- cloneOwnership(result)
 			}
-			log.Printf("vmctl: resumed VM %s for user %s desktop %s on resolve (epoch=%d)", result.VMID, userID, desktopID, result.Epoch)
+			log.Printf("vmctl: started retained VM %s for user %s desktop %s on resolve (epoch=%d)", result.VMID, userID, desktopID, result.Epoch)
 			return result, nil
 		}
 
-		if own.State == VMStateBooting {
-			if waiters, ok := r.pendingWaiters[key]; ok {
-				return r.waitForPendingAssignmentLocked(ctx, key, userID, desktopID, waiters)
-			}
-			// No pending waiter means this is a stale booting ownership, for
-			// example after a process restart. Fall through and recover it the
-			// same way as a failed/degraded ownership.
-		}
-
-		// VM exists but failed or is degraded. Create a new one
-		// with a fresh epoch. Clean up the old mapping.
-		delete(r.vmByID, own.VMID)
 	}
 
 	// Check if a VM assignment is already in progress for this user/desktop.
