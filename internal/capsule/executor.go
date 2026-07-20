@@ -772,7 +772,13 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 		}
 		source := filepath.Join(caps.MergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
 		info, err := os.Lstat(source)
-		if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		if err != nil {
+			return nil, "", fmt.Errorf("capsule release file %q is unavailable", change.Path)
+		}
+		if info.IsDir() {
+			continue
+		}
+		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 			return nil, "", fmt.Errorf("capsule release file %q is not regular", change.Path)
 		}
 		total += info.Size()

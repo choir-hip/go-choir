@@ -11,6 +11,14 @@ import (
 func TestCopyImmutableSourceTreePinsTrackedCleanFiles(t *testing.T) {
 	source := t.TempDir()
 	target := filepath.Join(t.TempDir(), "snapshot")
+	t.Cleanup(func() {
+		_ = filepath.Walk(target, func(path string, info os.FileInfo, err error) error {
+			if err == nil && info.IsDir() {
+				_ = os.Chmod(path, 0o700)
+			}
+			return nil
+		})
+	})
 	mustRunGit(t, source, "init")
 	mustRunGit(t, source, "config", "user.name", "Capsule Test")
 	mustRunGit(t, source, "config", "user.email", "capsule@test.invalid")

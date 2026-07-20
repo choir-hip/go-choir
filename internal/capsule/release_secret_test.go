@@ -51,7 +51,11 @@ func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
 				capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-1", Handle: "grant-1"}: capability},
 				revokedCaps:  map[string]bool{}, publicKey: publicKey,
 			}
-			_, _, err = executor.StageGrantedRelease("cosuper-1", "grant-1", t.TempDir())
+			incoming := t.TempDir()
+			if err := os.Chmod(incoming, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = executor.StageGrantedRelease("cosuper-1", "grant-1", incoming)
 			if err == nil || !strings.Contains(err.Error(), "refuses secret") {
 				t.Fatalf("secret release error = %v", err)
 			}
@@ -88,9 +92,13 @@ func TestStageGrantedReleaseStagesRelativeUpperdirPaths(t *testing.T) {
 			ID: "capsule-success", UpperDir: upper, MergedDir: merged, MemoryMax: 16 << 20,
 		}},
 		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-success", Handle: "grant-success"}: capability},
-		revokedCaps: map[string]bool{}, publicKey: publicKey,
+		revokedCaps:  map[string]bool{}, publicKey: publicKey,
 	}
-	files, staged, err := executor.StageGrantedRelease("cosuper-success", "grant-success", t.TempDir())
+	incoming := t.TempDir()
+	if err := os.Chmod(incoming, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	files, staged, err := executor.StageGrantedRelease("cosuper-success", "grant-success", incoming)
 	if err != nil {
 		t.Fatal(err)
 	}
