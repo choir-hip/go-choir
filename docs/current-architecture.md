@@ -107,7 +107,7 @@ authority.
 | **settlement** | a trajectory's goal closure, earned by its rule (e.g. publication: published AND listed AND no open work). Replaces root-run completion as liveness truth. |
 | **obligation** | an open work item, blocker, or question on a live trajectory. "Open obligations with no resident assignee" is the stall query — observability, never a planner. |
 | **authority envelope** | a code-enforced profile boundary. Super orchestrates but cannot mutate directly; CoSuper effects are capsule broker verbs; Researcher has typed updates only; VSuper aliases are retired for self-development. |
-| **capsule** | an ephemeral guest-local effect chamber. Current executor/host/tool code is scaffolded and inert; target capsules require namespaces, cgroup v2, overlayfs, seccomp, Landlock, capability-bound AF_UNIX brokerage, and verified cleanup. |
+| **capsule** | an ephemeral guest-local effect chamber. The effects-OFF executor implements namespaces, cgroup v2, overlayfs, seccomp, Landlock, capability-bound inherited AF_UNIX brokerage, reconnect, and verified cleanup; the exact Node A Linux path passes, while staging activation remains gated by C/D/G2. |
 | **computer event / acceptance** | the canonical per-ComputerID causal and state-transition record. A frozen bundle remains inert until an authorized acceptance event; updater, checkpoint, and route are projections, not alternate promotion authorities. |
 | **conjecture / hyperthesis / assertion** | the epistemic vocabulary: a claim under test with a named blind edge and scope; an assertion is a supported conjecture with receipts; heresy is a circulating claim whose proof died. |
 

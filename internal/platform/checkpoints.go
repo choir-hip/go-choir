@@ -121,6 +121,10 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 	if err := a.service.writeBlob(storageRef, artifact); err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
 	}
+	checkpointRef, err := computerevent.ArtifactRefFromDigest(checkpoint.Digest)
+	if err != nil {
+		return selfdevprotocol.CheckpointResponse{}, err
+	}
 	tx, err := a.cas.store.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
@@ -132,7 +136,7 @@ func (a *CheckpointAuthority) Publish(ctx context.Context, request selfdevprotoc
 			return selfdevprotocol.CheckpointResponse{}, err
 		}
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO computer_checkpoints (computer_id,idempotency_key,request_commitment,checkpoint_digest,checkpoint_artifact_ref,checkpoint_json,receipt_json,receipt_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?)`, request.ComputerID, request.IdempotencyKey, requestCommitment, checkpoint.Digest, "artifact://sha256/"+checkpoint.Digest, checkpointJSON, receiptJSON, receiptDigest, receipt.IssuedAt)
+	_, err = tx.ExecContext(ctx, `INSERT INTO computer_checkpoints (computer_id,idempotency_key,request_commitment,checkpoint_digest,checkpoint_artifact_ref,checkpoint_json,receipt_json,receipt_digest,created_at) VALUES (?,?,?,?,?,?,?,?,?)`, request.ComputerID, request.IdempotencyKey, requestCommitment, checkpoint.Digest, checkpointRef.String(), checkpointJSON, receiptJSON, receiptDigest, receipt.IssuedAt)
 	if err != nil {
 		return selfdevprotocol.CheckpointResponse{}, err
 	}

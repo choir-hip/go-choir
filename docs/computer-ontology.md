@@ -295,13 +295,16 @@ Current state:
 
 - audited ComputerVersion construction, verification, route CAS, rollback,
   reconstruction, and no-SSH inspection are live;
-- direct Super/CoSuper/VSuper tools, worker/package paths, host capsule
-  authority, incomplete isolation, and plaintext CLI flags remain live or
-  scaffolded and are non-conformant for self-development;
-- no canonical per-computer event appender, privacy protocol, guest updater, or
-  supported public self-development API exists yet;
-- package/adoption records remain useful sharing artifacts but are not
-  self-development acceptance or served-code activation.
+- the effects-OFF cutover provides one canonical per-computer event appender,
+  private payload protocol, guest updater, public self-development API/CLI,
+  and capsule-only CoSuper execution; direct VSuper/worker/candidate/package
+  mutation paths are deleted or refuse;
+- the capsule executor's namespace, cgroup v2, overlayfs, seccomp, Landlock,
+  inherited AF_UNIX listener, reconnect, and cleanup path passes the exact
+  Node A Linux proof;
+- self-development activation and deployed effects remain disabled until the
+  C/D/G2 gates bind the exact staging guest, kernel receipt, genesis, and
+  proposal path.
 
 Near target:
 

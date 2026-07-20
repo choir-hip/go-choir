@@ -312,6 +312,13 @@ func TestPrivatePayloadAppendCompletesDirectedCommitmentGraph(t *testing.T) {
 	if checkpointResponse.StatusCode != http.StatusCreated || !bytes.Equal(expectedCheckpointJSON, publishedCheckpointJSON) || published.Receipt.Verify(service.signingKey.Public) != nil {
 		t.Fatalf("checkpoint response status=%d response=%+v", checkpointResponse.StatusCode, published)
 	}
+	var storedCheckpointRef string
+	if err := platformStore.db.QueryRow(`SELECT checkpoint_artifact_ref FROM computer_checkpoints WHERE computer_id=? AND idempotency_key=?`, event.ComputerID, checkpointRequest.IdempotencyKey).Scan(&storedCheckpointRef); err != nil {
+		t.Fatal(err)
+	}
+	if storedCheckpointRef != "artifact:sha256:"+published.Checkpoint.Digest {
+		t.Fatalf("checkpoint artifact reference = %q", storedCheckpointRef)
+	}
 	oldVersion := computerversion.ComputerVersion{CodeRef: computerversion.CodeRef("code:sha256:" + platformTestDigest('6')), ArtifactProgramRef: computerversion.ArtifactProgramRef("artifact-program:sha256:" + platformTestDigest('7'))}
 	checkpointReceiptDigest, _ := selfdevprotocol.Digest(published.Receipt)
 	acceptedPayload := selfdevprotocol.AcceptedEventAuthorizationEvidence{
