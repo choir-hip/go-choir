@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-guest-closure-fate-sharing-round-50
-    state: accepted_G1
+    state: accepted_G1_landed_deployed_C_kernel_receipt_blocked
     ref: bbbb34f32a22a79b5e4ca7caea0096bf789e58aa
     owner: integration-authority
     base: 37409fa657c0928b61ff9495ce5938ea69364726
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [9ed2b49fb9a9b29a5b70ddb061ca1b02c2782a51, 37409fa657c0928b61ff9495ce5938ea69364726]
     verification: "Before repair, the classifier contract reproduced `internal/vmmanager/manager.go` with `deploy_host_os=false`. The repaired classifier asserts both vmmanager and vmctl production paths select deploy_host_os, vmctl restart, active refresh, and the existing host-service set. `.github/scripts/deploy-impact-classify-test` and `.github/scripts/deploy-workflow-contract-test` pass."
-    disposition: "Round-50 accepted unanimously by OMP Gemini 3.5, OMP Cursor/Grok 4.5, and OpenCode. All three confirmed the existing guest-boot-contract helper is the necessary fate-sharing route, both production branches preserve host-service sets, tests/docs remain ignored, and workflow deploy_host_os builds/switches the canonical guest closure before refresh. Devin timed out empty; Codex exhausted usage. Effects remain OFF; corrected redeployment and exact guest identity remain mandatory."
+    disposition: "Round-50 landed as main bbcbf914d3f2c14a19f022a9f264ff00350f432c. Push CI 29771072403 passed; forced full-closure run 29771190925 passed in 19m33s, switched Node B, refreshed retained active guests, and completed deployment. Public health reports exact commit/deployed_commit bbcbf914. The retained target reconstructed active at epoch 1140; replay of original lifecycle key `c-reconstruct-1784566206810` returned signed LifecycleReceipt `019f8108-3e31-74db-95b0-12d96967b453` joining failed epoch 804 to active epoch 1140. Effects remain OFF. C is now blocked only on the required kernel capability receipt."
     g1_round_50_probe:
       reviewed_at: 2026-07-20T19:12:10Z
       source_ref: bbbb34f32a22a79b5e4ca7caea0096bf789e58aa
@@ -1206,7 +1206,7 @@ now:
     heresy_delta: {discovered: 4, introduced: 0, repaired: 0}
   c_deploy_failure_9:
     observed_at: 2026-07-20T18:55:21Z
-    status: accepted_G1_round_50_pending_land
+    status: repaired_deployed_run_29771190925
     mutation_class: red
     protected_surfaces: [deployment_routing, immutable_guest_image, active_computer_refresh, retained_persistent_computer, deploy_acceptance]
     admissible_evidence_class: "Exact CI/deploy receipt, public health/build identity, deploy classifier/closure source trace, refrozen G1 review if runtime code changes, and no-SSH deployed acceptance."
@@ -1221,6 +1221,21 @@ now:
     rollback_candidate: "Revert bbbb34f32a22a79b5e4ca7caea0096bf789e58aa before landing or its eventual main landing commit. Do not rerun the incomplete deployment through the old classifier."
     conjecture_delta: "A correct lifecycle repair cannot deploy through a host-service-only route when acceptance requires a new guest runtime identity; refresh and guest closure must fate-share."
     heresy_delta: {discovered: 5, introduced: 0, repaired: 0}
+  c_deploy_failure_10:
+    observed_at: 2026-07-20T19:37:09Z
+    status: blocked_C_kernel_baseline_release_unavailable
+    mutation_class: red
+    protected_surfaces: [kernel_capability_receipt, immutable_release_identity, guest_runtime_environment, deployed_acceptance]
+    admissible_evidence_class: "Public scoped API receipt, exact guest/Nix environment evaluation, focused launcher contract, refrozen G1, and deployed no-SSH kernel receipt verification."
+    success_before_blocker: "Full-closure deployment run 29771190925 passed and public health binds commit/deployed_commit bbcbf914. Exact target status is active at epoch 1140. Replaying the retained lifecycle idempotency returned 201 signed LifecycleReceipt `019f8108-3e31-74db-95b0-12d96967b453`, prior failed/804 to active/1140. Public self-development mode is `off`, generation 0."
+    evidence: "Public scoped GET `/api/computers/computer-4c20ff4a21a021c4306d8c783be0037d/self-development/kernel-capabilities` returned 503 `current immutable release unavailable`. Handler source reaches this only when no updater current manifest exists and `CHOIR_BASELINE_RELEASE_ROOT` is absent or not a `/nix/store/` path. Repository search finds no Nix/runtime wiring for that required variable."
+    problem: "The guest sandbox launcher knows the immutable package root used for the baseline runtime but exports only `RUNTIME_SKILLS_ROOT` and `CHOIR_UPDATER_ROOT`. Kernel capability fallback requires the same immutable release root through `CHOIR_BASELINE_RELEASE_ROOT`; without it, a pristine effects-OFF computer cannot build the baseline manifest needed to bind its signed kernel report to the current route."
+    existing_replacement_check: "`nix/sandbox-vm.nix` already embeds `${goChoirPackages.sandbox}` as the exact immutable sandbox executable/skills package and the runtime handler already implements safe baseline-manifest fallback restricted to `/nix/store/`. Connect that existing immutable package identity in the launcher; do not relax the store-path check, fabricate a manifest, use a mutable updater symlink, or bypass receipt verification."
+    credential_hygiene: "The first fresh scoped acceptance secret was accidentally emitted into the local tool transcript during assignment. Key `ak_d215b59f-e92a-46c9-b245-2305ba8da2a3` was immediately revoked with 204 before use and replaced by non-secret metadata key `ak_294df2dc-ea73-4ef9-a47d-5f067b31ec2c`. No provider/admin secret was exposed; the replacement remains exact-target scoped and expiring."
+    rollback: "Preserve complete run 29771190925, lifecycle receipt 019f8108, active target epoch 1140, R0/R1, and effects OFF. Revert only the future launcher environment change if needed; do not roll back successful epoch authority or guest-closure fate-sharing."
+    next_action: "Add a deterministic sandbox-vm contract requiring immutable `CHOIR_BASELINE_RELEASE_ROOT=${goChoirPackages.sandbox}` before both static and dynamic execution, evaluate the guest service/launcher, freeze G1, deploy, and retry the public kernel receipt."
+    conjecture_delta: "A pristine immutable guest needs an explicit baseline release identity before updater genesis; the updater current manifest cannot be the only source of present-version truth."
+    heresy_delta: {discovered: 6, introduced: 1, repaired: 1}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
