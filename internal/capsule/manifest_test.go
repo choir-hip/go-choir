@@ -3,6 +3,7 @@ package capsule
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -139,5 +140,30 @@ func TestContextReaderHonorsCancellationBetweenChunks(t *testing.T) {
 	cancel()
 	if _, err := reader.Read(make([]byte, 8)); !errors.Is(err, context.Canceled) {
 		t.Fatalf("contextReader error = %v, want context canceled", err)
+	}
+}
+
+type cancelingEOFReader struct {
+	cancel context.CancelFunc
+	done   bool
+}
+
+func (r *cancelingEOFReader) Read(buffer []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+	r.done = true
+	n := copy(buffer, "payload")
+	r.cancel()
+	return n, io.EOF
+}
+
+func TestContextReaderPrefersCancellationOnFinalRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	_, err := io.Copy(io.Discard, &contextReader{
+		ctx: ctx, reader: &cancelingEOFReader{cancel: cancel},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("final-read error = %v, want context canceled", err)
 	}
 }

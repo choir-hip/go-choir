@@ -169,10 +169,8 @@ func (r *contextReader) Read(buffer []byte) (int, error) {
 		return 0, err
 	}
 	n, err := r.reader.Read(buffer)
-	if err == nil {
-		if contextErr := r.ctx.Err(); contextErr != nil {
-			return n, contextErr
-		}
+	if contextErr := r.ctx.Err(); contextErr != nil {
+		return n, contextErr
 	}
 	return n, err
 }

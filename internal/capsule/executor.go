@@ -496,6 +496,9 @@ func digestCapsuleWorktree(ctx context.Context, caps *Capsule) (string, error) {
 	}
 	entries := make([]entry, 0, len(changes))
 	for _, change := range changes {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
 		item := entry{Path: change.Path, Kind: change.Kind.String(), Mode: uint32(change.Mode.Perm())}
 		if change.Kind != ChangeDeleted {
 			path := filepath.Join(caps.MergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
@@ -510,7 +513,7 @@ func digestCapsuleWorktree(ctx context.Context, caps *Capsule) (string, error) {
 					return "", openErr
 				}
 				hash := sha256.New()
-				_, copyErr := io.Copy(hash, input)
+				_, copyErr := io.Copy(hash, &contextReader{ctx: ctx, reader: input})
 				closeErr := input.Close()
 				if copyErr != nil || closeErr != nil {
 					return "", errors.Join(copyErr, closeErr)
