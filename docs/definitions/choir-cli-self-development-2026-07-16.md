@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-canonical-guest-deploy-round-39
-    state: frozen_G1_review
+    state: rejected_G1_stale_playwright_nix_comment
     ref: 198fad983747cc5f14c027fc739fd1f4ee7b5700
     owner: integration-authority
     base: 275d819b
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [692a68d0642b6bfc8f85ba6c926ca01f4e9819e8, 275d819b]
     verification: "Classifier, deploy workflow, CI workflow, pointer resolver, and Bash syntax contracts pass. Negative active inventory under `.github` contains no Playwright guest deploy token. Exact script classification selects host OS/vmctl restart, no ordinary guest, and no second guest output. Run 29740013073 is the deployed stale-selection reproducer."
-    disposition: "Effects remain OFF. Round-39 G1 must review exact deletion, negative caller inventory, retained evidence boundary, and classifier behavior before main may advance or deployment may retry."
+    disposition: "Round-39 is rejected under the reproducible-minority rule. Four reviewers accepted the active deploy deletion, but Devin found `nix/sandbox-vm.nix:132` still teaching CI ordinary/Playwright image roots. The comment contradicts the canonical flake and the requested complete negative inventory. Effects remain OFF and main does not advance."
     g1_round_36_probe:
       reviewed_at: 2026-07-20T11:16:00Z
       source_ref: cc380712f941f7b88e06240e108024e329bfc511
@@ -629,6 +629,17 @@ now:
       adjudication: "No reproducible blocker. Exact Round-37 wrapper/package symlink reproducers and final executable escape refuse; canonical direct/nested generated chains resolve; production root is fixed; no unsafe evaluation or effects activation exists. CI execution and live Node B wrapper/pointer behavior remain mandatory C gates."
       residual_risks: "First main CI must execute the fixture; live deployment must prove systemd wrapper shape and pointer sync. Future script-only diffs should be added to the Plan CI classifier, and an in-store executable symlink positive fixture would improve regression precision; neither blocks this exact candidate."
       output_sha256: {devin: 86d6b9d186aa90de998e9f54682ce9722f680aab781dbb8b2d71b7b4293772d0, claude: 72b82554960ff81aba78b7730f8cbd69a92ab04032ba25edb8af7d73f1138558, cursor: 5ccc3802ba917d3fae1973df6906a28b0a4f99253fb9863ca7b019e937cb5c9f, omp_gemini35: f225ac13fa4b435abb86474eac4068e40afd050823aaa62b74d6d2103551432a}
+    g1_round_39_probe:
+      reviewed_at: 2026-07-20T12:23:00Z
+      source_ref: 198fad983747cc5f14c027fc739fd1f4ee7b5700
+      authority_ref: fe1350fd431a0ad093397d1ff3d4a9a7800448ef
+      manifest: /tmp/choir-selfdev-g1-round39-panel/manifest.tsv
+      manifest_sha256: f41819f3e2009897e730439a646a7366ba5069084e3160d1405740e9663772a3
+      panel_health: "Devin completed a substantive REJECT; Claude, Cursor, OpenCode, and omp-gemini35 completed substantive ACCEPT reviews."
+      verdicts: [devin:REJECT_G1, claude:ACCEPT_G1, cursor:ACCEPT_G1, opencode:ACCEPT_G1, omp_gemini35:ACCEPT_G1]
+      blocker: "nix/sandbox-vm.nix:132 says CI builds selected ordinary/playwright image roots in parallel even though flake.nix exposes only the canonical guest image. This is stale product/deploy framing in a load-bearing Nix file and violates the complete hidden-reference inventory requested by G1."
+      adjudication: "Reproducible framing blocker; reject despite majority. Rewrite the comment to one canonical guest image and add deploy-workflow contract refusals for the deleted environment/output/package tokens before re-freezing."
+      output_sha256: {devin: f7c622f0c88801e17d3f95df9d3e7cf5a3c514c75703d820b0d586d6150b23e4, claude: abd5d32cf6d0c591c9621e78ce064eba2c1627b26ac6d893a89f26261bc315a1, cursor: 39d758d9038082e27e811e6795997069fa0e40634a862be1caa6dfc416e3b972, opencode: 9256c9d5e2e899f5e4a6ccaf47bb8d7131a46c8432623dd0073578f5b510bd93, omp_gemini35: 08d8f6618aab31e9ae80d7d0c7d38ce99b70b0ccef9c268d51d7e39134baf9d8}
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -697,8 +708,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "C deployment run 29740013073 passed all selected source gates but failed before activation: the deploy classifier/workflow still select `.#guest-image-playwright`, while flake.nix exposes only the canonical `.#guest-image`. This stale second guest authority survived the worker/candidate cutover. Public health remains exact 87432535; effects remain OFF and incomplete receipts are authoritative."
-  next_action: "Delete the obsolete Playwright guest deploy class/build/install/receipt path, classify `scripts/node-b-sync-service-pointers` explicitly as host-OS-only, preserve legacy host data/reporting without selecting it, refreeze G1, then retry C deployment."
+  blocker_or_risk: "Round-39 deleted active second-guest deploy authority and fixed pointer-script classification, but G1 found stale ordinary/Playwright-root framing in `nix/sandbox-vm.nix`. Public health remains exact 87432535; effects remain OFF and incomplete receipts remain authoritative."
+  next_action: "Delete the stale Nix comment framing, add contract-level refusals for the removed Playwright deploy tokens, refreeze G1, then retry C deployment."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -993,15 +1004,15 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   c_deploy_failure_3:
     observed_at: 2026-07-20T12:10:45Z
-    status: canonical_guest_deploy_repair_implemented_pending_G1
+    status: rejected_G1_stale_playwright_nix_comment
     mutation_class: red
     protected_surfaces: [deployment_routing, guest_image_authority, deploy_receipt, Node_B_activation]
     admissible_evidence_class: "Exact GitHub deploy logs, negative caller inventory, classifier/workflow contracts, refrozen G1 review, complete deploy receipt, public identity, and no-SSH acceptance."
     evidence: "Run 29740013073 passed Plan CI, all race shards, vet/build, frontend, docs truth, heresy, rolling flake, and the focused pointer fixture. Deploy impact treated `scripts/node-b-sync-service-pointers` as an unknown deployed path, selected host OS plus ordinary and Playwright guests, built the host closure and canonical guest, then failed: `flake ... does not provide attribute ... guest-image-playwright`. It wrote `/var/lib/go-choir/deploy-failures/29740013073-1.json`; public health remained 874325352b202baf6692d1abb4ca03ac1ff1ea85."
     problem: "The canonical flake deleted the second Playwright guest image, but deploy classification, workflow environment/output, build/install/receipt branches, and classifier assertions still model it as an active deploy authority. The accepted service-pointer script also lacks an explicit deploy class, causing the stale full-deploy fallback."
     existing_replacement: "flake.nix exposes one canonical `guest-image`; Playwright/browser proof no longer has a separate VM image package. The current ordinary guest and public browser acceptance paths supersede the removed image. Historical `/var/lib/go-choir/guest-playwright` data and report classifications are rollback/retention evidence, not deploy authority."
-    authorized_repair: "Delete `deploy_playwright_guest` from the classifier outputs and all workflow input/log/build/install/receipt branches. Remove stale classifier assertions and add a focused assertion that `scripts/node-b-sync-service-pointers` selects host OS/vmctl restart only, with both guest selections absent. Do not delete or mutate retained host paths, reports, receipts, or archives. Refreeze G1 because deployment routing is protected."
-    repair_result: "The deploy classifier and workflow no longer expose, transport, log, build, install, or require a Playwright guest class/receipt. `scripts/node-b-sync-service-pointers` is explicitly host-OS/vmctl-restart only and does not select a guest. Classifier, workflow contract, pointer resolver, and Bash syntax checks pass; negative inventory finds no active Playwright guest deploy token in `.github`. Legacy host/report/archive data remains untouched."
+    authorized_repair: "Delete `deploy_playwright_guest` from the classifier outputs and all workflow input/log/build/install/receipt branches. Remove stale classifier assertions; add a focused assertion that `scripts/node-b-sync-service-pointers` selects host OS/vmctl restart only with both guest selections absent; rewrite active Nix comments to one canonical guest image; and make deploy-workflow contracts reject the removed environment/output/package tokens. Do not delete or mutate retained host paths, reports, receipts, or archives. Refreeze G1 because deployment routing is protected."
+    repair_result: "Round-39 deleted the active classifier/workflow authority and fixed pointer classification, but G1 found one stale ordinary/Playwright-root comment in `nix/sandbox-vm.nix`; that frozen source is rejected. Round-40 must remove the framing and add durable negative workflow contracts while preserving retained evidence."
     rollback: "Revert the source deletion if G1 rejects it. Node B remains on host identity 87432535 with canonical immutable guest and both preserved rollback trees; retain incomplete receipt 29740013073-1 and any legacy guest-playwright data."
     conjecture_delta: "Deleting a package output is incomplete until deploy classifiers, workflow receipts, and selection tests lose the same authority; otherwise conservative fallbacks resurrect the deleted topology."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
