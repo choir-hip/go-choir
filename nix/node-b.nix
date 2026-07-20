@@ -717,6 +717,7 @@ in
     state=/var/lib/go-choir
     target="$state/guest"
     legacy="$state/guest-pre-managed-rollback"
+    conflict="$state/guest-cutover-conflict-recovery"
     next="$state/.guest-next"
     src="${guestImage}"
     for artifact in vmlinux rootfs.ext4 initrd storedisk.erofs kernel-params build.json; do
@@ -726,16 +727,32 @@ in
       fi
     done
     mkdir -p "$state"
-    if [ -e "$target" ] && [ ! -L "$target" ]; then
-      if [ -e "$legacy" ]; then
-        echo "go-choir guest image cutover refuses to replace existing rollback $legacy" >&2
-        exit 1
+    moved_to=
+    restore_moved_guest() {
+      if [ -n "$moved_to" ] && [ ! -e "$target" ] && [ ! -L "$target" ]; then
+        mv "$moved_to" "$target"
       fi
-      mv "$target" "$legacy"
+    }
+    trap restore_moved_guest ERR
+    if [ -e "$target" ] && [ ! -L "$target" ]; then
+      if [ -e "$legacy" ] || [ -L "$legacy" ]; then
+        if [ -e "$conflict" ] || [ -L "$conflict" ]; then
+          echo "go-choir guest image cutover refuses a second ambiguous guest tree; recovery already exists at $conflict" >&2
+          exit 1
+        fi
+        mv "$target" "$conflict"
+        moved_to="$conflict"
+        echo "go-choir guest image cutover preserved ambiguous active tree at $conflict"
+      else
+        mv "$target" "$legacy"
+        moved_to="$legacy"
+      fi
     fi
     rm -f "$next"
     ln -s "$src" "$next"
     mv -Tf "$next" "$target"
+    moved_to=
+    trap - ERR
     echo "go-choir guest image pointer updated to $src"
   '';
 
