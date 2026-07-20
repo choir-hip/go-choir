@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-credential-authority-round-47
-    state: frozen_G1_review
+    state: accepted_G1
     ref: 6777a66062cd60684eb846e7d4c1dfac7e602492
     owner: integration-authority
     base: 30bf9f075ba4ac055fb2f8ab0f22edb2f35509bb
@@ -595,7 +595,15 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [f55414cbabcb47e93e61f7067337f04f5bbc5390, 30bf9f075ba4ac055fb2f8ab0f22edb2f35509bb]
     verification: "The Node B service contract and Bash syntax pass. Nix evaluation yields vmctl ExecStart `/nix/store/...-go-choir-vmctl-exec`, EnvironmentFile unchanged, and exact after/wants arrays including corpusd. Direct Environment evaluation retains `VMCTL_CORPUSD_URL=http://127.0.0.1:8086`. Local x86_64-linux launcher realization is unavailable from the aarch64-darwin builder and remains a selected CI host-closure proof."
-    disposition: "Frozen for Round-47 G1. Review must verify launcher execution occurs after EnvironmentFile precedence, only credential authority is reasserted, corpusd ordering is valid/non-cyclic, source contracts cover the actual Nix symbols, and selected CI will build the x86_64-linux closure. No landing, deploy, or retry is authorized before acceptance."
+    disposition: "Round-47 accepted unanimously by three substantive reviewers: Devin, OMP Cursor/Grok 4.5, and OMP Gemini 3.5. Each confirmed EnvironmentFile precedence is closed by immutable launcher re-export, only credential authority is fixed, corpusd ordering is acyclic, guest routing remains 8082, and Nix eval/contracts pass. OpenCode stopped after a denied temporary-directory probe without a verdict; Codex exhausted usage. Effects remain OFF. Candidate may land; selected x86_64 host closure, Node B activation, and same-idempotency public replay are mandatory."
+    g1_round_47_probe:
+      reviewed_at: 2026-07-20T17:24:00Z
+      source_ref: 6777a66062cd60684eb846e7d4c1dfac7e602492
+      authority_ref: 4b488e4022c31b4ebd0a2acc51350ac537947e57
+      verdicts: {devin: ACCEPT_G1, omp_cursor_grok45: ACCEPT_G1, omp_gemini35: ACCEPT_G1, opencode: incomplete_no_verdict, codex: usage_limit}
+      adjudication: "Accept. The three substantive reviewers independently traced systemd EnvironmentFile precedence into immutable vmctlExec, verified it reasserts only direct corpusd authority, confirmed actual handler/port ownership, acyclic after/wants, unchanged guest wire routing, selected CI host-closure path, and focused/Nix evidence. No severe finding remains."
+      residual_risks: "x86_64-linux wrapper/host closure realization, Node B service activation, effective live launcher precedence, corpusd readiness, credential mint, root-owned credential disk, guest attach/consume/unlink, retained boot, same pending lifecycle completion, and effects OFF remain deployed C gates."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round47-panel/manifest.tsv, manifest_sha256: a69be4028e581b042b0199f6e1551274f4b1823f8a26b283c4d07690d55ab8f2, devin_sha256: e3c077104c5c9c1b9ade2d07d5a075d061acc54d40f4330fe05921eba6fa4106, omp_cursor_grok45_sha256: e05d0c4f8663c60f10c5f73bdb7c7b9f1929f98115c651cf3cebc060237f2117, omp_gemini35_sha256: bca9af4b075ba2bb56a62693586f8b8758b4df6a7495abf7dad48a1674240e4b, opencode_incomplete_sha256: 9b22f4a6821a345e8f6689a77d91e232d47d2a06669c2472bf03f6ee9153b50a, codex_failure_sha256: e7c22dc80c3f7bdd2fbef33b54dbcf3fcdb7cce5aecdd622520b318d562759fb}
     g1_round_46_probe:
       reviewed_at: 2026-07-20T17:10:00Z
       source_ref: f55414cbabcb47e93e61f7067337f04f5bbc5390
@@ -1133,7 +1141,7 @@ now:
     heresy_delta: {discovered: 2, introduced: 0, repaired: 0}
   c_deploy_failure_7:
     observed_at: 2026-07-20T16:50:06Z
-    status: frozen_round_47_G1_review
+    status: accepted_G1_pending_land
     mutation_class: red
     protected_surfaces: [public_lifecycle_API, scoped_API_key, vmctl_refresh, retained_persistent_computer, credential_envelope, Firecracker_boot, lifecycle_intent, deploy_acceptance]
     admissible_evidence_class: "Exact main CI/deploy receipt, public health/build identity, public exact-key lifecycle responses, non-secret key metadata, source boot/credential/persistence trace, focused production-shaped reproduction, refrozen G1 review, and deployed no-SSH acceptance."
