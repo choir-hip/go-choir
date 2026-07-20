@@ -957,7 +957,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_deploy_failure_2:
     observed_at: 2026-07-20T10:51:22Z
-    status: rejected_G1_mutable_package_authority
+    status: immutable_store_repair_implemented_pending_G1
     mutation_class: red
     protected_surfaces: [Node_B_deployment, service_package_pointers, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deploy logs, focused wrapper-resolution fixtures, refrozen G1 review, complete deploy receipt, public build identity, and no-SSH acceptance."
@@ -965,7 +965,7 @@ now:
     problem: "`node-b-sync-service-pointers` parses only a quoted final `exec` directly in the systemd ExecStart wrapper. `proxyExec` instead has an unquoted exec to the generated serviceExec wrapper, whose final quoted exec reaches the immutable proxy package. The package authority exists but the synchronizer stops one wrapper too early."
     existing_replacement: "The generated wrapper chain already contains the exact immutable package path. Resolve that chain with a small bounded/cycle-detecting parser rather than adding another proxy-specific package authority or duplicating serviceExec."
     authorized_repair: "Resolve quoted or unquoted literal exec targets recursively for a strict small depth. In production, require the start wrapper and every intermediate wrapper to be canonical direct children of `/nix/store`, and accept only an executable direct store package leaf `/nix/store/<entry>/bin/<service>`. Reject variables, traversal/noncanonical paths, mutable paths, cycles, unreadable targets, wrong binary names, and depth exhaustion. Focused tests may pass an explicit disposable store root; main must not. Refreeze G1 before deployment."
-    repair_result: "Round-36 implemented bounded resolution and focused refusals, but G1 reproduced acceptance of `/tmp/mutable-package/bin/proxy`; its positive fixture normalized the unsafe authority. That source is rejected. Round-37 must add direct-store-child validation for every hop and make mutable/noncanonical refusal observable."
+    repair_result: "Round-37 adds `is_direct_store_child`: production defaults to `/nix/store`; the start wrapper and every intermediate hop must be direct store children, and the final executable must be `<direct-store-package>/bin/<service>`. The focused test injects a disposable store root explicitly and now proves production-default refusal, mutable wrapper/package refusal, nested noncanonical package refusal, and all prior success/refusal cases. Focused deploy/CI contracts and Bash syntax pass."
     rollback: "The exact main host generation and immutable guest pointer are active; pre-managed and conflict recovery trees remain. No complete deployment receipt or active-computer refresh was published. Revert only the synchronizer repair if rejected; retain incomplete receipts and all guest rollback refs."
     conjecture_delta: "Service package authority may be wrapped for immutable environment injection; deployment discovery must resolve bounded generated wrapper composition, not assume one textual wrapper shape."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}

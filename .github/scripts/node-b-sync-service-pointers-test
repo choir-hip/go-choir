@@ -7,13 +7,15 @@ source "$root/scripts/node-b-sync-service-pointers"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+store="$tmp/nix/store"
+mkdir -p "$store"
 
-package="$tmp/package"
+package="$store/hash-package"
 mkdir -p "$package/bin"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$package/bin/proxy"
 chmod +x "$package/bin/proxy"
 
-direct="$tmp/direct-wrapper"
+direct="$store/hash-direct-wrapper"
 cat >"$direct" <<EOF
 #!/usr/bin/env bash
 exec "\$pointer" "\$@"
@@ -21,12 +23,12 @@ exec "$package/bin/proxy" "\$@"
 EOF
 chmod +x "$direct"
 
-nested="$tmp/nested-wrapper"
+nested="$store/hash-nested-wrapper"
 printf '#!/usr/bin/env bash\nexec %s "$@"\n' "$direct" >"$nested"
 chmod +x "$nested"
 
-[ "$(resolve_service_package proxy "$direct")" = "$package" ]
-[ "$(resolve_service_package proxy "$nested")" = "$package" ]
+[ "$(resolve_service_package proxy "$direct" "$store")" = "$package" ]
+[ "$(resolve_service_package proxy "$nested" "$store")" = "$package" ]
 
 expect_refusal() {
   local name="$1"
@@ -34,7 +36,7 @@ expect_refusal() {
   local message="$3"
   local stderr="$tmp/$name.stderr"
 
-  if resolve_service_package proxy "$wrapper" >"$tmp/$name.stdout" 2>"$stderr"; then
+  if resolve_service_package proxy "$wrapper" "$store" >"$tmp/$name.stdout" 2>"$stderr"; then
     echo "wrapper resolver unexpectedly accepted $name" >&2
     exit 1
   fi
@@ -45,35 +47,62 @@ expect_refusal() {
   fi
 }
 
-variable="$tmp/variable-wrapper"
+if resolve_service_package proxy "$direct" >"$tmp/production-root.stdout" 2>"$tmp/production-root.stderr"; then
+  echo "production resolver accepted an injected mutable store root" >&2
+  exit 1
+fi
+grep -Fq "outside the immutable store" "$tmp/production-root.stderr"
+
+variable="$store/hash-variable-wrapper"
 printf '#!/usr/bin/env bash\nexec "$pointer" "$@"\n' >"$variable"
 chmod +x "$variable"
 expect_refusal variable "$variable" "Could not find literal Nix exec target"
 
-cycle_a="$tmp/cycle-a"
-cycle_b="$tmp/cycle-b"
+cycle_a="$store/hash-cycle-a"
+cycle_b="$store/hash-cycle-b"
 printf '#!/usr/bin/env bash\nexec %s\n' "$cycle_b" >"$cycle_a"
 printf '#!/usr/bin/env bash\nexec %s\n' "$cycle_a" >"$cycle_b"
 chmod +x "$cycle_a" "$cycle_b"
 expect_refusal cycle "$cycle_a" "Cycle in Nix exec wrappers"
 
-wrong_package="$tmp/wrong-package"
+wrong_package="$store/hash-wrong-package"
 mkdir -p "$wrong_package/bin"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$wrong_package/bin/gateway"
 chmod +x "$wrong_package/bin/gateway"
-wrong="$tmp/wrong-wrapper"
+wrong="$store/hash-wrong-wrapper"
 printf '#!/usr/bin/env bash\nexec "%s"\n' "$wrong_package/bin/gateway" >"$wrong"
 chmod +x "$wrong"
 expect_refusal wrong-binary "$wrong" "resolves to wrong service binary"
 
-missing="$tmp/missing-wrapper"
-printf '#!/usr/bin/env bash\nexec %s\n' "$tmp/absent-wrapper" >"$missing"
+missing="$store/hash-missing-wrapper"
+printf '#!/usr/bin/env bash\nexec %s\n' "$store/hash-absent-wrapper" >"$missing"
 chmod +x "$missing"
 expect_refusal missing "$missing" "Could not read Nix exec wrapper"
 
+mutable_package="$tmp/mutable-package"
+mkdir -p "$mutable_package/bin"
+cp "$package/bin/proxy" "$mutable_package/bin/proxy"
+mutable="$store/hash-mutable-wrapper"
+printf '#!/usr/bin/env bash\nexec \"%s\"\n' "$mutable_package/bin/proxy" >"$mutable"
+chmod +x "$mutable"
+expect_refusal mutable-package "$mutable" "Nix service package is outside the immutable store"
+
+nested_package="$store/hash-nested-package/subdirectory"
+mkdir -p "$nested_package/bin"
+cp "$package/bin/proxy" "$nested_package/bin/proxy"
+noncanonical="$store/hash-noncanonical-wrapper"
+printf '#!/usr/bin/env bash\nexec \"%s\"\n' "$nested_package/bin/proxy" >"$noncanonical"
+chmod +x "$noncanonical"
+expect_refusal noncanonical-package "$noncanonical" "Nix service package is outside the immutable store"
+
+outside="$tmp/outside-wrapper"
+printf '#!/usr/bin/env bash\nexec \"%s\"\n' "$package/bin/proxy" >"$outside"
+chmod +x "$outside"
+expect_refusal mutable-wrapper "$outside" "Nix exec wrapper is outside the immutable store"
+
 chain=()
 for index in 0 1 2 3 4; do
-  chain+=("$tmp/depth-$index")
+  chain+=("$store/hash-depth-$index")
 done
 for index in 0 1 2 3; do
   next=$((index + 1))

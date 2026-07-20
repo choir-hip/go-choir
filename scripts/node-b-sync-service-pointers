@@ -45,14 +45,32 @@ last_literal_exec_target() {
   printf '%s\n' "$target"
 }
 
+is_direct_store_child() {
+  local path="$1"
+  local store_root="$2"
+  local child
+
+  case "$path" in
+    "$store_root"/*) child="${path#"$store_root"/}" ;;
+    *) return 1 ;;
+  esac
+  [ -n "$child" ] && [[ "$child" != */* ]] && [ "$child" != "." ] && [ "$child" != ".." ]
+}
+
 resolve_service_package() {
   local service="$1"
   local current="$2"
+  local store_root="${3:-/nix/store}"
   local target
+  local package
   local depth
   local -A seen=()
 
   for depth in 1 2 3 4; do
+    if ! is_direct_store_child "$current" "$store_root"; then
+      echo "Nix exec wrapper is outside the immutable store: $current" >&2
+      return 1
+    fi
     if [ ! -r "$current" ]; then
       echo "Could not read Nix exec wrapper $current for go-choir-$service.service" >&2
       return 1
@@ -67,8 +85,17 @@ resolve_service_package() {
       echo "Could not find literal Nix exec target in wrapper $current for go-choir-$service.service" >&2
       return 1
     fi
-    if [[ "$target" == */bin/"$service" ]] && [ -x "$target" ]; then
-      printf '%s\n' "${target%/bin/$service}"
+    if [[ "$target" == */bin/"$service" ]]; then
+      package="${target%/bin/$service}"
+      if ! is_direct_store_child "$package" "$store_root"; then
+        echo "Nix service package is outside the immutable store: $package" >&2
+        return 1
+      fi
+      if [ ! -x "$target" ]; then
+        echo "Nix service package missing executable $target" >&2
+        return 1
+      fi
+      printf '%s\n' "$package"
       return 0
     fi
     if [[ "$target" == */bin/* ]]; then
