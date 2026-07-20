@@ -141,6 +141,10 @@ func (o *VMOwnership) IsReady() bool {
 // registry runs in host-process mode with no-op VM lifecycle calls.
 
 type VMManager interface {
+	// ReserveBootEpoch durably allocates the realization epoch before vmctl
+	// mints any credential bound to that boot attempt.
+	ReserveBootEpoch(vmID string, minimum int64) (int64, error)
+
 	// BootVM launches a new Firecracker VM and returns its instance info.
 	BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error)
 
@@ -816,26 +820,49 @@ func (r *OwnershipRegistry) ensureActiveVMReady(own *VMOwnership, mgr VMManager)
 	}
 }
 
-func (r *OwnershipRegistry) freshVMConfig(own *VMOwnership, gatewayToken string) VMManagerConfig {
+func (r *OwnershipRegistry) reserveFreshVMConfigLocked(own *VMOwnership, gatewayToken string, mgr VMManager) (VMManagerConfig, string, error) {
+	if own == nil || mgr == nil {
+		return VMManagerConfig{}, "", fmt.Errorf("VM realization authority is unavailable")
+	}
+	epoch, err := mgr.ReserveBootEpoch(own.VMID, own.Epoch+1)
+	if err != nil {
+		return VMManagerConfig{}, "", err
+	}
+	if r.epochCounter < epoch {
+		r.epochCounter = epoch
+	}
+	if err := r.writePersistenceLocked(); err != nil {
+		return VMManagerConfig{}, "", fmt.Errorf("persist reserved VM realization %d: %w", epoch, err)
+	}
 	cfg := vmManagerConfigForOwnership(own, gatewayToken)
-	cfg.Epoch = own.Epoch + 1
-	cfg.RealizationID = realizationIDFor(own.VMID, cfg.Epoch)
-	cfg.ComputerCredentialEnvelope = r.issueComputerCredentialEnvelope(cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
-	return cfg
+	cfg.Epoch = epoch
+	cfg.RealizationID = realizationIDFor(own.VMID, epoch)
+	return cfg, r.corpusdURL, nil
 }
-func freshVMConfigWithCredentialIssuer(own *VMOwnership, gatewayToken, corpusdURL string) VMManagerConfig {
-	cfg := vmManagerConfigForOwnership(own, gatewayToken)
-	cfg.Epoch = own.Epoch + 1
-	cfg.RealizationID = realizationIDFor(own.VMID, cfg.Epoch)
+
+func (r *OwnershipRegistry) reserveFreshVMConfig(own *VMOwnership, gatewayToken string, mgr VMManager) (VMManagerConfig, error) {
+	r.mu.Lock()
+	cfg, corpusdURL, err := r.reserveFreshVMConfigLocked(own, gatewayToken, mgr)
+	r.mu.Unlock()
+	if err != nil {
+		return VMManagerConfig{}, err
+	}
 	cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
-	return cfg
+	if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
+		return VMManagerConfig{}, fmt.Errorf("realization credential unavailable")
+	}
+	return cfg, nil
 }
 
 func (r *OwnershipRegistry) recoverOrRestartActiveVM(own *VMOwnership, mgr VMManager) (*VMInstanceInfo, error) {
 	if mgr.GetVM(own.VMID) == nil {
 		return r.startExistingVM(own, mgr)
 	}
-	recovered, err := mgr.RecoverVM(own.VMID, r.freshVMConfig(own, ""))
+	cfg, err := r.reserveFreshVMConfig(own, "", mgr)
+	if err != nil {
+		return nil, err
+	}
+	recovered, err := mgr.RecoverVM(own.VMID, cfg)
 	if err != nil {
 		if mgr.GetVM(own.VMID) == nil {
 			return r.startExistingVM(own, mgr)
@@ -850,9 +877,16 @@ func (r *OwnershipRegistry) startExistingVM(own *VMOwnership, mgr VMManager) (*V
 		return nil, nil
 	}
 	if mgr.GetVM(own.VMID) != nil {
-		return mgr.RecoverVM(own.VMID, r.freshVMConfig(own, ""))
+		cfg, err := r.reserveFreshVMConfig(own, "", mgr)
+		if err != nil {
+			return nil, err
+		}
+		return mgr.RecoverVM(own.VMID, cfg)
 	}
-	cfg := r.freshVMConfig(own, r.issueGatewayToken(own.VMID))
+	cfg, err := r.reserveFreshVMConfig(own, r.issueGatewayToken(own.VMID), mgr)
+	if err != nil {
+		return nil, err
+	}
 	return mgr.BootVM(cfg)
 }
 
@@ -1297,7 +1331,19 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 
 	// We are the first caller for this user/desktop pair. Create a new VM.
 	vmID := generateVMID()
+	mgr := r.vmManager
 	epoch := r.nextEpoch()
+	if mgr != nil {
+		reservedEpoch, err := mgr.ReserveBootEpoch(vmID, epoch)
+		if err != nil {
+			r.mu.Unlock()
+			return nil, fmt.Errorf("reserve initial realization for VM %s: %w", vmID, err)
+		}
+		epoch = reservedEpoch
+		if r.epochCounter < epoch {
+			r.epochCounter = epoch
+		}
+	}
 
 	own := &VMOwnership{
 		VMID:       vmID,
@@ -1323,11 +1369,15 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 	// Store the ownership immediately in booting state.
 	r.ownerships[key] = own
 	r.vmByID[vmID] = own
-	r.saveLocked()
+	if err := r.writePersistenceLocked(); err != nil {
+		delete(r.ownerships, key)
+		delete(r.vmByID, vmID)
+		delete(r.pendingWaiters, key)
+		r.mu.Unlock()
+		return nil, fmt.Errorf("persist initial realization for VM %s: %w", vmID, err)
+	}
 
-	// Check if we have a real Firecracker VM manager.
-	mgr := r.vmManager
-
+	corpusdConfigured := strings.TrimSpace(r.corpusdURL) != ""
 	r.mu.Unlock()
 
 	// Boot the real Firecracker VM if a manager is configured.
@@ -1337,20 +1387,28 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 		// and read by the guest init script to authenticate to the gateway.
 		gwToken := r.issueGatewayToken(vmID)
 
-		info, err := mgr.BootVM(VMManagerConfig{
-			VMID:                       vmID,
-			ComputerID:                 own.ComputerID,
-			RealizationID:              realizationIDFor(vmID, epoch),
-			Epoch:                      epoch,
-			GuestPort:                  8085,
-			MachineCPUCount:            interactiveVMCPUCount,
-			MachineMemSizeMib:          interactiveVMMemSizeMib,
-			GatewayToken:               gwToken,
-			ComputerCredentialEnvelope: r.issueComputerCredentialEnvelope(own.ComputerID, realizationIDFor(vmID, epoch), epoch),
-			ComputerKind:               "active",
-			OwnerID:                    userID,
-			DesktopID:                  desktopID,
-		})
+		realizationID := realizationIDFor(vmID, epoch)
+		credentialEnvelope := r.issueComputerCredentialEnvelope(own.ComputerID, realizationID, epoch)
+		var info *VMInstanceInfo
+		var err error
+		if credentialEnvelope == "" && corpusdConfigured {
+			err = fmt.Errorf("realization credential unavailable")
+		} else {
+			info, err = mgr.BootVM(VMManagerConfig{
+				VMID:                       vmID,
+				ComputerID:                 own.ComputerID,
+				RealizationID:              realizationID,
+				Epoch:                      epoch,
+				GuestPort:                  8085,
+				MachineCPUCount:            interactiveVMCPUCount,
+				MachineMemSizeMib:          interactiveVMMemSizeMib,
+				GatewayToken:               gwToken,
+				ComputerCredentialEnvelope: credentialEnvelope,
+				ComputerKind:               "active",
+				OwnerID:                    userID,
+				DesktopID:                  desktopID,
+			})
+		}
 		if err != nil {
 			log.Printf("vmctl: Firecracker boot failed for VM %s: %v", vmID, err)
 			r.mu.Lock()
@@ -1825,9 +1883,6 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 			r.ensureExistingGatewayCredential(ensureVMID)
 		}
 	}()
-	r.mu.RLock()
-	corpusdURL := r.corpusdURL
-	r.mu.RUnlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1846,7 +1901,15 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 
 	// Delegate to the real VM manager if available.
 	if r.vmManager != nil {
-		info, err := r.vmManager.RecoverVM(own.VMID, freshVMConfigWithCredentialIssuer(own, "", corpusdURL))
+		cfg, corpusdURL, err := r.reserveFreshVMConfigLocked(own, "", r.vmManager)
+		if err != nil {
+			return nil, fmt.Errorf("reserve recovery realization for VM %s: %w", own.VMID, err)
+		}
+		cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
+		if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
+			return nil, fmt.Errorf("failed to recover VM %s: realization credential unavailable", own.VMID)
+		}
+		info, err := r.vmManager.RecoverVM(own.VMID, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to recover VM %s: %w", own.VMID, err)
 		}
@@ -1899,17 +1962,16 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 		return nil, fmt.Errorf("VM %s refresh is already in progress", own.VMID)
 	}
 
-	attemptEpoch := int64(0)
 	mgr := r.vmManager
+	var cfg VMManagerConfig
+	var corpusdURL string
 	if mgr != nil {
-		// Reserve and persist a unique realization before credential issuance.
-		// Failed boots do not advance ownership.Epoch, but retries must not reuse
-		// an expired or differently committed credential idempotency key.
-		if r.epochCounter < own.Epoch {
-			r.epochCounter = own.Epoch
+		var err error
+		cfg, corpusdURL, err = r.reserveFreshVMConfigLocked(own, "", mgr)
+		if err != nil {
+			r.mu.Unlock()
+			return nil, fmt.Errorf("reserve refresh realization for VM %s: %w", own.VMID, err)
 		}
-		attemptEpoch = r.nextEpoch()
-		r.saveLocked()
 	}
 	snapshot := *own
 	missingManagerInstance := mgr != nil && mgr.GetVM(own.VMID) == nil &&
@@ -1924,11 +1986,8 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 
 	var info *VMInstanceInfo
 	if mgr != nil {
-		cfg := vmManagerConfigForOwnership(&snapshot, "")
-		cfg.Epoch = attemptEpoch
-		cfg.RealizationID = realizationIDFor(snapshot.VMID, attemptEpoch)
-		cfg.ComputerCredentialEnvelope = r.issueComputerCredentialEnvelope(cfg.ComputerID, cfg.RealizationID, attemptEpoch)
-		if cfg.ComputerCredentialEnvelope == "" {
+		cfg.ComputerCredentialEnvelope = issueComputerCredentialEnvelope(corpusdURL, cfg.ComputerID, cfg.RealizationID, cfg.Epoch)
+		if cfg.ComputerCredentialEnvelope == "" && strings.TrimSpace(corpusdURL) != "" {
 			return nil, fmt.Errorf("failed to refresh VM %s: realization credential unavailable", snapshot.VMID)
 		}
 		var err error

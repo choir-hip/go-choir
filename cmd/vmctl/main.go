@@ -181,6 +181,10 @@ type vmManagerAdapter struct {
 	mgr *vmmanager.Manager
 }
 
+func (a *vmManagerAdapter) ReserveBootEpoch(vmID string, minimum int64) (int64, error) {
+	return a.mgr.ReserveBootEpoch(vmID, minimum)
+}
+
 func (a *vmManagerAdapter) BootVM(cfg vmctl.VMManagerConfig) (*vmctl.VMInstanceInfo, error) {
 	inst, err := a.mgr.BootVM(toManagerVMConfig(cfg))
 	if err != nil {

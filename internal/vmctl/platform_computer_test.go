@@ -347,6 +347,10 @@ type blockingPlatformRecoverManager struct {
 	startedOnce  sync.Once
 }
 
+func (m *blockingPlatformRecoverManager) ReserveBootEpoch(_ string, minimum int64) (int64, error) {
+	return minimum, nil
+}
+
 func (m *blockingPlatformRecoverManager) BootVM(VMManagerConfig) (*VMInstanceInfo, error) {
 	return nil, errors.New("boot should not be called")
 }

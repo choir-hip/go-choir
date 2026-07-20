@@ -199,6 +199,10 @@ func newBlockingBootVMManager(hostURL string) *blockingBootVMManager {
 	}
 }
 
+func (m *blockingBootVMManager) ReserveBootEpoch(_ string, minimum int64) (int64, error) {
+	return minimum, nil
+}
+
 func (m *blockingBootVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
 	m.mu.Lock()
 	m.boots = append(m.boots, cfg)
@@ -2425,19 +2429,20 @@ func TestHandler_LifecycleEndpointsDenyExternalCallers(t *testing.T) {
 // It records lifecycle calls so tests can verify that the OwnershipRegistry
 // properly delegates to the VM manager when one is configured.
 type mockVMManager struct {
-	mu           sync.Mutex
-	boots        []VMManagerConfig
-	stops        []string
-	hibernates   []string
-	resumes      []string
-	reattaches   []string
-	reattachCfgs []VMManagerConfig
-	recovers     []string
-	refreshes    []string
-	recoverCfgs  []VMManagerConfig
-	refreshCfgs  []VMManagerConfig
-	destroys     []string
-	tokens       map[string]string
+	mu             sync.Mutex
+	boots          []VMManagerConfig
+	stops          []string
+	hibernates     []string
+	resumes        []string
+	reattaches     []string
+	reattachCfgs   []VMManagerConfig
+	recovers       []string
+	refreshes      []string
+	recoverCfgs    []VMManagerConfig
+	refreshCfgs    []VMManagerConfig
+	destroys       []string
+	tokens         map[string]string
+	reservedEpochs map[string]int64
 	// Configurable responses
 	bootResponse       *VMInstanceInfo
 	bootError          error
@@ -2465,6 +2470,20 @@ type mockVMManager struct {
 	refreshStarted     chan struct{}
 	refreshRelease     chan struct{}
 	refreshStartedOnce sync.Once
+}
+
+func (m *mockVMManager) ReserveBootEpoch(vmID string, minimum int64) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.reservedEpochs == nil {
+		m.reservedEpochs = make(map[string]int64)
+	}
+	next := m.reservedEpochs[vmID] + 1
+	if next < minimum {
+		next = minimum
+	}
+	m.reservedEpochs[vmID] = next
+	return next, nil
 }
 
 func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {

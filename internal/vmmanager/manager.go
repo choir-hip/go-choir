@@ -538,6 +538,61 @@ func (m *Manager) BootVM(cfg VMConfig) (*VMInstance, error) {
 	return m.bootVM(cfg)
 }
 
+// ReserveBootEpoch durably allocates the next realization epoch for a VM.
+// Callers that bind credentials before boot use this as the sole epoch
+// authority; BootVM then verifies and consumes the reserved value.
+func (m *Manager) ReserveBootEpoch(vmID string, minimum int64) (int64, error) {
+	if strings.TrimSpace(vmID) == "" {
+		return 0, fmt.Errorf("vmmanager: VM ID is required to reserve boot epoch")
+	}
+	unlock := m.lockVMOperation(vmID)
+	defer unlock()
+
+	current, err := m.loadEpoch(vmID)
+	if err != nil && !os.IsNotExist(err) {
+		return 0, fmt.Errorf("vmmanager: load boot epoch for %s: %w", vmID, err)
+	}
+	next := current + 1
+	if next < minimum {
+		next = minimum
+	}
+	if next < 1 {
+		next = 1
+	}
+	if err := m.saveEpoch(vmID, next); err != nil {
+		return 0, fmt.Errorf("vmmanager: persist boot epoch for %s: %w", vmID, err)
+	}
+	return next, nil
+}
+
+func (m *Manager) consumeBootEpoch(vmID string, supplied int64) (int64, error) {
+	stored, err := m.loadEpoch(vmID)
+	switch {
+	case supplied > 0 && err == nil && supplied < stored:
+		return 0, fmt.Errorf("vmmanager: reserved boot epoch %d is stale; current epoch is %d", supplied, stored)
+	case supplied > 0 && err != nil && !os.IsNotExist(err):
+		return 0, fmt.Errorf("vmmanager: load boot epoch for %s: %w", vmID, err)
+	case supplied > 0 && (err != nil || supplied > stored):
+		if err := m.saveEpoch(vmID, supplied); err != nil {
+			return 0, fmt.Errorf("vmmanager: persist supplied boot epoch for %s: %w", vmID, err)
+		}
+		return supplied, nil
+	case supplied > 0:
+		return supplied, nil
+	case err != nil && !os.IsNotExist(err):
+		return 0, fmt.Errorf("vmmanager: load boot epoch for %s: %w", vmID, err)
+	default:
+		next := stored + 1
+		if next < 1 {
+			next = 1
+		}
+		if err := m.saveEpoch(vmID, next); err != nil {
+			return 0, fmt.Errorf("vmmanager: persist boot epoch for %s: %w", vmID, err)
+		}
+		return next, nil
+	}
+}
+
 func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	m.mu.Lock()
 	locked := true
@@ -599,18 +654,13 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	}
 	cfg.GatewayToken = m.resolveGatewayToken(cfg)
 
-	// Load or initialize the epoch counter for this VM.
-	epoch, err := m.loadEpoch(cfg.VMID)
+	// Consume the durable reservation without overwriting the epoch already
+	// bound into the realization credential and guest identity.
+	epoch, err := m.consumeBootEpoch(cfg.VMID, cfg.Epoch)
 	if err != nil {
-		log.Printf("vmmanager: could not load epoch for %s, starting at 1: %v", cfg.VMID, err)
-		epoch = 1
-	} else {
-		epoch++ // increment on fresh boot
+		return nil, err
 	}
 	cfg.Epoch = epoch
-
-	// Save the updated epoch.
-	_ = m.saveEpoch(cfg.VMID, epoch)
 
 	// Apply defaults from manager config.
 	if cfg.KernelImagePath == "" {
@@ -721,7 +771,7 @@ func (m *Manager) bootVM(cfg VMConfig) (*VMInstance, error) {
 	inst.LastHealthCheck = time.Now()
 	inst.LastHealthyAt = inst.LastHealthCheck
 
-	log.Printf("vmmanager: booted VM %s (host=%s epoch=%d)", cfg.VMID, hostURL, epoch)
+	log.Printf("vmmanager: booted VM %s (host=%s epoch=%d)", cfg.VMID, hostURL, cfg.Epoch)
 
 	return inst, nil
 }
@@ -1114,11 +1164,11 @@ func (m *Manager) RecoverVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	inst.State = StateFailed
 	m.mu.Unlock()
 
-	// Increment the epoch for recovery (fresh boot, not resume).
 	m.mu.Lock()
-	inst.Config.Epoch++
-	_ = m.saveEpoch(vmID, inst.Config.Epoch)
 	cfg := mergeVMConfigOverrides(inst.Config, overrides)
+	if overrides.Epoch == 0 {
+		cfg.Epoch = 0
+	}
 	cfg.VMID = vmID
 	m.mu.Unlock()
 
@@ -1149,6 +1199,9 @@ func (m *Manager) RefreshVMWithConfig(vmID string, overrides VMConfig) (*VMInsta
 	m.killFirecrackerProcess(inst)
 	inst.State = StateFailed
 	cfg := refreshConfigForCurrentDeploy(mergeVMConfigOverrides(inst.Config, overrides), m.cfg)
+	if overrides.Epoch == 0 {
+		cfg.Epoch = 0
+	}
 	cfg.VMID = vmID
 	m.mu.Unlock()
 

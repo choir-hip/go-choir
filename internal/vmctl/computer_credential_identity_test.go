@@ -184,3 +184,37 @@ func TestRefreshManagerFailureProjectsFailedOwnershipAndAdvancesRetryIdentity(t 
 		t.Fatalf("retry reused credential realization %q after failed boot", retry)
 	}
 }
+
+func TestRefreshRefusesCredentialIssuanceWhenEpochReservationCannotPersist(t *testing.T) {
+	issuanceCalls := 0
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		issuanceCalls++
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer corpusd.Close()
+
+	registry := NewOwnershipRegistry("")
+	registry.SetCorpusdURL(corpusd.URL)
+	registry.SetVMManager(&mockVMManager{})
+	own := &VMOwnership{
+		UserID:     "owner-persist-failure",
+		DesktopID:  PrimaryDesktopID,
+		VMID:       "vm-persist-failure",
+		ComputerID: "computer-persist-failure",
+		State:      VMStateFailed,
+		Epoch:      804,
+	}
+	registry.mu.Lock()
+	registry.ownerships[ownershipKey(own.UserID, own.DesktopID)] = own
+	registry.vmByID[own.VMID] = own
+	registry.persistencePath = t.TempDir()
+	registry.mu.Unlock()
+
+	_, err := registry.RefreshVMForDesktop(own.UserID, own.DesktopID)
+	if err == nil || !strings.Contains(err.Error(), "persist reserved VM realization") {
+		t.Fatalf("refresh error = %v, want durable reservation refusal", err)
+	}
+	if issuanceCalls != 0 {
+		t.Fatalf("credential issuance calls = %d, want 0 before durable reservation", issuanceCalls)
+	}
+}

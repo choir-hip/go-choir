@@ -260,6 +260,39 @@ func TestManagerEpochPersistence(t *testing.T) {
 	}
 }
 
+func TestReserveBootEpochIsDurableAndMonotonic(t *testing.T) {
+	cfg := DefaultManagerConfig()
+	cfg.StateDir = t.TempDir()
+
+	firstManager := NewManager(cfg)
+	first, err := firstManager.ReserveBootEpoch("vm-reserved", 804)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != 804 {
+		t.Fatalf("first reserved epoch = %d, want 804", first)
+	}
+
+	restartedManager := NewManager(cfg)
+	second, err := restartedManager.ReserveBootEpoch("vm-reserved", 804)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != 805 {
+		t.Fatalf("post-restart reserved epoch = %d, want 805", second)
+	}
+	consumed, err := restartedManager.consumeBootEpoch("vm-reserved", second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if consumed != second {
+		t.Fatalf("consumed epoch = %d, want reserved %d", consumed, second)
+	}
+	if _, err := restartedManager.consumeBootEpoch("vm-reserved", first); err == nil {
+		t.Fatal("stale pre-restart epoch was accepted")
+	}
+}
+
 func TestManagerGetListRemoveVM(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := DefaultManagerConfig()
