@@ -32,7 +32,7 @@ framing.
 | H029 | Browser source-gathering residue | `Browser app`, `BrowserApp`, `browser_sessions`, `AppHint: "browser"`, `open_surface: "browser"` | 0 current product-surface hits | Browser names may remain only as transitional implementation names for Web Lens/source work. |
 | H030 | actor runtime database polling | `log.Unprocessed` | 0 active warm-loop hits | Repaired 2026-06-27; remaining hits should be cold-start replay, post-drain overflow, or Sweep boot recovery, not warm-loop polling. Registry row update only. |
 | H031 | route resolves to VM/desktop identity | `UniversalWirePlatformOwnerID`, `UniversalWirePlatformDesktopID`, `ResolveDesktopContext`, `route_profile` | 0 product-route hits | See `docs/choir-doctrine.md` H031; Banned Patterns list #16. The `route_profile` hits need allowlist context for the parser implementation itself and tests. |
-| I4 | destructive embedded rollback guard | `CALL DOLT_RESET` | 0 production (non-test, non-adapter) hits | `DoltPromotionAdapter` and `*_test.go` are excluded by design; `DOLT_RESET --hard` against embedded main is not an admissible production rollback. exclude: *_test.go, dolt_promotion_adapter.go |
+| I4 | destructive embedded rollback guard | `CALL DOLT_RESET`, `DoltPromotionAdapter` | 0 production hits | The obsolete adapter is deleted; destructive embedded-main reset or adapter-symbol reintroduction is inadmissible. enforce: zero; exclude: docs/**, README.md, AGENTS.md, scripts/**, specs/**, *_test.go |
 | framing | retired root ontology | `personal writing system`, `publishing system`, `AI workspace`, `workflow app`, `StoryGraph`, `chat` | 0 current-root hits | Surface or historical usage is acceptable when explicitly labeled. |
 
 ## Baseline Counts
