@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-26
-    state: rejected_G1_uncancellable_source_snapshot
-    ref: 6067db8d792ecd9fd87013ac3c83c78d32381184
+    id: self-development-B-disabled-cutover-round-27
+    state: frozen_G1_review
+    ref: 074edfd52509255d9e764569bfbda8eb4c34db8a
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete effects-OFF cutover with one cancellation contract for every freeze/evidence reader, including receipt rehash and final-read EOF semantics; physical ambiguity remains fail-closed."
+    scope: "Complete effects-OFF cutover with one request-lifecycle contract from immutable source admission through capsule execution, physical freeze, evidence binding, and release staging; every O(tree/bytes) step is cancellable and physical ambiguity remains fail-closed."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [c756fc131b91420a3308ec492ca559a2f0ba42a0, ad54c0b8e351be055ff18e40806b25204451110a]
-    verification: "Node A x86_64-linux focused and full capsule race suites pass. Receipt digest now checks ctx per entry and reads through contextReader. Tests prove ordinary between-chunk cancellation and cancellation on a final n>0,io.EOF read. All prior frozen walk/stage/extract, ambiguity, descendant, openat2, secret, race, and integration receipts remain passing."
-    disposition: "Round-26 is rejected under the severe-minority rule: Executor.Spawn accepts ctx but immutable source snapshot Git probes and tracked-byte copying ignore it. Effects remain OFF and R0 serves staging."
+    immediate_predecessors: [ad54c0b8e351be055ff18e40806b25204451110a, 6067db8d792ecd9fd87013ac3c83c78d32381184]
+    verification: "Node A x86_64-linux focused source-snapshot tests and full capsule race suite pass. Git probes use CommandContext, tracked entry/copy uses ctx/contextReader, and pre-canceled snapshot returns context.Canceled without creating target. Production Executor.Spawn cgroup integration with immutable Nix broker passes again; all prior freeze/evidence/release receipts remain."
+    disposition: "Effects remain OFF and R0 serves staging. Round-27 G1 must accept exact Git-resolved source/doc identities before any fast-forward or deployment."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -663,9 +663,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round26-panel/manifest.tsv, "sha256:3ddae2cde7fec0c38598e03e7c59180be437d68f0c7235b8aade19d42d27bab4", 6067db8d792ecd9fd87013ac3c83c78d32381184]
-  blocker_or_risk: "Five reviewers accept round-26, but omp-gpt55 identifies a red full-candidate blocker: Spawn's immutable source snapshot is uncancellable across Git probes and O(tracked bytes) copy."
-  next_action: "Thread Spawn ctx through copyImmutableSourceTree, use exec.CommandContext for Git probes, use contextReader and per-entry checks for tracked copy, add cancellation/cleanup proof, then refreeze G1."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round26-panel/manifest.tsv, "sha256:3ddae2cde7fec0c38598e03e7c59180be437d68f0c7235b8aade19d42d27bab4", 074edfd52509255d9e764569bfbda8eb4c34db8a]
+  blocker_or_risk: "Round-26's source-snapshot request-lifecycle blocker is repaired. The red G1 gate remains closed pending independent review."
+  next_action: "Commit and Git-resolve round-27 authority, rerun the diverse G1 panel against the exact source-admission delta and Node A proofs, and proceed to C only on acceptance."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -815,15 +815,16 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_ci_failure_9:
     observed_at: 2026-07-20T05:56:00Z
-    status: blocked_uncancellable_source_snapshot
+    status: repaired_in_round_27_candidate
     mutation_class: red
     protected_surfaces: [capsule_spawn_admission, immutable_source_snapshot, request_lifecycle]
     evidence_class: "Frozen round-26 panel; omp-gpt55 supplied exact full-candidate call graph and Devin independently noted the same residual."
     problem: "`Executor.Spawn(ctx)` calls copyImmutableSourceTree without ctx before cgroup/broker startup. That function runs Git validation with exec.Command and copies every tracked file with bare io.Copy. A canceled spawn continues O(tree bytes) work and writes source-lower until completion before cleanup."
     repair: "Add ctx to copyImmutableSourceTree and all callers/tests; replace Git probes with exec.CommandContext; check ctx per tracked entry and copy through contextReader; prove cancellation returns promptly and removes the partial snapshot."
+    repair_result: "copyImmutableSourceTree now accepts Spawn ctx, uses CommandContext for all Git probes, checks ctx per tracked entry, and copies through contextReader. All callers/tests migrated; cancellation, full race, and production Spawn integration pass."
     rollback: "Discard the unmerged branch and retain R0; no deploy or genesis occurred."
     conjecture_delta: "The same request-lifecycle contract governs immutable input admission before capsule construction, not only the later freeze/evidence transaction."
-    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
