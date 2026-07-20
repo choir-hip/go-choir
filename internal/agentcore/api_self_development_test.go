@@ -378,16 +378,89 @@ func TestRecoveredStartEventRequiresExactCausalBinding(t *testing.T) {
 		SchemaVersion: computerevent.SchemaVersionV1, ComputerID: "computer-crash",
 		EventKind: computerevent.EventTrajectoryStarted, TrajectoryID: "trajectory-crash",
 		IdempotencyKey: "selfdev-start-crash", RequestCommitment: strings.Repeat("a", 64),
+		DecisionRef:  strings.Repeat("c", 64),
 		AuthorityRef: "public-self-development-api:owner", PrivacyClass: "private",
 		OutputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("b", 64)},
 	}
-	ref, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner")
+	ref, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner", strings.Repeat("c", 64))
 	if err != nil || ref != event.OutputArtifactRefs[0] {
 		t.Fatalf("exact recovered event ref=%q err=%v", ref, err)
 	}
 	event.AuthorityRef = "public-self-development-api:other"
-	if _, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner"); err == nil {
+	if _, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner", strings.Repeat("c", 64)); err == nil {
 		t.Fatal("changed trajectory authority recovered the old event")
+	}
+	event.AuthorityRef = "public-self-development-api:owner"
+	if _, err := recoveredStartPromptRef(event, "computer-crash", "trajectory-crash", "selfdev-start-crash", "owner", strings.Repeat("d", 64)); err == nil {
+		t.Fatal("changed public request commitment recovered the old event")
+	}
+}
+
+func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing.T) {
+	ctx := context.Background()
+	computerID := "computer-start-recovery"
+	idempotencyKey := "start-recovery"
+	prompt := "recover exact proposal"
+	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer productStore.Close()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signingKey := computerevent.SigningKey{SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: "start-recovery"}, PrivateKey: privateKey}
+	appender, err := computerevent.NewComputerEventAppender(computerID, rollbackTestPinner{signingKey}, productStore, rollbackTestCAS{key: signingKey, projection: productStore}, rollbackTestReceiptVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	genesisID, _ := computerevent.NewEventID()
+	genesis := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: genesisID, ComputerID: computerID,
+		EventKind: computerevent.EventGenesisImported, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "start-recovery-genesis", ActorProfile: "super", AuthorityRef: "owner", PrivacyClass: "owner",
+		PayloadCommitment: strings.Repeat("a", 64), ProposedEffectRef: strings.Repeat("b", 64),
+		ResultingEffectiveCommitment: strings.Repeat("a", 64), ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, err := appender.AppendNew(ctx, genesis, computerevent.TransitionInput{TargetStateCommitment: strings.Repeat("a", 64)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestCommitment := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey + "\x00" + computerevent.DigestBytes([]byte(prompt))))
+	if err := operations.BindStartIntent(ctx, computerID, idempotencyKey, requestCommitment); err != nil {
+		t.Fatal(err)
+	}
+	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey))
+	eventID, _ := computerevent.NewEventID()
+	started := computerevent.Event{
+		SchemaVersion: computerevent.SchemaVersionV1, EventID: eventID, ComputerID: computerID,
+		EventKind: computerevent.EventTrajectoryStarted, OccurredAt: time.Now().UTC().Format(time.RFC3339Nano),
+		IdempotencyKey: "selfdev-start-" + identityDigest, TrajectoryID: "trajectory-" + identityDigest[32:],
+		ActorProfile: "super", AuthorityRef: "public-self-development-api:owner", PrivacyClass: "private",
+		PayloadCommitment: strings.Repeat("c", 64), ProposedEffectRef: strings.Repeat("c", 64),
+		DecisionRef: requestCommitment, OutputArtifactRefs: []string{"artifact:sha256:" + strings.Repeat("c", 64)},
+		ReducerVersion: computerevent.ReducerVersionV1,
+	}
+	if _, err := appender.AppendNew(ctx, started, computerevent.TransitionInput{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	handler := &APIHandler{rt: &Runtime{cfg: provideriface.Config{SandboxID: computerID}, store: productStore, selfdevOperations: operations}}
+	body, _ := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: idempotencyKey, Prompt: prompt})
+	httpRequest := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
+	httpRequest.Header.Set("X-Authenticated-User", "owner")
+	httpRequest.Header.Set("X-Authenticated-Computer", computerID)
+	response := httptest.NewRecorder()
+	handler.HandleComputersRouter(response, httpRequest)
+	if response.Code != http.StatusOK {
+		t.Fatalf("finalized start recovery status=%d body=%s", response.Code, response.Body.String())
+	}
+	operation, found, err := operations.GetByIdempotency(ctx, computerID, idempotencyKey)
+	if err != nil || !found || operation.PromptArtifactRef != started.OutputArtifactRefs[0] {
+		t.Fatalf("recovered operation=%+v found=%v err=%v", operation, found, err)
 	}
 }
 

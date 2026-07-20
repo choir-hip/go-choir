@@ -164,6 +164,13 @@ func (e Event) Validate() error {
 			return fmt.Errorf("computer event: %s must be lowercase SHA-256", name)
 		}
 	}
+	for _, refs := range [][]string{e.InputArtifactRefs, e.OutputArtifactRefs} {
+		for _, ref := range refs {
+			if _, err := ParseArtifactRef(ref); err != nil {
+				return fmt.Errorf("computer event: artifact references must be canonical: %w", err)
+			}
+		}
+	}
 	if e.ExpectedPendingTransitionRef != "" && !isSHA256(e.ExpectedPendingTransitionRef) {
 		return fmt.Errorf("computer event: expected_pending_transition_ref must be lowercase SHA-256 or empty")
 	}

@@ -188,7 +188,7 @@ func (a *CheckpointAuthority) verifyVerifierEvidence(ctx context.Context, reques
 		event.ActorProfile != "co-super" || event.AuthorityRef != "guest-core:self-development-verifier" || len(event.OutputArtifactRefs) != 1 {
 		return fmt.Errorf("checkpoint authority: verifier event authority mismatch")
 	}
-	payloadRef, err := computerevent.NormalizeArtifactRef(event.OutputArtifactRefs[0])
+	payloadRef, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])
 	if err != nil {
 		return fmt.Errorf("checkpoint authority: verifier payload reference refused")
 	}

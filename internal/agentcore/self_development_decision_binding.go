@@ -54,7 +54,7 @@ func verifyFinalizedSelfDevelopmentDecision(operation selfdev.Operation, transit
 		return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt cardinality mismatch")
 	}
 	{
-		modeReceiptRef, err := computerevent.NormalizeArtifactRef(event.InputArtifactRefs[0])
+		modeReceiptRef, err := computerevent.ParseArtifactRef(event.InputArtifactRefs[0])
 		if err != nil {
 			return verifiedSelfDevelopmentDecision{}, fmt.Errorf("decision binding: mode receipt artifact reference mismatch")
 		}

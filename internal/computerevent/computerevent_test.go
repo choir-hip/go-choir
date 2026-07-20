@@ -387,6 +387,19 @@ func TestAppenderReconstructsEmbeddedProjectionFromDurableChain(t *testing.T) {
 	}
 }
 
+func TestEventRejectsNonCanonicalArtifactReferences(t *testing.T) {
+	event := testEvent(t, nil, EventArtifactProduced)
+	event.InputArtifactRefs = []string{testDigestA}
+	if err := event.Validate(); err == nil {
+		t.Fatal("raw artifact digest was accepted in immutable event")
+	}
+	event.InputArtifactRefs = []string{"artifact:sha256:" + testDigestA}
+	event.OutputArtifactRefs = []string{"sha256:" + testDigestB}
+	if err := event.Validate(); err == nil {
+		t.Fatal("untyped output artifact reference was accepted in immutable event")
+	}
+}
+
 func testEvent(t *testing.T, current *Head, kind EventKind) Event {
 	t.Helper()
 	id, err := NewEventID()

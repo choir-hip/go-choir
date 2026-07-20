@@ -176,7 +176,7 @@ func (s *EventArtifactService) ValidateEventPins(_ context.Context, request comp
 }
 
 func eventArtifactDigestFromRef(raw string) (string, bool) {
-	ref, err := computerevent.NormalizeArtifactRef(raw)
+	ref, err := computerevent.ParseArtifactRef(raw)
 	if err != nil {
 		return "", false
 	}

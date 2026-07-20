@@ -185,6 +185,36 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 		writeAPIJSON(w, http.StatusOK, existing)
 		return
 	}
+	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + request.IdempotencyKey))
+	operationID := "selfdev-" + identityDigest[:32]
+	trajectoryID := "trajectory-" + identityDigest[32:]
+	eventIdempotency := "selfdev-start-" + identityDigest
+	event, found, err := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency)
+	if err != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+		return
+	}
+	if found {
+		promptArtifactRef, recoveryErr := recoveredStartPromptRef(event, computerID, trajectoryID, eventIdempotency, ownerID, requestCommitment)
+		if recoveryErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
+			return
+		}
+		if recoveryErr = h.rt.selfdevOperations.BindStartIntent(r.Context(), computerID, request.IdempotencyKey, requestCommitment); recoveryErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
+			return
+		}
+		operation, recoveryErr := h.rt.selfdevOperations.Start(r.Context(), selfdev.StartRequest{
+			ComputerID: computerID, IdempotencyKey: request.IdempotencyKey, PromptArtifactRef: promptArtifactRef,
+			OperationID: operationID, TrajectoryID: trajectoryID, BaseHead: event.PreviousHead, RequestCommitment: requestCommitment,
+		})
+		if recoveryErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
+			return
+		}
+		writeAPIJSON(w, http.StatusOK, operation)
+		return
+	}
 	if h.rt.selfdevControl == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "self-development mode authority unavailable"})
 		return
@@ -203,15 +233,6 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 		return
 	}
 
-	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + request.IdempotencyKey))
-	operationID := "selfdev-" + identityDigest[:32]
-	trajectoryID := "trajectory-" + identityDigest[32:]
-	eventIdempotency := "selfdev-start-" + identityDigest
-	event, found, err := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency)
-	if err != nil {
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	}
 	if !found {
 		eventID, eventErr := computerevent.NewEventID()
 		if eventErr != nil {
@@ -225,6 +246,7 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 			RequestCommitment: computerevent.ZeroHead, TrajectoryID: trajectoryID,
 			ActorProfile: "super", AuthorityRef: "public-self-development-api:" + ownerID,
 			PrivacyClass: "private", ReducerVersion: computerevent.ReducerVersionV1,
+			DecisionRef: requestCommitment,
 		}
 		if _, pinnedDigest, appendErr := h.rt.eventAppender.AppendNewPrivatePayload(r.Context(), event, computerevent.TransitionInput{}, prompt, selfDevelopmentPromptMediaType, h.rt.privateArtifactCipher); appendErr != nil {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: fmt.Sprintf("append self-development trajectory: %v", appendErr)})
@@ -240,7 +262,7 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 			return
 		}
 	}
-	promptDigest, err = recoveredStartPromptRef(event, computerID, trajectoryID, eventIdempotency, ownerID)
+	promptDigest, err = recoveredStartPromptRef(event, computerID, trajectoryID, eventIdempotency, ownerID, requestCommitment)
 	if err != nil {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
 		return
@@ -266,15 +288,15 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 	writeAPIJSON(w, http.StatusCreated, operation)
 }
 
-func recoveredStartPromptRef(event computerevent.Event, computerID, trajectoryID, eventIdempotency, ownerID string) (string, error) {
+func recoveredStartPromptRef(event computerevent.Event, computerID, trajectoryID, eventIdempotency, ownerID, requestCommitment string) (string, error) {
 	if event.SchemaVersion != computerevent.SchemaVersionV1 || event.ComputerID != computerID ||
 		event.EventKind != computerevent.EventTrajectoryStarted || event.TrajectoryID != trajectoryID ||
-		event.IdempotencyKey != eventIdempotency ||
+		event.IdempotencyKey != eventIdempotency || event.DecisionRef != requestCommitment ||
 		event.AuthorityRef != "public-self-development-api:"+ownerID || event.PrivacyClass != "private" ||
 		len(event.OutputArtifactRefs) != 1 {
 		return "", fmt.Errorf("durable trajectory event binding mismatch")
 	}
-	ref, err := computerevent.NormalizeArtifactRef(event.OutputArtifactRefs[0])
+	ref, err := computerevent.ParseArtifactRef(event.OutputArtifactRefs[0])
 	if err != nil {
 		return "", fmt.Errorf("durable trajectory event artifact binding mismatch")
 	}
