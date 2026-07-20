@@ -29,6 +29,13 @@ let
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
   platformArtifactsDir = "/var/lib/go-choir/platform-artifacts";
+  # Stable ComputerID for the explicitly disposable staging platform computer
+  # (owner universal-wire-platform, desktop platform). Genesis remains
+  # fail-closed for every other computer.
+  selfDevelopmentDisposableComputerID =
+    if config.networking.hostName == "go-choir-b"
+    then "computer-4c20ff4a21a021c4306d8c783be0037d"
+    else "";
   platformDoltInit = pkgs.writeShellScript "platform-dolt-init" ''
     set -euo pipefail
     export HOME="${platformDoltDir}"
@@ -108,6 +115,13 @@ let
   };
 in
 {
+  assertions = [
+    {
+      assertion = config.networking.hostName != "go-choir-b" || builtins.match "^computer-[0-9a-f]{32}$" selfDevelopmentDisposableComputerID != null;
+      message = "Node B self-development requires one explicit stable ComputerID";
+    }
+  ];
+
   # Boot
   boot.loader.efi.canTouchEfiVariables = true;
   boot.loader.efi.efiSysMountPoint = "/boot/efi";
@@ -349,6 +363,7 @@ in
         # VM_BOOT_READY_TIMEOUT and the retry/replay path (Phase D).
         "PROXY_VMCTL_TIMEOUT=60s"
         "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
+        "PROXY_SELF_DEVELOPMENT_DISPOSABLE_COMPUTER_ID=${selfDevelopmentDisposableComputerID}"
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
       ];
     };
