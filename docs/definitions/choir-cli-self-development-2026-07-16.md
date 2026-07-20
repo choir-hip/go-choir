@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-platform-warm-failure-round-52
-    state: rejected_G1_vmbyid_incoherence
-    ref: b5c51d008acd009b04c0c0ed66ff5a8029d4e5ec
+    id: self-development-C-platform-warm-failure-round-53
+    state: frozen_G1_review
+    ref: d0f8f785de25c9f4cae8d7da6def4047c31940f4
     owner: integration-authority
     base: f381841a620a9abca4a0a40bb9a4acf4b669d757
-    scope: "Protected platform restart-recovery repair only: when `WarmUniversalWirePlatformComputer` has moved the exact retained platform ownership to booting and manager resume fails, atomically project that same VMID to durable failed/recovery_failed. Do not change successful warm behavior, identity, epoch reservation, lifecycle API, route, guest release, mode OFF, or any event/capsule/credential behavior."
+    scope: "Protected platform restart-recovery repair only: bind the warm path's booting snapshot into both ownership indexes, then on ResumeVM failure atomically project that same retained VMID to durable failed/recovery_failed. Preserve successful warm behavior, identity, epoch reservation, lifecycle API, route, guest release, mode OFF, and all event/capsule/credential behavior."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [928fbf13715228b41dfbe7f6b9df7e7e6af56012, f381841a620a9abca4a0a40bb9a4acf4b669d757]
-    verification: "The new production-shaped test reproduces the pre-repair state as booting, then proves the repair leaves failed/recovery_failed in memory and after registry reload. Focused platform recovery/proxy race tests and full `go test -race ./internal/vmctl -count=1` pass."
-    disposition: "Round-52 reviewers returned three ACCEPT_G1 verdicts, but OMP Cursor/Grok and OpenCode both identified the same in-process `vmByID` split pointer as residual. Local source inspection confirms `WarmUniversalWirePlatformComputer` replaces `ownerships[key]` with `&snapshot` without updating `vmByID[VMID]`; the new failed terminalization mutates only the new pointer while reverse lookup retains the old stopped pointer until restart. Because G1 explicitly required map invariants to remain coherent, integration authority rejects the candidate pending one-pointer repair and a regression assertion. Devin timed out empty; Codex exhausted usage."
+    immediate_predecessors: [928fbf13715228b41dfbe7f6b9df7e7e6af56012, 00dca496fbdff502560754f6706043da97144d9c]
+    verification: "The production-shaped test first reproduced booting instead of failed, then reproduced split lookup as ownerships=failed versus vmByID=stopped. The final candidate proves both indexes immediately return the same retained identity in failed/recovery_failed state and registry reload preserves it. Focused platform race tests and full `go test -race ./internal/vmctl -count=1` pass."
+    disposition: "Pending proportionate independent G1 review of the one-pointer coherence repair. Effects remain OFF. Deployment, public retained-computer recovery, and the exact signed kernel receipt remain mandatory."
     g1_round_52_probe:
       reviewed_at: 2026-07-20T20:33:42Z
       source_ref: b5c51d008acd009b04c0c0ed66ff5a8029d4e5ec
@@ -1256,7 +1256,7 @@ now:
     heresy_delta: {discovered: 6, introduced: 1, repaired: 1}
   c_deploy_failure_11:
     observed_at: 2026-07-20T20:11:20Z
-    status: rejected_G1_round_52_vmbyid_incoherence
+    status: frozen_G1_round_53
     mutation_class: red
     protected_surfaces: [vmctl_restart_recovery, retained_computer, realization_epoch, lifecycle_acceptance, kernel_capability_receipt]
     admissible_evidence_class: "Exact main CI/deploy receipt, public scoped lifecycle/kernel responses, source transition trace, focused production-shaped tests, refrozen G1, and deployed no-SSH acceptance."
@@ -1266,11 +1266,11 @@ now:
     existing_replacement_check: "The same platform function already has a stale-booting recovery branch that preserves the retained VMID/data root and marks the ownership failed when recovery fails. Generic lifecycle recovery and prior failed-missing-instance reconstruction also exist. Apply that existing failed terminal state to warm-resume failure and persist it; do not mint a replacement VMID, invoke generic assignment, weaken active checks, or use SSH/raw vmctl."
     rollback: "Preserve R0/R1, complete deployment 29773955528-1, prior active receipt 019f8108, retained VMID/data image, epoch 1146, exact scoped key, and effects OFF. Do not replay lifecycle with a new idempotency key or route around the stranded state before repair review."
     next_action: "Add a production-shaped test proving universal-platform warm/resume failure ends in a durable recoverable failed state rather than booting; terminalize and persist that exact failure branch, run focused/race suites, freeze G1, land/deploy, then use the public retained-computer path to recover and obtain the exact signed kernel receipt."
-    candidate_repair: "b5c51d008acd009b04c0c0ed66ff5a8029d4e5ec changes only the warm-resume error branch: under the registry lock, the same VMID still in booting becomes failed/recovery_failed and is persisted before returning. A concurrent state transition away from booting is not overwritten."
-    repair_evidence: "Before repair, `TestWarmUniversalWirePlatformComputerPersistsResumeFailure` failed with the exact retained ownership still booting at epoch 1146. After repair, the focused race set covering warm failure, universal ensure, and bounded platform proxy passes; full vmctl race passes."
-    rollback_candidate: "Revert b5c51d008acd009b04c0c0ed66ff5a8029d4e5ec before landing or its eventual main landing commit. Preserve deployed 928fbf13, retained target/epoch/data, and effects OFF."
+    candidate_repair: "d0f8f785de25c9f4cae8d7da6def4047c31940f4 includes the round-52 terminalization plus the required one-pointer invariant: under the existing lock, both `ownerships[key]` and `vmByID[VMID]` bind to the same booting snapshot; a guarded resume failure mutates that shared object to failed/recovery_failed and persists it."
+    repair_evidence: "The initial regression failed before round 52 with booting at epoch 1146. Its new VMID lookup assertion then failed against round 52 with stopped versus failed. Against round 53, both immediate indexes and reload return the exact retained failed identity; focused platform race tests and full vmctl race pass."
+    rollback_candidate: "Revert d0f8f785de25c9f4cae8d7da6def4047c31940f4 before landing or its eventual main landing commit. Preserve deployed 928fbf13, retained target/epoch/data, and effects OFF."
     round_52_rejection: "The source candidate correctly persists failed/recovery_failed, but the warm path first replaces only `ownerships[key]` with a snapshot pointer. `vmByID[VMID]` remains attached to the prior stopped object, so GetOwnershipByVMID and any VMID-directed transition observe or mutate a different ownership in-process. Reload repairs the pointer graph, but requiring restart for consistency is inadmissible."
-    next_repair: "When installing the booting snapshot, bind both indexes to the same pointer under the existing lock; extend the regression to assert VMID lookup returns failed/recovery_failed immediately and the exact same retained identity. Refreeze and rerun proportionate G1."
+    next_repair: "Satisfied in round 53; await proportionate independent review before landing."
     conjecture_delta: "A durable boot-epoch reservation is necessary but insufficient: every caller that begins a boot must terminalize failed attempts, or restart recovery can strand the retained Computer in a transient state."
     heresy_delta: {discovered: 7, introduced: 1, repaired: 1}
   dead_end_assessment:
