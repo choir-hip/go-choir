@@ -99,6 +99,13 @@ func (rt *Runtime) recoverSelfDevelopmentDecision(ctx context.Context, operation
 	return recovered, true, nil
 }
 
+func selfDevelopmentBundleMatchesOperation(bundle transaction.CapsuleEffectBundle, operation selfdev.Operation) bool {
+	return bundle.ComputerID == operation.ComputerID &&
+		bundle.TrajectoryRef == operation.TrajectoryID &&
+		bundle.CapsuleIdentity == operation.CapsuleID &&
+		bundle.BaseEventHead == operation.BaseHead
+}
+
 func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, operation selfdev.Operation) error {
 	bundlePath := filepath.Join(rt.selfdevUpdaterRoot, "incoming", operation.BundleDigest, "bundle.json")
 	rawBundle, err := os.ReadFile(bundlePath)
@@ -108,10 +115,12 @@ func (rt *Runtime) materializeSelfDevelopmentOperation(ctx context.Context, oper
 	var bundle transaction.CapsuleEffectBundle
 	decoder := json.NewDecoder(strings.NewReader(string(rawBundle)))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&bundle); err != nil || bundle.Validate(true) != nil || bundle.BaseEventHead != operation.BaseHead ||
+	if err := decoder.Decode(&bundle); err != nil || bundle.Validate(true) != nil ||
+		!selfDevelopmentBundleMatchesOperation(bundle, operation) ||
 		len(operation.VerifierRefs) == 0 || !selfDevelopmentContainsString(bundle.VerifierReceipts, operation.VerifierRefs[0]) {
 		return fmt.Errorf("materializer: invalid frozen bundle")
 	}
+
 	if operation.State == selfdev.StateAccepted {
 		idempotency := "selfdev-materialization-started-" + operation.DecisionEvent
 		if _, found, lookupErr := rt.store.EventByIdempotency(ctx, operation.ComputerID, idempotency); lookupErr != nil {

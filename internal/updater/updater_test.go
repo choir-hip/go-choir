@@ -20,9 +20,10 @@ type fakeServiceManager struct {
 	restarts   int
 	recoveries int
 	cleanups   int
+	restartErr error
 }
 
-func (s *fakeServiceManager) Restart(context.Context) error         { s.restarts++; return nil }
+func (s *fakeServiceManager) Restart(context.Context) error         { s.restarts++; return s.restartErr }
 func (s *fakeServiceManager) RecoveryRestart(context.Context) error { s.recoveries++; return nil }
 func (s *fakeServiceManager) CleanupRecoveryCredential(context.Context) error {
 	s.cleanups++
@@ -82,6 +83,19 @@ func TestUpdaterAppliesIdempotentlyAndRestoresPriorHealthyRelease(t *testing.T) 
 	}
 	if service.restarts != 2 || service.recoveries != 1 || service.cleanups != 2 {
 		t.Fatalf("failure recovery counts restart=%d recovery=%d cleanup=%d", service.restarts, service.recoveries, service.cleanups)
+	}
+	service.restartErr = errors.New("restart failed")
+	third := updaterRequestFixture(t, root, "computer-test", "realization-test", "operation-3", "idem-3", "restart failure")
+	restartFailed, err := updater.Apply(context.Background(), third)
+	if err == nil || restartFailed.Outcome != "failed" || restartFailed.RecoveryReceipt == nil {
+		t.Fatalf("restart failed apply = %+v err=%v", restartFailed, err)
+	}
+	currentDigest, _, err = updater.currentRelease()
+	if err != nil || currentDigest != first.Manifest.ContentDigest {
+		t.Fatalf("current release after restart recovery = %q, %v; want %q", currentDigest, err, first.Manifest.ContentDigest)
+	}
+	if service.restarts != 3 || service.recoveries != 2 || service.cleanups != 3 {
+		t.Fatalf("restart failure recovery counts restart=%d recovery=%d cleanup=%d", service.restarts, service.recoveries, service.cleanups)
 	}
 }
 

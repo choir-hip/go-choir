@@ -51,8 +51,9 @@ changes only after verified guest materialization.
 - **vmctl projection:** vmctl remains the sole route-slot CAS actuator and
   verifies exact accepted-event, checkpoint, materialization, verifier, and
   route-certificate joins. Post-genesis legacy route authority refuses.
-- **D-PROMO interim:** the tag-only `DoltPromotionAdapter` remains disabled and
-  its destructive reset path is forbidden.
+- **No embedded-store promotion:** the obsolete tag/commit/reset
+  `DoltPromotionAdapter` is deleted; accepted-event materialization is the only
+  self-development path.
 - **Timeout hardening landed:** `vmctl.Client` defaults to 60 seconds and the
   server has bounded read/write timeouts (120-second defaults). Staging proved
   the induced resolve-failure path returns a bounded 504; re-prove after a

@@ -566,6 +566,37 @@ func TestCapabilityRenewalReturnsCurrentAndPostRevocationPair(t *testing.T) {
 	}
 }
 
+func TestCredentialRenewalRequiresAppendAuthority(t *testing.T) {
+	store, root := openTestPlatformStore(t)
+	service := NewService(store, filepath.Join(root, "artifacts"), filepath.Join(root, "platform-signing.key"))
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	handler := NewHandler(service)
+	handler.eventAuth = SignedCapabilityVerifier{Store: store, PublicKey: service.signingKey.Public, Now: func() time.Time { return now }}
+	mint := func(scopes []string) string {
+		token, err := MintComputerCapability(ComputerCapability{
+			Version: 1, ComputerID: "computer-renew-scope", Scopes: scopes,
+			ExpiresAt: now.Add(time.Minute).Format(time.RFC3339Nano), Nonce: strings.Join(scopes, "-"),
+		}, service.signingKey.Private)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return token
+	}
+	call := func(token string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/internal/computers/credentials/renew", strings.NewReader(`{"computer_id":"computer-renew-scope"}`))
+		request.Header.Set("Authorization", "Bearer "+token)
+		response := httptest.NewRecorder()
+		handler.HandleComputerCredentialRenew(response, request)
+		return response
+	}
+	if response := call(mint([]string{"event:read"})); response.Code != http.StatusForbidden {
+		t.Fatalf("read-only renewal status=%d body=%s", response.Code, response.Body.String())
+	}
+	if response := call(mint([]string{"event:read", "event:pin", "event:append"})); response.Code != http.StatusCreated {
+		t.Fatalf("append-authorized renewal status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
 type platformTestKeyResolver struct{ key ed25519.PublicKey }
 
 func (r platformTestKeyResolver) ResolveReceiptKey(string, string, string, uint64, time.Time) (ed25519.PublicKey, error) {

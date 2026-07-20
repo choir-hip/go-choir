@@ -182,6 +182,11 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "idempotency key reused with different prompt"})
 			return
 		}
+		existing, err = h.ensureSelfDevelopmentRun(r, existing, ownerID, request.Prompt)
+		if err != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
+			return
+		}
 		writeAPIJSON(w, http.StatusOK, existing)
 		return
 	}
@@ -947,6 +952,16 @@ func selfDevelopmentDecisionBinding(operationID string, request selfDevelopmentD
 }
 
 func (h *APIHandler) ensureSelfDevelopmentRun(r *http.Request, operation selfdev.Operation, ownerID, prompt string) (selfdev.Operation, error) {
+	h.rt.selfdevStartMu.Lock()
+	defer h.rt.selfdevStartMu.Unlock()
+	current, err := h.rt.selfdevOperations.Get(r.Context(), operation.ComputerID, operation.OperationID)
+	if err != nil {
+		return operation, fmt.Errorf("refresh self-development operation: %w", err)
+	}
+	if current.RequestCommitment != operation.RequestCommitment {
+		return operation, fmt.Errorf("self-development operation commitment changed")
+	}
+	operation = current
 	if operation.State != selfdev.StateRequested {
 		return operation, nil
 	}

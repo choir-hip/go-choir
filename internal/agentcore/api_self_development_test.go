@@ -5,10 +5,12 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"github.com/yusefmosiah/go-choir/internal/capsule/transaction"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -464,6 +466,87 @@ func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing
 	runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operation.OperationID, 2)
 	if err != nil || len(runs) != 1 {
 		t.Fatalf("recovered operation runs=%d err=%v", len(runs), err)
+	}
+}
+func TestConcurrentExactRetriesRepairOneRequestedOperationRun(t *testing.T) {
+	ctx := context.Background()
+	runtime, productStore := testRuntime(t)
+	computerID := "computer-requested-retry"
+	idempotencyKey := "requested-retry"
+	prompt := "repair one durable run"
+	runtime.cfg.SandboxID = computerID
+	operations, err := selfdev.NewStore(productStore, productStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime.selfdevOperations = operations
+	requestCommitment := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey + "\x00" + computerevent.DigestBytes([]byte(prompt))))
+	identityDigest := computerevent.DigestBytes([]byte(computerID + "\x00" + idempotencyKey))
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	operationID := "selfdev-" + identityDigest[:32]
+	if _, err := productStore.DB().ExecContext(ctx, `INSERT INTO self_development_operations (operation_id,computer_id,idempotency_key,request_commitment,trajectory_id,base_head,prompt_artifact_ref,verifier_refs_json,desired_head,effective_head,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'[]',?,?,?, ?,?)`,
+		operationID, computerID, idempotencyKey, requestCommitment, "trajectory-"+identityDigest[32:], strings.Repeat("a", 64),
+		"artifact:sha256:"+strings.Repeat("b", 64), strings.Repeat("c", 64), strings.Repeat("c", 64), selfdev.StateRequested, now, now); err != nil {
+		t.Fatal(err)
+	}
+	handler := &APIHandler{rt: runtime}
+	body, _ := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: idempotencyKey, Prompt: prompt})
+	var wait sync.WaitGroup
+	errs := make(chan string, 16)
+	for range 16 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			request := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
+			request.Header.Set("X-Authenticated-User", "owner")
+			request.Header.Set("X-Authenticated-Computer", computerID)
+			response := httptest.NewRecorder()
+			handler.HandleComputersRouter(response, request)
+			if response.Code != http.StatusOK {
+				errs <- response.Body.String()
+			}
+		}()
+	}
+	wait.Wait()
+	close(errs)
+	for message := range errs {
+		t.Fatalf("exact retry failed: %s", message)
+	}
+	operation, err := operations.Get(ctx, computerID, operationID)
+	if err != nil || operation.State != selfdev.StateExecuting {
+		t.Fatalf("repaired operation=%+v err=%v", operation, err)
+	}
+	runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operationID, 2)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("operation-bound runs=%d err=%v", len(runs), err)
+	}
+}
+
+func TestMaterializerBindsBundleToDurableOperationIdentity(t *testing.T) {
+	operation := selfdev.Operation{
+		ComputerID: "computer-bundle", TrajectoryID: "trajectory-bundle", CapsuleID: "capsule-bundle",
+		BaseHead: strings.Repeat("a", 64),
+	}
+	bundle := transaction.CapsuleEffectBundle{
+		ComputerID: operation.ComputerID, TrajectoryRef: operation.TrajectoryID,
+		CapsuleIdentity: operation.CapsuleID, BaseEventHead: operation.BaseHead,
+	}
+	if !selfDevelopmentBundleMatchesOperation(bundle, operation) {
+		t.Fatal("exact bundle identity was refused")
+	}
+	for name, mutate := range map[string]func(*transaction.CapsuleEffectBundle){
+		"computer":   func(value *transaction.CapsuleEffectBundle) { value.ComputerID = "other-computer" },
+		"trajectory": func(value *transaction.CapsuleEffectBundle) { value.TrajectoryRef = "other-trajectory" },
+		"capsule":    func(value *transaction.CapsuleEffectBundle) { value.CapsuleIdentity = "other-capsule" },
+		"base":       func(value *transaction.CapsuleEffectBundle) { value.BaseEventHead = strings.Repeat("b", 64) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := bundle
+			mutate(&changed)
+			if selfDevelopmentBundleMatchesOperation(changed, operation) {
+				t.Fatal("cross-operation bundle identity was accepted")
+			}
+		})
 	}
 }
 

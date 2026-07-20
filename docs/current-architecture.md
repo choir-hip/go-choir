@@ -733,8 +733,8 @@ declared updater state machine.
 The embedded store materializes desktop/app graph, appagent state, Texture
 versions, prompts/policies, typed findings, local trajectory indexes, and
 publication staging metadata. The canonical causal envelope and immutable
-payload/receipt artifacts remain externally pinned. The tag-only
-`DoltPromotionAdapter` stays disabled; its destructive reset is forbidden.
+payload/receipt artifacts remain externally pinned. It has no candidate
+branch, tag-promotion, or destructive-reset authority.
 
 Per-realization filesystems hold release slots, working projections, uploads,
 large media, and caches. Source/build effects and accepted artifacts are pinned

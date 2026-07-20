@@ -594,8 +594,6 @@ EOF
       CHOIR_CAPSULE_STATE_DIR = "/run/choir/capsules";
       CHOIR_CAPSULE_SOURCE_ROOT = "/mnt/persistent/files/Source/platform";
       CHOIR_CAPSULE_LOWER_ROOT = "/";
-      RUNTIME_PROMOTION_SOURCE_REPO = sourceRepoRemote;
-      RUNTIME_PROMOTION_WORKSPACE_ROOT = "/mnt/persistent/promotion-workspaces";
       # Guest health is part of staging acceptance. Stamp the source revision
       # into the VM runtime so refreshed active computers can prove which guest
       # image they are serving, even though they do not mount host deploy.env.

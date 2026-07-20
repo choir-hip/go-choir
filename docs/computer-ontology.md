@@ -125,13 +125,10 @@ D-STORES and D-WIRE in
   chain and materializes the accepted effective state; it is never the sole
   durable event copy or an alternate head authority.
 
-Branch isolation on the VM-local embedded store is settled for pinned
-single-writer connections (D-PROMO), but the current `DoltPromotionAdapter`
-remains tag-only and non-conformant. Its `Rollback` method still uses forbidden
-`DOLT_RESET --hard` on main, and its setter has no production caller. The
-adapter must remain unwired. Audited construction completed without granting
-new adapter mutation authority; replacement or deletion requires a separately
-promoted Definition. No historical Phase D/E assignment authorizes work.
+The obsolete tag-based embedded-Dolt promotion adapter and its destructive
+`DOLT_RESET --hard` rollback are deleted. VM-local embedded Dolt materializes
+accepted effective state; it does not fork candidate branches, promote tags, or
+act as route authority.
 
 ## Ledger Split
 

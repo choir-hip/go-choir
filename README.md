@@ -249,11 +249,9 @@ Storage direction (owner decision, 2026-07-08): exactly two product-state Dolt
 stores remain distinct: the corpusd world-wire sql-server store and each
 computer's VM-local embedded app-state store. Narrow route-slot and transition
 receipt tables live on corpusd with vmctl as sole CAS writer; they are route
-control, not a third product-state store. The current `DoltPromotionAdapter`
-remains tag-only and non-conformant. These nonconformant paths remain blocked. The completed
-[audited-construction Definition](docs/definitions/choir-audited-autoputer-construction-2026-07-15.md)
-retains the evidence and deletion boundary; no current product `/goal` authorizes
-further replacement or deletion.
+control, not a third product-state store. The obsolete tag/commit/reset
+promotion adapter is deleted; accepted events, guest materialization,
+checkpoints, and vmctl route projection are the only self-development path.
 
 ## Services
 

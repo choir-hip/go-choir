@@ -112,6 +112,7 @@ type Runtime struct {
 	selfdevStartupReleaseDigest string
 	selfdevStartupEventSchema   uint64
 	selfdevStartupReducer       uint64
+	selfdevStartMu              sync.Mutex
 	selfdevMaterializeMu        sync.Mutex
 }
 

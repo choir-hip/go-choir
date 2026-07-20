@@ -173,10 +173,12 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		}
 	}
 	if journal.Phase == "pointer_swapped" {
-		if err := u.service.Restart(ctx); err != nil {
-			return ApplyResult{}, err
+		if restartErr := u.service.Restart(ctx); restartErr != nil {
+			journal.Phase = "recovering"
+			journal.Failure = fmt.Sprintf("updater: restart target release: %v", restartErr)
+		} else {
+			journal.Phase = "restart_requested"
 		}
-		journal.Phase = "restart_requested"
 		if err := writeJournal(journalPath, journal); err != nil {
 			return ApplyResult{}, err
 		}

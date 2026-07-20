@@ -81,7 +81,7 @@ func (h *Handler) HandleComputerCredentialRenew(w http.ResponseWriter, r *http.R
 		return
 	}
 	request.ComputerID = strings.TrimSpace(request.ComputerID)
-	if h == nil || h.eventAuth == nil || h.service == nil || h.eventAuth.Authorize(r, request.ComputerID, "event:read") != nil {
+	if h == nil || h.eventAuth == nil || h.service == nil || h.eventAuth.Authorize(r, request.ComputerID, "event:append") != nil {
 		writeJSON(w, http.StatusForbidden, apiError{Error: "credential renewal refused"})
 		return
 	}
