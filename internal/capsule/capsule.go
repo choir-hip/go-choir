@@ -48,12 +48,6 @@ type Capsule struct {
 
 // Exec executes a command in the capsule via the broker.
 func (c *Capsule) Exec(ctx context.Context, cap *Capability, req ExecRequest) (ExecResult, error) {
-	c.mu.RLock()
-	if c.State != StateActive {
-		c.mu.RUnlock()
-		return ExecResult{}, fmt.Errorf("capsule %s is not active (state=%s)", c.ID, c.State)
-	}
-	c.mu.RUnlock()
 
 	if !cap.AgentRole.HasVerb("exec") {
 		return ExecResult{}, fmt.Errorf("role %s does not allow exec", cap.AgentRole)
@@ -62,6 +56,11 @@ func (c *Capsule) Exec(ctx context.Context, cap *Capability, req ExecRequest) (E
 	if err := VerifyCapabilityWithKey(cap, c.broker.publicKey, c.revokedCaps); err != nil {
 		return ExecResult{}, fmt.Errorf("capability verification failed: %w", err)
 	}
+
+	if err := c.acquireOp(); err != nil {
+		return ExecResult{}, err
+	}
+	defer c.releaseOp()
 
 	return c.broker.Exec(ctx, cap, req)
 }

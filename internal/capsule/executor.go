@@ -672,12 +672,33 @@ func (e *Executor) ExtractOwned(agentRunID, handle string) ([]FileChange, error)
 	return e.ExtractDiff(capsuleID)
 }
 
+// ExtractGranted closes the capsule's execution boundary before observing its
+// diff. A frozen capsule may be retried after a later freeze step fails.
 func (e *Executor) ExtractGranted(agentRunID, handle string) ([]FileChange, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
 	if err != nil || capability.AgentRole != RoleCoSuper {
 		return nil, fmt.Errorf("capsule granted diff unavailable")
 	}
-	return e.ExtractDiff(capability.TargetCapsule)
+	e.mu.RLock()
+	caps := e.capsules[capability.TargetCapsule]
+	e.mu.RUnlock()
+	if caps == nil {
+		return nil, fmt.Errorf("capsule granted diff unavailable")
+	}
+	caps.mu.RLock()
+	state := caps.State
+	caps.mu.RUnlock()
+	switch state {
+	case StateActive:
+		if err := caps.Quiesce(context.Background()); err != nil {
+			return nil, fmt.Errorf("freeze capsule before extracting diff: %w", err)
+		}
+	case StateFrozen:
+		// A failed freeze operation may retry against the same immutable tree.
+	default:
+		return nil, fmt.Errorf("capsule granted diff unavailable in state %s", state)
+	}
+	return caps.Diff(context.Background())
 }
 
 func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, error) {
@@ -734,6 +755,12 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 	if caps == nil {
 		return nil, "", fmt.Errorf("capsule release staging unavailable")
 	}
+	caps.mu.RLock()
+	state := caps.State
+	caps.mu.RUnlock()
+	if state != StateFrozen {
+		return nil, "", fmt.Errorf("capsule release staging requires frozen capsule")
+	}
 	incomingRoot = filepath.Clean(incomingRoot)
 	if !filepath.IsAbs(incomingRoot) {
 		return nil, "", fmt.Errorf("capsule release incoming root must be absolute")
@@ -759,6 +786,11 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 			_ = os.RemoveAll(temporary)
 		}
 	}()
+	rootFD, err := unix.Open(caps.MergedDir, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, "", fmt.Errorf("capsule release root is unavailable: %w", err)
+	}
+	defer unix.Close(rootFD)
 	var files []FrozenReleaseFile
 	var total int64
 	for _, change := range changes {
@@ -770,35 +802,52 @@ func (e *Executor) StageGrantedRelease(agentRunID, handle, incomingRoot string) 
 		if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) || change.Kind == ChangeDeleted {
 			return nil, "", fmt.Errorf("capsule release contains unsafe path %q", change.Path)
 		}
-		source := filepath.Join(caps.MergedDir, filepath.FromSlash(strings.TrimPrefix(change.Path, "/")))
-		info, err := os.Lstat(source)
+		sourcePath := filepath.FromSlash(strings.TrimPrefix(change.Path, "/"))
+		sourceFD, err := unix.Openat2(rootFD, sourcePath, &unix.OpenHow{
+			Flags:   uint64(unix.O_RDONLY | unix.O_CLOEXEC | unix.O_NONBLOCK),
+			Resolve: unix.RESOLVE_BENEATH | unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
+		})
 		if err != nil {
+			return nil, "", fmt.Errorf("capsule release file %q is unavailable: %w", change.Path, err)
+		}
+		input := os.NewFile(uintptr(sourceFD), change.Path)
+		info, err := input.Stat()
+		if err != nil {
+			_ = input.Close()
 			return nil, "", fmt.Errorf("capsule release file %q is unavailable", change.Path)
 		}
 		if info.IsDir() {
+			_ = input.Close()
 			continue
 		}
-		if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		if !info.Mode().IsRegular() {
+			_ = input.Close()
 			return nil, "", fmt.Errorf("capsule release file %q is not regular", change.Path)
 		}
 		total += info.Size()
 		if total > caps.MemoryMax {
+			_ = input.Close()
 			return nil, "", fmt.Errorf("capsule release exceeds resource budget")
 		}
 		target := filepath.Join(temporary, clean)
 		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			_ = input.Close()
 			return nil, "", err
 		}
-		base := strings.ToLower(filepath.Base(clean))
-		extension := strings.ToLower(filepath.Ext(base))
-		if base == ".env" || strings.HasPrefix(base, ".env.") || base == ".npmrc" || base == ".netrc" ||
-			base == "credentials.json" || base == "auth.json" || base == "id_rsa" || base == "id_ed25519" ||
-			extension == ".pem" || extension == ".key" || extension == ".p12" || extension == ".pfx" {
+		secretPath := false
+		for _, component := range strings.Split(filepath.ToSlash(clean), "/") {
+			base := strings.ToLower(component)
+			extension := strings.ToLower(filepath.Ext(base))
+			if base == ".env" || strings.HasPrefix(base, ".env.") || base == ".npmrc" || base == ".netrc" ||
+				base == "credentials.json" || base == "auth.json" || base == "id_rsa" || base == "id_ed25519" ||
+				extension == ".pem" || extension == ".key" || extension == ".p12" || extension == ".pfx" {
+				secretPath = true
+				break
+			}
+		}
+		if secretPath {
+			_ = input.Close()
 			return nil, "", fmt.Errorf("capsule release refuses secret-bearing path %q", change.Path)
-		}
-		input, err := os.Open(source)
-		if err != nil {
-			return nil, "", err
 		}
 		scanner := bufio.NewScanner(input)
 		scanner.Buffer(make([]byte, 64<<10), 1<<20)
