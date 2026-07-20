@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-configured-target-round-45
-    state: accepted_G1_landed_C_reconstruction_failed
-    ref: 4571aac669fd0e4d494807f34e45e2cf250326c8
+    id: self-development-C-credential-authority-round-46
+    state: frozen_G1_review
+    ref: f55414cbabcb47e93e61f7067337f04f5bbc5390
     owner: integration-authority
-    base: d1b083def980d51eed659af72b8c56e378d2755e
-    scope: "Protected C target-resolution and retained-realization reconstruction repair only: add fail-closed unique vmctl stable-ComputerID lookup; permit proxy global resolution only for an exact scoped API key bound to the configured disposable ComputerID; actuate through ownership identity; use refresh for configured-target start/restart; boot the same persisted failed VMID when vmmanager has no instance, through the existing fresh realization config. Preserve ordinary user-scoped lookup and stop/resolve lifecycle semantics, exact refusals, persistent data, canonical guest/route, incomplete receipts, and effects OFF. No public global lookup, replacement VMID/data root, host authority, migration, API grammar, event, capsule, or route behavior is added."
+    base: 50220538f5662d999e620c50dda0ea6af05b5396
+    scope: "Protected C Node B credential-authority wiring only: change vmctl's host-side `VMCTL_CORPUSD_URL` from proxy port 8082 to the existing corpusd port 8086 and add a deterministic Node B service-environment contract binding corpusd, proxy, and vmctl consistently. Preserve guest runtime routing, public APIs, lifecycle code/state, retained VMID/data, pending idempotency intent, service ports, effects OFF, and all rollback refs. No proxy credential route, fallback, retry allocator, issuer, event, capsule, or route behavior is added."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [4048d542e65f9ac4eb7510f3dae480645b3a3168, 3efcd69f55361a8548e92d71a3cfe69508f30edb]
-    verification: "`go test ./internal/proxy ./internal/vmctl ./internal/vmmanager` passes. Focused and race-enabled regressions reproduce persisted failed ownership after registry reload with an empty manager, prove `BootVM` receives the retained VMID/ComputerID plus fresh credential and returns active at a new epoch, preserve stopped missing-instance recovery and active-manager refresh, configured-target idempotent refresh, ordinary stop/resolve semantics, exact-key/self-development routing, ambiguity refusal, and wrong-target/cookie/non-disposable refusals."
-    disposition: "Round-45 source was accepted and landed as main c159aec299a18f09a446e7f590aaf8ec06f5b569. CI/deploy run 29759759360 passed and published a complete exact-main activation receipt. Public exact-key target resolution is repaired, but the first public start returned immediate 502 `lifecycle actuation failed`; target remained failed at epoch 804. C is blocked and no self-development effect is authorized."
+    immediate_predecessors: [c159aec299a18f09a446e7f590aaf8ec06f5b569, 50220538f5662d999e620c50dda0ea6af05b5396]
+    verification: "`.github/scripts/node-b-sync-service-pointers-test` and Bash syntax pass. `nix eval --json .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-vmctl.serviceConfig.Environment` succeeds and contains exact `VMCTL_CORPUSD_URL=http://127.0.0.1:8086`; the contract requires corpusd port 8086 for corpusd, proxy, and vmctl and rejects the old vmctl proxy-port value."
+    disposition: "Frozen for Round-46 G1. Review must confirm port ownership from actual handlers/services, exact 51 ms failure causality, no guest/public routing regression, and that the test guards the evaluated deployment authority rather than merely a comment. No landing, deploy, or retry is authorized before acceptance."
     g1_round_45_probe:
       reviewed_at: 2026-07-20T16:22:00Z
       source_ref: 4571aac669fd0e4d494807f34e45e2cf250326c8
@@ -1125,7 +1125,7 @@ now:
     heresy_delta: {discovered: 2, introduced: 0, repaired: 0}
   c_deploy_failure_7:
     observed_at: 2026-07-20T16:50:06Z
-    status: diagnosed_vmctl_credential_authority_miswired
+    status: frozen_round_46_G1_review
     mutation_class: red
     protected_surfaces: [public_lifecycle_API, scoped_API_key, vmctl_refresh, retained_persistent_computer, credential_envelope, Firecracker_boot, lifecycle_intent, deploy_acceptance]
     admissible_evidence_class: "Exact main CI/deploy receipt, public health/build identity, public exact-key lifecycle responses, non-secret key metadata, source boot/credential/persistence trace, focused production-shaped reproduction, refrozen G1 review, and deployed no-SSH acceptance."
@@ -1135,6 +1135,8 @@ now:
     existing_replacement_check: "The correct direct corpusd service and credential issue handler already exist and are live on 8086. The narrow repair is configuration deletion/reconnection: point vmctl's host-side credential issuer at 127.0.0.1:8086, add a Node B service-environment contract that binds VMCTL and proxy to the corpusd service port, and leave guest `RUNTIME_CORPUSD_URL`/proxy routing unchanged. Do not add a proxy credential route, fallback, retry allocation, or second issuer."
     rollback: "R0/R1 and prior complete deployment receipts remain authoritative; effects remain OFF. Preserve the failed ownership, VMID/data image, pending lifecycle intent for `c-reconstruct-1784566206810`, incomplete receipt 29747648700-1, complete receipt 29759759360-1, and scoped key metadata. Do not retry with a new idempotency key until the failure boundary is understood."
     authorized_repair: "Change only Node B vmctl's `VMCTL_CORPUSD_URL` from proxy port 8082 to corpusd port 8086 and add a deterministic deployment/Nix contract test preventing regression. Run the focused contract, evaluate the Nix service environment if available, freeze Round-46 G1, then land/deploy and replay the same pending lifecycle idempotency key through the public API."
+    repair_result: "Candidate f55414cbabcb47e93e61f7067337f04f5bbc5390 changes the one miswired Node B vmctl environment value to corpusd port 8086. The existing Node B service contract now requires `CORPUSD_PORT=8086`, `PROXY_CORPUSD_URL=http://127.0.0.1:8086`, and `VMCTL_CORPUSD_URL=http://127.0.0.1:8086`, and explicitly rejects the old vmctl 8082 value."
+    repair_evidence: "The focused contract and Bash parser pass. Direct Nix evaluation of the go-choir-b vmctl systemd Environment yields `VMCTL_CORPUSD_URL=http://127.0.0.1:8086` alongside the unchanged gateway, VM, sandbox socket, and lifecycle settings."
     conjecture_delta: "Correct capability routing and method selection are necessary but insufficient; a retained Computer can still lack a production-valid reconstruction input even when source-level VMID preservation is correct."
     heresy_delta: {discovered: 3, introduced: 0, repaired: 0}
   dead_end_assessment:
