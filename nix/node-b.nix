@@ -761,6 +761,7 @@ in
       kill -s "$signal" "$$"
     }
     move_to=
+    preserved_conflict=false
     if [ -e "$target" ] && [ ! -L "$target" ]; then
       if [ -e "$legacy" ] || [ -L "$legacy" ]; then
         if [ -e "$conflict" ] || [ -L "$conflict" ]; then
@@ -768,6 +769,7 @@ in
           exit 1
         fi
         move_to="$conflict"
+        preserved_conflict=true
       else
         move_to="$legacy"
       fi
@@ -788,9 +790,6 @@ in
         rm -f "$next" || true
         exit "$status"
       fi
-      if [ "$moved_to" = "$conflict" ]; then
-        echo "go-choir guest image cutover preserved ambiguous active tree at $conflict"
-      fi
     fi
     if mv -Tf "$next" "$target"; then
       :
@@ -803,7 +802,10 @@ in
     fi
     moved_to=
     restore_cutover_traps
-    echo "go-choir guest image pointer updated to $src"
+    if [ "$preserved_conflict" = true ]; then
+      echo "go-choir guest image cutover preserved ambiguous active tree at $conflict" || true
+    fi
+    echo "go-choir guest image pointer updated to $src" || true
   '';
 
   # Host sandbox service deleted in PR 5 of store-consolidation mission.
