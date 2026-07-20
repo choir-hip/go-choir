@@ -1899,8 +1899,19 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 		return nil, fmt.Errorf("VM %s refresh is already in progress", own.VMID)
 	}
 
-	snapshot := *own
+	attemptEpoch := int64(0)
 	mgr := r.vmManager
+	if mgr != nil {
+		// Reserve and persist a unique realization before credential issuance.
+		// Failed boots do not advance ownership.Epoch, but retries must not reuse
+		// an expired or differently committed credential idempotency key.
+		if r.epochCounter < own.Epoch {
+			r.epochCounter = own.Epoch
+		}
+		attemptEpoch = r.nextEpoch()
+		r.saveLocked()
+	}
+	snapshot := *own
 	missingManagerInstance := mgr != nil && mgr.GetVM(own.VMID) == nil &&
 		(own.State == VMStateStopped || own.State == VMStateHibernated || own.State == VMStateFailed)
 	r.refreshing[key] = struct{}{}
@@ -1913,7 +1924,10 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 
 	var info *VMInstanceInfo
 	if mgr != nil {
-		cfg := r.freshVMConfig(&snapshot, "")
+		cfg := vmManagerConfigForOwnership(&snapshot, "")
+		cfg.Epoch = attemptEpoch
+		cfg.RealizationID = realizationIDFor(snapshot.VMID, attemptEpoch)
+		cfg.ComputerCredentialEnvelope = r.issueComputerCredentialEnvelope(cfg.ComputerID, cfg.RealizationID, attemptEpoch)
 		if cfg.ComputerCredentialEnvelope == "" {
 			return nil, fmt.Errorf("failed to refresh VM %s: realization credential unavailable", snapshot.VMID)
 		}

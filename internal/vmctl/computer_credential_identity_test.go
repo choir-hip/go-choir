@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -123,8 +124,8 @@ func TestRefreshBindsFreshCredentialWithoutBlockingRegistry(t *testing.T) {
 	}
 	cfg := manager.refreshCfgs[0]
 	manager.mu.Unlock()
-	if cfg.Epoch != initialEpoch+1 || cfg.RealizationID != realizationIDFor(initial.VMID, initialEpoch+1) {
-		t.Fatalf("refresh identity = epoch %d realization %q, want epoch %d realization %q", cfg.Epoch, cfg.RealizationID, initialEpoch+1, realizationIDFor(initial.VMID, initialEpoch+1))
+	if cfg.Epoch <= initialEpoch || cfg.RealizationID != realizationIDFor(initial.VMID, cfg.Epoch) {
+		t.Fatalf("refresh identity = epoch %d realization %q, want a later reserved epoch bound to the realization", cfg.Epoch, cfg.RealizationID)
 	}
 	if cfg.ComputerID != initial.ComputerID {
 		t.Fatalf("refresh computer identity = %q, want stable %q", cfg.ComputerID, initial.ComputerID)
@@ -134,21 +135,52 @@ func TestRefreshBindsFreshCredentialWithoutBlockingRegistry(t *testing.T) {
 	}
 }
 
-func TestRefreshManagerFailureProjectsFailedOwnership(t *testing.T) {
-	manager := &mockVMManager{refreshError: errors.New("boot failed after process replacement")}
+func TestRefreshManagerFailureProjectsFailedOwnershipAndAdvancesRetryIdentity(t *testing.T) {
+	var issuedRealizations []string
+	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		issuedRealizations = append(issuedRealizations, request["realization_id"])
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"envelope":{"schema_version":1}}`))
+	}))
+	defer corpusd.Close()
+
+	bootFailure := errors.New("boot failed after process replacement")
+	manager := &mockVMManager{refreshError: bootFailure}
 	registry := NewOwnershipRegistry("")
-	registry.SetCorpusdURL(testComputerCredentialIssuerURL(t))
+	registry.SetPersistencePath(filepath.Join(t.TempDir(), "ownership.json"))
+	registry.SetCorpusdURL(corpusd.URL)
 	registry.SetVMManager(manager)
 	initial, err := registry.ResolveOrAssign("owner-refresh-failure")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := registry.RefreshVMForDesktop("owner-refresh-failure", PrimaryDesktopID); err == nil || !strings.Contains(err.Error(), "boot failed after process replacement") {
+	if _, err := registry.RefreshVMForDesktop("owner-refresh-failure", PrimaryDesktopID); err == nil || !strings.Contains(err.Error(), bootFailure.Error()) {
 		t.Fatalf("refresh error = %v, want manager failure", err)
 	}
 	current := registry.GetOwnership("owner-refresh-failure")
 	if current == nil || current.VMID != initial.VMID || current.State != VMStateFailed {
 		t.Fatalf("ownership after refresh failure = %+v, want same VM in failed state", current)
+	}
+
+	restarted := NewOwnershipRegistry("")
+	restarted.SetCorpusdURL(corpusd.URL)
+	restarted.SetVMManager(&mockVMManager{bootError: bootFailure})
+	if err := restarted.SetPersistencePath(registry.persistencePath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.RefreshVMForDesktop("owner-refresh-failure", PrimaryDesktopID); err == nil || !strings.Contains(err.Error(), bootFailure.Error()) {
+		t.Fatalf("restart retry error = %v, want manager failure", err)
+	}
+	if len(issuedRealizations) < 2 {
+		t.Fatalf("credential issuances = %v, want failed attempt and retry", issuedRealizations)
+	}
+	previous, retry := issuedRealizations[len(issuedRealizations)-2], issuedRealizations[len(issuedRealizations)-1]
+	if retry == previous {
+		t.Fatalf("retry reused credential realization %q after failed boot", retry)
 	}
 }
