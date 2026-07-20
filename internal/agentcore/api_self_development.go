@@ -212,6 +212,11 @@ func (h *APIHandler) startSelfDevelopmentOperation(w http.ResponseWriter, r *htt
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
 			return
 		}
+		operation, recoveryErr = h.ensureSelfDevelopmentRun(r, operation, ownerID, request.Prompt)
+		if recoveryErr != nil {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: recoveryErr.Error()})
+			return
+		}
 		writeAPIJSON(w, http.StatusOK, operation)
 		return
 	}

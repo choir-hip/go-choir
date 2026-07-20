@@ -401,11 +401,9 @@ func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing
 	computerID := "computer-start-recovery"
 	idempotencyKey := "start-recovery"
 	prompt := "recover exact proposal"
-	productStore, err := choirstore.Open(filepath.Join(t.TempDir(), "runtime.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer productStore.Close()
+	runtime, _ := testRuntime(t)
+	productStore := runtime.store
+	runtime.cfg.SandboxID = computerID
 	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -448,7 +446,8 @@ func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing
 	if _, err := appender.AppendNew(ctx, started, computerevent.TransitionInput{}, nil); err != nil {
 		t.Fatal(err)
 	}
-	handler := &APIHandler{rt: &Runtime{cfg: provideriface.Config{SandboxID: computerID}, store: productStore, selfdevOperations: operations}}
+	runtime.selfdevOperations = operations
+	handler := &APIHandler{rt: runtime}
 	body, _ := json.Marshal(selfDevelopmentStartRequest{IdempotencyKey: idempotencyKey, Prompt: prompt})
 	httpRequest := httptest.NewRequest(http.MethodPost, "/api/computers/"+computerID+"/self-development/operations", strings.NewReader(string(body)))
 	httpRequest.Header.Set("X-Authenticated-User", "owner")
@@ -459,8 +458,12 @@ func TestFinalizedStartEventRepairsMissingOperationWithoutCurrentMode(t *testing
 		t.Fatalf("finalized start recovery status=%d body=%s", response.Code, response.Body.String())
 	}
 	operation, found, err := operations.GetByIdempotency(ctx, computerID, idempotencyKey)
-	if err != nil || !found || operation.PromptArtifactRef != started.OutputArtifactRefs[0] {
+	if err != nil || !found || operation.PromptArtifactRef != started.OutputArtifactRefs[0] || operation.State != selfdev.StateExecuting {
 		t.Fatalf("recovered operation=%+v found=%v err=%v", operation, found, err)
+	}
+	runs, err := productStore.ListRunsBySelfDevelopmentOperation(ctx, "owner", operation.OperationID, 2)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("recovered operation runs=%d err=%v", len(runs), err)
 	}
 }
 

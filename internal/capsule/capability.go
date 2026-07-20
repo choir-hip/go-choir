@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// Capability is an Ed25519-signed token minted by HostAuthority.
-// The cosuper never sees the raw capsule ID — it gets an opaque handle.
+// Capability is an Ed25519-signed token minted by guest-core authority.
+// The co-super never sees the raw capsule ID — it gets an opaque handle.
 type Capability struct {
 	CapabilityID   string    `json:"capability_id"`   // stable unique ID (used in revocation + session binding)
 	Handle         string    `json:"handle"`          // opaque handle, e.g. "build-a" (agent-facing)
@@ -26,7 +26,7 @@ type Capability struct {
 	Signature      []byte    `json:"signature"`       // Ed25519 signature over all fields
 }
 
-// signingPayload returns the canonical bytes that are signed by HostAuthority.
+// signingPayload returns the canonical bytes signed by guest-core authority.
 // The signature field itself is excluded from the payload.
 func (c *Capability) signingPayload() ([]byte, error) {
 	// Create a copy without the signature for signing.
@@ -80,9 +80,8 @@ func UnmarshalFromTransport(data []byte) (*Capability, error) {
 	return &cap, nil
 }
 
-// SignCapability signs a capability with the provided Ed25519 private key.
-// This is called by HostAuthority on the host. The Signature field is
-// populated in-place.
+// SignCapability signs a capability with the provided guest-core private key.
+// The Signature field is populated in-place.
 func SignCapability(cap *Capability, privateKey ed25519.PrivateKey, keyID string) error {
 	if len(privateKey) != ed25519.PrivateKeySize {
 		return fmt.Errorf("invalid private key size: %d", len(privateKey))

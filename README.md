@@ -277,9 +277,9 @@ Additional deployed or deploy-wired host services are deliberately narrower:
 | `sourcecycled` | Experimental source polling and handoff adapter | Cycle/queue state is in memory and lost on restart; it is not canonical article authority. |
 | `maild` | Host email ingress/adapter | Transport boundary, not private appagent authority. |
 
-`capsule-host`, Choir Base harnesses, materializers, evidence tools, and other
-`cmd/*` binaries are implementation utilities or partial substrates unless a
-current domain contract explicitly labels them deployed product services.
+Choir Base harnesses, materializers, evidence tools, and other `cmd/*` binaries
+are implementation utilities or partial substrates unless a current domain
+contract explicitly labels them deployed product services.
 
 The `sandbox` service name is an implementation name, not the product ontology.
 The product object is a persistent computer. The sandbox health response
