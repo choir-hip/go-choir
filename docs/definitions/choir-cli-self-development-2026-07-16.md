@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-service-pointer-repair-round-36
-    state: rejected_G1_mutable_package_authority
-    ref: cc380712f941f7b88e06240e108024e329bfc511
+    id: self-development-C-service-pointer-repair-round-37
+    state: frozen_G1_review
+    ref: 9e56b19b2d598d4e8e79398d6ec82688d2e46cb5
     owner: integration-authority
     base: ea1f8d12
-    scope: "Protected C deployment repair only: resolve a bounded chain of absolute generated Nix exec wrappers to the exact executable `/bin/<service>` leaf; reject variables, cycles, missing or wrong targets, and depth exhaustion; execute focused fixtures in Plan CI and deploy preflight. No self-development effect, event, API, capsule, guest image, or route behavior changes."
+    scope: "Protected C deployment repair only: bounded literal wrapper resolution whose production root is fixed to `/nix/store`; every wrapper and final package is a canonical direct store child; disposable roots exist only as explicit focused-test arguments. Reject mutable/noncanonical paths, variables, cycles, missing/wrong targets, and depth exhaustion. No self-development effect, event, API, capsule, guest image, or route behavior changes."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [de9412284cb4cd23846b9b7223329fdd479f038a, ea1f8d12]
-    verification: "`.github/scripts/node-b-sync-service-pointers-test`, `.github/scripts/deploy-workflow-contract-test`, `.github/scripts/ci-workflow-contract-test`, and `bash -n` pass. Run 29735841371 is the exact nested-wrapper reproducer."
-    disposition: "Round-36 is rejected under the severe-minority rule. Four reviewers accepted, but Devin reproduced a high-severity mutable-package authority gap: any executable absolute `/bin/<service>` leaf outside `/nix/store` is accepted, and the positive fixture itself uses `/tmp`. Effects remain OFF and main does not advance."
+    immediate_predecessors: [cc380712f941f7b88e06240e108024e329bfc511, d900c4915e8ccdfeb0666b751741121f5772824a]
+    verification: "Focused resolver, deploy workflow, CI workflow, and Bash syntax contracts pass. Positive wrappers/packages are direct children of an injected disposable store; the default production root rejects them. Mutable wrapper/package and nested package reproducers fail closed. Run 29735841371 remains the deployed nested-wrapper reproducer."
+    disposition: "Effects remain OFF. Round-37 G1 must review exact immutable-store-bound source and authority before main may advance or deployment may retry."
     g1_round_36_probe:
       reviewed_at: 2026-07-20T11:16:00Z
       source_ref: cc380712f941f7b88e06240e108024e329bfc511
