@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-guest-cutover-repair-round-29
-    state: rejected_G1_activation_traps
-    ref: daece9fd0f00f11839d743f4bf57017bdb6f9f5b
+    id: self-development-C-guest-cutover-repair-round-30
+    state: frozen_G1_review
+    ref: e1cf9ebaa40b456c9eddbc9b49d73240dbfb4ee6
     owner: integration-authority
     base: 8971c194
-    scope: "One protected C deployment repair: preserve an unexpected physical active guest under a single conflict-recovery ref when the pre-managed rollback already exists, then atomically converge to the immutable Nix guest pointer. No self-development effect, event, API, or capsule behavior changes."
+    scope: "Protected C deployment repair with bounded conflict preservation and signal-safe convergence: pre-create the immutable pointer; preserve both existing trees; restore on command failure or HUP/INT/TERM; retain NixOS ERR and prior signal traps; fail closed on a second ambiguity. No self-development effect, event, API, or capsule behavior changes."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [50c634909bc1793d3c50160eec630c42816833c2, 8971c194]
-    verification: "`nix eval` renders the Node B system and activation. Disposable execution of the exact rendered script proves ambiguous-tree preservation, ordinary rerun idempotency, second-ambiguity refusal, and restoration after an induced post-move failure. CI run 29723308309 passed before this repair; failed deployment 29723644656 is the reproducer."
-    disposition: "Round-29 is rejected under the severe-minority rule. Effects remain OFF and main does not advance. The repair overwrites NixOS's process-wide ERR trap and does not restore on termination signals."
+    immediate_predecessors: [daece9fd0f00f11839d743f4bf57017bdb6f9f5b, 26e7c747]
+    verification: "`nix eval` renders the Node B system and revised activation. Disposable execution of that exact rendered script proves ambiguous-tree preservation, idempotent rerun, second-ambiguity refusal, post-move error restoration, existing ERR-trap preservation, and HUP/INT/TERM restoration plus re-raise. CI run 29723308309 passed before this repair; failed deployment 29723644656 remains the reproducer."
+    disposition: "Effects remain OFF. Round-30 G1 must review the exact signal-safe source and authority before main may advance or deployment may retry."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
