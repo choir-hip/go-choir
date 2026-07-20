@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-kernel-receipt-diagnostics-round-54
-    state: frozen_G1_review
+    state: accepted_G1
     ref: 6a196d8a5893ab911bc03cef16ba6c5f443ac2c7
     owner: integration-authority
     base: 714f6a3057172ab41d4d7c07daeaa6548d4e22af
@@ -595,7 +595,14 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [6f841ec4e5c699997bd262c7a00b12d9e63fc80c, 714f6a3057172ab41d4d7c07daeaa6548d4e22af]
     verification: "Focused race tests prove updater refusal bodies map only to stable reason codes and the public error remains generic with 503 plus typed reason. Full updater race and all runtime shards pass. Existing error envelopes omit reason unchanged."
-    disposition: "Pending independent G1 review. This is observability, not acceptance: effects remain OFF and the deployed reason must drive a substrate repair before the kernel gate can pass."
+    disposition: "Round-54 accepted unanimously by OMP Gemini 3.5, OMP Cursor/Grok 4.5, Devin, and OpenCode. All confirmed raw causes are never serialized, updater text only selects exact known constants, authorization/503/verification remain unchanged, and scope is diagnostic only. Cursor and Devin note a nonblocking future hardening: allowlist the helper input even though both current call sites are closed constants. Codex exhausted usage. Effects remain OFF; deployment is solely to recover the no-SSH failure class."
+    g1_round_54_probe:
+      reviewed_at: 2026-07-20T22:00:05Z
+      source_ref: 6a196d8a5893ab911bc03cef16ba6c5f443ac2c7
+      authority_ref: ab8a24aa6ddd7b5e9ee859c08fd2affbda6ae8dc
+      outcome: accept_G1
+      adjudication: "Four independent reviewers found no blocker. Exact-match updater envelopes cannot inject arbitrary response values, error causes remain private, `omitempty` preserves existing clients, and all admission/signature checks remain fail-closed. The current closed call sites make helper allowlisting optional future hardening, not a landing blocker."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round54-panel/manifest.tsv, manifest_sha256: 199370aecce3d9271d0b1ac862f760b4dcdee423b04b9ee9eb4f67fc193c9780, omp_gemini35_sha256: aaf95017a46ba9c32bffca6a6f06468c906b0c691215a31b626868cf2397a00c, omp_cursor_grok45_sha256: 636a21e964dbe99113cf936d96ee5592fbb6e4dca04af433a025314b8b2ec310, opencode_sha256: a095484484c20af19f33180337e8d8d04a677eed804863d297f2362c35848676, devin_sha256: 33ff65b21767aecabcfbbff91c2574279fdcd9d98c619803df7e7ea941f5cca9, codex_failure_sha256: f249671cc78fa0acd2d7d5707e6c638506e97a0ce0a1a2d1c1aff46a84174831}
     g1_round_53_probe:
       reviewed_at: 2026-07-20T20:53:25Z
       source_ref: d0f8f785de25c9f4cae8d7da6def4047c31940f4
@@ -1282,7 +1289,7 @@ now:
     heresy_delta: {discovered: 7, introduced: 1, repaired: 2}
   c_deploy_failure_12:
     observed_at: 2026-07-20T21:19:42Z
-    status: frozen_G1_round_54_diagnostic
+    status: accepted_G1_round_54_pending_land
     mutation_class: red
     protected_surfaces: [retained_computer_recovery, lifecycle_intent, guest_readiness, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main CI/deploy receipt, public scoped lifecycle and guest-proxy responses, source timeout/readiness trace, focused production-shaped tests, refrozen G1 if code changes, and deployed no-SSH acceptance."
