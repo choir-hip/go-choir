@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-credential-authority-round-46
-    state: rejected_G1_mutable_environment_override
-    ref: f55414cbabcb47e93e61f7067337f04f5bbc5390
+    id: self-development-C-credential-authority-round-47
+    state: frozen_G1_review
+    ref: 6777a66062cd60684eb846e7d4c1dfac7e602492
     owner: integration-authority
-    base: 50220538f5662d999e620c50dda0ea6af05b5396
-    scope: "Protected C Node B credential-authority wiring only: change vmctl's host-side `VMCTL_CORPUSD_URL` from proxy port 8082 to the existing corpusd port 8086 and add a deterministic Node B service-environment contract binding corpusd, proxy, and vmctl consistently. Preserve guest runtime routing, public APIs, lifecycle code/state, retained VMID/data, pending idempotency intent, service ports, effects OFF, and all rollback refs. No proxy credential route, fallback, retry allocator, issuer, event, capsule, or route behavior is added."
+    base: 30bf9f075ba4ac055fb2f8ab0f22edb2f35509bb
+    scope: "Protected C Node B credential-authority wiring and precedence only: retain direct corpusd port 8086, add an immutable vmctl launcher that re-exports only `VMCTL_CORPUSD_URL` after mutable EnvironmentFile expansion, bind vmctl after/wants corpusd, and require all joins in the deterministic service contract. Preserve the mutable priority file for intended always-on IDs, guest routing, public APIs, lifecycle state, retained VMID/data, pending idempotency intent, effects OFF, and rollback refs. No other immutable override, proxy route, fallback, allocator, issuer, event, capsule, or route behavior is added."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [c159aec299a18f09a446e7f590aaf8ec06f5b569, 50220538f5662d999e620c50dda0ea6af05b5396]
-    verification: "`.github/scripts/node-b-sync-service-pointers-test` and Bash syntax pass. `nix eval --json .#nixosConfigurations.go-choir-b.config.systemd.services.go-choir-vmctl.serviceConfig.Environment` succeeds and contains exact `VMCTL_CORPUSD_URL=http://127.0.0.1:8086`; the contract requires corpusd port 8086 for corpusd, proxy, and vmctl and rejects the old vmctl proxy-port value."
-    disposition: "Round-46 rejected on Devin's reproducible severe finding. `go-choir-vmctl` imports mutable `/var/lib/go-choir/vmctl-priority.env`, and systemd EnvironmentFile values override Nix Environment assignments; unlike the protected proxy target, vmctl has no immutable launcher re-export. The repaired corpusd URL could therefore remain or become 8082/arbitrary at runtime. The grep-only contract cannot prove effective precedence. OMP Cursor/Grok 4.5, OpenCode, and OMP Gemini accepted but treated this as deployed-only. No landing, deploy, or retry is authorized."
+    immediate_predecessors: [f55414cbabcb47e93e61f7067337f04f5bbc5390, 30bf9f075ba4ac055fb2f8ab0f22edb2f35509bb]
+    verification: "The Node B service contract and Bash syntax pass. Nix evaluation yields vmctl ExecStart `/nix/store/...-go-choir-vmctl-exec`, EnvironmentFile unchanged, and exact after/wants arrays including corpusd. Direct Environment evaluation retains `VMCTL_CORPUSD_URL=http://127.0.0.1:8086`. Local x86_64-linux launcher realization is unavailable from the aarch64-darwin builder and remains a selected CI host-closure proof."
+    disposition: "Frozen for Round-47 G1. Review must verify launcher execution occurs after EnvironmentFile precedence, only credential authority is reasserted, corpusd ordering is valid/non-cyclic, source contracts cover the actual Nix symbols, and selected CI will build the x86_64-linux closure. No landing, deploy, or retry is authorized before acceptance."
     g1_round_46_probe:
       reviewed_at: 2026-07-20T17:10:00Z
       source_ref: f55414cbabcb47e93e61f7067337f04f5bbc5390
@@ -1133,7 +1133,7 @@ now:
     heresy_delta: {discovered: 2, introduced: 0, repaired: 0}
   c_deploy_failure_7:
     observed_at: 2026-07-20T16:50:06Z
-    status: rejected_G1_mutable_environment_override
+    status: frozen_round_47_G1_review
     mutation_class: red
     protected_surfaces: [public_lifecycle_API, scoped_API_key, vmctl_refresh, retained_persistent_computer, credential_envelope, Firecracker_boot, lifecycle_intent, deploy_acceptance]
     admissible_evidence_class: "Exact main CI/deploy receipt, public health/build identity, public exact-key lifecycle responses, non-secret key metadata, source boot/credential/persistence trace, focused production-shaped reproduction, refrozen G1 review, and deployed no-SSH acceptance."
@@ -1146,6 +1146,8 @@ now:
     repair_result: "Candidate f55414cbabcb47e93e61f7067337f04f5bbc5390 changes the one miswired Node B vmctl environment value to corpusd port 8086. The existing Node B service contract now requires `CORPUSD_PORT=8086`, `PROXY_CORPUSD_URL=http://127.0.0.1:8086`, and `VMCTL_CORPUSD_URL=http://127.0.0.1:8086`, and explicitly rejects the old vmctl 8082 value."
     repair_evidence: "The focused contract and Bash parser pass. Direct Nix evaluation of the go-choir-b vmctl systemd Environment yields `VMCTL_CORPUSD_URL=http://127.0.0.1:8086` alongside the unchanged gateway, VM, sandbox socket, and lifecycle settings."
     round_46_rejection: "Devin found that `EnvironmentFile=-/var/lib/go-choir/vmctl-priority.env` overrides systemd Environment and can replace the repaired corpusd URL. The same Nix module already protects proxy's immutable disposable target by launcher re-export, proving the precedence and replacement pattern. Round-47 must protect only vmctl's credential-authority URL in the launcher, keep priority overrides for intended IDs, order vmctl after/want corpusd, and strengthen the source contract."
+    round_47_repair: "Candidate 6777a66062cd60684eb846e7d4c1dfac7e602492 adds a Nix-store vmctl launcher that exports the exact direct corpusd URL immediately before delegating to the existing service pointer wrapper. The mutable priority EnvironmentFile remains but can no longer replace credential authority. vmctl now after/wants corpusd. The contract requires the immutable export, launcher ExecStart, ordering edges, three service port joins, and rejection of the old value."
+    round_47_evidence: "Focused contract and Bash parse pass. Nix evaluation confirms the new immutable ExecStart store path, unchanged priority EnvironmentFile, after/wants corpusd edges, and direct corpusd Environment. x86_64-linux realization is correctly deferred to selected CI because the local builder set is aarch64."
     conjecture_delta: "Correct capability routing and method selection are necessary but insufficient; a retained Computer can still lack a production-valid reconstruction input even when source-level VMID preservation is correct."
     heresy_delta: {discovered: 3, introduced: 0, repaired: 0}
   dead_end_assessment:
