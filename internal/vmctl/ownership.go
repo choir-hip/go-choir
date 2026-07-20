@@ -1462,6 +1462,21 @@ func (r *OwnershipRegistry) GetOwnershipForComputer(userID, computerID string) *
 	return nil
 }
 
+// GetOwnershipByComputerID returns the unique ownership for a stable
+// ComputerID without applying a user-ID filter. Callers must authorize the
+// ComputerID before invoking this internal control-plane lookup.
+func (r *OwnershipRegistry) GetOwnershipByComputerID(computerID string) *VMOwnership {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, own := range r.ownerships {
+		if own != nil && stableComputerID(own.UserID, own.DesktopID, own.ComputerID) == computerID {
+			snapshot := *own
+			return &snapshot
+		}
+	}
+	return nil
+}
+
 // LiveSandboxURL returns the live sandbox URL for the given user/desktop pair.
 // It prefers the VM manager's live HostURL over the cached ownership record.
 // Returns an error if the ownership does not exist and no live VM is found.

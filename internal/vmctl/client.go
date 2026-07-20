@@ -200,10 +200,26 @@ func (c *Client) LookupDesktopContext(ctx context.Context, userID, desktopID str
 }
 
 func (c *Client) LookupComputerContext(ctx context.Context, userID, computerID string) (*ownershipResponse, error) {
+	return c.lookupComputerContext(ctx, strings.TrimSpace(userID), computerID)
+}
+
+// LookupComputerByIDContext resolves an ownership by stable ComputerID without
+// imposing a user-ID join. It is an internal control-plane primitive; public
+// callers must authorize the exact ComputerID before using it.
+func (c *Client) LookupComputerByIDContext(ctx context.Context, computerID string) (*ownershipResponse, error) {
+	return c.lookupComputerContext(ctx, "", computerID)
+}
+
+func (c *Client) lookupComputerContext(ctx context.Context, userID, computerID string) (*ownershipResponse, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	endpoint := LookupEndpoint(c.baseURL) + "?user_id=" + url.QueryEscape(userID) + "&computer_id=" + url.QueryEscape(strings.TrimSpace(computerID))
+	computerID = strings.TrimSpace(computerID)
+	query := url.Values{"computer_id": []string{computerID}}
+	if userID != "" {
+		query.Set("user_id", userID)
+	}
+	endpoint := LookupEndpoint(c.baseURL) + "?" + query.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("vmctl client: create computer lookup request: %w", err)
@@ -225,7 +241,7 @@ func (c *Client) LookupComputerContext(ctx context.Context, userID, computerID s
 		return nil, fmt.Errorf("vmctl client: computer lookup status %s", resp.Status)
 	}
 	var result ownershipResponse
-	if err := json.Unmarshal(body, &result); err != nil || result.ComputerID != strings.TrimSpace(computerID) {
+	if err := json.Unmarshal(body, &result); err != nil || result.ComputerID != computerID {
 		return nil, fmt.Errorf("vmctl client: computer lookup identity mismatch")
 	}
 	return &result, nil

@@ -1271,6 +1271,14 @@ func TestHandler_Lookup(t *testing.T) {
 	if result.UserID != "user-1" {
 		t.Errorf("expected user-1, got %s", result.UserID)
 	}
+
+	global, err := NewClient(srv.URL).LookupComputerByIDContext(context.Background(), result.ComputerID)
+	if err != nil {
+		t.Fatalf("global computer lookup: %v", err)
+	}
+	if global == nil || global.UserID != "user-1" || global.ComputerID != result.ComputerID {
+		t.Fatalf("global computer lookup = %+v", global)
+	}
 }
 
 func TestHandler_LookupNonexistent(t *testing.T) {

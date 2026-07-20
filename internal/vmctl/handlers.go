@@ -250,26 +250,28 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id query parameter is required"})
+	userID := strings.TrimSpace(r.URL.Query().Get("user_id"))
+	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
+	if userID == "" && computerID == "" {
+		writeVMCTLJSON(w, http.StatusBadRequest, vmctlErrorResponse{Error: "user_id or computer_id query parameter is required"})
 		return
 	}
-	computerID := strings.TrimSpace(r.URL.Query().Get("computer_id"))
 	var own *VMOwnership
-	if computerID != "" {
+	if computerID != "" && userID == "" {
+		own = h.registry.GetOwnershipByComputerID(computerID)
+	} else if computerID != "" {
 		own = h.registry.GetOwnershipForComputer(userID, computerID)
 	} else {
 		own = h.registry.GetOwnershipForDesktop(userID, normalizeDesktopID(r.URL.Query().Get("desktop_id")))
 	}
 	if own != nil {
-		if err := h.requireComputerVersionRoute(r.Context(), userID, own.DesktopID); err != nil {
+		if err := h.requireComputerVersionRoute(r.Context(), own.UserID, own.DesktopID); err != nil {
 			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})
 			return
 		}
 	}
 	if own == nil {
-		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no VM found for user"})
+		writeVMCTLJSON(w, http.StatusNotFound, vmctlErrorResponse{Error: "no VM found for target"})
 		return
 	}
 	if own.IsReady() {

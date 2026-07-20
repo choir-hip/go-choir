@@ -143,8 +143,11 @@ func TestPublicDecisionDelegatesModeAuthorityToGuest(t *testing.T) {
 	}))
 	defer guest.Close()
 	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("computer_id") != "computer-decision" || r.URL.Query().Get("user_id") != "" {
+			t.Fatalf("configured target lookup query = %q user=%q", r.URL.Query().Get("computer_id"), r.URL.Query().Get("user_id"))
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"computer_id": "computer-decision", "desktop_id": "primary", "user_id": "owner-decision",
+			"computer_id": "computer-decision", "desktop_id": "platform", "user_id": "universal-wire-platform",
 			"state": "active", "sandbox_url": guest.URL,
 		})
 	}))
@@ -156,6 +159,7 @@ func TestPublicDecisionDelegatesModeAuthorityToGuest(t *testing.T) {
 	defer corpusd.Close()
 	handler, _, _, store := testProxyEnvWithAuthStore(t)
 	handler.vmctlClient = vmctl.NewClient(ownership.URL)
+	handler.cfg.SelfDevelopmentDisposableComputerID = "computer-decision"
 	handler.cfg.CorpusdURL = corpusd.URL
 	user, err := store.CreateUser("owner-decision", "owner-decision@example.com")
 	if err != nil {

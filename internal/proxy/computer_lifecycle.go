@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +35,41 @@ func isComputerLifecyclePath(path string) bool {
 	return ok
 }
 
+type resolvedComputerTarget struct {
+	ComputerID string
+	UserID     string
+	DesktopID  string
+	SandboxURL string
+	State      string
+	Epoch      int64
+}
+
+func (h *Handler) resolveAuthorizedComputer(ctx context.Context, authResult *AuthResult, computerID string) (*resolvedComputerTarget, error) {
+	if h.vmctlClient == nil {
+		return nil, fmt.Errorf("computer ownership authority unavailable")
+	}
+	if authResult.AuthMethod == "api_key" &&
+		authResult.ComputerID == computerID &&
+		computerID == h.cfg.SelfDevelopmentDisposableComputerID {
+		global, err := h.vmctlClient.LookupComputerByIDContext(ctx, computerID)
+		if err != nil || global == nil {
+			return nil, err
+		}
+		return &resolvedComputerTarget{
+			ComputerID: global.ComputerID, UserID: global.UserID, DesktopID: global.DesktopID,
+			SandboxURL: global.SandboxURL, State: global.State, Epoch: global.Epoch,
+		}, nil
+	}
+	scoped, err := h.vmctlClient.LookupComputerContext(ctx, authResult.UserID, computerID)
+	if err != nil || scoped == nil {
+		return nil, err
+	}
+	return &resolvedComputerTarget{
+		ComputerID: scoped.ComputerID, UserID: scoped.UserID, DesktopID: scoped.DesktopID,
+		SandboxURL: scoped.SandboxURL, State: scoped.State, Epoch: scoped.Epoch,
+	}, nil
+}
+
 func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request) {
 	computerID, action, ok := parseComputerLifecyclePath(r.URL.Path)
 	if !ok {
@@ -64,11 +100,7 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	if h.vmctlClient == nil {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "lifecycle actuator unavailable"})
-		return
-	}
-	ownership, err := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, computerID)
+	ownership, err := h.resolveAuthorizedComputer(r.Context(), authResult, computerID)
 	if err != nil || ownership == nil || ownership.ComputerID != computerID {
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "computer not found"})
 		return
@@ -99,26 +131,22 @@ func (h *Handler) HandleComputerLifecycle(w http.ResponseWriter, r *http.Request
 	switch action {
 	case "stop":
 		if ownership.State != "stopped" {
-			err = h.vmctlClient.StopDesktop(authResult.UserID, ownership.DesktopID)
+			err = h.vmctlClient.StopDesktop(ownership.UserID, ownership.DesktopID)
 		}
 	case "start":
 		if ownership.State != "active" {
-			_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), authResult.UserID, ownership.DesktopID)
+			_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
 		}
 	case "restart":
-		if ownership.State == "stopped" {
-			_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), authResult.UserID, ownership.DesktopID)
-		} else if ownership.Epoch <= control.PriorEpoch {
-			if err = h.vmctlClient.StopDesktop(authResult.UserID, ownership.DesktopID); err == nil {
-				_, err = h.vmctlClient.ResolveDesktopContext(r.Context(), authResult.UserID, ownership.DesktopID)
-			}
+		if ownership.Epoch <= control.PriorEpoch {
+			_, err = h.vmctlClient.RefreshDesktopContext(r.Context(), ownership.UserID, ownership.DesktopID)
 		}
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "lifecycle actuation failed"})
 		return
 	}
-	result, err := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, computerID)
+	result, err := h.resolveAuthorizedComputer(r.Context(), authResult, computerID)
 	if err != nil || result == nil || (action == "stop" && result.State != "stopped") ||
 		(action != "stop" && result.State != "active") || (action == "restart" && result.Epoch <= control.PriorEpoch) {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "lifecycle resulting state was not observed"})

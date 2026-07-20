@@ -94,17 +94,6 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
-	if authResult.AuthMethod != "api_key" {
-		if h.vmctlClient == nil {
-			writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "computer ownership authority unavailable"})
-			return
-		}
-		ownership, ownershipErr := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, target.ComputerID)
-		if ownershipErr != nil || ownership == nil || ownership.ComputerID != target.ComputerID {
-			writeJSON(w, http.StatusForbidden, errorResponse{Error: "computer ownership required"})
-			return
-		}
-	}
 	if authResult.AuthMethod == "api_key" {
 		if authResult.ComputerID != target.ComputerID {
 			writeJSON(w, http.StatusForbidden, errorResponse{Error: "api key is bound to another computer"})
@@ -124,16 +113,16 @@ func (h *Handler) HandleSelfDevelopmentOperation(w http.ResponseWriter, r *http.
 		}
 	}
 	suffix := strings.TrimPrefix(r.URL.Path, "/api/computers/"+url.PathEscape(target.ComputerID))
-	if h.vmctlClient == nil {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "target computer resolver unavailable"})
-		return
-	}
-	ownership, err := h.vmctlClient.LookupComputerContext(r.Context(), authResult.UserID, target.ComputerID)
+	ownership, err := h.resolveAuthorizedComputer(r.Context(), authResult, target.ComputerID)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "failed to resolve target computer"})
 		return
 	}
-	if ownership == nil || ownership.SandboxURL == "" || ownership.State != "active" {
+	if ownership == nil || ownership.ComputerID != target.ComputerID {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "computer ownership required"})
+		return
+	}
+	if ownership.SandboxURL == "" || ownership.State != "active" {
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "target computer is not active"})
 		return
 	}
