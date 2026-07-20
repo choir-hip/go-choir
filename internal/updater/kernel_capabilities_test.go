@@ -69,3 +69,24 @@ func TestKernelCapabilityReceiptBindsIdentityAndFailsClosed(t *testing.T) {
 		t.Fatal("missing mandatory capability was accepted")
 	}
 }
+
+func TestKernelCapabilityHTTPFailureCodesAreStable(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "probe unavailable", body: `{"error":"mandatory kernel capability probe unavailable"}`, want: KernelCapabilityFailureProbeUnavailable},
+		{name: "receipt refused", body: `{"error":"mandatory kernel capability receipt refused"}`, want: KernelCapabilityFailureReceiptRefused},
+		{name: "unknown refusal", body: `{"error":"another refusal"}`, want: KernelCapabilityFailureUpdaterUnavailable},
+		{name: "invalid response", body: `not-json`, want: KernelCapabilityFailureUpdaterUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := kernelCapabilityHTTPFailure(strings.NewReader(test.body))
+			if got := KernelCapabilityFailureCode(err); got != test.want {
+				t.Fatalf("failure code = %q, want %q", got, test.want)
+			}
+		})
+	}
+}

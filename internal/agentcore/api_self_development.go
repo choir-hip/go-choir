@@ -1146,11 +1146,21 @@ func (h *APIHandler) readKernelCapabilityReceipt(w http.ResponseWriter, r *http.
 	report, err := rt.selfdevUpdater.KernelCapabilities(r.Context(), updater.KernelCapabilityRequest{
 		ComputerVersion: resolution.Slot.Current, ReleaseDigest: manifest.ContentDigest,
 	})
-	if err != nil || updater.VerifyKernelCapabilityReport(report, computerID, rt.selfdevRealizationID, resolution.Slot.Current, time.Now().UTC()) != nil {
-		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "kernel capability receipt unavailable"})
+	if err != nil {
+		writeKernelCapabilityUnavailable(w, updater.KernelCapabilityFailureCode(err))
+		return
+	}
+	if err := updater.VerifyKernelCapabilityReport(report, computerID, rt.selfdevRealizationID, resolution.Slot.Current, time.Now().UTC()); err != nil {
+		writeKernelCapabilityUnavailable(w, "verification_refused")
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, report)
+}
+
+func writeKernelCapabilityUnavailable(w http.ResponseWriter, reason string) {
+	writeAPIJSON(w, http.StatusServiceUnavailable, apiError{
+		Error: "kernel capability receipt unavailable", Reason: reason,
+	})
 }
 
 func (h *APIHandler) HandleSelfDevelopmentRestartHandoff(w http.ResponseWriter, r *http.Request) {

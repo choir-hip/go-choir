@@ -624,3 +624,18 @@ func TestFinalizedDecisionBindingRejectsCrossAuthorityJoinsAndAllowsAcceptedDesc
 		t.Fatal("rejected decision was accepted as an applied descendant")
 	}
 }
+
+func TestKernelCapabilityUnavailableResponseIsTypedAndNonSecret(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	writeKernelCapabilityUnavailable(recorder, "probe_unavailable")
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+	var response apiError
+	if err := json.NewDecoder(recorder.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Error != "kernel capability receipt unavailable" || response.Reason != "probe_unavailable" {
+		t.Fatalf("response = %#v, want stable typed refusal", response)
+	}
+}

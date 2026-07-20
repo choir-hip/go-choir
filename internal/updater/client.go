@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,6 +21,41 @@ import (
 type Client struct {
 	socket string
 	http   *http.Client
+}
+
+const (
+	KernelCapabilityFailureUpdaterUnavailable = "updater_unavailable"
+	KernelCapabilityFailureUpdaterUnreachable = "updater_unreachable"
+	KernelCapabilityFailureProbeUnavailable   = "probe_unavailable"
+	KernelCapabilityFailureReceiptRefused     = "receipt_refused"
+	KernelCapabilityFailureInvalidResponse    = "invalid_response"
+)
+
+type KernelCapabilityUnavailableError struct {
+	Code  string
+	cause error
+}
+
+func (e *KernelCapabilityUnavailableError) Error() string {
+	if e == nil || e.cause == nil {
+		return "updater client: kernel capabilities unavailable"
+	}
+	return "updater client: kernel capabilities unavailable: " + e.cause.Error()
+}
+
+func (e *KernelCapabilityUnavailableError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.cause
+}
+
+func KernelCapabilityFailureCode(err error) string {
+	var unavailable *KernelCapabilityUnavailableError
+	if errors.As(err, &unavailable) {
+		return unavailable.Code
+	}
+	return KernelCapabilityFailureUpdaterUnavailable
 }
 
 func NewClient(socket string) (*Client, error) {
@@ -67,7 +103,7 @@ func (c *Client) PublicKey(ctx context.Context) (computerevent.SignerRef, ed2551
 
 func (c *Client) KernelCapabilities(ctx context.Context, request KernelCapabilityRequest) (KernelCapabilityReport, error) {
 	if c == nil || c.http == nil {
-		return KernelCapabilityReport{}, fmt.Errorf("updater client: unavailable")
+		return KernelCapabilityReport{}, &KernelCapabilityUnavailableError{Code: KernelCapabilityFailureUpdaterUnavailable}
 	}
 	body, err := json.Marshal(request)
 	if err != nil {
@@ -80,17 +116,36 @@ func (c *Client) KernelCapabilities(ctx context.Context, request KernelCapabilit
 	httpRequest.Header.Set("Content-Type", "application/json")
 	response, err := c.http.Do(httpRequest)
 	if err != nil {
-		return KernelCapabilityReport{}, fmt.Errorf("updater client: kernel capabilities: %w", err)
+		return KernelCapabilityReport{}, &KernelCapabilityUnavailableError{
+			Code: KernelCapabilityFailureUpdaterUnreachable, cause: err,
+		}
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return KernelCapabilityReport{}, fmt.Errorf("updater client: kernel capabilities unavailable")
+		return KernelCapabilityReport{}, kernelCapabilityHTTPFailure(response.Body)
 	}
 	var report KernelCapabilityReport
 	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&report); err != nil {
-		return KernelCapabilityReport{}, err
+		return KernelCapabilityReport{}, &KernelCapabilityUnavailableError{
+			Code: KernelCapabilityFailureInvalidResponse, cause: err,
+		}
 	}
 	return report, nil
+}
+
+func kernelCapabilityHTTPFailure(body io.Reader) error {
+	var failure struct {
+		Error string `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(body, 64<<10)).Decode(&failure)
+	code := KernelCapabilityFailureUpdaterUnavailable
+	switch failure.Error {
+	case "mandatory kernel capability probe unavailable":
+		code = KernelCapabilityFailureProbeUnavailable
+	case "mandatory kernel capability receipt refused":
+		code = KernelCapabilityFailureReceiptRefused
+	}
+	return &KernelCapabilityUnavailableError{Code: code}
 }
 
 func (c *Client) ImportBaseline(ctx context.Context, request BaselineImportRequest) (ReleaseManifest, error) {

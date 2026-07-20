@@ -28,7 +28,8 @@ import (
 
 // apiError is a JSON error envelope for API responses.
 type apiError struct {
-	Error string `json:"error"`
+	Error  string `json:"error"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type internalChannelCastRequest struct {
