@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-guest-closure-fate-sharing-round-50
-    state: frozen_G1_review
+    state: accepted_G1
     ref: bbbb34f32a22a79b5e4ca7caea0096bf789e58aa
     owner: integration-authority
     base: 37409fa657c0928b61ff9495ce5938ea69364726
@@ -595,7 +595,15 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [9ed2b49fb9a9b29a5b70ddb061ca1b02c2782a51, 37409fa657c0928b61ff9495ce5938ea69364726]
     verification: "Before repair, the classifier contract reproduced `internal/vmmanager/manager.go` with `deploy_host_os=false`. The repaired classifier asserts both vmmanager and vmctl production paths select deploy_host_os, vmctl restart, active refresh, and the existing host-service set. `.github/scripts/deploy-impact-classify-test` and `.github/scripts/deploy-workflow-contract-test` pass."
-    disposition: "Frozen for proportionate Round-50 G1. Review must confirm the existing `mark_guest_boot_contract` is the correct closure path, no lighter route can satisfy exact refreshed sandbox identity, test files remain ignored before production patterns, and the broader full closure is necessary rather than accidental over-deployment. Effects remain OFF."
+    disposition: "Round-50 accepted unanimously by OMP Gemini 3.5, OMP Cursor/Grok 4.5, and OpenCode. All three confirmed the existing guest-boot-contract helper is the necessary fate-sharing route, both production branches preserve host-service sets, tests/docs remain ignored, and workflow deploy_host_os builds/switches the canonical guest closure before refresh. Devin timed out empty; Codex exhausted usage. Effects remain OFF; corrected redeployment and exact guest identity remain mandatory."
+    g1_round_50_probe:
+      reviewed_at: 2026-07-20T19:12:10Z
+      source_ref: bbbb34f32a22a79b5e4ca7caea0096bf789e58aa
+      authority_ref: 70baaaad887250e865fba61be9a4b8a9321dbffa
+      verdicts: {omp_gemini35: ACCEPT_G1, omp_cursor_grok45: ACCEPT_G1, opencode: ACCEPT_G1, devin: timed_out_empty, codex: usage_limit}
+      adjudication: "Accept. Exact runtime identity after refresh cannot be supplied by a service-pointer-only deployment when the immutable guest rootfs remains old. The candidate connects the already-defined canonical guest closure class and leaves ignore precedence, host-service selection, verifier strength, rollback, and runtime behavior unchanged."
+      residual_risks: "Full NixOS closure build/switch cost, Node B guest image activation, retained active refresh, complete deploy receipt, exact sandbox build identity, and public deployed_commit remain deployed-only gates."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round50-panel/manifest.tsv, manifest_sha256: fc25d651ed1316d525c082c4f9481b38910818de540ab9e45b91d81cacf7f014, omp_gemini35_sha256: 129e950e09a6df381f9b865757cb3a6fabdb99677a904ffd96b70b51a5c92f17, omp_cursor_grok45_sha256: 17c39c109ed017dd17acd4cf002a4fa648b984e13a1399f8778f14b0c320e9d3, opencode_sha256: 17d4c78f9281e2a29b2a2fdce95658f5a797bff15d566734ecc4be2112929222, devin_empty_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, codex_failure_sha256: e1a8cef357a50e3dfb4b363c09fbbb9057d3ed09c4b6210fdd68a3ff47e9d9b2}
     g1_round_49_probe:
       reviewed_at: 2026-07-20T18:35:44Z
       source_ref: 26a449de5c956c801a8501c5e7406ce7e159da79
@@ -1198,7 +1206,7 @@ now:
     heresy_delta: {discovered: 4, introduced: 0, repaired: 0}
   c_deploy_failure_9:
     observed_at: 2026-07-20T18:55:21Z
-    status: frozen_G1_round_50_guest_closure_fate_sharing
+    status: accepted_G1_round_50_pending_land
     mutation_class: red
     protected_surfaces: [deployment_routing, immutable_guest_image, active_computer_refresh, retained_persistent_computer, deploy_acceptance]
     admissible_evidence_class: "Exact CI/deploy receipt, public health/build identity, deploy classifier/closure source trace, refrozen G1 review if runtime code changes, and no-SSH deployed acceptance."
