@@ -103,6 +103,14 @@ func TestCopyImmutableCommitTreeIgnoresMutableWorktree(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := filepath.Join(t.TempDir(), "snapshot")
+	t.Cleanup(func() {
+		_ = filepath.Walk(target, func(path string, info os.FileInfo, err error) error {
+			if err == nil && info.IsDir() {
+				_ = os.Chmod(path, 0o700)
+			}
+			return nil
+		})
+	})
 	if _, err := copyImmutableCommitTree(context.Background(), source, strings.TrimSpace(string(rawCommit)), target); err != nil {
 		t.Fatal(err)
 	}
