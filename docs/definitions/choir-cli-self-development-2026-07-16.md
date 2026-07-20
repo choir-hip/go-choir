@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-20
-    state: frozen_G1_review
+    state: rejected_G1_freeze_substrate_repair
     ref: 7657fa325064b0ede56e6cd964fec1dc5a1c1ade
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
@@ -663,8 +663,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round19-panel/manifest.tsv]
-  blocker_or_risk: "The release admission repair passes the full capsule Linux race suite on Node A and is isolated on `origin/selfdev/g1-round20-release`; R0 remains healthy. G1 review is the remaining pre-deploy gate."
-  next_action: "Run frozen round-20 G1 against the exact candidate branch, focusing on directory traversal/symlink/device refusal and retained prior authority. Only after acceptance, fast-forward main and monitor the resulting CI/deploy."
+  blocker_or_risk: "Round-20 rejects under two reproducible security findings: freeze staging reads a live mutable tree through an Lstat/open TOCTOU window, and path-secret classification checks only the file basename. Three release-admission failures now cluster at one unwired freeze substrate."
+  next_action: "Repair the freeze substrate, not another symptom: quiesce through the existing capsule lifecycle before diff, require frozen state for staging, replace path-based Lstat/open with descriptor-rooted no-symlink openat2, classify every relative path component for secret names, add focused negative/race tests, then refreeze G1."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -731,6 +731,23 @@ now:
     rollback: "Revert the focused release-admission commit; effects remain OFF, workflow 29714324950 never deployed, and R0 remains active."
     conjecture_delta: "The release scanner correctly constrains files but conflated overlay directory metadata with releasable artifacts, making every realistic release impossible."
     heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
+  c_ci_failure_3:
+    observed_at: 2026-07-20T03:52:00Z
+    status: blocked_root_cause_cluster
+    mutation_class: red
+    protected_surfaces: [capsule_quiesce, release_path_custody, secret_scan, frozen_effect_bundle]
+    evidence_class: "Frozen round-20 diverse review; Codex and omp-gpt55 supplied independent reproducible security blockers."
+    problem: "The freeze tool calls `ExtractGranted` and `StageGrantedRelease` while the capsule is active. Staging Lstats a pathname and later opens it by name, so a capsule can substitute the file or an intermediate directory between check and use; pre-existing intermediate symlinks are also followed. Separately, secret-path refusal inspects only the final basename, so `.env.production/config` stages. The directory-admission repair made the previously unreachable path executable and exposed both failures."
+    root_cause_cluster:
+      trigger: "Three same-subsystem failures in one day: structural directory rejection, live-tree pathname TOCTOU, and incomplete component-wise secret classification."
+      common_cause: "The freeze operation has no single state/custody boundary. It observes an active overlay through repeated host pathnames and applies file-only policy after traversal rather than freezing once and admitting through one rooted descriptor."
+      substrate_vs_symptoms: "Substrate: missing active→frozen lifecycle transition plus descriptor-rooted release reader. Symptoms: rejecting directory metadata, following swapped/intermediate symlinks, and missing secret directory components."
+      existing_replacement: "The existing `Capsule.Quiesce` state transition and Linux `openat2`/`golang.org/x/sys/unix` dependency are present but unwired. Connect them and delete the Lstat-then-open split; do not add another pathname special case."
+      dependency_graph: "freeze tool → granted capability → capsule Quiesce/inflight drain → frozen Diff → descriptor-rooted openat2 beneath merged root → component-wise secret policy → immutable staging/hash/bundle."
+    repair: "Make granted extraction quiesce exactly once and return the frozen diff; require StateFrozen before release staging; open each file relative to a merged-root descriptor with RESOLVE_BENEATH|RESOLVE_NO_SYMLINKS|RESOLVE_NO_MAGICLINKS and verify the opened descriptor is regular; reject secret-bearing names in every path component. Preserve directory skipping, unsafe/deleted/non-regular/resource refusals, and immutable output."
+    rollback: "Discard the unmerged candidate branch and keep R0. No deploy or genesis occurred."
+    conjecture_delta: "Freeze correctness depends on one lifecycle-and-descriptor custody boundary, not independent pathname checks."
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
