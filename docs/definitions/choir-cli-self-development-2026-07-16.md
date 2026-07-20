@@ -587,14 +587,14 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-21
-    state: frozen_G1_review
-    ref: 2944ae5bb79e73a47584289209a0831d14f8a6ed
+    state: rejected_G1_complete_freeze_custody
+    ref: 2944ae5bdc44f3f85fc671fb08f247e2a1a15838
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
     scope: "Complete effects-OFF cutover plus one freeze custody boundary: granted extraction quiesces and drains broker operations, staging requires Frozen, openat2 resolves beneath the merged root without symlinks, and secret classification covers every path component."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     verification: "On Node A x86_64-linux, focused freeze tests and the full `go test -race ./internal/capsule -count=1` suite pass. Proof covers active-stage refusal, active→frozen granted extraction, quiesce waiting for an in-flight broker execution, safe directory-plus-file staging, intermediate-symlink refusal, secret directory-component refusal, secret-content refusal, and immutable snapshot cleanup."
-    disposition: "Effects remain OFF and R0 serves staging. Round-21 G1 must accept this red freeze-custody repair before fast-forwarding the candidate branch to main or dispatching deployment."
+    disposition: "Round-21 is rejected. Effects remain OFF and R0 serves staging. The prior frozen card named a nonexistent long SHA; the actual runtime commit is recorded above. No fast-forward or deployment is authorized."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -662,9 +662,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round20-panel/manifest.tsv, "sha256:5ec67101c57886c39dea851ce5a26de8e772de8d1552b2f7c1166ba1487edf04"]
-  blocker_or_risk: "Round-20 is rejected by the severe-minority rule: Codex reproduced live-tree pathname substitution and omp-gpt55 reproduced secret directory-component admission. Round-21 repairs the shared freeze substrate; G1 review remains required."
-  next_action: "Freeze the round-21 source/doc identities, rerun the diverse G1 panel against the exact openat2/quiesce/component-policy delta and Node A race receipts, and proceed to C only on acceptance."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round21-panel/manifest.tsv, "sha256:77e475a0bbf98cf32bc88756f20e30f4c8cc36e91844693a5880f0bac518ebdb"]
+  blocker_or_risk: "Round-21 is rejected by four independent reviewers. The card invented a nonexistent long SHA from an observed prefix; ReadFile/WriteFile/ListDir bypass lifecycle custody; detached broker descendants survive RPC completion; Quiesce cancellation deadlocks and strands StateQuiescing."
+  next_action: "Repair the whole capsule freeze substrate: bind every broker operation to inflight custody, freeze the capsule cgroup after RPC drain so descendants cannot mutate, make cancellation unlock and restore Active, prove thaw symmetry and all negative transitions, then resolve and verify exact commit identities from Git before refreezing G1."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -749,6 +749,19 @@ now:
     rollback: "Discard the unmerged candidate branch and keep R0. No deploy or genesis occurred."
     conjecture_delta: "Freeze correctness depends on one lifecycle-and-descriptor custody boundary, not independent pathname checks."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+  c_ci_failure_4:
+    observed_at: 2026-07-20T04:18:00Z
+    status: blocked_complete_freeze_custody
+    mutation_class: red
+    protected_surfaces: [capsule_operation_admission, inflight_drain, cgroup_freezer, freeze_retry, source_identity]
+    evidence_class: "Frozen round-21 panel: Codex, Cursor, Devin, and omp-gpt55 independently rejected; exact source inspection and Git object lookup reproduce all findings."
+    problem: "Round-21 wired only `Capsule.Exec` into logical inflight accounting. ReadFile, WriteFile, and ListDir still invoke the broker directly, so a retained CoSuper handle can write after StateFrozen and race scanning/copying. A shell RPC may also return while a detached descendant keeps mutating; logical RPC drain is not process drain. Quiesce cancellation returns while holding inflightMu and leaves StateQuiescing, deadlocking releaseOp and all retries. Separately, the candidate card expanded an observed short hash into a nonexistent long SHA instead of resolving it through Git."
+    substrate_classification: "One capsule lifecycle substrate failure, not four isolated symptoms: operation admission, process containment, state rollback, and identity binding did not share one authoritative freeze transaction."
+    existing_replacement: "Every broker wrapper already resolves the Capsule and can use acquireOp/releaseOp. Each spawned capsule already owns a cgroup v2 manager, whose `cgroup.freeze` and `cgroup.events` provide descendant-complete freeze/thaw. Git rev-parse/cat-file provide exact identity authority."
+    repair: "Route Exec, ReadFile, WriteFile, and ListDir through the same Active-only inflight gate. After all RPCs drain, write `cgroup.freeze=1` and wait for `frozen 1` before StateFrozen; thaw by writing 0 and waiting for `frozen 0`. On context/error, release every mutex and restore Active. Add deterministic broker-operation, cancellation, descendant-freezer, retry, and thaw tests. Never hand-compose object IDs."
+    rollback: "Discard the unmerged branch and keep R0; no deploy or genesis occurred."
+    conjecture_delta: "A frozen capsule is a cgroup state plus closed operation admission, not a Go enum plus completed RPC count."
+    heresy_delta: {discovered: 2, introduced: 1, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
