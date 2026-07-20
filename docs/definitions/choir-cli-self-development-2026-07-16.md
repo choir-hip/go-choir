@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-guest-cutover-repair-round-30
-    state: frozen_G1_review
+    state: rejected_G1_unguarded_post_move_output
     ref: e1cf9ebaa40b456c9eddbc9b49d73240dbfb4ee6
     owner: integration-authority
     base: 8971c194
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [daece9fd0f00f11839d743f4bf57017bdb6f9f5b, 26e7c747]
     verification: "`nix eval` renders the Node B system and revised activation. Disposable execution of that exact rendered script proves ambiguous-tree preservation, idempotent rerun, second-ambiguity refusal, post-move error restoration, existing ERR-trap preservation, and HUP/INT/TERM restoration plus re-raise. CI run 29723308309 passed before this repair; failed deployment 29723644656 remains the reproducer."
-    disposition: "Effects remain OFF. Round-30 G1 must review the exact signal-safe source and authority before main may advance or deployment may retry."
+    disposition: "Round-30 is rejected under the severe-minority rule. Effects remain OFF and main does not advance. An informational echo remains fallible between moving the active tree and installing the immutable pointer."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -852,7 +852,7 @@ now:
     heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
   c_deploy_failure_1:
     observed_at: 2026-07-20T07:29:00Z
-    status: signal_safe_repair_implemented_pending_G1
+    status: rejected_G1_unguarded_post_move_output
     mutation_class: red
     protected_surfaces: [Node_B_NixOS_activation, immutable_guest_image, rollback_realizations, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deployment logs, incomplete-deploy receipt, public build identity, refrozen source review, successful deployment receipt, and deployed no-SSH acceptance."
@@ -872,6 +872,17 @@ now:
       blocker: "The repair replaces NixOS activation's existing ERR accounting trap and clears it after success. ERR also does not run for TERM/INT/HUP, so a signal after moving the active tree can leave the canonical guest path absent until another activation."
       repair: "Do not touch ERR. Pre-create the next symlink before mutation; save and restore existing HUP/INT/TERM traps; on a caught signal restore the moved tree, reinstate the prior trap, and re-raise. Guard every fallible post-move command explicitly and restore before returning failure."
       output_sha256: {codex: 5c6ac5ce8ec4aa80e5adabc3e27572785ea16619062873ae806079bc1e34480b, claude: b5d79c7650ab6dd450ed193d261e7f07110953fcb88565fbdc0e6fdb2df3302d, cursor: 894338a1e56c33723f77b966a7c71302ed1a9b1dde99b62701b5ed42094b80a4, opencode: 76b66cebb8f4853e3beae73b4c076faa69550182659806bb3e3f54df1eed4cba, omp_gpt55: 3058f16f73c9cd68a080c022dd4e524e80c51d760b1c00f3c2e8ef29ee8ea9b7, omp_gemini35: 45190930552b7264fad55eafbd4c033bd0643b486f78020b32500cd16188aba0}
+    g1_round_30_probe:
+      reviewed_at: 2026-07-20T08:18:34Z
+      source_ref: e1cf9ebaa40b456c9eddbc9b49d73240dbfb4ee6
+      authority_ref: efda8c1e07ca4737fa6a3b96d98448b4ea5e0fd2
+      manifest: /tmp/choir-selfdev-g1-round30-panel/manifest.tsv
+      manifest_sha256: 696dd4ecb3ff4333a5dc804d03071a9bc0ec68d13bef52e6b1afdc82685bc9b3
+      panel_health: "Five substantive verdicts completed; OpenCode stopped before verdict after a denied temp-file action and Devin timed out."
+      verdicts: [codex:REJECT_G1, claude:ACCEPT_G1, cursor:ACCEPT_G1, omp-gpt55:REJECT_G1, omp-gemini35:ACCEPT_G1]
+      blocker: "After the physical target moves, the conflict-preservation echo runs under errexit before the immutable pointer install. Closed stdout can fail echo, bypass explicit restoration, and leave the canonical guest path absent."
+      repair: "Remove every informational command from the move/install critical section. Record a boolean before the move and emit best-effort diagnostics only after the canonical symlink is installed and signal traps are restored."
+      output_sha256: {codex: ffa4318b5d1368b752ae1da8d10f8c1f9e9dd190668e620d0d2688ff0bd33ef1, claude: 9a6a755db96def4c173dfddec89aba38e36ca6fbff459428e7864a6905e53577, cursor: f2fb089b2f6486bed7d3515ac68abf9663baa57554c704cd56ddcf9fc52389db, opencode: f5ce417578e51a5d7f1ccaa1fb7b38c7deb2845cb29f803cf5981bb9aaa0be34, omp_gpt55: 4df8cf1d98a16cb4391d3e9696bd76eeb4a43f36a41164337ecfc289c220f5b4, omp_gemini35: 568b8b0e7aeaec97a0c4633c64f81fb233463f18dddac8008cb6cb62237817a4}
     rollback: "Current R0 guest realization and pre-managed rollback remain present; public route remains effects-OFF. On failed repair activation, restore the conflict-recovery directory to `/var/lib/go-choir/guest` and retain the prior NixOS generation and incomplete-deploy receipt."
     conjecture_delta: "Fail-closed ambiguity needs a bounded, named preservation transition; refusal alone is not restart-durable convergence."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
