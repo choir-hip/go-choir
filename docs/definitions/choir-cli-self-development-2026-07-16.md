@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-guest-cutover-repair-round-35
-    state: frozen_G1_review
+    state: accepted_G1
     ref: de9412284cb4cd23846b9b7223329fdd479f038a
     owner: integration-authority
     base: 8971c194
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [570b698f2ada21a8f48ca51f191e2065af9cb626, 1d2d12f6]
     verification: "`nix eval` renders exact activation. Fault injection proves closed-stdout convergence, idempotency, second-ambiguity refusal, command-failure restoration, ERR/trap preservation, deferred HUP/INT/TERM rollback after either move, unexpected-target refusal, and crash rerun convergence. Failed deployment 29723644656 remains reproducer."
-    disposition: "Effects remain OFF. Round-35 G1 must review exact transactional source and authority before main may advance or deployment retry."
+    disposition: "Round-35 G1 accepted: three substantive independent reviews accepted, no reproducible blocker remained, and exact rendered-script fault injection covers the transaction. Effects remain OFF. Candidate may fast-forward to main and retry C deployment."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -664,8 +664,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "C is blocked after forced deployment run 29723644656 partially activated host services at a704d390 but failed the NixOS switch before guest refresh/receipt. The guest-image activation guard found both a physical `/var/lib/go-choir/guest` and the preserved `/var/lib/go-choir/guest-pre-managed-rollback`; it refused to overwrite either. Public health serves a704d390, but incomplete-deploy evidence exists and no C acceptance is authorized."
-  next_action: "Preserve both conflicting guest directories, make first-cutover reconciliation idempotent without deleting rollback evidence, refreeze the source through G1, then rerun the forced deployment from exact main. Do not accept the partially activated host identity."
+  blocker_or_risk: "Round-35 accepted the bounded guest cutover recovery source. C remains incomplete until exact main lands, all selected CI gates pass, forced deployment publishes a complete receipt, staging identity matches, active guest refresh succeeds, and no-SSH effects-OFF/kernel receipt acceptance passes."
+  next_action: "Fast-forward accepted round-35 authority to main, push, monitor CI, force staging deployment from exact main, verify complete activation identity/receipt, then run effects-OFF and signed route-bound kernel receipt acceptance."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -852,7 +852,7 @@ now:
     heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
   c_deploy_failure_1:
     observed_at: 2026-07-20T07:29:00Z
-    status: deferred_signal_rollback_implemented_pending_G1
+    status: accepted_G1_pending_land
     mutation_class: red
     protected_surfaces: [Node_B_NixOS_activation, immutable_guest_image, rollback_realizations, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deployment logs, incomplete-deploy receipt, public build identity, refrozen source review, successful deployment receipt, and deployed no-SSH acceptance."
@@ -928,6 +928,19 @@ now:
       blocker: "Bash defers traps while waiting for the second mv. If pointer rename succeeds before the deferred trap runs, target already exists as the new symlink; restoration only handles an absent target, so the handler reports abort while retaining the new pointer."
       repair: "While `moved_to` is non-empty, restoration may remove only the exact expected `target -> src` symlink before moving the preserved tree back. Any other existing target remains fail-closed. Clear `moved_to` immediately after successful pointer rename to define the commit point."
       output_sha256: {codex: c750fe36eb0ba83c6ed4d3bf31c70ae43f10f78fee69e44e6c05388ce620f1f9, claude: d611d0ff30cf5466d336d18ec0499a64540f3fe1a31bcdfe59a0083ed722739d, cursor: 1d9a045547a2dae7182f46a5e810ac11fc12b75ce4743a9205e0d5f8d70c4239, opencode: 29ffc5e13387e1d824c0a5549eb9133053df9f2e1f58b240d724760292e5916e, omp_gpt55: f5073a6cccfeac16fb471db8e8a34293ebccad7814f94b5eabb97d10595c216b, omp_gemini35: 3c5d3357b4212b94c02922ee69d861763f66337f37b0f94a5281c066f4a587d5}
+    g1_round_35_probe:
+      reviewed_at: 2026-07-20T10:38:05Z
+      source_ref: de9412284cb4cd23846b9b7223329fdd479f038a
+      authority_ref: 51cf2caea2a04dc0845b2be2bafe91386473aa79
+      manifest: /tmp/choir-selfdev-g1-round35-panel/manifest.tsv
+      manifest_sha256: 9374d53a09fc227d335e0074ff43e962e97a420793e9c2d840c99e9bb3e7a14c
+      internal_review: /tmp/choir-selfdev-g1-round35-internal-review.json
+      internal_review_sha256: 061f0909aebb92e4cc9f8609c70750c3715adccdfec980a6f33ca4c0eeeba546
+      panel_health: "Cursor and omp-gemini35 completed substantive ACCEPT reviews; Codex and omp-gpt55 hit provider limits, Claude exited, Devin timed out, and OpenCode stopped before verdict. A separate repository reviewer completed a high-confidence ACCEPT with direct fault injection."
+      verdicts: [cursor:ACCEPT_G1, omp-gemini35:ACCEPT_G1, repository_reviewer:ACCEPT_G1]
+      invalid_retry: "A static OpenCode retry claimed the transaction and candidate were absent. That claim is non-reproducible: `git show de941228:nix/node-b.nix` and the checked-out candidate blob both hash to 9cb5d4ca08d2b108e111c18bb77b2ccb1409b495d05ec11969d0490649562f, and the reviewed transaction is at nix/node-b.nix:715-825. The retry performed no ref diff and is excluded."
+      adjudication: "No reproducible blocker. The exact expected target symlink is the only removable target; both rollback trees remain bounded and preserved; command failures and deferred signals roll back before the moved_to commit point; unexpected targets refuse; success restores traps; ERR is untouched; crash state converges on rerun. Deployed C evidence remains later."
+      output_sha256: {cursor: f11d5bbeb0d9758f56e9ddf3f529eac3b73cbed70170b668424a0faf1493ce6b, omp_gemini35: d7ded9438f46ea364194329b5001534e7ba4bc71eaa281a9e3bedf5e164851cb, opencode_invalid_retry: 47a83b11dabb6f43ac7ad7ed7aec5542a3abbb48312b857e081221af9b8fd7b0}
     rollback: "Current R0 guest realization and pre-managed rollback remain present; public route remains effects-OFF. On failed repair activation, restore the conflict-recovery directory to `/var/lib/go-choir/guest` and retain the prior NixOS generation and incomplete-deploy receipt."
     conjecture_delta: "Fail-closed ambiguity needs a bounded, named preservation transition; refusal alone is not restart-durable convergence."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
