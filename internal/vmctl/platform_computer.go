@@ -58,6 +58,7 @@ func (r *OwnershipRegistry) WarmUniversalWirePlatformComputer(ctx context.Contex
 		snapshot := *own
 		snapshot.State = VMStateBooting
 		r.ownerships[key] = &snapshot
+		r.vmByID[snapshot.VMID] = &snapshot
 		mgr := r.vmManager
 		r.mu.Unlock()
 		if mgr != nil {

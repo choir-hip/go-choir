@@ -62,6 +62,11 @@ func TestWarmUniversalWirePlatformComputerPersistsResumeFailure(t *testing.T) {
 	if own == nil || own.State != VMStateFailed || own.StoppedBy != "recovery_failed" {
 		t.Fatalf("ownership after resume failure = %#v, want durable recovery_failed state", own)
 	}
+	byVMID := reg.GetOwnershipByVMID(UniversalWirePlatformVMID)
+	if byVMID == nil || byVMID.State != VMStateFailed || byVMID.StoppedBy != "recovery_failed" ||
+		byVMID.ComputerID != own.ComputerID || byVMID.UserID != own.UserID || byVMID.DesktopID != own.DesktopID {
+		t.Fatalf("VMID ownership after resume failure = %#v, want coherent retained failed ownership %#v", byVMID, own)
+	}
 
 	restarted := NewOwnershipRegistry("http://127.0.0.1:8085")
 	if err := restarted.SetPersistencePath(path); err != nil {
