@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-25
-    state: frozen_G1_review
+    state: rejected_G1_uncancellable_receipt_digest
     ref: ad54c0b8e351be055ff18e40806b25204451110a
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [90e35b5e655c5e77b7cae934fce99c83c3cb05f7, c756fc131b91420a3308ec492ca559a2f0ba42a0]
     verification: "Node A x86_64-linux focused and full capsule race suites pass. New proofs cover canceled manifest walk, chunk-reader cancellation, canceled StageGrantedRelease, and canceled ExtractGranted; local cross-platform capsule and focused agentcore tests pass. The real cgroup Executor.Spawn integration with immutable Nix broker passes again, preserving descendant freeze/thaw and cleanup."
-    disposition: "Effects remain OFF and R0 serves staging. Round-25 G1 must accept exact Git-resolved source/doc identities before any fast-forward or deployment."
+    disposition: "Round-25 is rejected: receipt-binding digestCapsuleWorktree still performs bare io.Copy, and contextReader can mask cancellation on a final n>0,EOF read. Effects remain OFF and R0 serves staging."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -663,9 +663,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round24-panel/manifest.tsv, "sha256:5242b847a86b6e7c3f65e24286d5554ab0f795169504e9d0a2af1ea1eb5c950a", ad54c0b8e351be055ff18e40806b25204451110a]
-  blocker_or_risk: "Round-24's sole high blocker is repaired end to end through manifest hashing and release scan/copy. The red G1 gate remains closed pending independent review."
-  next_action: "Commit and Git-resolve round-25 authority, rerun the diverse G1 panel against the exact scan/copy cancellation delta and Node A proofs, and proceed to C only on acceptance."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round25-panel/manifest.tsv, "sha256:cffc9dcd53c053d66c7542db009401b9f7ffeb7684c78c6d16900d4f5521bd57", ad54c0b8e351be055ff18e40806b25204451110a]
+  blocker_or_risk: "Five reviewers reject round-25: digestCapsuleWorktree rehashes each changed regular file without ctx, and contextReader only checks post-read cancellation when err is nil."
+  next_action: "Use contextReader for receipt-binding rehash with per-change ctx checks; make contextReader return cancellation after every underlying read including n>0,EOF; add focused tests; refreeze G1."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -801,6 +801,17 @@ now:
     rollback: "Discard the unmerged branch and retain R0; no deploy or genesis occurred."
     conjecture_delta: "Cancellation authority must cover each O(tree size) and O(bytes) step after physical freeze, not merely the state transition."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+  c_ci_failure_8:
+    observed_at: 2026-07-20T05:38:00Z
+    status: blocked_uncancellable_receipt_digest
+    mutation_class: red
+    protected_surfaces: [execution_receipt_digest, context_reader_contract, request_lifecycle]
+    evidence_class: "Frozen round-25 panel; Codex, Cursor, Devin, and omp-gpt55 independently reproduced the bare receipt rehash; omp-gpt55 identified the EOF cancellation edge."
+    problem: "digestCapsuleWorktree accepts ctx and calls cancellable Diff, then opens every changed regular file and hashes it with bare io.Copy. This is the production receipt-binding path. contextReader also checks post-read cancellation only when err==nil, so an underlying n>0,io.EOF final read can report successful completion despite simultaneous cancellation."
+    repair: "Check ctx for every digest entry and wrap every receipt rehash input with contextReader. After every underlying Read, return ctx.Err when canceled regardless of the underlying error; preserve the bytes count so io.Copy does not admit completion. Test the n>0,EOF edge and canceled receipt digest."
+    rollback: "Discard the unmerged branch and retain R0; no deploy or genesis occurred."
+    conjecture_delta: "All readers in the freeze/evidence transaction must share one exact cancellation contract, including final-read edge semantics."
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
