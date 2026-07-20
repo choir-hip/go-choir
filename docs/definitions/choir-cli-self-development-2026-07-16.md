@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-guest-closure-fate-sharing-round-50
-    state: accepted_G1_landed_deployed_C_kernel_receipt_blocked
-    ref: bbbb34f32a22a79b5e4ca7caea0096bf789e58aa
+    id: self-development-C-kernel-baseline-release-round-51
+    state: frozen_G1_review
+    ref: f6a5b9235a76594e5fd401cfacc79e52f4366a92
     owner: integration-authority
-    base: 37409fa657c0928b61ff9495ce5938ea69364726
-    scope: "Protected deployment-classification cutover only: production changes under `cmd/vmctl`, `internal/vmmanager`, or `internal/vmctl` must invoke the existing canonical guest-boot-contract class, selecting a host NixOS/guest closure, vmctl restart, and active VM refresh as one fate-sharing unit. Retain existing affected host service selections. Do not change runtime code, acceptance identity, timeouts, rollback, active Computer selection, guest contents, or effects mode."
+    base: e2986162ac74113d3222cbab2d0255bd42ef1891
+    scope: "Protected guest baseline identity wiring only: bind `CHOIR_BASELINE_RELEASE_ROOT` to the immutable `${goChoirPackages.sandbox}` Nix store package in the sandbox systemd environment and reassert it in the launcher after mutable environment-file expansion, before either static or dynamic sandbox execution. Preserve updater root, current dynamic release selection, route identity, kernel verifier, guest image, mode OFF, and every lifecycle/event/capsule/credential behavior."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [9ed2b49fb9a9b29a5b70ddb061ca1b02c2782a51, 37409fa657c0928b61ff9495ce5938ea69364726]
-    verification: "Before repair, the classifier contract reproduced `internal/vmmanager/manager.go` with `deploy_host_os=false`. The repaired classifier asserts both vmmanager and vmctl production paths select deploy_host_os, vmctl restart, active refresh, and the existing host-service set. `.github/scripts/deploy-impact-classify-test` and `.github/scripts/deploy-workflow-contract-test` pass."
-    disposition: "Round-50 landed as main bbcbf914d3f2c14a19f022a9f264ff00350f432c. Push CI 29771072403 passed; forced full-closure run 29771190925 passed in 19m33s, switched Node B, refreshed retained active guests, and completed deployment. Public health reports exact commit/deployed_commit bbcbf914. The retained target reconstructed active at epoch 1140; replay of original lifecycle key `c-reconstruct-1784566206810` returned signed LifecycleReceipt `019f8108-3e31-74db-95b0-12d96967b453` joining failed epoch 804 to active epoch 1140. Effects remain OFF. C is now blocked only on the required kernel capability receipt."
+    immediate_predecessors: [bbcbf914d3f2c14a19f022a9f264ff00350f432c, e2986162ac74113d3222cbab2d0255bd42ef1891]
+    verification: "Nix evaluation yields sandbox environment `CHOIR_BASELINE_RELEASE_ROOT=/nix/store/...-sandbox-0.1.0`. The evaluated launcher derivation shows the exact immutable export after `/run/go-choir-sandbox.env` sourcing and before both dynamic/static exec paths. Local realization is unavailable from the aarch64 builder; selected x86_64 CI/full closure is the realization gate."
+    disposition: "Frozen for Round-51 G1. Review must confirm this is the exact baseline package consumed by `BuildBaselineManifest`, launcher precedence prevents mutable override, dynamic releases still use their own current manifest, no mutable symlink is trusted, and no receipt verifier is weakened. Effects remain OFF."
     g1_round_50_probe:
       reviewed_at: 2026-07-20T19:12:10Z
       source_ref: bbbb34f32a22a79b5e4ca7caea0096bf789e58aa
@@ -1223,7 +1223,7 @@ now:
     heresy_delta: {discovered: 5, introduced: 0, repaired: 0}
   c_deploy_failure_10:
     observed_at: 2026-07-20T19:37:09Z
-    status: blocked_C_kernel_baseline_release_unavailable
+    status: frozen_G1_round_51_kernel_baseline_release
     mutation_class: red
     protected_surfaces: [kernel_capability_receipt, immutable_release_identity, guest_runtime_environment, deployed_acceptance]
     admissible_evidence_class: "Public scoped API receipt, exact guest/Nix environment evaluation, focused launcher contract, refrozen G1, and deployed no-SSH kernel receipt verification."
@@ -1234,6 +1234,9 @@ now:
     credential_hygiene: "The first fresh scoped acceptance secret was accidentally emitted into the local tool transcript during assignment. Key `ak_d215b59f-e92a-46c9-b245-2305ba8da2a3` was immediately revoked with 204 before use and replaced by non-secret metadata key `ak_294df2dc-ea73-4ef9-a47d-5f067b31ec2c`. No provider/admin secret was exposed; the replacement remains exact-target scoped and expiring."
     rollback: "Preserve complete run 29771190925, lifecycle receipt 019f8108, active target epoch 1140, R0/R1, and effects OFF. Revert only the future launcher environment change if needed; do not roll back successful epoch authority or guest-closure fate-sharing."
     next_action: "Add a deterministic sandbox-vm contract requiring immutable `CHOIR_BASELINE_RELEASE_ROOT=${goChoirPackages.sandbox}` before both static and dynamic execution, evaluate the guest service/launcher, freeze G1, deploy, and retry the public kernel receipt."
+    candidate_repair: "f6a5b9235a76594e5fd401cfacc79e52f4366a92 adds the immutable sandbox package root to systemd environment and re-exports it after mutable environment-file sourcing. The fallback remains restricted by runtime code to `/nix/store/` and only applies when no updater current manifest exists."
+    repair_evidence: "Guest Nix evaluation succeeds with `/nix/store/kpff...-sandbox-0.1.0`; derivation inspection proves the launcher source order is mutable env source, immutable baseline re-export, then dynamic/static selection."
+    rollback_candidate: "Revert f6a5b9235a76594e5fd401cfacc79e52f4366a92 before landing or its eventual main landing commit; preserve active target and complete bbcbf914 deployment."
     conjecture_delta: "A pristine immutable guest needs an explicit baseline release identity before updater genesis; the updater current manifest cannot be the only source of present-version truth."
     heresy_delta: {discovered: 6, introduced: 1, repaired: 1}
   dead_end_assessment:
