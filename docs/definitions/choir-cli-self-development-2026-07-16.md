@@ -586,15 +586,15 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-B-disabled-cutover-round-16
-    state: accepted_G1
-    ref: ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe
+    id: self-development-B-disabled-cutover-round-18
+    state: frozen_G1_review
+    ref: fe5b854f79036b2ab666259a88f39ee11fddc098
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
-    scope: "Complete effects-OFF event, capsule, role, updater, checkpoint, public API/CLI/auth, mode, recovery, and obsolete-path clean cutover."
-    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8]
-    verification: "Focused deterministic packages passed; exact Node A Nix guest image, Firecracker effects-OFF boot/restart identity, mandatory kernel probes, and production Executor.Spawn namespace/cgroup/inherited-listener reconnect/cleanup passed. Final round-16 panel returned four substantive ACCEPT_G1 verdicts with no blocker; Cursor timed out after connection loss."
-    disposition: "Accepted at G1. Self-development remains OFF. C is authorized to freeze R0, land/deploy the accepted cutover, verify exact staging identity and public signed kernel receipt, then freeze/rehearse R1 before any genesis."
+    scope: "Complete effects-OFF source cutover plus exact immutable Node B disposable-ComputerID deployment binding; Node A remains fail-closed."
+    prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e]
+    verification: "Prior effects-OFF package and exact Node A guest/capsule evidence remains unchanged. Local Nix evaluation proves Node B's proxy Environment and immutable ExecStart launcher bind the exact target while Node A binds empty; the full Node B closure build and round-18 G1 panel are pending."
+    disposition: "C remains blocked. Do not deploy or create genesis until the full Node B closure passes and a frozen diverse G1 panel accepts this candidate."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -667,8 +667,8 @@ now:
   next_action: "Execute C only: freeze R0 source/deploy/ComputerVersion/event-head/route-generation/release-pointer identities; deploy exact R1 with mode off; verify staging identity, health, refusals, signed kernel receipt, rollback, and immutable redeploy before GenesisImported."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
-    status: blocked_missing_disposable_target_configuration
-    source_identity: 704163034097fc5b7f6b7b27f6f44abed5a648aa
+    status: repaired_in_round_18_candidate
+    source_identity: fe5b854f79036b2ab666259a88f39ee11fddc098
     mutation_class: red
     protected_surfaces: [disposable_ComputerID, GenesisImported, deployment_configuration, R0_R1_ratchet]
     evidence_class: "Tracked deployment configuration inspection plus read-only Node B ownership/route inventory before any cutover deployment or genesis."
@@ -677,11 +677,11 @@ now:
     repair: "Bind exactly `computer-4c20ff4a21a021c4306d8c783be0037d` in the tracked Node B proxy environment, add a focused deployment-configuration assertion, refreeze source, and rerun G1 before deployment. Keep effects OFF and preserve R0."
     rollback: "Revert the tracked environment/test repair before deployment. No mode, event head, route, release pointer, realization, or deployed service has changed."
     conjecture_delta: "Discovered that source-level fail-closed target enforcement was not connected to the staging deployment configuration; no product behavior has yet changed."
-    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_preflight_2:
     observed_at: 2026-07-20T02:28:00Z
-    status: rejected_G1_mutable_target_override
-    source_identity: 7365376aced9c633aa3a993feceee1f1e150b66e
+    status: repaired_in_round_18_candidate
+    source_identity: fe5b854f79036b2ab666259a88f39ee11fddc098
     mutation_class: red
     protected_surfaces: [disposable_ComputerID, GenesisImported, deployment_configuration, host_authority, R0_R1_ratchet]
     evidence_class: "Frozen-source diverse G1 review; Codex supplied a reproducible critical minority blocker before deployment."
@@ -689,9 +689,10 @@ now:
     problem: "The proxy also imports mutable `/var/lib/go-choir/deploy.env`; systemd EnvironmentFile values override Environment assignments, and the deployment workflow preserves operator-managed keys. A stale or operator-written disposable-target variable could therefore replace the tracked ComputerID after evaluation. The added assertion checks only the local value's shape, not the exact identity or its presence in the proxy service environment. The Definition now card also remained bound to the prior accepted candidate instead of the rejected freeze."
     existing_replacement_check: "The Nix-closure service launcher, exact stable ComputerID, proxy equality refusal, and evaluated service environment already exist. The repair must make the immutable launcher overwrite any inherited target value and make the module assertion join the exact identity to the proxy environment; no new store, host file, or override path is needed."
     repair: "Export the exact target from the Nix-closure proxy launcher after systemd has loaded mutable environment files; assert the exact Node B identity and exact proxy Environment assignment; keep Node A empty; update the now card; rerun local Nix evaluation and a new frozen G1 panel."
+    repair_result: "The Nix-closure proxy launcher now overwrites the disposable target immediately before exec, after all systemd environment sources. The module asserts the exact Node B identity, its exact service Environment membership, and the immutable ExecStart; Node A evaluates to an empty target."
     rollback: "Revert the un-deployed target commits to R0. CI run 29712192632 was explicitly cancelled before deployment; no staging service, mode, event head, route, release pointer, or realization changed."
     conjecture_delta: "Discovered that an apparently tracked environment assignment was not runtime authority because a later mutable source had precedence. The security boundary must end at the final exec environment."
-    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
