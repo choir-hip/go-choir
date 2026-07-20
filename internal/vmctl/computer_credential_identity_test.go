@@ -108,6 +108,9 @@ func TestRefreshBindsFreshCredentialWithoutBlockingRegistry(t *testing.T) {
 	if _, err := registry.RefreshVMForDesktop("owner-refresh", PrimaryDesktopID); err == nil || !strings.Contains(err.Error(), "already in progress") {
 		t.Fatalf("concurrent refresh error = %v, want already in progress", err)
 	}
+	if err := registry.StopVM("owner-refresh"); err == nil || !strings.Contains(err.Error(), "refresh is already in progress") {
+		t.Fatalf("concurrent stop error = %v, want refresh conflict", err)
+	}
 
 	close(manager.refreshRelease)
 	if err := <-refreshDone; err != nil {
@@ -123,7 +126,29 @@ func TestRefreshBindsFreshCredentialWithoutBlockingRegistry(t *testing.T) {
 	if cfg.Epoch != initialEpoch+1 || cfg.RealizationID != realizationIDFor(initial.VMID, initialEpoch+1) {
 		t.Fatalf("refresh identity = epoch %d realization %q, want epoch %d realization %q", cfg.Epoch, cfg.RealizationID, initialEpoch+1, realizationIDFor(initial.VMID, initialEpoch+1))
 	}
+	if cfg.ComputerID != initial.ComputerID {
+		t.Fatalf("refresh computer identity = %q, want stable %q", cfg.ComputerID, initial.ComputerID)
+	}
 	if cfg.ComputerCredentialEnvelope == "" {
 		t.Fatal("refresh omitted the per-realization computer credential envelope")
+	}
+}
+
+func TestRefreshManagerFailureProjectsFailedOwnership(t *testing.T) {
+	manager := &mockVMManager{refreshError: errors.New("boot failed after process replacement")}
+	registry := NewOwnershipRegistry("")
+	registry.SetCorpusdURL(testComputerCredentialIssuerURL(t))
+	registry.SetVMManager(manager)
+	initial, err := registry.ResolveOrAssign("owner-refresh-failure")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := registry.RefreshVMForDesktop("owner-refresh-failure", PrimaryDesktopID); err == nil || !strings.Contains(err.Error(), "boot failed after process replacement") {
+		t.Fatalf("refresh error = %v, want manager failure", err)
+	}
+	current := registry.GetOwnership("owner-refresh-failure")
+	if current == nil || current.VMID != initial.VMID || current.State != VMStateFailed {
+		t.Fatalf("ownership after refresh failure = %+v, want same VM in failed state", current)
 	}
 }

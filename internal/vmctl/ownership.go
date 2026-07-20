@@ -683,6 +683,17 @@ func ownershipKey(userID, desktopID string) string {
 	return strings.TrimSpace(userID) + "|" + normalizeDesktopID(desktopID)
 }
 
+func (r *OwnershipRegistry) rejectRefreshConflictLocked(key string) error {
+	if _, inProgress := r.refreshing[key]; !inProgress {
+		return nil
+	}
+	vmID := "unknown"
+	if own := r.ownerships[key]; own != nil && own.VMID != "" {
+		vmID = own.VMID
+	}
+	return fmt.Errorf("VM %s refresh is already in progress", vmID)
+}
+
 func machineShapeForOwnership(own *VMOwnership) (int, int) {
 	if own != nil && isPlatformOwnership(own) {
 		return platformVMCPUCount, platformVMMemSizeMib
@@ -1157,6 +1168,10 @@ func (r *OwnershipRegistry) ResolveOrAssignDesktopContext(ctx context.Context, u
 
 	// Check if the desktop already has an active ownership.
 	if own, ok := r.ownerships[key]; ok {
+		if err := r.rejectRefreshConflictLocked(key); err != nil {
+			r.mu.Unlock()
+			return nil, err
+		}
 		if own.IsReady() {
 			mgr := r.vmManager
 			snapshot := *own
@@ -1547,6 +1562,9 @@ func (r *OwnershipRegistry) StopVMForDesktop(userID, desktopID string) error {
 	if !ok {
 		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
+	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		return err
+	}
 
 	// Every product start is a fresh realization. Propagate actuator failure;
 	// never project a stopped state that vmctl did not observe.
@@ -1580,6 +1598,9 @@ func (r *OwnershipRegistry) RemoveOwnershipForDesktop(userID, desktopID string) 
 	if !ok {
 		return nil // already gone, idempotent
 	}
+	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		return err
+	}
 
 	// Delegate to the real VM manager if available.
 	if r.vmManager != nil && (own.State == VMStateActive || own.State == VMStateDegraded) {
@@ -1605,9 +1626,13 @@ func (r *OwnershipRegistry) MarkUnhealthyForDesktop(userID, desktopID string) er
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	key := ownershipKey(userID, desktopID)
+	own, ok := r.ownerships[key]
 	if !ok {
 		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+	}
+	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		return err
 	}
 
 	own.State = VMStateDegraded
@@ -1635,9 +1660,13 @@ func (r *OwnershipRegistry) hibernateVMForDesktopWithReason(userID, desktopID, r
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	key := ownershipKey(userID, desktopID)
+	own, ok := r.ownerships[key]
 	if !ok {
 		return fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+	}
+	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		return err
 	}
 
 	if own.State != VMStateActive && own.State != VMStateDegraded {
@@ -1703,6 +1732,10 @@ func (r *OwnershipRegistry) ResumeVMForDesktop(userID, desktopID string) (*VMOwn
 	if !ok {
 		r.mu.Unlock()
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+	}
+	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		r.mu.Unlock()
+		return nil, err
 	}
 
 	if own.State != VMStateStopped && own.State != VMStateHibernated {
@@ -1775,9 +1808,13 @@ func (r *OwnershipRegistry) RecoverVMForDesktop(userID, desktopID string) (*VMOw
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	key := ownershipKey(userID, desktopID)
+	own, ok := r.ownerships[key]
 	if !ok {
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
+	}
+	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		return nil, err
 	}
 
 	if own.State != VMStateDegraded && own.State != VMStateFailed {
@@ -1864,6 +1901,14 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 			info, err = mgr.RefreshVM(snapshot.VMID, cfg)
 		}
 		if err != nil {
+			r.mu.Lock()
+			current := r.ownerships[key]
+			if current != nil && current.VMID == snapshot.VMID && current.Epoch == snapshot.Epoch && current.State == snapshot.State {
+				current.State = VMStateFailed
+				current.LastActiveAt = time.Now()
+				r.saveLocked()
+			}
+			r.mu.Unlock()
 			return nil, fmt.Errorf("failed to refresh VM %s: %w", snapshot.VMID, err)
 		}
 	}
@@ -1872,7 +1917,15 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 	own = r.ownerships[key]
 	if own == nil || own.VMID != snapshot.VMID {
 		r.mu.Unlock()
+		if mgr != nil {
+			_ = mgr.StopVM(snapshot.VMID)
+		}
 		return nil, fmt.Errorf("VM %s ownership changed during refresh", snapshot.VMID)
+	}
+	if own.Epoch != snapshot.Epoch || own.State != snapshot.State {
+		currentEpoch, currentState := own.Epoch, own.State
+		r.mu.Unlock()
+		return nil, fmt.Errorf("VM %s lifecycle changed during refresh (epoch=%d state=%s, started epoch=%d state=%s)", snapshot.VMID, currentEpoch, currentState, snapshot.Epoch, snapshot.State)
 	}
 	if info != nil {
 		own.SandboxURL = info.HostURL
@@ -1902,9 +1955,13 @@ func (r *OwnershipRegistry) LogoutVMForDesktop(userID, desktopID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	key := ownershipKey(userID, desktopID)
+	own, ok := r.ownerships[key]
 	if !ok {
 		return nil // no VM for this user, idempotent
+	}
+	if err := r.rejectRefreshConflictLocked(key); err != nil {
+		return err
 	}
 
 	// Delegate to the real VM manager if available.

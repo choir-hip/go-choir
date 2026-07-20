@@ -93,12 +93,16 @@ func TestMergeVMConfigOverridesFillsDeployRefreshIdentity(t *testing.T) {
 		MachineMemSizeMib: 4096,
 	}
 	overrides := VMConfig{
-		VMID:              "vm-existing",
-		MachineCPUCount:   4,
-		MachineMemSizeMib: 8192,
-		ComputerKind:      "active",
-		OwnerID:           "owner-1",
-		DesktopID:         "primary",
+		VMID:                       "vm-existing",
+		ComputerID:                 "computer-stable",
+		RealizationID:              "vm-existing-epoch-8",
+		Epoch:                      8,
+		ComputerCredentialEnvelope: "signed-refresh-envelope",
+		MachineCPUCount:            4,
+		MachineMemSizeMib:          8192,
+		ComputerKind:               "active",
+		OwnerID:                    "owner-1",
+		DesktopID:                  "primary",
 	}
 
 	got := mergeVMConfigOverrides(old, overrides)
@@ -108,8 +112,17 @@ func TestMergeVMConfigOverridesFillsDeployRefreshIdentity(t *testing.T) {
 	if got.MachineCPUCount != 4 || got.MachineMemSizeMib != 8192 {
 		t.Fatalf("merge did not apply machine shape overrides: %+v", got)
 	}
+	if got.ComputerID != overrides.ComputerID || got.RealizationID != overrides.RealizationID || got.Epoch != overrides.Epoch || got.ComputerCredentialEnvelope != overrides.ComputerCredentialEnvelope {
+		t.Fatalf("merge dropped fresh realization authority: %+v", got)
+	}
 	if got.ComputerKind != "active" || got.OwnerID != "owner-1" || got.DesktopID != "primary" {
 		t.Fatalf("merge did not apply guest identity overrides: %+v", got)
+	}
+	currentDeploy := DefaultManagerConfig()
+	currentDeploy.StoreDiskPath = "/current/store"
+	got = refreshConfigForCurrentDeploy(got, currentDeploy)
+	if got.ComputerID != overrides.ComputerID || got.RealizationID != overrides.RealizationID || got.Epoch != overrides.Epoch || got.ComputerCredentialEnvelope != overrides.ComputerCredentialEnvelope {
+		t.Fatalf("deploy refresh dropped fresh realization authority: %+v", got)
 	}
 }
 

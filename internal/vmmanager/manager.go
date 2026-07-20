@@ -1159,6 +1159,15 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	if overrides.VMID != "" {
 		cfg.VMID = overrides.VMID
 	}
+	if overrides.ComputerID != "" {
+		cfg.ComputerID = overrides.ComputerID
+	}
+	if overrides.RealizationID != "" {
+		cfg.RealizationID = overrides.RealizationID
+	}
+	if overrides.Epoch != 0 {
+		cfg.Epoch = overrides.Epoch
+	}
 	if overrides.KernelImagePath != "" {
 		cfg.KernelImagePath = overrides.KernelImagePath
 	}
@@ -1188,6 +1197,9 @@ func mergeVMConfigOverrides(cfg VMConfig, overrides VMConfig) VMConfig {
 	}
 	if overrides.GatewayToken != "" {
 		cfg.GatewayToken = overrides.GatewayToken
+	}
+	if overrides.ComputerCredentialEnvelope != "" {
+		cfg.ComputerCredentialEnvelope = overrides.ComputerCredentialEnvelope
 	}
 	if overrides.ComputerKind != "" {
 		cfg.ComputerKind = overrides.ComputerKind
