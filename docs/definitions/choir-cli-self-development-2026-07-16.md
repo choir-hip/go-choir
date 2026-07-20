@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-guest-cutover-repair-round-32
-    state: frozen_G1_review
+    state: rejected_G1_signal_reraise_errexit
     ref: 4fa912199e3881a8787f19d5a3f58a2e6b1f6d50
     owner: integration-authority
     base: 8971c194
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [dfece81b6578799d428805a4bb7e34f50b2dd126, 3bb1f436]
     verification: "`nix eval` renders the exact Node B activation. Disposable execution proves closed-stdout convergence, idempotent rerun, second-ambiguity refusal, post-move error restoration, ERR preservation, prior exiting-handler execution, and safe abort after returning or ignored HUP/INT/TERM. Failed deployment 29723644656 remains the reproducer."
-    disposition: "Effects remain OFF. Round-32 G1 must review the exact aborting-signal source and authority before main may advance or deployment may retry."
+    disposition: "Round-32 is rejected under the severe-minority rule. Effects remain OFF and main does not advance. A prior signal handler returning nonzero can trigger errexit at the re-raise before the standard abort status executes."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -852,7 +852,7 @@ now:
     heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
   c_deploy_failure_1:
     observed_at: 2026-07-20T07:29:00Z
-    status: aborting_signal_repair_implemented_pending_G1
+    status: rejected_G1_signal_reraise_errexit
     mutation_class: red
     protected_surfaces: [Node_B_NixOS_activation, immutable_guest_image, rollback_realizations, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deployment logs, incomplete-deploy receipt, public build identity, refrozen source review, successful deployment receipt, and deployed no-SSH acceptance."
@@ -894,6 +894,17 @@ now:
       blocker: "The signal handler restores prior traps and re-raises, but if the prior handler returns or ignores the signal, activation continues with safety traps disarmed. A later signal can then interrupt a subsequent critical transition."
       repair: "A signal observed during cutover must always abort the activation after restoring the canonical target. Restore prior traps, re-raise so the prior handler runs, then explicitly exit with the standard signal status if that handler returns or ignores the signal."
       output_sha256: {codex: 22ea53f89f963ab45b1de7fda30c563d98c7db0c12f4c59fee083bdb4d1c0460, claude: 1d8c47ca59f31b46cf1b64d5940bcea724dd446ae8085dfa4549dcb2499c3af9, cursor: 01f6c46a50ec630764761ffa5ae07f0d6e9a10b9aaa0827b7a3467e214c81e8c, opencode: 430eb5d25cb171e201a7d7195d9da9afdace482c4b1109bfd918f25694824d18, omp_gpt55: 204e1c3cf470c9cfefa18fd2238c1f3ba3a67bd69e59fa2dfeb42b75a4b886ac, omp_gemini35: 3ea4116c3652c0c5b033016fcf65230f4676cb0c3c0961e69866d4c74fb7b038}
+    g1_round_32_probe:
+      reviewed_at: 2026-07-20T09:00:48Z
+      source_ref: 4fa912199e3881a8787f19d5a3f58a2e6b1f6d50
+      authority_ref: 665bb1081621490815aa3b5a8cc5e41d02f5eab0
+      manifest: /tmp/choir-selfdev-g1-round32-panel/manifest.tsv
+      manifest_sha256: 0765468410956fbbd2f841f0dcdc90402e7fae89e4f333ec76fa2621dc2d1b1f
+      panel_health: "Four substantive verdicts completed; OpenCode stopped before verdict, Claude exited without a verdict, and Devin timed out."
+      verdicts: [codex:REJECT_G1, cursor:ACCEPT_G1, omp-gpt55:ACCEPT_G1, omp-gemini35:ACCEPT_G1]
+      blocker: "The prior signal is re-raised as an unguarded kill under errexit. If the restored handler returns nonzero, Bash exits at kill and invokes ERR before the explicit standard 129/130/143 fallback."
+      repair: "Guard the re-raise as best-effort (`kill ... || true`), then unconditionally execute the standard signal-status exit if control returns. Default/exiting handlers still terminate before the fallback; returning-nonzero and ignored handlers cannot bypass it."
+      output_sha256: {codex: 39ececdd7ad2c55aafe6c77ee00c1559973822a14926f301c3fc7519a0e935c0, claude: d611d0ff30cf5466d336d18ec0499a64540f3fe1a31bcdfe59a0083ed722739d, cursor: 99fe2d73ea2077236842ad48f002bfa7ccaee68842ab55f76b492f033b88b479, opencode: 5af14849bcdae4a0d20e1452420e9dad0402ab6e67c768dd25df94159579e61f, omp_gpt55: 2ebb469a0408c73518f320180f0a9e8822300eb0924ce3cfc18a8b7dab362073, omp_gemini35: 54aa0da55eff6429bcdf6b72c72ba52962604b199bc7b969a945ce5d0cb48aab}
     rollback: "Current R0 guest realization and pre-managed rollback remain present; public route remains effects-OFF. On failed repair activation, restore the conflict-recovery directory to `/var/lib/go-choir/guest` and retain the prior NixOS generation and incomplete-deploy receipt."
     conjecture_delta: "Fail-closed ambiguity needs a bounded, named preservation transition; refusal alone is not restart-durable convergence."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
