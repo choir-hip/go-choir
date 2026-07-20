@@ -642,6 +642,17 @@ now:
     problem: "Five source joins remain incomplete: an existing requested operation still returns before missing-run repair and concurrent list-then-create can duplicate runs; event-read alone authorizes credential renewal that mints append/pin scope; updater restart failure after pointer swap neither restores the prior release nor returns signed recovery; materialization does not compare bundle ComputerID/TrajectoryRef/CapsuleIdentity to the durable operation; and the exported DoltPromotionAdapter plus guest env/current citers still preserve callable tag/commit/reset candidate promotion."
     disposition: "Documented before repair. G1 remains rejected and effects remain OFF. Repair all five at their shared authority boundaries: serialize and repair exactly-one operation/run binding, require append scope for renewal, make post-swap restart failure rollback-and-receipt complete, bind every bundle identity, and delete the obsolete promotion adapter/config/citers without a shim."
     rollback: "Revert the future coherent authority repair; no deployed self-development mode, run, route, or release was enabled by this rejected candidate."
+  g1_round_15_probe:
+    observed_at: 2026-07-20T01:44:00Z
+    status: rejected_stale_detector_exclusion
+    source_identity: 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8
+    mutation_class: yellow
+    protected_surfaces: [deletion_detector, obsolete_promotion_regression]
+    evidence_class: "Six substantive frozen-source reviewers completed: five accepted and one supplied a reproducible severe deletion-citer blocker; exact Node A guest-image, effects-OFF boot identity, and Executor.Spawn lifecycle proofs passed."
+    success_before_blocker: "All five round-14 authority gaps are repaired and their focused tests pass; the obsolete adapter/source/config/current product citers are deleted."
+    problem: "The live I4 heresy-detector manifest still excludes `DoltPromotionAdapter` and `dolt_promotion_adapter.go` by design. Deletion succeeded, but the guard would ignore a future reintroduction of the same destructive embedded-reset authority."
+    disposition: "Documented before repair. Severe-minority rule rejects G1 despite five accepts. Remove the obsolete exclusion, detect both destructive reset and adapter-symbol reintroduction in production, run the detector, then freeze a final candidate for a clean gate."
+    rollback: "Revert the focused detector-manifest repair; no deployed behavior is involved."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
