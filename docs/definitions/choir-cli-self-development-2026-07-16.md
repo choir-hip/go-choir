@@ -664,8 +664,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "Round-35 accepted the bounded guest cutover recovery source. C remains incomplete until exact main lands, all selected CI gates pass, forced deployment publishes a complete receipt, staging identity matches, active guest refresh succeeds, and no-SSH effects-OFF/kernel receipt acceptance passes."
-  next_action: "Fast-forward accepted round-35 authority to main, push, monitor CI, force staging deployment from exact main, verify complete activation identity/receipt, then run effects-OFF and signed route-bound kernel receipt acceptance."
+  blocker_or_risk: "C deployment run 29735841371 passed selected CI and repaired the guest cutover on Node B: both rollback trees were preserved and the immutable guest pointer installed. Deployment then failed before service refresh/receipt because `node-b-sync-service-pointers` cannot follow proxyExec's nested unquoted Nix wrapper. Public health serves exact 87432535, but the incomplete receipt remains authoritative."
+  next_action: "Teach the service-pointer synchronizer to resolve a bounded chain of generated Nix exec wrappers to the final `/bin/<service>` package, reject cycles/missing or wrong binaries, refreeze the focused deploy repair, then rerun exact main deployment and C acceptance."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -852,7 +852,7 @@ now:
     heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
   c_deploy_failure_1:
     observed_at: 2026-07-20T07:29:00Z
-    status: accepted_G1_pending_land
+    status: repaired_deployed_guest_cutover_pending_C_receipt
     mutation_class: red
     protected_surfaces: [Node_B_NixOS_activation, immutable_guest_image, rollback_realizations, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deployment logs, incomplete-deploy receipt, public build identity, refrozen source review, successful deployment receipt, and deployed no-SSH acceptance."
@@ -943,6 +943,19 @@ now:
       output_sha256: {cursor: f11d5bbeb0d9758f56e9ddf3f529eac3b73cbed70170b668424a0faf1493ce6b, omp_gemini35: d7ded9438f46ea364194329b5001534e7ba4bc71eaa281a9e3bedf5e164851cb, opencode_invalid_retry: 47a83b11dabb6f43ac7ad7ed7aec5542a3abbb48312b857e081221af9b8fd7b0}
     rollback: "Current R0 guest realization and pre-managed rollback remain present; public route remains effects-OFF. On failed repair activation, restore the conflict-recovery directory to `/var/lib/go-choir/guest` and retain the prior NixOS generation and incomplete-deploy receipt."
     conjecture_delta: "Fail-closed ambiguity needs a bounded, named preservation transition; refusal alone is not restart-durable convergence."
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
+  c_deploy_failure_2:
+    observed_at: 2026-07-20T10:51:22Z
+    status: blocked_C_nested_service_wrapper
+    mutation_class: red
+    protected_surfaces: [Node_B_deployment, service_package_pointers, deploy_receipt, active_computer_refresh]
+    admissible_evidence_class: "Exact GitHub deploy logs, focused wrapper-resolution fixtures, refrozen G1 review, complete deploy receipt, public build identity, and no-SSH acceptance."
+    evidence: "Run 29735841371 passed its selected CI gates. NixOS activation preserved the ambiguous active guest at `/var/lib/go-choir/guest-cutover-conflict-recovery`, installed `/var/lib/go-choir/guest -> /nix/store/s49115dzzpq0ybm9idhqv17nmy4338yf-go-choir-guest-image`, and completed the switch. Pointer sync then failed: `Could not find Nix fallback binary in wrapper /nix/store/06r0mqvvcpwwkxf51pijf2p1l8iw2055-go-choir-proxy-exec for go-choir-proxy.service`. It wrote `/var/lib/go-choir/deploy-failures/29735841371-1.json`; public health reports 874325352b202baf6692d1abb4ca03ac1ff1ea85."
+    problem: "`node-b-sync-service-pointers` parses only a quoted final `exec` directly in the systemd ExecStart wrapper. `proxyExec` instead has an unquoted exec to the generated serviceExec wrapper, whose final quoted exec reaches the immutable proxy package. The package authority exists but the synchronizer stops one wrapper too early."
+    existing_replacement: "The generated wrapper chain already contains the exact immutable package path. Resolve that chain with a small bounded/cycle-detecting parser rather than adding another proxy-specific package authority or duplicating serviceExec."
+    authorized_repair: "Resolve quoted or unquoted literal exec targets recursively for a strict small depth. Accept only an executable ending in `/bin/<service>` and install its package root. Reject variables, cycles, unreadable targets, wrong binary names, and depth exhaustion. Add focused disposable fixtures for direct, nested, unquoted, cycle, variable, wrong-binary, and missing targets; refreeze G1 before deployment."
+    rollback: "The exact main host generation and immutable guest pointer are active; pre-managed and conflict recovery trees remain. No complete deployment receipt or active-computer refresh was published. Revert only the synchronizer repair if rejected; retain incomplete receipts and all guest rollback refs."
+    conjecture_delta: "Service package authority may be wrapped for immutable environment injection; deployment discovery must resolve bounded generated wrapper composition, not assume one textual wrapper shape."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
