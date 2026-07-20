@@ -729,13 +729,31 @@ in
     mkdir -p "$state"
     moved_to=
     restore_moved_guest() {
-      if [ -n "$moved_to" ] && [ ! -e "$target" ] && [ ! -L "$target" ]; then
-        if ! mv -T "$moved_to" "$target"; then
-          echo "go-choir guest image cutover could not restore $moved_to to $target" >&2
+      local current_target=
+      if [ -z "$moved_to" ]; then
+        return 0
+      fi
+      if [ -L "$target" ]; then
+        if ! current_target=$(readlink "$target"); then
           return 1
         fi
-        moved_to=
+        if [ "$current_target" != "$src" ]; then
+          echo "go-choir guest image cutover refuses to replace unexpected target $target -> $current_target" >&2
+          return 1
+        fi
+        if ! rm -f "$target"; then
+          return 1
+        fi
       fi
+      if [ -e "$target" ] || [ -L "$target" ]; then
+        echo "go-choir guest image cutover refuses to restore over existing target $target" >&2
+        return 1
+      fi
+      if ! mv -T "$moved_to" "$target"; then
+        echo "go-choir guest image cutover could not restore $moved_to to $target" >&2
+        return 1
+      fi
+      moved_to=
     }
     saved_hup=$(trap -p HUP)
     saved_int=$(trap -p INT)

@@ -852,7 +852,7 @@ now:
     heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
   c_deploy_failure_1:
     observed_at: 2026-07-20T07:29:00Z
-    status: rejected_G1_deferred_signal_commit
+    status: deferred_signal_rollback_implemented_pending_G1
     mutation_class: red
     protected_surfaces: [Node_B_NixOS_activation, immutable_guest_image, rollback_realizations, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deployment logs, incomplete-deploy receipt, public build identity, refrozen source review, successful deployment receipt, and deployed no-SSH acceptance."
@@ -860,7 +860,7 @@ now:
     problem: "The first-cutover activation guard handles either a physical active guest or an existing preserved pre-managed rollback, but not both. That fail-closed ambiguity is correct; the transition is not idempotently recoverable and leaves a partially activated host generation."
     existing_replacement: "The exact immutable Nix guest output and its build manifest already provide managed image custody. Reconciliation should preserve the unexpected physical tree under one explicit conflict-recovery ref, retain the pre-managed rollback untouched, then atomically install the immutable store pointer."
     authorized_repair: "Add one deterministic conflict-recovery path. When both physical target and pre-managed rollback exist, fail if that recovery path already exists; otherwise atomically move the physical target there, leave the pre-managed rollback untouched, and install the immutable symlink. Never delete or overwrite any of the three refs. Refreeze G1 because this changes a protected deployment surface."
-    repair_result: "`nix eval` renders the revised Node B activation successfully. Exact rendered-script fault injection proves closed-stdout convergence, bounded tree preservation, idempotent rerun, second-ambiguity refusal, post-move command-failure restoration, ERR preservation, and restoration of prior HUP/INT/TERM traps after success. Signals during either move restore the target and abort with 129/130/143 without executing arbitrary saved handlers. A simulated uncatchable-crash state with absent target, retained conflict tree, and staged next pointer converges on rerun without deleting either rollback."
+    repair_result: "`nix eval` renders the revised Node B activation successfully. Exact rendered-script fault injection proves closed-stdout convergence, bounded tree preservation, idempotent rerun, second-ambiguity refusal, post-move command-failure restoration, ERR/success-path signal-trap preservation, and crash rerun convergence. HUP/INT/TERM deferred until after either physical-tree move or immutable-pointer rename now remove only the exact uncommitted `target -> src` pointer, restore the preserved tree, and abort 129/130/143. Any unexpected target remains fail-closed; clearing `moved_to` immediately after pointer rename is the transaction commit point."
     g1_round_29_probe:
       reviewed_at: 2026-07-20T07:52:58Z
       source_ref: daece9fd0f00f11839d743f4bf57017bdb6f9f5b
