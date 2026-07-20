@@ -993,7 +993,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   c_deploy_failure_3:
     observed_at: 2026-07-20T12:10:45Z
-    status: blocked_C_obsolete_playwright_guest_selection
+    status: canonical_guest_deploy_repair_implemented_pending_G1
     mutation_class: red
     protected_surfaces: [deployment_routing, guest_image_authority, deploy_receipt, Node_B_activation]
     admissible_evidence_class: "Exact GitHub deploy logs, negative caller inventory, classifier/workflow contracts, refrozen G1 review, complete deploy receipt, public identity, and no-SSH acceptance."
@@ -1001,6 +1001,7 @@ now:
     problem: "The canonical flake deleted the second Playwright guest image, but deploy classification, workflow environment/output, build/install/receipt branches, and classifier assertions still model it as an active deploy authority. The accepted service-pointer script also lacks an explicit deploy class, causing the stale full-deploy fallback."
     existing_replacement: "flake.nix exposes one canonical `guest-image`; Playwright/browser proof no longer has a separate VM image package. The current ordinary guest and public browser acceptance paths supersede the removed image. Historical `/var/lib/go-choir/guest-playwright` data and report classifications are rollback/retention evidence, not deploy authority."
     authorized_repair: "Delete `deploy_playwright_guest` from the classifier outputs and all workflow input/log/build/install/receipt branches. Remove stale classifier assertions and add a focused assertion that `scripts/node-b-sync-service-pointers` selects host OS/vmctl restart only, with both guest selections absent. Do not delete or mutate retained host paths, reports, receipts, or archives. Refreeze G1 because deployment routing is protected."
+    repair_result: "The deploy classifier and workflow no longer expose, transport, log, build, install, or require a Playwright guest class/receipt. `scripts/node-b-sync-service-pointers` is explicitly host-OS/vmctl-restart only and does not select a guest. Classifier, workflow contract, pointer resolver, and Bash syntax checks pass; negative inventory finds no active Playwright guest deploy token in `.github`. Legacy host/report/archive data remains untouched."
     rollback: "Revert the source deletion if G1 rejects it. Node B remains on host identity 87432535 with canonical immutable guest and both preserved rollback trees; retain incomplete receipt 29740013073-1 and any legacy guest-playwright data."
     conjecture_delta: "Deleting a package output is incomplete until deploy classifiers, workflow receipts, and selection tests lose the same authority; otherwise conservative fallbacks resurrect the deleted topology."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}

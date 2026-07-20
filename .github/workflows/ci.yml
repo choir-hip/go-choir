@@ -532,7 +532,6 @@ jobs:
       deploy_frontend: ${{ steps.detect.outputs.deploy_frontend }}
       deploy_host_service: ${{ steps.detect.outputs.deploy_host_service }}
       deploy_ordinary_guest: ${{ steps.detect.outputs.deploy_ordinary_guest }}
-      deploy_playwright_guest: ${{ steps.detect.outputs.deploy_playwright_guest }}
       deploy_host_os: ${{ steps.detect.outputs.deploy_host_os }}
       deploy_vmctl_restart: ${{ steps.detect.outputs.deploy_vmctl_restart }}
       deploy_active_vm_refresh: ${{ steps.detect.outputs.deploy_active_vm_refresh }}
@@ -562,7 +561,6 @@ jobs:
               echo "deploy_frontend=true"
               echo "deploy_host_service=false"
               echo "deploy_ordinary_guest=false"
-              echo "deploy_playwright_guest=false"
               echo "deploy_host_os=true"
               echo "deploy_vmctl_restart=true"
               echo "deploy_active_vm_refresh=true"
@@ -653,7 +651,6 @@ jobs:
           DEPLOY_VMCTL_RESTART: ${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}
           DEPLOY_ACTIVE_VM_REFRESH: ${{ needs.deploy-impact.outputs.deploy_active_vm_refresh }}
           DEPLOY_ORDINARY_GUEST: ${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}
-          DEPLOY_PLAYWRIGHT_GUEST: ${{ needs.deploy-impact.outputs.deploy_playwright_guest }}
           DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
           HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
         run: |
@@ -666,7 +663,6 @@ jobs:
             "DEPLOY_VMCTL_RESTART=$DEPLOY_VMCTL_RESTART"
             "DEPLOY_ACTIVE_VM_REFRESH=$DEPLOY_ACTIVE_VM_REFRESH"
             "DEPLOY_ORDINARY_GUEST=$DEPLOY_ORDINARY_GUEST"
-            "DEPLOY_PLAYWRIGHT_GUEST=$DEPLOY_PLAYWRIGHT_GUEST"
             "DEPLOY_HOST_OS=$DEPLOY_HOST_OS"
             "HOST_SERVICES=$HOST_SERVICES"
           )
@@ -720,7 +716,6 @@ jobs:
             echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
             echo "    deploy_active_vm_refresh=${DEPLOY_ACTIVE_VM_REFRESH}"
             echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
-            echo "    deploy_playwright_guest=${DEPLOY_PLAYWRIGHT_GUEST}"
             echo "    deploy_host_os=${DEPLOY_HOST_OS}"
             echo "    host_services=${HOST_SERVICES}"
             echo "    workflow_commit=${DEPLOY_COMMIT}"
@@ -941,12 +936,6 @@ jobs:
             else
               echo "    Skipping ordinary guest image build"
             fi
-            if [ "${DEPLOY_PLAYWRIGHT_GUEST}" = "true" ]; then
-              build_selected_root "Playwright guest image" ".#guest-image-playwright" "/tmp/guest-image-playwright-result" &
-              selected_build_pids+=("$!")
-            else
-              echo "    Skipping Playwright guest image build"
-            fi
             for pid in "${selected_build_pids[@]}"; do
               if ! wait "$pid"; then
                 selected_build_status=1
@@ -1160,14 +1149,6 @@ jobs:
               echo "    Ordinary guest image deployed"
             else
               echo "    Skipping ordinary guest image install"
-            fi
-            if [ "${DEPLOY_PLAYWRIGHT_GUEST}" = "true" ]; then
-              install_guest_image /tmp/guest-image-playwright-result /var/lib/go-choir/guest-playwright
-              playwright_guest_commit=$(verify_artifact_manifest /var/lib/go-choir/guest-playwright/build.json go-choir-guest-image-playwright)
-              record_receipt_artifact playwright_guest "$playwright_guest_commit" installed
-              echo "    Playwright guest image deployed"
-            else
-              echo "    Skipping Playwright guest image install"
             fi
             note_phase "guest image install"
 
@@ -1441,9 +1422,6 @@ jobs:
             done
             if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
               require_receipt_artifact ordinary_guest verified
-            fi
-            if [ "${DEPLOY_PLAYWRIGHT_GUEST}" = "true" ]; then
-              require_receipt_artifact playwright_guest verified
             fi
             if [ "$sandbox_service_selected" = "true" ]; then
               require_receipt_artifact sandbox verified

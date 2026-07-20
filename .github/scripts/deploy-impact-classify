@@ -35,7 +35,6 @@ deploy_host=false
 deploy_frontend=false
 deploy_host_service=false
 deploy_ordinary_guest=false
-deploy_playwright_guest=false
 deploy_host_os=false
 deploy_vmctl_restart=false
 deploy_active_vm_refresh=false
@@ -95,11 +94,6 @@ mark_ordinary_guest() {
   deploy_active_vm_refresh=true
 }
 
-mark_playwright_guest() {
-  deploy_needed=true
-  deploy_playwright_guest=true
-  deploy_vmctl_restart=true
-}
 
 mark_host_os() {
   deploy_needed=true
@@ -140,6 +134,11 @@ for path in "${changed[@]}"; do
       ;;
     start-services.sh)
       add_explanation "$path -> ignored (local developer service harness)"
+      continue
+      ;;
+    scripts/node-b-sync-service-pointers)
+      mark_host_os_only
+      add_explanation "$path -> host OS activation and immutable service-pointer synchronization"
       continue
       ;;
     docs/*|.github/*|skills/*|scripts/go-test-*|frontend/tests/*|frontend/playwright-report/*|frontend/test-results/*|*_test.go|internal/*/testdata/*)
@@ -302,14 +301,12 @@ for path in "${changed[@]}"; do
       ;;
     nix/sandbox-vm.nix)
       mark_ordinary_guest
-      mark_playwright_guest
-      add_explanation "$path -> ordinary + playwright guest images"
+      add_explanation "$path -> canonical guest image"
       ;;
     flake.nix|flake.lock)
       mark_host_os
       mark_ordinary_guest
-      mark_playwright_guest
-      add_explanation "$path -> host OS + ordinary + playwright guest images (shared Nix input)"
+      add_explanation "$path -> host OS + canonical guest image (shared Nix input)"
       ;;
     nix/node-b.nix|nix/hardware.nix|nix/disks.nix)
       mark_host_os_only
@@ -318,20 +315,17 @@ for path in "${changed[@]}"; do
     nix/*)
       mark_host_os
       mark_ordinary_guest
-      mark_playwright_guest
-      add_explanation "$path -> conservative Nix impact: host OS + both guest images"
+      add_explanation "$path -> conservative Nix impact: host OS + canonical guest image"
       ;;
     go.mod|go.sum)
       mark_host_service
       mark_ordinary_guest
-      mark_playwright_guest
-      add_explanation "$path -> shared Go/build metadata: host + both guest images"
+      add_explanation "$path -> shared Go/build metadata: host + canonical guest image"
       ;;
     cmd/*|internal/*)
       mark_host_service
       mark_ordinary_guest
-      mark_playwright_guest
-      add_explanation "$path -> conservative Go impact: host + both guest images"
+      add_explanation "$path -> conservative Go impact: host + canonical guest image"
       ;;
     frontend/*)
       mark_frontend
@@ -340,8 +334,7 @@ for path in "${changed[@]}"; do
     *)
       mark_host_os
       mark_ordinary_guest
-      mark_playwright_guest
-      add_explanation "$path -> unknown deployed path: conservative host + both guest images"
+      add_explanation "$path -> unknown deployed path: conservative host + canonical guest image"
       ;;
   esac
 done
@@ -353,7 +346,6 @@ if [[ -n "$output_file" ]]; then
     echo "deploy_frontend=${deploy_frontend}"
     echo "deploy_host_service=${deploy_host_service}"
     echo "deploy_ordinary_guest=${deploy_ordinary_guest}"
-    echo "deploy_playwright_guest=${deploy_playwright_guest}"
     echo "deploy_host_os=${deploy_host_os}"
     echo "deploy_vmctl_restart=${deploy_vmctl_restart}"
     echo "deploy_active_vm_refresh=${deploy_active_vm_refresh}"
@@ -373,7 +365,6 @@ deploy_host=${deploy_host}
 deploy_frontend=${deploy_frontend}
 deploy_host_service=${deploy_host_service}
 deploy_ordinary_guest=${deploy_ordinary_guest}
-deploy_playwright_guest=${deploy_playwright_guest}
 deploy_host_os=${deploy_host_os}
 deploy_vmctl_restart=${deploy_vmctl_restart}
 deploy_active_vm_refresh=${deploy_active_vm_refresh}
