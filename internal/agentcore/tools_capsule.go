@@ -224,6 +224,10 @@ func newCommitTransactionTool() toolregistry.Tool {
 			if input.Handle == "" || input.BuildRecipeRef == "" || len(input.TestReceipts) == 0 || len(input.DependencyToolchainRefs) == 0 {
 				return "", fmt.Errorf("complete build recipe, test receipts, and dependency/toolchain refs are required")
 			}
+			changes, err := toolCtx.Executor.ExtractGranted(toolCtx.AgentRunID, input.Handle)
+			if err != nil {
+				return "", err
+			}
 			evidenceRefs := append([]string{input.BuildRecipeRef}, input.TestReceipts...)
 			evidenceRefs = append(evidenceRefs, input.DependencyToolchainRefs...)
 			executionReceipts, err := toolCtx.Executor.ResolveGrantedExecutionReceipts(ctx, toolCtx.AgentRunID, input.Handle, evidenceRefs)
@@ -232,10 +236,6 @@ func newCommitTransactionTool() toolregistry.Tool {
 			}
 			if len(executionReceipts) < 3 {
 				return "", fmt.Errorf("distinct build, test, and dependency/toolchain execution receipts are required")
-			}
-			changes, err := toolCtx.Executor.ExtractGranted(toolCtx.AgentRunID, input.Handle)
-			if err != nil {
-				return "", err
 			}
 			if toolCtx.TransactionBuilder == nil || toolCtx.EventAppender == nil || toolCtx.ComputerID == "" {
 				return "", fmt.Errorf("capsule event authority unavailable")

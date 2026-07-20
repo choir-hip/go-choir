@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,7 +17,9 @@ import (
 )
 
 type testCapsuleCgroup struct {
-	frozen bool
+	frozen    bool
+	freezeErr error
+	thawErr   error
 }
 
 func (c *testCapsuleCgroup) Open() (*os.File, error) { return nil, nil }
@@ -26,14 +29,14 @@ func (c *testCapsuleCgroup) Freeze(ctx context.Context) error {
 		return err
 	}
 	c.frozen = true
-	return nil
+	return c.freezeErr
 }
 func (c *testCapsuleCgroup) Thaw(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	c.frozen = false
-	return nil
+	return c.thawErr
 }
 
 func TestStageGrantedReleaseRefusesSecrets(t *testing.T) {
@@ -343,5 +346,56 @@ func TestFrozenCapsuleRefusesEveryBrokerOperation(t *testing.T) {
 	}
 	if _, err := executor.ListDir(context.Background(), "cosuper-frozen", "grant-frozen", "."); err == nil {
 		t.Fatal("ListDir admitted after freeze")
+	}
+}
+
+func TestAmbiguousFreezerTransitionsRemainFailClosed(t *testing.T) {
+	freezeCgroup := &testCapsuleCgroup{freezeErr: errors.New("freeze event unavailable")}
+	freezing := &Capsule{ID: "capsule-freeze-error", State: StateActive, Cgroup: freezeCgroup}
+	if err := freezing.Quiesce(context.Background()); err == nil {
+		t.Fatal("ambiguous freeze succeeded")
+	}
+	if freezing.State != StateQuiescing || !freezeCgroup.frozen {
+		t.Fatalf("failed freeze state=%s cgroup_frozen=%t", freezing.State, freezeCgroup.frozen)
+	}
+	if err := freezing.acquireOp(); err == nil {
+		t.Fatal("operation admitted after ambiguous freeze")
+	}
+
+	thawCgroup := &testCapsuleCgroup{frozen: true, thawErr: errors.New("thaw event unavailable")}
+	thawing := &Capsule{ID: "capsule-thaw-error", State: StateFrozen, Cgroup: thawCgroup}
+	if err := thawing.Thaw(context.Background()); err == nil {
+		t.Fatal("ambiguous thaw succeeded")
+	}
+	if thawing.State != StateQuiescing || thawCgroup.frozen {
+		t.Fatalf("failed thaw state=%s cgroup_frozen=%t", thawing.State, thawCgroup.frozen)
+	}
+	if err := thawing.acquireOp(); err == nil {
+		t.Fatal("operation admitted after ambiguous thaw")
+	}
+}
+
+func TestExecutionReceiptValidationRequiresFrozenCapsule(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := &Capability{
+		CapabilityID: "cap-receipt", Handle: "grant-receipt", CapsuleID: "capsule-receipt",
+		TargetCapsule: "capsule-receipt", AgentRunID: "cosuper-receipt", AgentRole: RoleCoSuper,
+		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
+		t.Fatal(err)
+	}
+	executor := &Executor{
+		capsules: map[string]*Capsule{"capsule-receipt": {
+			ID: "capsule-receipt", State: StateActive, Cgroup: &testCapsuleCgroup{},
+		}},
+		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-receipt", Handle: "grant-receipt"}: capability},
+		revokedCaps:  map[string]bool{}, publicKey: publicKey,
+	}
+	if _, err := executor.ResolveGrantedExecutionReceipts(context.Background(), "cosuper-receipt", "grant-receipt", []string{"receipt"}); err == nil || !strings.Contains(err.Error(), "requires frozen capsule") {
+		t.Fatalf("active receipt validation error = %v", err)
 	}
 }

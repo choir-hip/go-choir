@@ -123,13 +123,7 @@ func (c *CgroupManager) AddPID(pid int) error {
 }
 
 func (c *CgroupManager) Freeze(ctx context.Context) error {
-	if err := c.setFrozen(ctx, true); err != nil {
-		rollbackCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		_ = c.setFrozen(rollbackCtx, false)
-		return err
-	}
-	return nil
+	return c.setFrozen(ctx, true)
 }
 
 func (c *CgroupManager) Thaw(ctx context.Context) error {

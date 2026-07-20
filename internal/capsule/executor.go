@@ -538,6 +538,12 @@ func (e *Executor) ResolveGrantedExecutionReceipts(ctx context.Context, agentRun
 	if err != nil || capability.AgentRole != RoleCoSuper {
 		return nil, fmt.Errorf("capsule execution evidence unavailable")
 	}
+	caps.mu.RLock()
+	state := caps.State
+	caps.mu.RUnlock()
+	if state != StateFrozen {
+		return nil, fmt.Errorf("capsule execution evidence requires frozen capsule")
+	}
 	worktreeDigest, err := digestCapsuleWorktree(ctx, caps)
 	if err != nil {
 		return nil, err

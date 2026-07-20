@@ -103,7 +103,6 @@ func (c *Capsule) Quiesce(ctx context.Context) error {
 		}
 	}
 	if err := c.Cgroup.Freeze(ctx); err != nil {
-		c.State = StateActive
 		return fmt.Errorf("freeze capsule %s cgroup: %w", c.ID, err)
 	}
 	c.State = StateFrozen
@@ -121,6 +120,7 @@ func (c *Capsule) Thaw(ctx context.Context) error {
 	if c.Cgroup == nil {
 		return fmt.Errorf("capsule %s cgroup is unavailable", c.ID)
 	}
+	c.State = StateQuiescing
 	if err := c.Cgroup.Thaw(ctx); err != nil {
 		return fmt.Errorf("thaw capsule %s cgroup: %w", c.ID, err)
 	}
