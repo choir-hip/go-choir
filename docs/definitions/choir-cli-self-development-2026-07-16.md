@@ -665,6 +665,19 @@ now:
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, /tmp/choir-selfdev-g1-round16-panel/manifest.tsv]
   blocker_or_risk: "G1 is accepted with effects OFF. The next risk is deployment identity and rollback ratchet integrity: staging must serve the exact accepted cutover, preserve R0, expose a route-bound signed KernelCapabilityReceipt matching the immutable-image receipt, and refuse legacy route authority before genesis."
   next_action: "Execute C only: freeze R0 source/deploy/ComputerVersion/event-head/route-generation/release-pointer identities; deploy exact R1 with mode off; verify staging identity, health, refusals, signed kernel receipt, rollback, and immutable redeploy before GenesisImported."
+  c_preflight_1:
+    observed_at: 2026-07-20T02:15:00Z
+    status: blocked_missing_disposable_target_configuration
+    source_identity: 704163034097fc5b7f6b7b27f6f44abed5a648aa
+    mutation_class: red
+    protected_surfaces: [disposable_ComputerID, GenesisImported, deployment_configuration, R0_R1_ratchet]
+    evidence_class: "Tracked deployment configuration inspection plus read-only Node B ownership/route inventory before any cutover deployment or genesis."
+    problem: "`internal/proxy/config.go` fails closed when `PROXY_SELF_DEVELOPMENT_DISPOSABLE_COMPUTER_ID` is empty, but `nix/node-b.nix` does not set that variable. Deploying the accepted source unchanged would make the required one-time public genesis path impossible. The stable staging platform realization already maps `universal-wire-platform/platform` to ComputerID `computer-4c20ff4a21a021c4306d8c783be0037d`; its pre-cutover realization is active and constructed from the current immutable ComputerVersion. No self-development mode or event row has been created."
+    existing_replacement_check: "The stable `ComputerID` derivation, existing `universal-wire-platform/platform` staging computer, proxy fail-closed disposable-target check, and tracked Nix service environment are the intended mechanisms. No new target registry, host-local override, VM identity, or fallback is needed."
+    repair: "Bind exactly `computer-4c20ff4a21a021c4306d8c783be0037d` in the tracked Node B proxy environment, add a focused deployment-configuration assertion, refreeze source, and rerun G1 before deployment. Keep effects OFF and preserve R0."
+    rollback: "Revert the tracked environment/test repair before deployment. No mode, event head, route, release pointer, realization, or deployed service has changed."
+    conjecture_delta: "Discovered that source-level fail-closed target enforcement was not connected to the staging deployment configuration; no product behavior has yet changed."
+    heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
