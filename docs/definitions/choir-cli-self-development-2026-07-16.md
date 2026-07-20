@@ -620,6 +620,17 @@ now:
     problem: "`CheckpointAuthority.Publish` still stores `checkpoint_artifact_ref` as the invented, unresolvable `artifact://sha256/<digest>` form rather than canonical `artifact:sha256:<digest>`. Separately, current authority text in `docs/computer-ontology.md` and `docs/current-architecture.md` still says the now-wired event/updater/public API/capsule substrate is absent or inert and retains deleted direct-role/worker/package/host-authority paths as current. These violate the owner-settled typed-reference and deletion-citer contracts."
     disposition: "Documented before repair. G1 remains rejected and effects remain OFF. Replace the checkpoint reference through the canonical constructor, update only the stale current-state claims to the exact effects-OFF cutover state, add focused reconstruction/reference coverage, and freeze a new candidate for a clean round-13 panel."
     rollback: "Revert the future focused checkpoint/current-guidance repair; no deployed effect or route was enabled by this rejected candidate."
+  g1_round_13_probe:
+    observed_at: 2026-07-20T00:45:00Z
+    status: rejected_start_run_recovery_and_deletion_citers
+    source_identity: f5d5a76dd9aebc9672da08a40e93c4e359788f36
+    mutation_class: red
+    protected_surfaces: [proposal_crash_recovery, durable_run_binding, deletion_citers]
+    evidence_class: "Frozen-source independent review plus local source confirmation; focused packages, exact guest-image build, exact effects-OFF Firecracker boot/restart identity proof, and prior unchanged Executor.Spawn proof passed."
+    success_before_blocker: "Checkpoint persistence now uses canonical typed artifact refs and current ontology/architecture describe the effects-OFF cutover accurately."
+    problem: "Event-first start recovery reconstructs a requested operation and returns before `ensureSelfDevelopmentRun`; every later retry takes the existing-operation fast path, so a crash after `TrajectoryStarted` can strand the proposal without a durable run. The deletion-citer sweep also missed current `specs/README.md` and `specs/promotion_protocol.tla` candidate-branch/route-flip authority plus README/capsule comments that still name deleted `capsule-host`/HostAuthority surfaces as current."
+    disposition: "Documented before repair. G1 remains rejected and effects remain OFF. Reuse the normal run-binding path after deterministic operation repair, strengthen the event-first crash regression to require one executing bound run, and remove or rewrite every obsolete current citer without preserving a compatibility path."
+    rollback: "Revert the future focused recovery/citer repair; no deployed effect, run, or route was enabled by this rejected candidate."
   decision:
     selected: "Execute the entire A→F mission under the fixed execution contract above. Candidate VMs and worker VMs are obsolete and their code is deleted; generic delegated agents use durable runs/trajectories and capsules. A/G0 reconciles rather than invents semantics; implementation lands with only self-development activation off; deployed G2 precedes the one bounded acceptance; G3 precedes closure."
     kind: architecture_and_execution_authority
