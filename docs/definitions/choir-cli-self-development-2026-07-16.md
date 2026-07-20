@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-single-boot-epoch-authority-round-49
-    state: frozen_G1_review
+    state: accepted_G1
     ref: 26a449de5c956c801a8501c5e7406ce7e159da79
     owner: integration-authority
     base: 850ba6f6aa13eb061bf5d9025912ae4af1360f8d
@@ -595,7 +595,15 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [707c28cae59694fd97c81ca01700f4171516a459, ee6d8da20d86225b8f955f251a91d19cf2a0fb77]
     verification: "The pre-repair retry test failed with the same `vm-...-epoch-2` realization after failed boot. Round-49 retains the restart retry proof, adds fail-closed no-issuance proof when registry persistence fails, and uses real vmmanager tests to reserve epoch 804, restart, reserve 805, consume exactly 805, and reject stale 804. `go test -race ./internal/vmctl ./internal/vmmanager ./cmd/vmctl -count=1` passes; gopls diagnostics are clean for manager and ownership."
-    disposition: "Frozen for Round-49 G1. Review the exact full diff from main problem base 850ba6f6, not only the delta from rejected Round-48. Confirm every credential-bearing vmctl boot/recovery path reserves through manager first, manager cannot rewrite the bound epoch, persistence failures precede issuance, and legacy no-credential/direct-manager behavior remains compatible. Effects remain OFF."
+    disposition: "Round-49 accepted unanimously by three substantive reviewers: OMP Gemini 3.5, OMP Cursor/Grok 4.5, and OpenCode. Each independently inventoried the full main-base diff, confirmed all five credential-bearing paths reserve through the durable manager authority before issuance, confirmed boot consumes rather than overwrites the bound epoch, and accepted fail-closed persistence behavior. Devin timed out empty and Codex exhausted usage. Effects remain OFF; live Node B manager/registry epoch echo, credential attach/consume, and same lifecycle completion remain deployed gates."
+    g1_round_49_probe:
+      reviewed_at: 2026-07-20T18:35:44Z
+      source_ref: 26a449de5c956c801a8501c5e7406ce7e159da79
+      authority_ref: 114dab26ebbd9bbe5b2d2c45bf93dabfd3743cf5
+      verdicts: {omp_gemini35: ACCEPT_G1, omp_cursor_grok45: ACCEPT_G1, opencode: ACCEPT_G1, devin: timed_out_empty, codex: usage_limit}
+      adjudication: "Accept. Three independent high-confidence reviews found no blocker. The manager per-VM epoch file is the only credential-attempt reservation authority; registry persistence is a fail-closed mirror; initial/start-existing/active-recovery/explicit-recovery/refresh all reserve before mint; manager consume preserves the bound epoch and rejects stale values. Legacy zero-epoch platform boot has no computer credential and remains explicitly compatible."
+      residual_risks: "Selected CI and Node B must exercise the production adapter, real Firecracker return epoch, corpusd mint, credential disk attach/consume/unlink, same pending lifecycle completion, and effects OFF. Unused reserved epochs after failure are monotonic gaps, not rollback or replay."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round49-panel/manifest.tsv, manifest_sha256: 20a3fb4542997a3d0fcbcc6bb64c0b6ca6135325409d3a9338e14ff730ae29a6, omp_gemini35_sha256: 3ccb91c0f4eebba076cbfdd35a28694d65072e7c4a08204fddc8f03f9d949a67, omp_cursor_grok45_sha256: 24064376788c770b01787ad82254b8b44df6c92c431b20aac8b27da946e2381f, opencode_sha256: 579a138ac10fbd6ad907976b6623148be56f8643f3baffeda4c5056cd5b51f90, devin_empty_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, codex_failure_sha256: b9ab724a00690b37ffd322200acddc612a0abf5b0459ac66143f015d0467cdb7}
     g1_round_48_probe:
       reviewed_at: 2026-07-20T18:02:00Z
       source_ref: 707c28cae59694fd97c81ca01700f4171516a459
@@ -1168,7 +1176,7 @@ now:
     heresy_delta: {discovered: 3, introduced: 0, repaired: 0}
   c_deploy_failure_8:
     observed_at: 2026-07-20T17:34:30Z
-    status: frozen_G1_round_49_single_boot_epoch_authority
+    status: accepted_G1_round_49_pending_land
     mutation_class: red
     protected_surfaces: [credential_issuance_idempotency, realization_epoch, vmmanager_boot_epoch, retained_persistent_computer, lifecycle_intent, public_acceptance]
     admissible_evidence_class: "Exact main CI/deploy receipt, public same-idempotency response/status, source credential/epoch persistence trace, deterministic platform+vmctl reproduction, refrozen G1 review, and deployed no-SSH acceptance."
