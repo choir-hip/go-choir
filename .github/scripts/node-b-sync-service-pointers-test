@@ -5,7 +5,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 # shellcheck source=../../scripts/node-b-sync-service-pointers
 source "$root/scripts/node-b-sync-service-pointers"
 
-tmp=$(mktemp -d)
+tmp=$(realpath -e -- "$(mktemp -d)")
 trap 'rm -rf "$tmp"' EXIT
 store="$tmp/nix/store"
 mkdir -p "$store"
@@ -99,6 +99,25 @@ outside="$tmp/outside-wrapper"
 printf '#!/usr/bin/env bash\nexec \"%s\"\n' "$package/bin/proxy" >"$outside"
 chmod +x "$outside"
 expect_refusal mutable-wrapper "$outside" "Nix exec wrapper is outside the immutable store"
+
+symlink_wrapper="$store/hash-symlink-wrapper"
+ln -s "$outside" "$symlink_wrapper"
+expect_refusal symlink-wrapper "$symlink_wrapper" "Nix exec wrapper is symlinked or noncanonical"
+
+symlink_package="$store/hash-symlink-package"
+ln -s "$mutable_package" "$symlink_package"
+symlink_package_wrapper="$store/hash-symlink-package-wrapper"
+printf '#!/usr/bin/env bash\nexec \"%s\"\n' "$symlink_package/bin/proxy" >"$symlink_package_wrapper"
+chmod +x "$symlink_package_wrapper"
+expect_refusal symlink-package "$symlink_package_wrapper" "Nix service package is symlinked or noncanonical"
+
+symlink_executable_package="$store/hash-symlink-executable-package"
+mkdir -p "$symlink_executable_package/bin"
+ln -s "$mutable_package/bin/proxy" "$symlink_executable_package/bin/proxy"
+symlink_executable_wrapper="$store/hash-symlink-executable-wrapper"
+printf '#!/usr/bin/env bash\nexec \"%s\"\n' "$symlink_executable_package/bin/proxy" >"$symlink_executable_wrapper"
+chmod +x "$symlink_executable_wrapper"
+expect_refusal symlink-executable "$symlink_executable_wrapper" "Nix service executable resolves outside the immutable store"
 
 chain=()
 for index in 0 1 2 3 4; do

@@ -968,7 +968,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_deploy_failure_2:
     observed_at: 2026-07-20T10:51:22Z
-    status: rejected_G1_symlink_mutable_authority
+    status: symlink_authority_repair_implemented_pending_G1
     mutation_class: red
     protected_surfaces: [Node_B_deployment, service_package_pointers, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deploy logs, focused wrapper-resolution fixtures, refrozen G1 review, complete deploy receipt, public build identity, and no-SSH acceptance."
@@ -976,7 +976,7 @@ now:
     problem: "`node-b-sync-service-pointers` parses only a quoted final `exec` directly in the systemd ExecStart wrapper. `proxyExec` instead has an unquoted exec to the generated serviceExec wrapper, whose final quoted exec reaches the immutable proxy package. The package authority exists but the synchronizer stops one wrapper too early."
     existing_replacement: "The generated wrapper chain already contains the exact immutable package path. Resolve that chain with a small bounded/cycle-detecting parser rather than adding another proxy-specific package authority or duplicating serviceExec."
     authorized_repair: "Resolve quoted or unquoted literal exec targets recursively for a strict small depth. In production, require the start wrapper and every intermediate wrapper to be non-symlink canonical direct children of `/nix/store`, and accept only an executable whose package root is itself a non-symlink canonical direct store child `/nix/store/<entry>/bin/<service>`. Reject variables, traversal/noncanonical paths, symlink/mutable paths, cycles, unreadable targets, wrong binary names, and depth exhaustion. Focused tests may pass an explicit disposable store root; main must not. Refreeze G1 before deployment."
-    repair_result: "Round-37 bound all lexical paths to direct store children, but G1 reproduced a symlinked direct child resolving to mutable wrapper/package bytes. That source is rejected. Round-38 must refuse symlink wrapper and package roots and cover both exact reproducers while retaining the bounded immutable wrapper chain."
+    repair_result: "Round-38 requires every wrapper and package root to be a readable canonical non-symlink path in addition to direct-store lexical membership. It resolves the final executable and rejects any symlink target outside the immutable store, while allowing immutable in-store executable links. Focused fixtures now reproduce and refuse symlink wrapper, symlink package root, and executable symlink to mutable bytes, plus all prior cases. Focused deploy/CI contracts and Bash syntax pass."
     rollback: "The exact main host generation and immutable guest pointer are active; pre-managed and conflict recovery trees remain. No complete deployment receipt or active-computer refresh was published. Revert only the synchronizer repair if rejected; retain incomplete receipts and all guest rollback refs."
     conjecture_delta: "Service package authority may be wrapped for immutable environment injection; deployment discovery must resolve bounded generated wrapper composition, not assume one textual wrapper shape."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}

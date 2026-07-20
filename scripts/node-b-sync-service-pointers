@@ -57,12 +57,22 @@ is_direct_store_child() {
   [ -n "$child" ] && [[ "$child" != */* ]] && [ "$child" != "." ] && [ "$child" != ".." ]
 }
 
+is_canonical_nonsymlink() {
+  local path="$1"
+  local canonical
+
+  [ ! -L "$path" ] || return 1
+  canonical="$(realpath -e -- "$path")" || return 1
+  [ "$canonical" = "$path" ]
+}
+
 resolve_service_package() {
   local service="$1"
   local current="$2"
   local store_root="${3:-/nix/store}"
   local target
   local package
+  local resolved_target
   local depth
   local -A seen=()
 
@@ -73,6 +83,10 @@ resolve_service_package() {
     fi
     if [ ! -r "$current" ]; then
       echo "Could not read Nix exec wrapper $current for go-choir-$service.service" >&2
+      return 1
+    fi
+    if ! is_canonical_nonsymlink "$current"; then
+      echo "Nix exec wrapper is symlinked or noncanonical: $current" >&2
       return 1
     fi
     if [ -n "${seen[$current]+x}" ]; then
@@ -91,8 +105,17 @@ resolve_service_package() {
         echo "Nix service package is outside the immutable store: $package" >&2
         return 1
       fi
+      if ! is_canonical_nonsymlink "$package"; then
+        echo "Nix service package is symlinked or noncanonical: $package" >&2
+        return 1
+      fi
       if [ ! -x "$target" ]; then
         echo "Nix service package missing executable $target" >&2
+        return 1
+      fi
+      if ! resolved_target="$(realpath -e -- "$target")" ||
+        [[ "$resolved_target" != "$store_root"/* ]]; then
+        echo "Nix service executable resolves outside the immutable store: $target" >&2
         return 1
       fi
       printf '%s\n' "$package"
