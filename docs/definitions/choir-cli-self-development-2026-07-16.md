@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-canonical-guest-deploy-round-40
-    state: accepted_G1_landed_C_blocked_legacy_guest_installer
-    ref: a97bf5a2fa26463f55b1bc4e56288d0b157a1c5b
+    id: self-development-C-guest-single-writer-round-41
+    state: frozen_G1_review
+    ref: c2725f3b7318c010a31c0d8a7bbf71288fa2deb1
     owner: integration-authority
-    base: 275d819b
-    scope: "Protected C deployment-routing deletion only: remove obsolete Playwright guest classifier/workflow authority and stale active Nix framing; add contract refusals; classify service-pointer synchronization as host-OS/vmctl-restart only. Preserve canonical guest behavior and all retained legacy host/report/archive data. No self-development effect, event, API, capsule, canonical guest, or route behavior changes."
+    base: 0418d4c9
+    scope: "Protected C deployment-routing deletion only: remove the direct ordinary-guest class/build/installer/receipt writer; route canonical guest changes through Node B NixOS activation, vmctl restart, and active-computer boot-contract refresh; add negative contracts. Preserve activation transaction, guest pointer, rollback trees, reports/archives, and incomplete receipts. No self-development effect, event, API, capsule, or route behavior changes."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [198fad983747cc5f14c027fc739fd1f4ee7b5700, 539207aa79111db8f238ab0c45ba956422f87b5a]
-    verification: "Classifier, deploy workflow, CI workflow, pointer resolver, and Bash syntax contracts pass. Active `.github`, `nix`, and flake inventory contains removed Playwright guest tokens only as explicit negative workflow contracts. Pointer sync selects host OS/vmctl restart and no guest. Run 29740013073 remains the deployed stale-selection reproducer."
-    disposition: "Round-40 G1 accepted and landed as exact main d0307585. All selected source gates passed. Deployment 29744232989 correctly removed the second guest path but selected the canonical guest because the accepted diff touched sandbox-vm.nix, then failed before activation on the legacy direct installer writing through the new immutable `/var/lib/go-choir/guest` symlink. Effects remain OFF."
+    immediate_predecessors: [a97bf5a2fa26463f55b1bc4e56288d0b157a1c5b, 0418d4c9]
+    verification: "Classifier, deploy workflow, CI workflow, pointer resolver, Bash syntax, and YAML parse pass. Active workflow inventory contains removed ordinary-guest tokens only as negative contracts. `nix/sandbox-vm.nix` selects host OS + vmctl restart + active refresh with no guest class. Run 29744232989 is the deployed dual-writer reproducer."
+    disposition: "Effects remain OFF. Round-41 G1 must review single-writer deletion, activation/refresh route, negative inventory/contracts, and rollback preservation before main may advance or deployment may retry."
     g1_round_36_probe:
       reviewed_at: 2026-07-20T11:16:00Z
       source_ref: cc380712f941f7b88e06240e108024e329bfc511
