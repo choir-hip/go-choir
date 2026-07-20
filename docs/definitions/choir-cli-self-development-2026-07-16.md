@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-retained-readiness-round-56
-    state: frozen_G1_review
+    state: rejected_G1
     ref: a3477b8739275fc7097b49d4014ff43415c494e4
     owner: integration-authority
     base: f621df381881d6513ec2d6b2a5b1cf7dd6c255af
@@ -595,13 +595,14 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af]
     verification: "Production-shaped tests prove Active+unhealthy lookup returns and persists degraded; degraded lookup→generic resolve calls RecoverVM exactly once under the same VMID/ComputerID with a fresh epoch; failed ownership without a manager also preserves identity and advances epoch; lookup concurrent with a blocked explicit refresh projects booting without health probe or durable mutation, then refresh completes under the same identity. Focused and full vmctl race suites, cmd/vmctl build, and proxy tests pass."
-    disposition: "Frozen for Round-56 independent G1 review. Round-55's replacement-arming blocker is repaired by deleting the failed/degraded fallthrough to `generateVMID` and reusing the existing retained recovery path. Effects remain OFF. Reject if any lookup constructs, any recovery changes VMID/ComputerID/data binding, any explicit refresh races, or failed recovery publishes Active."
+    disposition: "Round-56 rejected after local adjudication of Devin's minority finding. The same-VMID recovery repair is correct, and Devin, OMP Cursor/Grok 4.5, and OMP Gemini 3.5 found no identity/failure-atomicity blocker. However `HandleLookup` calls health reconciliation before `requireComputerVersionRoute`, so a route-authority refusal can still persist a protected ownership mutation. This violates the frozen route-authority boundary and VAL-CROSS-110 even though the endpoint is internal. OpenCode returned no verdict; Cursor timed out empty; Codex, Claude, and OMP GPT-5.5 failed for provider/usage reasons. Effects remain OFF."
     g1_round_56_probe:
-      reviewed_at: 2026-07-20T23:12:36Z
+      reviewed_at: 2026-07-20T23:30:31Z
       source_ref: a3477b8739275fc7097b49d4014ff43415c494e4
-      authority_ref: pending_freeze_commit
-      outcome: pending
-      adjudication: "Pending independent review of the frozen retained-readiness candidate."
+      authority_ref: 60f1ecea2fed1e755c89128891a272ecbc00abcd
+      outcome: reject_G1
+      adjudication: "Round-55's replacement blocker is repaired: failed/degraded resolve now preserves VMID/ComputerID/data and freshens epoch. One remaining blocker is confirmed directly at handlers.go: reconciliation precedes route authorization, allowing a 409 route refusal to mutate Active→degraded. Round 57 must authorize first and prove a refused route performs no CheckHealth or ownership persistence. Add the missing failed-RecoverVM regression proving state never publishes Active."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round56-panel/manifest.tsv, manifest_sha256: 1ed03cdbc2bb53af1003298b06d0501c575358f51a08d2af2ab9f85932e6d4b5, devin_sha256: 70e81591c55b124503159568f32056da896bf8494d51ac79f9d0f260ac88da09, omp_cursor_grok45_sha256: efb0b2c25ab3c1727f2599bcd971c6df0ae0f5033c08bab8007a0ec9dd7f424b, omp_gemini35_sha256: 862d7028d45b54c4d1e63288a1fa5752d3f6907bdd6654ed229dccadd1f3ce81, opencode_nonverdict_sha256: b7c65ed1e0d9ee31d162b25a460d219ba0e2bdb8b90b1cc3b217b984223074d7, cursor_empty_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, codex_failure_sha256: 6f93044f04a97b2da9f444580032b3064a8f183f6a88f46dcd514ddefd7236ff, claude_failure_sha256: ad39127499b067f62e17a3a5d2fb06380b86a384c264eb4c9da6fc93aa450950, omp_gpt55_failure_sha256: 55e29be6790d476e55182f3121a11b66aa2c985ff37f06e9dc8725dfffdf8165}
     g1_round_55_probe:
       reviewed_at: 2026-07-20T23:06:38Z
       source_ref: ca4774f8362970ed7230b91b52d30e54c72a3fc3
@@ -1320,7 +1321,7 @@ now:
     heresy_delta: {discovered: 8, introduced: 1, repaired: 3}
   c_deploy_failure_13:
     observed_at: 2026-07-20T22:37:45Z
-    status: frozen_G1_round_56
+    status: rejected_G1_round_56
     mutation_class: red
     protected_surfaces: [retained_computer_recovery, lifecycle_intent, guest_readiness, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main deploy identity, public scoped lifecycle/status/guest-proxy responses, source readiness/ownership joins, production-shaped Linux and Go tests, refrozen G1, and deployed no-SSH acceptance."
@@ -1335,6 +1336,8 @@ now:
     rollback_candidate: "Revert a3477b8739275fc7097b49d4014ff43415c494e4 and ca4774f8362970ed7230b91b52d30e54c72a3fc3 before landing or their eventual main landing commit; preserve e5eeefd5 deployment, exact retained target/data, scoped authority metadata, and effects OFF."
     round_55_rejection: "The lookup health join is fail-closed and race-safe in isolation, but durable degraded state feeds the legacy generic resolve branch that deletes `vmByID` and generates a new VMID. The candidate therefore violates its own identity/data preservation boundary on the next ordinary routed request."
     next_repair: "Satisfied in Round 56; await proportionate G1 review before landing."
+    round_56_rejection: "Same-identity recovery and explicit-refresh concurrency are sound, but lookup currently executes CheckHealth and may persist degraded before the ComputerVersion route guard accepts the target. A route-refused request must not mutate protected lifecycle state."
+    next_repair_round_57: "Move readiness reconciliation after successful route authorization, prove a refused route leaves Active ownership and performs no health call, and prove same-identity RecoverVM failure leaves degraded/non-Active. Refreeze only this ordering/test delta."
     conjecture_delta: "Typed updater diagnostics worked as a discriminator: no typed updater reason appeared because the request never crossed the guest transport. The remaining error is now localized to vmctl lifecycle/ownership readiness versus proxy reachability, before updater report or signature verification."
     heresy_delta: {discovered: 9, introduced: 1, repaired: 3}
   dead_end_assessment:
