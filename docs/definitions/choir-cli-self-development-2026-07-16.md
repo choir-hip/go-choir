@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-service-pointer-repair-round-38
-    state: frozen_G1_review
+    state: accepted_G1
     ref: 692a68d0642b6bfc8f85ba6c926ca01f4e9819e8
     owner: integration-authority
     base: ea1f8d12
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [9e56b19b2d598d4e8e79398d6ec82688d2e46cb5, d188ddca1b207b668df67e0f681a802edb8044af]
     verification: "Focused resolver, deploy workflow, CI workflow, and Bash syntax contracts pass. Exact Round-37 symlink wrapper/package reproducers and an executable symlink to mutable bytes now fail closed; direct and nested generated wrapper cases still resolve. Run 29735841371 remains the deployed nested-wrapper reproducer."
-    disposition: "Effects remain OFF. Round-38 G1 must review exact canonical immutable-store source and authority before main may advance or deployment may retry."
+    disposition: "Round-38 G1 accepted unanimously across four substantive terminal reviewers. Exact symlink reproducers are closed, no reproducible source blocker remains, and effects remain OFF. Candidate may land on main and retry C deployment."
     g1_round_36_probe:
       reviewed_at: 2026-07-20T11:16:00Z
       source_ref: cc380712f941f7b88e06240e108024e329bfc511
@@ -618,6 +618,17 @@ now:
       blocker: "scripts/node-b-sync-service-pointers:48-58 validates only lexical store shape. A direct store-child symlink to a mutable wrapper or mutable package passes, is followed by read/-x/cp, and restores the alternate mutable authority class. The focused fixture has no symlink refusal."
       adjudication: "Two independent exact reproducers establish the blocker. Require each wrapper and package root itself to be a non-symlink canonical path; add symlink-wrapper and symlink-package fixtures. Re-freeze the targeted source."
       output_sha256: {claude: 70bf3b5a710f62a1392e072b6ae2c0fb664b00f3bb1d8ff6376c54aa87bb905c, cursor: c513c12fcc28afe46b1827a05d70442c617e9e06fe1fb3db8d2af51a4d3fd7fb, omp_gemini35: fb29c88e2772abe272a7d3e1a89dfeff6a78c2d8ab2001da4255785d87303d1a}
+    g1_round_38_probe:
+      reviewed_at: 2026-07-20T11:49:00Z
+      source_ref: 692a68d0642b6bfc8f85ba6c926ca01f4e9819e8
+      authority_ref: a562eb2e5476eeae5ba3cb6f0d905a842451d857
+      manifest: /tmp/choir-selfdev-g1-round38-panel/manifest.tsv
+      manifest_sha256: b10ccf543cb8e2fa2cedeac5057b83e2bd63854480227c8b95751b9365cc8ecf
+      panel_health: "Devin, Claude, Cursor, and omp-gemini35 completed substantive ACCEPT reviews; OpenCode completed source inspection but returned no terminal verdict."
+      verdicts: [devin:ACCEPT_G1, claude:ACCEPT_G1, cursor:ACCEPT_G1, omp_gemini35:ACCEPT_G1]
+      adjudication: "No reproducible blocker. Exact Round-37 wrapper/package symlink reproducers and final executable escape refuse; canonical direct/nested generated chains resolve; production root is fixed; no unsafe evaluation or effects activation exists. CI execution and live Node B wrapper/pointer behavior remain mandatory C gates."
+      residual_risks: "First main CI must execute the fixture; live deployment must prove systemd wrapper shape and pointer sync. Future script-only diffs should be added to the Plan CI classifier, and an in-store executable symlink positive fixture would improve regression precision; neither blocks this exact candidate."
+      output_sha256: {devin: 86d6b9d186aa90de998e9f54682ce9722f680aab781dbb8b2d71b7b4293772d0, claude: 72b82554960ff81aba78b7730f8cbd69a92ab04032ba25edb8af7d73f1138558, cursor: 5ccc3802ba917d3fae1973df6906a28b0a4f99253fb9863ca7b019e937cb5c9f, omp_gemini35: f225ac13fa4b435abb86474eac4068e40afd050823aaa62b74d6d2103551432a}
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -686,8 +697,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "C deployment run 29735841371 repaired the guest cutover but failed at nested proxy wrapper resolution. Round-37 is rejected because lexical `/nix/store` membership still accepts direct-child symlinks to mutable wrappers/packages. Public health serves exact 87432535; effects remain OFF and the incomplete receipt remains authoritative."
-  next_action: "Require non-symlink canonical wrapper and package roots, add exact symlink refusal fixtures, refreeze G1, then rerun exact main deployment and C acceptance."
+  blocker_or_risk: "Round-38 G1 accepted the canonical immutable-store wrapper resolver. C remains incomplete until accepted authority lands on main, selected CI including the focused fixture passes, deployment publishes a complete receipt, staging identity matches, active guest refresh succeeds, and no-SSH effects-OFF/kernel receipt acceptance passes."
+  next_action: "Land accepted Round-38 authority on main, monitor selected CI, run exact staging deployment, then verify complete receipt, public identity, active guest refresh, effects-OFF behavior, and signed route-bound kernel capability receipt."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -968,7 +979,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_deploy_failure_2:
     observed_at: 2026-07-20T10:51:22Z
-    status: symlink_authority_repair_implemented_pending_G1
+    status: accepted_G1_pending_land
     mutation_class: red
     protected_surfaces: [Node_B_deployment, service_package_pointers, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deploy logs, focused wrapper-resolution fixtures, refrozen G1 review, complete deploy receipt, public build identity, and no-SSH acceptance."
