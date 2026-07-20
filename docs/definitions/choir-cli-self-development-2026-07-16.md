@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-28
-    state: frozen_G1_review
+    state: accepted_G1
     ref: 50c634909bc1793d3c50160eec630c42816833c2
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [6067db8d792ecd9fd87013ac3c83c78d32381184, 074edfd52509255d9e764569bfbda8eb4c34db8a]
     verification: "Node A x86_64-linux focused object-snapshot tests and full capsule race suite pass. Snapshot resolves/validates HEAD commit, enumerates ls-tree blob OIDs, streams cat-file blobs, and hashes commit/mode/path/OID metadata. A deterministic test mutates the worktree after commit and proves copyImmutableCommitTree still emits committed bytes. Production Spawn integration passes again; all cancellation/freeze/release proofs remain."
-    disposition: "Effects remain OFF and R0 serves staging. Round-28 G1 must accept exact Git-resolved source/doc identities before any fast-forward or deployment."
+    disposition: "Round-28 G1 accepted unanimously across five substantive independent reviewers. Effects remain OFF. Candidate may fast-forward to main and enter C landing/deployed mode-off proof; no genesis or effects-ON action is authorized."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -663,9 +663,9 @@ now:
     evidence_ref: "Owner whole-mission instruction and explicit worker-VM/candidate-VM deletion clarification in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
-  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round27-panel/manifest.tsv, "sha256:2ea47d8b4faaeaf4ac439e0eac55d0489d7de1c7745c647f7dbd3c0a0b9246e9", 50c634909bc1793d3c50160eec630c42816833c2]
-  blocker_or_risk: "Round-27's immutable-source TOCTOU is repaired by deleting worktree reads from the copy path. The red G1 gate remains closed pending independent review."
-  next_action: "Commit and Git-resolve round-28 authority, rerun the diverse G1 panel against the exact object-pinning delta and Node A proofs, and proceed to C only on acceptance."
+  evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round28-panel/manifest.tsv, "sha256:a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc", 50c634909bc1793d3c50160eec630c42816833c2]
+  blocker_or_risk: "G1 accepted. Remaining evidence is deliberately deployed-only: pushed main/CI/deploy identity, effects-OFF behavior, exact signed KernelCapabilityReceipt, and R0/R1 recovery before genesis."
+  next_action: "Fast-forward the accepted source/authority to main, push, monitor selected CI and staging deployment, verify exact staging identity and effects-OFF behavior, retrieve the route-bound signed kernel receipt, and complete C/R1 before any genesis."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -1112,6 +1112,19 @@ review_receipts:
     output_sha256: {codex: 6206a7cc65931dce7c9d81383440ed7f5ebe0c406022e200f82bbb926f0e54cb, opencode: 133d34bc9f78c78ce281e06a9eb13519b72971fa4377a20c2c7c0ae763d2a9ac, omp_gpt55: 1d6bfe5ca7b482eb0428e81e258319200d4497eaf5c3e065665c9c071a282da4, omp_gemini35: 18d6fdf7248e3367d0dc6ea8ef5be18afc50c04ea6818bed6d72dc65622cc391}
     outcome: accept_G1
     adjudication: "Three independent reviewers accepted and independently confirmed the final-exec override, exact target, Node A refusal, assertion joins, and proxy fail-closed behavior. Codex's sole blocker is factually invalid: its quoted `python3` SHA-256 command was executed locally and returns `computer-4c20ff4a21a021c4306d8c783be0037d`, not its claimed `computer-b52c…`; OpenCode independently obtained the same 4c20 digest. The finding therefore is not reproducible and does not trigger minority rejection. Exact R0 recovery and Node B closure evidence are recorded; deployed C-F gates remain later."
+
+  - id: G1-disabled-cutover-round-28-2026-07-20
+    reviewed_at: 2026-07-20T06:33:58Z
+    candidate_ref: 50c634909bc1793d3c50160eec630c42816833c2
+    authority_ref: d7b3e2a691221f775d7f4f9975109486906a8bc1
+    manifest: /tmp/choir-selfdev-g1-round28-panel/manifest.tsv
+    manifest_sha256: a12785c9f06a4c590f04e2a49dda5068ecd65439c607b8bcbba2881d8578f3fc
+    panel: [codex, devin, cursor, omp-gpt55, omp-gemini35]
+    health: "Five substantive reviewers completed; Claude and OpenCode did not produce gate outputs."
+    verdicts: [codex:ACCEPT_G1, devin:ACCEPT_G1, cursor:ACCEPT_G1, omp-gpt55:ACCEPT_G1, omp-gemini35:ACCEPT_G1]
+    output_sha256: {codex: 3e95edd0890711033dc36265b00c44006e06173280ee3047055f86c34303db24, devin: 3cd616ca57461ff09c1fd426dfc9c118147b20d394a424f02565b1a14b95d54d, cursor: a10ec20190f45d589a863ea51e18f3de89e8b6d3a9cf782cf386809f86f8d9ea, omp_gpt55: e766c0ad24e49ded160e6f266c3d4d39e842d8ab87efa51dd28cdbf11b46c097, omp_gemini35: 1ba55f9bcd7583dd8031aa9f40706a9ba62c7c296b7c22962cd2cda6be4a27e4}
+    outcome: accept_G1
+    adjudication: "All five substantive reviewers accepted with no blocker. Exact Git identities resolve; immutable source copies commit/tree/blob objects rather than worktree paths; request cancellation covers source admission through freeze/evidence/release; physical ambiguity remains fail-closed; focused/full Node A race and production cgroup integration proofs pass. C-F deployed evidence remains correctly excluded from G1."
 
 view:
   path: none
