@@ -1381,6 +1381,43 @@ func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
 	}
 }
 
+func TestHandler_LookupAuthorizesRouteBeforeHealthMutation(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	own := &VMOwnership{
+		VMID:       "vm-route-refused",
+		ComputerID: "computer-route-refused",
+		UserID:     "user-route-refused",
+		DesktopID:  PrimaryDesktopID,
+		SandboxURL: "http://127.0.0.1:9001",
+		State:      VMStateActive,
+		Epoch:      7,
+	}
+	key := ownershipKey(own.UserID, own.DesktopID)
+	reg.ownerships[key] = own
+	reg.vmByID[own.VMID] = own
+	unhealthy := false
+	manager := &mockVMManager{checkHealthOK: &unhealthy}
+	reg.SetVMManager(manager)
+	handler := NewHandler(reg)
+	handler.routeAuthorityRequired = true
+
+	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/lookup?computer_id="+own.ComputerID, nil)
+	request.Header.Set("X-Internal-Caller", "true")
+	response := httptest.NewRecorder()
+	handler.HandleLookup(response, request)
+
+	if response.Code != http.StatusConflict {
+		t.Fatalf("lookup status = %d, want 409; body=%s", response.Code, response.Body.String())
+	}
+	stored := reg.GetOwnershipForDesktop(own.UserID, own.DesktopID)
+	if stored == nil || stored.State != VMStateActive || stored.Epoch != own.Epoch {
+		t.Fatalf("route-refused lookup mutated ownership: %+v", stored)
+	}
+	if len(manager.checkHealthCalls) != 0 {
+		t.Fatalf("route-refused lookup health checks = %v, want none", manager.checkHealthCalls)
+	}
+}
+
 func TestHandler_LookupProjectsBootingWithoutRacingRefresh(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	own := &VMOwnership{
@@ -1452,6 +1489,46 @@ func TestHandler_LookupProjectsBootingWithoutRacingRefresh(t *testing.T) {
 	if refreshed == nil || refreshed.VMID != own.VMID || refreshed.ComputerID != own.ComputerID ||
 		refreshed.State != VMStateActive || refreshed.Epoch != initialEpoch+1 {
 		t.Fatalf("refreshed ownership = %+v, want retained active identity at epoch %d", refreshed, initialEpoch+1)
+	}
+}
+
+func TestOwnershipRegistry_DegradedRecoveryFailureDoesNotPublishActive(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	own := &VMOwnership{
+		VMID:       "vm-recovery-fails",
+		ComputerID: "computer-recovery-fails",
+		UserID:     "user-recovery-fails",
+		DesktopID:  PrimaryDesktopID,
+		SandboxURL: "http://127.0.0.1:9001",
+		State:      VMStateDegraded,
+		Epoch:      7,
+	}
+	key := ownershipKey(own.UserID, own.DesktopID)
+	reg.ownerships[key] = own
+	reg.vmByID[own.VMID] = own
+	manager := &mockVMManager{
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL: own.SandboxURL,
+				Epoch:   own.Epoch,
+				Healthy: false,
+				State:   "running",
+			},
+		},
+		recoverError: errors.New("guest recovery failed"),
+	}
+	reg.SetVMManager(manager)
+
+	if recovered, err := reg.ResolveOrAssignDesktop(own.UserID, own.DesktopID); err == nil {
+		t.Fatalf("resolve returned %+v, want recovery error", recovered)
+	}
+	stored := reg.GetOwnershipForDesktop(own.UserID, own.DesktopID)
+	if stored == nil || stored.VMID != own.VMID || stored.ComputerID != own.ComputerID ||
+		stored.Epoch != own.Epoch || stored.State != VMStateDegraded {
+		t.Fatalf("failed recovery published or replaced ownership: %+v", stored)
+	}
+	if len(manager.recovers) != 1 || manager.recovers[0] != own.VMID {
+		t.Fatalf("manager recovers = %v, want [%s]", manager.recovers, own.VMID)
 	}
 }
 
