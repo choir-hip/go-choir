@@ -159,18 +159,16 @@ for path in "${changed[@]}"; do
       ;;
     cmd/vmctl/*|internal/vmmanager/*)
       add_host_service "vmctl"
-      mark_vmctl_restart
-      mark_active_vm_refresh
-      add_explanation "$path -> vmctl host service closure + vmctl restart + active VM boot-contract refresh"
+      mark_guest_boot_contract
+      add_explanation "$path -> vmctl host service + canonical guest boot closure + active VM refresh"
       ;;
     internal/vmctl/*)
       add_host_service "gateway"
       add_host_service "proxy"
       add_host_service "sandbox"
       add_host_service "vmctl"
-      mark_vmctl_restart
-      mark_active_vm_refresh
-      add_explanation "$path -> vmctl users: gateway/proxy/sandbox/vmctl + vmctl restart + active VM boot-contract refresh"
+      mark_guest_boot_contract
+      add_explanation "$path -> vmctl users + canonical guest boot closure + active VM refresh"
       ;;
     cmd/auth/*|internal/auth/*)
       add_host_service "auth"
