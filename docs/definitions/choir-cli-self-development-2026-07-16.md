@@ -586,16 +586,22 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-retained-readiness-round-56
-    state: rejected_G1
-    ref: a3477b8739275fc7097b49d4014ff43415c494e4
+    id: self-development-C-route-first-readiness-round-57
+    state: frozen_G1_review
+    ref: b1e580472c99b01aa826e337c6411656dbba99a5
     owner: integration-authority
-    base: f621df381881d6513ec2d6b2a5b1cf7dd6c255af
-    scope: "Protected readiness and retained-recovery cutover only. Internal lookup validates Active through VMManager.CheckHealth and persists unhealthy/erroring ownership as degraded without construction. The next generic resolve now connects failed/degraded/stale-booting ownership to the existing same-VMID `startExistingVM` path, preserving ComputerID/VMID/data while reserving a fresh epoch. Lookup during explicit refresh projects booting without mutating the transaction. Preserve route/event/capsule/credential authority, public grammar, and mode OFF."
+    base: 5801a0c78c3cc560cda8df8756a77401ace73f7d
+    scope: "Protected readiness and retained-recovery cutover with route-first ordering. Internal lookup resolves identity, requires the accepted ComputerVersion route, then validates Active through VMManager.CheckHealth; route refusal performs no health or lifecycle mutation. Unhealthy/erroring lookup persists degraded without construction. Generic resolve recovers failed/degraded/stale-booting ownership under the same ComputerID/VMID/data with a fresh epoch. Explicit refresh projects booting without transaction mutation. Preserve all route/event/capsule/credential authority, public grammar, and mode OFF."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af]
-    verification: "Production-shaped tests prove Active+unhealthy lookup returns and persists degraded; degraded lookup→generic resolve calls RecoverVM exactly once under the same VMID/ComputerID with a fresh epoch; failed ownership without a manager also preserves identity and advances epoch; lookup concurrent with a blocked explicit refresh projects booting without health probe or durable mutation, then refresh completes under the same identity. Focused and full vmctl race suites, cmd/vmctl build, and proxy tests pass."
-    disposition: "Round-56 rejected after local adjudication of Devin's minority finding. The same-VMID recovery repair is correct, and Devin, OMP Cursor/Grok 4.5, and OMP Gemini 3.5 found no identity/failure-atomicity blocker. However `HandleLookup` calls health reconciliation before `requireComputerVersionRoute`, so a route-authority refusal can still persist a protected ownership mutation. This violates the frozen route-authority boundary and VAL-CROSS-110 even though the endpoint is internal. OpenCode returned no verdict; Cursor timed out empty; Codex, Claude, and OMP GPT-5.5 failed for provider/usage reasons. Effects remain OFF."
+    immediate_predecessors: [a3477b8739275fc7097b49d4014ff43415c494e4, 5801a0c78c3cc560cda8df8756a77401ace73f7d]
+    verification: "All Round-56 transition proofs remain. New regressions prove route-authority refusal returns 409 while leaving Active identity/epoch unchanged and issuing zero health calls; and a same-VMID RecoverVM error returns failure while retaining degraded state, identity, and epoch without publishing Active. Focused/full vmctl race, cmd/vmctl build, and proxy tests pass."
+    disposition: "Frozen for proportionate Round-57 G1 review. The only source delta after Round 56 moves reconciliation after route acceptance and adds the two demanded negative contracts. Effects remain OFF. Reject if route refusal mutates, lookup constructs, recovery changes identity/data, refresh races, or failed recovery publishes Active."
+    g1_round_57_probe:
+      reviewed_at: 2026-07-20T23:33:19Z
+      source_ref: b1e580472c99b01aa826e337c6411656dbba99a5
+      authority_ref: pending_freeze_commit
+      outcome: pending
+      adjudication: "Pending independent review of the frozen route-first readiness candidate."
     g1_round_56_probe:
       reviewed_at: 2026-07-20T23:30:31Z
       source_ref: a3477b8739275fc7097b49d4014ff43415c494e4
@@ -1321,7 +1327,7 @@ now:
     heresy_delta: {discovered: 8, introduced: 1, repaired: 3}
   c_deploy_failure_13:
     observed_at: 2026-07-20T22:37:45Z
-    status: rejected_G1_round_56
+    status: frozen_G1_round_57
     mutation_class: red
     protected_surfaces: [retained_computer_recovery, lifecycle_intent, guest_readiness, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main deploy identity, public scoped lifecycle/status/guest-proxy responses, source readiness/ownership joins, production-shaped Linux and Go tests, refrozen G1, and deployed no-SSH acceptance."
@@ -1330,14 +1336,13 @@ now:
     problem: "The authoritative lifecycle state can be Active while the proxy cannot reach the exact guest for at least its full 30-second upstream deadline. `VMOwnership.IsReady`/Active and the routed guest transport do not fate-share; lifecycle completion and public status acknowledge a realization that is not serving. This is a substrate readiness-authority defect, not a kernel capability refusal, and it blocks every no-SSH guest-local acceptance step."
     existing_replacement_check: "`ensureActiveVMReady`, `VMManager.CheckHealth`, boot health probes, `LiveSandboxURL`, ownership lookup, and the proxy's upstream dial already exist. Round-55 review additionally found that `startExistingVM` already preserves VMID/data and reserves a fresh realization, but the failed/degraded branch bypasses it and mints a new VMID. Connect that existing recovery path; do not add another state store, lengthen deadlines, accept state alone, bypass the proxy, mint a replacement computer, or use SSH as product proof."
     rollback: "Preserve R0/R1, deployed e5eeefd5, retained ComputerID/data image, epochs 1176 and 1183, exact replay intent, scoped-key metadata, and effects OFF. Revert only a future readiness-authority repair if it regresses stable lifecycle behavior."
-    next_action: "Trace the one authority transition that publishes Active and the proxy route used for that same ownership; add a production-shaped regression in which manager/ownership says active but guest health or routing is unavailable, and make the existing readiness authority fail closed before refreezing G1. Do not issue another lifecycle mutation until that source-level join is repaired and deployed."
-    candidate_repair: "a3477b8739275fc7097b49d4014ff43415c494e4 retains Round-55's fail-closed lookup health join and routes failed/degraded/stale-booting generic resolve through existing `startExistingVM`. Recovery now preserves ComputerID/VMID/data and advances epoch; explicit refresh lookup projects booting without transaction mutation."
-    repair_evidence: "Focused regressions prove persisted degraded lookup→resolve retains identity and calls same-VMID RecoverVM once at the next epoch; managerless failed recovery retains identity and advances epoch; a real blocked RefreshVM goroutine plus concurrent lookup returns booting, performs no health check or durable mutation, and completes active under the same identity. Full vmctl race and dependent builds/tests pass."
-    rollback_candidate: "Revert a3477b8739275fc7097b49d4014ff43415c494e4 and ca4774f8362970ed7230b91b52d30e54c72a3fc3 before landing or their eventual main landing commit; preserve e5eeefd5 deployment, exact retained target/data, scoped authority metadata, and effects OFF."
+    candidate_repair: "b1e580472c99b01aa826e337c6411656dbba99a5 includes the same-identity Round-56 substrate repair and moves lookup reconciliation after successful ComputerVersion route authorization. Route refusal cannot call health or mutate ownership; failed same-identity recovery cannot publish Active."
+    repair_evidence: "In addition to lookup→resolve identity, persistence, epoch, and refresh-concurrency proofs, focused tests now assert route-required/unavailable returns 409 with zero health calls and unchanged Active ownership, and RecoverVM error leaves degraded identity/epoch unchanged. Full vmctl race and dependent builds/tests pass."
+    rollback_candidate: "Revert b1e580472c99b01aa826e337c6411656dbba99a5, a3477b8739275fc7097b49d4014ff43415c494e4, and ca4774f8362970ed7230b91b52d30e54c72a3fc3 before landing or their eventual main landing commit; preserve deployed e5eeefd5, retained target/data, and effects OFF."
     round_55_rejection: "The lookup health join is fail-closed and race-safe in isolation, but durable degraded state feeds the legacy generic resolve branch that deletes `vmByID` and generates a new VMID. The candidate therefore violates its own identity/data preservation boundary on the next ordinary routed request."
     next_repair: "Satisfied in Round 56; await proportionate G1 review before landing."
     round_56_rejection: "Same-identity recovery and explicit-refresh concurrency are sound, but lookup currently executes CheckHealth and may persist degraded before the ComputerVersion route guard accepts the target. A route-refused request must not mutate protected lifecycle state."
-    next_repair_round_57: "Move readiness reconciliation after successful route authorization, prove a refused route leaves Active ownership and performs no health call, and prove same-identity RecoverVM failure leaves degraded/non-Active. Refreeze only this ordering/test delta."
+    next_repair_round_57: "Satisfied; await proportionate G1 review before landing."
     conjecture_delta: "Typed updater diagnostics worked as a discriminator: no typed updater reason appeared because the request never crossed the guest transport. The remaining error is now localized to vmctl lifecycle/ownership readiness versus proxy reachability, before updater report or signature verification."
     heresy_delta: {discovered: 9, introduced: 1, repaired: 3}
   dead_end_assessment:
