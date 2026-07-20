@@ -692,7 +692,7 @@ func (e *Executor) ExtractOwned(agentRunID, handle string) ([]FileChange, error)
 
 // ExtractGranted closes the capsule's execution boundary before observing its
 // diff. A frozen capsule may be retried after a later freeze step fails.
-func (e *Executor) ExtractGranted(agentRunID, handle string) ([]FileChange, error) {
+func (e *Executor) ExtractGranted(ctx context.Context, agentRunID, handle string) ([]FileChange, error) {
 	capability, err := e.ResolveCapability(agentRunID, handle)
 	if err != nil || capability.AgentRole != RoleCoSuper {
 		return nil, fmt.Errorf("capsule granted diff unavailable")
@@ -708,7 +708,7 @@ func (e *Executor) ExtractGranted(agentRunID, handle string) ([]FileChange, erro
 	caps.mu.RUnlock()
 	switch state {
 	case StateActive:
-		if err := caps.Quiesce(context.Background()); err != nil {
+		if err := caps.Quiesce(ctx); err != nil {
 			return nil, fmt.Errorf("freeze capsule before extracting diff: %w", err)
 		}
 	case StateFrozen:
@@ -716,7 +716,7 @@ func (e *Executor) ExtractGranted(agentRunID, handle string) ([]FileChange, erro
 	default:
 		return nil, fmt.Errorf("capsule granted diff unavailable in state %s", state)
 	}
-	return caps.Diff(context.Background())
+	return caps.Diff(ctx)
 }
 
 func (e *Executor) ResolveGrantedCapsuleID(agentRunID, handle string) (string, error) {

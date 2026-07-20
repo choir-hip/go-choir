@@ -161,7 +161,7 @@ func TestExtractGrantedFreezesBeforeDiff(t *testing.T) {
 	if _, _, err := executor.StageGrantedRelease("cosuper-freeze", "grant-freeze", t.TempDir()); err == nil || !strings.Contains(err.Error(), "requires frozen capsule") {
 		t.Fatalf("active capsule stage error = %v", err)
 	}
-	if _, err := executor.ExtractGranted("cosuper-freeze", "grant-freeze"); err != nil {
+	if _, err := executor.ExtractGranted(context.Background(), "cosuper-freeze", "grant-freeze"); err != nil {
 		t.Fatal(err)
 	}
 	if caps.State != StateFrozen {
@@ -397,5 +397,38 @@ func TestExecutionReceiptValidationRequiresFrozenCapsule(t *testing.T) {
 	}
 	if _, err := executor.ResolveGrantedExecutionReceipts(context.Background(), "cosuper-receipt", "grant-receipt", []string{"receipt"}); err == nil || !strings.Contains(err.Error(), "requires frozen capsule") {
 		t.Fatalf("active receipt validation error = %v", err)
+	}
+}
+
+func TestExtractGrantedPropagatesCancellation(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := &Capability{
+		CapabilityID: "cap-cancel", Handle: "grant-cancel", CapsuleID: "capsule-cancel",
+		TargetCapsule: "capsule-cancel", AgentRunID: "cosuper-cancel", AgentRole: RoleCoSuper,
+		Verbs: RoleVerbSets[RoleCoSuper], ExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := SignCapability(capability, privateKey, "test-key"); err != nil {
+		t.Fatal(err)
+	}
+	caps := &Capsule{ID: "capsule-cancel", State: StateActive, Cgroup: &testCapsuleCgroup{}}
+	if err := caps.acquireOp(); err != nil {
+		t.Fatal(err)
+	}
+	defer caps.releaseOp()
+	executor := &Executor{
+		capsules:     map[string]*Capsule{"capsule-cancel": caps},
+		capabilities: map[capKey]*Capability{{AgentRunID: "cosuper-cancel", Handle: "grant-cancel"}: capability},
+		revokedCaps:  map[string]bool{}, publicKey: publicKey,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := executor.ExtractGranted(ctx, "cosuper-cancel", "grant-cancel"); err == nil {
+		t.Fatal("canceled extraction succeeded")
+	}
+	if caps.State != StateActive {
+		t.Fatalf("canceled extraction state = %s, want %s", caps.State, StateActive)
 	}
 }

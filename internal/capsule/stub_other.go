@@ -39,7 +39,7 @@ func (e *Executor) ExtractOwned(string, string) ([]FileChange, error) { return n
 func (e *Executor) ResolveOwnedCapsuleID(string, string) (string, error) {
 	return "", stubErr("resolve")
 }
-func (e *Executor) ExtractGranted(string, string) ([]FileChange, error) {
+func (e *Executor) ExtractGranted(context.Context, string, string) ([]FileChange, error) {
 	return nil, stubErr("diff")
 }
 func (e *Executor) ResolveGrantedCapsuleID(string, string) (string, error) {

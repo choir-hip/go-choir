@@ -224,7 +224,7 @@ func newCommitTransactionTool() toolregistry.Tool {
 			if input.Handle == "" || input.BuildRecipeRef == "" || len(input.TestReceipts) == 0 || len(input.DependencyToolchainRefs) == 0 {
 				return "", fmt.Errorf("complete build recipe, test receipts, and dependency/toolchain refs are required")
 			}
-			changes, err := toolCtx.Executor.ExtractGranted(toolCtx.AgentRunID, input.Handle)
+			changes, err := toolCtx.Executor.ExtractGranted(ctx, toolCtx.AgentRunID, input.Handle)
 			if err != nil {
 				return "", err
 			}
