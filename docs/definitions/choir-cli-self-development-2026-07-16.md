@@ -946,7 +946,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 1}
   c_deploy_failure_2:
     observed_at: 2026-07-20T10:51:22Z
-    status: blocked_C_nested_service_wrapper
+    status: repair_implemented_pending_G1
     mutation_class: red
     protected_surfaces: [Node_B_deployment, service_package_pointers, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deploy logs, focused wrapper-resolution fixtures, refrozen G1 review, complete deploy receipt, public build identity, and no-SSH acceptance."
@@ -954,6 +954,7 @@ now:
     problem: "`node-b-sync-service-pointers` parses only a quoted final `exec` directly in the systemd ExecStart wrapper. `proxyExec` instead has an unquoted exec to the generated serviceExec wrapper, whose final quoted exec reaches the immutable proxy package. The package authority exists but the synchronizer stops one wrapper too early."
     existing_replacement: "The generated wrapper chain already contains the exact immutable package path. Resolve that chain with a small bounded/cycle-detecting parser rather than adding another proxy-specific package authority or duplicating serviceExec."
     authorized_repair: "Resolve quoted or unquoted literal exec targets recursively for a strict small depth. Accept only an executable ending in `/bin/<service>` and install its package root. Reject variables, cycles, unreadable targets, wrong binary names, and depth exhaustion. Add focused disposable fixtures for direct, nested, unquoted, cycle, variable, wrong-binary, and missing targets; refreeze G1 before deployment."
+    repair_result: "`resolve_service_package` follows at most four absolute literal exec targets, detects cycles, and accepts only an executable `/bin/<service>` leaf. The main script remains sourceable for direct contract testing. Focused fixtures prove direct quoted and nested unquoted resolution plus refusal of variable-only, cyclic, wrong-binary, missing-target, and over-depth chains; both Plan CI and deploy preflight execute the regression."
     rollback: "The exact main host generation and immutable guest pointer are active; pre-managed and conflict recovery trees remain. No complete deployment receipt or active-computer refresh was published. Revert only the synchronizer repair if rejected; retain incomplete receipts and all guest rollback refs."
     conjecture_delta: "Service package authority may be wrapped for immutable environment injection; deployment discovery must resolve bounded generated wrapper composition, not assume one textual wrapper shape."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}

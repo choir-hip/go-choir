@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$#" -eq 0 ]; then
-  echo "usage: $0 <service>..." >&2
-  exit 64
-fi
-
 install_service_pointer_from_src() {
   local service="$1"
   local src="$2"
@@ -31,33 +26,100 @@ install_service_pointer_from_src() {
   echo "    Host service pointer updated from NixOS closure: $service -> $current"
 }
 
-for service in "$@"; do
-  unit="go-choir-${service}.service"
-  # Use a subshell with || true so systemctl show doesn't abort under
-  # set -euo pipefail when the unit is intentionally absent (e.g.
-  # go-choir-sandbox, deleted in PR 5 of store-consolidation).
-  wrapper="$(
-    { systemctl show "$unit" -p ExecStart --value 2>/dev/null || true; } |
-      sed -n 's/^.*path=\([^ ;]*\).*$/\1/p' |
-      head -n 1
-  )"
-  if [ -z "$wrapper" ] || [ ! -r "$wrapper" ]; then
-    # go-choir-sandbox was intentionally deleted in PR 5 of store-consolidation.
-    # Its package pointer is now installed by a NixOS activation script.
-    # All other services are required — a missing unit is a deploy error.
-    if [ "$service" = "sandbox" ]; then
-      echo "    No ExecStart wrapper for $unit — skipping (deleted in PR 5)" >&2
-      continue
+last_literal_exec_target() {
+  local wrapper="$1"
+  local line
+  local target=
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*exec[[:space:]]+\"(/[^\"]+)\" ]]; then
+      target="${BASH_REMATCH[1]}"
+    elif [[ "$line" =~ ^[[:space:]]*exec[[:space:]]+(/[^[:space:]]+) ]]; then
+      target="${BASH_REMATCH[1]}"
     fi
-    echo "Could not find readable ExecStart wrapper for $unit" >&2
-    exit 1
+  done < "$wrapper"
+
+  if [ -z "$target" ]; then
+    return 1
+  fi
+  printf '%s\n' "$target"
+}
+
+resolve_service_package() {
+  local service="$1"
+  local current="$2"
+  local target
+  local depth
+  local -A seen=()
+
+  for depth in 1 2 3 4; do
+    if [ ! -r "$current" ]; then
+      echo "Could not read Nix exec wrapper $current for go-choir-$service.service" >&2
+      return 1
+    fi
+    if [ -n "${seen[$current]+x}" ]; then
+      echo "Cycle in Nix exec wrappers at $current for go-choir-$service.service" >&2
+      return 1
+    fi
+    seen["$current"]=1
+
+    if ! target="$(last_literal_exec_target "$current")"; then
+      echo "Could not find literal Nix exec target in wrapper $current for go-choir-$service.service" >&2
+      return 1
+    fi
+    if [[ "$target" == */bin/"$service" ]] && [ -x "$target" ]; then
+      printf '%s\n' "${target%/bin/$service}"
+      return 0
+    fi
+    if [[ "$target" == */bin/* ]]; then
+      echo "Nix wrapper $current resolves to wrong service binary $target for go-choir-$service.service" >&2
+      return 1
+    fi
+    current="$target"
+  done
+
+  echo "Nix exec wrapper depth exceeded for go-choir-$service.service" >&2
+  return 1
+}
+
+main() {
+  if [ "$#" -eq 0 ]; then
+    echo "usage: $0 <service>..." >&2
+    return 64
   fi
 
-  bin="$(sed -n 's|^exec "\([^"]*\)".*|\1|p' "$wrapper" | tail -n 1)"
-  if [ -z "$bin" ]; then
-    echo "Could not find Nix fallback binary in wrapper $wrapper for $unit" >&2
-    exit 1
-  fi
+  local service
+  local unit
+  local wrapper
+  local package
 
-  install_service_pointer_from_src "$service" "$(dirname "$(dirname "$bin")")"
-done
+  for service in "$@"; do
+    unit="go-choir-${service}.service"
+    # Use a subshell with || true so systemctl show doesn't abort under
+    # set -euo pipefail when the unit is intentionally absent (e.g.
+    # go-choir-sandbox, deleted in PR 5 of store-consolidation).
+    wrapper="$(
+      { systemctl show "$unit" -p ExecStart --value 2>/dev/null || true; } |
+        sed -n 's/^.*path=\([^ ;]*\).*$/\1/p' |
+        head -n 1
+    )"
+    if [ -z "$wrapper" ] || [ ! -r "$wrapper" ]; then
+      # go-choir-sandbox was intentionally deleted in PR 5 of store-consolidation.
+      # Its package pointer is now installed by a NixOS activation script.
+      # All other services are required — a missing unit is a deploy error.
+      if [ "$service" = "sandbox" ]; then
+        echo "    No ExecStart wrapper for $unit — skipping (deleted in PR 5)" >&2
+        continue
+      fi
+      echo "Could not find readable ExecStart wrapper for $unit" >&2
+      return 1
+    fi
+
+    package="$(resolve_service_package "$service" "$wrapper")"
+    install_service_pointer_from_src "$service" "$package"
+  done
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi

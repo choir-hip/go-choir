@@ -117,6 +117,7 @@ jobs:
           .github/scripts/ci-workflow-contract-test
           .github/scripts/deploy-impact-classify-test
           .github/scripts/deploy-workflow-contract-test
+          .github/scripts/node-b-sync-service-pointers-test
           bash -n .github/scripts/*
 
   go-vet-build:
@@ -547,6 +548,7 @@ jobs:
         run: |
           .github/scripts/deploy-impact-classify-test
           .github/scripts/deploy-workflow-contract-test
+          .github/scripts/node-b-sync-service-pointers-test
 
       - name: Detect deployed artifact changes
         id: detect
