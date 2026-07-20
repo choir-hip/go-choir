@@ -586,16 +586,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-credential-authority-round-47
-    state: accepted_G1_landed_wiring_repaired_C_actuation_failed
-    ref: 6777a66062cd60684eb846e7d4c1dfac7e602492
+    id: self-development-C-realization-reservation-round-48
+    state: frozen_G1_review
+    ref: 707c28cae59694fd97c81ca01700f4171516a459
     owner: integration-authority
-    base: 30bf9f075ba4ac055fb2f8ab0f22edb2f35509bb
-    scope: "Protected C Node B credential-authority wiring and precedence only: retain direct corpusd port 8086, add an immutable vmctl launcher that re-exports only `VMCTL_CORPUSD_URL` after mutable EnvironmentFile expansion, bind vmctl after/wants corpusd, and require all joins in the deterministic service contract. Preserve the mutable priority file for intended always-on IDs, guest routing, public APIs, lifecycle state, retained VMID/data, pending idempotency intent, effects OFF, and rollback refs. No other immutable override, proxy route, fallback, allocator, issuer, event, capsule, or route behavior is added."
+    base: 850ba6f6aa13eb061bf5d9025912ae4af1360f8d
+    scope: "Protected C retry-identity repair only: before each vmmanager refresh/boot actuation, reserve and persist a monotonically fresh registry epoch, bind credential issuance and RealizationID to that attempt, and preserve the ownership's published epoch/state until manager success. A failed boot and vmctl restart must retain the same ComputerID, VMID, data root, lifecycle intent, and effects OFF while using a non-replayed credential realization on retry. No idempotency weakening, credential TTL change, replacement allocation, manager epoch rewrite, API grammar, event, capsule, route, or mode behavior is added."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
-    immediate_predecessors: [f55414cbabcb47e93e61f7067337f04f5bbc5390, 30bf9f075ba4ac055fb2f8ab0f22edb2f35509bb]
-    verification: "The Node B service contract and Bash syntax pass. Nix evaluation yields vmctl ExecStart `/nix/store/...-go-choir-vmctl-exec`, EnvironmentFile unchanged, and exact after/wants arrays including corpusd. Direct Environment evaluation retains `VMCTL_CORPUSD_URL=http://127.0.0.1:8086`. Local x86_64-linux launcher realization is unavailable from the aarch64-darwin builder and remains a selected CI host-closure proof."
-    disposition: "Round-47 landed as main e50c55989faeea406a39dcc512999fea716fd8fd; CI/deploy run 29763351273 passed, realized and activated the protected launcher/host closure, and public health reports the exact SHA. Replaying the same pending lifecycle start still returned immediate 502 in 165 ms; target remains failed at epoch 804. Credential port/precedence is repaired but was not the sole blocker. C remains blocked and effects OFF."
+    immediate_predecessors: [e50c55989faeea406a39dcc512999fea716fd8fd, 850ba6f6aa13eb061bf5d9025912ae4af1360f8d]
+    verification: "Before repair, `TestRefreshManagerFailureProjectsFailedOwnershipAndAdvancesRetryIdentity` reproduced the defect: retry reused `vm-...-epoch-2` after failed boot. The repaired test persists ownership, restarts vmctl, retries the same failed Computer, and requires a different realization while retaining the failed ownership. Focused production-shaped tests and the full `go test -race ./internal/vmctl -count=1` pass; gopls diagnostics are clean."
+    disposition: "Frozen for Round-48 G1. Review must verify the registry epoch reservation is durable before credential issuance, does not publish a failed realization as active, cannot regress identity/ownership, and does not invent a second credential or manager authority. Main remains e50c5598 plus code-free failure record 850ba6f6; effects remain OFF."
     g1_round_47_probe:
       reviewed_at: 2026-07-20T17:24:00Z
       source_ref: 6777a66062cd60684eb846e7d4c1dfac7e602492
@@ -1160,7 +1160,7 @@ now:
     heresy_delta: {discovered: 3, introduced: 0, repaired: 0}
   c_deploy_failure_8:
     observed_at: 2026-07-20T17:34:30Z
-    status: blocked_C_post_credential_wiring_actuation_failure
+    status: frozen_G1_round_48_realization_reservation
     mutation_class: red
     protected_surfaces: [credential_issuance_idempotency, realization_epoch, vmmanager_boot_epoch, retained_persistent_computer, lifecycle_intent, public_acceptance]
     admissible_evidence_class: "Exact main CI/deploy receipt, public same-idempotency response/status, source credential/epoch persistence trace, deterministic platform+vmctl reproduction, refrozen G1 review, and deployed no-SSH acceptance."
@@ -1170,6 +1170,10 @@ now:
     existing_replacement_check: "The platform lifecycle receipt store already enforces idempotency commitments; vmmanager already owns a durable per-VM boot epoch file; ownership already has a global epoch counter. Do not weaken idempotency or mint multiple unconstrained credentials. Reconcile to one durable boot-attempt epoch/realization authority and ensure the credential commitment is retry-stable, or expose a safe typed failure class if evidence disproves the hypothesis."
     rollback: "Preserve main e50c5598 activation receipt, R0/R1, failed ownership/VMID/data image, pending lifecycle intent, credential lifecycle receipts, and the scoped key until expiry/revocation. Effects remain OFF. No new public lifecycle key or replacement allocation is authorized."
     next_action: "Build a deterministic production-shaped reproduction joining failed ownership epoch 804, durable vmmanager epoch advancement, credential issuance/retry commitment, and missing manager instance. Establish the exact refusal and existing single-authority repair, document it, then freeze any source candidate through G1 before deployment."
+    reproduction: "The focused regression failed on the pre-repair source with `retry reused credential realization \"vm-f0af8396dc4a89d36c23edf645dfca06-epoch-2\" after failed boot`. This proves the platform credential endpoint receives the same realization/idempotency identity after a failed actuation even though its absolute-expiry commitment changes."
+    candidate_repair: "707c28cae59694fd97c81ca01700f4171516a459 reserves `OwnershipRegistry.epochCounter` under the registry lock and persists it before calling the credential issuer. Credential RealizationID and idempotency bind that reserved attempt. Ownership epoch/state remain unchanged until manager success, so failed realization publication is not introduced. The regression restarts the registry from disk before retry and observes a distinct credential realization."
+    repair_evidence: "The focused retry/identity/retained-computer race tests pass, the complete vmctl race suite passes, and gopls reports no diagnostics. No manager API, platform idempotency semantics, credential lifetime, public route, or lifecycle intent changed."
+    rollback_candidate: "Revert 707c28cae59694fd97c81ca01700f4171516a459 before landing or revert its eventual main landing commit; main e50c5598/850ba6f6 remains effects OFF and retains the failed Computer."
     conjecture_delta: "A correct endpoint can still reject because credential idempotency and boot epoch are split authorities; retries must bind one durable realization identity across platform, vmctl, vmmanager, and guest."
     heresy_delta: {discovered: 4, introduced: 0, repaired: 0}
   dead_end_assessment:
