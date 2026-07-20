@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-B-disabled-cutover-round-19
-    state: accepted_G1
+    state: accepted_G1_C_ci_repairing
     ref: fe5b854f9c73356fe51fe2b5f53e4d931695db80
     owner: integration-authority
     base: 5483a082d0012890343deb3693eea15c53a98415
@@ -663,8 +663,8 @@ now:
     recorded_at: 2026-07-18T22:17:41Z
     consequence: "G0 must delete its unrelated-worker retention exception and rerun the frozen panel. B deletes worker-VM/candidate-VM lifecycle, controller, tool, API, profile, prompt, and configuration code; no fallback or unrelated VM-worker classification survives."
   evidence_refs: [docs/evidence/self-development-g0-conformance-2026-07-18.md, fe5b854f9c73356fe51fe2b5f53e4d931695db80, f89549a671aedfe916d1fc038bbe82d5c8be94eb, /tmp/choir-selfdev-g1-round19-panel/manifest.tsv]
-  blocker_or_risk: "G1 is accepted and R0 is healthy. The next risk is C deployment/ratchet integrity: a fresh workflow must complete coherently, serve one exact build identity, preserve effects OFF, expose the signed route-bound kernel receipt, and prove R1 immutable redeploy before genesis."
-  next_action: "Dispatch one fresh CI/deploy for current origin/main; monitor completion; verify exact Node B and choir.news identity, ordinary health, mode-off matrix, signed kernel receipt, legacy route refusal, R0 boundary, and immutable R1 redeploy before GenesisImported."
+  blocker_or_risk: "G1 is accepted and R0 is healthy, but fresh deploy workflow 29714324950 failed twice before deployment because Linux capsule tests did not preserve their own private/writable temporary-directory preconditions. This is a test-fixture blocker, not deployed behavior."
+  next_action: "Repair only the deterministic Linux test fixtures, reproduce them with `-race` on Node A, rerun the exact CI workflow, and deploy only after all selected gates pass. Keep R0 serving and genesis forbidden."
   c_preflight_1:
     observed_at: 2026-07-20T02:15:00Z
     status: repaired_in_round_18_candidate
@@ -706,6 +706,18 @@ now:
     recovery_result: "Preserved the mixed deployment under `/var/lib/go-choir/deploy-failures/selfdev-pre-gate-20260720T0240Z`; switched NixOS generation 561; removed mutable service pointers from authority so the R0 closure packages serve; restored the prior deploy receipt; rebuilt and installed guest image `e6fa53f10db3ba9499175d7a1d7912a0cbe2f876`; reconstructed the platform realization at epoch 615; and verified public proxy `2bc1799f72ce437b35d4606a23d14e62b7239ac5`, route generation 1/receipt `9f0e13fc-fa7e-5bdc-9620-6720477ace4f`, exact baseline ComputerVersion, direct guest health, and routed platform health."
     conjecture_delta: "CI cancellation is not a deployment barrier once the deploy job has begun. Future gates must prevent workflow dispatch/landing before authorization rather than rely on cancellation."
     heresy_delta: {discovered: 1, introduced: 1, repaired: 1}
+  c_ci_failure_1:
+    observed_at: 2026-07-20T03:28:00Z
+    status: documented_before_repair
+    mutation_class: yellow
+    protected_surfaces: [G1_gate_integrity, capsule_release_privacy, immutable_source_snapshot]
+    evidence_class: "GitHub Actions run 29714324950 attempts 1 and 2, exact race-shard JSON output."
+    problem: "The selected Linux race shard fails `TestCopyImmutableSourceTreePinsTrackedCleanFiles` because the immutable snapshot remains read-only when `testing.TempDir` cleans it, and fails the release staging tests because their caller-provided `incomingRoot` fixture is not explicitly forced to the production-required private mode. The production checks behave as designed; the tests fail to own cleanup and permission preconditions. The aggregate check blocks deployment, so R0 remains serving."
+    existing_replacement_check: "`copyImmutableSourceTree` intentionally produces read-only trees and `StageGrantedRelease` intentionally refuses group/world-accessible incoming roots. The repair belongs only in test cleanup/setup; weakening either production invariant is forbidden."
+    repair: "Register cleanup that restores owner write permission on the immutable snapshot before TempDir cleanup, explicitly chmod each release incoming root to 0700, and rerun the exact focused tests with `-race` on Linux before publishing."
+    rollback: "Revert the test-only fixture commit; no staging deployment was attempted by failed run 29714324950 and R0 remains active."
+    conjecture_delta: "The source invariants are sound, but their tests relied on ambient TempDir cleanup/mode behavior instead of declaring the boundary."
+    heresy_delta: {discovered: 0, introduced: 0, repaired: 0}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
