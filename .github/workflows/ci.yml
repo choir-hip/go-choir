@@ -531,7 +531,6 @@ jobs:
       deploy_host: ${{ steps.detect.outputs.deploy_host }}
       deploy_frontend: ${{ steps.detect.outputs.deploy_frontend }}
       deploy_host_service: ${{ steps.detect.outputs.deploy_host_service }}
-      deploy_ordinary_guest: ${{ steps.detect.outputs.deploy_ordinary_guest }}
       deploy_host_os: ${{ steps.detect.outputs.deploy_host_os }}
       deploy_vmctl_restart: ${{ steps.detect.outputs.deploy_vmctl_restart }}
       deploy_active_vm_refresh: ${{ steps.detect.outputs.deploy_active_vm_refresh }}
@@ -560,7 +559,6 @@ jobs:
               echo "deploy_host=true"
               echo "deploy_frontend=true"
               echo "deploy_host_service=false"
-              echo "deploy_ordinary_guest=false"
               echo "deploy_host_os=true"
               echo "deploy_vmctl_restart=true"
               echo "deploy_active_vm_refresh=true"
@@ -650,7 +648,6 @@ jobs:
           DEPLOY_FRONTEND: ${{ needs.deploy-impact.outputs.deploy_frontend }}
           DEPLOY_VMCTL_RESTART: ${{ needs.deploy-impact.outputs.deploy_vmctl_restart }}
           DEPLOY_ACTIVE_VM_REFRESH: ${{ needs.deploy-impact.outputs.deploy_active_vm_refresh }}
-          DEPLOY_ORDINARY_GUEST: ${{ needs.deploy-impact.outputs.deploy_ordinary_guest }}
           DEPLOY_HOST_OS: ${{ needs.deploy-impact.outputs.deploy_host_os }}
           HOST_SERVICES: ${{ needs.deploy-impact.outputs.host_services }}
         run: |
@@ -662,7 +659,6 @@ jobs:
             "DEPLOY_FRONTEND=$DEPLOY_FRONTEND"
             "DEPLOY_VMCTL_RESTART=$DEPLOY_VMCTL_RESTART"
             "DEPLOY_ACTIVE_VM_REFRESH=$DEPLOY_ACTIVE_VM_REFRESH"
-            "DEPLOY_ORDINARY_GUEST=$DEPLOY_ORDINARY_GUEST"
             "DEPLOY_HOST_OS=$DEPLOY_HOST_OS"
             "HOST_SERVICES=$HOST_SERVICES"
           )
@@ -715,7 +711,6 @@ jobs:
             echo "    deploy_frontend=${DEPLOY_FRONTEND}"
             echo "    deploy_vmctl_restart=${DEPLOY_VMCTL_RESTART}"
             echo "    deploy_active_vm_refresh=${DEPLOY_ACTIVE_VM_REFRESH}"
-            echo "    deploy_ordinary_guest=${DEPLOY_ORDINARY_GUEST}"
             echo "    deploy_host_os=${DEPLOY_HOST_OS}"
             echo "    host_services=${HOST_SERVICES}"
             echo "    workflow_commit=${DEPLOY_COMMIT}"
@@ -930,12 +925,6 @@ jobs:
             else
               echo "    Skipping host NixOS closure build"
             fi
-            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
-              build_selected_root "Guest image" ".#guest-image" "/tmp/guest-image-result" &
-              selected_build_pids+=("$!")
-            else
-              echo "    Skipping ordinary guest image build"
-            fi
             for pid in "${selected_build_pids[@]}"; do
               if ! wait "$pid"; then
                 selected_build_status=1
@@ -1114,43 +1103,6 @@ jobs:
             fi
             note_phase "service settle"
 
-            install_guest_image() (
-              local src="$1"
-              local dst="$2"
-              install -d -m 0750 "$dst"
-              local tmp
-              tmp=$(mktemp -d "$dst/.incoming.XXXXXX")
-              cleanup_guest_tmp() {
-                if [ -n "${tmp:-}" ] && [ -d "$tmp" ]; then
-                  rm -rf "$tmp"
-                fi
-              }
-              trap cleanup_guest_tmp EXIT
-              install -m 0644 "$src/vmlinux" "$tmp/vmlinux"
-              install -m 0644 "$src/rootfs.ext4" "$tmp/rootfs.ext4"
-              install -m 0644 "$src/initrd" "$tmp/initrd"
-              install -m 0644 "$src/storedisk.erofs" "$tmp/storedisk.erofs"
-              install -m 0644 "$src/kernel-params" "$tmp/kernel-params"
-              install -m 0644 "$src/build.json" "$tmp/build.json"
-              sync
-              for artifact in vmlinux rootfs.ext4 initrd storedisk.erofs kernel-params build.json; do
-                mv -f "$tmp/$artifact" "$dst/$artifact"
-              done
-              rmdir "$tmp"
-              tmp=
-              trap - EXIT
-            )
-
-            echo "==> Installing selected guest images (kernel + rootfs + initrd + store disk)"
-            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
-              install_guest_image /tmp/guest-image-result /var/lib/go-choir/guest
-              guest_commit=$(verify_artifact_manifest /var/lib/go-choir/guest/build.json go-choir-guest-image)
-              record_receipt_artifact ordinary_guest "$guest_commit" installed
-              echo "    Ordinary guest image deployed"
-            else
-              echo "    Skipping ordinary guest image install"
-            fi
-            note_phase "guest image install"
 
             if [ "${DEPLOY_VMCTL_RESTART}" = "true" ]; then
               echo "==> Restarting vmctl when selected classes require it"
@@ -1185,11 +1137,9 @@ jobs:
               sandbox_commit=$(verify_artifact_manifest /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)
               record_receipt_artifact sandbox "$sandbox_commit" installed
             fi
-            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] || [ "$sandbox_service_selected" = "true" ]; then
+            if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ] || [ "$sandbox_service_selected" = "true" ]; then
               sandbox_runtime_commit=$(artifact_manifest_commit /var/lib/go-choir/services/sandbox/share/go-choir/build.json sandbox)
-              if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
-                echo "==> Refreshing active interactive computers onto deployed guest image"
-              elif [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
+              if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
                 echo "==> Refreshing active interactive computers onto deployed VM boot contract"
               else
                 echo "==> Hot-refreshing active interactive computers onto deployed sandbox runtime package"
@@ -1221,13 +1171,13 @@ jobs:
                 refresh_pids=()
                 refresh_status=0
                 max_parallel_refresh=4
-                if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
+                if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
                   max_parallel_refresh=1
                 fi
                 for record in "${active_interactive[@]}"; do
                   IFS=$'\t' read -r refresh_user_id refresh_desktop_id refresh_vm_id refresh_sandbox_url <<< "$record"
                   (
-                    if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ] || [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
+                    if [ "${DEPLOY_ACTIVE_VM_REFRESH}" = "true" ]; then
                       echo "    Refreshing ${refresh_vm_id} for user ${refresh_user_id} desktop ${refresh_desktop_id}"
                       payload=$(jq -nc --arg user_id "$refresh_user_id" --arg desktop_id "$refresh_desktop_id" '{user_id:$user_id, desktop_id:$desktop_id}')
                       refresh_body="/tmp/go-choir-vm-refresh-${refresh_vm_id}.json"
@@ -1287,9 +1237,6 @@ jobs:
                   dump_deploy_service_diagnostics "active computer refresh or identity verification failed"
                   exit "$refresh_status"
                 fi
-              fi
-              if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
-                record_receipt_artifact ordinary_guest "$DEPLOY_COMMIT" active
               fi
               if [ "$sandbox_service_selected" = "true" ]; then
                 record_receipt_artifact sandbox "$DEPLOY_COMMIT" active
@@ -1420,9 +1367,6 @@ jobs:
               [ "$service" = "sandbox" ] && continue
               require_receipt_artifact "$service" active
             done
-            if [ "${DEPLOY_ORDINARY_GUEST}" = "true" ]; then
-              require_receipt_artifact ordinary_guest verified
-            fi
             if [ "$sandbox_service_selected" = "true" ]; then
               require_receipt_artifact sandbox verified
             fi

@@ -1029,7 +1029,7 @@ now:
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
   c_deploy_failure_4:
     observed_at: 2026-07-20T13:10:56Z
-    status: blocked_C_legacy_direct_guest_installer
+    status: activation_single_writer_repair_implemented_pending_G1
     mutation_class: red
     protected_surfaces: [immutable_guest_image, Node_B_NixOS_activation, deployment_routing, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deploy logs, single-writer negative inventory, classifier/workflow contracts, refrozen G1 review, complete deploy receipt, public identity, and no-SSH acceptance."
@@ -1037,6 +1037,7 @@ now:
     problem: "The first-cutover repair made `/var/lib/go-choir/guest` an activation-owned immutable Nix-store symlink, but the workflow retains an older second writer that copies artifacts into that path. Canonical guest inputs still select the old direct build/install/ordinary_guest receipt route, bypassing the activation transaction and violating single state authority."
     existing_replacement: "`nix/node-b.nix` activation already owns atomic canonical guest pointer replacement, rollback-tree preservation, signal/error restoration, and idempotent convergence. The Node B host closure includes `guestImage`; active-computer refresh already consumes the resulting boot contract."
     authorized_repair: "Delete the `deploy_ordinary_guest` classifier output and all workflow environment/log/build/direct-install/ordinary_guest receipt branches, including the now-unused `install_guest_image` helper. Make canonical guest-affecting classifier paths select host OS activation, vmctl restart, and active-computer refresh. Refresh wording must use the VM boot-contract path. Add negative workflow contracts for removed ordinary-guest tokens and focused classifier assertions that `nix/sandbox-vm.nix` selects host OS + refresh with no guest output. Preserve `/var/lib/go-choir/guest`, rollback trees, temp/report/archive refs, and incomplete receipts. Refreeze G1."
+    repair_result: "The ordinary-guest deploy class, environment/output transport, direct build/install helper, ordinary_guest receipt, and refresh branches are deleted. Canonical guest inputs now select Node B host activation, vmctl restart, and active-computer boot-contract refresh; the activation-owned guestImage pointer is the only writer. Focused classifier/workflow/pointer contracts, Bash syntax, and YAML parse pass; active workflow inventory contains old tokens only as negative contracts."
     rollback: "Revert the source deletion if G1 rejects it. Node B remains on 87432535 with activation-owned canonical guest pointer, pre-managed/conflict rollback trees, and incomplete receipts 29740013073-1 and 29744232989-1."
     conjecture_delta: "A canonical artifact cannot have both an activation transaction and a deploy-time copier; selection, materialization, and receipt authority must move together to the single writer."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}

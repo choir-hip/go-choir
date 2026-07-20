@@ -72,7 +72,6 @@ choir_cli_output="$(
 assert_contains "$choir_cli_output" "deploy_needed=false"
 assert_contains "$choir_cli_output" "deploy_host=false"
 assert_contains "$choir_cli_output" "deploy_host_service=false"
-assert_contains "$choir_cli_output" "deploy_ordinary_guest=false"
 assert_contains "$choir_cli_output" "host_services="
 assert_contains "$choir_cli_output" "cmd/choir/main.go -> ignored (undistributed Choir CLI; not installed on Node B or guest closures)"
 assert_contains "$choir_cli_output" "cmd/choir/main_test.go -> ignored (undistributed Choir CLI; not installed on Node B or guest closures)"
@@ -87,7 +86,6 @@ desktop_native_output="$(
 assert_contains "$desktop_native_output" "deploy_needed=false"
 assert_contains "$desktop_native_output" "deploy_host=false"
 assert_contains "$desktop_native_output" "deploy_host_service=false"
-assert_contains "$desktop_native_output" "deploy_ordinary_guest=false"
 assert_contains "$desktop_native_output" "cmd/desktop/main.go -> ignored (native Wails distribution module; not installed on Node B or guest closures)"
 assert_not_contains "$desktop_native_output" "conservative Go impact"
 
@@ -100,7 +98,6 @@ assert_contains "$desktop_shared_frontend_output" "deploy_needed=true"
 assert_contains "$desktop_shared_frontend_output" "deploy_frontend=true"
 assert_contains "$desktop_shared_frontend_output" "deploy_host=false"
 assert_contains "$desktop_shared_frontend_output" "deploy_host_service=false"
-assert_contains "$desktop_shared_frontend_output" "deploy_ordinary_guest=false"
 assert_contains "$desktop_shared_frontend_output" "frontend/src/lib/auth.js -> frontend bundle"
 assert_not_contains "$desktop_shared_frontend_output" "conservative Go impact"
 
@@ -121,7 +118,6 @@ assert_contains "$node_b_storage_tooling_output" "scripts/node-b-storage-vm-gate
 assert_contains "$node_b_storage_tooling_output" "scripts/node-b-data-img-snapshot -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
 assert_contains "$node_b_storage_tooling_output" "scripts/node-b-nix-root-report -> ignored (Node B operator/report tooling; not deployed to host or guest closures)"
 assert_not_contains "$node_b_storage_tooling_output" "unknown deployed path"
-assert_not_contains "$node_b_storage_tooling_output" "ordinary_guest=true"
 
 node_a_tooling_output="$(
   run_classifier \
@@ -134,17 +130,25 @@ assert_contains "$node_a_tooling_output" "nix/node-a.nix -> ignored (Node A mirr
 assert_contains "$node_a_tooling_output" "nix/node-a-hardware.nix -> ignored (Node A mirror config; not deployed to Node B host or guest closures)"
 assert_contains "$node_a_tooling_output" "nix/node-a-disks.nix -> ignored (Node A mirror config; not deployed to Node B host or guest closures)"
 assert_not_contains "$node_a_tooling_output" "unknown deployed path"
-assert_not_contains "$node_a_tooling_output" "ordinary_guest=true"
 
 pointer_sync_output="$(run_classifier "scripts/node-b-sync-service-pointers")"
 assert_contains "$pointer_sync_output" "deploy_needed=true"
 assert_contains "$pointer_sync_output" "deploy_host=true"
 assert_contains "$pointer_sync_output" "deploy_host_os=true"
 assert_contains "$pointer_sync_output" "deploy_vmctl_restart=true"
-assert_contains "$pointer_sync_output" "deploy_ordinary_guest=false"
+assert_not_contains "$pointer_sync_output" "deploy_ordinary_guest"
 assert_contains "$pointer_sync_output" "host_services="
 assert_contains "$pointer_sync_output" "scripts/node-b-sync-service-pointers -> host OS activation and immutable service-pointer synchronization"
 assert_not_contains "$pointer_sync_output" "playwright"
+
+guest_boot_output="$(run_classifier "nix/sandbox-vm.nix")"
+assert_contains "$guest_boot_output" "deploy_needed=true"
+assert_contains "$guest_boot_output" "deploy_host=true"
+assert_contains "$guest_boot_output" "deploy_host_os=true"
+assert_contains "$guest_boot_output" "deploy_vmctl_restart=true"
+assert_contains "$guest_boot_output" "deploy_active_vm_refresh=true"
+assert_contains "$guest_boot_output" "nix/sandbox-vm.nix -> canonical guest image"
+assert_not_contains "$guest_boot_output" "deploy_ordinary_guest"
 
 proxy_runtime_output="$(run_classifier "cmd/proxy/main.go")"
 assert_contains "$proxy_runtime_output" "deploy_needed=true"

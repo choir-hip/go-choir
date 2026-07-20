@@ -43,6 +43,11 @@ reject 'deploy_playwright_guest'
 reject 'guest-image-playwright'
 reject 'guest-playwright'
 reject 'playwright_guest'
+reject 'DEPLOY_ORDINARY_GUEST'
+reject 'deploy_ordinary_guest'
+reject 'install_guest_image'
+reject 'ordinary_guest'
+reject '/tmp/guest-image-result'
 
 identity_line=$(grep -nF 'selected service build identity mismatch' "$workflow" | cut -d: -f1)
 receipt_line=$(grep -nF 'Published activation receipt' "$workflow" | cut -d: -f1)
