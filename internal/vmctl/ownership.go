@@ -279,6 +279,10 @@ type OwnershipRegistry struct {
 	// mechanism to prevent duplicate canonical effects (VAL-CROSS-117).
 	epochCounter int64
 
+	// refreshing serializes deploy-time reboot/config preparation per stable
+	// ownership without holding the registry lock across Firecracker startup.
+	refreshing map[string]struct{}
+
 	// vmManager is the optional Firecracker VM lifecycle manager.
 	// When nil, the registry operates in host-process sandbox mode where
 	// all VMs share the same sandbox URL. When set, the registry delegates
@@ -309,6 +313,7 @@ func NewOwnershipRegistry(sandboxURLBase string) *OwnershipRegistry {
 		vmByID:                     make(map[string]*VMOwnership),
 		pendingWaiters:             make(map[string][]chan *VMOwnership),
 		gatewayCredentialNextCheck: make(map[string]time.Time),
+		refreshing:                 make(map[string]struct{}),
 		sandboxURLBase:             sandboxURLBase,
 		idleTimeout:                0, // no idle timeout by default
 		pressureReclaim:            DefaultPressureReclaimConfig(),
@@ -1812,49 +1817,78 @@ func (r *OwnershipRegistry) RefreshVMForDesktop(userID, desktopID string) (*VMOw
 			r.ensureExistingGatewayCredential(ensureVMID)
 		}
 	}()
-	r.mu.Lock()
-	defer r.mu.Unlock()
 
-	own, ok := r.ownerships[ownershipKey(userID, desktopID)]
+	key := ownershipKey(userID, desktopID)
+	r.mu.Lock()
+	own, ok := r.ownerships[key]
 	if !ok {
+		r.mu.Unlock()
 		return nil, fmt.Errorf("no VM found for user %s desktop %s", userID, normalizeDesktopID(desktopID))
 	}
-
 	if own.State != VMStateActive &&
 		own.State != VMStateBooting &&
 		own.State != VMStateStopped &&
 		own.State != VMStateHibernated &&
 		own.State != VMStateDegraded &&
 		own.State != VMStateFailed {
+		r.mu.Unlock()
 		return nil, fmt.Errorf("VM %s is not refreshable (state=%s)", own.VMID, own.State)
 	}
+	if _, inProgress := r.refreshing[key]; inProgress {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("VM %s refresh is already in progress", own.VMID)
+	}
 
-	if r.vmManager != nil {
-		var info *VMInstanceInfo
+	snapshot := *own
+	mgr := r.vmManager
+	missingStoppedInstance := mgr != nil && mgr.GetVM(own.VMID) == nil &&
+		(own.State == VMStateStopped || own.State == VMStateHibernated)
+	r.refreshing[key] = struct{}{}
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.refreshing, key)
+		r.mu.Unlock()
+	}()
+
+	var info *VMInstanceInfo
+	if mgr != nil {
+		cfg := r.freshVMConfig(&snapshot, "")
+		if cfg.ComputerCredentialEnvelope == "" {
+			return nil, fmt.Errorf("failed to refresh VM %s: realization credential unavailable", snapshot.VMID)
+		}
 		var err error
-		missingStoppedInstance := r.vmManager.GetVM(own.VMID) == nil &&
-			(own.State == VMStateStopped || own.State == VMStateHibernated)
 		if missingStoppedInstance {
-			info, err = r.vmManager.BootVM(vmManagerConfigForOwnership(own, issueGatewayTokenAt(r.gatewayURL, own.VMID)))
+			info, err = mgr.BootVM(cfg)
 		} else {
-			info, err = r.vmManager.RefreshVM(own.VMID, vmManagerConfigForOwnership(own, ""))
+			info, err = mgr.RefreshVM(snapshot.VMID, cfg)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("failed to refresh VM %s: %w", own.VMID, err)
+			return nil, fmt.Errorf("failed to refresh VM %s: %w", snapshot.VMID, err)
 		}
+	}
+
+	r.mu.Lock()
+	own = r.ownerships[key]
+	if own == nil || own.VMID != snapshot.VMID {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("VM %s ownership changed during refresh", snapshot.VMID)
+	}
+	if info != nil {
 		own.SandboxURL = info.HostURL
 		own.Epoch = info.Epoch
 	} else {
 		own.Epoch = r.nextEpoch()
 	}
-
 	own.State = VMStateActive
 	own.LastActiveAt = time.Now()
 	own.StoppedBy = ""
 	r.saveLocked()
 	log.Printf("vmctl: refreshed VM %s for user %s desktop %s (new_epoch=%d, deploy-image-refresh)", own.VMID, userID, own.DesktopID, own.Epoch)
 	ensureVMID = own.VMID
-	return own, nil
+	result := cloneOwnership(own)
+	r.mu.Unlock()
+	return result, nil
 }
 
 // LogoutVM handles VM lifecycle transition on user logout. It transitions

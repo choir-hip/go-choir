@@ -2441,6 +2441,9 @@ type mockVMManager struct {
 	recoverStarted     chan struct{}
 	recoverRelease     chan struct{}
 	recoverStartedOnce sync.Once
+	refreshStarted     chan struct{}
+	refreshRelease     chan struct{}
+	refreshStartedOnce sync.Once
 }
 
 func (m *mockVMManager) BootVM(cfg VMManagerConfig) (*VMInstanceInfo, error) {
@@ -2535,13 +2538,26 @@ func (m *mockVMManager) RecoverVM(vmID string, cfg VMManagerConfig) (*VMInstance
 }
 
 func (m *mockVMManager) RefreshVM(vmID string, cfg VMManagerConfig) (*VMInstanceInfo, error) {
+	m.mu.Lock()
 	m.refreshes = append(m.refreshes, vmID)
 	m.refreshCfgs = append(m.refreshCfgs, cfg)
-	if m.refreshError != nil {
-		return nil, m.refreshError
+	m.refreshStartedOnce.Do(func() {
+		if m.refreshStarted != nil {
+			close(m.refreshStarted)
+		}
+	})
+	release := m.refreshRelease
+	refreshError := m.refreshError
+	response := m.refreshResponse
+	m.mu.Unlock()
+	if release != nil {
+		<-release
 	}
-	if m.refreshResponse != nil {
-		return m.refreshResponse, nil
+	if refreshError != nil {
+		return nil, refreshError
+	}
+	if response != nil {
+		return response, nil
 	}
 	return &VMInstanceInfo{HostURL: "http://127.0.0.1:9004", Epoch: 3, Healthy: true, State: "running"}, nil
 }
@@ -3063,6 +3079,7 @@ func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
 		},
 	}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
 	reg.SetVMManager(mock)
 
 	_, _ = reg.ResolveOrAssign("user-refresh-vm")
@@ -3097,6 +3114,7 @@ func TestOwnershipRegistry_RefreshActiveVMDelegatesToVMManager(t *testing.T) {
 
 func TestOwnershipRegistry_LiveSandboxURLSnapshotsDuringRefresh(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
 	reg.SetVMManager(&mockVMManager{
 		refreshResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9045",
@@ -3140,6 +3158,7 @@ func TestOwnershipRegistry_LiveSandboxURLSnapshotsDuringRefresh(t *testing.T) {
 
 func TestOwnershipRegistry_ResolveReturnSnapshotDuringRefresh(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
 	reg.SetVMManager(&mockVMManager{
 		refreshResponse: &VMInstanceInfo{
 			HostURL: "http://127.0.0.1:9047",
@@ -3193,6 +3212,7 @@ func TestOwnershipRegistry_RefreshAllowsHibernatedVM(t *testing.T) {
 		},
 	}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
 	reg.SetVMManager(mock)
 	initial, err := reg.ResolveOrAssign("user-refresh-hibernated")
 	if err != nil {
@@ -3303,6 +3323,7 @@ func TestOwnershipRegistry_RefreshStoppedVMWithoutManagerInstanceBootsFromOwners
 		},
 	}
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	reg.SetCorpusdURL(testComputerCredentialIssuerURL(t))
 	reg.SetVMManager(mock)
 	if _, err := reg.ResolveOrAssign("user-refresh-stopped-missing"); err != nil {
 		t.Fatalf("ResolveOrAssign: %v", err)
