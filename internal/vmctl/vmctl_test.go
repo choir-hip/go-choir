@@ -1285,6 +1285,82 @@ func TestHandler_Lookup(t *testing.T) {
 	}
 }
 
+func TestHandler_LookupDemotesUnhealthyActiveOwnership(t *testing.T) {
+	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
+	persistencePath := filepath.Join(t.TempDir(), "ownership.json")
+	if err := reg.SetPersistencePath(persistencePath); err != nil {
+		t.Fatalf("SetPersistencePath: %v", err)
+	}
+	own := &VMOwnership{
+		VMID:       "vm-unhealthy",
+		ComputerID: "computer-unhealthy",
+		UserID:     "user-unhealthy",
+		DesktopID:  PrimaryDesktopID,
+		SandboxURL: "http://127.0.0.1:9001",
+		State:      VMStateActive,
+		Epoch:      7,
+	}
+	key := ownershipKey(own.UserID, own.DesktopID)
+	reg.ownerships[key] = own
+	reg.vmByID[own.VMID] = own
+	unhealthy := false
+	manager := &mockVMManager{
+		getVMs: map[string]*VMInstanceInfo{
+			own.VMID: {
+				HostURL: own.SandboxURL,
+				Epoch:   own.Epoch,
+				Healthy: false,
+				State:   "running",
+			},
+		},
+		checkHealthOK: &unhealthy,
+	}
+	reg.SetVMManager(manager)
+	handler := NewHandler(reg)
+
+	request := httptest.NewRequest(http.MethodGet, "/internal/vmctl/lookup?computer_id="+own.ComputerID, nil)
+	request.Header.Set("X-Internal-Caller", "true")
+	response := httptest.NewRecorder()
+	handler.HandleLookup(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("lookup status = %d, want 200; body=%s", response.Code, response.Body.String())
+	}
+	var result ownershipResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode lookup response: %v", err)
+	}
+	if result.State != string(VMStateDegraded) {
+		t.Fatalf("lookup state = %q, want %q", result.State, VMStateDegraded)
+	}
+	stored := reg.GetOwnershipForDesktop(own.UserID, own.DesktopID)
+	if stored == nil || stored.State != VMStateDegraded {
+		t.Fatalf("stored ownership = %+v, want durable degraded state", stored)
+	}
+	persistedBytes, err := os.ReadFile(persistencePath)
+	if err != nil {
+		t.Fatalf("read persisted ownership: %v", err)
+	}
+	var persisted persistedOwnershipState
+	if err := json.Unmarshal(persistedBytes, &persisted); err != nil {
+		t.Fatalf("decode persisted ownership: %v", err)
+	}
+	if len(persisted.Ownerships) != 1 || persisted.Ownerships[0].State != VMStateDegraded {
+		t.Fatalf("persisted ownerships = %+v, want degraded ownership", persisted.Ownerships)
+	}
+	restarted := NewOwnershipRegistry("http://127.0.0.1:8085")
+	if err := restarted.SetPersistencePath(persistencePath); err != nil {
+		t.Fatalf("reload ownership: %v", err)
+	}
+	reloaded := restarted.GetOwnershipForDesktop(own.UserID, own.DesktopID)
+	if reloaded == nil || reloaded.State != VMStateStopped {
+		t.Fatalf("reloaded ownership = %+v, want stopped recovery state", reloaded)
+	}
+	if len(manager.checkHealthCalls) != 1 || manager.checkHealthCalls[0] != own.VMID {
+		t.Fatalf("health checks = %v, want [%s]", manager.checkHealthCalls, own.VMID)
+	}
+}
+
 func TestOwnershipRegistry_ComputerIDLookupFailsClosedOnAmbiguity(t *testing.T) {
 	reg := NewOwnershipRegistry("http://127.0.0.1:8085")
 	reg.ownerships[ownershipKey("owner-a", "primary")] = &VMOwnership{

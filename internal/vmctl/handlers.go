@@ -264,6 +264,7 @@ func (h *Handler) HandleLookup(w http.ResponseWriter, r *http.Request) {
 	} else {
 		own = h.registry.GetOwnershipForDesktop(userID, normalizeDesktopID(r.URL.Query().Get("desktop_id")))
 	}
+	own = h.registry.reconcileLookupReadiness(own)
 	if own != nil {
 		if err := h.requireComputerVersionRoute(r.Context(), own.UserID, own.DesktopID); err != nil {
 			writeVMCTLJSON(w, http.StatusConflict, vmctlErrorResponse{Error: err.Error()})

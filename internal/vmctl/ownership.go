@@ -1543,6 +1543,63 @@ func (r *OwnershipRegistry) GetOwnershipByComputerID(computerID string) *VMOwner
 	return &snapshot
 }
 
+// reconcileLookupReadiness prevents a cached active ownership from outliving
+// the guest health evidence that made it routable. It never starts or replaces
+// a VM: lookup remains non-constructive, and lifecycle recovery stays explicit.
+func (r *OwnershipRegistry) reconcileLookupReadiness(own *VMOwnership) *VMOwnership {
+	if own == nil || !own.IsReady() {
+		return own
+	}
+
+	key := ownershipKey(own.UserID, own.DesktopID)
+	r.mu.RLock()
+	mgr := r.vmManager
+	_, refreshing := r.refreshing[key]
+	r.mu.RUnlock()
+	if mgr == nil {
+		return own
+	}
+	if refreshing {
+		snapshot := *own
+		snapshot.State = VMStateBooting
+		return &snapshot
+	}
+
+	healthy, healthErr := mgr.CheckHealth(own.VMID)
+	if healthErr == nil && healthy {
+		return own
+	}
+
+	r.mu.Lock()
+	current := r.ownerships[key]
+	if current == nil {
+		r.mu.Unlock()
+		return nil
+	}
+	if current.VMID != own.VMID || current.Epoch != own.Epoch || current.State != VMStateActive {
+		result := cloneOwnership(current)
+		r.mu.Unlock()
+		return result
+	}
+	if _, refreshing = r.refreshing[key]; refreshing {
+		result := cloneOwnership(current)
+		result.State = VMStateBooting
+		r.mu.Unlock()
+		return result
+	}
+	current.State = VMStateDegraded
+	r.saveLocked()
+	result := cloneOwnership(current)
+	r.mu.Unlock()
+
+	if healthErr != nil {
+		log.Printf("vmctl: active VM %s lookup health check failed; marked degraded: %v", own.VMID, healthErr)
+	} else {
+		log.Printf("vmctl: active VM %s lookup health check returned unhealthy; marked degraded", own.VMID)
+	}
+	return result
+}
+
 // LiveSandboxURL returns the live sandbox URL for the given user/desktop pair.
 // It prefers the VM manager's live HostURL over the cached ownership record.
 // Returns an error if the ownership does not exist and no live VM is found.
