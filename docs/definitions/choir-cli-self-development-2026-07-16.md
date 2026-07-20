@@ -1263,7 +1263,7 @@ now:
     heresy_delta: {discovered: 6, introduced: 1, repaired: 1}
   c_deploy_failure_11:
     observed_at: 2026-07-20T20:11:20Z
-    status: accepted_G1_round_53_pending_land
+    status: repaired_deployed_round_53
     mutation_class: red
     protected_surfaces: [vmctl_restart_recovery, retained_computer, realization_epoch, lifecycle_acceptance, kernel_capability_receipt]
     admissible_evidence_class: "Exact main CI/deploy receipt, public scoped lifecycle/kernel responses, source transition trace, focused production-shaped tests, refrozen G1, and deployed no-SSH acceptance."
@@ -1280,6 +1280,20 @@ now:
     next_repair: "Satisfied and accepted in round 53; land and run the deployed no-SSH recovery/kernel receipt gate."
     conjecture_delta: "A durable boot-epoch reservation is necessary but insufficient: every caller that begins a boot must terminalize failed attempts, or restart recovery can strand the retained Computer in a transient state."
     heresy_delta: {discovered: 7, introduced: 1, repaired: 2}
+  c_deploy_failure_12:
+    observed_at: 2026-07-20T21:19:42Z
+    status: documented_pending_investigation
+    mutation_class: red
+    protected_surfaces: [retained_computer_recovery, lifecycle_intent, guest_readiness, kernel_capability_receipt, deployed_acceptance]
+    admissible_evidence_class: "Exact main CI/deploy receipt, public scoped lifecycle and guest-proxy responses, source timeout/readiness trace, focused production-shaped tests, refrozen G1 if code changes, and deployed no-SSH acceptance."
+    success_before_blocker: "Main 6f841ec4e5c699997bd262c7a00b12d9e63fc80c passed CI/deploy run 29778050342 and public health binds commit/deployed_commit. Immediately after restart the exact retained target was durable failed/recovery_failed at epoch 1161, proving round 53 repaired the stranded booting state and index coherence. Effects remain OFF."
+    evidence: "One public scoped lifecycle start with idempotency `c-recover-round53-1784582194558` returned 502 `lifecycle actuation failed` after 60077 ms. Subsequent public status reported the same ComputerID active at epoch 1164, but public kernel-capability GET returned 502 `target computer request failed` immediately after actuation and again more than 30 seconds later. No replacement identity, SSH, raw vmctl, second lifecycle key, or self-development effect was used."
+    problem: "Lifecycle ownership and guest readiness diverged: the retained Computer is projected active even though the public actuation timed out and its guest endpoint remains unreachable. Active state therefore is not admissible evidence of a routable immutable guest, and the signed kernel receipt gate remains blocked."
+    existing_replacement_check: "`ensureActiveVMReady`, manager health checks, configured-target retained recovery, sandbox proxy transport, lifecycle intent/idempotency, and exact kernel receipt handler already exist. Determine which join allowed Active before guest reachability; connect the existing readiness authority rather than extending timeouts, accepting state alone, minting a VM, bypassing the proxy, or using SSH as product proof."
+    rollback: "Preserve R0/R1, complete deployment 29778050342-1, retained VMID/data image, failed-to-active epoch transition 1161→1164, exact scoped key metadata, and effects OFF. Do not issue another lifecycle mutation until the timed-out intent and active/unreachable divergence are source-traced."
+    next_action: "Trace the public lifecycle start timeout, vmctl recovery completion, Active projection, sandbox proxy routing, and kernel handler against the exact production sequence; reproduce with existing production-shaped managers before proposing any repair."
+    conjecture_delta: "Terminalizing failed boots repaired restart recovery but exposed a separate readiness-authority gap: lifecycle completion, ownership Active, and guest routability do not currently fate-share."
+    heresy_delta: {discovered: 8, introduced: 1, repaired: 3}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
