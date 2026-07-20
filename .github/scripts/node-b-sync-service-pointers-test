@@ -136,6 +136,10 @@ node_b_config="$root/nix/node-b.nix"
 grep -Fq '"CORPUSD_PORT=8086"' "$node_b_config"
 grep -Fq '"PROXY_CORPUSD_URL=http://127.0.0.1:8086"' "$node_b_config"
 grep -Fq '"VMCTL_CORPUSD_URL=http://127.0.0.1:8086"' "$node_b_config"
+grep -Fq 'export VMCTL_CORPUSD_URL="http://127.0.0.1:8086"' "$node_b_config"
+grep -Fq 'ExecStart = "${vmctlExec}"' "$node_b_config"
+grep -Fq 'after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ]' "$node_b_config"
+grep -Fq 'wants = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ]' "$node_b_config"
 if grep -Fq '"VMCTL_CORPUSD_URL=http://127.0.0.1:8082"' "$node_b_config"; then
   echo "vmctl credential issuer points at proxy instead of corpusd" >&2
   exit 1

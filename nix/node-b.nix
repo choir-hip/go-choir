@@ -69,6 +69,13 @@ let
     export PROXY_SELF_DEVELOPMENT_DISPOSABLE_COMPUTER_ID="${selfDevelopmentDisposableComputerID}"
     exec ${serviceExec "proxy" goChoirPackages.proxy} "$@"
   '';
+  # vmctl-priority.env is mutable by design, but may only tune priority IDs.
+  # Reassert credential authority after EnvironmentFile expansion.
+  vmctlExec = pkgs.writeShellScript "go-choir-vmctl-exec" ''
+    set -euo pipefail
+    export VMCTL_CORPUSD_URL="http://127.0.0.1:8086"
+    exec ${serviceExec "vmctl" goChoirPackages.vmctl} "$@"
+  '';
   proxyDisposableTargetEnvironment =
     "PROXY_SELF_DEVELOPMENT_DISPOSABLE_COMPUTER_ID=${selfDevelopmentDisposableComputerID}";
   diskRetentionSweep = pkgs.writeShellScript "go-choir-disk-retention-sweep" ''
@@ -486,10 +493,10 @@ in
   systemd.services.go-choir-vmctl = {
     description = "go-choir VMCtl Service (Firecracker VM lifecycle)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-platform-dolt.service" ];
-    wants = [ "network-online.target" "go-choir-platform-dolt.service" ];
+    after = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ];
+    wants = [ "network-online.target" "go-choir-platform-dolt.service" "go-choir-corpusd.service" ];
     serviceConfig = commonServiceHardening // {
-      ExecStart = "${serviceExec "vmctl" goChoirPackages.vmctl}";
+      ExecStart = "${vmctlExec}";
       Restart = "on-failure";
       RuntimeDirectory = "go-choir";
       RuntimeDirectoryMode = "0700";
