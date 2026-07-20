@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-guest-cutover-repair-round-29
-    state: frozen_G1_review
+    state: rejected_G1_activation_traps
     ref: daece9fd0f00f11839d743f4bf57017bdb6f9f5b
     owner: integration-authority
     base: 8971c194
@@ -595,7 +595,7 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [50c634909bc1793d3c50160eec630c42816833c2, 8971c194]
     verification: "`nix eval` renders the Node B system and activation. Disposable execution of the exact rendered script proves ambiguous-tree preservation, ordinary rerun idempotency, second-ambiguity refusal, and restoration after an induced post-move failure. CI run 29723308309 passed before this repair; failed deployment 29723644656 is the reproducer."
-    disposition: "Effects remain OFF. Round-29 G1 must review exact source and authority before main may advance or deployment may retry."
+    disposition: "Round-29 is rejected under the severe-minority rule. Effects remain OFF and main does not advance. The repair overwrites NixOS's process-wide ERR trap and does not restore on termination signals."
   g1_round_11_probe:
     observed_at: 2026-07-19T23:31:00Z
     status: rejected_capsule_admission_substrate
@@ -852,7 +852,7 @@ now:
     heresy_delta: {discovered: 0, introduced: 0, repaired: 1}
   c_deploy_failure_1:
     observed_at: 2026-07-20T07:29:00Z
-    status: repair_implemented_pending_G1
+    status: rejected_G1_activation_traps
     mutation_class: red
     protected_surfaces: [Node_B_NixOS_activation, immutable_guest_image, rollback_realizations, deploy_receipt, active_computer_refresh]
     admissible_evidence_class: "Exact GitHub deployment logs, incomplete-deploy receipt, public build identity, refrozen source review, successful deployment receipt, and deployed no-SSH acceptance."
@@ -861,6 +861,17 @@ now:
     existing_replacement: "The exact immutable Nix guest output and its build manifest already provide managed image custody. Reconciliation should preserve the unexpected physical tree under one explicit conflict-recovery ref, retain the pre-managed rollback untouched, then atomically install the immutable store pointer."
     authorized_repair: "Add one deterministic conflict-recovery path. When both physical target and pre-managed rollback exist, fail if that recovery path already exists; otherwise atomically move the physical target there, leave the pre-managed rollback untouched, and install the immutable symlink. Never delete or overwrite any of the three refs. Refreeze G1 because this changes a protected deployment surface."
     repair_result: "`nix eval` renders the Node B activation successfully. A disposable execution of that exact rendered script proves four transitions: both trees are preserved while the immutable pointer installs; a normal rerun is idempotent; a second ambiguity is refused without mutation; and a forced post-move error restores the original active target."
+    g1_round_29_probe:
+      reviewed_at: 2026-07-20T07:52:58Z
+      source_ref: daece9fd0f00f11839d743f4bf57017bdb6f9f5b
+      authority_ref: 9d71444456537714372ff2a46f2ee62d3293ef53
+      manifest: /tmp/choir-selfdev-g1-round29-panel/manifest.tsv
+      manifest_sha256: c0bf4fee3179f1cc946fa05c371fc64d7fd1d6166855041a5c45f8b5dd39a37e
+      panel_health: "Six substantive reviews completed; Devin timed out."
+      verdicts: [codex:REJECT_G1, claude:ACCEPT_G1, cursor:ACCEPT_G1, opencode:ACCEPT_G1, omp-gpt55:ACCEPT_G1, omp-gemini35:ACCEPT_G1]
+      blocker: "The repair replaces NixOS activation's existing ERR accounting trap and clears it after success. ERR also does not run for TERM/INT/HUP, so a signal after moving the active tree can leave the canonical guest path absent until another activation."
+      repair: "Do not touch ERR. Pre-create the next symlink before mutation; save and restore existing HUP/INT/TERM traps; on a caught signal restore the moved tree, reinstate the prior trap, and re-raise. Guard every fallible post-move command explicitly and restore before returning failure."
+      output_sha256: {codex: 5c6ac5ce8ec4aa80e5adabc3e27572785ea16619062873ae806079bc1e34480b, claude: b5d79c7650ab6dd450ed193d261e7f07110953fcb88565fbdc0e6fdb2df3302d, cursor: 894338a1e56c33723f77b966a7c71302ed1a9b1dde99b62701b5ed42094b80a4, opencode: 76b66cebb8f4853e3beae73b4c076faa69550182659806bb3e3f54df1eed4cba, omp_gpt55: 3058f16f73c9cd68a080c022dd4e524e80c51d760b1c00f3c2e8ef29ee8ea9b7, omp_gemini35: 45190930552b7264fad55eafbd4c033bd0643b486f78020b32500cd16188aba0}
     rollback: "Current R0 guest realization and pre-managed rollback remain present; public route remains effects-OFF. On failed repair activation, restore the conflict-recovery directory to `/var/lib/go-choir/guest` and retain the prior NixOS generation and incomplete-deploy receipt."
     conjecture_delta: "Fail-closed ambiguity needs a bounded, named preservation transition; refusal alone is not restart-durable convergence."
     heresy_delta: {discovered: 1, introduced: 0, repaired: 0}
