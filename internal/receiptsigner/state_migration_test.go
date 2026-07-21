@@ -44,7 +44,9 @@ func runGuestSignerMigrationWithPath(t *testing.T, root, path string) error {
 	t.Helper()
 	owner, group := currentUserAndGroup(t)
 	command := exec.Command("bash", guestSignerMigrationScript(t), root, owner, group)
-	command.Env = replaceEnvironmentVariable(os.Environ(), "PATH", path)
+	environment := replaceEnvironmentVariable(os.Environ(), "BASH_ENV", "")
+	environment = replaceEnvironmentVariable(environment, "ENV", "")
+	command.Env = replaceEnvironmentVariable(environment, "PATH", path)
 	if output, err := command.CombinedOutput(); err != nil {
 		return &migrationCommandError{err: err, output: string(output)}
 	}
