@@ -1328,7 +1328,7 @@ now:
     heresy_delta: {discovered: 8, introduced: 1, repaired: 3}
   c_deploy_failure_13:
     observed_at: 2026-07-20T22:37:45Z
-    status: accepted_G1_round_57_pending_land
+    status: repaired_deployed_round_57
     mutation_class: red
     protected_surfaces: [retained_computer_recovery, lifecycle_intent, guest_readiness, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main deploy identity, public scoped lifecycle/status/guest-proxy responses, source readiness/ownership joins, production-shaped Linux and Go tests, refrozen G1, and deployed no-SSH acceptance."
@@ -1338,14 +1338,28 @@ now:
     existing_replacement_check: "`ensureActiveVMReady`, `VMManager.CheckHealth`, boot health probes, `LiveSandboxURL`, ownership lookup, and the proxy's upstream dial already exist. Round-55 review additionally found that `startExistingVM` already preserves VMID/data and reserves a fresh realization, but the failed/degraded branch bypasses it and mints a new VMID. Connect that existing recovery path; do not add another state store, lengthen deadlines, accept state alone, bypass the proxy, mint a replacement computer, or use SSH as product proof."
     rollback: "Preserve R0/R1, deployed e5eeefd5, retained ComputerID/data image, epochs 1176 and 1183, exact replay intent, scoped-key metadata, and effects OFF. Revert only a future readiness-authority repair if it regresses stable lifecycle behavior."
     candidate_repair: "b1e580472c99b01aa826e337c6411656dbba99a5 includes the same-identity Round-56 substrate repair and moves lookup reconciliation after successful ComputerVersion route authorization. Route refusal cannot call health or mutate ownership; failed same-identity recovery cannot publish Active."
-    repair_evidence: "In addition to lookup→resolve identity, persistence, epoch, and refresh-concurrency proofs, focused tests now assert route-required/unavailable returns 409 with zero health calls and unchanged Active ownership, and RecoverVM error leaves degraded identity/epoch unchanged. Full vmctl race and dependent builds/tests pass."
+    repair_evidence: "Main 8beee4597a3fb580167eaa41ee2647a8af541001 passed CI/deploy run 29788288622; public health binds commit/deployed_commit. Deployment restart and one scoped lifecycle start left the exact target failed at epoch 1198 rather than falsely Active; exact replay returned the same failure in 41 ms without mutation. The in-flight retained recovery later projected booting and settled Active at epoch 1202. A route-first kernel request then reached the guest in 5707 ms and returned typed 503 `updater_unreachable`, proving lifecycle/guest transport now fate-share and localizing the next blocker beyond vmctl/proxy."
     rollback_candidate: "Revert b1e580472c99b01aa826e337c6411656dbba99a5, a3477b8739275fc7097b49d4014ff43415c494e4, and ca4774f8362970ed7230b91b52d30e54c72a3fc3 before landing or their eventual main landing commit; preserve deployed e5eeefd5, retained target/data, and effects OFF."
     round_55_rejection: "The lookup health join is fail-closed and race-safe in isolation, but durable degraded state feeds the legacy generic resolve branch that deletes `vmByID` and generates a new VMID. The candidate therefore violates its own identity/data preservation boundary on the next ordinary routed request."
-    next_repair: "Satisfied in Round 56; await proportionate G1 review before landing."
+    next_repair: "Satisfied and deployed in Round 57."
     round_56_rejection: "Same-identity recovery and explicit-refresh concurrency are sound, but lookup currently executes CheckHealth and may persist degraded before the ComputerVersion route guard accepts the target. A route-refused request must not mutate protected lifecycle state."
-    next_repair_round_57: "Satisfied; await proportionate G1 review before landing."
+    next_repair_round_57: "Satisfied and deployed in main 8beee459."
     conjecture_delta: "Typed updater diagnostics worked as a discriminator: no typed updater reason appeared because the request never crossed the guest transport. The remaining error is now localized to vmctl lifecycle/ownership readiness versus proxy reachability, before updater report or signature verification."
-    heresy_delta: {discovered: 9, introduced: 1, repaired: 3}
+    heresy_delta: {discovered: 9, introduced: 1, repaired: 5}
+  c_deploy_failure_14:
+    observed_at: 2026-07-21T00:15:45Z
+    status: documented_pending_diagnosis
+    mutation_class: red
+    protected_surfaces: [guest_updater, guest_receipt_signer, kernel_capability_receipt, immutable_guest_readiness, deployed_acceptance]
+    admissible_evidence_class: "Exact main CI/deploy identity, public scoped lifecycle/mode/kernel responses, exact Nix guest closure and Node A harness, focused production-shaped tests, refrozen G1 for code changes, and deployed no-SSH acceptance."
+    success_before_blocker: "Round 57 repaired false Active publication and same-computer recovery. The exact retained ComputerID reached Active epoch 1202 only after guest health succeeded; mode remains off generation 0; the authenticated route now reaches the guest and receives a stable typed updater refusal rather than proxy timeout."
+    evidence: "On deployed main 8beee459, public scoped kernel-capability GET returned 503 after 5707 ms with `{\"error\":\"kernel capability receipt unavailable\",\"reason\":\"updater_unreachable\"}`. The request crossed ComputerVersion route authorization, vmctl guest-health reconciliation, proxy transport, and sandbox kernel handler; failure occurs when sandbox dials the guest-local updater Unix socket, before report creation or signature verification."
+    problem: "The served guest runtime is healthy while its required root-owned updater is unreachable, so immutable guest readiness and self-development readiness do not fate-share. The current `updater_unreachable` class cannot distinguish missing socket, permission denial, connection refusal, or timeout without SSH, and sandbox health does not require updater readiness."
+    existing_replacement_check: "`updater.Client` already preserves wrapped Unix dial errors, `KernelCapabilityUnavailableError` already exposes a closed stable code set, and the authenticated kernel endpoint already serializes only those codes. Refine that existing classifier; do not expose raw errors, add an observability store, weaken signer/updater isolation, bypass the updater, accept sandbox health alone, or use SSH as product proof."
+    rollback: "Preserve deployed 8beee459, retained ComputerID/VMID/data at epoch 1202, scoped-key metadata, R0/R1, and mode OFF. Any diagnostic candidate must be independently revertible and cannot alter service ordering, permissions, admission, or effects."
+    next_action: "Refine updater Unix transport refusal into stable non-secret missing-socket, permission-denied, connection-refused, and timeout codes using wrapped error identity; add focused tests and G1, deploy, and use the exact public response to select the substrate repair. Do not guess at systemd permissions or change guest service policy before that receipt."
+    conjecture_delta: "Round-57 falsified the vmctl/proxy theory: the request now reliably reaches a healthy sandbox. Remaining error is guest-local updater process/socket availability. The Nix unit appears configured and ordered, but its exact failure class remains unobserved."
+    heresy_delta: {discovered: 10, introduced: 1, repaired: 5}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
