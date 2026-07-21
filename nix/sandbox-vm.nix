@@ -101,8 +101,8 @@ let
       echo "go-choir-sandbox: wire publish URL not configured" >&2
     fi
 
-    admitted="$(${pkgs.curl}/bin/curl --silent --show-error --fail --retry 20 \
-      --retry-all-errors --retry-delay 0 --connect-timeout 1 --max-time 5 \
+    admitted="$(${pkgs.curl}/bin/curl --silent --show-error --retry 20 --retry-connrefused \
+      --retry-delay 0 --connect-timeout 1 --max-time 5 \
       --unix-socket /run/choir/updater.sock http://updater/v1/admit-current 2>/dev/null || true)"
     dynamic="$(printf '%s' "$admitted" | ${pkgs.jq}/bin/jq -er '.sandbox_path' 2>/dev/null || true)"
     skills="$(printf '%s' "$admitted" | ${pkgs.jq}/bin/jq -er '.skills_root' 2>/dev/null || true)"
