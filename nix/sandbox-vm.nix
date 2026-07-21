@@ -507,6 +507,7 @@ EOF
       Type = "simple";
       User = "root";
       Group = "root";
+      ExecStartPre = "${pkgs.coreutils}/bin/install -m 0600 /dev/null /run/choir/updater-unit-entered";
       ExecStart = "${goChoirPackages.updater}/bin/choir-updater --root /mnt/persistent/choir-updater --socket /run/choir/updater.sock --restart-request /run/choir-updater-control/restart --recovery-restart-request /run/choir-updater-control/recover --recovery-cleanup-request /run/choir-updater-control/cleanup --restart-prepare-url http://127.0.0.1:8085/internal/self-development/restart-handoff --health-url http://127.0.0.1:8085/health --signer-socket /run/choir-signers/guest-core/signer.sock --guest-image-manifest ${guestImageManifest} --kernel-config ${config.boot.kernelPackages.kernel.configfile}";
       Restart = "on-failure";
       RestartSec = 1;

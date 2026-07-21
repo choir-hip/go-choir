@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -84,12 +85,19 @@ func (t failingKernelCapabilityTransport) RoundTrip(*http.Request) (*http.Respon
 }
 
 func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
+	markerPath := filepath.Join(t.TempDir(), "updater-unit-entered")
+	if err := os.WriteFile(markerPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
-		name string
-		err  error
-		want string
+		name       string
+		err        error
+		markerPath string
+		want       string
 	}{
-		{name: "socket missing", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), want: KernelCapabilityFailureUpdaterSocketMissing},
+		{name: "unit not started", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), markerPath: filepath.Join(t.TempDir(), "missing"), want: KernelCapabilityFailureUpdaterUnitNotStarted},
+		{name: "process unavailable", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), markerPath: markerPath, want: KernelCapabilityFailureUpdaterProcessUnavailable},
+		{name: "socket missing without projection", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), want: KernelCapabilityFailureUpdaterSocketMissing},
 		{name: "permission denied", err: fmt.Errorf("wrapped: %w", os.ErrPermission), want: KernelCapabilityFailureUpdaterPermissionDenied},
 		{name: "connection refused", err: fmt.Errorf("wrapped: %w", syscall.ECONNREFUSED), want: KernelCapabilityFailureUpdaterConnectionRefused},
 		{name: "deadline", err: context.DeadlineExceeded, want: KernelCapabilityFailureUpdaterTimeout},
@@ -97,7 +105,10 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			client := &Client{http: &http.Client{Transport: failingKernelCapabilityTransport{err: test.err}}}
+			client := &Client{
+				unitEntryMarkerPath: test.markerPath,
+				http:                &http.Client{Transport: failingKernelCapabilityTransport{err: test.err}},
+			}
 			_, err := client.KernelCapabilities(context.Background(), KernelCapabilityRequest{})
 			if got := KernelCapabilityFailureCode(err); got != test.want {
 				t.Fatalf("failure code = %q, want %q", got, test.want)

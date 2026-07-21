@@ -21,20 +21,23 @@ import (
 )
 
 type Client struct {
-	socket string
-	http   *http.Client
+	socket              string
+	unitEntryMarkerPath string
+	http                *http.Client
 }
 
 const (
-	KernelCapabilityFailureUpdaterUnavailable       = "updater_unavailable"
-	KernelCapabilityFailureUpdaterUnreachable       = "updater_unreachable"
-	KernelCapabilityFailureUpdaterSocketMissing     = "updater_socket_missing"
-	KernelCapabilityFailureUpdaterPermissionDenied  = "updater_permission_denied"
-	KernelCapabilityFailureUpdaterConnectionRefused = "updater_connection_refused"
-	KernelCapabilityFailureUpdaterTimeout           = "updater_timeout"
-	KernelCapabilityFailureProbeUnavailable         = "probe_unavailable"
-	KernelCapabilityFailureReceiptRefused           = "receipt_refused"
-	KernelCapabilityFailureInvalidResponse          = "invalid_response"
+	KernelCapabilityFailureUpdaterUnavailable        = "updater_unavailable"
+	KernelCapabilityFailureUpdaterUnreachable        = "updater_unreachable"
+	KernelCapabilityFailureUpdaterSocketMissing      = "updater_socket_missing"
+	KernelCapabilityFailureUpdaterUnitNotStarted     = "updater_unit_not_started"
+	KernelCapabilityFailureUpdaterProcessUnavailable = "updater_process_unavailable"
+	KernelCapabilityFailureUpdaterPermissionDenied   = "updater_permission_denied"
+	KernelCapabilityFailureUpdaterConnectionRefused  = "updater_connection_refused"
+	KernelCapabilityFailureUpdaterTimeout            = "updater_timeout"
+	KernelCapabilityFailureProbeUnavailable          = "probe_unavailable"
+	KernelCapabilityFailureReceiptRefused            = "receipt_refused"
+	KernelCapabilityFailureInvalidResponse           = "invalid_response"
 )
 
 type KernelCapabilityUnavailableError struct {
@@ -64,9 +67,16 @@ func KernelCapabilityFailureCode(err error) string {
 	return KernelCapabilityFailureUpdaterUnavailable
 }
 
-func kernelCapabilityTransportFailureCode(err error) string {
+func (c *Client) kernelCapabilityTransportFailureCode(err error) string {
 	switch {
 	case errors.Is(err, os.ErrNotExist):
+		if c != nil && c.unitEntryMarkerPath != "" {
+			if _, markerErr := os.Stat(c.unitEntryMarkerPath); markerErr == nil {
+				return KernelCapabilityFailureUpdaterProcessUnavailable
+			} else if errors.Is(markerErr, os.ErrNotExist) {
+				return KernelCapabilityFailureUpdaterUnitNotStarted
+			}
+		}
 		return KernelCapabilityFailureUpdaterSocketMissing
 	case errors.Is(err, os.ErrPermission):
 		return KernelCapabilityFailureUpdaterPermissionDenied
@@ -94,7 +104,7 @@ func NewClient(socket string) (*Client, error) {
 		},
 		DisableKeepAlives: true,
 	}
-	return &Client{socket: socket, http: &http.Client{Transport: transport, Timeout: 2 * time.Minute}}, nil
+	return &Client{socket: socket, unitEntryMarkerPath: "/run/choir/updater-unit-entered", http: &http.Client{Transport: transport, Timeout: 2 * time.Minute}}, nil
 }
 
 func (c *Client) PublicKey(ctx context.Context) (computerevent.SignerRef, ed25519.PublicKey, error) {
@@ -141,7 +151,7 @@ func (c *Client) KernelCapabilities(ctx context.Context, request KernelCapabilit
 	response, err := c.http.Do(httpRequest)
 	if err != nil {
 		return KernelCapabilityReport{}, &KernelCapabilityUnavailableError{
-			Code: kernelCapabilityTransportFailureCode(err), cause: err,
+			Code: c.kernelCapabilityTransportFailureCode(err), cause: err,
 		}
 	}
 	defer response.Body.Close()
