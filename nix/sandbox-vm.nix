@@ -23,8 +23,8 @@
 
 let
   genesisG0Receipt = "sha256:31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd";
-  genesisG1Receipt = "pending_g1_receipt";
-  genesisCandidateRef = "pending_candidate_ref";
+  genesisG1Receipt = "sha256:17d04056e19a947df86853a0c4f7b1f97b3fdb4d5513843cdb81c304602b3906";
+  genesisCandidateRef = "9dc1ff913cb7e5402f11bf2d5b64ddb127b31e1b";
 
   documentPython = pkgs.python3.withPackages (ps: with ps; [
     beautifulsoup4
