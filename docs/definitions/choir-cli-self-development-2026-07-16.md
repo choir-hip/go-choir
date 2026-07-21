@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-signer-stage-diagnostic-round-62
-    state: frozen_G1_review
+    state: accepted_G1
     ref: ae2166191373aa493eed8abd6b5e6f9979c19dbe
     owner: integration-authority
     base: 8d16553ab3d33c922a6bb4bdfd21b6d3a1db3003
@@ -595,7 +595,14 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d9a60e4117, 4bebd0eb597137b906035823f801055625b12492f, 2955ec8642839982d12a08a39f045b8b887b468a, e6599f44fb24b1203f7d5e1b4a02dbc4dd25922d, 654b3a9b009f9b1964a0f0db8ece9164bf46b85f, 30ad6955d038ae1231e2b2ca59a9855af3909117, fa7dc942bf1444110f9737bdff97535bc3ec4a5f, 2876c8299e6a87a095ce8b0ee9e0187367047792, 009068f6c4f8eac2275610e2eb1118a5a7f39676, d3282d8af478ceac5990c0cf2a467ff19527b046, 3a5ae4cdd90d4c12317e24401b639373c44bb9f3, 772219bde69f024cd43dd059e44a92d36b409a91, a7964034b79f0f4ad492076e9e1c2f7da57da6e2, 29d5e12e90f03cc24e4eb0a56a35f17236414adc, ad89165c69ed5b33a971d225861716b7c67d81a, 13eb85e8c98bdbbc4fbe794b2525dd5a0920e436, 72f358f86407a10c3b93bfc56739270d4fc47a29, 105949f78858b17bcfad863213feb191699a535f, 5879d5dd3109a708244ed1b7decccf1f19b859a, 0d61fef0d2e138ea4223b0f982c1718629642449, 12e42fa9b6353b2af8ab8bec186476324956f434, 0cfdce7f87ce257fda7f37e6ad1fe9b259e22d9, 9fc68e64067aa8f1251a7a924472b65310bc22b4, 3050bb407a85a366cfc5c22e5bd62f93f2fe60e, 5f2e29be6790d476e55182f3121a11b66aa2c985f, 350475f2afd1e755c89128891a272ecbc00abcd, ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af, a3477b8739275fc7097b49d4014ff43415c494e4, b1e580472c99b01aa826e337c6411656dbba99a5, 83bc416629775d0ad5080324c3b62c2ad1a580d7]
     immediate_predecessors: [af2d30f960a3c800c15535248a96d8be25bab068, 8d16553ab3d33c922a6bb4bdfd21b6d3a1db3003, c2261bd5587a5f539f4f3f04f7eca87c63736fb3]
     verification: "Focused transport tests cover migration marker absent/present, updater entry precedence, no migration projection, no projection, and all prior wrapped transport codes; full updater race, public agentcore typed-response race, and all runtime shards pass. Nix evaluation binds fixed mode-0600 ExecStartPost and only adds `/run/choir` to the migration unit's writable namespace. Node A x86_64-linux builds exact closure `/nix/store/lm79k0k1w4hl4iqqfavr283hr2pdqb6i-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d` and returns clean to main."
-    disposition: "Frozen for independent Round-62 G1. Review must verify post-success systemd semantics, marker precedence/staleness, exact sandbox readability, non-secret closed codes, no admission/state/effect change, test completeness, rollback, and whether one deployed cold-boot result can select the next source. Effects remain OFF."
+    disposition: "Round-62 accepted unanimously by Devin, Cursor, and OMP Gemini 3.5 with no blocker. Review confirms ExecStartPost success semantics, updater-entry precedence, closed/non-secret authenticated codes, exact boot-local scope, unchanged admission/state/effects, and sufficiency for one cold-boot source selection. Residuals are explicit: marker-write failure over-attributes to migration activation, transient/stale markers are projections only, root can forge them, and ambiguous marker stat must not authorize a source pick. Effects remain OFF."
+    g1_round_62_probe:
+      reviewed_at: 2026-07-21T03:35:10Z
+      source_ref: ae2166191373aa493eed8abd6b5e6f9979c19dbe
+      authority_ref: 2dcf91737e6a66d56490d17ee807cd8712f966cb
+      outcome: accept_G1
+      adjudication: "Three substantive independent reviewers found no blocker. The marker is written only after successful migration, is readable through the existing root sandbox projection path, and subdivides only absent updater entry. G1 accepts deployment solely to obtain one cold-boot closed reason; ambiguous/stale/transient projections cannot settle source repair."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round62-panel/manifest.tsv, manifest_sha256: f6fdc45dee4f06c03d3aae5d4fbc7b6bf1094c73c65ba62df289b6ec033f492b, devin_sha256: 1a5aa90e4287f1448a259580f976e172c9a32f2ba82627aac6dea76ee05978e7, cursor_sha256: 809c13c5b6f288b434842687660a6774a0555e02151ecca8349a01b5964f78d3, omp_gemini35_sha256: 2529c7b64c03b13d2e8b09fd2a8363d4d0d5416d0bbfcd981da9577a42f1f90a}
     g1_round_61_probe:
       reviewed_at: 2026-07-21T02:35:00Z
       source_ref: c2261bd5587a5f539f4f3f04f7eca87c63736fb3
@@ -1430,7 +1437,7 @@ now:
     heresy_delta: {discovered: 12, introduced: 1, repaired: 5}
   c_deploy_failure_17:
     observed_at: 2026-07-21T03:05:08Z
-    status: frozen_G1_round_62_review
+    status: accepted_G1_round_62_pending_land
     mutation_class: red
     protected_surfaces: [guest_signer_state_migration, guest_receipt_signer, guest_updater, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main deploy/public receipts, boot-local non-secret post-migration marker, focused tests, independent G1, and one deployed no-SSH discriminator."
@@ -1439,10 +1446,11 @@ now:
     problem: "No public admissible evidence currently says whether the new migration completed. Without that bit, changing retained state rules or signer parsing/startup is ungrounded."
     existing_replacement_check: "Reuse the migration unit, `/run/choir` boot projection namespace, updater client's closed classifier, and authenticated 503 envelope. Do not add logs/status APIs, a durable store, systemd access from sandbox, raw errors, SSH product proof, or effects."
     rollback: "Preserve deployed af2d30f9, retained identity/data epoch 1242, normalized metadata, all key/receipt bytes, R0/R1, scoped-key metadata, and mode OFF. Diagnostic rollback removes only the marker and refined codes."
-    next_action: "Review frozen candidate ae2166191373aa493eed8abd6b5e6f9979c19dbe against authority 8d16553ab3d33c922a6bb4bdfd21b6d3a1db3003. If accepted, land/deploy and issue one public kernel request after retained recovery."
+    next_action: "Land accepted ae2166191373aa493eed8abd6b5e6f9979c19dbe with authority, monitor exact CI/deploy identity, recover the retained computer, and issue exactly one authenticated kernel request. Only one of the two new exact closed reasons authorizes source selection."
     diagnostic_candidate: "ae2166191373aa493eed8abd6b5e6f9979c19dbe adds the one post-migration marker and two closed classifier codes; no raw errors or content cross the public envelope."
     diagnostic_verification: "Focused/full updater and public agentcore race, runtime shards, Nix service evaluation, and exact Node A x86_64-linux closure build pass."
     diagnostic_rollback: "Revert ae2166191373aa493eed8abd6b5e6f9979c19dbe before landing or its eventual main landing commit; retain main af2d30f9, normalized state metadata, all bytes, identity/data, R0/R1, and mode OFF."
+    g1_acceptance: "Devin, Cursor, and OMP Gemini 3.5 unanimously accepted Round 62. Marker write failure, transient/stale projection, root forgery class, and ambiguous-stat no-selection remain explicit."
     conjecture_delta: "If the marker is absent, investigate the migration's fail-closed retained-shape/runtime boundary. If present, migration succeeded and the guest signer binary/key/socket path is the remaining source."
     heresy_delta: {discovered: 13, introduced: 1, repaired: 5}
   dead_end_assessment:
