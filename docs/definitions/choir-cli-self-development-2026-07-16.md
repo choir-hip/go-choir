@@ -1437,22 +1437,36 @@ now:
     heresy_delta: {discovered: 12, introduced: 1, repaired: 5}
   c_deploy_failure_17:
     observed_at: 2026-07-21T03:05:08Z
-    status: accepted_G1_round_62_pending_land
+    status: diagnosed_signer_unavailable_after_migration
     mutation_class: red
     protected_surfaces: [guest_signer_state_migration, guest_receipt_signer, guest_updater, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main deploy/public receipts, boot-local non-secret post-migration marker, focused tests, independent G1, and one deployed no-SSH discriminator."
-    success_before_blocker: "The canonical migration landed with byte/path/refusal proof and did not weaken effects, identity, or audit state, but the signer chain remains unavailable."
-    evidence: "Updater's unit-entry marker is absent after a fresh retained boot. The signer requires the migration one-shot; systemd runs ExecStartPost only when ExecStart succeeds. A fixed empty `/run/choir` post-migration marker can separate migration completion from later signer failure while remaining inaccessible as durable authority."
-    problem: "No public admissible evidence currently says whether the new migration completed. Without that bit, changing retained state rules or signer parsing/startup is ungrounded."
+    success_before_blocker: "Round-62 main 320d311a7cf1efcd7f5a3d4305e7e147798a340e passed CI/deploy run 29798959318 and public health binds both commit fields. The retained computer remained same-identity through recovery epochs 1247→1254→1255→1256→1258; effects remain OFF."
+    evidence: "The first post-recovery kernel request raced Active→degraded and refused 409; the next timed out 502 during autonomous epoch advance. After explicit retained recovery settled Active at epoch 1258, the authenticated request reached the guest in 8486 ms and returned exact HTTP 503 reason `guest_signer_unavailable_after_migration`. The migration ExecStart and marker write therefore completed; guest signer/updater still did not."
+    problem: "The signer fails after canonical state metadata migration. Fresh Node A guest closures previously start the same signer/updater code, so retained key content is the only persistent input not validated by the migration; runtime state/socket setup remains the non-persistent alternative. Do not regenerate or replace the signing identity on inference alone."
     existing_replacement_check: "Reuse the migration unit, `/run/choir` boot projection namespace, updater client's closed classifier, and authenticated 503 envelope. Do not add logs/status APIs, a durable store, systemd access from sandbox, raw errors, SSH product proof, or effects."
     rollback: "Preserve deployed af2d30f9, retained identity/data epoch 1242, normalized metadata, all key/receipt bytes, R0/R1, scoped-key metadata, and mode OFF. Diagnostic rollback removes only the marker and refined codes."
-    next_action: "Land accepted ae2166191373aa493eed8abd6b5e6f9979c19dbe with authority, monitor exact CI/deploy identity, recover the retained computer, and issue exactly one authenticated kernel request. Only one of the two new exact closed reasons authorizes source selection."
+    next_action: "Add a read-only closed key-shape projection to the successful migration post-step: absent key, invalid size, or exact Ed25519 private-key size. Expose only corresponding allowlisted signer-stage reasons when migration succeeded and updater did not start. G1, deploy, then either identify an unrecoverable retained-key blocker or move to runtime state/socket repair."
     diagnostic_candidate: "ae2166191373aa493eed8abd6b5e6f9979c19dbe adds the one post-migration marker and two closed classifier codes; no raw errors or content cross the public envelope."
     diagnostic_verification: "Focused/full updater and public agentcore race, runtime shards, Nix service evaluation, and exact Node A x86_64-linux closure build pass."
     diagnostic_rollback: "Revert ae2166191373aa493eed8abd6b5e6f9979c19dbe before landing or its eventual main landing commit; retain main af2d30f9, normalized state metadata, all bytes, identity/data, R0/R1, and mode OFF."
     g1_acceptance: "Devin, Cursor, and OMP Gemini 3.5 unanimously accepted Round 62. Marker write failure, transient/stale projection, root forgery class, and ambiguous-stat no-selection remain explicit."
-    conjecture_delta: "If the marker is absent, investigate the migration's fail-closed retained-shape/runtime boundary. If present, migration succeeded and the guest signer binary/key/socket path is the remaining source."
+    conjecture_delta: "Round-62 proves the migration completes. The remaining signer failure is either retained key content rejected by `readSigningKey` or later handler/socket setup; owner, mode, path type, link count, state-directory shape, computer identity, and common verifier binary/config have been discharged."
     heresy_delta: {discovered: 13, introduced: 1, repaired: 5}
+  c_deploy_failure_18:
+    observed_at: 2026-07-21T04:12:30Z
+    status: documented_pending_diagnosis
+    mutation_class: red
+    protected_surfaces: [guest_signing_key_identity, guest_receipt_signer, guest_updater, kernel_capability_receipt, deployed_acceptance]
+    admissible_evidence_class: "Exact main deploy/public receipts, fixed-size metadata-only key-shape projection, focused tests, independent G1, and one deployed no-SSH discriminator."
+    success_before_blocker: "Post-migration public evidence now excludes migration and metadata normalization failure without revealing key bytes or guest logs."
+    evidence: "`readSigningKey` accepts an existing key only when owner/mode/regular-file checks pass and byte length equals `ed25519.PrivateKeySize` (64); every 64-byte Ed25519 private key is usable by the subsequent public-key derivation. Migration success proves the first checks. A missing key follows the existing secure O_EXCL generation path. Therefore absent/invalid-size/exact-size metadata separates key load from later state/socket startup without reading or exporting content."
+    problem: "The authenticated path cannot yet tell whether the retained key has invalid size. Deleting, truncating, or regenerating it would sever signer identity and audit continuity; later runtime repair would be irrelevant if key load cannot pass."
+    existing_replacement_check: "Reuse the migration post-step, fixed key path, `ed25519.PrivateKeySize` contract, updater closed classifier, and authenticated 503 envelope. Do not parse/export key bytes, regenerate identity, expose raw stat values/errors, add durable state, or weaken signer isolation."
+    rollback: "Preserve deployed 320d311a, exact retained identity/data epoch 1258, key/receipt bytes and normalized metadata, R0/R1, scoped-key metadata, and mode OFF. Diagnostic rollback removes only key-shape projection and codes."
+    next_action: "Write exactly one closed boot-local key-shape value after migration succeeds using existence/regular-file/size metadata only; allowlist absent, size-invalid, and exact-size. Add precedence/unknown/error tests, refreeze G1, deploy, and issue one stable public request."
+    conjecture_delta: "Invalid retained key size is now the leading source because fresh signer state works and all metadata checks passed, but this remains unproven until the closed projection reports it."
+    heresy_delta: {discovered: 14, introduced: 1, repaired: 5}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
