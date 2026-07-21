@@ -432,6 +432,8 @@ EOF
       ExecStart = "${guestSignerStateMigration}/bin/choir-guest-signer-state-migrate /mnt/persistent/choir-signers/guest-core choir-guest-signer choir-guest-signer";
       ExecStartPost = "${guestSignerStateProjection}/bin/choir-guest-signer-state-project /mnt/persistent/choir-signers/guest-core/key.ed25519 /run/choir 64";
       UMask = "0077";
+      StandardOutput = "journal+console";
+      StandardError = "journal+console";
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
