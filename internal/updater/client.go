@@ -44,6 +44,11 @@ const (
 	KernelCapabilityFailureSignerStoppedAfterKeyLoad        = "guest_signer_stopped_after_key_load"
 	KernelCapabilityFailureSignerStoppedAfterHandlerSetup   = "guest_signer_stopped_after_handler_setup"
 	KernelCapabilityFailureSignerStoppedAfterSocketListen   = "guest_signer_stopped_after_socket_listen"
+	KernelCapabilityFailureSignerServeReturnedClosed        = "guest_signer_serve_returned_closed"
+	KernelCapabilityFailureSignerServeReturnedPermission    = "guest_signer_serve_returned_permission"
+	KernelCapabilityFailureSignerServeReturnedInvalid       = "guest_signer_serve_returned_invalid"
+	KernelCapabilityFailureSignerServeReturnedResource      = "guest_signer_serve_returned_resource"
+	KernelCapabilityFailureSignerServeReturnedUnknown       = "guest_signer_serve_returned_unknown"
 	KernelCapabilityFailureUpdaterPermissionDenied          = "updater_permission_denied"
 	KernelCapabilityFailureUpdaterConnectionRefused         = "updater_connection_refused"
 	KernelCapabilityFailureUpdaterTimeout                   = "updater_timeout"
@@ -118,6 +123,16 @@ func (c *Client) signerUnavailableWithExactKeyShapeCode() string {
 		return KernelCapabilityFailureSignerStoppedAfterHandlerSetup
 	case "socket-listening":
 		return KernelCapabilityFailureSignerStoppedAfterSocketListen
+	case "serve-returned-closed":
+		return KernelCapabilityFailureSignerServeReturnedClosed
+	case "serve-returned-permission":
+		return KernelCapabilityFailureSignerServeReturnedPermission
+	case "serve-returned-invalid":
+		return KernelCapabilityFailureSignerServeReturnedInvalid
+	case "serve-returned-resource":
+		return KernelCapabilityFailureSignerServeReturnedResource
+	case "serve-returned-unknown":
+		return KernelCapabilityFailureSignerServeReturnedUnknown
 	default:
 		return KernelCapabilityFailureSignerUnavailableAfterMigration
 	}

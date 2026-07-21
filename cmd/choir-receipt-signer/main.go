@@ -69,8 +69,10 @@ func main() {
 	}
 	recordStartupStage(receiptsigner.StartupStageSocketListening)
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}
-	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-		fmt.Fprintf(os.Stderr, "choir-receipt-signer: serve: %v\n", err)
+	serveErr := server.Serve(listener)
+	recordStartupStage(receiptsigner.ClassifyServeExit(serveErr))
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		fmt.Fprintf(os.Stderr, "choir-receipt-signer: serve: %v\n", serveErr)
 		os.Exit(1)
 	}
 }

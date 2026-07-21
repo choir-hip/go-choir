@@ -1,19 +1,28 @@
 package receiptsigner
 
 import (
+	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"syscall"
 )
 
 type StartupStage string
 
 const (
-	StartupStageStarted           StartupStage = "started"
-	StartupStageConfigured        StartupStage = "configured"
-	StartupStageKeyLoaded         StartupStage = "key-loaded"
-	StartupStageHandlerConfigured StartupStage = "handler-configured"
-	StartupStageSocketListening   StartupStage = "socket-listening"
+	StartupStageStarted                 StartupStage = "started"
+	StartupStageConfigured              StartupStage = "configured"
+	StartupStageKeyLoaded               StartupStage = "key-loaded"
+	StartupStageHandlerConfigured       StartupStage = "handler-configured"
+	StartupStageSocketListening         StartupStage = "socket-listening"
+	StartupStageServeReturnedClosed     StartupStage = "serve-returned-closed"
+	StartupStageServeReturnedPermission StartupStage = "serve-returned-permission"
+	StartupStageServeReturnedInvalid    StartupStage = "serve-returned-invalid"
+	StartupStageServeReturnedResource   StartupStage = "serve-returned-resource"
+	StartupStageServeReturnedUnknown    StartupStage = "serve-returned-unknown"
 )
 
 func WriteStartupStage(path string, stage StartupStage) error {
@@ -52,9 +61,26 @@ func WriteStartupStage(path string, stage StartupStage) error {
 	return nil
 }
 
+func ClassifyServeExit(err error) StartupStage {
+	switch {
+	case err == nil, errors.Is(err, http.ErrServerClosed), errors.Is(err, net.ErrClosed):
+		return StartupStageServeReturnedClosed
+	case errors.Is(err, os.ErrPermission), errors.Is(err, syscall.EPERM):
+		return StartupStageServeReturnedPermission
+	case errors.Is(err, syscall.EBADF), errors.Is(err, syscall.EINVAL):
+		return StartupStageServeReturnedInvalid
+	case errors.Is(err, syscall.EMFILE), errors.Is(err, syscall.ENFILE), errors.Is(err, syscall.ENOBUFS), errors.Is(err, syscall.ENOMEM):
+		return StartupStageServeReturnedResource
+	default:
+		return StartupStageServeReturnedUnknown
+	}
+}
+
 func validStartupStage(stage StartupStage) bool {
 	switch stage {
-	case StartupStageStarted, StartupStageConfigured, StartupStageKeyLoaded, StartupStageHandlerConfigured, StartupStageSocketListening:
+	case StartupStageStarted, StartupStageConfigured, StartupStageKeyLoaded, StartupStageHandlerConfigured, StartupStageSocketListening,
+		StartupStageServeReturnedClosed, StartupStageServeReturnedPermission, StartupStageServeReturnedInvalid,
+		StartupStageServeReturnedResource, StartupStageServeReturnedUnknown:
 		return true
 	default:
 		return false
