@@ -375,8 +375,22 @@ orchestration:
 
 now:
   status: working
-  slice: "C-repair-genesis-authority-configuration"
-  question: "Can the immutable guest final-exec wrapper bind the accepted G0 freeze digest, final G1 panel digest, and exact G1 candidate ref after all mutable environment sources, then re-freeze and re-prove R1 before any GenesisImported call?"
+  slice: "architecture-recovery-texture-protocol"
+  question: "What minimum stable artifact/obligation/actor/effect kernel lets Texture's public API express the complete UI lifecycle, so protocol behavior is headlessly reproducible while role models, prompts, and implementations remain replaceable?"
+  round72_candidate:
+    status: rejected_G1_semantic_authority_and_inventory_blockers
+    source_ref: 838a518917fa548e527e9138cfa75b6da3c51872
+    evidence_ref: a5253e8ea62176c7837aa15b73aa2d9e274ebfe3
+    immutable_closure: /nix/store/0inxys1jym8q8dd3j0f3v6373kdh5skl-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d
+    guest_image: /nix/store/vxb9nchq9jhqqnyfdmmrdb80vzw6sw59-go-choir-guest-image
+    exact_guest_proof: "Node A disposable Firecracker run `round72proof2` passed in 14.721s. Fresh immutable boot served build 838a518917fa548e527e9138cfa75b6da3c51872, kept effects OFF with start refusal 409, admitted the kernel probe, and refused public kernel receipt before route identity (503). After planting an unauthenticated persistent `current` symlink and reconstructing as epoch 2, the guest again served immutable build 838a518917fa548e527e9138cfa75b6da3c51872 and logged `unsigned_current=refused`."
+    independent_review:
+      outcome: REJECT_G1_multi_reviewer_blockers
+      panel_d_entry_authorized: false
+      adjudication: "Codex, Devin, Cursor, and OMP GPT rejected; OMP Gemini accepted; OpenCode failed before review. Minority rule rejects G1. Locally confirmed: the root sandbox can call the updater socket and `/v1/apply` validates only caller-supplied internally consistent fields, not canonical event authority; final admission omits exact inventory and on-disk mode equality; the read-only updater mount also removes the current capsule freeze writer without providing the selected narrow replacement. Cursor additionally identified that baseline replacement conflates activation absence with signer/verification failure and cannot replace malformed unauthenticated current."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round72-final-panel/manifest.tsv, manifest_sha256: a95d0d68cf61920d2fe29c7651b7857dd95b4768eaac78f90afd20dbe10a7061, codex_sha256: 22bc1e3d12f0e4b4df666a9e10a2149b8d2634b9f9fe688f7ebf1178880702f9, devin_sha256: ce105f94c8238a9ce1bfb08eb118229185e258f300c28ad08bfd800022a9700a, cursor_sha256: 039a3cfe33c501ce4857718943e44c1632933b4359c619282404fb93246be505, omp_gpt55_sha256: 796b6be95928d4871da6aa14697e3c2bc91cdf0396dd0edb1f0de9b7b7b88b02, omp_gemini35_sha256: b8fa5883664a3e8986802b75ac90fd2c310d76f84a3bce06a159763b0651ca12}
+    rollback: "Effects OFF and no GenesisImported. Revert candidate to deployed 832ae951 or R0 a7f497ab; all disposable Node A VM/data identities were destroyed."
+    next_action: "Keep Round 72 rejected. Freeze the redesign around one public Texture protocol with UI/CLI parity, singular artifact and obligation authorities, replaceable role activations, durable wake semantics, and an externally authorized effect boundary; then use its headless delayed-research lifecycle as the first falsifier before rebuilding self-development effects."
   r1_security_floor:
     frozen_at: 2026-07-21T12:17:44Z
     status: rejected_R1_dynamic_release_authority_bypass
@@ -1716,6 +1730,142 @@ now:
     rollback: "Uncommitted candidate only; no product state changed."
     conjecture_delta: "Fate-sharing uses the stable computer/event/key lineage. Realization is evidence context, not cross-reconstruction identity."
     heresy_delta: {discovered: 23, introduced: 2, repaired: 9}
+  d_entry_failure_5:
+    observed_at: 2026-07-21T17:47:46Z
+    status: documented_and_repaired_in_candidate
+    mutation_class: red
+    protected_surfaces: [guest_core_signer_startup, exact_guest_boot, signed_activation_key_lineage]
+    evidence: "Exact Node A Firecracker boot of immutable candidate c66bc8dded06fe711929148dd123c27c0ff7029b on a fresh persistent data image reached systemd, then `go-choir-guest-receipt-signer-state-migration.service` failed and the required guest-core signer dependency prevented agentcore readiness. Three independent run IDs reproduced the 120-second boot timeout; serial output reported `Failed to start Normalize retained guest-core signer state ownership` and `Dependency failed for Isolated guest-core receipt signer`. The stale-current reconstruction assertion did not run."
+    problem: "The exact immutable guest cannot initialize guest-core signer state on a fresh persistent disk, so neither baseline readiness nor signed activation authority is available."
+    substrate_vs_symptom: "Guest signer state initialization and systemd confinement/order substrate; not a stale-current activation-validation defect."
+    existing_replacement_check: "The migration/projection helpers and tmpfiles rules are the intended initialization path and are wired. A serial-console OnFailure receipt identified systemd exit 226/NAMESPACE because `/mnt/persistent/choir-credentials` did not yet exist; no alternative signer-state initializer exists."
+    rollback: "Rejected disposable Firecracker identities were destroyed; Node A returned to clean main; no route, accepted event, mode, retained production computer, or deployed release changed."
+    resolution: "Candidate 6ed471104d3c69c8362e0bea87d53c6014e93f55 creates the root-owned mode-0700 credential directory through boot tmpfiles before signer/updater confinement. The diagnostic unit was removed; critical migration stderr remains visible on the serial console."
+    next_action: "Diagnose the subsequent agent runtime readiness failure, then rerun fresh boot and stale-current reconstruction."
+    conjecture_delta: "Static unit evaluation and helper tests did not prove first-boot signer-state initialization inside the exact persistent-mount and systemd sandbox. Every path named by systemd mount confinement must exist before the confined unit races its creator."
+    heresy_delta: {discovered: 24, introduced: 2, repaired: 10}
+  d_entry_failure_6:
+    observed_at: 2026-07-21T18:12:00Z
+    status: documented_and_repaired_in_candidate
+    mutation_class: red
+    protected_surfaces: [exact_guest_boot, immutable_baseline_exec, updater_admission]
+    evidence: "After the credential-path repair, exact fresh Firecracker boots no longer reported signer migration or dependency failure, but four disposable runs still timed out after 120 seconds with TCP connection refused at the guest health endpoint `10.200.1.2:8085`. Serial boot reached the login prompt and reported no failed unit, so the stale-current reconstruction assertion still did not execute."
+    problem: "The immutable guest reached multi-user boot after signer initialization but the agent runtime never bound its health port."
+    substrate_vs_symptom: "Immutable launcher/updater admission retry contract."
+    existing_replacement_check: "The signed launcher, updater admission endpoint, and static baseline fallback are the intended replacement and are wired. No alternative launch path is authorized."
+    rollback: "Rejected disposable Firecracker identities were destroyed; Node A returned to clean main; no deployed or retained product state changed."
+    resolution: "Debug systemd boot proved updater and signer units healthy and the immutable wrapper running. Its curl used `--fail --retry-all-errors`; the expected pre-genesis 404 `no authorized dynamic release` became a retryable error and consumed the entire 120-second harness window. Candidate 838a518917fa548e527e9138cfa75b6da3c51872 retries connection failures and transient HTTP failures but treats 404 as the immediate safe static-baseline fallback."
+    acceptance: "Exact guest `round72proof2` reached build 838a518917fa548e527e9138cfa75b6da3c51872, then reconstructed on the same data disk after an unsigned current was planted and again served the immutable build; `TestSelfDevelopmentEffectsOffGuestHarness` passed in 14.721 seconds."
+    next_action: "Freeze final source/test receipts and submit candidate 838a518917fa548e527e9138cfa75b6da3c51872 to independent G1."
+    conjecture_delta: "A semantically expected 404 must not share retry policy with transport or transient server failure. Safe immutable fallback must be prompt enough to be observable as a product transition."
+    heresy_delta: {discovered: 25, introduced: 2, repaired: 11}
+  d_entry_failure_7:
+    observed_at: 2026-07-21T18:46:29Z
+    status: documented_G1_rejection_pending_owner_authority
+    mutation_class: red
+    protected_surfaces: [canonical_event_authority, updater_apply, activation_receipts, capsule_freeze, baseline_import, immutable_launcher]
+    evidence: "Frozen Round 72 candidate 838a518917fa548e527e9138cfa75b6da3c51872 passed focused/race suites, full runtime shards, immutable image build, and exact unsigned-current reconstruction, but independent G1 rejected it. Four substantive reviewers found reproducible source blockers; one accepted; one provider failed."
+    problem: "The immutable updater authenticates only root UID and internally consistent caller fields. The mutable root sandbox shares that UID and socket, so it can ask updater/guest-core signer to authorize a caller-selected release and hash-shaped event head without proving a canonical accepted/rollback event. Separately, removing sandbox write access to updater state also removes the existing capsule-freeze ingress, admission does not enforce exact inventory/on-disk modes/root confinement, and baseline replacement cannot distinguish absent authority from transient signer/verification failure."
+    substrate_vs_symptom: "Single semantic authority and privileged ingress substrate across mutable agentcore, canonical ComputerEventAppender, capsule freezer, immutable updater, and guest-core signer. The retry, current-symlink, and mode checks are symptoms around that missing boundary."
+    root_cause_cluster: "Round 72 joins at least four failures to the same substrate: mutable runtime self-asserts apply authority; shared updater root doubles as unprivileged freeze ingress and privileged release state; admission verifies a list but not the exact realized tree; baseline migration uses one undifferentiated admission error for absence, corruption, signer outage, and IO failure. Further isolated patches would preserve the broken authority topology."
+    existing_replacement_check: "Canonical ComputerEventAppender, scoped verifier decisions, capsule grant/frozen inventory, immutable updater, and guest-core signer already exist, but no single cryptographically or capability-bound command joins them. Connecting those authorities is preferred over adding another store or restoring broad filesystem writes."
+    rollback: "Candidate remains branch-only; effects OFF; no GenesisImported, accepted event, route, deployed release, or retained computer was mutated."
+    next_action: "Freeze an owner-ratified authority design before more repair code. It must specify who signs or serves the canonical apply command, how updater verifies current/target/event/request bindings without trusting mutable root UID, how capsule bytes cross a narrow ingress, how exact-tree admission is race-safe, and which baseline errors permit replacement."
+    conjecture_delta: "A guest-core signature generated by updater proves provenance of updater output, not semantic authorization of caller input. UID and mount namespaces cannot separate two authorities inside the same root process boundary."
+    heresy_delta: {discovered: 29, introduced: 2, repaired: 11}
+  d_entry_failure_8:
+    observed_at: 2026-07-21T18:46:40Z
+    status: documented_checkpoint_requires_texture_and_agent_factoring_redesign
+    mutation_class: red
+    protected_surfaces: [Texture_canonical_revisions, durable_actor_lifecycle, coagent_delivery, trajectory_settlement, product_visible_work]
+    evidence: "The owner submitted and replicated ordinary staging Texture prompts. For `whats new in ai?`, Texture spawned researcher `ef37b6de-54ad-4309-b70d-e615830d9987`, then the tool-loop required-write policy forced an interim V1 saying the document was still being revised. Texture emitted `texture.agent_revision.completed` and terminal `loop.completed` at 18:45:53Z with `actor_park_on_idle=true`; the researcher completed at 18:46:40Z, but no V2 incorporated its result. The trajectory was recorded cancelled at 18:45:51Z and the document remained at V1. An earlier replicated prompt likewise produced V1, then a cancelled trajectory and completed Texture run seconds later. Staging build remained 832ae951."
+    problem: "Choir currently equates one provider turn, one required canonical write, one run terminal state, and one artifact lifecycle. That makes an interim work-state revision look like completion, allows a nominal durable Texture actor to terminalize while delegated evidence is outstanding, and gives the product no honest stable state between V1, background work, wake, and the next revision. Cancellation timing means the first receipt does not prove whether wake delivery alone is broken; it does prove the user-visible lifecycle and runtime state authorities disagree."
+    substrate_vs_symptom: "Multiagent runtime factoring and durable artifact/actor lifecycle substrate. The visible V1 freeze is a symptom; prompt wording, another retry, or forcing a second patch would preserve the category error."
+    root_cause_cluster: "The self-development G1 rejection and Texture V1 failure share the same deeper defect: mutable model loops, semantic authority, durable state, effect execution, and lifecycle settlement are co-located or inferred from process/run state. A root UID is mistaken for apply authority; a terminal tool call is mistaken for actor completion; a child process result is mistaken for durable artifact progress."
+    existing_replacement_check: "Doctrine already names the intended replacement: database-backed durable actors that never complete, typed `update_coagent` as the only wake source, trajectories/work items as causality, and Texture revisions as canonical artifact state. The live runtime carries these pieces but still terminates root runs and uses required-tool continuation/process ancestry as control. Connect the existing durable primitives before adding new orchestration roles or prompt branches."
+    rollback: "No new code or deployment followed this observation. Preserve staging receipts and the two documents; effects remain OFF and Round 72 remains rejected."
+    next_action: "Pause the incremental self-development candidate loop. Review the system at three boundaries: artifact lifecycle (draft/work-state/current/settled), actor lifecycle (resident/passivated/woken; never terminal merely because one turn wrote), and authority/effect lifecycle (proposal/event authorization/materialization). Re-factor roles around those state machines, then use the smallest real Texture prompt with delayed researcher evidence as the first product-path falsifier."
+    conjecture_delta: "Self-development is not an added workflow inside Choir; it is a stress test of whether Choir's own agents, artifacts, authorities, and effects are factored so implementations and models can change independently. Texture failed because those seams are not yet real."
+    heresy_delta: {discovered: 33, introduced: 2, repaired: 11}
+  d_entry_failure_9:
+    observed_at: 2026-07-21T19:04:22Z
+    status: documented_texture_api_ui_equivalence_gap
+    mutation_class: red
+    protected_surfaces: [Texture_public_protocol, canonical_revisions, trajectory_obligations, actor_wake, CLI_automation, product_visible_work]
+    evidence: "Texture has a substantial same-origin HTTP surface and the desktop UI already consumes it through `frontend/src/lib/texture.js`: create/list/read/update/delete documents; create/list/read revisions; history/diff/blame/compare; merge preview/accept; restore; diagnosis; revise/cancel; and a document SSE stream. Proxy API-key authorization already recognizes `read:texture` and `write:texture`. The public `choir texture` command exposes only three GET operations: read, history, and revisions. The server currently projects `park_wait_started`, `park_wait_finished`, and `RunPassivated` as `synth_completed`; the UI responds to `head_changed` by clearing `agentPending`. Thus even the existing API/UI contract encodes the V1 lifecycle error rather than merely failing to expose it. Existing deployed tests often drive raw browser `fetch`, so they prove endpoints but do not define one transport-neutral lifecycle contract equivalent to the UI experience."
+    problem: "Texture has endpoints, but not yet one explicit product protocol whose commands, observations, lifecycle states, errors, idempotency, and streaming semantics are shared by the UI and headless clients. CLI read coverage is not UI equivalence. Without that equivalence, automated maintenance can observe final revisions yet miss the exact V0→V1-work-state→outstanding-obligation→wake→V2→settled behavior that failed in staging."
+    substrate_vs_symptom: "Public protocol and client factoring substrate. Adding isolated CLI verbs or more browser-only tests would be a symptom repair if UI and CLI continue to encode separate semantics."
+    existing_replacement_check: "The canonical HTTP handlers, frontend Texture client, API-key read/write scopes, trajectory detail API, diagnosis response, and document SSE stream already contain most required pieces. Promote one typed protocol contract over these implementations; generate or share clients where practical instead of building another Texture service."
+    decision_constraint: "The Texture UI must be a client of the same public protocol available to headless automation. Product equivalence means every user-visible lifecycle command and state is expressible and observable without DOM access; pixel/layout behavior remains UI-only. The protocol must expose artifact head, open obligations, waiting reason, actor activation/passivation, cancellation, settlement, and typed failure/refusal joins without treating a completed provider run as document completion."
+    rollback: "Documentation only; no runtime, API, CLI, deployment, canonical revision, or self-development effect changed. Round 72 remains rejected and effects remain OFF."
+    next_action: "Include public Texture protocol equivalence in the architecture decision packet and first falsifier. Define a transport-neutral conformance trace, then require both the UI client and `choir texture` headless client to execute the same fixtures against the same server contract before self-development resumes."
+    conjecture_delta: "The missing capability is not primarily another internal agent primitive. It is a stable public product protocol that makes artifact and obligation state observable independently of whichever UI, CLI, model, or actor implementation currently drives it."
+    heresy_delta: {discovered: 34, introduced: 2, repaired: 11}
+  architecture_recovery_decision:
+    status: proposed_owner_ratification_required
+    source: "Orchestrator synthesis of repository inspection, staging receipts d_entry_failure_7/8/9, and a frozen independent panel. This is not settled architecture until owner-ratified."
+    mutation_class: red
+    protected_surfaces: [Texture_public_protocol, embedded_Dolt, durable_actor_delivery, trajectory_settlement, ComputerEventAppender, capsule_ingress, updater_apply, route_projection]
+    panel:
+      result: "Four substantive reviewers selected durable address plus disposable activations with reducer-owned settlement; one selected fully stateless reducer workers; one provider failed. The dissent strengthens the rule that conversational memory is reconstructible cache, never authority."
+      receipt: {manifest: /tmp/choir-selfdev-agent-factoring-panel/manifest.tsv, manifest_sha256: 03268ad1fb94529b4abfd470c35d578381e7f782e7536cf431d02239ba87bfab, codex_sha256: e479d6e8b8e27d97c4c2535b9cd9e363d19cad3970c0c456bb14defc797cd306, devin_sha256: d34353e2b73abce6cb38c1aace88789da4fb3afc0ebbbe996bcba91b2cadc710, cursor_sha256: b01b3ad64f68b6bbcf7a4545407c12cf7cd00ba431851e6645e4b88ad3515fcd, omp_gpt55_sha256: ce5043cce1bb028b3edfcdd153fdcd709b606f9bcf029b84488c1b64020b83bd, omp_gemini35_sha256: 2afac7ad7ca572f3a88330b84984c2e8e54275981a370d766b1616de3992865f, opencode_status: failed}
+    recommended_topology: "B-kappa: durable subject address and typed inbox; disposable model/tool activations; artifact, obligation, semantic-event, and effect reducers as sole authorities. Deterministic state machines guard settlement and effects, not model reasoning."
+    invariant: "An activation may finish. An actor address remains addressable. An artifact has a current head. A trajectory alone settles or cancels work. An accepted canonical event alone authorizes effects. None implies another."
+    stable_kernel:
+      - "Embedded Dolt owns actor addresses, one typed inbox with runtime-minted update identity and explicit delivery/incorporation/cancelled dispositions, canonical Texture revisions, trajectories, work items, and settlement state. The current actor SQLite update/snapshot log and Dolt coagent mailbox are overlapping durable stores; cut over to one authoritative inbox rather than preserving dual delivery truth."
+      - "Resident goroutines, channel buffers, sweep timing, provider transcripts, run IDs, and compacted summaries are caches or activation evidence. They may be discarded and rebuilt from address, artifact head, obligations, pending packets, and durable evidence refs."
+      - "A role package is resolved per activation and records versioned objective/authority envelope, model capability policy, prompt/compiler ref, tool-policy ref, and readable projection schema. None becomes actor identity or durable semantic state."
+      - "The immutable self-development TCB separately owns exact-tree staging, accepted-event authorization verification, updater journal/activation/health/recovery, checkpoint verification, and vmctl route CAS. Mutable agentcore transports proposals and commands but cannot authorize them."
+    sole_authorities:
+      actor_identity: "Stable runtime-minted subject address bound to owner, role envelope, and subject refs; never a RunID or persona."
+      artifact_head: "Texture revision reducer; user and Texture commands may advance through stale-head-checked mutations."
+      obligations_and_settlement: "Trajectory/work-item reducer; models and activations may create facts but cannot set settled."
+      semantic_event_order: "One ComputerEventAppender per ComputerID plus corpusd signed head CAS."
+      staged_bytes: "Capability-bound capsule broker streams into updater-owned exact-tree staging and receives a content-addressed StageReceipt."
+      applied_release: "Immutable updater after independent verification of canonical accepted/rollback event authorization, exact staged inventory, prior/current heads, request commitment, and freshness."
+      served_route: "vmctl certificate-only route-slot CAS after materialization/checkpoint/event joins."
+    texture_public_protocol:
+      authority: "One transport-neutral typed contract backs UI and headless clients. The Svelte UI, `choir texture`, and conformance tests are clients; none defines alternate lifecycle semantics."
+      operation_projection: "{protocol_version, operation_id, trajectory_id, document_id, base_revision_id, current_revision_id, state, open_obligations, pending_updates, waiting_on, cancellation, latest_activation_ref, monotonic_sequence}. State is queued|active|waiting|settled|failed|cancelled; provider-run completion is not a state transition here."
+      stream_events: [operation_started, artifact_head_advanced, obligation_opened, activation_finished, operation_waiting, update_available, update_incorporated, operation_settled, operation_cancelled, operation_failed]
+      stream_rules: "Snapshot first; monotonic resumable cursor; reconnect reconstructs exact current projection. `activation_finished`, `artifact_head_advanced`, and actor passivation never clear pending work. Only trajectory settlement/cancellation/failure terminalizes the operation."
+      command_parity: "Inventory every UI network action and expose the same create/list/read/update/delete, revision/history/diff/blame/compare/merge/restore, revise/status/watch/wait/cancel, diagnosis, file-manifest, derivative, and publication command through the public scoped API and `choir texture`, with the same typed errors, idempotency, stale-head rules, and owner scope. Layout and pixels remain UI-only."
+      implementation_shape: "Promote shared Go protocol DTOs/enums/reducer under a narrow package used by server and CLI; keep the frontend client thin; freeze language-neutral JSON conformance fixtures and an API schema so JS cannot silently reinterpret lifecycle events."
+    delayed_research_transition:
+      - "Owner prompt creates V0, one Texture operation/trajectory, and stable `texture:<docID>` address."
+      - "Activation A1 may open researcher obligation W and optionally write substantive interim V1. No harness-forced placeholder patch is required."
+      - "A1 finishes and the resident goroutine may passivate; operation state remains waiting because W is open. UI and CLI show current head V1 plus the exact wait."
+      - "Researcher completion transactionally records packet U and closes or advances W only with a durable delivery disposition. U wakes the same address even when no passivated RunRecord exists."
+      - "Activation A2 uses the current role package and reconstructs from V1, operation state, U, and evidence refs. V2 incorporates or explicitly rejects U, then marks its disposition."
+      - "The trajectory settles only when all obligations and pending packets have terminal dispositions. Owner cancellation wins independently; V1 remains, late U is retained as cancelled evidence, and only an explicit new trajectory may import it."
+    delete_after_cutover:
+      - "Texture terminal-tool-success and required placeholder-write control."
+      - "RunCompleted/RunPassivated as actor, artifact, operation, or trajectory authority."
+      - "Passivated-run-only wake, `resumeState.RunID` continuity, `actor_park_on_idle`, run-scoped reactivation flags, parent/child liveness waits, and pending-mutation cleanup keyed to terminal runs."
+      - "Duplicate SQLite actor mailbox/snapshot authority after the single Dolt inbox and rebuildable context projection are live."
+      - "Shared UID or caller-computed commitments as updater apply authority; broad updater-root capsule ingress."
+    retain_and_connect: [Texture_revisions, typed_update_coagent, trajectory_work_items, ComputerEventAppender, capsule_executor_broker, immutable_updater, checkpoint_authority, vmctl_route_CAS]
+    first_falsifier: "Through only the public Texture protocol, execute V0 → open delayed researcher obligation → optional V1 → A1 finish → runtime restart → U delivery → same-address A2 → V2 exact evidence incorporation → settlement. Run cancellation separately before V1, while waiting, and after U. The UI must render the same snapshots/events, and `choir texture watch/wait` must report the same sequence."
+    deployed_identity_inventory:
+      observed_at: 2026-07-21T19:17:17Z
+      problem: "A checkout ref is not an executable identity. Node A and Node B each carry a source checkout, a NixOS system closure, host-service closures, guest-image inputs, and zero or more independently running guest builds, but no single public projection joins them. Several health endpoints omit build identity entirely."
+      current_receipt:
+        github_main: 7913a3da0343ee03cf32b7622aaf9f2de35ee887
+        node_a: {role: proof_harness_not_staging, source_checkout: 7913a3da0343ee03cf32b7622aaf9f2de35ee887, source_clean: true, system_closure: /nix/store/s26cvi1mp3l3lrfxxsh6kglyn3m3jzwa-nixos-system-go-choir-a-26.05.20260409.4c1018d, observed_proxy_and_corpusd_build: 9b6dbf7f446e56d93c434792811b27a86153bdf8, active_computers: 0}
+        node_b: {role: staging, source_checkout: 832ae951e84400a54bd7f8ef52a312e872b5c3ef, source_clean: true, source_relation: "five Definition-only commits behind GitHub main", system_closure: /nix/store/0b5x47v1z6snmax2mqdkhj6wbk8x7bya-nixos-system-go-choir-b-26.05.20260409.4c1018d, observed_proxy_and_corpusd_build: 832ae951e84400a54bd7f8ef52a312e872b5c3ef, public_health_build: 832ae951e84400a54bd7f8ef52a312e872b5c3ef, active_guest_count: 2, active_guest_build: 832ae951e84400a54bd7f8ef52a312e872b5c3ef}
+        rejected_round72: "Branch 5517c2eb5c94678eb4ec323fef2cec34b96f7c6a is present only in Git; neither node host closure nor either active staging guest runs it."
+      contract: "Add one authenticated public no-SSH inventory that reports node role, canonical GitHub ref, checkout ref/cleanliness, NixOS system closure, each service executable store path and embedded build commit, deployment run/deployed commit, immutable guest image/config digests, active ComputerID/realization/epoch, and each guest build. It classifies drift as none, docs_only, source_not_activated, service_mixed, guest_mixed, or unknown and never infers executable identity from checkout state."
+      acceptance: "A clean client can retrieve one signed/bound inventory and reproduce the exact Node B host and active-guest identities returned by their health surfaces. Missing build metadata or disagreement is a refusal, not `unknown` success. Node A is explicitly labeled harness and cannot satisfy staging acceptance."
+    stopping_rule: "Reject the redesign if any activation/run/tool outcome can settle the operation; if U needs a passivated run or old provider transcript; if restart loses/duplicates U; if UI and CLI disagree; if V2 advances after cancellation without a new trajectory; or if updater accepts mutable-UID plus self-consistent caller fields without independent event-bound authorization."
+    owner_decisions:
+      actor_continuity: "Recommended: ratify stable address + inbox + artifact/obligation refs; compact summaries are discardable hints. Do not promise provider-conversation continuity."
+      interim_revision: "Recommended: allow only useful owner-readable V1 work state; never require a placeholder write from harness policy."
+      late_cancelled_updates: "Recommended: retain with cancelled disposition; never auto-incorporate; explicit new trajectory may import."
+      apply_authorization_issuer: "Unsettled: select the external event-bound proof/command issuer and freshness mechanism that the immutable updater can verify without mutable-root custody. Candidate shapes are a fresh corpusd-signed authorization over the accepted event and request, or an equivalently isolated guest command resolver; same-UID signer calls are forbidden."
+      self_update_TCB: "Unsettled: whether the mission may update the immutable verifier/updater/event TCB at all. Recommended: not in the same accepted transition; require a separately authorized two-version platform handoff."
+    rollback: "Proposal/documentation only. No runtime/API/CLI/deployment/event/artifact/updater/route state changed. Effects remain OFF; Round 72 remains rejected."
+    conjecture_delta: "C6 is narrowed from a passivated LLM run to durable subject address and delivery. C7 becomes the sole work-settlement authority. Public Texture protocol parity becomes the product verifier for those joins. The stateless-worker dissent remains an available future simplification because no authoritative conversational state is retained."
+    heresy_delta: {discovered: 36, introduced: 2, repaired: 11}
   dynamic_execution_authority_decision:
     status: settled
     source: owner
