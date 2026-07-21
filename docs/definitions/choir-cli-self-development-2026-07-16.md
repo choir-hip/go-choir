@@ -1716,6 +1716,19 @@ now:
     rollback: "Uncommitted candidate only; no product state changed."
     conjecture_delta: "Fate-sharing uses the stable computer/event/key lineage. Realization is evidence context, not cross-reconstruction identity."
     heresy_delta: {discovered: 23, introduced: 2, repaired: 9}
+  d_entry_failure_5:
+    observed_at: 2026-07-21T17:47:46Z
+    status: documented_pending_source_repair
+    mutation_class: red
+    protected_surfaces: [guest_core_signer_startup, exact_guest_boot, signed_activation_key_lineage]
+    evidence: "Exact Node A Firecracker boot of immutable candidate c66bc8dded06fe711929148dd123c27c0ff7029b on a fresh persistent data image reached systemd, then `go-choir-guest-receipt-signer-state-migration.service` failed and the required guest-core signer dependency prevented agentcore readiness. Three independent run IDs reproduced the 120-second boot timeout; serial output reported `Failed to start Normalize retained guest-core signer state ownership` and `Dependency failed for Isolated guest-core receipt signer`. The stale-current reconstruction assertion did not run."
+    problem: "The exact immutable guest cannot initialize guest-core signer state on a fresh persistent disk, so neither baseline readiness nor signed activation authority is available."
+    substrate_vs_symptom: "Guest signer state initialization and systemd confinement/order substrate; not a stale-current activation-validation defect."
+    existing_replacement_check: "The migration/projection helpers and tmpfiles rules are the intended initialization path and are wired, but the oneshot fails before signer startup. No alternative signer-state initializer exists."
+    rollback: "Rejected disposable Firecracker identities were destroyed; Node A returned to clean main; no route, accepted event, mode, retained production computer, or deployed release changed."
+    next_action: "Expose the migration oneshot's exact stderr on the serial console, repair the source failure without weakening path or key confinement, rebuild the immutable image, then rerun fresh boot and stale-current reconstruction."
+    conjecture_delta: "Static unit evaluation and helper tests did not prove first-boot signer-state initialization inside the exact persistent-mount and systemd sandbox."
+    heresy_delta: {discovered: 24, introduced: 2, repaired: 9}
   dynamic_execution_authority_decision:
     status: settled
     source: owner
