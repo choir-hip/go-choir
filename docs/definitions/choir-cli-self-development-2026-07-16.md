@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-updater-unit-entry-round-59
-    state: frozen_G1_review
+    state: accepted_G1
     ref: 54c02094d7fc73e1d4f89546d1bb16ffb53634e7
     owner: integration-authority
     base: c4867a611b29bd4acde4dba00b9fe1f81530b604
@@ -595,7 +595,14 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d9a60e4117, 4bebd0eb597137b906035823f801055625b12492f, 2955ec8642839982d12a08a39f045b8b887b468a, e6599f44fb24b1203f7d5e1b4a02dbc4dd25922d, 654b3a9b009f9b1964a0f0db8ece9164bf46b85f, 30ad6955d038ae1231e2b2ca59a9855af3909117, fa7dc942bf1444110f9737bdff97535bc3ec4a5f, 2876c8299e6a87a095ce8b0ee9e0187367047792, 009068f6c4f8eac2275610e2eb1118a5a7f39676, d3282d8af478ceac5990c0cf2a467ff19527b046, 3a5ae4cdd90d4c12317e24401b639373c44bb9f3, 772219bde69f024cd43dd059e44a92d36b409a91, a7964034b79f0f4ad492076e9e1c2f7da57da6e2, 29d5e12e90f03cc24e4eb0a56a35f17236414adc, ad89165c69ed5b33a971d225861716b7c67d81a, 13eb85e8c98bdbbc4fbe794b2525dd5a0920e436, 72f358f86407a10c3b93bfc56739270d4fc47a29, 105949f78858b17bcfad863213feb191699a535f, 5879d5dd3109a708244ed1b7decccf1f19b859a, 0d61fef0d2e138ea4223b0f982c1718629642449, 12e42fa9b6353b2af8ab8bec186476324956f434, 0cfdce7f87ce257fda7f37e6ad1fe9b259e22d9, 9fc68e64067aa8f1251a7a924472b65310bc22b4, 3050bb407a85a366cfc5c22e5bd62f93f2fe60e, 5f2e29be6790d476e55182f3121a11b66aa2c985f, 350475f2afd1e755c89128891a272ecbc00abcd, ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af, a3477b8739275fc7097b49d4014ff43415c494e4, b1e580472c99b01aa826e337c6411656dbba99a5, 83bc416629775d0ad5080324c3b62c2ad1a580d7]
     immediate_predecessors: [d83f505b833e5eb86a7e241a41a42879f5a46fd5, c4867a611b29bd4acde4dba00b9fe1f81530b604]
     verification: "Focused race tests cover absent, present, and unavailable marker projections plus existing wrapped transport/HTTP refusal codes. Full updater race, agentcore public typed-response race, all 37/146 agentcore and 20/81 textureowner runtime shards pass. Nix evaluation resolves the exact root-owned `install -m 0600 /dev/null /run/choir/updater-unit-entered` ExecStartPre in the guest unit. The marker is empty, boot-local, non-authoritative, and written after required-unit ordering but before updater ExecStart."
-    disposition: "Frozen for independent G1. Review must verify the systemd ordering claim, marker accessibility from the root sandbox without relaxing inaccessible signer/control paths, closed/non-secret public codes, absence of durable authority or service-policy change, exact prior rollback, and whether this one-bit diagnostic can discriminate the deployed blocker without new ambiguity. Effects remain OFF."
+    disposition: "Round-59 accepted unanimously by the two substantive independent reviewers, Cursor and OMP Gemini 3.5; Devin timed out empty and OpenCode lacked account balance. Both verified exact systemd ordering, root sandbox marker access, unchanged signer/control inaccessibility, closed public codes, and no durable/effect authority change. Residuals are explicit: the marker proves ExecStartPre succeeded sometime this boot, a later restart/dependency failure may leave it stale, and the short pre-listen window also reports process unavailable. Those caveats do not invalidate the cold-boot deployed discriminator. Effects remain OFF."
+    g1_round_59_probe:
+      reviewed_at: 2026-07-21T01:31:01Z
+      source_ref: 54c02094d7fc73e1d4f89546d1bb16ffb53634e7
+      authority_ref: 3402aa313af02fd5fbd8932f3e55c706a2d7b52c
+      outcome: accept_G1
+      adjudication: "Two substantive independent reviewers found no blocker. Exact source confirms required-unit ordering precedes the marker, sandbox remains root with `/run/choir` access, signer/control paths remain inaccessible, and only closed code crosses the authenticated HTTP 503 envelope. Stale-marker and transient pre-listen interpretations are retained as deployed-only caveats; G1 accepts landing solely for one cold-boot no-SSH discriminator."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round59-panel/manifest.tsv, manifest_sha256: 2732a211093eab1b633991ea6c47c98de694c3f6277100d1db1c148bcf73c2a1, cursor_sha256: ef3937ee936c403a8d867d4ac819b618715da13916b4b8f75805efe22e0501cd, omp_gemini35_sha256: 286ce507c3edfd3d81577f9dbb1c6f32dc39d516b10b439ced63b24e5c1af82a, devin_timeout_empty_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, opencode_failure_sha256: 106ec3d1466b9d78c94fe0082ca226e4ddeb833e8378b79d260f76afc4a575a1}
     g1_round_58_probe:
       reviewed_at: 2026-07-21T00:32:34Z
       source_ref: 83bc416629775d0ad5080324c3b62c2ad1a580d7
@@ -1372,7 +1379,7 @@ now:
     heresy_delta: {discovered: 10, introduced: 1, repaired: 5}
   c_deploy_failure_15:
     observed_at: 2026-07-21T01:05:11Z
-    status: frozen_G1_review
+    status: accepted_G1_round_59_pending_land
     mutation_class: red
     protected_surfaces: [guest_systemd_ordering, guest_updater, guest_receipt_signer, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact main deploy and public scoped receipts, immutable Nix unit graph, boot-local non-secret projection, focused tests, refrozen G1, and deployed no-SSH acceptance."
@@ -1381,10 +1388,11 @@ now:
     problem: "No authenticated no-SSH evidence identifies whether systemd ever entered updater execution. Repairing signer permissions, updater startup, or dependency/readiness policy now would be guesswork across protected boundaries."
     existing_replacement_check: "The updater already has write authority to `/run/choir`; systemd already supports fixed ExecStartPre ordering; the client already owns stable missing-socket classification. Reuse those surfaces for one ephemeral marker and two closed codes. Do not add a daemon/store, grant sandbox systemd access, expose unit logs/status, change service dependencies, or weaken isolation."
     rollback: "Preserve deployed d83f505b, exact retained identity/data epoch 1214, R0/R1, scoped-key metadata, and mode OFF. Diagnostic rollback removes only the marker and refined codes."
-    next_action: "Review frozen candidate 54c02094d7fc73e1d4f89546d1bb16ffb53634e7 against authority commit c4867a611b29bd4acde4dba00b9fe1f81530b604. If accepted, land/deploy and use exactly one public kernel response to choose a source repair."
+    next_action: "Land accepted candidate 54c02094d7fc73e1d4f89546d1bb16ffb53634e7 with authority, monitor CI/deploy and exact health identity, recover the retained computer if required, and issue exactly one public scoped kernel request. Use its closed reason to choose a source repair."
     diagnostic_candidate: "54c02094d7fc73e1d4f89546d1bb16ffb53634e7 adds one empty boot-local root marker at updater unit entry and refines only missing-socket into unit-not-started versus process-unavailable; marker inspection ambiguity retains the prior missing-socket code."
     diagnostic_verification: "Focused/full updater race, public agentcore typed-response race, runtime shards, and exact Nix service evaluation pass. No service dependency/order/restart, signer/control access, durable state, lifecycle, route, or effect behavior changes."
     diagnostic_rollback: "Revert 54c02094d7fc73e1d4f89546d1bb16ffb53634e7 before landing or its eventual main landing commit; preserve deployed d83f505b, retained identity/data, R0/R1, and effects OFF."
+    g1_acceptance: "Cursor and OMP Gemini 3.5 accepted Round 59 with no blocker. Devin timed out empty; OpenCode failed for account balance. Review confirmed the one-bit projection, isolation and secrecy invariants, and explicit stale/transient caveats."
     conjecture_delta: "Guest signer dependency failure is plausible because updater requires it while sandbox requires only the independently healthy verifier signer; updater pre-listen failure is also plausible. Neither is yet evidence."
     heresy_delta: {discovered: 11, introduced: 1, repaired: 5}
   dead_end_assessment:
