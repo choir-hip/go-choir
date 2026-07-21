@@ -1405,17 +1405,17 @@ now:
     heresy_delta: {discovered: 11, introduced: 1, repaired: 5}
   c_deploy_failure_16:
     observed_at: 2026-07-21T01:53:47Z
-    status: accepted_G1_round_61_pending_land
+    status: deployed_repair_falsified_source_inference
     mutation_class: red
     protected_surfaces: [guest_receipt_signer_key, guest_receipt_history, guest_systemd_ordering, guest_updater, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact deployed identity and public scoped receipts, immutable Nix unit graph, byte-preserving disposable migration tests, independent G1, and deployed signed receipt verification."
-    success_before_blocker: "The no-SSH diagnostic reduced transport ambiguity to required guest-core signer non-entry without exposing logs, raw errors, signer paths, or durable contents."
-    evidence: "Commit fb0e56e33de17fbf7cf7326b345fa701d6a241a3 split the former shared signer group into per-signer groups and updated directory declarations, but no retained-content migration was added. `d` tmpfiles rules adjust the directory itself, not existing `key.ed25519`, `receipts/`, or receipt files. Receipt signer code requires state directories at 0700 and keys/receipts at 0600. The healthy verifier path has independent state and does not disprove a retained guest-core mismatch."
-    problem: "A prior security cutover changed guest-core group/path ownership contracts without an explicit retained-state migration. On a long-lived computer, that can prevent the isolated signer from reading its existing identity/history and transitively prevent updater start. Deleting/regenerating the key or receipts would destroy audit identity and is forbidden."
+    success_before_blocker: "Round-61 main af2d30f960a3c800c15535248a96d8be25bab068 passed CI/deploy run 29796259252 and public health binds both commit fields. The byte-preserving migration remains the required durable upgrade hygiene and effects remain OFF generation 0."
+    evidence: "After deploy, the exact retained ComputerID moved through failed epoch 1238, booting/degraded epoch 1241, then recovered same-identity Active at epoch 1242 after two public idempotent starts. The required public kernel request still returned HTTP 503 in 1627 ms with exact reason `updater_unit_not_started`. No key/receipt bytes were exposed or regenerated."
+    problem: "Ownership/mode normalization alone did not restore the guest-core signer/updater chain. The remaining closed reason cannot distinguish migration-unit refusal/failure from successful migration followed by signer process failure. Guessing between retained path shape, key validity, or runtime socket startup would repeat the protected-boundary failure."
     substrate_vs_symptom: "Substrate: immutable guest upgrades must migrate protected persistent service state when Unix identities or ownership contracts change. Symptom: updater socket absent and kernel receipt unavailable."
     existing_replacement_check: "The signer already owns a canonical key path, receipt directory, exact modes, and fail-closed parsers. Add a one-shot byte-preserving ownership/mode migration before that existing service; do not replace the signer, move state, regenerate identity, weaken isolation, expose logs, or bypass signature verification."
     rollback: "Preserve main eb0368ff, retained ComputerID/data epoch 1227, existing key and receipt bytes, R0/R1, scoped-key metadata, and mode OFF. Candidate rollback removes the migration unit only; it cannot undo harmless ownership normalization, so tests and G1 must establish the target ownership as the already-settled service contract."
-    next_action: "Land accepted production source c2261bd5587a5f539f4f3f04f7eca87c63736fb3 plus deterministic test-only fb07070c and authority, monitor exact CI/deploy identity, recover the retained computer, and require a fresh signed route-bound kernel receipt while effects remain OFF."
+    next_action: "Document the falsified ownership-only inference, then add one boot-local closed marker written only after successful migration. Refine `updater_unit_not_started` into migration-unavailable versus signer-unavailable-after-migration without exposing paths/logs/content or changing service admission. G1, deploy, then select one source repair."
     repair_candidate: "Round-61 c2261bd5587a5f539f4f3f04f7eca87c63736fb3 retains the confined Round-60 migration, validates the complete tree before mutation, propagates scan failures, and rejects inode aliases."
     repair_verification: "Expanded Unix tests reproduce and close fail-open discovery and hardlink escape, plus nested symlink/FIFO boundaries. Local and Node A full receiptsigner race pass; exact Node A x86_64-linux guest system closure builds."
     repair_rollback: "Revert both c2261bd5587a5f539f4f3f04f7eca87c63736fb3 and 8921f84ec6c7f383ca660e28634c47a8828443dd before landing, or their eventual main landing commits. No deployed metadata or effects changed."
@@ -1426,8 +1426,22 @@ now:
       blocker: "The shell's `if [ -n \"$(find ...)\" ]` form does not propagate a failing `find` status under `set -e`; migration can continue after an incomplete security scan. Regular hard links are accepted, so metadata normalization may escape the exact pathname tree through inode aliasing."
       adjudication: "Reject on locally reproducible contract reasoning despite favorable verdicts. A protected root migration must fail closed on traversal failure and must not alter metadata of an inode reachable outside its canonical tree."
       next_repair: "Capture and check every find exit status before inspecting output; refuse key or receipt regular files with link count greater than one; cover nested symlink, FIFO, hardlink, and forced scan failure. Do not expand migration scope or regenerate state."
-    conjecture_delta: "If the retained mismatch inference is right, signer and updater will start and the next public response will be a signed kernel capability receipt. If it is wrong, the same `updater_unit_not_started` response remains and no identity/history bytes are lost."
+    conjecture_delta: "Deployed Round 61 falsified the sufficient-cause conjecture: canonical metadata migration may be necessary upgrade hygiene but did not make updater executable. Remaining alternatives are migration refusal/failure or guest signer process failure after migration."
     heresy_delta: {discovered: 12, introduced: 1, repaired: 5}
+  c_deploy_failure_17:
+    observed_at: 2026-07-21T03:05:08Z
+    status: documented_pending_diagnosis
+    mutation_class: red
+    protected_surfaces: [guest_signer_state_migration, guest_receipt_signer, guest_updater, kernel_capability_receipt, deployed_acceptance]
+    admissible_evidence_class: "Exact main deploy/public receipts, boot-local non-secret post-migration marker, focused tests, independent G1, and one deployed no-SSH discriminator."
+    success_before_blocker: "The canonical migration landed with byte/path/refusal proof and did not weaken effects, identity, or audit state, but the signer chain remains unavailable."
+    evidence: "Updater's unit-entry marker is absent after a fresh retained boot. The signer requires the migration one-shot; systemd runs ExecStartPost only when ExecStart succeeds. A fixed empty `/run/choir` post-migration marker can separate migration completion from later signer failure while remaining inaccessible as durable authority."
+    problem: "No public admissible evidence currently says whether the new migration completed. Without that bit, changing retained state rules or signer parsing/startup is ungrounded."
+    existing_replacement_check: "Reuse the migration unit, `/run/choir` boot projection namespace, updater client's closed classifier, and authenticated 503 envelope. Do not add logs/status APIs, a durable store, systemd access from sandbox, raw errors, SSH product proof, or effects."
+    rollback: "Preserve deployed af2d30f9, retained identity/data epoch 1242, normalized metadata, all key/receipt bytes, R0/R1, scoped-key metadata, and mode OFF. Diagnostic rollback removes only the marker and refined codes."
+    next_action: "Write one empty mode-0600 marker in migration ExecStartPost, grant that unit only `/run/choir` in addition to its existing state root, and classify absent/present marker only when updater unit entry is absent. Test all three projections; refreeze G1 and deploy."
+    conjecture_delta: "If the marker is absent, investigate the migration's fail-closed retained-shape/runtime boundary. If present, migration succeeded and the guest signer binary/key/socket path is the remaining source."
+    heresy_delta: {discovered: 13, introduced: 1, repaired: 5}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
