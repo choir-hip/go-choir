@@ -1718,17 +1718,31 @@ now:
     heresy_delta: {discovered: 23, introduced: 2, repaired: 9}
   d_entry_failure_5:
     observed_at: 2026-07-21T17:47:46Z
-    status: documented_pending_source_repair
+    status: documented_and_repaired_in_candidate
     mutation_class: red
     protected_surfaces: [guest_core_signer_startup, exact_guest_boot, signed_activation_key_lineage]
     evidence: "Exact Node A Firecracker boot of immutable candidate c66bc8dded06fe711929148dd123c27c0ff7029b on a fresh persistent data image reached systemd, then `go-choir-guest-receipt-signer-state-migration.service` failed and the required guest-core signer dependency prevented agentcore readiness. Three independent run IDs reproduced the 120-second boot timeout; serial output reported `Failed to start Normalize retained guest-core signer state ownership` and `Dependency failed for Isolated guest-core receipt signer`. The stale-current reconstruction assertion did not run."
     problem: "The exact immutable guest cannot initialize guest-core signer state on a fresh persistent disk, so neither baseline readiness nor signed activation authority is available."
     substrate_vs_symptom: "Guest signer state initialization and systemd confinement/order substrate; not a stale-current activation-validation defect."
-    existing_replacement_check: "The migration/projection helpers and tmpfiles rules are the intended initialization path and are wired, but the oneshot fails before signer startup. No alternative signer-state initializer exists."
+    existing_replacement_check: "The migration/projection helpers and tmpfiles rules are the intended initialization path and are wired. A serial-console OnFailure receipt identified systemd exit 226/NAMESPACE because `/mnt/persistent/choir-credentials` did not yet exist; no alternative signer-state initializer exists."
     rollback: "Rejected disposable Firecracker identities were destroyed; Node A returned to clean main; no route, accepted event, mode, retained production computer, or deployed release changed."
-    next_action: "Expose the migration oneshot's exact stderr on the serial console, repair the source failure without weakening path or key confinement, rebuild the immutable image, then rerun fresh boot and stale-current reconstruction."
-    conjecture_delta: "Static unit evaluation and helper tests did not prove first-boot signer-state initialization inside the exact persistent-mount and systemd sandbox."
-    heresy_delta: {discovered: 24, introduced: 2, repaired: 9}
+    resolution: "Candidate 6ed471104d3c69c8362e0bea87d53c6014e93f55 creates the root-owned mode-0700 credential directory through boot tmpfiles before signer/updater confinement. The diagnostic unit was removed; critical migration stderr remains visible on the serial console."
+    next_action: "Diagnose the subsequent agent runtime readiness failure, then rerun fresh boot and stale-current reconstruction."
+    conjecture_delta: "Static unit evaluation and helper tests did not prove first-boot signer-state initialization inside the exact persistent-mount and systemd sandbox. Every path named by systemd mount confinement must exist before the confined unit races its creator."
+    heresy_delta: {discovered: 24, introduced: 2, repaired: 10}
+  d_entry_failure_6:
+    observed_at: 2026-07-21T18:12:00Z
+    status: documented_pending_source_repair
+    mutation_class: red
+    protected_surfaces: [exact_guest_boot, immutable_baseline_exec, updater_admission]
+    evidence: "After the credential-path repair, exact fresh Firecracker boots no longer reported signer migration or dependency failure, but four disposable runs still timed out after 120 seconds with TCP connection refused at the guest health endpoint `10.200.1.2:8085`. Serial boot reached the login prompt and reported no failed unit, so the stale-current reconstruction assertion still did not execute."
+    problem: "The immutable guest reaches multi-user boot after signer initialization but the agent runtime never binds its health port; current serial evidence does not distinguish a restart loop, skipped service, or launcher/admission failure."
+    substrate_vs_symptom: "Immutable launcher/systemd/updater startup join; not yet classified below that boundary."
+    existing_replacement_check: "The signed launcher, updater admission endpoint, and static baseline fallback are the intended replacement and are wired. No alternative launch path is authorized."
+    rollback: "Rejected disposable Firecracker identities were destroyed; Node A returned to clean main; no deployed or retained product state changed."
+    next_action: "Emit bounded systemd status and recent journal for the launcher, updater, and required signer units to the serial console on failed readiness; classify and repair the exact startup transition without bypassing signed admission."
+    conjecture_delta: "Eliminating unit dependency failure is not proof that the immutable launcher reached static exec or that its required updater endpoint was ready."
+    heresy_delta: {discovered: 25, introduced: 2, repaired: 10}
   dynamic_execution_authority_decision:
     status: settled
     source: owner
