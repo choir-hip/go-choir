@@ -375,16 +375,22 @@ orchestration:
 
 now:
   status: working
-  slice: "C-freeze-round72-signed-activation"
-  question: "Does frozen candidate 838a518917fa548e527e9138cfa75b6da3c51872 completely close the mutable execution-authority bypass and pass independent G1 before any landing or deployed effect?"
+  slice: "C-reject-round72-and-recover-authority"
+  question: "What owner-ratified semantic authority can the immutable updater verify without trusting the mutable root sandbox, while preserving the only legitimate capsule-freeze/materialization path and exact reviewed inventory?"
   round72_candidate:
-    status: frozen_pending_independent_G1
+    status: rejected_G1_semantic_authority_and_inventory_blockers
     source_ref: 838a518917fa548e527e9138cfa75b6da3c51872
+    evidence_ref: a5253e8ea62176c7837aa15b73aa2d9e274ebfe3
     immutable_closure: /nix/store/0inxys1jym8q8dd3j0f3v6373kdh5skl-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d
     guest_image: /nix/store/vxb9nchq9jhqqnyfdmmrdb80vzw6sw59-go-choir-guest-image
     exact_guest_proof: "Node A disposable Firecracker run `round72proof2` passed in 14.721s. Fresh immutable boot served build 838a518917fa548e527e9138cfa75b6da3c51872, kept effects OFF with start refusal 409, admitted the kernel probe, and refused public kernel receipt before route identity (503). After planting an unauthenticated persistent `current` symlink and reconstructing as epoch 2, the guest again served immutable build 838a518917fa548e527e9138cfa75b6da3c51872 and logged `unsigned_current=refused`."
+    independent_review:
+      outcome: REJECT_G1_multi_reviewer_blockers
+      panel_d_entry_authorized: false
+      adjudication: "Codex, Devin, Cursor, and OMP GPT rejected; OMP Gemini accepted; OpenCode failed before review. Minority rule rejects G1. Locally confirmed: the root sandbox can call the updater socket and `/v1/apply` validates only caller-supplied internally consistent fields, not canonical event authority; final admission omits exact inventory and on-disk mode equality; the read-only updater mount also removes the current capsule freeze writer without providing the selected narrow replacement. Cursor additionally identified that baseline replacement conflates activation absence with signer/verification failure and cannot replace malformed unauthenticated current."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round72-final-panel/manifest.tsv, manifest_sha256: a95d0d68cf61920d2fe29c7651b7857dd95b4768eaac78f90afd20dbe10a7061, codex_sha256: 22bc1e3d12f0e4b4df666a9e10a2149b8d2634b9f9fe688f7ebf1178880702f9, devin_sha256: ce105f94c8238a9ce1bfb08eb118229185e258f300c28ad08bfd800022a9700a, cursor_sha256: 039a3cfe33c501ce4857718943e44c1632933b4359c619282404fb93246be505, omp_gpt55_sha256: 796b6be95928d4871da6aa14697e3c2bc91cdf0396dd0edb1f0de9b7b7b88b02, omp_gemini35_sha256: b8fa5883664a3e8986802b75ac90fd2c310d76f84a3bce06a159763b0651ca12}
     rollback: "Effects OFF and no GenesisImported. Revert candidate to deployed 832ae951 or R0 a7f497ab; all disposable Node A VM/data identities were destroyed."
-    next_action: "Rerun final focused/runtime suites against the frozen ref, then obtain independent G1 review of source diff, exact Linux receipt, negative authority inventory, and rollback refs."
+    next_action: "Do not patch Round 72 incrementally. Reconcile one semantic authority boundary for canonical accepted-event commands, narrow capsule staging, exact inventory, and baseline replacement error classes; obtain owner ratification where options change authority, then build a new candidate."
   r1_security_floor:
     frozen_at: 2026-07-21T12:17:44Z
     status: rejected_R1_dynamic_release_authority_bypass
@@ -1753,6 +1759,20 @@ now:
     next_action: "Freeze final source/test receipts and submit candidate 838a518917fa548e527e9138cfa75b6da3c51872 to independent G1."
     conjecture_delta: "A semantically expected 404 must not share retry policy with transport or transient server failure. Safe immutable fallback must be prompt enough to be observable as a product transition."
     heresy_delta: {discovered: 25, introduced: 2, repaired: 11}
+  d_entry_failure_7:
+    observed_at: 2026-07-21T18:46:29Z
+    status: documented_G1_rejection_pending_owner_authority
+    mutation_class: red
+    protected_surfaces: [canonical_event_authority, updater_apply, activation_receipts, capsule_freeze, baseline_import, immutable_launcher]
+    evidence: "Frozen Round 72 candidate 838a518917fa548e527e9138cfa75b6da3c51872 passed focused/race suites, full runtime shards, immutable image build, and exact unsigned-current reconstruction, but independent G1 rejected it. Four substantive reviewers found reproducible source blockers; one accepted; one provider failed."
+    problem: "The immutable updater authenticates only root UID and internally consistent caller fields. The mutable root sandbox shares that UID and socket, so it can ask updater/guest-core signer to authorize a caller-selected release and hash-shaped event head without proving a canonical accepted/rollback event. Separately, removing sandbox write access to updater state also removes the existing capsule-freeze ingress, admission does not enforce exact inventory/on-disk modes/root confinement, and baseline replacement cannot distinguish absent authority from transient signer/verification failure."
+    substrate_vs_symptom: "Single semantic authority and privileged ingress substrate across mutable agentcore, canonical ComputerEventAppender, capsule freezer, immutable updater, and guest-core signer. The retry, current-symlink, and mode checks are symptoms around that missing boundary."
+    root_cause_cluster: "Round 72 joins at least four failures to the same substrate: mutable runtime self-asserts apply authority; shared updater root doubles as unprivileged freeze ingress and privileged release state; admission verifies a list but not the exact realized tree; baseline migration uses one undifferentiated admission error for absence, corruption, signer outage, and IO failure. Further isolated patches would preserve the broken authority topology."
+    existing_replacement_check: "Canonical ComputerEventAppender, scoped verifier decisions, capsule grant/frozen inventory, immutable updater, and guest-core signer already exist, but no single cryptographically or capability-bound command joins them. Connecting those authorities is preferred over adding another store or restoring broad filesystem writes."
+    rollback: "Candidate remains branch-only; effects OFF; no GenesisImported, accepted event, route, deployed release, or retained computer was mutated."
+    next_action: "Freeze an owner-ratified authority design before more repair code. It must specify who signs or serves the canonical apply command, how updater verifies current/target/event/request bindings without trusting mutable root UID, how capsule bytes cross a narrow ingress, how exact-tree admission is race-safe, and which baseline errors permit replacement."
+    conjecture_delta: "A guest-core signature generated by updater proves provenance of updater output, not semantic authorization of caller input. UID and mount namespaces cannot separate two authorities inside the same root process boundary."
+    heresy_delta: {discovered: 29, introduced: 2, repaired: 11}
   dynamic_execution_authority_decision:
     status: settled
     source: owner
