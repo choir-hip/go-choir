@@ -172,7 +172,7 @@ func NewClient(socket string) (*Client, error) {
 		unitEntryMarkerPath:       "/run/choir/updater-unit-entered",
 		signerMigrationMarkerPath: "/run/choir/guest-signer-state-migrated",
 		signerKeyShapePath:        "/run/choir/guest-signer-key-shape",
-		signerStartupStagePath:    "/run/choir-signers/guest-core/startup-stage",
+		signerStartupStagePath:    "/run/choir-signer-status/guest-core/startup-stage",
 		http:                      &http.Client{Transport: transport, Timeout: 2 * time.Minute},
 	}, nil
 }

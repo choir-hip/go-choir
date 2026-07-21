@@ -341,6 +341,8 @@ EOF
     "d /mnt/persistent/choir-signers/verifier 0700 choir-verifier-signer choir-verifier-signer -"
     "d /run/choir-signers 0711 root root -"
     "d /run/choir-signers/guest-core 0750 choir-guest-signer choir-guest-signer -"
+    "d /run/choir-signer-status 0711 root root -"
+    "d /run/choir-signer-status/guest-core 0750 choir-guest-signer choir-guest-signer -"
     "d /run/choir-verifier 0750 choir-verifier-signer choir-verifier-signer -"
   ];
 
@@ -435,7 +437,7 @@ EOF
       Type = "simple";
       User = "choir-guest-signer";
       Group = "choir-guest-signer";
-      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode guest-core --socket /run/choir-signers/guest-core/signer.sock --startup-status /run/choir-signers/guest-core/startup-stage --key /mnt/persistent/choir-signers/guest-core/key.ed25519 --state-root /mnt/persistent/choir-signers/guest-core/receipts";
+      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode guest-core --socket /run/choir-signers/guest-core/signer.sock --startup-status /run/choir-signer-status/guest-core/startup-stage --key /mnt/persistent/choir-signers/guest-core/key.ed25519 --state-root /mnt/persistent/choir-signers/guest-core/receipts";
       EnvironmentFile = [ "-/run/go-choir-updater.env" ];
       Restart = "on-failure";
       RestartSec = 1;
@@ -451,7 +453,7 @@ EOF
       ProtectHome = true;
       ProtectSystem = "strict";
       ProtectControlGroups = true;
-      ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" "/run/choir-signers/guest-core" ];
+      ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" "/run/choir-signers/guest-core" "/run/choir-signer-status/guest-core" ];
       InaccessiblePaths = [ "/mnt/persistent/choir-signers/verifier" "/run/choir-verifier" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" ];
       LockPersonality = true;
