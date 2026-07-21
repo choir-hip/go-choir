@@ -435,7 +435,7 @@ EOF
       Type = "simple";
       User = "choir-guest-signer";
       Group = "choir-guest-signer";
-      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode guest-core --socket /run/choir-signers/guest-core/signer.sock --key /mnt/persistent/choir-signers/guest-core/key.ed25519 --state-root /mnt/persistent/choir-signers/guest-core/receipts";
+      ExecStart = "${goChoirPackages.receiptSigner}/bin/choir-receipt-signer --mode guest-core --socket /run/choir-signers/guest-core/signer.sock --startup-status /run/choir-signers/guest-core/startup-stage --key /mnt/persistent/choir-signers/guest-core/key.ed25519 --state-root /mnt/persistent/choir-signers/guest-core/receipts";
       EnvironmentFile = [ "-/run/go-choir-updater.env" ];
       Restart = "on-failure";
       RestartSec = 1;

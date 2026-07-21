@@ -25,26 +25,31 @@ type Client struct {
 	unitEntryMarkerPath       string
 	signerMigrationMarkerPath string
 	signerKeyShapePath        string
+	signerStartupStagePath    string
 	http                      *http.Client
 }
 
 const (
-	KernelCapabilityFailureUpdaterUnavailable                  = "updater_unavailable"
-	KernelCapabilityFailureUpdaterUnreachable                  = "updater_unreachable"
-	KernelCapabilityFailureUpdaterSocketMissing                = "updater_socket_missing"
-	KernelCapabilityFailureUpdaterUnitNotStarted               = "updater_unit_not_started"
-	KernelCapabilityFailureUpdaterProcessUnavailable           = "updater_process_unavailable"
-	KernelCapabilityFailureSignerMigrationUnavailable          = "guest_signer_migration_unavailable"
-	KernelCapabilityFailureSignerUnavailableAfterMigration     = "guest_signer_unavailable_after_migration"
-	KernelCapabilityFailureSignerKeySizeInvalid                = "guest_signer_key_size_invalid"
-	KernelCapabilityFailureSignerUnavailableWithKeyAbsent      = "guest_signer_unavailable_with_key_absent"
-	KernelCapabilityFailureSignerUnavailableAfterKeyValidation = "guest_signer_unavailable_after_key_validation"
-	KernelCapabilityFailureUpdaterPermissionDenied             = "updater_permission_denied"
-	KernelCapabilityFailureUpdaterConnectionRefused            = "updater_connection_refused"
-	KernelCapabilityFailureUpdaterTimeout                      = "updater_timeout"
-	KernelCapabilityFailureProbeUnavailable                    = "probe_unavailable"
-	KernelCapabilityFailureReceiptRefused                      = "receipt_refused"
-	KernelCapabilityFailureInvalidResponse                     = "invalid_response"
+	KernelCapabilityFailureUpdaterUnavailable               = "updater_unavailable"
+	KernelCapabilityFailureUpdaterUnreachable               = "updater_unreachable"
+	KernelCapabilityFailureUpdaterSocketMissing             = "updater_socket_missing"
+	KernelCapabilityFailureUpdaterUnitNotStarted            = "updater_unit_not_started"
+	KernelCapabilityFailureUpdaterProcessUnavailable        = "updater_process_unavailable"
+	KernelCapabilityFailureSignerMigrationUnavailable       = "guest_signer_migration_unavailable"
+	KernelCapabilityFailureSignerUnavailableAfterMigration  = "guest_signer_unavailable_after_migration"
+	KernelCapabilityFailureSignerKeySizeInvalid             = "guest_signer_key_size_invalid"
+	KernelCapabilityFailureSignerUnavailableWithKeyAbsent   = "guest_signer_unavailable_with_key_absent"
+	KernelCapabilityFailureSignerStoppedBeforeConfiguration = "guest_signer_stopped_before_configuration"
+	KernelCapabilityFailureSignerStoppedAfterConfiguration  = "guest_signer_stopped_after_configuration"
+	KernelCapabilityFailureSignerStoppedAfterKeyLoad        = "guest_signer_stopped_after_key_load"
+	KernelCapabilityFailureSignerStoppedAfterHandlerSetup   = "guest_signer_stopped_after_handler_setup"
+	KernelCapabilityFailureSignerStoppedAfterSocketListen   = "guest_signer_stopped_after_socket_listen"
+	KernelCapabilityFailureUpdaterPermissionDenied          = "updater_permission_denied"
+	KernelCapabilityFailureUpdaterConnectionRefused         = "updater_connection_refused"
+	KernelCapabilityFailureUpdaterTimeout                   = "updater_timeout"
+	KernelCapabilityFailureProbeUnavailable                 = "probe_unavailable"
+	KernelCapabilityFailureReceiptRefused                   = "receipt_refused"
+	KernelCapabilityFailureInvalidResponse                  = "invalid_response"
 )
 
 type KernelCapabilityUnavailableError struct {
@@ -88,7 +93,31 @@ func (c *Client) signerUnavailableAfterMigrationCode() string {
 	case "size-invalid":
 		return KernelCapabilityFailureSignerKeySizeInvalid
 	case "exact-size":
-		return KernelCapabilityFailureSignerUnavailableAfterKeyValidation
+		return c.signerUnavailableWithExactKeyShapeCode()
+	default:
+		return KernelCapabilityFailureSignerUnavailableAfterMigration
+	}
+}
+
+func (c *Client) signerUnavailableWithExactKeyShapeCode() string {
+	if c.signerStartupStagePath == "" {
+		return KernelCapabilityFailureSignerUnavailableAfterMigration
+	}
+	raw, err := os.ReadFile(c.signerStartupStagePath)
+	if err != nil {
+		return KernelCapabilityFailureSignerUnavailableAfterMigration
+	}
+	switch strings.TrimSpace(string(raw)) {
+	case "started":
+		return KernelCapabilityFailureSignerStoppedBeforeConfiguration
+	case "configured":
+		return KernelCapabilityFailureSignerStoppedAfterConfiguration
+	case "key-loaded":
+		return KernelCapabilityFailureSignerStoppedAfterKeyLoad
+	case "handler-configured":
+		return KernelCapabilityFailureSignerStoppedAfterHandlerSetup
+	case "socket-listening":
+		return KernelCapabilityFailureSignerStoppedAfterSocketListen
 	default:
 		return KernelCapabilityFailureSignerUnavailableAfterMigration
 	}
@@ -143,6 +172,7 @@ func NewClient(socket string) (*Client, error) {
 		unitEntryMarkerPath:       "/run/choir/updater-unit-entered",
 		signerMigrationMarkerPath: "/run/choir/guest-signer-state-migrated",
 		signerKeyShapePath:        "/run/choir/guest-signer-key-shape",
+		signerStartupStagePath:    "/run/choir-signers/guest-core/startup-stage",
 		http:                      &http.Client{Transport: transport, Timeout: 2 * time.Minute},
 	}, nil
 }
