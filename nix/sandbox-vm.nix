@@ -351,6 +351,7 @@ EOF
 
   systemd.tmpfiles.rules = [
     "d /mnt/persistent/choir-updater 0700 root root -"
+    "d /mnt/persistent/choir-credentials 0700 root root -"
     "d /run/choir-updater-control 0700 root root -"
     "d /run/choir-runtime-handoff 0700 root root -"
     "d /run/choir 0700 root root -"
@@ -424,7 +425,6 @@ EOF
   systemd.services.go-choir-guest-receipt-signer-state-migration = {
     description = "Normalize retained guest-core signer state ownership";
     before = [ "go-choir-guest-receipt-signer.service" ];
-    unitConfig.OnFailure = [ "go-choir-guest-receipt-signer-state-migration-diagnostic.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -449,17 +449,6 @@ EOF
     };
   };
 
-  systemd.services.go-choir-guest-receipt-signer-state-migration-diagnostic = {
-    description = "Report guest-core signer migration failure to the serial console";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = pkgs.writeShellScript "go-choir-guest-signer-state-migration-diagnostic" ''
-        ${pkgs.systemd}/bin/systemctl status go-choir-guest-receipt-signer-state-migration.service --no-pager --full || true
-      '';
-      StandardOutput = "journal+console";
-      StandardError = "journal+console";
-    };
-  };
 
   systemd.services.go-choir-guest-receipt-signer = {
     description = "Isolated guest-core receipt signer";
