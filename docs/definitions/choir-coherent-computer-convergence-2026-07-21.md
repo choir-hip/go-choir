@@ -171,11 +171,11 @@ execution:
 
 now:
   status: working
-  slice: A-reconcile-and-supersede
-  question: none
+  slice: B-observe-and-freeze-kernel-contract
+  question: "Which existing store/reducer should own each durable subject, update, and work transition after the complete writer/reader and replacement inventory?"
   reconciliation:
-    observed_at: 2026-07-21T20:26:17Z
-    source_ref: refs/remotes/origin/main@7913a3da0343ee03cf32b7622aaf9f2de35ee887
+    observed_at: 2026-07-21T20:30:02Z
+    source_ref: refs/remotes/origin/main@c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc
     deploy_identity: "Node B staging host and active guests reported 832ae951e84400a54bd7f8ef52a312e872b5c3ef"
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-cli-self-development-2026-07-16.md]
     policy_resolution_ref: not_applicable
@@ -183,11 +183,11 @@ now:
     status: reconciled
   candidate:
     id: convergence-definition-docs-01
-    state: ready
-    ref: refs/heads/selfdev/architecture-recovery@2eb9129577aeb19e515b8c9b0ad549b077ffafa7
+    state: landed
+    ref: refs/remotes/origin/main@c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc
     owner: owner-and-current-session
     base: refs/remotes/origin/main@7913a3da0343ee03cf32b7622aaf9f2de35ee887
-    digest: 2eb9129577aeb19e515b8c9b0ad549b077ffafa7
+    digest: c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc
     scope: [docs]
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
@@ -198,9 +198,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [refs/heads/selfdev/architecture-recovery@2eb9129577aeb19e515b8c9b0ad549b077ffafa7, refs/heads/selfdev/g1-round72-signed-activation@5517c2eb5c94678eb4ec323fef2cec34b96f7c6a, /tmp/choir-convergence-definition-final-panel/manifest.tsv]
-  blocker_or_risk: "The reviewed docs-only authority cutover is not yet landed on canonical main. Runtime mutation remains unauthorized."
-  next_action: "Land the reviewed docs-only branch on clean canonical main, verify docs truth and exact origin/main identity, then begin the successor's code-free B contract inventory."
+  evidence_refs: [refs/remotes/origin/main@c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc, refs/heads/selfdev/g1-round72-signed-activation@5517c2eb5c94678eb4ec323fef2cec34b96f7c6a, https://github.com/choir-hip/go-choir/actions/runs/29865854776]
+  blocker_or_risk: "No blocker. Exact public host/guest inventory is still incomplete and staging remains at 832ae951; therefore B begins read-only and may not infer runtime identity from clean main."
+  next_action: "Read-only map every writer, reader, replacement implementation, and deletion citer for artifact head, actor/update delivery, trajectory/work settlement, run/passivation, cancellation, and effect authorization; freeze the smallest one-authority contract before runtime code."
 
 receipts:
   - id: architecture-interrogation-2026-07-21
@@ -218,7 +218,7 @@ receipts:
       deploy_ref: not_applicable
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
-    registry_conformance_ref: "pending docs-only authority cutover"
+    registry_conformance_ref: "landed at origin/main@c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc; docs truth workflow 29865854776 passed"
 
   - id: definition-supersession-gate-2026-07-21
     boundary: define
@@ -230,12 +230,12 @@ receipts:
     authorization_ref: owner_supersession_2026-07-21
     candidate_or_evidence_refs: [refs/heads/selfdev/architecture-recovery@51836f329d53feaed768c9566323dcd77931efdc, refs/heads/selfdev/architecture-recovery@2eb9129577aeb19e515b8c9b0ad549b077ffafa7]
     landing:
-      source_commit: pending
-      ci_ref: not_applicable_docs_only
+      source_commit: c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc
+      ci_ref: "GitHub Actions 29865854776: Plan CI Lanes, Docs Truth Check, and Go Vet + Test + Build passed"
       deploy_ref: not_applicable_docs_only
-      environment_identity: not_applicable_docs_only
+      environment_identity: "No deploy by design; choir.news remained at 832ae951e84400a54bd7f8ef52a312e872b5c3ef"
       deployed_acceptance: not_applicable_docs_only
-    registry_conformance_ref: "one working mission entrypoint and one active_product_mission verified in candidate; live doccheck passed"
+    registry_conformance_ref: "origin/main@c972ce1b6ab4bf4c1d03e7590773082c92c4e9dc; one working mission entrypoint; one active_product_mission; live doccheck passed"
 
 view:
   path: none
