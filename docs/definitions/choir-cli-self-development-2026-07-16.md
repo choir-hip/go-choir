@@ -1691,6 +1691,19 @@ now:
     next_action: "Implement the owner-selected signed activation gate: immutable static baseline before any valid receipt; guest-core-signed ActivationIntent permits first dynamic boot; successful health replaces it with MaterializationReceipt; recovery authorizes the restored release; sandbox sees updater state read-only; genesis ignores/replaces unauthenticated legacy current and binds the immutable baseline."
     conjecture_delta: "Environment inheritance is insufficient identity custody when the inherited executable chooses its own build identity. The execution target and release manifest must fate-share with immutable or guest-core-signed expected values."
     heresy_delta: {discovered: 21, introduced: 2, repaired: 8}
+  d_entry_failure_3:
+    observed_at: 2026-07-21T16:52:00Z
+    status: documented_pending_source_repair
+    mutation_class: red
+    protected_surfaces: [updater_staged_release, dynamic_runtime_exec, materialization_restart]
+    evidence: "The first signed-activation focused test staged a manifest-declared mode-0555 `bin/sandbox`, then the immutable admit gate refused it as non-executable. `chmodTreeReadOnly` derives executable bits from `DirEntry.Type().Perm()`; `DirEntry.Type()` carries type bits, not the file's permission bits, so every staged regular file becomes mode 0444. Existing process tests invoke `bin/choir` through `/bin/sh` and did not exercise direct exec."
+    problem: "Updater staging silently strips executable bits from accepted release binaries, making the intended dynamic runtime path impossible even with valid signed activation authority."
+    substrate_vs_symptom: "Updater release realization metadata; not a launcher signature or systemd condition defect."
+    existing_replacement_check: "ManifestFile already carries the reviewed mode and `stageRelease` already validates it. No replacement chmod implementation exists; connect the final read-only chmod to the manifest-preserved file mode via actual `entry.Info().Mode()` rather than type bits."
+    rollback: "Uncommitted candidate only. No deployment, event, mode, route, or persistent release mutation occurred."
+    next_action: "Fix chmodTreeReadOnly to preserve actual executable bits while removing writes, add a direct-exec admission assertion, then rerun the signed activation tests."
+    conjecture_delta: "Manifest validation alone did not preserve runtime mode through realization; direct execution is the missing product-path verifier."
+    heresy_delta: {discovered: 22, introduced: 2, repaired: 8}
   dynamic_execution_authority_decision:
     status: settled
     source: owner
