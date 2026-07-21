@@ -1,13 +1,13 @@
 # Platform OS And App State
 
 **Status:** canonical platform-level state ledger
-**Last updated:** 2026-07-19
-**Changelog:** Reconciled the executable app inventory and self-development
-authority after the clean cutover. Features/AppChangePackage/AppAdoption,
-Candidate Review, and worker/candidate-machine product paths are deleted;
-historical design material remains in Git history.
-**Baseline checked:** source candidate only; fresh staging acceptance remains
-gated by the active self-development Definition.
+**Last updated:** 2026-07-21
+**Changelog:** Reconciled the executable app inventory against the rejected
+self-development branch and active durable-work convergence mission. Historical
+design material remains in Git history; rejected-branch deletions are not
+silently claimed as canonical-main state.
+**Baseline checked:** accepted staging plus isolated source candidates; fresh
+generic lifecycle acceptance is governed by the active convergence Definition.
 
 This document records the current common state of the Choir automatic computer:
 the platform substrate, desktop shell, app catalog, app boundaries, known proof,
@@ -607,9 +607,9 @@ dashboards:
   `vm-2e6c63b2b834b6441c324cb32f82d24f`; a later Chiron probe ended
   `no_matching_package`. These ids are retained only as evidence of obsolete
   worker-VM behavior. They authorize no current role, lifecycle, delegation,
-  capture, candidate, package, or promotion path. The active self-development
-  Definition deletes `finish_worker_delegation`, `worker-playwright`, and their
-  worker/candidate VM callers rather than treating them as future proof work.
+  capture, candidate, package, or promotion path. The rejected self-development
+  candidate deleted `finish_worker_delegation`, `worker-playwright`, and their
+  callers, but canonical-main residue must be inventoried before claiming cutover.
 
 ## Divergence Plan
 

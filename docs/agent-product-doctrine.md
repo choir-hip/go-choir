@@ -5,9 +5,9 @@ loaded on demand when a mission touches authority boundaries, harness behavior,
 Texture, runtime configuration, product-path verification, or run acceptance.
 Long-running missions now execute as Definition documents (`/goal <doc>.md`);
 see [skills/definition/SKILL.md](../skills/definition/SKILL.md). The active
-[self-development Definition](definitions/choir-cli-self-development-2026-07-16.md)
-is the sole executable top-level product authority. The completed audited
-construction Definition is historical evidence.
+[durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
+is the sole executable top-level product authority. The superseded self-development
+Definition and completed audited-construction Definition are historical evidence.
 It inherits [Choir Doctrine](choir-doctrine.md) and must not become a competing
 doctrine source.
 
@@ -208,17 +208,17 @@ evidence ledger and completion semantics in `skills/definition/SKILL.md` govern
 what counts as settled. `RunAcceptanceRecord` is a historical evidence
 projection for older runs; it is not self-development authority.
 
-The active self-development Definition requires ComputerID; source/deploy
-identity; canonical, desired, and effective event heads; trajectory and capsule
-refs; bundle/verifier/decision/materialization/checkpoint/route receipts;
-authority refusals; restart/reconstruction; rejection; rollback; mutation and
-heresy deltas; and residual risks.
+The active convergence Definition requires exact source/deploy/host/guest
+identity; artifact, subject/activation, obligation, update-disposition, and work
+settlement refs; restart/reconstruction and cancellation traces; UI/headless
+protocol conformance; authority refusals; rollback; mutation and heresy deltas;
+and residual risks. Self-development effects remain OFF.
 
-Do not claim deployed self-development from a deleted
-AppChangePackage/AppAdoption path, RunAcceptance, worker/candidate VM, local
-tests, a verifier statement, checkpoint publication, or route transition alone.
-Only the active Definition's complete deployed product path and G3 receipt can
-settle it.
+Do not claim deployed self-development from the superseded Definition, rejected
+Round 72 candidate, AppChangePackage/AppAdoption, RunAcceptance, worker/candidate
+VM, local tests, a verifier statement, checkpoint publication, or route
+transition. A future separately owner-ratified Definition must re-authorize and
+prove that product path over the accepted generic kernel.
 
 `continuation-level` is transitional H008/H014 residue: the durable-actor contract re-points this
 acceptance level at trajectory/work-item settlement evidence. No deleted
