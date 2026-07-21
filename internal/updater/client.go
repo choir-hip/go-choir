@@ -11,8 +11,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
@@ -24,11 +26,15 @@ type Client struct {
 }
 
 const (
-	KernelCapabilityFailureUpdaterUnavailable = "updater_unavailable"
-	KernelCapabilityFailureUpdaterUnreachable = "updater_unreachable"
-	KernelCapabilityFailureProbeUnavailable   = "probe_unavailable"
-	KernelCapabilityFailureReceiptRefused     = "receipt_refused"
-	KernelCapabilityFailureInvalidResponse    = "invalid_response"
+	KernelCapabilityFailureUpdaterUnavailable       = "updater_unavailable"
+	KernelCapabilityFailureUpdaterUnreachable       = "updater_unreachable"
+	KernelCapabilityFailureUpdaterSocketMissing     = "updater_socket_missing"
+	KernelCapabilityFailureUpdaterPermissionDenied  = "updater_permission_denied"
+	KernelCapabilityFailureUpdaterConnectionRefused = "updater_connection_refused"
+	KernelCapabilityFailureUpdaterTimeout           = "updater_timeout"
+	KernelCapabilityFailureProbeUnavailable         = "probe_unavailable"
+	KernelCapabilityFailureReceiptRefused           = "receipt_refused"
+	KernelCapabilityFailureInvalidResponse          = "invalid_response"
 )
 
 type KernelCapabilityUnavailableError struct {
@@ -56,6 +62,24 @@ func KernelCapabilityFailureCode(err error) string {
 		return unavailable.Code
 	}
 	return KernelCapabilityFailureUpdaterUnavailable
+}
+
+func kernelCapabilityTransportFailureCode(err error) string {
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return KernelCapabilityFailureUpdaterSocketMissing
+	case errors.Is(err, os.ErrPermission):
+		return KernelCapabilityFailureUpdaterPermissionDenied
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return KernelCapabilityFailureUpdaterConnectionRefused
+	case errors.Is(err, context.DeadlineExceeded):
+		return KernelCapabilityFailureUpdaterTimeout
+	}
+	var networkError net.Error
+	if errors.As(err, &networkError) && networkError.Timeout() {
+		return KernelCapabilityFailureUpdaterTimeout
+	}
+	return KernelCapabilityFailureUpdaterUnreachable
 }
 
 func NewClient(socket string) (*Client, error) {
@@ -117,7 +141,7 @@ func (c *Client) KernelCapabilities(ctx context.Context, request KernelCapabilit
 	response, err := c.http.Do(httpRequest)
 	if err != nil {
 		return KernelCapabilityReport{}, &KernelCapabilityUnavailableError{
-			Code: KernelCapabilityFailureUpdaterUnreachable, cause: err,
+			Code: kernelCapabilityTransportFailureCode(err), cause: err,
 		}
 	}
 	defer response.Body.Close()

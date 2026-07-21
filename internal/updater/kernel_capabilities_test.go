@@ -4,7 +4,12 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -67,6 +72,37 @@ func TestKernelCapabilityReceiptBindsIdentityAndFailsClosed(t *testing.T) {
 		GuestImageDigest: strings.Repeat("f", 64), KernelConfigDigest: strings.Repeat("1", 64), LifecycleGeneration: 4,
 	}, KernelCapabilityRequest{ComputerVersion: version, ReleaseDigest: strings.Repeat("2", 64)}, missing, testReceiptSigner{key: key}, now); err == nil {
 		t.Fatal("missing mandatory capability was accepted")
+	}
+}
+
+type failingKernelCapabilityTransport struct {
+	err error
+}
+
+func (t failingKernelCapabilityTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, t.err
+}
+
+func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "socket missing", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), want: KernelCapabilityFailureUpdaterSocketMissing},
+		{name: "permission denied", err: fmt.Errorf("wrapped: %w", os.ErrPermission), want: KernelCapabilityFailureUpdaterPermissionDenied},
+		{name: "connection refused", err: fmt.Errorf("wrapped: %w", syscall.ECONNREFUSED), want: KernelCapabilityFailureUpdaterConnectionRefused},
+		{name: "deadline", err: context.DeadlineExceeded, want: KernelCapabilityFailureUpdaterTimeout},
+		{name: "unknown", err: errors.New("unknown transport failure"), want: KernelCapabilityFailureUpdaterUnreachable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &Client{http: &http.Client{Transport: failingKernelCapabilityTransport{err: test.err}}}
+			_, err := client.KernelCapabilities(context.Background(), KernelCapabilityRequest{})
+			if got := KernelCapabilityFailureCode(err); got != test.want {
+				t.Fatalf("failure code = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 
