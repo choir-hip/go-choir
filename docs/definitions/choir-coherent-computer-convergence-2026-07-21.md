@@ -270,8 +270,8 @@ execution:
 
 now:
   status: working
-  slice: B-observe-and-freeze-kernel-contract
-  question: "Does contract scope 03 close the remaining request/update identity, subject-field, manual-head, durable-tail, exact-caller, material-work, and actor-cancel blockers?"
+  slice: C-build-disabled-candidate
+  question: "Can the smallest conditional object-graph transaction plus scoped identity migration establish one restart-durable lifecycle without touching effect capabilities?"
   reconciliation:
     observed_at: 2026-07-21T21:03:29Z
     source_ref: refs/remotes/origin/main@9d887494c230a5276529066c7f1e049349d933c9
@@ -281,15 +281,14 @@ now:
     worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
     status: reconciled
   candidate:
-    id: convergence-kernel-contract-05
-    state: frozen_by_scoped_content_digest
+    id: convergence-durable-work-runtime-01
+    state: authorized_not_started
     ref: refs/heads/convergence/kernel-contract-01
     owner: owner-and-current-session
-    base: ab01a6493b5bf93b0777e02556724564ae19d23e
-    rejected_predecessors: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
-    rejected_reason: "Scope 04 omitted Texture boot/wake and assigned-work actor unscoped GetAgent readers. Scope 05 names them, requires scoped wake/work envelopes, forbids ListAllDocuments/AgentID rediscovery authority, and closes adjacent manual/delete ambiguities."
-    digest: sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589
-    scope: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md#kernel_contract]
+    base: 9f725b9bd2e38b6079b23eb265f081bc91d1835f
+    accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
+    prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
+    scope: "Phase C protected paths only; effects OFF and uninjected"
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -299,11 +298,20 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [ab01a6493b5bf93b0777e02556724564ae19d23e, /tmp/choir-kernel-contract-review-ab01a649/manifest.tsv, /tmp/choir-kernel-contract-review-ab01a649/codex.out, /tmp/choir-kernel-contract-review-ab01a649/cursor.out, /tmp/choir-kernel-contract-review-ab01a649/omp-gemini35.out]
-  blocker_or_risk: "Runtime mutation remains unauthorized. Scope 05 is the narrow repair requested by the scope-04 minority blockers and needs exact-commit acceptance."
-  next_action: "Validate/commit scope 05 and run an exact-commit independent gate focused on the two repaired scoped-reader paths; implement only after acceptance."
+  evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv, /tmp/choir-kernel-contract-review-9f725b9b/codex.out, /tmp/choir-kernel-contract-review-9f725b9b/cursor.out, /tmp/choir-kernel-contract-review-9f725b9b/omp-gemini35.out, /tmp/choir-kernel-contract-review-9f725b9b/omp-gpt55.out]
+  blocker_or_risk: "Contract gate accepted unanimously across four substantive reviewers. Runtime risk now concentrates at the conditional embedded-Dolt CAS seam and owner/computer scope migration; a partial cutover would create dual truth."
+  next_action: "Implement and focused-test the conditional object-graph batch/CAS plus owner/computer-scoped subject/wake substrate as the first coherent disabled candidate slice; inject no effect capability."
 
 receipts:
+  - id: durable-work-contract-gate-2026-07-21
+    boundary: define
+    commit_or_artifact: 9f725b9bd2e38b6079b23eb265f081bc91d1835f
+    proof_refs: ["kernel_contract sha256 6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589", "panel manifest sha256 5cd3ec70c47844840910fc458e6ffaf8ea83b27a1e57ebd99d9b972b4b369163", "Codex ACCEPT sha256 9b6a25bb93b9f23bbcda6e91760145b6ce0212779f98e49e0b7370ae624f55ef", "Cursor ACCEPT sha256 aa9165b985c4cc10565af10300678b0c4bddf9fb484eb6975242dee724b0bf72", "Gemini ACCEPT sha256 04f73acd86456b4c283f4f0de08c048cfe74f7e0955d992edfffa7372fa74532", "GPT-5.5 ACCEPT sha256 6e8f28acec146b88d7b1ac2943ab89b8988e907161c6edb97cde2af694fe2e8c", "scripts/doccheck live passed", "Definition dashboard parsed"]
+    rollback_ref: refs/remotes/origin/main@9d887494c230a5276529066c7f1e049349d933c9
+    disposition: "Accepted after five code-free scopes repaired every reproducible minority blocker. Phase C runtime implementation is authorized only within the frozen contract; effects remain OFF."
+    problem_ref: "One lifecycle previously had compensating writes, unscoped subject reads, delivery-as-disposition projections, raw work/trajectory terminals, lossy replay, and unbound execution identity."
+    authorization_ref: "Owner-ratified bounded generic lifecycle plus accepted contract scope 05"
+    candidate_or_evidence_refs: [/tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv]
   - id: architecture-interrogation-2026-07-21
     boundary: define
     commit_or_artifact: /tmp/choir-texture-lens-panel/manifest.tsv
