@@ -27,15 +27,15 @@ if [ ! -d "$output_root" ] || [ -L "$output_root" ]; then
 fi
 
 install -m 0600 /dev/null "$output_root/guest-signer-state-migrated"
-shape=unknown
+shape="unknown"
 if [ ! -e "$key" ] && [ ! -L "$key" ]; then
-  shape=absent
+  shape="absent"
 elif [ -f "$key" ] && [ ! -L "$key" ]; then
   size="$(stat --format=%s -- "$key" 2>/dev/null || true)"
   if [ "$size" = "$expected_size" ]; then
-    shape=exact-size
+    shape="exact-size"
   elif [ -n "$size" ]; then
-    shape=size-invalid
+    shape="size-invalid"
   fi
 fi
 
