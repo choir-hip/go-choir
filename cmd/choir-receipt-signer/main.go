@@ -25,6 +25,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "choir-receipt-signer: absolute startup status path is required")
 		os.Exit(2)
 	}
+	var startupLease *receiptsigner.StartupLease
+	if *startupStatus != "" {
+		var err error
+		startupLease, err = receiptsigner.AcquireStartupLease(*startupStatus + ".lease")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "choir-receipt-signer: acquire startup lease")
+			os.Exit(1)
+		}
+		defer startupLease.Close()
+	}
 	writeStartupStage := func(stage receiptsigner.StartupStage) error {
 		if *startupStatus == "" {
 			return nil

@@ -16,6 +16,7 @@ import (
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/computerversion"
+	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 )
 
 func TestKernelCapabilityReceiptBindsIdentityAndFailsClosed(t *testing.T) {
@@ -119,6 +120,20 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 	}
 	missingUpdaterMarkerPath := filepath.Join(t.TempDir(), "missing-updater")
 	missingMigrationMarkerPath := filepath.Join(t.TempDir(), "missing-migration")
+	heldLeasePath := filepath.Join(t.TempDir(), "held-startup-lease")
+	heldLease, err := receiptsigner.AcquireStartupLease(heldLeasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer heldLease.Close()
+	unheldLeasePath := filepath.Join(t.TempDir(), "unheld-startup-lease")
+	unheldLease, err := receiptsigner.AcquireStartupLease(unheldLeasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unheldLease.Close(); err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
 		name                string
 		err                 error
@@ -126,6 +141,7 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 		migrationMarkerPath string
 		keyShapePath        string
 		startupStagePath    string
+		startupLeasePath    string
 		want                string
 	}{
 		{name: "signer migration unavailable", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: missingMigrationMarkerPath, want: KernelCapabilityFailureSignerMigrationUnavailable},
@@ -137,7 +153,9 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 		{name: "signer stopped after configuration", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["configured"], want: KernelCapabilityFailureSignerStoppedAfterConfiguration},
 		{name: "signer stopped after key load", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["key-loaded"], want: KernelCapabilityFailureSignerStoppedAfterKeyLoad},
 		{name: "signer stopped after handler setup", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["handler-configured"], want: KernelCapabilityFailureSignerStoppedAfterHandlerSetup},
-		{name: "signer stopped after socket listen", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["socket-listening"], want: KernelCapabilityFailureSignerStoppedAfterSocketListen},
+		{name: "signer serving before updater entry", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["socket-listening"], startupLeasePath: heldLeasePath, want: KernelCapabilityFailureSignerServingUpdaterNotEntered},
+		{name: "signer exited after socket listen", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["socket-listening"], startupLeasePath: unheldLeasePath, want: KernelCapabilityFailureSignerExitedAfterSocketListen},
+		{name: "socket stage without lease is generic", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["socket-listening"], startupLeasePath: filepath.Join(t.TempDir(), "missing-lease"), want: KernelCapabilityFailureSignerUnavailableAfterMigration},
 		{name: "signer Serve returned closed", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["serve-returned-closed"], want: KernelCapabilityFailureSignerServeReturnedClosed},
 		{name: "signer Serve returned permission", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["serve-returned-permission"], want: KernelCapabilityFailureSignerServeReturnedPermission},
 		{name: "signer Serve returned invalid", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, startupStagePath: startupStagePaths["serve-returned-invalid"], want: KernelCapabilityFailureSignerServeReturnedInvalid},
@@ -161,6 +179,7 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 				signerMigrationMarkerPath: test.migrationMarkerPath,
 				signerKeyShapePath:        test.keyShapePath,
 				signerStartupStagePath:    test.startupStagePath,
+				signerStartupLeasePath:    test.startupLeasePath,
 				http:                      &http.Client{Transport: failingKernelCapabilityTransport{err: test.err}},
 			}
 			_, err := client.KernelCapabilities(context.Background(), KernelCapabilityRequest{})

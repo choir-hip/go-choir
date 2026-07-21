@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
+	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 )
 
 type Client struct {
@@ -26,6 +27,7 @@ type Client struct {
 	signerMigrationMarkerPath string
 	signerKeyShapePath        string
 	signerStartupStagePath    string
+	signerStartupLeasePath    string
 	http                      *http.Client
 }
 
@@ -43,7 +45,8 @@ const (
 	KernelCapabilityFailureSignerStoppedAfterConfiguration  = "guest_signer_stopped_after_configuration"
 	KernelCapabilityFailureSignerStoppedAfterKeyLoad        = "guest_signer_stopped_after_key_load"
 	KernelCapabilityFailureSignerStoppedAfterHandlerSetup   = "guest_signer_stopped_after_handler_setup"
-	KernelCapabilityFailureSignerStoppedAfterSocketListen   = "guest_signer_stopped_after_socket_listen"
+	KernelCapabilityFailureSignerServingUpdaterNotEntered   = "guest_signer_serving_updater_not_entered"
+	KernelCapabilityFailureSignerExitedAfterSocketListen    = "guest_signer_exited_after_socket_listen"
 	KernelCapabilityFailureSignerServeReturnedClosed        = "guest_signer_serve_returned_closed"
 	KernelCapabilityFailureSignerServeReturnedPermission    = "guest_signer_serve_returned_permission"
 	KernelCapabilityFailureSignerServeReturnedInvalid       = "guest_signer_serve_returned_invalid"
@@ -122,7 +125,17 @@ func (c *Client) signerUnavailableWithExactKeyShapeCode() string {
 	case "handler-configured":
 		return KernelCapabilityFailureSignerStoppedAfterHandlerSetup
 	case "socket-listening":
-		return KernelCapabilityFailureSignerStoppedAfterSocketListen
+		if c.signerStartupLeasePath == "" {
+			return KernelCapabilityFailureSignerUnavailableAfterMigration
+		}
+		held, err := receiptsigner.StartupLeaseHeld(c.signerStartupLeasePath)
+		if err != nil {
+			return KernelCapabilityFailureSignerUnavailableAfterMigration
+		}
+		if held {
+			return KernelCapabilityFailureSignerServingUpdaterNotEntered
+		}
+		return KernelCapabilityFailureSignerExitedAfterSocketListen
 	case "serve-returned-closed":
 		return KernelCapabilityFailureSignerServeReturnedClosed
 	case "serve-returned-permission":
@@ -188,6 +201,7 @@ func NewClient(socket string) (*Client, error) {
 		signerMigrationMarkerPath: "/run/choir/guest-signer-state-migrated",
 		signerKeyShapePath:        "/run/choir/guest-signer-key-shape",
 		signerStartupStagePath:    "/run/choir-signer-status/guest-core/startup-stage",
+		signerStartupLeasePath:    "/run/choir-signer-status/guest-core/startup-stage.lease",
 		http:                      &http.Client{Transport: transport, Timeout: 2 * time.Minute},
 	}, nil
 }
