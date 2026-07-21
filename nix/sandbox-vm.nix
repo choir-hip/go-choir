@@ -424,6 +424,7 @@ EOF
   systemd.services.go-choir-guest-receipt-signer-state-migration = {
     description = "Normalize retained guest-core signer state ownership";
     before = [ "go-choir-guest-receipt-signer.service" ];
+    unitConfig.OnFailure = [ "go-choir-guest-receipt-signer-state-migration-diagnostic.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -445,6 +446,18 @@ EOF
       LockPersonality = true;
       RestrictSUIDSGID = true;
       SystemCallFilter = [ "~@debug" ];
+    };
+  };
+
+  systemd.services.go-choir-guest-receipt-signer-state-migration-diagnostic = {
+    description = "Report guest-core signer migration failure to the serial console";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "go-choir-guest-signer-state-migration-diagnostic" ''
+        ${pkgs.systemd}/bin/systemctl status go-choir-guest-receipt-signer-state-migration.service --no-pager --full || true
+      '';
+      StandardOutput = "journal+console";
+      StandardError = "journal+console";
     };
   };
 
