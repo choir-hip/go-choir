@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-guest-signer-migration-round-61
-    state: frozen_G1_review
+    state: accepted_G1
     ref: c2261bd5587a5f539f4f3f04f7eca87c63736fb3
     owner: integration-authority
     base: 63395401d2dca25fec37709270ef8232f8df821d
@@ -595,7 +595,15 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d9a60e4117, 4bebd0eb597137b906035823f801055625b12492f, 2955ec8642839982d12a08a39f045b8b887b468a, e6599f44fb24b1203f7d5e1b4a02dbc4dd25922d, 654b3a9b009f9b1964a0f0db8ece9164bf46b85f, 30ad6955d038ae1231e2b2ca59a9855af3909117, fa7dc942bf1444110f9737bdff97535bc3ec4a5f, 2876c8299e6a87a095ce8b0ee9e0187367047792, 009068f6c4f8eac2275610e2eb1118a5a7f39676, d3282d8af478ceac5990c0cf2a467ff19527b046, 3a5ae4cdd90d4c12317e24401b639373c44bb9f3, 772219bde69f024cd43dd059e44a92d36b409a91, a7964034b79f0f4ad492076e9e1c2f7da57da6e2, 29d5e12e90f03cc24e4eb0a56a35f17236414adc, ad89165c69ed5b33a971d225861716b7c67d81a, 13eb85e8c98bdbbc4fbe794b2525dd5a0920e436, 72f358f86407a10c3b93bfc56739270d4fc47a29, 105949f78858b17bcfad863213feb191699a535f, 5879d5dd3109a708244ed1b7decccf1f19b859a, 0d61fef0d2e138ea4223b0f982c1718629642449, 12e42fa9b6353b2af8ab8bec186476324956f434, 0cfdce7f87ce257fda7f37e6ad1fe9b259e22d9, 9fc68e64067aa8f1251a7a924472b65310bc22b4, 3050bb407a85a366cfc5c22e5bd62f93f2fe60e, 5f2e29be6790d476e55182f3121a11b66aa2c985f, 350475f2afd1e755c89128891a272ecbc00abcd, ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af, a3477b8739275fc7097b49d4014ff43415c494e4, b1e580472c99b01aa826e337c6411656dbba99a5, 83bc416629775d0ad5080324c3b62c2ad1a580d7]
     immediate_predecessors: [eb0368ffef46a9d43afd7d16ab31153347f43ee0, cc88b5cc29f5f1aafee54a759e64c4c691271158, 8921f84ec6c7f383ca660e28634c47a8828443dd, 63395401d2dca25fec37709270ef8232f8df821d]
     verification: "Round-61 closes the two rejected contracts: every `find` discovery is status-checked before output interpretation and no metadata changes precede all scans; key/receipt regular files with link count >1 refuse. Unix behavior tests cover byte/mode preservation, idempotency, root/top-level/nested symlinks, key/receipt hard links with unchanged outside modes/bytes, FIFO refusal, and injected `find` exit 73 with unchanged root/receipt/key modes. Focused/full receiptsigner race and Bash syntax pass locally and on Node A. Node A x86_64-linux builds exact closure `/nix/store/p08id9s5zl056bm4jq2pggcjj6falm8g-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d` and returns clean to main."
-    disposition: "Frozen for independent Round-61 G1. Review must recheck the Round-60 fail-open scan and inode-alias blockers, then the original byte/identity/path confinement/systemd/failure boundaries. TOCTOU requires the documented boot-time no-concurrent-writer invariant; capability narrowing and explicit default mount ordering are hardening unless a concrete escape/failure is reproduced. Effects remain OFF."
+    disposition: "Round-61 accepted unanimously by Devin, Cursor, and OMP Gemini 3.5 with no blocker. All independently confirmed the Round-60 scan-status and hardlink blockers are closed before mutation, the original migration remains exact-tree/byte-preserving/fail-closed, systemd ordering excludes normal concurrent writers, and only a deployed signed receipt can accept the repair. Residuals: theoretical out-of-band TOCTOU, broad root capability bounding inside a strict write namespace, sandbox/updater readiness not fate-shared, and irreversible-but-canonical metadata normalization. Cursor found local `BASH_ENV` could outrank the fake-find PATH fixture; post-review commit fb07070c clears `BASH_ENV`/`ENV` only in the test subprocess and passes under a hostile fixture. Production script/Nix bytes are unchanged, so review remains valid. Effects remain OFF."
+    g1_round_61_probe:
+      reviewed_at: 2026-07-21T02:35:00Z
+      source_ref: c2261bd5587a5f539f4f3f04f7eca87c63736fb3
+      authority_ref: 50c48bdfb841b08b58094c3d2b09adff8e4d121a
+      post_review_test_ref: fb07070c328894de886745bc9fd06c604afc0cce
+      outcome: accept_G1
+      adjudication: "Three substantive independent reviewers found no blocker. Round-60 discovery failures now terminate before mutation and multiply linked state refuses; expanded tests and exact x86_64 closure prove the frozen behavior. Test-only environment cleanup after review makes the forced-find fixture deterministic without changing production code, packaging, service graph, or contract, so no panel rerun is required."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round61-panel/manifest.tsv, manifest_sha256: caf96e5e7bcb5093377658582701b26684dabfa8e28cf36d618fb1296203bc9c, devin_sha256: 4731864b327517eed5f31139cfeeb746412d4609e759f3952b813e0298e5272e, cursor_sha256: aed52d947e9e1c71c15f8fba388e1b4943f42695c0b8beba43905a90d5db5f63, omp_gemini35_sha256: b73d1b118ec993aa5b9352d63e9aec6c6990a1b30059d188383526938e323fa4}
     g1_round_59_probe:
       reviewed_at: 2026-07-21T01:31:01Z
       source_ref: 54c02094d7fc73e1d4f89546d1bb16ffb53634e7
@@ -1397,7 +1405,7 @@ now:
     heresy_delta: {discovered: 11, introduced: 1, repaired: 5}
   c_deploy_failure_16:
     observed_at: 2026-07-21T01:53:47Z
-    status: frozen_G1_round_61_review
+    status: accepted_G1_round_61_pending_land
     mutation_class: red
     protected_surfaces: [guest_receipt_signer_key, guest_receipt_history, guest_systemd_ordering, guest_updater, kernel_capability_receipt, deployed_acceptance]
     admissible_evidence_class: "Exact deployed identity and public scoped receipts, immutable Nix unit graph, byte-preserving disposable migration tests, independent G1, and deployed signed receipt verification."
@@ -1407,10 +1415,11 @@ now:
     substrate_vs_symptom: "Substrate: immutable guest upgrades must migrate protected persistent service state when Unix identities or ownership contracts change. Symptom: updater socket absent and kernel receipt unavailable."
     existing_replacement_check: "The signer already owns a canonical key path, receipt directory, exact modes, and fail-closed parsers. Add a one-shot byte-preserving ownership/mode migration before that existing service; do not replace the signer, move state, regenerate identity, weaken isolation, expose logs, or bypass signature verification."
     rollback: "Preserve main eb0368ff, retained ComputerID/data epoch 1227, existing key and receipt bytes, R0/R1, scoped-key metadata, and mode OFF. Candidate rollback removes the migration unit only; it cannot undo harmless ownership normalization, so tests and G1 must establish the target ownership as the already-settled service contract."
-    next_action: "Review frozen candidate c2261bd5587a5f539f4f3f04f7eca87c63736fb3 against rejection authority 63395401d2dca25fec37709270ef8232f8df821d. If accepted, land/deploy, recover the retained computer, and require a fresh signed route-bound kernel receipt without enabling effects."
+    next_action: "Land accepted production source c2261bd5587a5f539f4f3f04f7eca87c63736fb3 plus deterministic test-only fb07070c and authority, monitor exact CI/deploy identity, recover the retained computer, and require a fresh signed route-bound kernel receipt while effects remain OFF."
     repair_candidate: "Round-61 c2261bd5587a5f539f4f3f04f7eca87c63736fb3 retains the confined Round-60 migration, validates the complete tree before mutation, propagates scan failures, and rejects inode aliases."
     repair_verification: "Expanded Unix tests reproduce and close fail-open discovery and hardlink escape, plus nested symlink/FIFO boundaries. Local and Node A full receiptsigner race pass; exact Node A x86_64-linux guest system closure builds."
     repair_rollback: "Revert both c2261bd5587a5f539f4f3f04f7eca87c63736fb3 and 8921f84ec6c7f383ca660e28634c47a8828443dd before landing, or their eventual main landing commits. No deployed metadata or effects changed."
+    g1_acceptance: "Devin, Cursor, and OMP Gemini 3.5 unanimously accepted Round 61. The only post-review delta clears inherited Bash startup files in the fake-PATH test subprocess; hostile-BASH_ENV focused/full race passes and production bytes are unchanged."
     round_60_rejection:
       reviewed_at: 2026-07-21T02:15:07Z
       panel: "Devin, Cursor, and OMP Gemini 3.5 returned ACCEPT_G1; OpenCode failed for account balance."
