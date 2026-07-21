@@ -271,23 +271,46 @@ func TestSelfDevelopmentDecisionRecoversAfterCanonicalAppendBeforeOperationProje
 }
 
 func TestGenesisAuthoritySeparatesReviewedCandidateFromDeployedRelease(t *testing.T) {
+	g0 := "sha256:" + strings.Repeat("a", 64)
+	g1 := "sha256:" + strings.Repeat("b", 64)
+	candidate := strings.Repeat("c", 40)
+	deployed := strings.Repeat("d", 40)
 	request := selfDevelopmentGenesisRequest{
-		G0Receipt: "g0-receipt", G1Receipt: "g1-receipt",
-		CandidateRef: "reviewed-candidate", DeployedReleaseRef: "deployed-release",
+		G0Receipt: g0, G1Receipt: g1,
+		CandidateRef: candidate, DeployedReleaseRef: deployed,
 	}
-	ref, payload, err := selfDevelopmentGenesisAuthorityRef(request, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release")
+	ref, payload, err := selfDevelopmentGenesisAuthorityRef(request, g0, g1, candidate, deployed)
 	if err != nil || !strings.HasPrefix(ref, "artifact:sha256:") || computerevent.DigestBytes(payload) != strings.TrimPrefix(ref, "artifact:sha256:") {
 		t.Fatalf("separate candidate/deployed artifact refused: ref=%q err=%v", ref, err)
 	}
 	changed := request
 	changed.DeployedReleaseRef = changed.CandidateRef
-	if _, _, err := selfDevelopmentGenesisAuthorityRef(changed, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release"); err == nil {
+	if _, _, err := selfDevelopmentGenesisAuthorityRef(changed, g0, g1, candidate, deployed); err == nil {
 		t.Fatal("genesis accepted reviewed candidate as the deployed release")
 	}
 	changed = request
 	changed.CandidateRef = changed.DeployedReleaseRef
-	if _, _, err := selfDevelopmentGenesisAuthorityRef(changed, "g0-receipt", "g1-receipt", "reviewed-candidate", "deployed-release"); err == nil {
+	if _, _, err := selfDevelopmentGenesisAuthorityRef(changed, g0, g1, candidate, deployed); err == nil {
 		t.Fatal("genesis accepted deployed release as the reviewed candidate")
+	}
+	for _, test := range []struct {
+		name, g0, g1, candidate, deployed string
+	}{
+		{name: "placeholder G0", g0: "pending_g0_receipt", g1: g1, candidate: candidate, deployed: deployed},
+		{name: "placeholder G1", g0: g0, g1: "pending_g1_receipt", candidate: candidate, deployed: deployed},
+		{name: "placeholder candidate", g0: g0, g1: g1, candidate: "pending_candidate_ref", deployed: deployed},
+		{name: "local release", g0: g0, g1: g1, candidate: candidate, deployed: "local"},
+		{name: "non-hex release", g0: g0, g1: g1, candidate: candidate, deployed: strings.Repeat("z", 40)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			invalid := selfDevelopmentGenesisRequest{
+				G0Receipt: test.g0, G1Receipt: test.g1,
+				CandidateRef: test.candidate, DeployedReleaseRef: test.deployed,
+			}
+			if _, _, err := selfDevelopmentGenesisAuthorityRef(invalid, test.g0, test.g1, test.candidate, test.deployed); err == nil {
+				t.Fatal("genesis accepted an unfrozen authority identity")
+			}
+		})
 	}
 }
 

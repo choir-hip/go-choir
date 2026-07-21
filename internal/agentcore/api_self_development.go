@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -481,7 +482,8 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 	writeAPIJSON(w, http.StatusCreated, map[string]any{"receipt": receipt, "head": head, "checkpoint": checkpoint, "baseline": baseline})
 }
 func selfDevelopmentGenesisAuthorityRef(request selfDevelopmentGenesisRequest, expectedG0, expectedG1, expectedCandidate, deployedRelease string) (string, []byte, error) {
-	if expectedG0 == "" || expectedG1 == "" || expectedCandidate == "" || deployedRelease == "" || deployedRelease == "local" ||
+	if !validGenesisReceiptRef(expectedG0) || !validGenesisReceiptRef(expectedG1) ||
+		!validGenesisCommit(expectedCandidate) || !validGenesisCommit(deployedRelease) ||
 		request.G0Receipt != expectedG0 || request.G1Receipt != expectedG1 || request.CandidateRef != expectedCandidate ||
 		request.DeployedReleaseRef != deployedRelease {
 		return "", nil, fmt.Errorf("genesis authority identity mismatch")
@@ -498,6 +500,19 @@ func selfDevelopmentGenesisAuthorityRef(request selfDevelopmentGenesisRequest, e
 		return "", nil, err
 	}
 	return ref.String(), canonical, nil
+}
+
+func validGenesisReceiptRef(value string) bool {
+	const prefix = "sha256:"
+	return strings.HasPrefix(value, prefix) && computerevent.IsSHA256(strings.TrimPrefix(value, prefix))
+}
+
+func validGenesisCommit(value string) bool {
+	if len(value) != 40 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func (h *APIHandler) recordGenesisBaseline(ctx context.Context, request selfDevelopmentGenesisRequest, event computerevent.Event, eventIdempotency string, route vmctl.RouteResolution, manifest updater.ReleaseManifest) (selfdev.Operation, selfdevprotocol.CheckpointResponse, error) {
