@@ -379,7 +379,7 @@ now:
   question: "Can the immutable guest final-exec wrapper bind the accepted G0 freeze digest, final G1 panel digest, and exact G1 candidate ref after all mutable environment sources, then re-freeze and re-prove R1 before any GenesisImported call?"
   r1_security_floor:
     frozen_at: 2026-07-21T10:08:57Z
-    status: R1_health_accepted_D_entry_revoked_configuration_blocker
+    status: successor_R1_candidate_frozen_G1_review
     source_and_deployed_ref: a7f497ab2d7ec691d816e936ffa7f0748bf24f57
     ci_deploy: {run_id: 29819487195, initial_attempt: success, rehearsal_attempt: 2, rehearsal_conclusion: success, rehearsal_deployed_at: 2026-07-21T10:11:49Z}
     computer_id: computer-4c20ff4a21a021c4306d8c783be0037d
@@ -612,16 +612,16 @@ now:
       boot_receipt: "Evaluated microvm.kernelParams contains `lsm=landlock,yama,bpf` and no cgroup-v1 override. NixOS/systemd 256 removes supported legacy/hybrid mode and defaults to cgroup v2. Realized modules tree contains overlay.ko.xz, SHA-256 a2004b3492257fc1d471fd607aed53537c1dc181b5d8d41024c6b697c2c3fcab."
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
-    id: self-development-C-updater-namespace-round-70
-    state: rejected_R1_post_review_genesis_authority_config_missing
-    ref: f84305848d3a9bfcbcf23db5ab865829afd46ad9
+    id: self-development-C-genesis-authority-round-71
+    state: frozen_G1_review
+    ref: 9dc1ff913cb7e5402f11bf2d5b64ddb127b31e1b
     owner: integration-authority
-    base: 9080d9f14391793a70940b6487fb9141ea624711
-    scope: "Protected updater systemd namespace correction only. Delete the nonexistent `/run/choir-signers/verifier` element from updater `InaccessiblePaths`; retain adjacent canonical `/run/choir-verifier` and every other path, unit dependency/order/restart/timeout, updater command, signer lease/stages, key/receipt identity, lifecycle/route, and effects OFF. No new path, retry, process access, projection, or semantic fallback."
+    base: ae47a2d3e1dc9de82d261c0f580a0281507fd2b7
+    scope: "Protected genesis authority configuration only. Immutable guest final-exec wrapper reasserts fixed accepted G0 freeze digest after mutable environment input and carries closed `pending_g1_receipt`/`pending_candidate_ref` placeholders. Handler now refuses non-`sha256:<64hex>` G0/G1 refs and non-40-hex candidate/deployed refs, making placeholders non-deployable. G1 may authorize replacement of exactly the two placeholder scalar literals with its manifest digest and candidate SHA. Preserve all binaries/roles except validation, event/head absence, mode OFF, ComputerID/data/key/receipts, route, updater, lifecycle, and R0."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d9a60e4117, 4bebd0eb597137b906035823f801055625b12492f, 2955ec8642839982d12a08a39f045b8b887b468a, e6599f44fb24b1203f7d5e1b4a02dbc4dd25922d, 654b3a9b009f9b1964a0f0db8ece9164bf46b85f, 30ad6955d038ae1231e2b2ca59a9855af3909117, fa7dc942bf1444110f9737bdff97535bc3ec4a5f, 2876c8299e6a87a095ce8b0ee9e0187367047792, 009068f6c4f8eac2275610e2eb1118a5a7f39676, d3282d8af478ceac5990c0cf2a467ff19527b046, 3a5ae4cdd90d4c12317e24401b639373c44bb9f3, 772219bde69f024cd43dd059e44a92d36b409a91, a7964034b79f0f4ad492076e9e1c2f7da57da6e2, 29d5e12e90f03cc24e4eb0a56a35f17236414adc, ad89165c69ed5b33a971d225861716b7c67d81a, 13eb85e8c98bdbbc4fbe794b2525dd5a0920e436, 72f358f86407a10c3b93bfc56739270d4fc47a29, 105949f78858b17bcfad863213feb191699a535f, 5879d5dd3109a708244ed1b7decccf1f19b859a, 0d61fef0d2e138ea4223b0f982c1718629642449, 12e42fa9b6353b2af8ab8bec186476324956f434, 0cfdce7f87ce257fda7f37e6ad1fe9b259e22d9, 9fc68e64067aa8f1251a7a924472b65310bc22b4, 3050bb407a85a366cfc5c22e5bd62f93f2fe60e, 5f2e29be6790d476e55182f3121a11b66aa2c985f, 350475f2afd1e755c89128891a272ecbc00abcd, ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af, a3477b8739275fc7097b49d4014ff43415c494e4, b1e580472c99b01aa826e337c6411656dbba99a5, 83bc416629775d0ad5080324c3b62c2ad1a580d7]
-    immediate_predecessors: [91c25300ce30b3017a5fec5fc77e3f5f9695cda8, 9080d9f14391793a70940b6487fb9141ea624711, 437406664c476966bf7aa564c790bfc1e8540f8d]
-    verification: "Exact a7f497ab health, dual kernel receipts, route refusal, active state, and mode OFF remain valid. Post-review source inventory finds no tracked producer for `CHOIR_SELF_DEVELOPMENT_G0_RECEIPT`, `CHOIR_SELF_DEVELOPMENT_G1_RECEIPT`, or `CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF`; handler lines 344-352 therefore reject every genesis request before mutation."
-    disposition: "R1/D entry rejected after review by a reproducible omitted final-exec authority binding. No GenesisImported event exists, so R0 remains admissible and no ratchet transition occurred. Repair only immutable configuration, re-freeze G1, deploy, and rehearse a successor R1."
+    immediate_predecessors: [a7f497ab2d7ec691d816e936ffa7f0748bf24f57, ae47a2d3e1dc9de82d261c0f580a0281507fd2b7, f84305848d3a9bfcbcf23db5ab865829afd46ad9]
+    verification: "Focused genesis authority race test passes locally and on Node A, including separate candidate/deployed identity and placeholder/local/nonhex refusal. All runtime shards pass. Local and Node A Nix evaluation expose exact fixed G0 plus closed placeholders. Node A builds closure `/nix/store/5pvk78cn0j9wfjs3f4c6c7pw943g3jcz-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d`; exact unit and wrapper `/nix/store/n1a66mpw8iakfqhgzxrczvya82kj8dww-go-choir-run-sandbox-runtime` prove environment-file sourcing precedes immutable exports and both static/dynamic sandbox exec branches inherit them."
+    disposition: "Frozen before G1. Candidate itself cannot authorize genesis because placeholders fail the strengthened closed syntax checks. Review must explicitly authorize only two deterministic post-review substitutions; any other byte change or mismatched digest/SHA requires a new candidate."
     g1_round_70_probe:
       reviewed_at: 2026-07-21T09:43:56Z
       source_ref: f84305848d3a9bfcbcf23db5ab865829afd46ad9
@@ -1650,21 +1650,23 @@ now:
     g1_acceptance: "Devin, Cursor, and OMP Gemini 3.5 unanimously accepted Round 70 with no blocker. Deployed updater entry and both public receipts close its source/deploy gates."
   d_entry_failure_1:
     observed_at: 2026-07-21T10:50:11Z
-    status: documented_pending_configuration_repair
+    status: frozen_G1_review
     mutation_class: red
     protected_surfaces: [GenesisImported, G0_G1_identity_binding, immutable_guest_final_exec, R0_R1_ratchet]
     admissible_evidence_class: "Complete tracked producer inventory, exact Nix final-exec evaluation, focused handler/config tests, exact Node A closure, independent G1, deployed mode-off receipt, and successor R1 rehearsal."
     success_before_blocker: "Exact a7f497ab independently rebuilds, serves, attests mandatory isolation, and enforces certificate-only route projection with mode OFF."
-    evidence: "The genesis handler requires nonempty exact expected G0 receipt, G1 receipt, and G1 candidate values from three environment variables and rejects mismatch before append. Repository-wide tracked search finds those names only in the handler/tests—not in Nix, wrapper, workflow, or deploy scripts. No GenesisImported event was attempted."
+    evidence: "The genesis handler requires exact configured authority identities but the prior release had no producer. Candidate 9dc1ff91 adds immutable final-exec custody after mutable environment input and closes placeholder/malformed admission before append."
     problem: "The accepted effects-off release cannot perform the authorized one-time genesis because its immutable guest runtime never receives the frozen authority bindings."
     substrate_vs_symptom: "Missing immutable authority configuration at the guest final-exec boundary; not a CLI, event-store, retry, or API validation defect."
-    existing_replacement_check: "The sandbox final-exec wrapper already reasserts `CHOIR_BASELINE_RELEASE_ROOT` after sourcing mutable kernel-derived environment. Reuse that precedence boundary for the accepted G0 freeze digest, final G1 panel manifest digest, and exact candidate commit; do not weaken handler matching or add a mutable deploy.env fallback."
+    existing_replacement_check: "Candidate reuses the sandbox final-exec wrapper's established immutable baseline precedence boundary; it adds no mutable deploy.env, alternate handler, or relaxed matching."
     authorized_values: {g0_receipt: "sha256:31eee3f95322f7c6698ca69b581e8e2bc8f4415fccee34dd00372083e780d4cd", g1_receipt_candidate: pending_g1_receipt, candidate_ref_candidate: pending_candidate_ref}
-    self_reference_resolution: "Candidate ref and G1 receipt do not exist until freeze/review. Candidate carries closed placeholders. G1 must explicitly authorize replacement of exactly those two scalar literals with `sha256:<panel-manifest-digest>` and its exact reviewed source SHA; no other post-review byte may change. The binding commit is the distinct deployed_release_ref."
-    rollback: "No genesis/event/mode/effective-state mutation occurred. Preserve deployed a7f497ab, retained ComputerID/data/key/receipts epoch 1349, R0, and mode OFF. Candidate rollback removes only the three final-exec exports."
-    next_action: "Add fixed-G0 plus two closed placeholder exports after the environment-file source, add deterministic source/Nix/runtime precedence tests, build exact Node A closure, freeze G1, then perform only the authorized exact substitutions and reverify before deployment."
-    conjecture_delta: "R1 runtime/security behavior is sound, but D entry was falsely inferred from handler validation without proving the deployed expected-value producer. Configuration provenance is part of authority."
-    heresy_delta: {discovered: 20, introduced: 2, repaired: 7}
+    self_reference_resolution: "Candidate ref and G1 receipt do not exist until freeze/review. Candidate carries syntax-invalid closed placeholders. G1 must explicitly authorize replacement of exactly those two scalar literals with `sha256:<panel-manifest-digest>` and its exact reviewed source SHA; no other post-review byte may change. The binding commit becomes deployed_release_ref."
+    rollback: "Candidate branch only. No genesis/event/mode/effective-state mutation occurred. Preserve deployed a7f497ab, retained ComputerID/data/key/receipts epoch 1349, R0, and mode OFF."
+    next_action: "Independent G1 reviews final-exec precedence, placeholder fail-closure, exact G0 identity, tests, Node A closure, and deterministic two-scalar substitution procedure."
+    conjecture_delta: "Configuration provenance is part of authority. Final-exec reassertion plus syntax-invalid pre-review placeholders yields a noncircular frozen candidate/deployed-release binding."
+    heresy_delta: {discovered: 20, introduced: 2, repaired: 8}
+    candidate: "9dc1ff913cb7e5402f11bf2d5b64ddb127b31e1b adds immutable final-exec authority custody and fail-closed identity syntax."
+    candidate_verification: "Focused local/Node A races, all runtime shards, exact local/Node A Nix evaluation, built unit/wrapper inspection, and exact closure `/nix/store/5pvk78cn0j9wfjs3f4c6c7pw943g3jcz-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d` pass."
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
