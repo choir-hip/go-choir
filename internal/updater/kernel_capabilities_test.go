@@ -85,18 +85,27 @@ func (t failingKernelCapabilityTransport) RoundTrip(*http.Request) (*http.Respon
 }
 
 func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
-	markerPath := filepath.Join(t.TempDir(), "updater-unit-entered")
-	if err := os.WriteFile(markerPath, nil, 0o600); err != nil {
+	updaterMarkerPath := filepath.Join(t.TempDir(), "updater-unit-entered")
+	if err := os.WriteFile(updaterMarkerPath, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	migrationMarkerPath := filepath.Join(t.TempDir(), "guest-signer-state-migrated")
+	if err := os.WriteFile(migrationMarkerPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	missingUpdaterMarkerPath := filepath.Join(t.TempDir(), "missing-updater")
+	missingMigrationMarkerPath := filepath.Join(t.TempDir(), "missing-migration")
 	tests := []struct {
-		name       string
-		err        error
-		markerPath string
-		want       string
+		name                string
+		err                 error
+		updaterMarkerPath   string
+		migrationMarkerPath string
+		want                string
 	}{
-		{name: "unit not started", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), markerPath: filepath.Join(t.TempDir(), "missing"), want: KernelCapabilityFailureUpdaterUnitNotStarted},
-		{name: "process unavailable", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), markerPath: markerPath, want: KernelCapabilityFailureUpdaterProcessUnavailable},
+		{name: "signer migration unavailable", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: missingMigrationMarkerPath, want: KernelCapabilityFailureSignerMigrationUnavailable},
+		{name: "signer unavailable after migration", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, want: KernelCapabilityFailureSignerUnavailableAfterMigration},
+		{name: "unit not started without migration projection", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, want: KernelCapabilityFailureUpdaterUnitNotStarted},
+		{name: "updater process unavailable", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: updaterMarkerPath, migrationMarkerPath: missingMigrationMarkerPath, want: KernelCapabilityFailureUpdaterProcessUnavailable},
 		{name: "socket missing without projection", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), want: KernelCapabilityFailureUpdaterSocketMissing},
 		{name: "permission denied", err: fmt.Errorf("wrapped: %w", os.ErrPermission), want: KernelCapabilityFailureUpdaterPermissionDenied},
 		{name: "connection refused", err: fmt.Errorf("wrapped: %w", syscall.ECONNREFUSED), want: KernelCapabilityFailureUpdaterConnectionRefused},
@@ -106,8 +115,9 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			client := &Client{
-				unitEntryMarkerPath: test.markerPath,
-				http:                &http.Client{Transport: failingKernelCapabilityTransport{err: test.err}},
+				unitEntryMarkerPath:       test.updaterMarkerPath,
+				signerMigrationMarkerPath: test.migrationMarkerPath,
+				http:                      &http.Client{Transport: failingKernelCapabilityTransport{err: test.err}},
 			}
 			_, err := client.KernelCapabilities(context.Background(), KernelCapabilityRequest{})
 			if got := KernelCapabilityFailureCode(err); got != test.want {

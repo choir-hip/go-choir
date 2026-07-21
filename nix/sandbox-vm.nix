@@ -404,13 +404,14 @@ EOF
       User = "root";
       Group = "root";
       ExecStart = "${guestSignerStateMigration}/bin/choir-guest-signer-state-migrate /mnt/persistent/choir-signers/guest-core choir-guest-signer choir-guest-signer";
+      ExecStartPost = "${pkgs.coreutils}/bin/install -m 0600 /dev/null /run/choir/guest-signer-state-migrated";
       UMask = "0077";
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
       PrivateTmp = true;
       PrivateDevices = true;
-      ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" ];
+      ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" "/run/choir" ];
       InaccessiblePaths = [ "/mnt/persistent/choir-signers/verifier" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-signers" "/run/choir-verifier" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" ];
       LockPersonality = true;
