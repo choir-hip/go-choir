@@ -139,7 +139,7 @@ kernel_contract:
     artifact_head:
       canonical_owner: "Embedded-Dolt object graph: choir.texture_document.CurrentRevisionID plus immutable choir.texture_revision/source objects."
       only_writer: "CommitTextureHeadAuthority is the sole private conditional head reducer. StartDurableWorkAuthority, ApplyTypedUpdateAuthority, and every manual/import/merge/restore revision command call it inside their transaction; Store.CreateRevision/CreateRevisionWithSourceGraph become guarded wrappers or private. Source graph, immutable revision, parent/document edges, stale-parent check, trajectory binding check when present, and head CAS commit together."
-      mutation_limits: "Store.UpdateDocument/UpdateTextureDocumentOG may change title-only fields and cannot accept CurrentRevisionID. PatchRevisionMetadata cannot mutate immutable revision/content/provenance metadata; operational delivery notes move to rebuildable projection objects. Platform publication mirrors remain post-commit read projections."
+      mutation_limits: "ManualTextureDocumentAuthority may create a headless owner/computer-scoped document or change title/archive projection only; it cannot create a lifecycle subject, trajectory, work, revision, or terminal state. Store.UpdateDocument/UpdateTextureDocumentOG cannot accept CurrentRevisionID. PatchRevisionMetadata cannot mutate immutable revision/content/provenance metadata; operational notes are projection objects. Publication mirrors are post-commit projections."
       projections: "Texture DTO/streams, Trace/events, publication mirrors, and public manifests may report revisions but never advance the private head."
     durable_subject:
       canonical_owner: "Embedded-Dolt AgentRecord keyed by (OwnerID,ComputerID,AgentID); Texture AgentID is deterministic texture:<DocID> within that owner/computer."
@@ -156,7 +156,7 @@ kernel_contract:
     obligation_and_settlement:
       canonical_owner: "Embedded-Dolt TrajectoryRecord plus canonical WorkItem and worker-update records."
       only_writers: "TrajectoryRecord is the sole home for settlement SubjectRefs. RecordTrajectorySubjectRefsAuthority writes refs on a live trajectory with CAS/outbox; Start/Apply/Resolve may invoke it in their transaction. Connect existing CancelTrajectoryAuthority/CancelTrajectoryAuthorityOG; SettleTrajectoryAuthority is the only settlement entrypoint over TrajectoryObligations/EvaluateTrajectorySettlement, which read only TrajectoryRecord.SubjectRefs. Raw UpdateTrajectorySubjectRefs and UpdateTrajectoryStatus(...settled|cancelled) are private reducer primitives."
-      settlement_rule: "The stored SettlementRuleVersion names a closed predicate vocabulary. In one transaction Settle re-reads live trajectory, zero open work, zero non-terminal updates, and every required TrajectoryRecord.SubjectRef; it captures TerminalArtifactHeadRef and writes settled plus event. Missing/unknown predicates or refs refuse."
+      settlement_rule: "The stored SettlementRuleVersion names a closed predicate vocabulary. In one transaction Settle re-reads live trajectory, zero open work, zero non-terminal updates, and every required TrajectoryRecord.SubjectRefs entry; it captures TerminalArtifactHeadRef and writes settled plus event. Missing/unknown predicates or refs refuse."
       cancellation_rule: "Cancellation locks the live trajectory first, assigns reducer sequence, captures TerminalArtifactHeadRef, and atomically writes trajectory cancelled, all open work cancelled, all non-terminal updates cancelled, and event. Committed revisions/evidence remain inspectable pre-cancellation history."
     effect_authorization:
       canonical_owner: "ComputerEventAppender plus corpusd ComputerEventCAS remain the separate per-computer semantic-event authority."
@@ -199,7 +199,8 @@ kernel_contract:
       - "artifact create/delete | internal/store/texture.go CreateDocument/CreateTextureDocumentOG/DeleteDocument/ogDelete; internal/textureowner/texture.go create/import/alias plus handleTextureDeleteDocument | StartDurableWorkAuthority or ManualTextureDocumentAuthority for create; ArchiveTextureDocumentAuthority for delete; raw physical delete private"
       - "subject | internal/textureowner/coagent_route.go, texture_controller.go, texture_handoff.go UpsertAgent | StartDurableWorkAuthority or bound-subject projection lookup; delete body upsert"
       - "subject | internal/agentcore/runtime.go persistent/coagent UpsertAgent; runtime_persistence.go; email_lifecycle.go | other-profile subject path retained behind owner/computer scope and guard forbidding texture:<DocID>; activation stays RunRecord/AgentMutation"
-      - "subject read | internal/store/store.go GetAgent/GetAgentOG; internal/actorruntime/handler.go ownerForAgent; internal/agentcore/tools_researcher.go, tools_worker_update.go, researcher_checkpoint_fallback.go, super_controller.go; internal/textureowner/texture.go | replace with GetAgentByScope(OwnerID,ComputerID,AgentID); delivery/wake envelopes carry owner/computer and never rediscover authority from global AgentID"
+      - "subject read | internal/store/store.go GetAgent/GetAgentOG; internal/actorruntime/handler.go ownerForAgent; internal/agentcore/tools_researcher.go, tools_worker_update.go, researcher_checkpoint_fallback.go, super_controller.go and runtime.go reconcileAssignedWorkItemActor; internal/textureowner/texture.go and texture_controller.go Start/ReconcileActorWake | replace with GetAgentByScope(OwnerID,ComputerID,AgentID); delivery/work/wake envelopes carry owner/computer; global AgentID or ListAllDocuments scans never authorize a transition"
+      - "Texture wake | internal/textureowner/texture_controller.go Start, scheduleTextureWorkerWake, ReconcileActorWake, ReconcileAgentWake | boot enumerates scoped (OwnerID,ComputerID,DocID) records only; queued wake carries that tuple; scoped document/subject lookup; no cross-owner ListAllDocuments or AgentID rediscovery authority"
       - "trajectory creation | internal/agentcore/trajectory.go ensureTrajectory/CreateTrajectoryIfAbsent | StartDurableWorkAuthority for bound Texture route; generic other-profile path guarded out of scope"
       - "work open | internal/agentcore/runtime.go spawn work item; wire_publication.go work-item creation at source/publication/edition paths | OpenWorkItemAuthority with live-trajectory CAS and event"
       - "work close | internal/agentcore/super_controller.go run work completion; wire_publication.go all UpdateWorkItemStatus completion paths | ResolveWorkItemAuthority with durable result/artifact/refusal ref; no raw status write"
@@ -212,7 +213,7 @@ kernel_contract:
       - "update delivery | MarkWorkerUpdateDeliveredOG/MarkWorkerUpdatesDeliveredOG, UpdateRunAndMarkWorkerUpdatesDeliveredOG/rollback, ListCoagentMailboxBacklog; texture_controller_checkpoint, texture_agent_mutations, textureWorkerUpdateCommitSeq/markTextureWorkerUpdatesDelivered, revision worker_updates_consumed/skipped/pending metadata | rebuildable delivery projection or delete; never disposition"
       - "actor late/cancel | internal/actorruntime/handler.go handleCoagentResult and handleCancel; internal/agentcore/super_controller.go reconcileUpdatedCoagentActor | terminal update consumed after reducer with nil handler error; handleCancel projects RunCancelled, never RunFailed, and never impersonates trajectory cancellation"
       - "stream | internal/agentcore/live_ws.go/event handlers; frontend Texture stream client | snapshot-watermark + heartbeat/paged durable tail; EventBus notification only; activation_parked never completion"
-    private_primitives_after_cutover: "objectgraph conditional transaction; CommitTextureHeadAuthority; CreateTextureDocumentOG; CreateTextureRevisionOG; CreateWorkItemOG; UpdateWorkItemDetails; UpdateWorkItemStatusOG; UpdateTrajectorySubjectRefs; UpdateTrajectoryStatusOG; canonical worker-update put; DeleteDocument/ogDelete for non-lifecycle maintenance only. Package visibility plus a structural ratchet prevents product callers outside reducers."
+    private_primitives_after_cutover: "objectgraph conditional transaction; CommitTextureHeadAuthority; CreateTextureDocumentOG; CreateTextureRevisionOG; CreateWorkItemOG; UpdateWorkItemDetails; UpdateWorkItemStatusOG; UpdateTrajectorySubjectRefs; UpdateTrajectoryStatusOG; canonical worker-update put. DeleteDocument/ogDelete are removed from Texture product paths and may exist only in isolated tests/migration tooling that refuses lifecycle kinds. Package visibility plus a structural ratchet prevents product callers outside reducers."
     legacy_delete_after_proof: "createRevision compensating deletes; immutable PatchRevisionMetadata writes; dead SQL worker_updates readers/scanners, inbox_deliveries and schema/index residue; RunContinuation production surfaces; legacy SQL Texture document/revision residue only after exact caller/migration proof."
     retained_out_of_scope: "Non-Texture AgentRecords/trajectories behind scoped guards; canonical Texture/Agent/Trajectory/WorkItem/update object graph; actor recovery as projection; publication projections; independent computer-event/effect chain."
   rejection_criteria:
@@ -280,14 +281,14 @@ now:
     worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
     status: reconciled
   candidate:
-    id: convergence-kernel-contract-04
+    id: convergence-kernel-contract-05
     state: frozen_by_scoped_content_digest
     ref: refs/heads/convergence/kernel-contract-01
     owner: owner-and-current-session
-    base: 15248ea876c6ff114b5ed307e57ccac858ad8e9d
-    rejected_predecessors: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d"]
-    rejected_reason: "Scope 03 retained physical Texture deletion, unscoped GetAgent authority reads, dual Agent/Trajectory subject refs, UpdateWorkItemDetails outside reducers, and an ambiguous digest frame. Scope 04 assigns each path, pins TrajectoryRecord as sole settlement-ref home, and defines digest bytes exactly."
-    digest: sha256:d8fc924f9cb5b2f5c07c3f9e95be74dcfe9e86df2161ffb48d969cbc97e7b377
+    base: ab01a6493b5bf93b0777e02556724564ae19d23e
+    rejected_predecessors: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
+    rejected_reason: "Scope 04 omitted Texture boot/wake and assigned-work actor unscoped GetAgent readers. Scope 05 names them, requires scoped wake/work envelopes, forbids ListAllDocuments/AgentID rediscovery authority, and closes adjacent manual/delete ambiguities."
+    digest: sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589
     scope: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md#kernel_contract]
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
@@ -298,9 +299,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [15248ea876c6ff114b5ed307e57ccac858ad8e9d, /tmp/choir-kernel-contract-review-15248ea8/manifest.tsv, /tmp/choir-kernel-contract-review-15248ea8/codex.out, /tmp/choir-kernel-contract-review-15248ea8/cursor.out, /tmp/choir-kernel-contract-review-15248ea8/omp-gpt55.out, /tmp/choir-kernel-contract-review-15248ea8/omp-gemini35.out]
-  blocker_or_risk: "Runtime mutation remains unauthorized. Scope 04 repairs all reproducible scope-03 blockers and needs exact-commit acceptance."
-  next_action: "Validate and commit scope 04, mechanically verify its framed digest, and run the final independent contract gate; implement nothing before acceptance."
+  evidence_refs: [ab01a6493b5bf93b0777e02556724564ae19d23e, /tmp/choir-kernel-contract-review-ab01a649/manifest.tsv, /tmp/choir-kernel-contract-review-ab01a649/codex.out, /tmp/choir-kernel-contract-review-ab01a649/cursor.out, /tmp/choir-kernel-contract-review-ab01a649/omp-gemini35.out]
+  blocker_or_risk: "Runtime mutation remains unauthorized. Scope 05 is the narrow repair requested by the scope-04 minority blockers and needs exact-commit acceptance."
+  next_action: "Validate/commit scope 05 and run an exact-commit independent gate focused on the two repaired scoped-reader paths; implement only after acceptance."
 
 receipts:
   - id: architecture-interrogation-2026-07-21
