@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-signer-liveness-round-69
-    state: frozen_G1_review
+    state: accepted_G1
     ref: 437406664c476966bf7aa564c790bfc1e8540f8d
     owner: integration-authority
     base: d064a3e1405b64da9e723ab64b5f56e93ddfaf56
@@ -595,7 +595,14 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d9a60e4117, 4bebd0eb597137b906035823f801055625b12492f, 2955ec8642839982d12a08a39f045b8b887b468a, e6599f44fb24b1203f7d5e1b4a02dbc4dd25922d, 654b3a9b009f9b1964a0f0db8ece9164bf46b85f, 30ad6955d038ae1231e2b2ca59a9855af3909117, fa7dc942bf1444110f9737bdff97535bc3ec4a5f, 2876c8299e6a87a095ce8b0ee9e0187367047792, 009068f6c4f8eac2275610e2eb1118a5a7f39676, d3282d8af478ceac5990c0cf2a467ff19527b046, 3a5ae4cdd90d4c12317e24401b639373c44bb9f3, 772219bde69f024cd43dd059e44a92d36b409a91, a7964034b79f0f4ad492076e9e1c2f7da57da6e2, 29d5e12e90f03cc24e4eb0a56a35f17236414adc, ad89165c69ed5b33a971d225861716b7c67d81a, 13eb85e8c98bdbbc4fbe794b2525dd5a0920e436, 72f358f86407a10c3b93bfc56739270d4fc47a29, 105949f78858b17bcfad863213feb191699a535f, 5879d5dd3109a708244ed1b7decccf1f19b859a, 0d61fef0d2e138ea4223b0f982c1718629642449, 12e42fa9b6353b2af8ab8bec186476324956f434, 0cfdce7f87ce257fda7f37e6ad1fe9b259e22d9, 9fc68e64067aa8f1251a7a924472b65310bc22b4, 3050bb407a85a366cfc5c22e5bd62f93f2fe60e, 5f2e29be6790d476e55182f3121a11b66aa2c985f, 350475f2afd1e755c89128891a272ecbc00abcd, ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af, a3477b8739275fc7097b49d4014ff43415c494e4, b1e580472c99b01aa826e337c6411656dbba99a5, 83bc416629775d0ad5080324c3b62c2ad1a580d7]
     immediate_predecessors: [a2e74539c046f6f4819350ccdc0d9812e5eb5c56, d064a3e1405b64da9e723ab64b5f56e93ddfaf56, 2c1c5c7524c4b624b100053069942ca90725c80d]
     verification: "Focused receipt-signer/updater races pass, including a real helper process proving lock-held while alive and automatic unlock after SIGKILL, exact mode 0600, locked/unlocked/missing public mappings, and unchanged terminal-stage precedence. All runtime shards pass. Node A x86_64-linux passes the focused races inside the pinned dev shell and builds exact closure `/nix/store/10jihnwc8xhj294bm4bgcb1cm07pazni-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d`, then returns clean to main."
-    disposition: "Frozen before G1. No service unit, namespace, dependency, restart, timeout, receipt, key, route, lifecycle, or effect path changes. One empty boot-local file and advisory lock distinguish live from dead signer without content, PID, signal, process scan, log/systemd access, or access to the signer socket directory."
+    disposition: "Round 69 accepted by two substantive independent reviewers (Devin and OMP Gemini 3.5) with no blocker; Cursor timed out empty. Review confirms Linux flock/process-exit semantics, real child-process proof, O_RDONLY probe behavior, closed missing/error mapping, terminal precedence, service visibility, and unchanged effects. Symlink hardening is residual because the signer-owned 0750 parent is the sole writer. Cross-mount-namespace observation and the transient updater-still-running branch remain deployed-only gates."
+    g1_round_69_probe:
+      reviewed_at: 2026-07-21T08:59:56Z
+      source_ref: 437406664c476966bf7aa564c790bfc1e8540f8d
+      authority_ref: cd19e6076f6bafbb171b02098f85275dde57decb
+      outcome: accept_G1
+      adjudication: "Devin and OMP Gemini 3.5 independently returned ACCEPT_G1 with no blocker; Cursor timed out empty. Both substantive reviewers inspected source, tests, Nix ownership/visibility, terminal precedence, fail-closed mapping, and cross-process lock lifetime. One stable deployed discriminator is authorized."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round69-panel/manifest.tsv, manifest_sha256: 648849ac9df06f98a55dba1567d77dfb6a98f91bce1711c3272a42614226915e, devin_sha256: 81b82ebaa5c953e973c76966e72d892143eb48a85eede8cfb48962e9d0ef6505, cursor_sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855, omp_gemini35_sha256: 7697a2ff77d7d90b06a1d3dbc595f583834283ee05500ef42b398979f0b503cc}
     g1_round_68_probe:
       reviewed_at: 2026-07-21T07:58:14Z
       source_ref: 2c1c5c7524c4b624b100053069942ca90725c80d
@@ -1575,7 +1582,7 @@ now:
     repair_verification: "Candidate 2c1c5c7524c4b624b100053069942ca90725c80d preserves pre-Serve fail-closed milestones, cannot let terminal write failure alter Serve exit, treats wrapped ErrServerClosed like the original sentinel, and builds exact Node A closure."
   c_deploy_failure_24:
     observed_at: 2026-07-21T08:28:04Z
-    status: frozen_G1_review
+    status: accepted_G1
     mutation_class: red
     protected_surfaces: [guest_signer_liveness, updater_unit_entry, systemd_dependency_join, deployed_acceptance]
     admissible_evidence_class: "Content-free signer-owned advisory lease, cross-process lock tests, exact Node A closure, independent G1, and one deployed no-SSH discriminator."
@@ -1584,11 +1591,12 @@ now:
     problem: "No current public evidence establishes signer process liveness at classification time, so neither signer death nor updater scheduling failure may be selected."
     existing_replacement_check: "Candidate 43740666 uses a POSIX advisory lock that releases automatically on process exit; it adds no daemon/store/content. The empty lease is in the existing non-secret signer-status directory and leaves signer socket isolation unchanged."
     rollback: "Candidate branch only; preserve main d064a3e1, deployed a2e74539, retained identity/data/key/history, R0/R1, and mode OFF. Revert 43740666 before landing or its eventual main landing commit."
-    next_action: "Independent G1 reviews the frozen lease semantics, cross-process proof, locked/unlocked/missing precedence, exact Nix service boundary, and Node A closure. If accepted, land and run one stable deployed request."
+    next_action: "Land accepted candidate, pass CI/deploy identity, preserve retained state and mode OFF, then issue one stable public request. Treat updater HTTP response before socket removal and cross-mount-namespace lease visibility as deployed gates."
     conjecture_delta: "Live signer versus dead signer is the last unresolved join before source repair."
     heresy_delta: {discovered: 18, introduced: 2, repaired: 6}
     candidate: "437406664c476966bf7aa564c790bfc1e8540f8d holds one empty mode-0600 startup lease for signer process lifetime and projects only locked/unlocked at socket-listening."
     candidate_verification: "Focused cross-process races, locked/unlocked/missing mapping tests, all runtime shards, Node A focused races, and exact closure `/nix/store/10jihnwc8xhj294bm4bgcb1cm07pazni-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d` pass."
+    g1_acceptance: "Devin and OMP Gemini 3.5 accepted Round 69 with no blocker; Cursor timed out empty. Residual symlink hardening is bounded by the signer-owned 0750 directory. Cross-namespace flock visibility and any updater-still-running response are deployed-only gates."
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
