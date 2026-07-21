@@ -93,6 +93,22 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 	if err := os.WriteFile(migrationMarkerPath, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	keyAbsentPath := filepath.Join(t.TempDir(), "key-absent")
+	if err := os.WriteFile(keyAbsentPath, []byte("absent\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	keySizeInvalidPath := filepath.Join(t.TempDir(), "key-size-invalid")
+	if err := os.WriteFile(keySizeInvalidPath, []byte("size-invalid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	keyExactSizePath := filepath.Join(t.TempDir(), "key-exact-size")
+	if err := os.WriteFile(keyExactSizePath, []byte("exact-size\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	keyUnknownPath := filepath.Join(t.TempDir(), "key-unknown")
+	if err := os.WriteFile(keyUnknownPath, []byte("unexpected\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	missingUpdaterMarkerPath := filepath.Join(t.TempDir(), "missing-updater")
 	missingMigrationMarkerPath := filepath.Join(t.TempDir(), "missing-migration")
 	tests := []struct {
@@ -100,10 +116,16 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 		err                 error
 		updaterMarkerPath   string
 		migrationMarkerPath string
+		keyShapePath        string
 		want                string
 	}{
 		{name: "signer migration unavailable", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: missingMigrationMarkerPath, want: KernelCapabilityFailureSignerMigrationUnavailable},
 		{name: "signer unavailable after migration", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, want: KernelCapabilityFailureSignerUnavailableAfterMigration},
+		{name: "signer key absent", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyAbsentPath, want: KernelCapabilityFailureSignerUnavailableWithKeyAbsent},
+		{name: "signer key size invalid", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keySizeInvalidPath, want: KernelCapabilityFailureSignerKeySizeInvalid},
+		{name: "signer key exact size", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyExactSizePath, want: KernelCapabilityFailureSignerUnavailableAfterKeyValidation},
+		{name: "signer key shape unknown", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: keyUnknownPath, want: KernelCapabilityFailureSignerUnavailableAfterMigration},
+		{name: "signer key shape missing", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, migrationMarkerPath: migrationMarkerPath, keyShapePath: filepath.Join(t.TempDir(), "missing-shape"), want: KernelCapabilityFailureSignerUnavailableAfterMigration},
 		{name: "unit not started without migration projection", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: missingUpdaterMarkerPath, want: KernelCapabilityFailureUpdaterUnitNotStarted},
 		{name: "updater process unavailable", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), updaterMarkerPath: updaterMarkerPath, migrationMarkerPath: missingMigrationMarkerPath, want: KernelCapabilityFailureUpdaterProcessUnavailable},
 		{name: "socket missing without projection", err: fmt.Errorf("wrapped: %w", os.ErrNotExist), want: KernelCapabilityFailureUpdaterSocketMissing},
@@ -117,6 +139,7 @@ func TestKernelCapabilityTransportFailureCodesAreStable(t *testing.T) {
 			client := &Client{
 				unitEntryMarkerPath:       test.updaterMarkerPath,
 				signerMigrationMarkerPath: test.migrationMarkerPath,
+				signerKeyShapePath:        test.keyShapePath,
 				http:                      &http.Client{Transport: failingKernelCapabilityTransport{err: test.err}},
 			}
 			_, err := client.KernelCapabilities(context.Background(), KernelCapabilityRequest{})

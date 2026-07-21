@@ -45,6 +45,12 @@ let
     runtimeInputs = [ pkgs.coreutils pkgs.findutils ];
     text = builtins.readFile ../scripts/guest-signer-state-migrate;
   };
+  guestSignerStateProjection = pkgs.writeShellApplication {
+    name = "choir-guest-signer-state-project";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = builtins.readFile ../scripts/guest-signer-state-project;
+  };
+
 
 
 
@@ -404,7 +410,7 @@ EOF
       User = "root";
       Group = "root";
       ExecStart = "${guestSignerStateMigration}/bin/choir-guest-signer-state-migrate /mnt/persistent/choir-signers/guest-core choir-guest-signer choir-guest-signer";
-      ExecStartPost = "${pkgs.coreutils}/bin/install -m 0600 /dev/null /run/choir/guest-signer-state-migrated";
+      ExecStartPost = "${guestSignerStateProjection}/bin/choir-guest-signer-state-project /mnt/persistent/choir-signers/guest-core/key.ed25519 /run/choir 64";
       UMask = "0077";
       NoNewPrivileges = true;
       ProtectSystem = "strict";

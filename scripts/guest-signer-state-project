@@ -1,0 +1,47 @@
+set -euo pipefail
+
+if [ "$#" -ne 3 ]; then
+  echo "usage: guest-signer-state-project KEY OUTPUT_ROOT EXPECTED_SIZE" >&2
+  exit 2
+fi
+
+key="$1"
+output_root="$2"
+expected_size="$3"
+case "$key:$output_root" in
+  /*:/*) ;;
+  *)
+    echo "guest-signer-state-project: absolute paths are required" >&2
+    exit 2
+    ;;
+esac
+case "$expected_size" in
+  ''|*[!0-9]*)
+    echo "guest-signer-state-project: numeric expected size is required" >&2
+    exit 2
+    ;;
+esac
+if [ ! -d "$output_root" ] || [ -L "$output_root" ]; then
+  echo "guest-signer-state-project: output root must be a directory" >&2
+  exit 1
+fi
+
+install -m 0600 /dev/null "$output_root/guest-signer-state-migrated"
+shape=unknown
+if [ ! -e "$key" ] && [ ! -L "$key" ]; then
+  shape=absent
+elif [ -f "$key" ] && [ ! -L "$key" ]; then
+  size="$(stat --format=%s -- "$key" 2>/dev/null || true)"
+  if [ "$size" = "$expected_size" ]; then
+    shape=exact-size
+  elif [ -n "$size" ]; then
+    shape=size-invalid
+  fi
+fi
+
+temporary="$output_root/.guest-signer-key-shape.$$"
+trap 'rm -f "$temporary"' EXIT
+printf '%s\n' "$shape" > "$temporary"
+chmod 0600 "$temporary"
+mv -f "$temporary" "$output_root/guest-signer-key-shape"
+trap - EXIT
