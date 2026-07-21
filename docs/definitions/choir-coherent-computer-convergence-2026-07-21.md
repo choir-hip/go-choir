@@ -174,7 +174,7 @@ now:
   slice: A-reconcile-and-supersede
   question: none
   reconciliation:
-    observed_at: 2026-07-21T19:41:58Z
+    observed_at: 2026-07-21T20:26:17Z
     source_ref: refs/remotes/origin/main@7913a3da0343ee03cf32b7622aaf9f2de35ee887
     deploy_identity: "Node B staging host and active guests reported 832ae951e84400a54bd7f8ef52a312e872b5c3ef"
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-cli-self-development-2026-07-16.md]
@@ -183,11 +183,11 @@ now:
     status: reconciled
   candidate:
     id: convergence-definition-docs-01
-    state: rehearsing
-    ref: /tmp/go-choir-architecture-recovery
+    state: ready
+    ref: refs/heads/selfdev/architecture-recovery@2eb9129577aeb19e515b8c9b0ad549b077ffafa7
     owner: owner-and-current-session
     base: refs/remotes/origin/main@7913a3da0343ee03cf32b7622aaf9f2de35ee887
-    digest: none
+    digest: 2eb9129577aeb19e515b8c9b0ad549b077ffafa7
     scope: [docs]
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
@@ -198,9 +198,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [refs/heads/selfdev/architecture-recovery@2526f108a36c498f2f90ac89fcc6e4140685d9d9, refs/heads/selfdev/g1-round72-signed-activation@5517c2eb5c94678eb4ec323fef2cec34b96f7c6a, /tmp/choir-texture-lens-panel/manifest.tsv]
-  blocker_or_risk: "The docs-only authority cutover is not frozen, reviewed, or landed on canonical main. Runtime mutation remains unauthorized."
-  next_action: "Freeze the docs-only candidate on selfdev/architecture-recovery, review its exact commit and registry conformance, then land it on clean canonical main without importing rejected runtime code."
+  evidence_refs: [refs/heads/selfdev/architecture-recovery@2eb9129577aeb19e515b8c9b0ad549b077ffafa7, refs/heads/selfdev/g1-round72-signed-activation@5517c2eb5c94678eb4ec323fef2cec34b96f7c6a, /tmp/choir-convergence-definition-final-panel/manifest.tsv]
+  blocker_or_risk: "The reviewed docs-only authority cutover is not yet landed on canonical main. Runtime mutation remains unauthorized."
+  next_action: "Land the reviewed docs-only branch on clean canonical main, verify docs truth and exact origin/main identity, then begin the successor's code-free B contract inventory."
 
 receipts:
   - id: architecture-interrogation-2026-07-21
@@ -219,6 +219,23 @@ receipts:
       environment_identity: not_applicable
       deployed_acceptance: not_applicable
     registry_conformance_ref: "pending docs-only authority cutover"
+
+  - id: definition-supersession-gate-2026-07-21
+    boundary: define
+    commit_or_artifact: refs/heads/selfdev/architecture-recovery@2eb9129577aeb19e515b8c9b0ad549b077ffafa7
+    proof_refs: ["final panel manifest sha256 d14f011ab042d7a8de09d8348cb91b66eed2f88089ff6c499a8aa63097b917f3", "Codex ACCEPT sha256 a9de8091cbb8b97c995b070507432eb37997ce8eb92f21c649bf4963dc32c71b", "Cursor ACCEPT sha256 04ea1de79feee572f1c512ab490055a7a7d13938d73bca21c4950ec9c64b2e95", "OMP GPT-5.5 ACCEPT sha256 a3bdbaa5e43ffe3506587e9c44eacfe27d604e8a119b9f089af4dd038fc6bbd3", "all three Definition dashboards parsed", "doccheck live passed and full report retained 101 warnings", "git diff --check passed"]
+    rollback_ref: refs/remotes/origin/main@7913a3da0343ee03cf32b7622aaf9f2de35ee887
+    disposition: "Accepted after repairing the old live now-card, unsupported mission execution mode, stale deployment claims, removed scratch-file baseline, and blocked successor reconciliation. No reproducible blocker remains."
+    problem_ref: "Former mission remained operationally executable and some platform prose laundered rejected candidate deletion/effect claims"
+    authorization_ref: owner_supersession_2026-07-21
+    candidate_or_evidence_refs: [refs/heads/selfdev/architecture-recovery@51836f329d53feaed768c9566323dcd77931efdc, refs/heads/selfdev/architecture-recovery@2eb9129577aeb19e515b8c9b0ad549b077ffafa7]
+    landing:
+      source_commit: pending
+      ci_ref: not_applicable_docs_only
+      deploy_ref: not_applicable_docs_only
+      environment_identity: not_applicable_docs_only
+      deployed_acceptance: not_applicable_docs_only
+    registry_conformance_ref: "one working mission entrypoint and one active_product_mission verified in candidate; live doccheck passed"
 
 view:
   path: none
