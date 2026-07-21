@@ -130,60 +130,90 @@ boundaries:
 
 kernel_contract:
   frozen_scope: "One Texture-backed durable-work lifecycle on one stable computer. This is a code-free implementation contract, not evidence that the lifecycle exists."
+  key_contract:
+    scope: "Every canonical lookup and mutation is owner-scoped. Durable keys are artifact=(OwnerID,ComputerID,DocID), revision=(OwnerID,ComputerID,DocID,RevisionID), subject=(OwnerID,ComputerID,AgentID), trajectory=(OwnerID,ComputerID,TrajectoryID), work=(OwnerID,ComputerID,TrajectoryID,WorkItemID). No unscoped GetAgent or object lookup may authorize a transition."
+    operation_identity: "Start carries caller CommandID scoped by owner/computer; first success stores its response and retries return it. TrajectoryID is allocated once by that reducer and is never derived from RunID. An update key is (OwnerID,ComputerID,TrajectoryID,TargetAgentID,ProducerAgentID,ProducerUpdateID); PayloadDigest covers canonical coagent_source_packet.v1 bytes. Reusing the key with a different digest is a conflict, while an exact retry returns the stored disposition."
+    versions: "Document head revision, subject lifecycle version, trajectory version/status, work-item version/status, and update disposition/version are reducer-checked CAS inputs. Terminal records are immutable except for projection rebuild metadata outside their signed/content hash."
   authority_inventory:
     artifact_head:
-      canonical_owner: "Embedded-Dolt object graph: choir.texture_document.CurrentRevisionID plus immutable choir.texture_revision objects."
-      only_writer: "Store.CreateRevision/CreateRevisionWithSourceGraph through the serialized stale-parent head check."
-      projections: "Texture DTO/SSE, Trace/events, platform publication mirrors, and public artifact manifests may report revisions but never advance the private head."
+      canonical_owner: "Embedded-Dolt object graph: choir.texture_document.CurrentRevisionID plus immutable choir.texture_revision/source objects."
+      only_writer: "StartDurableWorkAuthority and ApplyTypedUpdateAuthority call one private Texture-head batch reducer. Store.CreateRevision/CreateRevisionWithSourceGraph become wrappers or are made private; their source graph, revision, parent/document edges, stale-parent check, and head CAS commit in that batch."
+      mutation_limits: "Store.UpdateDocument/UpdateTextureDocumentOG may change title-only fields and cannot accept CurrentRevisionID. PatchRevisionMetadata cannot mutate immutable revision/content/provenance metadata; operational delivery notes move to rebuildable projection objects. Platform publication mirrors remain post-commit read projections."
+      projections: "Texture DTO/streams, Trace/events, publication mirrors, and public manifests may report revisions but never advance the private head."
     durable_subject:
-      canonical_owner: "Store AgentRecord keyed by owner-scoped AgentID; Texture subjects use the deterministic texture:<DocID> identity."
-      activation_boundary: "RunRecord and the actor recovery log describe replaceable activations only. Run terminality, actor processed_at, snapshots, AgentMutation state, and provider transcripts cannot settle the subject's work."
+      canonical_owner: "Embedded-Dolt AgentRecord keyed by (OwnerID,ComputerID,AgentID); Texture AgentID is deterministic texture:<DocID> within that owner/computer."
+      only_writer: "StartDurableWorkAuthority creates or verifies the subject and advances its lifecycle version. Subsequent semantic subject-ref changes occur only inside ApplyTypedUpdateAuthority, CancelTrajectoryAuthority, or SettleTrajectoryAuthority. UpsertAgent callers and actor recovery may update explicitly projection-only activation/health fields through that reducer facade, never owner, computer, subject identity, trajectory, obligation, or terminal state."
+      activation_boundary: "RunRecord, AgentMutation, provider state, and actor SQLite memory/processed_at describe replaceable activations only. Run terminality, passivation, snapshots, and transcripts cannot settle the subject or acknowledge evidence."
     typed_update:
-      canonical_owner: "Embedded-Dolt object graph choir.worker_update keyed by owner plus deterministic UpdateID over the normalized coagent_source_packet.v1."
-      reducer_contract: "Exactly one durable disposition is pending, incorporated, rejected, cancelled, or late. Incorporated/rejected/cancelled/late are terminal and carry an artifact/work/refusal ref; delivery to an activation is evidence only. Duplicate delivery returns the existing disposition and cannot wake or mutate twice."
-      projections: "Actor SQLite delivery rows, coagent mailbox cursors, channel messages, run metadata, and UI stream cursors are recovery/audit projections derived from the canonical update."
+      canonical_owner: "Embedded-Dolt object graph choir.worker_update under the key and payload-digest rules above."
+      state_machine: "Disposition is pending, incorporated, rejected, cancelled, or late. Pending includes never-delivered and delivered-to-activation evidence; delivery never changes semantic disposition. The other four states are terminal and carry exactly one artifact/work/refusal/terminal-trajectory ref plus reducer sequence. Exact duplicates return the record; conflicting duplicates refuse."
+      only_writers: "AppendTypedUpdateAuthority creates pending or post-terminal late; ApplyTypedUpdateAuthority writes incorporated/rejected; CancelTrajectoryAuthority changes every non-terminal update to cancelled. Delivery/cursor/checkpoint code has no disposition write."
+      projections: "Actor SQLite rows, DeliveredToRunID, coagent mailbox cursors, texture_controller_checkpoint, texture_agent_mutations, run/revision worker_updates_* metadata, channel messages, and UI cursors are delivery/recovery/audit projections. They are deleted or rebuilt from canonical updates and may never acknowledge incorporation, rejection, cancellation, or settlement."
+    work_item:
+      canonical_owner: "Embedded-Dolt WorkItemRecord keyed by the tuple above."
+      only_writers: "StartDurableWorkAuthority mints at least one material open obligation; ApplyTypedUpdateAuthority records its explicit complete/refuse/keep-open consequence; CancelTrajectoryAuthority cancels every open item. CreateWorkItemOG and UpdateWorkItemStatusOG become private batch primitives; boot sweeps, publication, run completion, and projections cannot close work."
     obligation_and_settlement:
-      canonical_owner: "Embedded-Dolt object graph TrajectoryRecord and WorkItemRecord."
-      reducer_contract: "Only the native trajectory reducer may settle or cancel. Settlement requires a live trajectory, zero open work items, every trajectory update terminal, and every required subject ref present. Cancellation wins by canonical sequence and atomically cancels open work and pending updates while retaining revisions, evidence, and terminal dispositions."
-      forbidden_writer: "UpdateTrajectoryStatus(...settled), run completion, activation passivation, UI state, acceptance records, and publication projections may not bypass the reducer."
+      canonical_owner: "Embedded-Dolt TrajectoryRecord plus canonical WorkItem and worker-update records."
+      only_writers: "Connect and extend existing CancelTrajectoryAuthority/CancelTrajectoryAuthorityOG; add SettleTrajectoryAuthority as the only settlement entrypoint over TrajectoryObligations/EvaluateTrajectorySettlement. Raw UpdateTrajectoryStatus(...settled|cancelled) is forbidden on every production path."
+      settlement_rule: "The stored SettlementRuleVersion names a closed predicate vocabulary. In the settlement transaction the reducer re-reads a live trajectory, zero open work, zero non-terminal updates, and every non-empty RequiredSubjectRef, then writes settled plus the lifecycle event. A missing or unknown predicate/rule version refuses."
+      cancellation_rule: "Cancellation locks the live trajectory first, assigns its canonical reducer sequence, and in the same transaction writes trajectory cancelled, all open work cancelled, all non-terminal updates cancelled, and the lifecycle event. Revisions and evidence already committed remain inspectable as pre-cancellation history."
     effect_authorization:
       canonical_owner: "ComputerEventAppender plus corpusd ComputerEventCAS remain the separate per-computer semantic-event authority."
-      effects_off: "The lifecycle kernel receives no capsule, EventEffectAccepted, updater, checkpoint, or route capability. It must neither start nor acknowledge self-development materialization. Existing protected implementations remain unchanged."
+      effects_off: "The lifecycle package receives no capsule, EventEffectAccepted, updater, checkpoint, ComputerVersion, or route-mutation capability. It neither starts nor acknowledges self-development materialization. Existing protected effect implementations remain unchanged."
+  reducer_contract:
+    storage_boundary: "All semantic lifecycle objects and the durable lifecycle-event outbox live in the same embedded-Dolt object graph. Extend objectgraph.BatchStore.PutBatch with a conditional serializable transaction/CAS seam; do not use compensating deletes as correctness. Aliases, actor SQLite, Trace, EventBus, and platform publication synchronize only after commit."
+    ordering: "Reducers lock/compare in deterministic order: owner/computer/trajectory, artifact head, subject, then sorted work/update IDs. Each accepted transaction receives one monotonic per-trajectory ReducerSeq. Cancellation or another terminal transition that obtains the trajectory CAS first wins; losers re-read and return the stored terminal/refusal result."
+    retries: "A crash or error before commit leaves no semantic sub-write. After commit, retry by CommandID/update key returns the stored result without reapplying. CAS conflicts are explicit retryable responses; validation/terminal conflicts are durable non-retryable refusals. Post-commit wake and stream notification may repeat or disappear because durable replay closes every gap."
+    start: "StartDurableWorkAuthority atomically writes V0 revision/head, durable subject, live trajectory with SettlementRuleVersion and required refs, at least one material open WorkItem, idempotency receipt, and lifecycle outbox event."
+    append_update: "AppendTypedUpdateAuthority atomically writes pending update plus outbox event when the trajectory is live. If the trajectory is already cancelled or settled it writes terminal late with that trajectory ref plus event and does not wake. Only after commit may a best-effort wake target the subject."
+    incorporate: "ApplyTypedUpdateAuthority with disposition incorporated atomically rechecks live trajectory and expected head, writes source graph + immutable revision + edges + head, terminal update disposition, declared WorkItem consequence, required subject refs, and outbox event. It either commits all or none."
+    reject: "ApplyTypedUpdateAuthority with disposition rejected atomically rechecks live trajectory, writes durable refusal reason/ref, terminal update disposition, declared WorkItem consequence, and outbox event. It creates no revision and either commits all or none."
+    cancel: "CancelTrajectoryAuthority performs the cancellation rule above in one transaction. A delivered-but-undisposed update is non-terminal and is cancelled. After the trajectory CAS commits, no revision, incorporation, rejection, work completion, or settlement can commit."
+    settle: "SettleTrajectoryAuthority performs the settlement rule above in one transaction and is idempotent. A settlement attempt never repairs predicates or silently closes work."
   transition_contract:
-    - "Create V0, durable subject, live trajectory, and at least one material obligation with owner/computer scope and idempotency identity."
-    - "A replaceable activation may create zero or more stale-head-checked revisions and passivate; neither activation completion nor a revision closes the obligation."
-    - "A typed update appends once as pending, survives restart, wakes the durable subject, and is incorporated into a later revision or explicitly rejected with a durable reason. Duplicate and late sends return the stored disposition."
-    - "Restart reconstructs subject, artifact head, obligations, update dispositions, cancellation, and evidence refs from durable authorities without a RunID or transcript."
-    - "Settlement and cancellation are mutually exclusive terminal trajectory transitions; cancellation observed first prevents later revision, incorporation, or settlement writes."
+    - "The owner-scoped Texture route calls StartDurableWorkAuthority to create V0, subject, trajectory, and a material delayed obligation under one CommandID."
+    - "Replaceable activations may propose zero or more revisions and passivate; only a reducer commit changes artifact, evidence, work, or trajectory state."
+    - "Typed evidence remains pending across delivery and restart until atomically incorporated or rejected. Cancellation terminalizes all non-terminal evidence; post-terminal new evidence becomes late without wake."
+    - "Restart reconstructs subject, artifact head, obligations, dispositions, terminality, evidence refs, reducer sequence, and replay cursor from embedded Dolt without RunID, actor SQLite, event bus, UI state, or transcript."
   public_protocol:
-    identity: "Extend authenticated /api/compute/status with a fail-closed signed identity block joining canonical GitHub ref and cleanliness, host Nix closure and service executable paths/embedded commits, deployed commit, guest image/config digests and builds, ComputerID/RealizationID/epoch, and ComputerVersion/route receipt. Any missing or conflicting join refuses acceptance."
-    snapshot: "GET /api/trajectories/{id} returns one owner-scoped lifecycle snapshot: artifact head, durable subject, activation projection, obligations, typed update dispositions, cancellation/settlement, evidence refs, and stream cursor."
-    events: "The existing owner event stream sequence is the reconnect cursor; desktop and CLI replay after the same cursor and receive the same typed lifecycle events. Streams notify and replay but never acknowledge semantic state."
-    commands: "Existing Texture revision, trajectory cancellation, and typed coagent update paths gain explicit expected-head/idempotency semantics where missing. No raw event mutation, internal vmctl route, SSH, or new universal Texture schema is exposed."
-    clients: "Desktop and cmd/choir consume the same snapshot/event/command DTOs; UI session/device state and CLI polling are non-authoritative."
+    schema: "choir.durable_work.v1 is a narrow lifecycle DTO, not a universal Texture schema. IDs and reads are owner/computer scoped by authenticated context; clients cannot supply another owner."
+    start_command: "The existing authenticated POST /api/prompt-bar Texture-selected path must delegate its first materialization to StartDurableWorkAuthority and return CommandID, TrajectoryID, DocID, V0 RevisionID, subject ID, obligation IDs, reducer sequence, and snapshot cursor. A headless cmd/choir start command calls this same endpoint/DTO; no client-side multi-call assembly is accepted."
+    snapshot: "GET /api/trajectories/{id} returns a versioned lifecycle snapshot containing artifact head, subject identity/version, activation projection clearly labeled non-authoritative, obligations, update dispositions/refs, trajectory rule/status, reducer sequence, evidence refs, and a watermark captured in the same read transaction."
+    replay: "GET /api/trajectories/{id}/events?after=<cursor>&limit=<n> pages the durable outbox without a fixed catch-up cap. Stream connection subscribes to notifications before replay, repeatedly replays through the latest durable watermark, and reports cursor-expired only with a replacement snapshot cursor. EventBus overflow is allowed only as a notification loss because clients always recover by durable replay."
+    commands: "Cancel and typed-update commands use the reducers and return the same snapshot/result DTO with explicit idempotency, expected-version/head, disposition, refusal, and conflict fields. Revision writes outside a bound live lifecycle keep existing manual-document semantics but cannot impersonate lifecycle settlement."
+    clients: "Desktop and cmd/choir render/print the same DTO and replay protocol. Texture park/passivation maps to activation_parked, never work_completed. UI session/device state and CLI polling remain non-authoritative."
+    identity:
+      endpoint: "Dedicated authenticated /api/acceptance/execution-identity, not general /api/compute/status. Access requires owner/admin acceptance:read scope; raw host paths, credentials, environment, and unrelated computer inventory are never returned."
+      envelope: "choir.execution_identity.v1 contains issuer/key_id, audience, caller nonce, issued_at/expires_at, deployed commit, canonical GitHub ref plus CI-signed clean-tree provenance, host Nix closure digest and role-named executable digests/embedded commits, guest image/config/build digests, ComputerID/RealizationID/epoch, ComputerVersion/route receipt digest, join verdict, and one signature over canonical bytes. Paths are role labels plus digests, not filesystem disclosure."
+      trust: "CI/deploy publishes a signed immutable deployment manifest; Node B's configured platform-attestation key joins that manifest to runtime executable/Nix measurements and vmctl's read-only guest/route/realization inventory. Acceptance clients pin the deployment/attestation public-key IDs; rotation requires an overlap manifest signed by an already trusted key. The verifier checks signature, nonce, audience, expiry, CI provenance, measurement equality, and one common deployed commit."
+      refusal: "Missing source oracle, manifest, key, measurement, guest/route join, authorization, or any conflict returns a typed fail-closed unsigned error and no acceptance verdict. Collection uses service APIs/manifests only: no SSH and no mutable checkout inspection."
   migration_and_deletion:
-    migrate:
-      - "All direct settlement callers to one atomic trajectory settlement reducer that includes pending update dispositions and required refs."
-      - "Texture stream mapping so park/passivation is not synthesized as document/work completion."
-      - "Actor cancel handling to a projection of trajectory cancellation; remove the competing RunFailed cancellation write."
-      - "Worker-update delivery marking to explicit canonical dispositions; actor processed_at and mailbox cursors remain recovery projections."
-    delete_after_migration_proof:
-      - "Dead legacy SQL worker_updates readers/scanners, inbox_deliveries, and their schema/index residue; live worker updates already use object-graph paths."
-      - "Legacy SQL texture document/revision residue only after an exact caller and migration proof; retain the platform publication mirror as a read-only projection."
-      - "RunContinuation production surfaces and any direct settled-status writer left without a production caller."
-    retain:
-      - "Texture object-graph artifact head, AgentRecord, actor recovery log, Trajectory/WorkItem authority, typed worker-update objects, public publication projections, and the independent computer-event/effect chain."
+    artifact_paths:
+      migrate: "internal/store/texture.go CreateRevision, CreateRevisionWithSourceGraph, createRevision; internal/store/graph_store.go CreateTextureRevisionOG and UpdateTextureDocumentOG; internal/textureowner/tools_texture.go commitTextureToolEdit; all direct CreateRevision callers. Connect objectgraph.BatchStore.PutBatch conditional transaction."
+      restrict_or_delete: "Store.UpdateDocument head mutation; PatchRevisionMetadata on immutable fields; createRevision compensating deletes. Keep title-only update and rebuildable publication/alias projections."
+    subject_paths:
+      migrate: "internal/store/graph_store.go UpsertAgent and GetAgentOG plus internal/agentcore runtime/runtime_persistence callers to owner/computer-scoped reducer/projection APIs. Delete unscoped authority reads from the exercised path."
+    trajectory_work_paths:
+      connect: "internal/store/graph_store.go CancelTrajectoryAuthorityOG, CreateWorkItemOG, UpdateWorkItemStatusOG; internal/agentcore/trajectory.go TrajectoryObligations and EvaluateTrajectorySettlement; internal/agentcore/api_trajectory.go owner-scoped reads/cancel."
+      migrate_or_delete: "internal/store/trajectory.go and graph_store.go raw UpdateTrajectoryStatus settled/cancelled paths; internal/agentcore/wire_publication.go direct settlement; any run-completion, boot-sweep, publication, or test helper used as a production WorkItem closer. Retain raw primitives only private to reducers."
+    update_paths:
+      migrate: "DispatchWorkerUpdateOG; ListCoagentMailboxBacklog; MarkWorkerUpdateDeliveredOG/MarkWorkerUpdatesDeliveredOG; UpdateRunAndMarkWorkerUpdatesDeliveredOG and rollback; internal/textureowner texture_controller_checkpoint, texture_agent_mutations, textureWorkerUpdateCommitSeq/markTextureWorkerUpdatesDelivered and revision worker_updates_consumed/skipped/pending metadata; internal/actorruntime/handler.go handleCoagentResult; internal/agentcore/super_controller.go reconcileUpdatedCoagentActor."
+      disposition: "Canonical worker-update objects gain disposition/version/digest/refs. Delivery marking and checkpoints become rebuildable projections or are deleted. A terminal trajectory consumes late actor messages with nil handler error after durable late/cancelled disposition, preventing retry loops."
+    stream_paths:
+      migrate: "internal/agentcore/live_ws.go and event handlers plus frontend Texture stream client to snapshot-watermark + paged durable replay; EventBus becomes notification only. Delete park/passivation-to-completion mapping."
+    legacy_residue:
+      delete_after_proof: "Dead SQL worker_updates readers/scanners, inbox_deliveries, schema/index residue; RunContinuation production surfaces; legacy SQL Texture document/revision residue only after exact caller/migration proof."
+      retain: "Canonical Texture/Agent/Trajectory/WorkItem/worker-update object graph, actor recovery log as projection, public publication projections, and independent computer-event/effect chain."
   rejection_criteria:
-    - "Reject a candidate that adds a second head/store, treats RunID or delivery as incorporation, settles with open work or pending updates, loses state on restart, lets late work mutate a cancelled trajectory, or gives lifecycle code an effect capability."
-    - "Reject identity output assembled by the client, mutable checkout state, unsigned independent health strings, or SSH. The trusted product service must bind and sign the joined inventory and fail closed on mismatch."
-    - "Reject any compatibility shim preserving two semantic writers, any fixed research workflow, or any claim proved only by local tests, source shape, dashboard, model agreement, or deployment metadata."
+    - "Reject any partial or compensating semantic write, second head/store, unscoped authority read, RunID-derived trajectory, delivery-as-incorporation, raw terminal writer, open-work/non-terminal-update settlement, lost restart state, late wake, or lifecycle effect capability."
+    - "Reject public catch-up with a fixed cap or subscribe gap, snapshot without an atomic watermark, UI-only state, client-composed lifecycle creation, or desktop/CLI DTO divergence."
+    - "Reject identity assembled from mutable checkout state, unsigned fragments, unpinned keys, stale/no nonce, raw path disclosure, client joins, SSH, or a non-failing missing/conflicting measurement."
+    - "Reject compatibility dual truth, fixed research workflow, universal Texture redesign, Round 72 runtime import, or proof only by local tests, source shape, dashboard, model agreement, or deployment metadata."
   evidence_refs:
-    - "agent://ArtifactTextureMap"
-    - "agent://ActorDeliveryMap"
-    - "agent://TrajectoryWorkMap"
-    - "agent://EffectsAuthorityMap"
-    - "agent://IdentityProtocolMap"
-    - "internal/store/texture.go; internal/store/graph_store.go; internal/actor; internal/actorruntime; internal/agentcore/trajectory.go; internal/agentcore/tools_worker_update.go; internal/proxy/compute_status.go"
+    - "contract review /tmp/choir-kernel-contract-review-b05ed30b: four independent REPAIR verdicts; reproducible blockers adjudicated into this scope"
+    - "internal/store/texture.go; internal/store/graph_store.go; internal/objectgraph/store.go; internal/objectgraph/dolt_store.go"
+    - "internal/types/evidence.go; internal/types/trajectory.go; internal/actor; internal/actorruntime; internal/agentcore/trajectory.go; internal/agentcore/api_trajectory.go; internal/agentcore/live_ws.go"
+    - "internal/textureowner/texture_revision_metadata.go; internal/textureowner/tools_texture.go; internal/textureowner/texture_agent_revision.go; internal/proxy/compute_status.go"
 
 measures:
   - name: executable_definition_count
@@ -214,8 +244,8 @@ execution:
     purpose: "Create one clean authority and source baseline without losing rejected work or unrelated WIP."
     exit: "Canonical main is clean, equals origin/main, names this file as sole `/goal` authority, preserves exact rejected/rollback refs, and authorizes no runtime effect."
   - id: B-observe-and-freeze-kernel-contract
-    purpose: "Add or connect complete no-SSH executable identity; map every writer/reader; freeze one-authority object contract, public trace, deletion inventory, rejection criteria, and rollback before runtime implementation."
-    exit: "Independent review accepts a frozen code-free contract and no runtime candidate exists yet."
+    purpose: "Map every writer/reader; freeze one-authority lifecycle, transactional/replay protocol, identity trust contract, deletion inventory, rejection criteria, and rollback before runtime implementation."
+    exit: "Independent review accepts a frozen code-free contract and no runtime or identity candidate exists yet."
   - id: C-build-disabled-candidate
     purpose: "Implement the smallest generic artifact/activation/obligation/settlement lifecycle and UI/headless contract with effects OFF; delete superseded exercised-path authorities only after migration proof."
     exit: "A frozen source candidate passes focused transition/refusal tests and a product smoke trace; independent review accepts authority and deletion inventory."
@@ -229,7 +259,7 @@ execution:
 now:
   status: working
   slice: B-observe-and-freeze-kernel-contract
-  question: "Will independent frozen review find any authority bypass, missing fate-sharing boundary, or unbounded public identity disclosure in the code-free kernel contract?"
+  question: "Does repaired contract scope 02 close every reproducible transactional, ownership, replay, migration, cancellation, and identity blocker without authorizing implementation?"
   reconciliation:
     observed_at: 2026-07-21T21:03:29Z
     source_ref: refs/remotes/origin/main@9d887494c230a5276529066c7f1e049349d933c9
@@ -239,13 +269,14 @@ now:
     worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
     status: reconciled
   candidate:
-    id: convergence-kernel-contract-01
-    state: drafting
+    id: convergence-kernel-contract-02
+    state: frozen_by_scoped_content_digest
     ref: refs/heads/convergence/kernel-contract-01
     owner: owner-and-current-session
-    base: refs/remotes/origin/main@9d887494c230a5276529066c7f1e049349d933c9
-    digest: pending_frozen_commit
-    scope: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
+    base: b05ed30bf3a3cc43a3d1aff707f30dcdce74a130
+    rejected_predecessor: "b05ed30bf3a3cc43a3d1aff707f30dcdce74a130 — independent panel unanimously returned REPAIR; blockers were transaction linearization, writer/key ownership, lossless replay, identity trust/disclosure, durable inventory, and internal freeze state"
+    digest: sha256:1eb323dc16ffdb31ff03d40661901b5bf82ad15fe9ec64e182ebc783d6e0f29f
+    scope: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md#kernel_contract]
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -255,9 +286,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [refs/remotes/origin/main@9d887494c230a5276529066c7f1e049349d933c9, https://choir.news/health, agent://ArtifactTextureMap, agent://ActorDeliveryMap, agent://TrajectoryWorkMap, agent://EffectsAuthorityMap, agent://IdentityProtocolMap]
-  blocker_or_risk: "The inventory found real overlaps: actor SQLite processed state versus Dolt update disposition, direct trajectory settlement without reducer preconditions, passivation rendered as completion, and no bound no-SSH host/guest identity. Runtime mutation remains unauthorized until this code-free contract is frozen and independently accepted."
-  next_action: "Validate and freeze the code-free contract candidate, then run an independent adversarial review bound to its exact commit and adjudicate every reproducible blocker before any runtime code."
+  evidence_refs: [b05ed30bf3a3cc43a3d1aff707f30dcdce74a130, /tmp/choir-kernel-contract-review-b05ed30b/manifest.tsv, /tmp/choir-kernel-contract-review-b05ed30b/codex.out, /tmp/choir-kernel-contract-review-b05ed30b/cursor.out, /tmp/choir-kernel-contract-review-b05ed30b/omp-gpt55.out, /tmp/choir-kernel-contract-review-b05ed30b/omp-gemini35.out]
+  blocker_or_risk: "Runtime mutation remains unauthorized. Contract scope 01 was rejected for repair; scope 02 incorporates every reproducible blocker but must be digest-frozen and independently accepted before code."
+  next_action: "Compute and record the scope-02 contract digest, commit the code-free repair, then rerun independent adversarial review against that exact commit; implement nothing unless no reproducible blocker remains."
 
 receipts:
   - id: architecture-interrogation-2026-07-21
