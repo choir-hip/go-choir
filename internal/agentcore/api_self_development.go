@@ -345,17 +345,23 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 	expectedG0 := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G0_RECEIPT"))
 	expectedG1 := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G1_RECEIPT"))
 	expectedCandidate := strings.TrimSpace(os.Getenv("CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF"))
+	expectedDeployed := strings.TrimSpace(os.Getenv("CHOIR_DEPLOYED_COMMIT"))
 	if r.Header.Get("X-Self-Development-Disposable") != "true" || r.Header.Get("X-Self-Development-Mode-Generation") != "0" {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires disposable target and absent off-mode state"})
 		return
 	}
-	genesisAuthorityRef, genesisAuthorityPayload, err := selfDevelopmentGenesisAuthorityRef(request, expectedG0, expectedG1, expectedCandidate, strings.TrimSpace(buildinfo.Commit))
+	genesisAuthorityRef, genesisAuthorityPayload, err := selfDevelopmentGenesisAuthorityRef(request, expectedG0, expectedG1, expectedCandidate, expectedDeployed)
 	if err != nil {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires exact frozen G0/G1 candidate and deployed release bindings"})
 		return
 	}
 	eventIdempotency := "selfdev-genesis-" + computerevent.DigestBytes([]byte(computerID+"\x00"+request.IdempotencyKey))
-	if existingEvent, found, lookupErr := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency); lookupErr == nil && found {
+	existingEvent, existingFound, lookupErr := h.rt.store.EventByIdempotency(r.Context(), computerID, eventIdempotency)
+	if lookupErr != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis event authority unavailable"})
+		return
+	}
+	if existingFound {
 		if existingEvent.ProposedEffectRef != request.BaselineVersion || existingEvent.ResultingEffectiveCommitment != request.BaselineState || !selfDevelopmentContainsString(existingEvent.InputArtifactRefs, genesisAuthorityRef) {
 			writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis idempotency binding changed"})
 			return
@@ -365,6 +371,13 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 			writeAPIJSON(w, http.StatusOK, map[string]any{"event": existingEvent, "head": head, "baseline": baseline})
 			return
 		}
+	} else if head, headErr := h.rt.store.Head(r.Context(), computerID); headErr != nil || head != nil {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "GenesisImported requires an absent computer event head"})
+		return
+	}
+	if expectedDeployed != strings.TrimSpace(buildinfo.Commit) {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis requires immutable deployed release identity"})
+		return
 	}
 	if h.rt.selfdevRoute == nil || h.rt.selfdevUpdater == nil || h.rt.selfdevVerifier == nil || h.rt.selfdevControl == nil {
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "genesis reconstruction authority unavailable"})
@@ -381,25 +394,27 @@ func (h *APIHandler) importSelfDevelopmentGenesis(w http.ResponseWriter, r *http
 		return
 	}
 	versionDigest, digestErr := selfdevprotocol.Digest(route.Slot.Current)
-	manifest, manifestErr := updater.ReadCurrentManifest(h.rt.selfdevUpdaterRoot)
-	if manifestErr != nil {
-		baselineRoot := filepath.Clean(strings.TrimSpace(os.Getenv("CHOIR_BASELINE_RELEASE_ROOT")))
-		if strings.HasPrefix(baselineRoot, "/nix/store/") {
-			manifest, manifestErr = updater.BuildBaselineManifest(baselineRoot, computerID, string(route.Slot.Current.CodeRef), string(route.Slot.Current.ArtifactProgramRef))
-			if manifestErr == nil {
-				importRequest := updater.BaselineImportRequest{
-					ComputerID: computerID, RealizationID: h.rt.selfdevRealizationID,
-					IdempotencyKey: "genesis-baseline-" + request.IdempotencyKey, SourceDir: baselineRoot, Manifest: manifest,
-				}
-				importRequest.RequestCommitment, manifestErr = updater.ComputeBaselineImportCommitment(importRequest)
-				if manifestErr == nil {
-					manifest, manifestErr = h.rt.selfdevUpdater.ImportBaseline(r.Context(), importRequest)
-				}
-			}
+	baselineRoot := filepath.Clean(strings.TrimSpace(os.Getenv("CHOIR_BASELINE_RELEASE_ROOT")))
+	if !strings.HasPrefix(baselineRoot, "/nix/store/") {
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "immutable genesis baseline is unavailable"})
+		return
+	}
+	expectedManifest, manifestErr := updater.BuildBaselineManifest(baselineRoot, computerID, string(route.Slot.Current.CodeRef), string(route.Slot.Current.ArtifactProgramRef))
+	manifest := updater.ReleaseManifest{}
+	if manifestErr == nil {
+		importRequest := updater.BaselineImportRequest{
+			ComputerID: computerID, RealizationID: h.rt.selfdevRealizationID,
+			IdempotencyKey: "genesis-baseline-" + request.IdempotencyKey, SourceDir: baselineRoot, Manifest: expectedManifest,
+			ReplaceUnauthenticatedCurrent: true,
+		}
+		importRequest.RequestCommitment, manifestErr = updater.ComputeBaselineImportCommitment(importRequest)
+		if manifestErr == nil {
+			manifest, manifestErr = h.rt.selfdevUpdater.ImportBaseline(r.Context(), importRequest)
 		}
 	}
 	if digestErr != nil || manifestErr != nil || versionDigest != request.BaselineVersion ||
-		manifest.ContentDigest == "" || manifest.CodeRef != string(route.Slot.Current.CodeRef) || manifest.ArtifactProgramRef != string(route.Slot.Current.ArtifactProgramRef) {
+		manifest.ContentDigest != expectedManifest.ContentDigest || manifest.CodeRef != string(route.Slot.Current.CodeRef) ||
+		manifest.ArtifactProgramRef != string(route.Slot.Current.ArtifactProgramRef) {
 		writeAPIJSON(w, http.StatusConflict, apiError{Error: "genesis baseline does not match the current immutable release and route"})
 		return
 	}
@@ -1145,8 +1160,15 @@ func (h *APIHandler) readKernelCapabilityReceipt(w http.ResponseWriter, r *http.
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "computer route identity unavailable"})
 		return
 	}
-	manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot)
-	if err != nil {
+	activeDigest := strings.TrimSpace(os.Getenv("CHOIR_ACTIVE_RELEASE_DIGEST"))
+	manifest := updater.ReleaseManifest{}
+	if computerevent.IsSHA256(activeDigest) {
+		manifest, err = updater.ReadCurrentManifest(rt.selfdevUpdaterRoot)
+		if err != nil || manifest.ContentDigest != activeDigest {
+			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "signed current release unavailable"})
+			return
+		}
+	} else {
 		baselineRoot := filepath.Clean(strings.TrimSpace(os.Getenv("CHOIR_BASELINE_RELEASE_ROOT")))
 		if !strings.HasPrefix(baselineRoot, "/nix/store/") {
 			writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "current immutable release unavailable"})

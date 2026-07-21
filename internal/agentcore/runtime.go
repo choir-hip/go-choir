@@ -483,11 +483,14 @@ func WithSelfDevelopmentUpdater(client *updater.Client, root, computerID, realiz
 		rt.selfdevUpdaterRoot = filepath.Clean(strings.TrimSpace(root))
 		rt.selfdevComputerID = strings.TrimSpace(computerID)
 		rt.selfdevRealizationID = strings.TrimSpace(realizationID)
-		if manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot); err == nil {
-			rt.selfdevStartupMarker = manifest.Marker
-			rt.selfdevStartupReleaseDigest = manifest.ContentDigest
-			rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
-			rt.selfdevStartupReducer = manifest.ReducerVersion
+		activeDigest := strings.TrimSpace(os.Getenv("CHOIR_ACTIVE_RELEASE_DIGEST"))
+		if computerevent.IsSHA256(activeDigest) {
+			if manifest, err := updater.ReadCurrentManifest(rt.selfdevUpdaterRoot); err == nil && manifest.ContentDigest == activeDigest {
+				rt.selfdevStartupMarker = manifest.Marker
+				rt.selfdevStartupReleaseDigest = manifest.ContentDigest
+				rt.selfdevStartupEventSchema = manifest.EventSchemaVersion
+				rt.selfdevStartupReducer = manifest.ReducerVersion
+			}
 		}
 	}
 }

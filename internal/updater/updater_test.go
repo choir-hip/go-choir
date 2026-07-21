@@ -253,21 +253,35 @@ func updaterRequestFixture(t *testing.T, updaterRoot, computerID, realizationID,
 	if err := os.MkdirAll(source, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(source, "bin", "choir")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	choirPath := filepath.Join(source, "bin", "choir")
+	sandboxPath := filepath.Join(source, "bin", "sandbox")
+	skillPath := filepath.Join(source, "share", "go-choir", "skills", "default.txt")
+	if err := os.MkdirAll(filepath.Dir(choirPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(skillPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	fileDigest, err := fileSHA256(path)
+	for _, path := range []string{choirPath, sandboxPath} {
+		if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(skillPath, []byte("skill"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fileDigest, err := fileSHA256(choirPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	skillDigest, err := fileSHA256(skillPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	manifest := ReleaseManifest{
 		Version: 1, ComputerID: computerID, AcceptedEventHead: strings.Repeat("a", 64), CodeRef: "code:" + operationID,
 		ArtifactProgramRef: "artifact-program:" + operationID, EventSchemaVersion: 1, ReducerVersion: 1, Marker: operationID,
-		Files: []ManifestFile{{Path: "bin/choir", SHA256: fileDigest, Mode: 0o555}},
+		Files: []ManifestFile{{Path: "bin/choir", SHA256: fileDigest, Mode: 0o555}, {Path: "bin/sandbox", SHA256: fileDigest, Mode: 0o555}, {Path: "share/go-choir/skills/default.txt", SHA256: skillDigest, Mode: 0o444}},
 	}
 	unsigned, err := computerevent.CanonicalJSON(manifest)
 	if err != nil {
@@ -329,11 +343,11 @@ func TestUpdaterImportsImmutableBaselineOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	imported, err := engine.ImportBaseline(request)
+	imported, err := engine.ImportBaseline(context.Background(), request)
 	if err != nil || imported.ContentDigest != manifest.ContentDigest {
 		t.Fatalf("baseline import=%+v err=%v", imported, err)
 	}
-	replayed, err := engine.ImportBaseline(request)
+	replayed, err := engine.ImportBaseline(context.Background(), request)
 	if err != nil || replayed.ContentDigest != imported.ContentDigest {
 		t.Fatalf("baseline replay=%+v err=%v", replayed, err)
 	}
@@ -344,7 +358,7 @@ func TestUpdaterImportsImmutableBaselineOnce(t *testing.T) {
 	changed.Manifest.Marker = "changed"
 	changed.Manifest, _ = FinalizeManifest(changed.Manifest)
 	changed.RequestCommitment, _ = ComputeBaselineImportCommitment(changed)
-	if _, err := engine.ImportBaseline(changed); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, err := engine.ImportBaseline(context.Background(), changed); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatalf("changed baseline error=%v", err)
 	}
 }

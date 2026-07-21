@@ -56,12 +56,13 @@ type ApplyRequest struct {
 }
 
 type BaselineImportRequest struct {
-	ComputerID        string          `json:"computer_id"`
-	RealizationID     string          `json:"realization_id"`
-	IdempotencyKey    string          `json:"idempotency_key"`
-	RequestCommitment string          `json:"request_commitment"`
-	SourceDir         string          `json:"source_dir"`
-	Manifest          ReleaseManifest `json:"manifest"`
+	ComputerID                    string          `json:"computer_id"`
+	RealizationID                 string          `json:"realization_id"`
+	IdempotencyKey                string          `json:"idempotency_key"`
+	RequestCommitment             string          `json:"request_commitment"`
+	SourceDir                     string          `json:"source_dir"`
+	Manifest                      ReleaseManifest `json:"manifest"`
+	ReplaceUnauthenticatedCurrent bool            `json:"replace_unauthenticated_current"`
 }
 
 type ApplyResult struct {
@@ -104,7 +105,7 @@ func New(root, computerID, realizationID string, service ServiceManager, health 
 	if root == "." || !filepath.IsAbs(root) || strings.TrimSpace(computerID) == "" || strings.TrimSpace(realizationID) == "" || service == nil || health == nil || signer == nil {
 		return nil, fmt.Errorf("updater: complete absolute root, identity, service, health probe, and isolated guest-core signer are required")
 	}
-	for _, dir := range []string{filepath.Join(root, "releases"), filepath.Join(root, "operations"), filepath.Join(root, "incoming")} {
+	for _, dir := range []string{filepath.Join(root, "releases"), filepath.Join(root, "operations"), filepath.Join(root, "incoming"), filepath.Join(root, "activations")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("updater: create state: %w", err)
 		}
@@ -131,10 +132,22 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		return ApplyResult{}, ErrIdempotencyConflict
 	}
 	if found && journal.Result.Outcome != "" {
-		if journal.Result.Outcome == "failed" {
+		switch journal.Result.Outcome {
+		case "applied":
+			if err := writeActivationReceipt(u.root, journal.Result.ReleaseDigest, journal.Result.MaterializationReceipt); err != nil {
+				return journal.Result, err
+			}
+			return journal.Result, nil
+		case "failed":
+			if journal.Result.RecoveryReceipt != nil {
+				if err := writeActivationReceipt(u.root, journal.Result.PriorReleaseDigest, *journal.Result.RecoveryReceipt); err != nil {
+					return journal.Result, err
+				}
+			}
 			return journal.Result, errors.New(journal.Failure)
+		default:
+			return journal.Result, fmt.Errorf("updater: invalid completed outcome %q", journal.Result.Outcome)
 		}
-		return journal.Result, nil
 	}
 	releaseDigest := request.Manifest.ContentDigest
 	sourceDir, err := u.trustedSourceDir(request.SourceDir, releaseDigest)
@@ -164,6 +177,13 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 		return ApplyResult{}, ErrIdempotencyConflict
 	}
 	if journal.Phase == "prepared" {
+		intent, intentErr := u.signActivationIntent(ctx, request, journal.PriorReleaseDigest, releaseDigest, journal.StartedAt)
+		if intentErr != nil {
+			return ApplyResult{}, intentErr
+		}
+		if intentErr = writeActivationReceipt(u.root, releaseDigest, intent); intentErr != nil {
+			return ApplyResult{}, intentErr
+		}
 		if err := u.swapCurrent(releaseDir); err != nil {
 			return ApplyResult{}, err
 		}
@@ -206,6 +226,9 @@ func (u *Updater) Apply(ctx context.Context, request ApplyRequest) (ApplyResult,
 				"request_commitment": request.RequestCommitment,
 			}, completedAt)
 			if receiptErr != nil {
+				return ApplyResult{}, receiptErr
+			}
+			if receiptErr = writeActivationReceipt(u.root, releaseDigest, materialization); receiptErr != nil {
 				return ApplyResult{}, receiptErr
 			}
 			journal.Result = ApplyResult{ReleaseDigest: releaseDigest, PriorReleaseDigest: journal.PriorReleaseDigest, MaterializationReceipt: materialization, HealthReceipt: healthReceipt, Outcome: "applied"}
@@ -414,7 +437,7 @@ func BuildBaselineManifest(sourceDir, computerID, codeRef, artifactProgramRef st
 		Marker: "genesis-baseline", Files: files,
 	})
 }
-func (u *Updater) ImportBaseline(request BaselineImportRequest) (ReleaseManifest, error) {
+func (u *Updater) ImportBaseline(ctx context.Context, request BaselineImportRequest) (ReleaseManifest, error) {
 	if u == nil {
 		return ReleaseManifest{}, fmt.Errorf("updater: invalid baseline import")
 	}
@@ -428,13 +451,18 @@ func (u *Updater) ImportBaseline(request BaselineImportRequest) (ReleaseManifest
 	if err != nil || commitment != request.RequestCommitment {
 		return ReleaseManifest{}, fmt.Errorf("updater: baseline import commitment mismatch")
 	}
-	if current, err := ReadCurrentManifest(u.root); err == nil {
+	if current, currentErr := ReadCurrentManifest(u.root); currentErr == nil {
 		if current.ContentDigest == request.Manifest.ContentDigest {
 			return current, nil
 		}
-		return ReleaseManifest{}, ErrIdempotencyConflict
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return ReleaseManifest{}, err
+		if !request.ReplaceUnauthenticatedCurrent {
+			return ReleaseManifest{}, ErrIdempotencyConflict
+		}
+		if _, admitErr := u.AdmitCurrent(ctx); admitErr == nil {
+			return ReleaseManifest{}, ErrIdempotencyConflict
+		}
+	} else if !errors.Is(currentErr, os.ErrNotExist) {
+		return ReleaseManifest{}, currentErr
 	}
 	releaseDir := filepath.Join(u.root, "releases", request.Manifest.ContentDigest)
 	if err := u.stageRelease(filepath.Clean(request.SourceDir), releaseDir, request.Manifest); err != nil {
@@ -503,7 +531,7 @@ func ComputeApplyRequestCommitment(request ApplyRequest) (string, error) {
 }
 
 func validateApplyRequest(computerID, realizationID string, request ApplyRequest) (string, error) {
-	if request.ComputerID != computerID || request.RealizationID != realizationID || request.OperationID == "" || request.IdempotencyKey == "" || !computerevent.IsSHA256(request.AcceptedEventHead) || request.Manifest.ComputerID != computerID || request.Manifest.AcceptedEventHead != request.AcceptedEventHead || !filepath.IsAbs(request.SourceDir) {
+	if request.ComputerID != computerID || request.RealizationID != realizationID || request.OperationID == "" || request.IdempotencyKey == "" || !computerevent.IsSHA256(request.AcceptedEventHead) || request.AcceptedEventHead == computerevent.ZeroHead || request.Manifest.ComputerID != computerID || request.Manifest.AcceptedEventHead != request.AcceptedEventHead || !filepath.IsAbs(request.SourceDir) {
 		return "", fmt.Errorf("updater: incomplete or mismatched apply request")
 	}
 	commitmentInput := request
@@ -580,6 +608,9 @@ func (u *Updater) restorePrior(ctx context.Context, request ApplyRequest, priorT
 		"observation_artifact_digests": observations,
 	}, completedAt)
 	if err != nil {
+		return nil, err
+	}
+	if err = writeActivationReceipt(u.root, priorDigest, receipt); err != nil {
 		return nil, err
 	}
 	return &receipt, nil
@@ -696,7 +727,11 @@ func chmodTreeReadOnly(root string) error {
 		if entry.IsDir() {
 			return os.Chmod(path, 0o555)
 		}
-		return os.Chmod(path, 0o444|entry.Type().Perm()&0o111)
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return os.Chmod(path, 0o444|info.Mode().Perm()&0o111)
 	})
 }
 

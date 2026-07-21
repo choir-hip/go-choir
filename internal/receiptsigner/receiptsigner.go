@@ -93,7 +93,7 @@ func (h *Handler) signReceipt(w http.ResponseWriter, r *http.Request) {
 
 func allowedGuestReceipt(kind string) bool {
 	switch kind {
-	case "HealthReceipt", "MaterializationReceipt", "UpdaterRecoveryReceipt", "KernelCapabilityReceipt":
+	case "HealthReceipt", "ActivationIntentReceipt", "MaterializationReceipt", "UpdaterRecoveryReceipt", "KernelCapabilityReceipt":
 		return true
 	default:
 		return false

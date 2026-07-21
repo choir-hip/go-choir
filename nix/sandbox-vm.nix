@@ -77,6 +77,7 @@ let
     export CHOIR_SELF_DEVELOPMENT_G0_RECEIPT="${genesisG0Receipt}"
     export CHOIR_SELF_DEVELOPMENT_G1_RECEIPT="${genesisG1Receipt}"
     export CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF="${genesisCandidateRef}"
+    export CHOIR_DEPLOYED_COMMIT="${buildCommit}"
 
     if [ -z "''${RUNTIME_WIRE_PUBLISH_URL:-}" ]; then
       for param in $(cat /proc/cmdline); do
@@ -100,13 +101,21 @@ let
       echo "go-choir-sandbox: wire publish URL not configured" >&2
     fi
 
-    current="/mnt/persistent/choir-updater/current"
-    dynamic="$current/bin/sandbox"
-    if [ -x "$dynamic" ]; then
-      export RUNTIME_SKILLS_ROOT="$current/share/go-choir/skills"
+    admitted="$(${pkgs.curl}/bin/curl --silent --show-error --fail --retry 20 \
+      --retry-all-errors --retry-delay 0 --connect-timeout 1 --max-time 5 \
+      --unix-socket /run/choir/updater.sock http://updater/v1/admit-current 2>/dev/null || true)"
+    dynamic="$(printf '%s' "$admitted" | ${pkgs.jq}/bin/jq -er '.sandbox_path' 2>/dev/null || true)"
+    skills="$(printf '%s' "$admitted" | ${pkgs.jq}/bin/jq -er '.skills_root' 2>/dev/null || true)"
+    release_digest="$(printf '%s' "$admitted" | ${pkgs.jq}/bin/jq -er '.release_digest' 2>/dev/null || true)"
+    if [ -n "$dynamic" ] && [ -n "$skills" ] && [ -n "$release_digest" ] && [ -x "$dynamic" ]; then
+      export RUNTIME_SKILLS_ROOT="$skills"
       export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
+      export CHOIR_ACTIVE_RELEASE_DIGEST="$release_digest"
+      echo "go-choir-sandbox: executing signed updater release"
       exec "$dynamic" "$@"
     fi
+    echo "go-choir-sandbox: no signed updater release; executing immutable baseline" >&2
+    unset CHOIR_ACTIVE_RELEASE_DIGEST
     export CHOIR_UPDATER_ROOT="/mnt/persistent/choir-updater"
     export RUNTIME_SKILLS_ROOT="${goChoirPackages.sandbox}/share/go-choir/skills"
     exec ${goChoirPackages.sandbox}/bin/sandbox "$@"
@@ -588,9 +597,9 @@ EOF
   systemd.services.go-choir-sandbox = {
     description = "go-choir Sandbox Runtime (VM guest)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-verifier-signer.service" ];
+    after = [ "network-online.target" "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-verifier-signer.service" "go-choir-updater.service" ];
     wants = [ "network-online.target" ];
-    requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-verifier-signer.service" ];
+    requires = [ "go-choir-extract-cmdline.service" "run-choir\\x2dbootstrap.mount" "go-choir-verifier-signer.service" "go-choir-updater.service" ];
     environment = {
       CHOIR_COMPUTER_CREDENTIAL_FILE = "/run/choir-bootstrap/computer-event-envelope";
       CHOIR_REVOCATION_CREDENTIAL_HANDOFF = "/run/choir-runtime-handoff/revocation-capability";
@@ -687,6 +696,7 @@ EOF
       StandardError = "journal+console";
       EnvironmentFile = [ "-/run/go-choir-sandbox.env" ];
       ReadWritePaths = [ "/mnt/persistent" "/run/choir" "/run/choir-runtime-handoff" ];
+      ReadOnlyPaths = [ "/mnt/persistent/choir-updater" ];
       InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-signers" "/run/choir-updater-control" ];
     };
   };

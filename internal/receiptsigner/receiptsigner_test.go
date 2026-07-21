@@ -33,6 +33,9 @@ func TestGuestSignerAllowsOnlyTypedReceiptsAndPersistsRetry(t *testing.T) {
 	if refused.Code != http.StatusNotFound {
 		t.Fatalf("guest signer exposed verifier authority: %d", refused.Code)
 	}
+	if !allowedGuestReceipt("ActivationIntentReceipt") {
+		t.Fatal("guest signer refused typed activation intent")
+	}
 }
 
 func TestVerifierSignerCannotSignUpdaterReceipt(t *testing.T) {

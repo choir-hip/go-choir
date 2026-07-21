@@ -133,7 +133,7 @@ func main() {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid baseline import request"})
 			return
 		}
-		manifest, err := engine.ImportBaseline(request)
+		manifest, err := engine.ImportBaseline(r.Context(), request)
 		if err != nil {
 			status := http.StatusBadRequest
 			if errors.Is(err, updater.ErrIdempotencyConflict) {
@@ -143,6 +143,18 @@ func main() {
 			return
 		}
 		writeJSON(w, http.StatusOK, manifest)
+	})
+	mux.HandleFunc("/v1/admit-current", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+		admitted, err := engine.AdmitCurrent(r.Context())
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no authorized dynamic release"})
+			return
+		}
+		writeJSON(w, http.StatusOK, admitted)
 	})
 	mux.HandleFunc("/v1/apply", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
