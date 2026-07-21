@@ -104,7 +104,7 @@ now:
     consequence: "Historical evidence only. Self-development effects remain OFF."
   evidence_refs: [refs/heads/selfdev/architecture-recovery@2526f108a36c498f2f90ac89fcc6e4140685d9d9, refs/heads/selfdev/g1-round72-signed-activation@5517c2eb5c94678eb4ec323fef2cec34b96f7c6a, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
   blocker_or_risk: "This mission never reached deployed product acceptance; intermediate receipts cannot be promoted into completion."
-  next_action: "Invoke /goal /Users/wiz/go-choir/docs/definitions/choir-coherent-computer-convergence-2026-07-21.md"
+  next_action: none
 
 receipts:
   - id: superseded-incomplete-2026-07-21

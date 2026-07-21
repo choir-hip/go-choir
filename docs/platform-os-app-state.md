@@ -108,9 +108,9 @@ platform docs record the common baseline and the desired divergence semantics.
   do not talk to Dolt directly.
 - **Computer lifecycle and disk retention:** primary computer realizations stay
   warm while capacity allows; configured always-on primaries have a protected
-  lane. Reclaim ranks unprotected idle realizations, not candidate/worker
-  computers. Obsolete worker/candidate VM disks are legacy substrate debris to
-  delete under the active mission, not retained product lifecycle classes.
+  lane. Reclaim ranks unprotected idle realizations. Obsolete worker/candidate
+  VM disks are legacy substrate debris, not product lifecycle classes; preserve
+  them until an exact inventory and separately authorized deletion boundary exist.
   Staging test/proof primary computers are reclaimable only when explicitly
   classified by ephemeral account policy, currently `example.com` auth emails,
   and only after they are stopped, hibernated, or failed past the diagnostic
@@ -200,9 +200,10 @@ Current capabilities:
 - restore recovery can avoid hydrating every saved heavy app at once, and heavy
   restored background apps may stay suspended until raised;
 - Compute Monitor is the product surface for the signed-in user's computer,
-  app restore weight, and bounded recovery actions. Its background-candidate
-  computer controls are obsolete residue deleted by the active
-  self-development mission. It intentionally does not expose host/platform
+  app restore weight, and bounded recovery actions. Background-candidate controls
+  are legacy residue; the rejected self-development candidate deleted them, but
+  canonical-main residue is unclaimed pending inventory. No active mission
+  authorizes that cleanup. Compute Monitor intentionally does not expose host/platform
   pressure, global vmctl inventory, deployed build metadata, or raw VM handles.
 
 Known gaps:
@@ -376,10 +377,10 @@ Recent deployed platform proof for live multi-device computer sync:
   `desktop-after-app-content-sync.png`, and
   `mobile-driver-texture-content-sync.png`.
 
-Historical deployed proof for the retired Apps & Changes/package-adoption
-surface follows only as provenance. The clean self-development cutover deleted
-that UI and its package/adoption authority; these receipts do not describe a
-current product path:
+Historical deployed proof for the Apps & Changes/package-adoption surface
+follows only as provenance. The rejected self-development candidate deleted
+that UI and authority, but those deletions are not canonical-main state until
+landed by separate authority. These receipts do not prove a current product path:
 
 - behavior commits:
   `e0a8f76954cb01a983c6d980b3e558fae45e06a0`,
