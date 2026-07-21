@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -66,7 +67,7 @@ func TestSelfDevelopmentEffectsOffGuestHarness(t *testing.T) {
 		_ = manager.DestroyVMState(vmID)
 	})
 
-	instance, err := manager.BootVM(VMConfig{
+	vmConfig := VMConfig{
 		VMID:                       vmID,
 		ComputerID:                 computerID,
 		RealizationID:              realizationID,
@@ -76,7 +77,8 @@ func TestSelfDevelopmentEffectsOffGuestHarness(t *testing.T) {
 		ComputerCredentialEnvelope: envelope,
 		MachineCPUCount:            2,
 		MachineMemSizeMib:          2048,
-	})
+	}
+	instance, err := manager.BootVM(vmConfig)
 	if err != nil {
 		t.Fatalf("boot exact G1 guest: %v", err)
 	}
@@ -122,6 +124,58 @@ func TestSelfDevelopmentEffectsOffGuestHarness(t *testing.T) {
 		t.Fatalf("unrouted harness kernel receipt status = %d body=%s", capabilities.StatusCode, capabilities.Body)
 	}
 	t.Logf("exact_guest=%s build=%s effects_off_status=%d kernel_probe=admitted public_kernel_receipt_status=%d body=%s", instance.HostURL, healthBody.Build.Commit, start.StatusCode, capabilities.StatusCode, capabilities.Body)
+
+	if err := manager.StopVM(vmID); err != nil {
+		t.Fatalf("stop exact G1 guest before stale-current probe: %v", err)
+	}
+	plantUnsignedHarnessCurrent(t, filepath.Join(stateDir, vmID, "data.img"))
+	if err := manager.RemoveVM(vmID); err != nil {
+		t.Fatalf("remove stopped G1 guest: %v", err)
+	}
+	vmConfig.RealizationID = vmID + "-epoch-2"
+	vmConfig.ComputerCredentialEnvelope = issueHarnessCredential(t, computerID, vmConfig.RealizationID)
+	instance, err = manager.BootVM(vmConfig)
+	if err != nil {
+		t.Fatalf("reboot exact G1 guest with unsigned current: %v", err)
+	}
+	if !instance.Healthy || instance.State != StateRunning {
+		t.Fatalf("unsigned-current guest instance = state=%s healthy=%t", instance.State, instance.Healthy)
+	}
+	rebuiltHealth := harnessRequest(t, http.MethodGet, instance.HostURL+"/health", nil, nil)
+	if rebuiltHealth.StatusCode != http.StatusOK || !bytes.Contains(rebuiltHealth.Body, []byte(healthBody.Build.Commit)) {
+		t.Fatalf("unsigned current escaped immutable fallback: status=%d body=%s", rebuiltHealth.StatusCode, rebuiltHealth.Body)
+	}
+	t.Logf("unsigned_current=refused reconstructed_realization=%s immutable_build=%s", vmConfig.RealizationID, healthBody.Build.Commit)
+}
+
+func plantUnsignedHarnessCurrent(t *testing.T, dataImage string) {
+	t.Helper()
+	mountPoint := t.TempDir()
+	mount := exec.Command(harnessPath(t, "CHOIR_G1_MOUNT", "mount"), "-o", "loop", dataImage, mountPoint)
+	if output, err := mount.CombinedOutput(); err != nil {
+		t.Fatalf("mount harness data image: %v: %s", err, output)
+	}
+	defer func() {
+		unmount := exec.Command(harnessPath(t, "CHOIR_G1_UMOUNT", "umount"), mountPoint)
+		if output, err := unmount.CombinedOutput(); err != nil {
+			t.Fatalf("unmount harness data image: %v: %s", err, output)
+		}
+	}()
+	updaterRoot := filepath.Join(mountPoint, "choir-updater")
+	releaseDigest := strings.Repeat("b", 64)
+	releaseRoot := filepath.Join(updaterRoot, "releases", releaseDigest)
+	if err := os.MkdirAll(filepath.Join(releaseRoot, "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(releaseRoot, "bin", "sandbox"), []byte("#!/bin/sh\nexit 99\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(updaterRoot, "current")); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("releases", releaseDigest), filepath.Join(updaterRoot, "current")); err != nil {
+		t.Fatal(err)
+	}
 }
 
 type harnessResponse struct {
