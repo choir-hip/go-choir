@@ -587,7 +587,7 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-updater-transport-round-58
-    state: frozen_G1_review
+    state: accepted_G1
     ref: 83bc416629775d0ad5080324c3b62c2ad1a580d7
     owner: integration-authority
     base: 17e8a7b8ba4d31bfb0e0b5790dedfbff53771ac7
@@ -595,13 +595,14 @@ now:
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d931695db80]
     immediate_predecessors: [8beee4597a3fb580167eaa41ee2647a8af541001, 17e8a7b8ba4d31bfb0e0b5790dedfbff53771ac7]
     verification: "Focused tests drive KernelCapabilities through an HTTP transport returning wrapped ENOENT, EACCES, ECONNREFUSED, deadline, and unknown errors and assert only the corresponding closed codes. Existing HTTP refusal-code tests, full updater race, and agentcore public typed-response race pass. No service, lifecycle, route, verifier, signer, or effect behavior changed."
-    disposition: "Frozen for proportionate G1 review. Deployment is solely to choose the guest updater substrate repair without SSH. Reject if raw error/path text can serialize, HTTP/auth/admission changes, non-transport errors are reclassified, or any service/effect behavior changes."
+    disposition: "Round-58 accepted unanimously by Devin, OMP Cursor/Grok 4.5, and OMP Gemini 3.5. All confirmed Go error identity survives net/http Unix wrapping, the categories are closed/non-secret, the public path serializes only the code with HTTP 503, unknowns remain generic, and no service/effect behavior changes. OpenCode failed before review. Reviewers note the internal Error string still carries its cause for local diagnostics and focused tests synthesize transport failures; neither reaches the public envelope, and live staging is the required discriminator. Effects remain OFF."
     g1_round_58_probe:
-      reviewed_at: 2026-07-21T00:19:09Z
+      reviewed_at: 2026-07-21T00:32:34Z
       source_ref: 83bc416629775d0ad5080324c3b62c2ad1a580d7
-      authority_ref: pending_freeze_commit
-      outcome: pending
-      adjudication: "Pending independent review of the frozen updater transport diagnostic."
+      authority_ref: 3841be5148ff5e2d7d5fdf58d159d1fc86e894a3
+      outcome: accept_G1
+      adjudication: "Three substantive independent reviewers found no blocker and two independently exercised real Unix/net/http wrapping. ENOENT, permission, refusal, and timeout map to exact stable codes; ENOTSOCK and unknowns remain generic; causes never enter the authenticated response. G1 accepts deployment solely to select the guest updater substrate repair."
+      receipt: {manifest: /tmp/choir-selfdev-g1-round58-panel/manifest.tsv, manifest_sha256: a6eec7e02d758c084642cbf073913624754916c4efcdc6e6618770c671894e6d, devin_sha256: 32bc4c54620baef1ce2544f5a38b4f4a1029e49464097cac73f6fd21c26b5a12, omp_cursor_grok45_sha256: 5adaeae107707772d71322ac063fdb99c1b1022f9b264cd42e31de6f822ab382, omp_gemini35_sha256: 1d0fbbc77a86daf87eb8f6fa92992afeac2a234ff7f4ae985823d30dbf17b8a0, opencode_failure_sha256: 106ec3d1466b9d78c94fe0082ca226e4ddeb833e8378b79d260f76afc4a575a1}
     g1_round_57_probe:
       reviewed_at: 2026-07-20T23:45:47Z
       source_ref: b1e580472c99b01aa826e337c6411656dbba99a5
@@ -1354,7 +1355,7 @@ now:
     heresy_delta: {discovered: 9, introduced: 1, repaired: 5}
   c_deploy_failure_14:
     observed_at: 2026-07-21T00:15:45Z
-    status: frozen_G1_round_58
+    status: accepted_G1_round_58_pending_land
     mutation_class: red
     protected_surfaces: [guest_updater, guest_receipt_signer, kernel_capability_receipt, immutable_guest_readiness, deployed_acceptance]
     admissible_evidence_class: "Exact main CI/deploy identity, public scoped lifecycle/mode/kernel responses, exact Nix guest closure and Node A harness, focused production-shaped tests, refrozen G1 for code changes, and deployed no-SSH acceptance."
