@@ -61,6 +61,10 @@ func WriteStartupStage(path string, stage StartupStage) error {
 	return nil
 }
 
+func ServeExitIsFailure(err error) bool {
+	return err != nil && !errors.Is(err, http.ErrServerClosed)
+}
+
 func ClassifyServeExit(err error) StartupStage {
 	switch {
 	case err == nil, errors.Is(err, http.ErrServerClosed), errors.Is(err, net.ErrClosed):

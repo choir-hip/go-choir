@@ -25,11 +25,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, "choir-receipt-signer: absolute startup status path is required")
 		os.Exit(2)
 	}
-	recordStartupStage := func(stage receiptsigner.StartupStage) {
+	writeStartupStage := func(stage receiptsigner.StartupStage) error {
 		if *startupStatus == "" {
-			return
+			return nil
 		}
-		if err := receiptsigner.WriteStartupStage(*startupStatus, stage); err != nil {
+		return receiptsigner.WriteStartupStage(*startupStatus, stage)
+	}
+	recordStartupStage := func(stage receiptsigner.StartupStage) {
+		if err := writeStartupStage(stage); err != nil {
 			fmt.Fprintln(os.Stderr, "choir-receipt-signer: write startup status")
 			os.Exit(1)
 		}
@@ -70,8 +73,10 @@ func main() {
 	recordStartupStage(receiptsigner.StartupStageSocketListening)
 	server := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	serveErr := server.Serve(listener)
-	recordStartupStage(receiptsigner.ClassifyServeExit(serveErr))
-	if serveErr != nil && serveErr != http.ErrServerClosed {
+	if err := writeStartupStage(receiptsigner.ClassifyServeExit(serveErr)); err != nil {
+		fmt.Fprintln(os.Stderr, "choir-receipt-signer: write terminal status")
+	}
+	if receiptsigner.ServeExitIsFailure(serveErr) {
 		fmt.Fprintf(os.Stderr, "choir-receipt-signer: serve: %v\n", serveErr)
 		os.Exit(1)
 	}

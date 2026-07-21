@@ -86,3 +86,24 @@ func TestClassifyServeExitUsesClosedNonSecretClasses(t *testing.T) {
 		})
 	}
 }
+
+func TestServeExitIsFailurePreservesExistingExitContract(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil"},
+		{name: "server closed", err: http.ErrServerClosed},
+		{name: "wrapped server closed", err: fmt.Errorf("wrapped: %w", http.ErrServerClosed)},
+		{name: "listener closed remains failure", err: net.ErrClosed, want: true},
+		{name: "unknown remains failure", err: fmt.Errorf("opaque"), want: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := ServeExitIsFailure(test.err); got != test.want {
+				t.Fatalf("failure = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
