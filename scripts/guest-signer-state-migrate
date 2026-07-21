@@ -17,12 +17,12 @@ case "$root" in
     ;;
 esac
 
-if [ -L "$root" ]; then
-  echo "guest-signer-state-migrate: root must not be a symlink" >&2
-  exit 1
+if [ -e "$root" ] || [ -L "$root" ]; then
+  if [ -L "$root" ] || [ ! -d "$root" ]; then
+    echo "guest-signer-state-migrate: root must be a directory, not a symlink" >&2
+    exit 1
+  fi
 fi
-
-install -d -m 0700 -o "$owner" -g "$group" "$root"
 
 key="$root/key.ed25519"
 if [ -e "$key" ] || [ -L "$key" ]; then
@@ -30,8 +30,14 @@ if [ -e "$key" ] || [ -L "$key" ]; then
     echo "guest-signer-state-migrate: key must be a regular file" >&2
     exit 1
   fi
-  chown -h "$owner:$group" "$key"
-  chmod 0600 "$key"
+  if ! aliased_key="$(find "$key" -xdev -type f -links +1 -print -quit)"; then
+    echo "guest-signer-state-migrate: key alias scan failed" >&2
+    exit 1
+  fi
+  if [ -n "$aliased_key" ]; then
+    echo "guest-signer-state-migrate: hard-linked key is forbidden" >&2
+    exit 1
+  fi
 fi
 
 receipts="$root/receipts"
@@ -40,14 +46,39 @@ if [ -e "$receipts" ] || [ -L "$receipts" ]; then
     echo "guest-signer-state-migrate: receipts must be a directory" >&2
     exit 1
   fi
-  if [ -n "$(find "$receipts" -xdev -type l -print -quit)" ]; then
+  if ! receipt_symlink="$(find "$receipts" -xdev -type l -print -quit)"; then
+    echo "guest-signer-state-migrate: receipt symlink scan failed" >&2
+    exit 1
+  fi
+  if [ -n "$receipt_symlink" ]; then
     echo "guest-signer-state-migrate: receipt symlinks are forbidden" >&2
     exit 1
   fi
-  if [ -n "$(find "$receipts" -xdev ! -type d ! -type f -print -quit)" ]; then
+  if ! invalid_receipt="$(find "$receipts" -xdev ! -type d ! -type f -print -quit)"; then
+    echo "guest-signer-state-migrate: receipt type scan failed" >&2
+    exit 1
+  fi
+  if [ -n "$invalid_receipt" ]; then
     echo "guest-signer-state-migrate: receipt entries must be regular files or directories" >&2
     exit 1
   fi
+  if ! aliased_receipt="$(find "$receipts" -xdev -type f -links +1 -print -quit)"; then
+    echo "guest-signer-state-migrate: receipt alias scan failed" >&2
+    exit 1
+  fi
+  if [ -n "$aliased_receipt" ]; then
+    echo "guest-signer-state-migrate: hard-linked receipts are forbidden" >&2
+    exit 1
+  fi
+fi
+
+# Mutate metadata only after every path and inode scan has succeeded.
+install -d -m 0700 -o "$owner" -g "$group" "$root"
+if [ -f "$key" ]; then
+  chown -h "$owner:$group" "$key"
+  chmod 0600 "$key"
+fi
+if [ -d "$receipts" ]; then
   find "$receipts" -xdev -type d -exec chown -h "$owner:$group" {} + -exec chmod 0700 {} +
   find "$receipts" -xdev -type f -exec chown -h "$owner:$group" {} + -exec chmod 0600 {} +
 fi
