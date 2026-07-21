@@ -375,8 +375,23 @@ orchestration:
 
 now:
   status: working
-  slice: "B-disabled-cutover"
-  question: "Can the complete source cutover implement the accepted G0 contracts with activation off, delete every obsolete worker/candidate path, and freeze one deterministic G1 candidate without weakening the two-store/event/route authority?"
+  slice: "C-freeze-and-rehearse-R1"
+  question: "Can exact deployed security floor a7f497ab be independently rebuilt/redeployed from immutable inputs, preserve the retained ComputerID with mode OFF, reproduce its verified signed kernel receipt, and retain certificate-only route refusal before GenesisImported?"
+  r1_security_floor:
+    frozen_at: 2026-07-21T10:08:57Z
+    status: frozen_rehearsal_pending
+    source_and_deployed_ref: a7f497ab2d7ec691d816e936ffa7f0748bf24f57
+    ci_deploy: {run_id: 29819487195, conclusion: success, deployed_at: 2026-07-21T09:56:23Z}
+    computer_id: computer-4c20ff4a21a021c4306d8c783be0037d
+    realization_id: candidate-fleet-d03dacaa7404b1e4412b2e6f-epoch-1340
+    kernel_receipt_id: 019f8424-8dc7-7c48-b959-8f2a76d9b5d5
+    computer_version: {code_ref: "code:sha256:499bee7bf2a486941c5a717a8b25b4030bc869929f96a0ac625f08e9eac9f380", artifact_program_ref: "artifact-program:sha256:c106eb2c6dd72097e27754ba28ae9cb32bd962adca63fe973ebb906ac3ce824d"}
+    immutable_inputs: {guest_image_digest: 70f4e8ecd2d61a40901a12b75c3b92ddbc4279e97ffa08e02bcb0e1d121c34c5, kernel_config_digest: 5abba8875e79ba9c8bcd7d9604d137af310641dc44caf536424dc2cdd4c032eb, release_digest: 821afaede00dcc231d5b54d5544dac8086619bd2529387a527ffb4aef9e6ff15, probe_contract_digest: d6534d105ac39e022503052cdd08f221b9596e0b1aa386b99f731e05c2452b5a}
+    signer: {domain: guest-core, key_id: guest-core-002246199ce09e32, signature_count: 1}
+    capabilities: [user_namespace, pid_namespace, mount_namespace, network_namespace, uts_namespace, ipc_namespace, cgroup_v2, overlayfs_loaded_and_mountable, seccomp_filter_enforced, landlock_enforcing]
+    public_proof: "Public API and `choir self-dev kernel-capabilities --computer=computer-4c20ff4a21a021c4306d8c783be0037d` returned HTTP/exit 0. API publishes only after Ed25519 signature, exact ComputerID/RealizationID/ComputerVersion, SHA-256 input digests, complete supported+enforced mandatory capability set, cgroup2, and freshness verification. Mode is OFF generation 0. Scoped diagnostic keys were revoked."
+    rollback: "Before GenesisImported, R0 remains admissible. Candidate R1 rollback/rehearsal failure preserves retained epoch-1340 state and redeploys no mutation effect; do not begin D."
+    next_action: "Rerun CI/deploy run 29819487195 at its immutable a7f497ab SHA, independently rerun certificate-only route refusal, recover the same ComputerID, and retrieve a second fresh verified public receipt with mode OFF."
   b_substrate_assessment:
     observed_at: 2026-07-19T04:25:00Z
     class: substrate
@@ -587,15 +602,15 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-updater-namespace-round-70
-    state: accepted_G1
+    state: deployed_C_acceptance_R1_rehearsal_pending
     ref: f84305848d3a9bfcbcf23db5ab865829afd46ad9
     owner: integration-authority
     base: 9080d9f14391793a70940b6487fb9141ea624711
     scope: "Protected updater systemd namespace correction only. Delete the nonexistent `/run/choir-signers/verifier` element from updater `InaccessiblePaths`; retain adjacent canonical `/run/choir-verifier` and every other path, unit dependency/order/restart/timeout, updater command, signer lease/stages, key/receipt identity, lifecycle/route, and effects OFF. No new path, retry, process access, projection, or semantic fallback."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d9a60e4117, 4bebd0eb597137b906035823f801055625b12492f, 2955ec8642839982d12a08a39f045b8b887b468a, e6599f44fb24b1203f7d5e1b4a02dbc4dd25922d, 654b3a9b009f9b1964a0f0db8ece9164bf46b85f, 30ad6955d038ae1231e2b2ca59a9855af3909117, fa7dc942bf1444110f9737bdff97535bc3ec4a5f, 2876c8299e6a87a095ce8b0ee9e0187367047792, 009068f6c4f8eac2275610e2eb1118a5a7f39676, d3282d8af478ceac5990c0cf2a467ff19527b046, 3a5ae4cdd90d4c12317e24401b639373c44bb9f3, 772219bde69f024cd43dd059e44a92d36b409a91, a7964034b79f0f4ad492076e9e1c2f7da57da6e2, 29d5e12e90f03cc24e4eb0a56a35f17236414adc, ad89165c69ed5b33a971d225861716b7c67d81a, 13eb85e8c98bdbbc4fbe794b2525dd5a0920e436, 72f358f86407a10c3b93bfc56739270d4fc47a29, 105949f78858b17bcfad863213feb191699a535f, 5879d5dd3109a708244ed1b7decccf1f19b859a, 0d61fef0d2e138ea4223b0f982c1718629642449, 12e42fa9b6353b2af8ab8bec186476324956f434, 0cfdce7f87ce257fda7f37e6ad1fe9b259e22d9, 9fc68e64067aa8f1251a7a924472b65310bc22b4, 3050bb407a85a366cfc5c22e5bd62f93f2fe60e, 5f2e29be6790d476e55182f3121a11b66aa2c985f, 350475f2afd1e755c89128891a272ecbc00abcd, ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af, a3477b8739275fc7097b49d4014ff43415c494e4, b1e580472c99b01aa826e337c6411656dbba99a5, 83bc416629775d0ad5080324c3b62c2ad1a580d7]
     immediate_predecessors: [91c25300ce30b3017a5fec5fc77e3f5f9695cda8, 9080d9f14391793a70940b6487fb9141ea624711, 437406664c476966bf7aa564c790bfc1e8540f8d]
-    verification: "Source-level Nix evaluation proves updater `InaccessiblePaths` contains canonical `/run/choir-verifier` and excludes stale `/run/choir-signers/verifier`. Deploy-impact classification passes and still requires host/OS/guest-image/active-VM refresh for `nix/sandbox-vm.nix`. Node A x86_64-linux repeats the exact evaluation and builds closure `/nix/store/58q70h5ns05jihc0mb0a95hpyh71aq92-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d`, then returns clean/current main."
-    disposition: "Round 70 accepted unanimously by Devin, Cursor, and OMP Gemini 3.5 with no blocker. Review confirms deletion-first scope, systemd's pre-ExecStartPre namespace failure mechanism, absence of any stale-path producer, canonical verifier socket/storage isolation retained, exact Nix/deploy evidence, and effects OFF. Fresh retained boot and public receipt remain deployed gates; other required `InaccessiblePaths` are residual drift risk."
+    verification: "Main a7f497ab2d7ec691d816e936ffa7f0748bf24f57 passed CI/deploy run 29819487195 and public health binds both commit fields. Retained recovery reached active epoch 1340. Public API returned a fresh Ed25519-verified KernelCapabilityReceipt, and the public CLI exited 0 with receipt 019f8424-8dc7-7c48-b959-8f2a76d9b5d5 bound to exact ComputerID, realization, ComputerVersion, guest image/config/release/probe digests, signer identity, cgroup2, and all ten mandatory capabilities supported+enforced. Mode remains OFF generation 0; scoped keys were revoked."
+    disposition: "Round 70 repairs the updater namespace setup defect and completes C's first deployed capability acceptance. Exact a7f497ab is frozen as candidate R1. Before D, the same immutable SHA must rebuild/redeploy, reproduce health and a fresh verified receipt for the same ComputerID, and independently pass certificate-only route refusal."
     g1_round_70_probe:
       reviewed_at: 2026-07-21T09:43:56Z
       source_ref: f84305848d3a9bfcbcf23db5ab865829afd46ad9
@@ -1606,22 +1621,22 @@ now:
     g1_acceptance: "Devin and OMP Gemini 3.5 accepted Round 69 with no blocker; Cursor timed out empty. Deployed proof closed both named mount-namespace and liveness gates."
   c_deploy_failure_25:
     observed_at: 2026-07-21T09:32:26Z
-    status: accepted_G1
+    status: deployed_repaired_R1_rehearsal_pending
     mutation_class: red
     protected_surfaces: [updater_systemd_namespace, verifier_signer_isolation, updater_unit_entry, deployed_acceptance]
     admissible_evidence_class: "Public signer-live/updater-not-entered discriminator, exact Nix unit graph, focused source-level evaluation, exact Node A closure, independent G1, and one deployed request."
     success_before_blocker: "The process-lifetime lease proves the guest-core signer is live in Serve and that advisory locking remains visible across service mount namespaces."
-    evidence: "Updater `InaccessiblePaths` names both canonical `/run/choir-verifier` and stale `/run/choir-signers/verifier`. No tmpfiles rule or service creates the stale path. Systemd establishes namespace paths before ExecStartPre, matching the public absence of `/run/choir/updater-unit-entered`."
-    problem: "A stale nonexistent isolation path can prevent updater namespace setup before its first command. The adjacent canonical entry already masks the real verifier authority socket directory."
+    evidence: "Main a7f497ab passed CI/deploy run 29819487195. Retained recovery advanced failed epoch 1332 to active epoch 1340. The public API returned HTTP 200 in 2057 ms with a fresh signed receipt; the public CLI independently exited 0 with receipt 019f8424-8dc7-7c48-b959-8f2a76d9b5d5. All mandatory capabilities are supported+enforced and exact immutable digests/identities verify."
+    problem: "Repaired: deleting the one nonexistent namespace path allows updater command entry and its complete signed signer→updater→sandbox receipt path."
     substrate_vs_symptom: "Substrate configuration defect in the updater systemd security boundary, not a signer, updater client, lifecycle, or retry symptom."
-    existing_replacement_check: "Candidate f8430584 deletes only the stale list element and retains canonical `/run/choir-verifier`; it adds no path, retry, daemon, or projection."
-    rollback: "Candidate branch only; preserve main/deployed 91c25300, retained ComputerID/data/key/receipts through epoch 1331, R0/R1, and mode OFF. Revert f8430584 before landing or its eventual main landing commit."
-    next_action: "Land accepted deletion, pass CI/deploy identity, preserve retained state and mode OFF, then request one fresh retained boot and public kernel receipt."
-    conjecture_delta: "The missing updater command entry is explained by a concrete namespace-path defect. A successful kernel receipt after repair would confirm the full signer→updater join."
+    existing_replacement_check: "Main a7f497ab retains canonical `/run/choir-verifier` and all other masks; no alternate path or monitor was added."
+    rollback: "Before genesis, frozen R0 remains admissible. Preserve R1 candidate a7f497ab, retained ComputerID/data/key/receipts at epoch 1340, and mode OFF during same-SHA rehearsal."
+    next_action: "Rehearse exact a7f497ab immutable deployment and certificate-only route refusal; retrieve a second fresh verified receipt for the same ComputerID before freezing R1 accepted."
+    conjecture_delta: "Confirmed: the nonexistent namespace path was the updater entry blocker. A complete signed immutable-image kernel receipt now succeeds end to end."
     heresy_delta: {discovered: 19, introduced: 2, repaired: 7}
-    candidate: "f84305848d3a9bfcbcf23db5ab865829afd46ad9 deletes only stale `/run/choir-signers/verifier` while retaining canonical `/run/choir-verifier`."
-    candidate_verification: "Local/Node A exact Nix evaluation, deploy-impact classification, and exact closure `/nix/store/58q70h5ns05jihc0mb0a95hpyh71aq92-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d` pass."
-    g1_acceptance: "Devin, Cursor, and OMP Gemini 3.5 unanimously accepted Round 70 with no blocker. Fresh guest boot/updater marker/socket/public receipt remain deployed-only gates."
+    candidate: "f84305848d3a9bfcbcf23db5ab865829afd46ad9 landed in exact deployed security-floor candidate a7f497ab2d7ec691d816e936ffa7f0748bf24f57."
+    candidate_verification: "CI/deploy, active retained recovery, public API and CLI signed receipt verification, exact immutable identity/digests, all ten mandatory capabilities, mode OFF, and credential revocation pass."
+    g1_acceptance: "Devin, Cursor, and OMP Gemini 3.5 unanimously accepted Round 70 with no blocker. Deployed updater entry and public receipt close its final gates."
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
