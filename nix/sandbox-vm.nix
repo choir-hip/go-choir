@@ -565,7 +565,7 @@ EOF
       ProtectSystem = "strict";
       ProtectControlGroups = true;
       ReadWritePaths = [ "/mnt/persistent/choir-updater" "/run/choir" "/run/choir-updater-control" ];
-      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-signers/verifier" "/run/choir-verifier" "/mnt/persistent/choir-credentials" "/run/choir-bootstrap" "/run/choir-runtime-handoff" "/run/go-choir-sandbox.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers" "/run/choir-verifier" "/mnt/persistent/choir-credentials" "/run/choir-bootstrap" "/run/choir-runtime-handoff" "/run/go-choir-sandbox.env" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
       RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" ];
       LockPersonality = true;
       RestrictSUIDSGID = true;
