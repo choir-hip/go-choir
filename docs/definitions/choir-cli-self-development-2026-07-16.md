@@ -587,15 +587,15 @@ now:
       disposition: "All mandatory immutable-image capabilities are positive; no kernel/NixOS/Firecracker repair is indicated. The current public computer status proves a served immutable ComputerVersion but does not bind its running guest to a kernel/config digest. That known observability gap is B work and a hard C-before-D check, not an impossible pre-target G0 requirement."
   candidate:
     id: self-development-C-signer-serve-exit-round-68
-    state: accepted_G1
+    state: deployed_no_serve_return_liveness_ambiguous
     ref: 2c1c5c7524c4b624b100053069942ca90725c80d
     owner: integration-authority
     base: 0e84bb8d46473645bb32552cb69ab609a32a2797
     scope: "Protected signer-owned no-SSH Serve-return diagnostic only. If and only if `http.Server.Serve` returns, guest-core signer atomically replaces `socket-listening` with one closed terminal milestone: `serve-returned-closed`, `-permission`, `-invalid`, `-resource`, or `-unknown`, then preserves existing exit handling. If the process is externally terminated, status remains `socket-listening`. Updater maps terminal values only after all prior migration/key/stage gates. Preserve status namespace, verifier signer, key/receipt bytes and identity, service dependencies/restart, raw-error secrecy, HTTP 503, lifecycle/route, and effects OFF."
     prior_candidates: [7d635330bf14bd8be505291c6a9d807264650afe, 8bad0a25aa4dc4d4e5fc4ce1a60314a0721f1135, f9cc324633fc64a40c407aa8abd328f9b257127a, 5ae5b6106bf60610b2404e4b1b1f5f26865c337e, 32b315971dc4939ccf8499d7740336300d5da81a, fb0e56e33de17fbf7cf7326b345fa701d6a241a3, 153c68668a8b16f47ff5fba17a983d2d37339cbb, 18e4f9dbfb37eb7d518103a8315542bc11f02f92, ae881720132809d6d6092b4a739e43a311489000, d5f3b4778439bb71745e951712a229993300d51d, 8b258d3bf7f75ffae1657c5cdef9272c5d21bc7c, 00d25827e249ec9d59052b5b3e5a28eaf546b662, f5d5a76dd9aebc9672da08a40e93c4e359788f36, 2fdd63f9078a8c6400d1852c693603e382c52bb6, 5a922b2bdf7ff676ed14c0cf0c6581c7933542c8, ab8d8791e0fc6c0a9e6dfd3ad2503c294e1e0cbe, 7365376aced9c633aa3a993feceee1f1e150b66e, fe5b854f9c73356fe51fe2b5f53e4d9a60e4117, 4bebd0eb597137b906035823f801055625b12492f, 2955ec8642839982d12a08a39f045b8b887b468a, e6599f44fb24b1203f7d5e1b4a02dbc4dd25922d, 654b3a9b009f9b1964a0f0db8ece9164bf46b85f, 30ad6955d038ae1231e2b2ca59a9855af3909117, fa7dc942bf1444110f9737bdff97535bc3ec4a5f, 2876c8299e6a87a095ce8b0ee9e0187367047792, 009068f6c4f8eac2275610e2eb1118a5a7f39676, d3282d8af478ceac5990c0cf2a467ff19527b046, 3a5ae4cdd90d4c12317e24401b639373c44bb9f3, 772219bde69f024cd43dd059e44a92d36b409a91, a7964034b79f0f4ad492076e9e1c2f7da57da6e2, 29d5e12e90f03cc24e4eb0a56a35f17236414adc, ad89165c69ed5b33a971d225861716b7c67d81a, 13eb85e8c98bdbbc4fbe794b2525dd5a0920e436, 72f358f86407a10c3b93bfc56739270d4fc47a29, 105949f78858b17bcfad863213feb191699a535f, 5879d5dd3109a708244ed1b7decccf1f19b859a, 0d61fef0d2e138ea4223b0f982c1718629642449, 12e42fa9b6353b2af8ab8bec186476324956f434, 0cfdce7f87ce257fda7f37e6ad1fe9b259e22d9, 9fc68e64067aa8f1251a7a924472b65310bc22b4, 3050bb407a85a366cfc5c22e5bd62f93f2fe60e, 5f2e29be6790d476e55182f3121a11b66aa2c985f, 350475f2afd1e755c89128891a272ecbc00abcd, ca4774f8362970ed7230b91b52d30e54c72a3fc3, f621df381881d6513ec2d6b2a5b1cf7dd6c255af, a3477b8739275fc7097b49d4014ff43415c494e4, b1e580472c99b01aa826e337c6411656dbba99a5, 83bc416629775d0ad5080324c3b62c2ad1a580d7]
     immediate_predecessors: [3e54535f2ea1e428ae0e19523c3c13430dffec1c, 0e84bb8d46473645bb32552cb69ab609a32a2797, c87e3d952fd3b56264031128cd8c4f3e2bd2361d]
-    verification: "Round 67's focused/full races, public typed-response test, runtime shards, exhaustive classification, and public mapping pass. Round 68 adds focused `ServeExitIsFailure` tests proving nil/direct+wrapped ErrServerClosed preserve success while net.ErrClosed/unknown preserve failure. Terminal status write is now best-effort and cannot replace Serve's exit; pre-Serve milestone writes remain fail-closed. Node A x86_64-linux passes receipt-signer race and builds exact closure `/nix/store/1pi7jy38092kyx0h69sfssi5ybggsdcj-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d`, then returns clean to main."
-    disposition: "Round 68 accepted by two substantive independent reviewers (Cursor and OMP Gemini 3.5) with no blocker; Devin timed out empty. Review confirms exact exit equivalence, errors.Is handling, non-fatal terminal publication, pre-Serve fail-closed behavior, unchanged public gates/secrecy, unchanged Nix/systemd, and effects OFF. Missing terminal write and deployed cold-boot discrimination remain explicit residuals."
+    verification: "Local/Node A/G1 evidence passed. Main a2e74539c046f6f4819350ccdc0d9812e5eb5c56 passed CI/deploy run 29812520965; public health binds both commit fields. Retained recovery crossed epochs 1312→1318 without identity/data replacement. The stable authenticated request returned HTTP 503 `guest_signer_stopped_after_socket_listen` in 7137 ms; no `serve-returned-*` terminal was published. Mode remains OFF generation 0."
+    disposition: "Round 68 proves no terminal Serve-return class was durably published. This refutes an observed returned error but does not prove external termination: terminal publication can fail best-effort, and `socket-listening` does not say whether the signer still holds the listener. A non-content liveness lease is required before selecting between live signer/updater scheduling and dead signer."
     g1_round_68_probe:
       reviewed_at: 2026-07-21T07:58:14Z
       source_ref: 2c1c5c7524c4b624b100053069942ca90725c80d
@@ -1543,18 +1543,18 @@ now:
     repair_verification: "Candidate 94099118874192c4561112ceba7fced477a24818 evaluates exact tmpfiles, signer ReadWritePaths, unchanged sandbox InaccessiblePaths, and builds `/nix/store/ya2c5jz2ik8hzwyb8qs6p8am3fshnqmc-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d` on Node A."
   c_deploy_failure_22:
     observed_at: 2026-07-21T07:09:36Z
-    status: accepted_G1_round_68_pending_land
+    status: deployed_no_serve_return_liveness_ambiguous
     mutation_class: red
     protected_surfaces: [guest_receipt_signer_serve_loop, systemd_guest_signer, updater_dependency, deployed_acceptance]
     admissible_evidence_class: "Signer-owned closed post-listen terminal class, focused classification tests, exact Node A closure, independent G1, and one deployed no-SSH discriminator."
-    success_before_blocker: "Round 66's dedicated namespace worked on the exact staging guest and repaired the Round 64 semantic overclaim without exposing signer secrets."
-    evidence: "The exact current-boot milestone is `socket-listening`. In command order this occurs only after successful complete config, key load, handler setup/state-root creation, socket directory creation, `net.Listen`, and mode-0660 chmod, immediately before `http.Server.Serve`. Updater's unit-entry marker remains absent, so its ordered start was canceled by signer activation failure."
-    problem: "The remaining failure occurs after socket listen but before the signer remains active long enough for updater ExecStartPre. No admissible public evidence distinguishes a returned Serve/Accept error from external termination."
-    existing_replacement_check: "Use the signer process's existing direct observation of `server.Serve` return. Do not add journal/systemd parsing, SSH, raw error transport, dependency retries, timeout changes, or a second monitor."
-    rollback: "Preserve main 3e54535f, retained identity/data/key/history, R0/R1, and mode OFF. Any diagnostic must remain boot-local and removable."
-    next_action: "Classify only returned Serve errors into an allowlist and publish one terminal stage before existing exit handling. If no terminal stage appears, external termination remains. Freeze G1 before deployment."
-    conjecture_delta: "Serve/Accept error and external termination are the final observed branch. A closed terminal stage can separate them without revealing error text."
-    heresy_delta: {discovered: 17, introduced: 2, repaired: 6}
+    success_before_blocker: "Main a2e74539c046f6f4819350ccdc0d9812e5eb5c56 passed CI/deploy run 29812520965; public health binds both fields. Retained identity/data/key/history survived epochs 1312→1318; effects remain OFF generation 0."
+    evidence: "The stable epoch-1318 request returned HTTP 503 in 7137 ms with `guest_signer_stopped_after_socket_listen`, not any `guest_signer_serve_returned_*` class. Thus no terminal status was durably published. All pre-Serve milestones remain proven."
+    problem: "The status cannot distinguish a still-live signer blocked in Serve from a dead signer whose terminal write never occurred or failed. Calling it `stopped` remains diagnostic shorthand, not observed liveness."
+    existing_replacement_check: "Use an empty boot-local advisory lock held by the signer process for its lifetime and probed nonblocking by the existing root sandbox client. No PID/content, signal, process scan, systemd/log access, or socket-directory access is needed."
+    rollback: "Preserve main a2e74539, retained ComputerID/data/key/receipts through epoch 1318, R0/R1, revoked/expiring scoped-key metadata, and mode OFF. Future lease diagnostic remains removable boot-local state."
+    next_action: "Add one empty mode-0600 signer-owned lease file beside startup status, hold an exclusive advisory lock for process lifetime, and have the client map locked/unlocked only when stage is `socket-listening`. Missing/error/unknown remains generic. Focused cross-process tests, exact Node A closure, G1, then one stable request."
+    conjecture_delta: "A returned Serve error is not observed. The remaining branch is live signer with updater scheduling/entry failure versus dead signer/external termination or failed terminal publication."
+    heresy_delta: {discovered: 18, introduced: 2, repaired: 6}
     candidate: "2c1c5c7524c4b624b100053069942ca90725c80d adds five closed signer-owned Serve return classes and preserves original exit handling when terminal publication fails or ErrServerClosed is wrapped."
     candidate_verification: "Focused/full races, public typed-response test, runtime shards, exhaustive wrapped-error/exit-semantics classification, and exact Node A closure `/nix/store/1pi7jy38092kyx0h69sfssi5ybggsdcj-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d` pass."
     candidate_rollback: "Revert 2c1c5c7524c4b624b100053069942ca90725c80d before landing or its eventual main landing commit; retain deployed 3e54535f, key/history/identity/data, R0/R1, and mode OFF."
@@ -1573,6 +1573,20 @@ now:
     conjecture_delta: "No staging source conjecture changed. This is a candidate instrumentation side effect caught before landing."
     heresy_delta: {discovered: 18, introduced: 2, repaired: 6}
     repair_verification: "Candidate 2c1c5c7524c4b624b100053069942ca90725c80d preserves pre-Serve fail-closed milestones, cannot let terminal write failure alter Serve exit, treats wrapped ErrServerClosed like the original sentinel, and builds exact Node A closure."
+  c_deploy_failure_24:
+    observed_at: 2026-07-21T08:28:04Z
+    status: documented_pending_liveness_diagnosis
+    mutation_class: red
+    protected_surfaces: [guest_signer_liveness, updater_unit_entry, systemd_dependency_join, deployed_acceptance]
+    admissible_evidence_class: "Content-free signer-owned advisory lease, cross-process lock tests, exact Node A closure, independent G1, and one deployed no-SSH discriminator."
+    success_before_blocker: "Round 68 safely distinguished returned Serve errors from the unchanged socket-listening stage and preserved signer exit semantics."
+    evidence: "No terminal Serve-return class appeared in the exact deployed guest. The same `socket-listening` file can remain while the signer is alive in Serve or after process death/terminal-write failure. The updater entry marker is absent in either case."
+    problem: "No current public evidence establishes signer process liveness at classification time, so neither signer death nor updater scheduling failure may be selected."
+    existing_replacement_check: "A POSIX advisory lock already releases automatically on process exit and requires no new daemon/store/content. Place an empty lease in the existing non-secret signer-status directory; keep all current status and socket isolation."
+    rollback: "Preserve main a2e74539, retained identity/data/key/history, R0/R1, and mode OFF. Revert only the lease diagnostic if rejected."
+    next_action: "Implement and test a process-lifetime exclusive lease plus nonblocking read probe; refreeze through G1 before deployment."
+    conjecture_delta: "Live signer versus dead signer is the last unresolved join before source repair."
+    heresy_delta: {discovered: 18, introduced: 2, repaired: 6}
   dead_end_assessment:
     trigger: "Nine G1 source candidates over two days; every accepted local repair exposed another cross-layer mirror or unexercised Linux transition."
     dependency_graph: "Public CLI → proxy ownership/mode/idempotency → guest API/start-intent/event appender → operation store/run → capsule broker namespaces/socket/capability → verifier/decision event → recovery reconciler/materializer/updater → checkpoint/route. Current docs/skills independently describe portions of that graph."
