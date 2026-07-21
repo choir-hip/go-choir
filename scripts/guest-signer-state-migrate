@@ -1,0 +1,53 @@
+set -euo pipefail
+
+if [ "$#" -ne 3 ]; then
+  echo "usage: guest-signer-state-migrate ROOT OWNER GROUP" >&2
+  exit 2
+fi
+
+root="$1"
+owner="$2"
+group="$3"
+
+case "$root" in
+  /*) ;;
+  *)
+    echo "guest-signer-state-migrate: absolute root is required" >&2
+    exit 2
+    ;;
+esac
+
+if [ -L "$root" ]; then
+  echo "guest-signer-state-migrate: root must not be a symlink" >&2
+  exit 1
+fi
+
+install -d -m 0700 -o "$owner" -g "$group" "$root"
+
+key="$root/key.ed25519"
+if [ -e "$key" ] || [ -L "$key" ]; then
+  if [ -L "$key" ] || [ ! -f "$key" ]; then
+    echo "guest-signer-state-migrate: key must be a regular file" >&2
+    exit 1
+  fi
+  chown -h "$owner:$group" "$key"
+  chmod 0600 "$key"
+fi
+
+receipts="$root/receipts"
+if [ -e "$receipts" ] || [ -L "$receipts" ]; then
+  if [ -L "$receipts" ] || [ ! -d "$receipts" ]; then
+    echo "guest-signer-state-migrate: receipts must be a directory" >&2
+    exit 1
+  fi
+  if [ -n "$(find "$receipts" -xdev -type l -print -quit)" ]; then
+    echo "guest-signer-state-migrate: receipt symlinks are forbidden" >&2
+    exit 1
+  fi
+  if [ -n "$(find "$receipts" -xdev ! -type d ! -type f -print -quit)" ]; then
+    echo "guest-signer-state-migrate: receipt entries must be regular files or directories" >&2
+    exit 1
+  fi
+  find "$receipts" -xdev -type d -exec chown -h "$owner:$group" {} + -exec chmod 0700 {} +
+  find "$receipts" -xdev -type f -exec chown -h "$owner:$group" {} + -exec chmod 0600 {} +
+fi

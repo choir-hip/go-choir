@@ -40,6 +40,12 @@ let
     kernel=${config.boot.kernelPackages.kernel}
     kernel_config=${config.boot.kernelPackages.kernel.configfile}
   '';
+  guestSignerStateMigration = pkgs.writeShellApplication {
+    name = "choir-guest-signer-state-migrate";
+    runtimeInputs = [ pkgs.coreutils pkgs.findutils ];
+    text = builtins.readFile ../scripts/guest-signer-state-migrate;
+  };
+
 
 
   sandboxRuntimeExec = pkgs.writeShellScript "go-choir-run-sandbox-runtime" ''
@@ -389,11 +395,35 @@ EOF
     };
   };
 
+  systemd.services.go-choir-guest-receipt-signer-state-migration = {
+    description = "Normalize retained guest-core signer state ownership";
+    before = [ "go-choir-guest-receipt-signer.service" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "root";
+      Group = "root";
+      ExecStart = "${guestSignerStateMigration}/bin/choir-guest-signer-state-migrate /mnt/persistent/choir-signers/guest-core choir-guest-signer choir-guest-signer";
+      UMask = "0077";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      PrivateDevices = true;
+      ReadWritePaths = [ "/mnt/persistent/choir-signers/guest-core" ];
+      InaccessiblePaths = [ "/mnt/persistent/choir-signers/verifier" "/mnt/persistent/choir-updater" "/mnt/persistent/choir-credentials" "/run/choir-signers" "/run/choir-verifier" "/run/choir-updater-control" "/run/choir-runtime-handoff" "/run/choir-bootstrap" "/run/systemd/private" "/run/dbus/system_bus_socket" ];
+      RestrictAddressFamilies = [ "AF_UNIX" ];
+      LockPersonality = true;
+      RestrictSUIDSGID = true;
+      SystemCallFilter = [ "~@debug" ];
+    };
+  };
+
   systemd.services.go-choir-guest-receipt-signer = {
     description = "Isolated guest-core receipt signer";
     wantedBy = [ "multi-user.target" ];
-    after = [ "go-choir-extract-cmdline.service" ];
-    requires = [ "go-choir-extract-cmdline.service" ];
+    after = [ "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer-state-migration.service" ];
+    requires = [ "go-choir-extract-cmdline.service" "go-choir-guest-receipt-signer-state-migration.service" ];
     serviceConfig = {
       Type = "simple";
       User = "choir-guest-signer";
