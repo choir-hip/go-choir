@@ -375,8 +375,16 @@ orchestration:
 
 now:
   status: working
-  slice: "C-repair-genesis-authority-configuration"
-  question: "Can the immutable guest final-exec wrapper bind the accepted G0 freeze digest, final G1 panel digest, and exact G1 candidate ref after all mutable environment sources, then re-freeze and re-prove R1 before any GenesisImported call?"
+  slice: "C-freeze-round72-signed-activation"
+  question: "Does frozen candidate 838a518917fa548e527e9138cfa75b6da3c51872 completely close the mutable execution-authority bypass and pass independent G1 before any landing or deployed effect?"
+  round72_candidate:
+    status: frozen_pending_independent_G1
+    source_ref: 838a518917fa548e527e9138cfa75b6da3c51872
+    immutable_closure: /nix/store/0inxys1jym8q8dd3j0f3v6373kdh5skl-nixos-system-go-choir-sandbox-26.05.20260409.4c1018d
+    guest_image: /nix/store/vxb9nchq9jhqqnyfdmmrdb80vzw6sw59-go-choir-guest-image
+    exact_guest_proof: "Node A disposable Firecracker run `round72proof2` passed in 14.721s. Fresh immutable boot served build 838a518917fa548e527e9138cfa75b6da3c51872, kept effects OFF with start refusal 409, admitted the kernel probe, and refused public kernel receipt before route identity (503). After planting an unauthenticated persistent `current` symlink and reconstructing as epoch 2, the guest again served immutable build 838a518917fa548e527e9138cfa75b6da3c51872 and logged `unsigned_current=refused`."
+    rollback: "Effects OFF and no GenesisImported. Revert candidate to deployed 832ae951 or R0 a7f497ab; all disposable Node A VM/data identities were destroyed."
+    next_action: "Rerun final focused/runtime suites against the frozen ref, then obtain independent G1 review of source diff, exact Linux receipt, negative authority inventory, and rollback refs."
   r1_security_floor:
     frozen_at: 2026-07-21T12:17:44Z
     status: rejected_R1_dynamic_release_authority_bypass
@@ -1732,17 +1740,19 @@ now:
     heresy_delta: {discovered: 24, introduced: 2, repaired: 10}
   d_entry_failure_6:
     observed_at: 2026-07-21T18:12:00Z
-    status: documented_pending_source_repair
+    status: documented_and_repaired_in_candidate
     mutation_class: red
     protected_surfaces: [exact_guest_boot, immutable_baseline_exec, updater_admission]
     evidence: "After the credential-path repair, exact fresh Firecracker boots no longer reported signer migration or dependency failure, but four disposable runs still timed out after 120 seconds with TCP connection refused at the guest health endpoint `10.200.1.2:8085`. Serial boot reached the login prompt and reported no failed unit, so the stale-current reconstruction assertion still did not execute."
-    problem: "The immutable guest reaches multi-user boot after signer initialization but the agent runtime never binds its health port; current serial evidence does not distinguish a restart loop, skipped service, or launcher/admission failure."
-    substrate_vs_symptom: "Immutable launcher/systemd/updater startup join; not yet classified below that boundary."
+    problem: "The immutable guest reached multi-user boot after signer initialization but the agent runtime never bound its health port."
+    substrate_vs_symptom: "Immutable launcher/updater admission retry contract."
     existing_replacement_check: "The signed launcher, updater admission endpoint, and static baseline fallback are the intended replacement and are wired. No alternative launch path is authorized."
     rollback: "Rejected disposable Firecracker identities were destroyed; Node A returned to clean main; no deployed or retained product state changed."
-    next_action: "Emit bounded systemd status and recent journal for the launcher, updater, and required signer units to the serial console on failed readiness; classify and repair the exact startup transition without bypassing signed admission."
-    conjecture_delta: "Eliminating unit dependency failure is not proof that the immutable launcher reached static exec or that its required updater endpoint was ready."
-    heresy_delta: {discovered: 25, introduced: 2, repaired: 10}
+    resolution: "Debug systemd boot proved updater and signer units healthy and the immutable wrapper running. Its curl used `--fail --retry-all-errors`; the expected pre-genesis 404 `no authorized dynamic release` became a retryable error and consumed the entire 120-second harness window. Candidate 838a518917fa548e527e9138cfa75b6da3c51872 retries connection failures and transient HTTP failures but treats 404 as the immediate safe static-baseline fallback."
+    acceptance: "Exact guest `round72proof2` reached build 838a518917fa548e527e9138cfa75b6da3c51872, then reconstructed on the same data disk after an unsigned current was planted and again served the immutable build; `TestSelfDevelopmentEffectsOffGuestHarness` passed in 14.721 seconds."
+    next_action: "Freeze final source/test receipts and submit candidate 838a518917fa548e527e9138cfa75b6da3c51872 to independent G1."
+    conjecture_delta: "A semantically expected 404 must not share retry policy with transport or transient server failure. Safe immutable fallback must be prompt enough to be observable as a product transition."
+    heresy_delta: {discovered: 25, introduced: 2, repaired: 11}
   dynamic_execution_authority_decision:
     status: settled
     source: owner
