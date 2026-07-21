@@ -53,7 +53,7 @@ documents:
     is_root: [entry]
     is_evidence: false
     annotations: {doc_role: active_work_navigation, authority: derived_support, lifecycle: living}
-    witnesses: [docs/mission-graph.yaml, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-seam-repair-2026-07-10.md]
+    witnesses: [docs/mission-graph.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/definitions/choir-autoputer-completion-2026-07-14.md, docs/definitions/og-dolt-heresy-completion-2026-07-08.md, docs/definitions/choir-seam-repair-2026-07-10.md]
     refresh_triggers: [active_definition_change, mission_graph_change]
 
   - path: docs/current-architecture.md
@@ -261,20 +261,30 @@ documents:
     refresh_triggers: []
 
   - path: docs/definitions/choir-cli-self-development-2026-07-16.md
+    claim_scope: historical
+    is_root: []
+    is_evidence: true
+    annotations: {doc_role: definition, authority: superseded_incomplete_mission_evidence, lifecycle: superseded, entrypoint: false}
+    superseded_by: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
+    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/evidence/audited-construction-terminal-receipt-2026-07-17.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md]
+    refresh_triggers: []
+
+  - path: docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
     claim_scope: current
     is_root: [authority, entry]
     is_evidence: false
     annotations: {doc_role: definition, authority: active_product_mission, lifecycle: active, entrypoint: true}
-    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/evidence/audited-construction-terminal-receipt-2026-07-17.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md]
-    refresh_triggers: [mission_state_change, computer_event_authority_change, capsule_role_cutover, trajectory_audit_change, guest_materialization_change, staging_acceptance]
+    supersedes: [docs/definitions/choir-cli-self-development-2026-07-16.md]
+    witnesses: [docs/mission-graph.yaml, docs/ACTIVE.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/definitions/choir-audited-autoputer-construction-2026-07-15.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
+    refresh_triggers: [mission_state_change, active_definition_change, deployment_identity_change, durable_actor_delivery_change, artifact_lifecycle_change, trajectory_settlement_change, Texture_public_protocol_change, staging_acceptance]
 
   - path: docs/definitions/choir-in-choir-computer-control-draft-2026-07-18.md
     claim_scope: current
     is_root: []
     is_evidence: false
     annotations: {doc_role: definition_draft, authority: non_executable_successor_draft, lifecycle: blocked, entrypoint: false}
-    witnesses: [docs/definitions/choir-cli-self-development-2026-07-16.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
-    refresh_triggers: [self_development_completion, capsule_cutover, trajectory_event_authority, cross_computer_grant_decision, registry_promotion]
+    witnesses: [docs/definitions/choir-coherent-computer-convergence-2026-07-21.md, docs/definitions/choir-cli-self-development-2026-07-16.md, docs/mission-graph.yaml, docs/ACTIVE.md, docs/standing-questions.md, docs/computer-ontology.md, docs/agent-product-doctrine.md, docs/choir-doctrine.md]
+    refresh_triggers: [durable_work_kernel_completion, capsule_cutover, trajectory_event_authority, cross_computer_grant_decision, registry_promotion]
 
   - path: docs/definitions/choir-computerversion-performance-optimization-draft-2026-07-15.md
     claim_scope: current

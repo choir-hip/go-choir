@@ -48,11 +48,11 @@ model-checked in CI, and heresies trend toward detectors that fail CI on
 regression. This document trends toward thesis + invariants + pointers. The
 mission form for long-running work is now `skills/definition/SKILL.md`
 (`/goal <doc>.md`). The audited-construction Definition completed on 2026-07-17
-and is retained as historical evidence. The owner-ratified active
-[self-development Definition](definitions/choir-cli-self-development-2026-07-16.md)
-is the sole executable product Definition; every other successor remains
-non-executable until separately owner-ratified and promoted through every
-registry.
+and the self-development Definition was owner-superseded incomplete on
+2026-07-21; both remain historical evidence. The owner-ratified active
+[durable-computer convergence Definition](definitions/choir-coherent-computer-convergence-2026-07-21.md)
+is the sole executable product Definition. Every other successor remains
+non-executable until separately owner-ratified and promoted through every registry.
 OG/Dolt supplies subordinate requirements and evidence only; it owns no
 sequencing, mutation, resumption, completion, or escalation.
 A heresy entry below without a CI detector is a heresy entry that is not yet done being

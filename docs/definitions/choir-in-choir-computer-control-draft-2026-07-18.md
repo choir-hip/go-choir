@@ -21,8 +21,8 @@ start:
       class: goal_candidate
       owner: owner-and-current-session
       touch: goal_owned
-      paths_or_digest: "this draft, the active self-development Definition, and the three Definition registries"
-      recovery: "Docs-only rollback removes this draft and its registry entries while restoring the prior active Definition text."
+      paths_or_digest: "this draft, the then-active self-development Definition, and the three Definition registries"
+      recovery: "Historical authoring receipt only; current registry authority is owned by the convergence Definition."
   candidates:
     - id: none
       ref: none
@@ -82,7 +82,7 @@ finish:
 
 activation_requirements:
   executable_only_after:
-    - "The active self-development Definition proves super has no bash, cosuper effects are capsule-scoped, researchers remain VM-local with typed concurrent Dolt writes, trajectories/effects are durably audited, and candidate VMs are absent from the self-development path."
+    - "The active convergence Definition proves one generic durable-work lifecycle with restart reconstruction, typed updates, reducer-owned settlement/cancellation, and equivalent public UI/headless observation. A later effect mission must separately prove capsule-scoped authority before this draft can execute effectful remote control."
     - "The public CLI/API exposes the target-local lifecycle, run, trajectory, refusal, and receipt semantics required here without raw vmctl or internal routes."
     - "The ComputerControlGrant authority, secret-delivery boundary, recursion policy, first two-computer target, rollback, and evidence floor are owner-ratified."
     - "All three registries promote one reconciled successor as the sole executable /goal. This draft is never invoked directly."
@@ -150,14 +150,14 @@ orchestration:
 now:
   status: blocked_incomplete
   slice: "non-executable successor draft"
-  question: "After capsule-based self-development lands, what exact target-bound grant and computer-addressing contract gives a cosuper useful control without granting owner-wide or transitive authority?"
+  question: "After the generic durable-work kernel and a separately authorized effect boundary are deployed, what exact target-bound grant and computer-addressing contract gives one computer useful control without owner-wide or transitive authority?"
   reconciliation:
-    observed_at: 2026-07-18T18:43:30Z
-    source_ref: refs/heads/main@6738abdbe30b6b19a6b572e42801f6c810102304_equals_refs/remotes/origin/main@6738abdbe30b6b19a6b572e42801f6c810102304
-    deploy_identity: "choir.news /health proxy commit 2bc1799f72ce437b35d4606a23d14e62b7239ac5; no successor behavior claimed"
-    authority_identities: [owner_decision:2026-07-18-choir-in-choir-after-self-development, predecessor:docs/definitions/choir-cli-self-development-2026-07-16.md@working]
-    policy_resolution_ref: "owner-selected future: cosupers use choir CLI from scoped capsules to control other Choir computers"
-    worktree_inventory_ref: "clean canonical main equal origin/main before this docs-only Definition boundary"
+    observed_at: 2026-07-21T19:41:58Z
+    source_ref: refs/remotes/origin/main@7913a3da0343ee03cf32b7622aaf9f2de35ee887
+    deploy_identity: "Node B staging host and active guests reported 832ae951e84400a54bd7f8ef52a312e872b5c3ef; no successor behavior claimed"
+    authority_identities: [owner_decision:2026-07-18-choir-in-choir-draft, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
+    policy_resolution_ref: "Blocked hypothesis only; no implementation policy selected"
+    worktree_inventory_ref: "Active convergence Definition start.worktree_inventory"
     status: reconciled
   candidate:
     id: choir-in-choir-computer-control-draft-2026-07-18
@@ -175,10 +175,10 @@ now:
     evidence_ref: "Owner statement in this 2026-07-18 conversation"
     owner_ratification_ref: "Owner statement in this 2026-07-18 conversation"
     recorded_at: 2026-07-18T18:43:30Z
-    consequence: "Register this as a non-executable successor and align the active self-development Definition toward the capsule/event/CLI substrate it requires. No successor implementation is authorized."
+    consequence: "Historical 2026-07-18 decision: register this as a non-executable successor and align the then-active self-development Definition toward the capsule/event/CLI substrate it required. The 2026-07-21 supersession keeps this topology as a hypothesis and authorizes no implementation."
   evidence_refs: [cmd/choir/main.go, internal/capsule/roles.go, internal/agentcore/tools_capsule.go, docs/computer-ontology.md, docs/choir-doctrine.md]
-  blocker_or_risk: "The predecessor capsule/event cutover is not implemented or accepted, and the exact cross-computer grant/addressing contract is intentionally unresolved."
-  next_action: "Complete the active capsule-based self-development Definition, then reconcile this draft against deployed CLI, capsule, trajectory, and authority evidence before owner ratification and registry promotion."
+  blocker_or_risk: "The generic durable-work kernel is not deployed or accepted; self-development effects remain OFF; the exact cross-computer grant/addressing contract is intentionally unresolved."
+  next_action: "Keep this draft blocked. After the active convergence Definition completes, reconcile it against deployed durable-work, CLI, capsule, trajectory, and authority evidence before separate owner ratification and registry promotion."
 
 successor:
   status: none_selected
@@ -192,4 +192,4 @@ view:
 
 # DRAFT — Choir-in-Choir Computer Control
 
-Future Choir-in-Choir begins only after one computer can develop itself honestly. A cosuper on computer A then uses the supported `choir` CLI from a scoped capsule to send authorized intent to computer B. Computer B remains sovereign: it authenticates the grant, records the trajectory, runs its own agents and capsules, and returns durable receipts. Neither computer receives host authority, raw vmctl, SSH, a candidate VM, or the other's owner-wide credentials.
+Future Choir-in-Choir begins only after Choir has one accepted durable-work kernel and a separately authorized effect boundary. A cosuper on computer A may then use the supported `choir` CLI from a scoped capsule to send authorized intent to computer B. Computer B remains sovereign: it authenticates the grant, records the trajectory, runs its own agents and capsules, and returns durable receipts. Neither computer receives host authority, raw vmctl, SSH, a candidate VM, or the other's owner-wide credentials.

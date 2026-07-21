@@ -5,22 +5,28 @@ corpus and does not make an unverified graph status into a live work claim.
 
 ## Active Definition — Sole `/goal` Authority
 
-[`definitions/choir-cli-self-development-2026-07-16.md`](definitions/choir-cli-self-development-2026-07-16.md)
-is the sole executable top-level product Definition from code-free contract
-conformance through deployed G3 closure. It cuts self-development over to one
-stable Choir computer with a content-addressed canonical event chain, complete
-privacy-safe trajectory commitments, guest-local fail-closed capsules, no-bash
-Super, capsule-only CoSuper effects, retired VSuper, typed Researcher updates,
-external scoped approval, atomic guest materialization, checkpoint/route
-projection, restart/reconstruction, rejection, and event-derived rollback. It
-owns execution order, mutation, evidence, rollback, and completion until closure.
+[`definitions/choir-coherent-computer-convergence-2026-07-21.md`](definitions/choir-coherent-computer-convergence-2026-07-21.md)
+is the sole executable top-level product Definition. It first reconciles a clean
+canonical-main baseline, preserves the rejected Round 72 candidate and unrelated
+worktrees, then proves one generic durable-work lifecycle: artifact revisions,
+replaceable activations, durable obligations and updates, reducer-owned
+settlement/cancellation, restart reconstruction, and equivalent UI/headless
+observation. Self-development effects remain OFF. Texture depth, MCP, World
+Wire control, and Choir-in-Choir are deferred until this kernel supplies evidence.
 
 ## Completed Definitions — Historical Evidence Authority
+
+The superseded-incomplete
+[`definitions/choir-cli-self-development-2026-07-16.md`](definitions/choir-cli-self-development-2026-07-16.md)
+retains construction, G1, security, failure, rejected-candidate, and architecture
+evidence. Owner direction on 2026-07-21 ended it before deployed product
+acceptance. Do not execute it, merge its rejected Round 72 branch, or infer that
+accepted intermediate gates completed the mission.
 
 [`definitions/choir-audited-autoputer-construction-2026-07-15.md`](definitions/choir-audited-autoputer-construction-2026-07-15.md)
 completed audited fleet-wide `ComputerVersion` construction, D-ROUTE cutover,
 rollback, reconstruction, and no-SSH product inspection. It is historical
-evidence authority, not an executable `/goal` entrypoint. The active self-development Definition depends on its accepted constructor, verifier, route, rollback, and no-SSH receipts.
+evidence authority, not an executable `/goal` entrypoint. The active convergence Definition inherits its accepted constructor, verifier, route, rollback, and no-SSH receipts.
 
 The superseded
 [`definitions/choir-autoputer-completion-2026-07-14.md`](definitions/choir-autoputer-completion-2026-07-14.md)
@@ -51,13 +57,12 @@ predecessor's deployed baseline, set owner-ratified numerical SLOs, and promote
 it through all registries before execution.
 
 [`definitions/choir-in-choir-computer-control-draft-2026-07-18.md`](definitions/choir-in-choir-computer-control-draft-2026-07-18.md)
-is the owner-authorized, non-executable successor draft for computer-to-computer
-control after capsule-based self-development is complete. Its first acceptance
-has a cosuper on computer A use the supported `choir` CLI from a scoped capsule
-under a target-bound grant to control disposable computer B; B remains the
-authority for its own agents, capsules, event history, state, and refusals.
-The draft authorizes no implementation, host access, raw vmctl, SSH, shared
-owner credential, candidate VM, recursive grant chain, or registry promotion.
+remains an owner-authorized, non-executable successor hypothesis. Its target-bound
+computer-to-computer grant and sovereign-recipient rules remain useful, but its
+topology must be reconciled from the generic durable-work kernel after this
+Definition completes. It authorizes no implementation, host access, raw vmctl,
+SSH, shared owner credential, candidate VM, recursive grant chain, or registry
+promotion.
 
 ## Supporting Maintenance
 
@@ -90,15 +95,17 @@ it active work or revising the product umbrella's semantics.
 Invoke only:
 
 ```text
-/goal /Users/wiz/go-choir/docs/definitions/choir-cli-self-development-2026-07-16.md
+/goal /Users/wiz/go-choir/docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
 ```
 
-The completed audited-construction Definition is historical evidence authority.
-The performance and Choir-in-Choir drafts remain blocked and non-executable.
-Capsule execution and its event authority are now the active mission.
+The completed audited-construction Definition and superseded self-development
+Definition are historical evidence authority. The performance and Choir-in-Choir
+drafts remain blocked and non-executable. One generic durable-work lifecycle is
+the active product mission; no self-development effect is authorized.
 
 This index owns no current slice, next action, execution order, resumption,
-completion, mutation, rollback sequencing, or escalation authority. Consult the active self-development Definition before execution. Autopaper remains unauthorized.
+completion, mutation, rollback sequencing, or escalation authority. Consult the
+active convergence Definition before execution. Autopaper remains unauthorized.
 
 The OG/Dolt/heresy contract supplies the currently deployed D-ROUTE
 corpusd/vmctl CAS mechanics, receipt gates, H031 detection, and deletion bars.

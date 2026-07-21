@@ -27,7 +27,7 @@ node_fields:
   entrypoint: whether the node accepts direct /goal execution
   member_of: containing mission id for subordinate contracts
   suite_phases: working or completed Definition phases that consume this contract
-  execution_mode: mission_orchestrator | completed_non_executable | subordinate_only | draft_non_executable | scope_disjoint_maintenance
+  execution_mode: mission_orchestrator | completed_non_executable | superseded_non_executable | subordinate_only | draft_non_executable | scope_disjoint_maintenance
   depends_on: discovery prerequisite hints only; never suite containment or phase authority
   enables: discovery successor hints only; never execution authority
   sources: current authority or terminal evidence sources only
@@ -171,7 +171,7 @@ nodes:
     entrypoint: false
     execution_mode: completed_non_executable
     depends_on: []
-    enables: [choir-cli-self-development-2026-07-16, choir-computerversion-performance-optimization-draft-2026-07-15]
+    enables: [choir-cli-self-development-2026-07-16, choir-coherent-computer-convergence-2026-07-21, choir-computerversion-performance-optimization-draft-2026-07-15]
     note: >-
       Completed audited construction; retained as historical evidence authority
       only. The successor remains blocked and non-executable pending separate
@@ -188,24 +188,48 @@ nodes:
     title: Make Choir Self-Developing — Capsule-Scoped Audited Work
     path: docs/definitions/choir-cli-self-development-2026-07-16.md
     ledger: ''
+    status: superseded
+    kind: spine
+    entrypoint: false
+    execution_mode: superseded_non_executable
+    depends_on:
+      - choir-audited-autoputer-construction-2026-07-15
+    enables: [choir-coherent-computer-convergence-2026-07-21]
+    note: >-
+      Owner-superseded on 2026-07-21 before deployed product acceptance.
+      Construction, review, security, failure, and architecture receipts remain
+      citable, but the rejected Round 72 candidate must not be merged or
+      deployed. Self-development effects remain OFF.
+    sources:
+      - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
+      - docs/evidence/audited-construction-terminal-receipt-2026-07-17.md
+      - docs/computer-ontology.md
+      - docs/agent-product-doctrine.md
+      - docs/standing-questions.md
+      - docs/ACTIVE.md
+      - AGENTS.md
+  - id: choir-coherent-computer-convergence-2026-07-21
+    title: Converge Choir on One Durable Agentic Computer
+    path: docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
+    ledger: ''
     status: working
     kind: spine
     entrypoint: true
     execution_mode: mission_orchestrator
     depends_on:
       - choir-audited-autoputer-construction-2026-07-15
+      - choir-cli-self-development-2026-07-16
     enables: [choir-in-choir-computer-control-draft-2026-07-18]
     note: >-
-      Sole executable product mission from code-free conformance through
-      deployed G3 closure. One stable Choir computer owns a canonical event
-      chain; privacy-safe trajectory commitments, guest-local capsules, typed
-      role cutover, scoped external approval, atomic guest materialization,
-      checkpoints, restart/reconstruction, rejection, and rollback are one
-      executable path. Worker/candidate VMs, host authority, SSH, and raw vmctl
-      do not count.
+      Sole executable product mission. Reconcile a clean canonical-main
+      baseline, then prove one generic durable-work lifecycle with distinct
+      artifact, activation, obligation/settlement, and effect authorities,
+      restart reconstruction, and equivalent UI/headless observation.
+      Self-development effects remain OFF; universal Texture, MCP, World Wire
+      control, and Choir-in-Choir implementation remain deferred.
     sources:
+      - docs/definitions/choir-cli-self-development-2026-07-16.md
       - docs/definitions/choir-audited-autoputer-construction-2026-07-15.md
-      - docs/evidence/audited-construction-terminal-receipt-2026-07-17.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
       - docs/standing-questions.md
@@ -220,18 +244,17 @@ nodes:
     entrypoint: false
     execution_mode: draft_non_executable
     depends_on:
-      - choir-cli-self-development-2026-07-16
+      - choir-coherent-computer-convergence-2026-07-21
     enables: []
     note: >-
-      Owner-authorized non-executable successor draft. After capsule-based
-      self-development is deployed and accepted, a cosuper on computer A may
-      use the supported choir CLI from a scoped capsule under a target-bound,
-      revocable grant to control computer B. B retains authority for its own
-      agents, capsules, event history, state, lifecycle, and refusals. The
-      draft grants no host access, SSH, raw vmctl, shared owner credentials,
-      candidate VMs, transitive grants, implementation, or /goal execution.
+      Owner-authorized non-executable successor hypothesis. Reconcile its
+      target-bound grant and sovereign-recipient topology only after the generic
+      durable-work kernel is deployed and accepted. The draft grants no host
+      access, SSH, raw vmctl, shared owner credentials, candidate VMs, transitive
+      grants, implementation, or /goal execution.
     sources:
       - docs/definitions/choir-cli-self-development-2026-07-16.md
+      - docs/definitions/choir-coherent-computer-convergence-2026-07-21.md
       - docs/standing-questions.md
       - docs/computer-ontology.md
       - docs/agent-product-doctrine.md
