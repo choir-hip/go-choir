@@ -71,9 +71,9 @@ let
     # expansion. Pristine updater roots need this exact release to produce a
     # route-bound kernel capability receipt before genesis.
     export CHOIR_BASELINE_RELEASE_ROOT="${goChoirPackages.sandbox}"
-    # Genesis identity is immutable build authority. Reassert it after every
-    # kernel-derived environment value; placeholders make the reviewed source
-    # candidate non-deployable until the G1-authorized exact substitution.
+    # Genesis identity is immutable build authority. Reassert the accepted
+    # G0/G1/candidate bindings and this exact deployed build after every
+    # kernel-derived environment value.
     export CHOIR_SELF_DEVELOPMENT_G0_RECEIPT="${genesisG0Receipt}"
     export CHOIR_SELF_DEVELOPMENT_G1_RECEIPT="${genesisG1Receipt}"
     export CHOIR_SELF_DEVELOPMENT_G1_CANDIDATE_REF="${genesisCandidateRef}"
