@@ -270,28 +270,28 @@ execution:
 
 now:
   status: working
-  slice: C-build-disabled-candidate
-  question: "Can the smallest conditional object-graph transaction plus scoped identity migration establish one restart-durable lifecycle without touching effect capabilities?"
+  slice: D-landing-deploy-receipt-repair
+  question: "Why did the first accepted deployment activate commit 0df14123 but fail before publishing its exact immutable deployment receipt?"
   reconciliation:
-    observed_at: 2026-07-22T07:01:00Z
-    source_ref: refs/heads/main@a8f849f1bfb74978ba6cd64e60f30313c260e762
-    deploy_identity: "Public https://choir.news/health remains at proxy build/deployed commit 832ae951e84400a54bd7f8ef52a312e872b5c3ef; this repaired candidate is local-only and has not entered the landing loop."
+    observed_at: 2026-07-22T09:21:32Z
+    source_ref: refs/remotes/origin/main@0df1412312deac4ee896bef5c4c0cc0f4f963287
+    deploy_identity: "CI run 29905885393 passed all source/test/build/SBOM gates and activated host services, frontend, and the active guest at 0df1412312deac4ee896bef5c4c0cc0f4f963287, but Deploy to Staging failed before replacing /var/lib/go-choir/deploy-receipt.json; public identity must remain fail-closed."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-03
-    state: accepted_candidate
-    ref: working-tree-code-diff-excluding-definition@sha256:62118724348d4abcc730b28aedee7def4eb0d8320dfc22a3d44d56feb5d06af2
+    state: landed_deploy_incomplete
+    ref: refs/heads/main@0df1412312deac4ee896bef5c4c0cc0f4f963287
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
-    observed_problem: "The seventh frozen gate found no implementation defect in the two prior repairs but reproduced one masked proxy negative test and one legacy test fixture that constructed a now-invalid empty-ref settlement rule, breaking the affected package suite. The prior code-free problem receipt remains the governing repair prerequisite."
-    repair_evidence: "Candidate 6211872 restores the correct pinned digest before exercising the proxy arbitrary-key-ID rejection, so deleting the KeyID guard would fail the test. The pending-update obligation fixture now carries a valid artifact subject ref and closed settlement rule. Focused proxy and agentcore reproductions pass."
-    remaining_error: "Candidate 6211872 passed the bounded final review with two independent ACCEPT verdicts and no reproduced P0/P1. It is authorized to enter the commit/push/CI/staging landing loop; deployment and product-path acceptance remain outstanding."
+    observed_problem: "CI run 29905885393 activated the accepted host, frontend, and guest artifacts at 0df14123, then failed at .github/workflows/ci.yml:1394-1402 with 'Host service identity is incomplete for auth' before publishing the immutable activation receipt. Health output showed auth build.commit=0df14123 while deployed_commit still named the prior receipt 832ae951; the deployment is therefore physically active but intentionally unacceptable. Failure receipt: /var/lib/go-choir/deploy-failures/29905885393-1.json."
+    repair_evidence: "None yet. This is the required code-free problem receipt before deployment-pipeline repair."
+    remaining_error: "Determine which host identity component failed the condition, repair the receipt assembly at source without weakening fail-closed identity, push a new commit, and complete CI/deploy/product acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -301,9 +301,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, e4efcf4a0449aee38cddce3133992e9f054d5ca9, "accepted candidate sha256:62118724348d4abcc730b28aedee7def4eb0d8320dfc22a3d44d56feb5d06af2", /tmp/choir-durable-kernel-accept-6211872/manifest.tsv, /tmp/choir-durable-kernel-accept-12f253b/manifest.tsv, /tmp/choir-durable-kernel-accept-ace48db/manifest.tsv, /tmp/choir-durable-kernel-accept-a9788c9/manifest.tsv, /tmp/choir-durable-kernel-accept-bec8009/manifest.tsv, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv]
-  blocker_or_risk: "Candidate 6211872 is accepted for landing but remains local-only. Staging still runs the prior deploy identity; trust-anchor rotation and the Definition's named deployed acceptance transitions remain unproved."
-  next_action: "Commit candidate 6211872 and this coherent Definition receipt, push origin/main, monitor CI/deploy, verify exact host/guest identity, then run the staged lifecycle/restart/cancellation/client acceptance path."
+  evidence_refs: ["pushed commit 0df1412312deac4ee896bef5c4c0cc0f4f963287", "CI run https://github.com/choir-hip/go-choir/actions/runs/29905885393", "failed deploy job 88879460131", "/var/lib/go-choir/deploy-failures/29905885393-1.json", "accepted candidate sha256:62118724348d4abcc730b28aedee7def4eb0d8320dfc22a3d44d56feb5d06af2", /tmp/choir-durable-kernel-accept-6211872/manifest.tsv]
+  blocker_or_risk: "Red protected deployment-identity surface: new code is active while the durable deploy receipt remains old. Acceptance must refuse until a repaired deploy publishes a complete identity joining the same commit. Rollback remains the prior NixOS profile, service pointers, frontend previous root, guest realization, and deploy-receipt-previous.json."
+  next_action: "Inspect the retained Node B failure values for auth package path/digest/embedded commit, then repair the source workflow condition or assembly without accepting mixed identity."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
