@@ -29,6 +29,14 @@ chmod +x "$nested"
 
 [ "$(resolve_service_package proxy "$direct" "$store")" = "$package" ]
 [ "$(resolve_service_package proxy "$nested" "$store")" = "$package" ]
+fake_bin="$tmp/bin"
+mkdir -p "$fake_bin"
+cat >"$fake_bin/systemctl" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' 'path=$direct ;'
+EOF
+chmod +x "$fake_bin/systemctl"
+[ "$(PATH="$fake_bin:$PATH" resolve_service_package_from_unit proxy "$store")" = "$package" ]
 
 expect_refusal() {
   local name="$1"

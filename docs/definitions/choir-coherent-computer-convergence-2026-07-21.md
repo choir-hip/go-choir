@@ -283,15 +283,15 @@ now:
   candidate:
     id: convergence-durable-work-runtime-03
     state: deploy_repair_candidate
-    ref: working-tree-code-diff-excluding-definition@sha256:eb075a0022882abdf2859324eabae0c6fb792068b476992efda01710fe82b056
+    ref: working-tree-code-diff-excluding-definition@sha256:eff4d02c121b0f7daa0df289db66953c0df40dd140e91aaf19b0809da66518fd
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
     observed_problem: "CI run 29905885393 activated the accepted host, frontend, and guest artifacts at 0df14123, then failed at .github/workflows/ci.yml:1394-1402 with 'Host service identity is incomplete for auth' before publishing the immutable activation receipt. Health output showed auth build.commit=0df14123 while deployed_commit still named the prior receipt 832ae951; the deployment is therefore physically active but intentionally unacceptable. Failure receipt: /var/lib/go-choir/deploy-failures/29905885393-1.json."
-    repair_evidence: "Root cause reproduced on Node B: readlink -f /var/lib/go-choir/services/auth returns the mutable copied runtime directory itself, violating the receipt's immutable /nix/store path check. The workflow now resolves each identity package from this deploy's verified Nix result or the activated systemd wrapper via the existing fail-closed node-b-sync-service-pointers resolver, verifies its build manifest equals DEPLOY_COMMIT, hashes that immutable package, and separately requires live health build.commit to equal DEPLOY_COMMIT. Node B rehearsal resolved auth wrapper /nix/store/bql5c...-go-choir-auth-exec to package /nix/store/8w1z...-auth-0.1.0 with commit 0df14123. Workflow contract and pointer resolver tests pass; YAML parses."
-    remaining_error: "Commit and deploy repair candidate eb075a; CI/deploy must publish a complete receipt and public exact identity before lifecycle acceptance."
+    repair_evidence: "Root cause reproduced on Node B: readlink -f /var/lib/go-choir/services/auth returns the mutable copied runtime directory itself, violating the receipt's immutable /nix/store path check. The workflow now resolves each identity package from this deploy's verified Nix result or the activated systemd wrapper via the shared fail-closed node-b-sync-service-pointers resolver, verifies its build manifest equals DEPLOY_COMMIT, hashes that immutable package, and separately requires live health build.commit to equal DEPLOY_COMMIT. Node B rehearsal resolved auth wrapper /nix/store/bql5c...-go-choir-auth-exec to package /nix/store/8w1z...-auth-0.1.0 with commit 0df14123. The shared resolver change is classified deploy_host=true/deploy_host_os=true, preventing another skipped deployment. Workflow contract, resolver, and classifier tests pass; YAML parses."
+    remaining_error: "Commit and deploy repair candidate eff4d02; CI/deploy must publish a complete receipt and public exact identity before lifecycle acceptance."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -301,9 +301,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: ["problem receipt commit a35d7404", "deploy repair candidate sha256:eb075a0022882abdf2859324eabae0c6fb792068b476992efda01710fe82b056", "pushed runtime commit 0df1412312deac4ee896bef5c4c0cc0f4f963287", "CI run https://github.com/choir-hip/go-choir/actions/runs/29905885393", "failed deploy job 88879460131", "/var/lib/go-choir/deploy-failures/29905885393-1.json"]
+  evidence_refs: ["problem receipt commit a35d7404", "skipped workflow-only repair commit 9dcb2521", "deploy-trigger repair candidate sha256:eff4d02c121b0f7daa0df289db66953c0df40dd140e91aaf19b0809da66518fd", "pushed runtime commit 0df1412312deac4ee896bef5c4c0cc0f4f963287", "CI run https://github.com/choir-hip/go-choir/actions/runs/29905885393", "failed deploy job 88879460131", "/var/lib/go-choir/deploy-failures/29905885393-1.json"]
   blocker_or_risk: "Red deployment-identity repair is locally rehearsed but not deployed. It preserves fail-closed exact package, live service, checkout, closure, and target commit joins. Rollback remains the prior NixOS profile, service pointers, frontend previous root, guest realization, and deploy receipts."
-  next_action: "Commit and push repair candidate eb075a, monitor its CI/deploy receipt, then run public signed identity and lifecycle acceptance."
+  next_action: "Commit and push repair candidate eff4d02, monitor its CI/deploy receipt, then run public signed identity and lifecycle acceptance."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21

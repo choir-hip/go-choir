@@ -1408,13 +1408,7 @@ jobs:
                 fi
               fi
               if [ -z "$package_path" ]; then
-                unit="go-choir-${service}.service"
-                wrapper=$(
-                  { systemctl show "$unit" -p ExecStart --value 2>/dev/null || true; } |
-                    sed -n 's/^.*path=\([^ ;]*\).*$/\1/p' |
-                    head -n 1
-                )
-                package_path=$(resolve_service_package "$service" "$wrapper")
+                package_path=$(resolve_service_package_from_unit "$service")
               fi
               package_commit=$(verify_artifact_manifest "$package_path/share/go-choir/build.json" "$service")
               package_digest=$(nix hash path --type sha256 "$package_path")

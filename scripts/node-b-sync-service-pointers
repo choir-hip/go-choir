@@ -132,6 +132,24 @@ resolve_service_package() {
   return 1
 }
 
+resolve_service_package_from_unit() {
+  local service="$1"
+  local store_root="${2:-/nix/store}"
+  local unit="go-choir-${service}.service"
+  local wrapper
+
+  wrapper="$(
+    { systemctl show "$unit" -p ExecStart --value 2>/dev/null || true; } |
+      sed -n 's/^.*path=\([^ ;]*\).*$/\1/p' |
+      head -n 1
+  )"
+  if [ -z "$wrapper" ] || [ ! -r "$wrapper" ]; then
+    echo "Could not find readable ExecStart wrapper for $unit" >&2
+    return 1
+  fi
+  resolve_service_package "$service" "$wrapper" "$store_root"
+}
+
 main() {
   if [ "$#" -eq 0 ]; then
     echo "usage: $0 <service>..." >&2
@@ -139,33 +157,13 @@ main() {
   fi
 
   local service
-  local unit
-  local wrapper
   local package
 
   for service in "$@"; do
-    unit="go-choir-${service}.service"
-    # Use a subshell with || true so systemctl show doesn't abort under
-    # set -euo pipefail when the unit is intentionally absent (e.g.
-    # go-choir-sandbox, deleted in PR 5 of store-consolidation).
-    wrapper="$(
-      { systemctl show "$unit" -p ExecStart --value 2>/dev/null || true; } |
-        sed -n 's/^.*path=\([^ ;]*\).*$/\1/p' |
-        head -n 1
-    )"
-    if [ -z "$wrapper" ] || [ ! -r "$wrapper" ]; then
-      # go-choir-sandbox was intentionally deleted in PR 5 of store-consolidation.
-      # Its package pointer is now installed by a NixOS activation script.
-      # All other services are required — a missing unit is a deploy error.
-      if [ "$service" = "sandbox" ]; then
-        echo "    No ExecStart wrapper for $unit — skipping (deleted in PR 5)" >&2
-        continue
-      fi
-      echo "Could not find readable ExecStart wrapper for $unit" >&2
-      return 1
-    fi
-
-    package="$(resolve_service_package "$service" "$wrapper")"
+    # go-choir-sandbox was intentionally deleted in PR 5 of
+    # store-consolidation. Its package pointer is installed by a NixOS
+    # activation script; all service arguments accepted here require units.
+    package="$(resolve_service_package_from_unit "$service")"
     install_service_pointer_from_src "$service" "$package"
   done
 }
