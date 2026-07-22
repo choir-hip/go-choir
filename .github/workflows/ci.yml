@@ -1390,15 +1390,40 @@ jobs:
             fi
             nixos_closure_digest=$(nix hash path --type sha256 "$nixos_closure")
             nixos_closure_digest="sha256:${nixos_closure_digest#sha256-}"
+            # Service runners execute atomically copied packages under
+            # /var/lib, so that mutable runtime path cannot be the immutable
+            # package identity. Resolve each package from either this deploy's
+            # Nix result or the activated systemd wrapper and verify its build
+            # manifest before publishing the receipt.
+            source scripts/node-b-sync-service-pointers
             host_services='{}'
             for service in auth proxy vmctl gateway corpusd maild sourcecycled; do
-              package_path=$(readlink -f "/var/lib/go-choir/services/${service}")
+              package_path=
+              candidate="/tmp/go-choir-service-${service}-result"
+              if [ -e "$candidate" ]; then
+                candidate_path=$(readlink -f "$candidate")
+                candidate_commit=$(artifact_manifest_commit "$candidate_path/share/go-choir/build.json" "$service" 2>/dev/null || true)
+                if [ "$candidate_commit" = "$DEPLOY_COMMIT" ]; then
+                  package_path="$candidate_path"
+                fi
+              fi
+              if [ -z "$package_path" ]; then
+                unit="go-choir-${service}.service"
+                wrapper=$(
+                  { systemctl show "$unit" -p ExecStart --value 2>/dev/null || true; } |
+                    sed -n 's/^.*path=\([^ ;]*\).*$/\1/p' |
+                    head -n 1
+                )
+                package_path=$(resolve_service_package "$service" "$wrapper")
+              fi
+              package_commit=$(verify_artifact_manifest "$package_path/share/go-choir/build.json" "$service")
               package_digest=$(nix hash path --type sha256 "$package_path")
               package_digest="sha256:${package_digest#sha256-}"
               port=$(service_health_port "$service")
               service_commit=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" | jq -er '.build.commit')
-              if [ -z "$package_path" ] || [[ "$package_path" != /nix/store/* ]] || [[ "$package_digest" != sha256:* ]] || [ "${#service_commit}" -ne 40 ]; then
-                echo "Host service identity is incomplete for ${service}" >&2
+              if [ -z "$package_path" ] || [[ "$package_path" != /nix/store/* ]] || [[ "$package_digest" != sha256:* ]] ||
+                [ "$package_commit" != "$DEPLOY_COMMIT" ] || [ "$service_commit" != "$DEPLOY_COMMIT" ]; then
+                echo "Host service identity is incomplete for ${service}: package=${package_path:-missing} package_commit=${package_commit:-missing} service_commit=${service_commit:-missing}" >&2
                 exit 1
               fi
               host_services=$(printf '%s' "$host_services" |
