@@ -270,28 +270,28 @@ execution:
 
 now:
   status: working
-  slice: D-landing-deploy-receipt-repair
-  question: "Can the receipt reuse the already exact, active service identity observation instead of assuming every health JSON body carries build.commit?"
+  slice: D-landing-guest-identity-convergence
+  question: "Can the accepted common-commit identity contract be exercised after a host-only deployment left the active guest on the prior executable commit?"
   reconciliation:
-    observed_at: 2026-07-22T10:03:17Z
-    source_ref: refs/remotes/origin/main@5fe6d241960f77531eb08c2327e6e6bad616ba39
-    deploy_identity: "Commit 5fe6d241 is physically active across host services, but CI run 29909000446 failed after all active artifact receipts and before publishing deploy-receipt.json; the old 832ae951 receipt remains authoritative and public acceptance remains fail-closed."
+    observed_at: 2026-07-22T10:44:00Z
+    source_ref: refs/remotes/origin/main@cc89b31e56b8d9822116845574f60f3eeaedcf7a
+    deploy_identity: "CI run 29911604457 and deploy job 88895740617 passed and published a complete cc89b31e receipt. Public `choir identity` nevertheless refused with HTTP 502 because the active guest still serves sandbox commit 0df14123 while host, receipt, and canonical main are cc89b31e."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-03
-    state: deploy_repair_candidate
-    ref: refs/heads/main@a1ed83e57090f0e9170e49543dff5fe1e269250f plus deploy-trigger-diff@sha256:1af19afec0b48483a12a6e63dc2657bda85c974697515e70dd74a6d7e752b370
+    state: deployed_identity_incomplete
+    ref: refs/heads/main@cc89b31e56b8d9822116845574f60f3eeaedcf7a
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
-    observed_problem: "CI run 29909000446 proved immutable package resolution and activated all seven host services at 5fe6d241, then exited during host identity assembly. The assembly re-queried `.build.commit` from each health JSON body even though gateway, maild, and sourcecycled expose exact build identity only through the already verified X-Choir-Build-Commit response header. Under set -e, jq -er aborted silently on the first body without build.commit. Failure receipt: /var/lib/go-choir/deploy-failures/29909000446-1.json."
-    repair_evidence: "Receipt assembly now consumes the exact active commit already observed from each service's X-Choir-Build-Commit header and recorded in receipt_artifacts, then independently joins it to the immutable package manifest and digest. Contract tests require this join and reject the old body lookup. A Node B rehearsal joined all seven active artifact entries from failure receipt 29909000446-1 to their immutable /nix/store package manifests at exact commit 5fe6d241; exit 0. Commit a1ed83e5 passed CI run 29910652765, but its workflow-only runtime change did not select deployment; a source-script clarification now intentionally selects host OS activation so the repaired workflow can publish its receipt."
-    remaining_error: "Commit and push deploy-trigger diff 1af19af; CI/deploy must publish a complete receipt and public exact identity before lifecycle acceptance."
+    observed_problem: "The successful cc89b31e deployment selected host OS activation but explicitly skipped active computer refresh because the canonical guest image input was unchanged. The public signed identity verifier correctly rejected the resulting mixed executable identity: Node B diagnostics found active VM candidate-fleet-e15cb89f25d963c220319b7b at epoch 109 serving sandbox commit 0df1412312deac4ee896bef5c4c0cc0f4f963287 while deploy-receipt.json, host packages, and checkout identify cc89b31e."
+    repair_evidence: "Problem documented before repair. The common-commit identity contract requires one deployment that selects canonical guest image rebuild and active refresh at the same target commit; acceptance remains fail-closed until the clean client succeeds."
+    remaining_error: "Trigger a canonical guest image build/refresh, monitor CI/deploy, and retry the no-SSH signed identity command."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -301,9 +301,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: ["problem receipt commit a35d7404", "skipped workflow-only repair commit 9dcb2521", "immutable resolver repair 5fe6d241960f77531eb08c2327e6e6bad616ba39", "receipt join repair a1ed83e57090f0e9170e49543dff5fe1e269250f", "passed CI run https://github.com/choir-hip/go-choir/actions/runs/29910652765", "failed deploy run https://github.com/choir-hip/go-choir/actions/runs/29909000446", "/var/lib/go-choir/deploy-failures/29909000446-1.json"]
-  blocker_or_risk: "Red deployment-identity repair passed CI but remains undeployed because its workflow-only path did not select deployment. The trigger diff selects host OS activation; rollback remains the prior NixOS profile, service pointers, frontend previous root, guest realization, and deploy receipts."
-  next_action: "Commit and push deploy-trigger diff 1af19af, monitor CI/deploy receipt, then run public signed identity and lifecycle acceptance."
+  evidence_refs: ["successful CI/deploy https://github.com/choir-hip/go-choir/actions/runs/29911604457", "deploy job 88895740617", "/var/lib/go-choir/deploy-receipt.json@cc89b31e", "public `go run ./cmd/choir identity --host https://choir.news` HTTP 502 execution identity guest refused", "active guest candidate-fleet-e15cb89f25d963c220319b7b epoch 109 health build.commit=0df1412312deac4ee896bef5c4c0cc0f4f963287"]
+  blocker_or_risk: "Red exact-identity surface is correctly fail-closed but not accepted. A guest refresh can restart the stable computer; rollback remains the currently retained ComputerVersion route/receipt and prior NixOS/deploy receipts."
+  next_action: "Commit this guest identity mismatch receipt before repair, then select canonical guest image refresh at one target commit and rerun public identity acceptance."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
