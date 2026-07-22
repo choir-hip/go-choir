@@ -271,27 +271,27 @@ execution:
 now:
   status: working
   slice: C-build-disabled-candidate
-  question: "Can one computer-scoped lifecycle remain the sole authority across reducer, projection, collection, retry, and restart paths?"
+  question: "Can lifecycle projections and source graphs remain computer-scoped on every query path, not only on canonical writes?"
   reconciliation:
-    observed_at: 2026-07-22T17:25:00Z
+    observed_at: 2026-07-22T19:22:00Z
     source_ref: refs/remotes/origin/main@48b50edad7e63958ffd5fb5ff1a5773d41e911ea
     deploy_identity: "Node B remains on executable commit 47e877d3d0741dd7080f3bbdee14b3d6ec2315f9 with independently versioned active route source commit 7122f2799be4458f4b925be11990321c7e70ffc4; repaired candidate is local only."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "Canonical worktree on convergence/kernel-contract-01 at origin/main; 27 intentional candidate source paths dirty, no untracked files; protected unrelated worktrees remain untouched."
+    worktree_inventory_ref: "Canonical worktree on convergence/kernel-contract-01 at origin/main; 31 intentional candidate source paths dirty, no untracked files; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-04
+    id: convergence-durable-work-runtime-05
     state: independent_review_repair_required
-    ref: uncommitted-code-diff-excluding-definition@sha256:c148d256e88b75407bda2d1ef2c960bbd7330c9c1fc2f738836f1719e7b97476
+    ref: uncommitted-code-diff-excluding-definition@sha256:e8d5545563ac8a99bdda40e2ad21d8588d09c19e52591a1537392eb72b4bdddf
     owner: owner-and-current-session
     base: 48b50edad7e63958ffd5fb5ff1a5773d41e911ea
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected."
-    observed_problem: "Frozen review rejected candidate c148d256 after local package, shard, smoke, restart, and race proofs passed. The durable-work substrate still violates its own scope and command-identity contract in five connected places: lifecycle RunRecord canonical IDs omit ComputerID; public Texture document/revision/history collections remain owner-only; legacy pending-worker lists expose lifecycle updates; omitted lifecycle work_disposition is rejected instead of preserving open work while present-invalid values refuse; and apply-command digests include reducer-generated revision/provenance/source-graph timestamps, so an identical semantic retry can conflict. This is a substrate cluster, not five independent symptoms: lifecycle keys and semantic identity were added beside legacy projection/collection APIs without making the lifecycle boundary closed."
-    repair_evidence: "Candidate c148d256 repaired every earlier blocker on its exercised path: projection-only RunRecord changes; cancellation-wins CAS races; explicit producer update identity; no implicit interim/checkpoint settlement; no lifecycle .texture projection mutation; terminal late/cancel behavior; shared-store sequence CAS; scoped single-document/subject/injection/wake paths; immutable restart reconstruction; and raw mutation refusal. Before freeze, all five affected package suites, runtime shards, the durable lifecycle smoke trace, and focused race suites passed. The independent panel ran Codex, Cursor, and OMP GPT-5.5 successfully; all three returned REPAIR. Devin and OMP Gemini timed out; OpenCode and OMP GLM failed before review."
-    remaining_error: "Candidate c148d256 is rejected. Repair must scope lifecycle RunRecord and every Texture collection/history/diagnosis read by OwnerID+ComputerID, exclude lifecycle rows from every legacy owner/agent pending list and unscoped getter/list fallback, default absent work_disposition to open while refusing present null/blank/unknown values, and canonicalize apply digests so reducer-generated timestamps cannot change semantic command identity. Add collision and retry reproductions before refreezing."
+    observed_problem: "Frozen review rejected candidate e8d55455 after package, serial shard, smoke, restart, and race proofs passed. Two computer-scope authority gaps remain. First, lifecycle RunRecord canonical writes are scoped but legacy metadata getters/lists still admit lifecycle rows, so same owner/agent/run metadata can cross computers during wake, reactivation, cancellation, and generic GetRun paths. Second, lifecycle Texture source-entity/source-ref graph objects and their readers omit ComputerID, so identical source or revision identities can collide across computers. These are substrate scope defects, not isolated caller bugs."
+    repair_evidence: "Candidate e8d55455 repaired every blocker recorded for c148d256: scoped lifecycle RunRecord canonical IDs and direct accessors; cancellation-wins CAS; deterministic semantic retry digests; computer-scoped Texture document/revision/list/history/blame/edit/injection paths; lifecycle exclusion from legacy pending-update lists; omission-means-open work disposition with present-invalid refusal; preserved terminal archive sequence; and focused collision/retry regressions. All affected package suites, TOTAL_SHARDS=1 runtime shards, durable lifecycle smoke trace, focused race count=10, go vet, and git diff --check passed. Independent Codex and Cursor review nevertheless both reproduced the remaining legacy RunRecord query leak; Codex additionally traced unscoped lifecycle source-graph storage/read paths. OpenCode failed and OMP GPT-5.5 timed out."
+    remaining_error: "Candidate e8d55455 is rejected. Exclude lifecycle RunRecords from every legacy unscoped getter/list/active/passivated path and route lifecycle wake/reactivation/projection callers through OwnerID+ComputerID APIs. Computer-scope lifecycle source-entity and source-ref canonical IDs, object fields, write sets, list/read APIs, response attachment, and restart reconstruction. Add exact same-owner/same-agent/same-RunID and same-source/revision collision regressions before refreezing."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -302,14 +302,14 @@ now:
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
   evidence_refs:
-    - "/tmp/agentic-consensus-20260722-131820/manifest.tsv: Codex, Cursor, and OMP GPT-5.5 REPAIR; exact candidate digest c148d256e88b75407bda2d1ef2c960bbd7330c9c1fc2f738836f1719e7b97476"
-    - "Cursor reproduced owner-only Texture collection leakage; Codex independently found lifecycle RunRecord and collection scope collisions plus omitted-disposition refusal; GPT-5.5 reproduced legacy pending-list exposure and timestamp-sensitive apply digests."
-    - "go test ./internal/store ./internal/agentcore ./internal/textureowner ./internal/runtimeprompts ./internal/types -count=1 passed"
-    - "scripts/go-test-runtime-shards passed"
-    - "Focused store race suite count=20, agentcore race suite count=5, and computer-scope Texture restart race suite count=5 passed"
-    - "TestDurableWorkLifecycleSmokeTrace passed across Store reopen; git diff --check passed"
-  blocker_or_risk: "Red durable-work authority candidate remains local and rejected. Protected surfaces: lifecycle canonical keys, reducer CAS/digests, terminal cancellation, typed update delivery, artifact reads, and restart reconstruction. Admissible repair evidence is exact collision/retry reproduction plus focused race/restart suites, followed after landing by signed Node B identity and deployed product-path acceptance. Rollback is source 48b50eda and deployed executable 47e877d3 with its accepted ComputerVersion/route receipts. Heresy delta discovered: four remaining unscoped or dual-path lifecycle reads/keys and one unstable semantic digest boundary; introduced: none deployed; repaired: earlier authority crossings remain locally repaired but unaccepted. Conjecture delta: computer scope and semantic command identity must close over projections and collections, not only reducers."
-  next_action: "Commit this code-free review/problem receipt alone, then repair the closed lifecycle scope/identity substrate, add exact collision and retry regressions, rerun focused and shard proof, and freeze a new independent-review candidate."
+    - "/tmp/agentic-consensus-20260722-150725/manifest.tsv: Codex and Cursor REPAIR against exact candidate digest e8d5545563ac8a99bdda40e2ad21d8588d09c19e52591a1537392eb72b4bdddf"
+    - "Codex and Cursor reproduced lifecycle rows leaking through legacy RunRecord metadata queries; Codex independently traced source-graph canonical IDs, object fields, writers, and readers that omit ComputerID."
+    - "go test ./internal/store ./internal/agentcore ./internal/textureowner ./internal/runtimeprompts ./internal/textureprompts ./internal/types passed"
+    - "TOTAL_SHARDS=1 scripts/go-test-runtime-shards passed all agentcore and textureowner tests"
+    - "Focused store race suite count=10 and computer-scope Texture restart proof passed"
+    - "TestDurableWorkLifecycleSmokeTrace passed across Store reopen; go vet and git diff --check passed"
+  blocker_or_risk: "Red durable-work authority candidate remains local and rejected. Protected surfaces: lifecycle run query authority, wake/reactivation, source-graph identity, reducer CAS/digests, terminal cancellation, typed update delivery, artifact reads, and restart reconstruction. Admissible repair evidence is exact run/source collision reproduction plus focused race/restart suites, followed after landing by signed Node B identity and deployed product-path acceptance. Rollback is source 48b50eda and deployed executable 47e877d3 with its accepted ComputerVersion/route receipts. Heresy delta discovered: lifecycle writes are scoped while two legacy RunRecord query families and source-graph identity remain unscoped; introduced: none deployed; repaired: prior e8d55455 repairs remain local but unaccepted."
+  next_action: "Commit this code-free review/problem receipt alone, then close legacy lifecycle RunRecord query leakage and computer-scope lifecycle source graphs end to end, add collision regressions, rerun focused and shard proof, and freeze a new independent-review candidate."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
