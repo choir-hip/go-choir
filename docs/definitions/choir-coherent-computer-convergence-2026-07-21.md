@@ -270,28 +270,28 @@ execution:
 
 now:
   status: working
-  slice: D-landing-lifecycle-acceptance
-  question: "Can an interim artifact revision preserve material work while a replaceable activation passivates?"
+  slice: C-build-disabled-candidate
+  question: "Can one computer-scoped lifecycle remain the sole authority across reducer, projection, collection, retry, and restart paths?"
   reconciliation:
-    observed_at: 2026-07-22T11:35:00Z
-    source_ref: refs/remotes/origin/main@90bbd2e864a091202ddafe252c157b9c27d55736
-    deploy_identity: "CI run 29914854032 and Node B deploy passed. Public `choir identity` returned joined=true with host, guest, deployment, package, closure, route, realization, epoch 112, and signatures bound; current executable commit is 47e877d3d0741dd7080f3bbdee14b3d6ec2315f9 and the independently versioned active route source commit remains 7122f2799be4458f4b925be11990321c7e70ffc4."
+    observed_at: 2026-07-22T17:25:00Z
+    source_ref: refs/remotes/origin/main@48b50edad7e63958ffd5fb5ff1a5773d41e911ea
+    deploy_identity: "Node B remains on executable commit 47e877d3d0741dd7080f3bbdee14b3d6ec2315f9 with independently versioned active route source commit 7122f2799be4458f4b925be11990321c7e70ffc4; repaired candidate is local only."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
-    worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
+    worktree_inventory_ref: "Canonical worktree on convergence/kernel-contract-01 at origin/main; 27 intentional candidate source paths dirty, no untracked files; protected unrelated worktrees remain untouched."
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-03
+    id: convergence-durable-work-runtime-04
     state: independent_review_repair_required
-    ref: superseded-working-tree-code-diff-excluding-definition@sha256:ab80ae80378544f0b532857b5b8218fd432f4644817ff5f4b83d969bfd8a4fb8
+    ref: uncommitted-code-diff-excluding-definition@sha256:c148d256e88b75407bda2d1ef2c960bbd7330c9c1fc2f738836f1719e7b97476
     owner: owner-and-current-session
-    base: a8f849f1bfb74978ba6cd64e60f30313c260e762
+    base: 48b50edad7e63958ffd5fb5ff1a5773d41e911ea
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
-    scope: "Phase C protected paths only; effects OFF and uninjected"
-    observed_problem: "Deployed product trace 8ffb5862-0ff6-5620-961b-54196e04a277 reproduced a substrate authority bug: an interim model-prior revision implicitly completed the only material work item, leaving no open work for a grounded update. Frozen review of candidate ab80ae8 then found two further authority crossings in the same commitTextureToolEdit substrate. Incorporating a pending worker checkpoint still unconditionally supplies that producer WorkItemID/WorkResultRef and can settle unfinished research merely because an artifact consumed one checkpoint. Lifecycle-bound tool revisions also still call ensureCanonicalTextureProjectionPath, writing a .texture file and alias outside the lifecycle reducer even though the public lifecycle revision path already skips that legacy projection. Review additionally found that present null/blank work_disposition values collapse to omission; this is fail-open but does not satisfy the frozen invalid-value refusal contract."
-    repair_evidence: "Superseded candidate ab80ae8 proved the core shape: explicit Texture work_disposition=open|completed, omitted values fail open, and a focused two-revision regression keeps appagent work open before explicit completion. Internal/textureowner and internal/textureprompts package suites passed. Independent panel result was split: Gemini and Cursor accepted the core repair; Codex and GPT-5.5 required removal of implicit pending-worker settlement, GPT-5.5 required the lifecycle projection guard, and Codex required strict present-invalid disposition refusal. The base identity typo in the review prompt is corrected here; all reviewers independently matched the exact included diff digest ab80ae8."
-    remaining_error: "Candidate ab80ae8 is rejected as incomplete. Pending worker updates still carry implicit work settlement, lifecycle-bound tool edits still mutate legacy file/alias projection state, and present null/blank disposition is not refused. No repaired candidate has passed focused proof or independent review."
+    scope: "Phase C protected paths only; effects OFF and uninjected."
+    observed_problem: "Frozen review rejected candidate c148d256 after local package, shard, smoke, restart, and race proofs passed. The durable-work substrate still violates its own scope and command-identity contract in five connected places: lifecycle RunRecord canonical IDs omit ComputerID; public Texture document/revision/history collections remain owner-only; legacy pending-worker lists expose lifecycle updates; omitted lifecycle work_disposition is rejected instead of preserving open work while present-invalid values refuse; and apply-command digests include reducer-generated revision/provenance/source-graph timestamps, so an identical semantic retry can conflict. This is a substrate cluster, not five independent symptoms: lifecycle keys and semantic identity were added beside legacy projection/collection APIs without making the lifecycle boundary closed."
+    repair_evidence: "Candidate c148d256 repaired every earlier blocker on its exercised path: projection-only RunRecord changes; cancellation-wins CAS races; explicit producer update identity; no implicit interim/checkpoint settlement; no lifecycle .texture projection mutation; terminal late/cancel behavior; shared-store sequence CAS; scoped single-document/subject/injection/wake paths; immutable restart reconstruction; and raw mutation refusal. Before freeze, all five affected package suites, runtime shards, the durable lifecycle smoke trace, and focused race suites passed. The independent panel ran Codex, Cursor, and OMP GPT-5.5 successfully; all three returned REPAIR. Devin and OMP Gemini timed out; OpenCode and OMP GLM failed before review."
+    remaining_error: "Candidate c148d256 is rejected. Repair must scope lifecycle RunRecord and every Texture collection/history/diagnosis read by OwnerID+ComputerID, exclude lifecycle rows from every legacy owner/agent pending list and unscoped getter/list fallback, default absent work_disposition to open while refusing present null/blank/unknown values, and canonicalize apply digests so reducer-generated timestamps cannot change semantic command identity. Add collision and retry reproductions before refreezing."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -301,9 +301,15 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: ["successful CI/deploy https://github.com/choir-hip/go-choir/actions/runs/29914854032", "public signed identity joined=true at executable commit 47e877d3d0741dd7080f3bbdee14b3d6ec2315f9 and active epoch 112", "trivial lifecycle cf02f1bd-b318-5ca0-aa29-a06e7d23d3af reducer_seq=5 activation completed, work completed, artifact update incorporated", "evidence lifecycle 8ffb5862-0ff6-5620-961b-54196e04a277 reducer_seq=5 activation completed, model_prior_interim head 5613bbde-de84-54f5-ad14-aeac807d1be6, only work incorrectly completed, no researcher update", "public revise HTTP 500 after premature work completion", "focused second lifecycle revision reproduced canonicalize texture document title: durable lifecycle authority required", "independent panel manifest sha256 6cf1f2bb9f91b34443d48d27359d3d695f9d06fb9b5a1bbd89b6e7e86e838c9", "Codex REPAIR sha256 636968af574fa4a94bd891c18a1517ef598e04321c1f4f5b46e7844fe3fcd2f8", "GPT-5.5 REPAIR sha256 b0628004aa4b80ea78faf032589b8b9604b2eea0295b3764fd6004181c9cfef9", "Cursor ACCEPT with pending-worker residual risk sha256 c6e4dfcc403dab0b8f989d0c30fd13fcbd0676295a26e62a73734627e524e7a0", "Gemini ACCEPT sha256 bd8f17d900dda85105b143cc3737f6f8bd61944a70cfe5f03351d383d127cfd6"]
-  blocker_or_risk: "Red durable-work authority repair is still local and incomplete. Effects remain OFF. Rollback remains deployed 47e877d3 and its prior ComputerVersion/NixOS/deploy receipts. Heresy delta discovered: three implicit/out-of-reducer consequences in one Texture commit path—appagent work settlement, pending-worker settlement, and legacy projection mutation—plus permissive present-invalid disposition decoding. Introduced: none deployed. Repaired: appagent consequence locally shaped but candidate rejected pending the complete cutover."
-  next_action: "Commit this independent-review problem receipt without further repair code, then remove both remaining authority crossings, strictly distinguish omitted from present-invalid work disposition, and extend focused proof before freezing a new candidate."
+  evidence_refs:
+    - "/tmp/agentic-consensus-20260722-131820/manifest.tsv: Codex, Cursor, and OMP GPT-5.5 REPAIR; exact candidate digest c148d256e88b75407bda2d1ef2c960bbd7330c9c1fc2f738836f1719e7b97476"
+    - "Cursor reproduced owner-only Texture collection leakage; Codex independently found lifecycle RunRecord and collection scope collisions plus omitted-disposition refusal; GPT-5.5 reproduced legacy pending-list exposure and timestamp-sensitive apply digests."
+    - "go test ./internal/store ./internal/agentcore ./internal/textureowner ./internal/runtimeprompts ./internal/types -count=1 passed"
+    - "scripts/go-test-runtime-shards passed"
+    - "Focused store race suite count=20, agentcore race suite count=5, and computer-scope Texture restart race suite count=5 passed"
+    - "TestDurableWorkLifecycleSmokeTrace passed across Store reopen; git diff --check passed"
+  blocker_or_risk: "Red durable-work authority candidate remains local and rejected. Protected surfaces: lifecycle canonical keys, reducer CAS/digests, terminal cancellation, typed update delivery, artifact reads, and restart reconstruction. Admissible repair evidence is exact collision/retry reproduction plus focused race/restart suites, followed after landing by signed Node B identity and deployed product-path acceptance. Rollback is source 48b50eda and deployed executable 47e877d3 with its accepted ComputerVersion/route receipts. Heresy delta discovered: four remaining unscoped or dual-path lifecycle reads/keys and one unstable semantic digest boundary; introduced: none deployed; repaired: earlier authority crossings remain locally repaired but unaccepted. Conjecture delta: computer scope and semantic command identity must close over projections and collections, not only reducers."
+  next_action: "Commit this code-free review/problem receipt alone, then repair the closed lifecycle scope/identity substrate, add exact collision and retry regressions, rerun focused and shard proof, and freeze a new independent-review candidate."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
