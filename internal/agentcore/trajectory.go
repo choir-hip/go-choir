@@ -30,12 +30,10 @@ func trajectoryKindForRun(rec *types.RunRecord) types.TrajectoryKind {
 func defaultSettlementRuleForKind(kind types.TrajectoryKind) types.SettlementRule {
 	switch kind {
 	case types.TrajectoryKindPublication:
-		return types.SettlementRule{
-			RequireNoOpenWorkItems: true,
-			RequiredSubjectRefs:    []string{"publish_ref", "edition_ref"},
-		}
+		return types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true,
+			RequiredSubjectRefs: []string{"publish_ref", "edition_ref"}}
 	default:
-		return types.SettlementRule{RequireNoOpenWorkItems: true}
+		return types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true}
 	}
 }
 
@@ -130,11 +128,31 @@ func EvaluateTrajectorySettlement(rec types.TrajectoryRecord, openWorkItems int)
 	if rec.Status != types.TrajectoryLive {
 		return false, []string{fmt.Sprintf("trajectory status is %s, not live", rec.Status)}
 	}
+	if rec.SettlementRule.Version != types.LifecycleReducerVersion {
+		return false, []string{fmt.Sprintf("invalid settlement rule version %q", rec.SettlementRule.Version)}
+	}
+	if !rec.SettlementRule.RequireNoOpenWorkItems {
+		return false, []string{"invalid settlement rule: no-open-work predicate is required"}
+	}
 	var waitingOn []string
 	if rec.SettlementRule.RequireNoOpenWorkItems && openWorkItems > 0 {
 		waitingOn = append(waitingOn, fmt.Sprintf("%d open work item(s)", openWorkItems))
 	}
-	for _, ref := range rec.SettlementRule.RequiredSubjectRefs {
+	if len(rec.SettlementRule.RequiredSubjectRefs) == 0 {
+		return false, []string{"invalid settlement rule: required subject refs are required"}
+	}
+	seenRefs := make(map[string]struct{}, len(rec.SettlementRule.RequiredSubjectRefs))
+	for _, rawRef := range rec.SettlementRule.RequiredSubjectRefs {
+		ref := strings.TrimSpace(rawRef)
+		if ref == "" {
+			waitingOn = append(waitingOn, "invalid empty required subject ref")
+			continue
+		}
+		if _, duplicate := seenRefs[ref]; duplicate {
+			waitingOn = append(waitingOn, fmt.Sprintf("duplicate required subject ref %q", ref))
+			continue
+		}
+		seenRefs[ref] = struct{}{}
 		if strings.TrimSpace(rec.SubjectRefs[ref]) == "" {
 			waitingOn = append(waitingOn, fmt.Sprintf("missing subject ref %q", ref))
 		}

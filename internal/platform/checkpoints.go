@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -342,6 +343,74 @@ func (h *Handler) HandleRouteProjectionCertificate(w http.ResponseWriter, r *htt
 		return
 	}
 	writeJSON(w, http.StatusCreated, response)
+}
+
+type executionIdentityAttestationRequest struct {
+	Schema                  string         `json:"schema"`
+	Nonce                   string         `json:"nonce"`
+	Audience                string         `json:"audience"`
+	DeployedCommit          string         `json:"deployed_commit"`
+	ComputerID              string         `json:"computer_id"`
+	RealizationID           string         `json:"realization_id"`
+	VMEpoch                 string         `json:"vm_epoch"`
+	GuestReceiptDigest      string         `json:"guest_receipt_digest"`
+	GuestSignerKeyDigest    string         `json:"guest_signer_key_digest"`
+	VMCTL                   map[string]any `json:"vmctl"`
+	RouteDigest             string         `json:"route_digest"`
+	HostBuildDigest         string         `json:"host_build_digest"`
+	DeploymentReceiptDigest string         `json:"deployment_receipt_digest"`
+}
+
+type executionIdentityAttestationResponse struct {
+	Receipt         computerevent.Receipt `json:"receipt"`
+	SignerPublicKey string                `json:"signer_public_key"`
+}
+
+// HandleExecutionIdentityAttestation gives the proxy's assembled identity join
+// an independent platform-control signature. The signature binds every joined
+// authority by digest; callers still verify the guest receipt separately.
+func (h *Handler) HandleExecutionIdentityAttestation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
+		return
+	}
+	host, _, splitErr := net.SplitHostPort(r.RemoteAddr)
+	if splitErr != nil || !net.ParseIP(host).IsLoopback() || r.Header.Get("X-Internal-Caller") != "true" || h == nil || h.eventCAS == nil {
+		writeJSON(w, http.StatusForbidden, apiError{Error: "loopback internal authorization required"})
+		return
+	}
+	var request executionIdentityAttestationRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&request) != nil || request.Schema != "choir.execution_identity.v1" ||
+		request.Audience != "choir.news/acceptance/execution-identity" ||
+		len(request.DeployedCommit) != 40 ||
+		strings.TrimSpace(request.Nonce) == "" || strings.TrimSpace(request.ComputerID) == "" ||
+		strings.TrimSpace(request.RealizationID) == "" || strings.TrimSpace(request.VMEpoch) == "" ||
+		len(request.VMCTL) == 0 || !strings.HasPrefix(request.GuestReceiptDigest, "sha256:") ||
+		!strings.HasPrefix(request.GuestSignerKeyDigest, "sha256:") ||
+		!strings.HasPrefix(request.RouteDigest, "sha256:") || !strings.HasPrefix(request.HostBuildDigest, "sha256:") ||
+		!strings.HasPrefix(request.DeploymentReceiptDigest, "sha256:") {
+		writeJSON(w, http.StatusBadRequest, apiError{Error: "invalid execution identity attestation request"})
+		return
+	}
+	fields := map[string]any{
+		"schema": request.Schema, "nonce": request.Nonce, "audience": request.Audience,
+		"deployed_commit": request.DeployedCommit,
+		"computer_id": request.ComputerID, "realization_id": request.RealizationID, "vm_epoch": request.VMEpoch,
+		"guest_receipt_digest": request.GuestReceiptDigest, "guest_signer_key_digest": request.GuestSignerKeyDigest,
+		"vmctl": request.VMCTL, "route_digest": request.RouteDigest, "host_build_digest": request.HostBuildDigest,
+		"deployment_receipt_digest": request.DeploymentReceiptDigest,
+	}
+	receipt, err := computerevent.NewSignedReceipt("ExecutionIdentityJoin", "corpusd", fields, []computerevent.SigningKey{h.eventCAS.signingKey}, time.Now().UTC())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, apiError{Error: "execution identity attestation unavailable"})
+		return
+	}
+	publicKey := h.eventCAS.signingKey.PrivateKey.Public().(ed25519.PublicKey)
+	writeJSON(w, http.StatusOK, executionIdentityAttestationResponse{
+		Receipt: receipt, SignerPublicKey: base64.RawStdEncoding.EncodeToString(publicKey),
+	})
 }
 
 func (h *Handler) HandlePlatformControlPublicKey(w http.ResponseWriter, r *http.Request) {

@@ -41,6 +41,10 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
 
+// ErrPromptCommandConflict marks reuse of a public command identity with a
+// different request. Public handlers map it to a durable 409 refusal.
+var ErrPromptCommandConflict = errors.New("prompt command conflict")
+
 // Runtime is the core runtime engine that manages run lifecycle, event
 // emission, and health state. It persists all state through
 // the store so that run handles and events survive sandbox process restarts
@@ -700,6 +704,19 @@ func (rt *Runtime) createRunWithMetadata(ctx context.Context, prompt, ownerID st
 func (rt *Runtime) completePromptBarDecisionRun(ctx context.Context, prompt, ownerID string, metadata map[string]any, decision conductorDecision) (*types.RunRecord, error) {
 	now := time.Now().UTC()
 	runID := uuid.New().String()
+	if commandID := strings.TrimSpace(metadataStringValue(metadata, "lifecycle_command_id")); commandID != "" {
+		runID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{"choir:prompt-bar", ownerID, rt.cfg.SandboxID, commandID}, ":"))).String()
+		existing, existingErr := rt.store.GetRunByOwner(ctx, ownerID, runID)
+		if existingErr == nil {
+			if existing.Prompt != prompt || metadataStringValue(existing.Metadata, "lifecycle_command_id") != commandID {
+				return nil, fmt.Errorf("%w: stored submission does not match request", ErrPromptCommandConflict)
+			}
+			return &existing, nil
+		}
+		if !errors.Is(existingErr, store.ErrNotFound) {
+			return nil, fmt.Errorf("load prompt command replay: %w", existingErr)
+		}
+	}
 	metadata = ensureDesktopID(metadata, nil, metadataStringValue(metadata, runMetadataDesktopID))
 	metadata = ensureTrajectoryID(metadata, nil, runID)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, nil)
@@ -841,6 +858,12 @@ func (rt *Runtime) StartCoagentRun(ctx context.Context, requesterRunID, objectiv
 	metadata = inheritTextureRequesterMetadata(metadata, &requesterRec)
 	agentRec, metadata := resolveRunIdentity(ownerID, rt.cfg.SandboxID, metadata, &requesterRec)
 	metadata = ensureTrajectoryID(metadata, &requesterRec, runID)
+	if requesterAgent, lookupErr := rt.store.GetAgentByScope(ctx, ownerID, rt.cfg.SandboxID, requesterRec.AgentID); lookupErr == nil && requesterAgent.LifecycleVersion > 0 {
+		switch agentprofile.Canonical(agentRec.Profile) {
+		case agentprofile.Super, agentprofile.CoSuper:
+			return nil, fmt.Errorf("durable-work lifecycle refuses effects-capable %s activation", agentRec.Profile)
+		}
+	}
 	if strings.TrimSpace(agentRec.ChannelID) == "" {
 		agentRec.ChannelID = runID
 	}
@@ -1274,34 +1297,74 @@ const trajectoryActivationDrainTimeout = 30 * time.Second
 // cancelTrajectoryAuthority delegates the durable cancellation transition to
 // the store, which atomically closes open obligations and terminalizes live
 // trajectories. The returned record is the authoritative durable state.
-func (rt *Runtime) cancelTrajectoryAuthority(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
+func (rt *Runtime) cancelTrajectoryAuthorityCommand(ctx context.Context, ownerID, trajectoryID, commandID, reason string, expectedVersion int64, expectedHead string) (types.LifecycleResult, error) {
 	if rt == nil || rt.store == nil {
-		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory: runtime store is unavailable")
+		return types.LifecycleResult{}, fmt.Errorf("cancel trajectory: runtime store is unavailable")
 	}
 	ownerID = strings.TrimSpace(ownerID)
 	trajectoryID = strings.TrimSpace(trajectoryID)
 	if ownerID == "" || trajectoryID == "" {
-		return types.TrajectoryRecord{}, fmt.Errorf("cancel trajectory: owner_id and trajectory_id are required")
+		return types.LifecycleResult{}, fmt.Errorf("cancel trajectory: owner_id and trajectory_id are required")
 	}
 	computerID := strings.TrimSpace(rt.TextureSandboxID())
 	if computerID != "" {
 		if trajectory, lifecycleErr := rt.store.GetLifecycleTrajectory(ctx, ownerID, computerID, trajectoryID); lifecycleErr == nil {
-			if trajectory.Status != types.TrajectoryLive {
-				return trajectory, nil
+			if expectedVersion <= 0 || strings.TrimSpace(expectedHead) == "" {
+				snapshot, snapshotErr := rt.store.GetLifecycleSnapshot(ctx, ownerID, computerID, trajectoryID)
+				if snapshotErr != nil {
+					return types.LifecycleResult{}, snapshotErr
+				}
+				expectedVersion = snapshot.Trajectory.LifecycleVersion
+				expectedHead = snapshot.HeadRevision.RevisionID
+			}
+			if strings.TrimSpace(commandID) == "" {
+				commandID = "lifecycle-cancel:" + trajectoryID
+			}
+			if strings.TrimSpace(reason) == "" {
+				reason = "owner cancellation"
 			}
 			cancel := types.CancelLifecycleRequest{
-				OwnerID: ownerID, ComputerID: computerID,
-				CommandID:    "lifecycle-cancel:" + trajectoryID,
-				TrajectoryID: trajectoryID, Reason: "owner cancellation",
+				OwnerID: ownerID, ComputerID: computerID, CommandID: strings.TrimSpace(commandID),
+				TrajectoryID: trajectory.TrajectoryID, Reason: strings.TrimSpace(reason),
+				ExpectedLifecycleVersion: expectedVersion, ExpectedHeadRevisionID: strings.TrimSpace(expectedHead),
 			}
 			cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
-			result, cancelErr := rt.store.CancelLifecycleTrajectory(ctx, cancel)
-			return result.Trajectory, cancelErr
+			return rt.store.CancelLifecycleTrajectory(ctx, cancel)
 		} else if !errors.Is(lifecycleErr, store.ErrNotFound) {
-			return types.TrajectoryRecord{}, lifecycleErr
+			return types.LifecycleResult{}, lifecycleErr
 		}
 	}
-	return rt.store.CancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
+	if expectedVersion > 0 || strings.TrimSpace(expectedHead) != "" {
+		return types.LifecycleResult{}, store.ErrNotFound
+	}
+	trajectory, err := rt.store.CancelTrajectoryAuthority(ctx, ownerID, trajectoryID)
+	return types.LifecycleResult{Trajectory: trajectory}, err
+}
+
+func (rt *Runtime) cancelTrajectoryAuthority(ctx context.Context, ownerID, trajectoryID string) (types.TrajectoryRecord, error) {
+	computerID := strings.TrimSpace(rt.TextureSandboxID())
+	if computerID != "" {
+		if trajectory, err := rt.store.GetLifecycleTrajectory(ctx, strings.TrimSpace(ownerID), computerID, strings.TrimSpace(trajectoryID)); err == nil && trajectory.Status != types.TrajectoryLive {
+			return trajectory, nil
+		}
+	}
+	result, err := rt.cancelTrajectoryAuthorityCommand(ctx, ownerID, trajectoryID, "", "", 0, "")
+	return result.Trajectory, err
+}
+
+// CancelTrajectoryCommand applies a caller-bound cancellation command and then
+// drains active realizations. Reusing commandID with the same canonical request
+// replays the receipt; reusing it with different input conflicts in the reducer.
+func (rt *Runtime) CancelTrajectoryCommand(ctx context.Context, trajectoryID, ownerID, commandID, reason string, expectedVersion int64, expectedHead string) (types.LifecycleResult, []string, error) {
+	result, err := rt.cancelTrajectoryAuthorityCommand(ctx, ownerID, trajectoryID, commandID, reason, expectedVersion, expectedHead)
+	if err != nil {
+		return types.LifecycleResult{}, nil, err
+	}
+	if result.Trajectory.Status != types.TrajectoryCancelled {
+		return result, nil, nil
+	}
+	cancelled, err := rt.drainCancelledTrajectoryActivations(ctx, strings.TrimSpace(ownerID), strings.TrimSpace(trajectoryID))
+	return result, cancelled, err
 }
 
 // CancelTrajectory cancels an owner-scoped trajectory and then terminates all
@@ -1604,7 +1667,7 @@ func (rt *Runtime) sweepPendingUpdateActors(ctx context.Context, seen map[string
 	if rt == nil || rt.store == nil {
 		return
 	}
-	updates, err := rt.store.ListCoagentMailboxBacklogAll(ctx, 1000)
+	updates, err := rt.store.ListCoagentMailboxBacklogAll(ctx, 0)
 	if err != nil {
 		log.Printf("runtime: boot update sweep: %v", err)
 		return
@@ -1631,7 +1694,7 @@ func (rt *Runtime) sweepOpenWorkItemActors(ctx context.Context) {
 	if rt == nil || rt.store == nil {
 		return
 	}
-	items, err := rt.store.ListOpenAssignedWorkItems(ctx, 1000)
+	items, err := rt.store.ListOpenAssignedWorkItems(ctx, 0)
 	if err != nil {
 		log.Printf("runtime: boot work-item sweep: %v", err)
 		return
@@ -1708,8 +1771,13 @@ func (rt *Runtime) reconcileAssignedWorkItemActor(ctx context.Context, workItems
 		return nil, fmt.Errorf("lookup assigned work-item actor: %w", err)
 	}
 	profile := agentprofile.Canonical(firstNonEmpty(agent.Profile, first.AuthorityProfile))
-	if profile == "" || profile == agentprofile.Email || profile == agentprofile.Conductor || profile == agentprofile.Texture {
+	switch profile {
+	case agentprofile.Researcher, agentprofile.Processor, agentprofile.Reconciler:
+	default:
 		return nil, nil
+	}
+	if agentprofile.Canonical(agent.Role) != profile {
+		return nil, fmt.Errorf("assigned lifecycle actor has conflicting profile and role")
 	}
 	role := strings.TrimSpace(firstNonEmpty(agent.Role, profile))
 	channelID := strings.TrimSpace(agent.ChannelID)

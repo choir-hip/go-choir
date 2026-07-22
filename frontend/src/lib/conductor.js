@@ -4,13 +4,13 @@ function trimText(text) {
   return (text || '').trim();
 }
 
-export async function submitConductorPrompt(text) {
+export async function submitConductorPrompt(text, options = {}) {
   const prompt = trimText(text);
   if (!prompt) {
     throw new Error('Prompt is required');
   }
 
-  const commandId = crypto.randomUUID();
+  const commandId = options.commandId || crypto.randomUUID();
   const res = await fetchWithRenewal('/api/prompt-bar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

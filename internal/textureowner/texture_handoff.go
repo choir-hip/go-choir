@@ -38,6 +38,7 @@ type HandoffRequest struct {
 
 // ConductorDecision is the durable prompt-bar result that opens Texture.
 type ConductorDecision struct {
+	Schema               string   `json:"schema,omitempty"`
 	Action               string   `json:"action"`
 	App                  string   `json:"app,omitempty"`
 	Title                string   `json:"title,omitempty"`
@@ -55,6 +56,7 @@ type ConductorDecision struct {
 	InitialRevisionID    string   `json:"initial_revision_id,omitempty"`
 	InitialLoopID        string   `json:"initial_loop_id,omitempty"`
 	CommandID            string   `json:"command_id,omitempty"`
+	StartRequestDigest   string   `json:"start_request_digest,omitempty"`
 	TrajectoryID         string   `json:"trajectory_id,omitempty"`
 	SubjectID            string   `json:"subject_id,omitempty"`
 	ObligationIDs        []string `json:"obligation_ids,omitempty"`
@@ -188,13 +190,16 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 		strings.TrimSpace(rec.Prompt),
 		metadataStringValue(rec.Metadata, "seed_prompt"),
 	)
-	userRevisionContent := routeSeedPrompt
 	if metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
 		if promptText := strings.TrimSpace(metadataStringValue(rec.Metadata, "seed_prompt")); promptText != "" {
-			userRevisionContent = promptText
+			routeSeedPrompt = promptText
 		}
 	}
+	userRevisionContent := routeSeedPrompt
 	initialPrompt := strings.TrimSpace(objective)
+	if metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
+		initialPrompt = routeSeedPrompt
+	}
 	if initialPrompt == "" {
 		initialPrompt = routeSeedPrompt
 	}
@@ -205,18 +210,21 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 	if commandID == "" {
 		return ConductorDecision{}, fmt.Errorf("start Texture lifecycle: durable command identity unavailable")
 	}
-	lifecycleKey := "choir:texture:lifecycle:" + commandID
-	docID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":document")).String()
-	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":revision:v0")).String()
-	workItemID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":work:initial")).String()
-	trajectoryID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":trajectory")).String()
 	computerID := strings.TrimSpace(h.Core.TextureSandboxID())
 	if computerID == "" {
 		return ConductorDecision{}, fmt.Errorf("start Texture lifecycle: computer identity unavailable")
 	}
+	lifecycleKey := strings.Join([]string{"choir:texture:lifecycle", rec.OwnerID, computerID, commandID}, ":")
+	docID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":document")).String()
+	revisionID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":revision:v0")).String()
+	workItemID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":work:initial")).String()
+	trajectoryID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(lifecycleKey+":trajectory")).String()
 	doc := types.Document{
 		DocID: docID, OwnerID: rec.OwnerID, ComputerID: computerID, TrajectoryID: trajectoryID,
 		Title: decision.Title, CreatedAt: now, UpdatedAt: now,
+	}
+	if metadataStringValue(rec.Metadata, "input_source") == "prompt_bar" {
+		doc.Title = conductorWindowTitle(rec, routeSeedPrompt)
 	}
 	if strings.TrimSpace(doc.Title) == "" {
 		doc.Title = "Texture"
@@ -237,12 +245,10 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 	agentID := currentTextureAgentID(doc.DocID)
 	start := types.StartLifecycleRequest{
 		OwnerID: rec.OwnerID, ComputerID: computerID,
-		CommandID: lifecycleKey, TrajectoryID: trajectoryID,
-		Kind:        types.TrajectoryKindTask,
-		SubjectRefs: map[string]string{"artifact": "texture://documents/" + doc.DocID},
-		SettlementRule: types.SettlementRule{
-			RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"},
-		},
+		CommandID: commandID, TrajectoryID: trajectoryID,
+		Kind:           types.TrajectoryKindTask,
+		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + doc.DocID},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork: types.WorkItemRecord{
 			WorkItemID: workItemID, Objective: initialPrompt, AssignedAgentID: agentID,
 			AuthorityProfile: agentprofile.Texture,
@@ -267,19 +273,39 @@ func (h *Handler) ensureConductorTextureRoute(ctx context.Context, rec *types.Ru
 		decision.InitialRevisionID = userRev.RevisionID
 	}
 	decision.CommandID = start.CommandID
+	decision.Schema = types.DurableWorkSchemaV1
+	decision.StartRequestDigest = start.StartRequestDigest
 	decision.TrajectoryID = started.Trajectory.TrajectoryID
-	decision.SubjectID = started.Agent.AgentID
-	decision.ObligationIDs = []string{started.WorkItem.WorkItemID}
+	if started.Agent != nil && started.WorkItem != nil {
+		decision.SubjectID = started.Agent.AgentID
+		decision.ObligationIDs = []string{started.WorkItem.WorkItemID}
+	}
 	decision.ReducerSeq = started.Trajectory.ReducerSeq
 	decision.SnapshotCursor = started.Trajectory.ReducerSeq
-	initialRun, err := h.submitTextureAgentRevisionRun(ctx, doc, rec.OwnerID, textureAgentRevisionRequest{
-		Intent: "initial_conductor_workflow",
-		Prompt: initialPrompt,
-	}, 0)
-	if err != nil {
-		return ConductorDecision{}, fmt.Errorf("start initial Texture agent revision: %w", err)
+	if started.Replay {
+		snapshot, snapshotErr := h.Store.GetLifecycleSnapshot(ctx, rec.OwnerID, computerID, started.Trajectory.TrajectoryID)
+		if snapshotErr != nil {
+			return ConductorDecision{}, fmt.Errorf("reconstruct replayed Texture lifecycle: %w", snapshotErr)
+		}
+		if len(snapshot.Agents) != 1 || len(snapshot.WorkItems) == 0 {
+			return ConductorDecision{}, fmt.Errorf("reconstruct replayed Texture lifecycle: durable subjects unavailable")
+		}
+		decision.SubjectID = snapshot.Agents[0].AgentID
+		decision.ObligationIDs = make([]string, 0, len(snapshot.WorkItems))
+		for _, work := range snapshot.WorkItems {
+			decision.ObligationIDs = append(decision.ObligationIDs, work.WorkItemID)
+		}
+		decision.InitialLoopID = snapshot.Activation.RunID
+	} else {
+		initialRun, submitErr := h.submitTextureAgentRevisionRun(ctx, doc, rec.OwnerID, textureAgentRevisionRequest{
+			Intent: "initial_conductor_workflow",
+			Prompt: initialPrompt,
+		}, 0)
+		if submitErr != nil {
+			return ConductorDecision{}, fmt.Errorf("start initial Texture agent revision: %w", submitErr)
+		}
+		decision.InitialLoopID = initialRun.RunID
 	}
-	decision.InitialLoopID = initialRun.RunID
 	decision = fillConductorDecisionFromRun(rec, decision)
 
 	if rec.Metadata == nil {

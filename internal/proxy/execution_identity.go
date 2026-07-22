@@ -1,25 +1,35 @@
 package proxy
 
 import (
+	"bytes"
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
-const executionIdentitySchemaV1 = "choir.execution_identity.v1"
+const (
+	executionIdentitySchemaV1 = "choir.execution_identity.v1"
+	executionIdentityAudience = "choir.news/acceptance/execution-identity"
+)
 
 type guestExecutionIdentityEnvelope struct {
 	Schema   string `json:"schema"`
 	Identity struct {
 		Schema              string          `json:"schema"`
 		Nonce               string          `json:"nonce"`
+		Audience            string          `json:"audience"`
 		ComputerID          string          `json:"computer_id"`
 		RealizationID       string          `json:"realization_id"`
 		VMEpoch             string          `json:"vm_epoch"`
@@ -30,21 +40,24 @@ type guestExecutionIdentityEnvelope struct {
 		IssuedAt            string          `json:"issued_at"`
 		ExpiresAt           string          `json:"expires_at"`
 	} `json:"identity"`
-	Receipt         json.RawMessage `json:"receipt"`
-	SignerPublicKey string          `json:"signer_public_key"`
+	Receipt         computerevent.Receipt `json:"receipt"`
+	SignerPublicKey string                `json:"signer_public_key"`
 }
 
 type hostServiceIdentity struct {
-	PackagePath    string `json:"package_path"`
+	Role           string `json:"role,omitempty"`
+	PackagePath    string `json:"package_path,omitempty"`
+	PackageDigest  string `json:"package_digest"`
 	EmbeddedCommit string `json:"embedded_commit"`
 }
 
 type hostDeploymentIdentity struct {
-	CanonicalRef  string                         `json:"canonical_ref"`
-	CheckoutHead  string                         `json:"checkout_head"`
-	CheckoutClean bool                           `json:"checkout_clean"`
-	NixOSClosure  string                         `json:"nixos_closure"`
-	Services      map[string]hostServiceIdentity `json:"services"`
+	CanonicalRef       string                         `json:"canonical_ref"`
+	CheckoutHead       string                         `json:"checkout_head,omitempty"`
+	CheckoutClean      bool                           `json:"checkout_clean"`
+	NixOSClosure       string                         `json:"nixos_closure,omitempty"`
+	NixOSClosureDigest string                         `json:"nixos_closure_digest"`
+	Services           map[string]hostServiceIdentity `json:"services"`
 }
 
 type deploymentIdentityReceipt struct {
@@ -60,13 +73,19 @@ type deploymentIdentityReceipt struct {
 }
 
 type joinedExecutionIdentity struct {
-	Schema            string                         `json:"schema"`
-	Joined            bool                           `json:"joined"`
-	Guest             guestExecutionIdentityEnvelope `json:"guest"`
-	VMCTL             map[string]any                 `json:"vmctl"`
-	Route             *computeImmutableIdentity      `json:"route"`
-	HostBuild         buildinfo.Info                 `json:"host_build"`
-	DeploymentReceipt json.RawMessage                `json:"deployment_receipt"`
+	Schema              string                               `json:"schema"`
+	Joined              bool                                 `json:"joined"`
+	RouteDigest         string                               `json:"route_digest"`
+	Guest               guestExecutionIdentityEnvelope       `json:"guest"`
+	VMCTL               map[string]any                       `json:"vmctl"`
+	HostBuild           buildinfo.Info                       `json:"host_build"`
+	DeploymentReceipt   json.RawMessage                      `json:"deployment_receipt"`
+	PlatformAttestation executionIdentityPlatformAttestation `json:"platform_attestation"`
+}
+
+type executionIdentityPlatformAttestation struct {
+	Receipt         computerevent.Receipt `json:"receipt"`
+	SignerPublicKey string                `json:"signer_public_key"`
 }
 
 func deploymentReceiptPath() string {
@@ -96,15 +115,199 @@ func readDeploymentIdentityReceipt() (json.RawMessage, deploymentIdentityReceipt
 		receipt.HostIdentity.CanonicalRef != "refs/heads/main@"+receipt.TargetCommit ||
 		receipt.HostIdentity.CheckoutHead != receipt.TargetCommit || !receipt.HostIdentity.CheckoutClean ||
 		!strings.HasPrefix(receipt.HostIdentity.NixOSClosure, "/nix/store/") ||
-		!strings.HasPrefix(proxy.PackagePath, "/nix/store/") || len(proxy.EmbeddedCommit) != 40 {
+		!strings.HasPrefix(receipt.HostIdentity.NixOSClosureDigest, "sha256:") ||
+		!strings.HasPrefix(proxy.PackagePath, "/nix/store/") || !strings.HasPrefix(proxy.PackageDigest, "sha256:") ||
+		len(proxy.EmbeddedCommit) != 40 {
 		return nil, deploymentIdentityReceipt{}, fmt.Errorf("deployment receipt is incomplete or conflicting")
 	}
-	return json.RawMessage(raw), receipt, nil
+	publicReceipt, err := publicDeploymentIdentityReceipt(receipt)
+	if err != nil {
+		return nil, deploymentIdentityReceipt{}, err
+	}
+	return publicReceipt, receipt, nil
+}
+
+func publicDeploymentIdentityReceipt(receipt deploymentIdentityReceipt) (json.RawMessage, error) {
+	receipt.HostIdentity.CheckoutHead = ""
+	receipt.HostIdentity.NixOSClosure = ""
+	for role, service := range receipt.HostIdentity.Services {
+		service.Role = role
+		service.PackagePath = ""
+		receipt.HostIdentity.Services[role] = service
+	}
+	raw, err := json.Marshal(receipt)
+	return json.RawMessage(raw), err
+}
+
+type executionIdentityKeyResolver struct {
+	keyID  string
+	domain string
+	key    ed25519.PublicKey
+}
+
+func (r executionIdentityKeyResolver) ResolveReceiptKey(domain, _ string, keyID string, _ uint64, _ time.Time) (ed25519.PublicKey, error) {
+	expectedDomain := r.domain
+	if expectedDomain == "" {
+		expectedDomain = "guest-core"
+	}
+	if domain != expectedDomain || keyID != r.keyID || len(r.key) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("untrusted execution identity signer")
+	}
+	return r.key, nil
+}
+
+func verifyGuestExecutionIdentity(guest guestExecutionIdentityEnvelope) error {
+	publicKey, err := base64.RawStdEncoding.DecodeString(guest.SignerPublicKey)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize || guest.Receipt.ReceiptKind != "ExecutionIdentity" ||
+		guest.Receipt.Issuer != "choir-sandbox" || len(guest.Receipt.RequiredSigners) != 1 ||
+		guest.Receipt.RequiredSigners[0].SignerDomain != "guest-core" {
+		return fmt.Errorf("invalid guest execution identity signer")
+	}
+	expectedFields := map[string]any{
+		"schema": guest.Identity.Schema, "nonce": guest.Identity.Nonce,
+		"audience":    guest.Identity.Audience,
+		"computer_id": guest.Identity.ComputerID, "realization_id": guest.Identity.RealizationID,
+		"vm_epoch": guest.Identity.VMEpoch, "executable": guest.Identity.Executable,
+		"guest_image_manifest": guest.Identity.GuestImageManifest,
+		"kernel_configuration": guest.Identity.KernelConfiguration, "build": guest.Identity.Build,
+		"expires_at": guest.Identity.ExpiresAt,
+	}
+	got, gotErr := computerevent.CanonicalJSON(guest.Receipt.KindFields)
+	want, wantErr := computerevent.CanonicalJSON(expectedFields)
+	if gotErr != nil || wantErr != nil || !bytes.Equal(got, want) {
+		return fmt.Errorf("guest execution identity receipt fields do not match")
+	}
+	issuedAt, issuedErr := time.Parse(time.RFC3339Nano, guest.Identity.IssuedAt)
+	expiresAt, expiresErr := time.Parse(time.RFC3339Nano, guest.Identity.ExpiresAt)
+	now := time.Now().UTC()
+	if issuedErr != nil || expiresErr != nil || guest.Receipt.IssuedAt != guest.Identity.IssuedAt ||
+		guest.Identity.Audience != executionIdentityAudience ||
+		issuedAt.After(now.Add(5*time.Second)) || expiresAt.After(issuedAt.Add(2*time.Minute)) || !expiresAt.After(now) {
+		return fmt.Errorf("guest execution identity time or audience binding invalid")
+	}
+	return guest.Receipt.Verify(executionIdentityKeyResolver{
+		keyID: guest.Receipt.RequiredSigners[0].KeyID,
+		key:   ed25519.PublicKey(publicKey),
+	})
+}
+
+func canonicalIdentityDigest(value any) (string, error) {
+	canonical, err := computerevent.CanonicalJSON(value)
+	if err != nil {
+		return "", err
+	}
+	return "sha256:" + computerevent.DigestBytes(canonical), nil
+}
+
+func verifyPlatformExecutionIdentity(attestation executionIdentityPlatformAttestation, expectedFields map[string]any, expectedSignerDigest string) error {
+	publicKey, err := base64.RawStdEncoding.DecodeString(attestation.SignerPublicKey)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize ||
+		attestation.Receipt.ReceiptKind != "ExecutionIdentityJoin" || attestation.Receipt.Issuer != "corpusd" ||
+		len(attestation.Receipt.RequiredSigners) != 1 || attestation.Receipt.RequiredSigners[0].SignerDomain != "platform-control" {
+		return fmt.Errorf("invalid platform execution identity signer")
+	}
+	if !strings.EqualFold(strings.TrimSpace(expectedSignerDigest), "sha256:"+computerevent.DigestBytes(publicKey)) {
+		return fmt.Errorf("platform execution identity signer is not pinned")
+	}
+	got, gotErr := computerevent.CanonicalJSON(attestation.Receipt.KindFields)
+	want, wantErr := computerevent.CanonicalJSON(expectedFields)
+	if gotErr != nil || wantErr != nil || !bytes.Equal(got, want) {
+		return fmt.Errorf("platform execution identity receipt fields do not match")
+	}
+	ref := attestation.Receipt.RequiredSigners[0]
+	expectedKeyID := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(expectedSignerDigest)), "sha256:")
+	if len(expectedKeyID) < 16 || !strings.EqualFold(ref.KeyID, expectedKeyID[:16]) {
+		return fmt.Errorf("platform execution identity signer key id is not pinned")
+	}
+	return attestation.Receipt.Verify(executionIdentityKeyResolver{
+		keyID: ref.KeyID, domain: "platform-control", key: ed25519.PublicKey(publicKey),
+	})
+}
+
+func (h *Handler) attestExecutionIdentity(
+	r *http.Request,
+	guest guestExecutionIdentityEnvelope,
+	vmctlIdentity map[string]any,
+	route *computeImmutableIdentity,
+	hostBuild buildinfo.Info,
+	deploymentReceipt json.RawMessage,
+	expectedPlatformSignerDigest string,
+) (executionIdentityPlatformAttestation, error) {
+	guestDigest, err := canonicalIdentityDigest(guest.Receipt)
+	if err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	routeDigest, err := canonicalIdentityDigest(route)
+	if err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	hostBuildDigest, err := canonicalIdentityDigest(hostBuild)
+	if err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	deploymentDigest, err := canonicalIdentityDigest(deploymentReceipt)
+	if err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	guestSignerKey, err := base64.RawStdEncoding.DecodeString(guest.SignerPublicKey)
+	if err != nil || len(guestSignerKey) != ed25519.PublicKeySize {
+		return executionIdentityPlatformAttestation{}, fmt.Errorf("guest signer key unavailable")
+	}
+	requestBody := map[string]any{
+		"schema": executionIdentitySchemaV1, "nonce": guest.Identity.Nonce,
+		"deployed_commit": hostBuild.Commit,
+		"computer_id":     guest.Identity.ComputerID, "realization_id": guest.Identity.RealizationID,
+		"vm_epoch": guest.Identity.VMEpoch, "guest_receipt_digest": guestDigest,
+		"audience": executionIdentityAudience,
+		"vmctl":    vmctlIdentity, "route_digest": routeDigest, "host_build_digest": hostBuildDigest,
+		"guest_signer_key_digest":   "sha256:" + computerevent.DigestBytes(guestSignerKey),
+		"deployment_receipt_digest": deploymentDigest,
+	}
+	raw, err := json.Marshal(requestBody)
+	if err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	endpoint, err := joinBasePath(h.cfg.CorpusdURL, "/internal/platform/execution-identity/attest")
+	if err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, endpoint, bytes.NewReader(raw))
+	if err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Internal-Caller", "true")
+	response, err := h.corpusd.Do(request)
+	if err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return executionIdentityPlatformAttestation{}, fmt.Errorf("platform signer status %d", response.StatusCode)
+	}
+	var attestation executionIdentityPlatformAttestation
+	decoder := json.NewDecoder(io.LimitReader(response.Body, 64<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&attestation); err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	if err := verifyPlatformExecutionIdentity(attestation, requestBody, expectedPlatformSignerDigest); err != nil {
+		return executionIdentityPlatformAttestation{}, err
+	}
+	return attestation, nil
 }
 
 // HandleExecutionIdentity joins guest-core evidence to the independently
 // resolved vmctl realization, immutable ComputerVersion route, host build, CI
 // deployment receipt, NixOS closure, and service executable inventory.
+func executionIdentityCommitsJoin(target string, host buildinfo.Info, hostEmbeddedCommit, routeCommit string, guest buildinfo.Info) bool {
+	target = strings.TrimSpace(target)
+	return len(target) == 40 &&
+		host.Commit == target && host.DeployedCommit == target &&
+		hostEmbeddedCommit == target && routeCommit == target &&
+		guest.Commit == target && guest.DeployedCommit == target
+}
+
 func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
@@ -115,7 +318,13 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "authentication required"})
 		return
 	}
-	if !h.authorizeAPIKeyScope(w, r, authResult) {
+	if authResult.AuthMethod != "api_key" || (!hasAPIKeyScope(authResult.Scopes, "admin") && !hasAPIKeyScope(authResult.Scopes, "acceptance:read")) {
+		writeJSON(w, http.StatusForbidden, errorResponse{Error: "acceptance API key scope required"})
+		return
+	}
+	expectedPlatformSignerDigest := h.platformSignerDigest
+	if !strings.HasPrefix(expectedPlatformSignerDigest, "sha256:") {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity trust configuration unavailable"})
 		return
 	}
 	if h.vmctlClient == nil {
@@ -151,6 +360,7 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+
 	if err != nil || response.StatusCode != http.StatusOK {
 		writeJSON(w, http.StatusBadGateway, errorResponse{Error: "execution identity guest refused"})
 		return
@@ -158,8 +368,15 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 	var guest guestExecutionIdentityEnvelope
 	decoder := json.NewDecoder(strings.NewReader(string(body)))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&guest); err != nil || guest.Schema != executionIdentitySchemaV1 || guest.Identity.Schema != executionIdentitySchemaV1 || guest.Identity.Nonce != strings.TrimSpace(r.URL.Query().Get("nonce")) || len(guest.Receipt) == 0 || guest.SignerPublicKey == "" {
+	if err := decoder.Decode(&guest); err != nil || guest.Schema != executionIdentitySchemaV1 ||
+		guest.Identity.Schema != executionIdentitySchemaV1 || guest.Identity.Audience != executionIdentityAudience ||
+		guest.Identity.Nonce != strings.TrimSpace(r.URL.Query().Get("nonce")) ||
+		guest.Receipt.ReceiptKind == "" || guest.SignerPublicKey == "" {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity guest evidence invalid"})
+		return
+	}
+	if err := verifyGuestExecutionIdentity(guest); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity guest signature invalid"})
 		return
 	}
 	expectedRealization := fmt.Sprintf("%s-epoch-%d", ownership.VMID, ownership.Epoch)
@@ -170,15 +387,25 @@ func (h *Handler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Request
 	receiptRaw, receipt, err := readDeploymentIdentityReceipt()
 	hostBuild := buildinfo.Snapshot("proxy")
 	hostProxy := receipt.HostIdentity.Services["proxy"]
-	if err != nil || hostBuild.Commit != hostProxy.EmbeddedCommit ||
-		guest.Identity.Build.Commit != routeIdentity.CodeCommit ||
-		guest.Identity.Build.DeployedCommit != guest.Identity.Build.Commit {
+	if err != nil || !executionIdentityCommitsJoin(receipt.TargetCommit, hostBuild, hostProxy.EmbeddedCommit, routeIdentity.CodeCommit, guest.Identity.Build) {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity host, guest, route, and CI join unavailable"})
+		return
+	}
+	vmctlIdentity := map[string]any{"computer_id": ownership.ComputerID, "vm_id": ownership.VMID, "epoch": ownership.Epoch, "state": ownership.State}
+	platformAttestation, err := h.attestExecutionIdentity(r, guest, vmctlIdentity, routeIdentity, hostBuild, receiptRaw, expectedPlatformSignerDigest)
+	if err != nil {
+		log.Printf("proxy execution identity: platform attestation: %v", err)
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity platform attestation unavailable"})
+		return
+	}
+	routeDigest, err := canonicalIdentityDigest(routeIdentity)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "execution identity route digest unavailable"})
 		return
 	}
 	writeJSON(w, http.StatusOK, joinedExecutionIdentity{
 		Schema: executionIdentitySchemaV1, Joined: true, Guest: guest,
-		VMCTL: map[string]any{"computer_id": ownership.ComputerID, "vm_id": ownership.VMID, "epoch": ownership.Epoch, "state": ownership.State},
-		Route: routeIdentity, HostBuild: hostBuild, DeploymentReceipt: receiptRaw,
+		VMCTL: vmctlIdentity, RouteDigest: routeDigest, HostBuild: hostBuild, DeploymentReceipt: receiptRaw,
+		PlatformAttestation: platformAttestation,
 	})
 }

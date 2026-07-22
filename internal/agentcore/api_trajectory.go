@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -18,10 +19,20 @@ type trajectoryListResponse struct {
 	Trajectories []types.TrajectoryRecord `json:"trajectories"`
 }
 
+type trajectoryCancelRequest struct {
+	IdempotencyKey           string `json:"idempotency_key"`
+	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
+	ExpectedHeadRevisionID   string `json:"expected_head_revision_id"`
+	Reason                   string `json:"reason,omitempty"`
+}
+
 type trajectoryCancelResponse struct {
-	TrajectoryID    string                 `json:"trajectory_id"`
-	Status          types.TrajectoryStatus `json:"status"`
-	CancelledRunIDs []string               `json:"cancelled_run_ids"`
+	types.LifecycleSnapshot
+	TrajectoryID    string                        `json:"trajectory_id"`
+	Status          types.TrajectoryStatus        `json:"status"`
+	CancelledRunIDs []string                      `json:"cancelled_run_ids"`
+	Receipt         types.LifecycleCommandReceipt `json:"receipt"`
+	Replay          bool                          `json:"replay"`
 }
 
 // HandleTrajectoriesRoot handles GET /api/trajectories: the owner's
@@ -42,6 +53,19 @@ func (h *APIHandler) HandleTrajectoriesRoot(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, trajectoryListResponse{Trajectories: trajectories})
+}
+
+func writeLifecycleAPIError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, store.ErrLifecycleCursorExpired):
+		writeAPIJSON(w, http.StatusConflict, types.LifecycleEventPage{Schema: types.DurableWorkSchemaV1, CursorExpired: true, ReplayRequired: true})
+	case errors.Is(err, store.ErrNotFound):
+		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "lifecycle object not found"})
+	case errors.Is(err, store.ErrLifecycleCommandConflict), errors.Is(err, store.ErrLifecycleInvalidTransition), errors.Is(err, store.ErrConcurrentStateChange):
+		writeAPIJSON(w, http.StatusConflict, apiError{Error: "lifecycle transition rejected", Reason: err.Error()})
+	default:
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle transition", Reason: err.Error()})
+	}
 }
 
 // HandleTrajectoryDetail handles the registered /api/trajectories/{trajectory_id}
@@ -96,7 +120,6 @@ func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if snapshot, snapshotErr := h.rt.Store().GetLifecycleSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID); snapshotErr == nil {
-		h.enrichLifecycleActivation(r, ownerID, &snapshot)
 		writeAPIJSON(w, http.StatusOK, snapshot)
 		return
 	} else if !errors.Is(snapshotErr, store.ErrNotFound) {
@@ -113,18 +136,6 @@ func (h *APIHandler) HandleTrajectoryDetail(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, obligations)
-}
-
-func (h *APIHandler) enrichLifecycleActivation(r *http.Request, ownerID string, snapshot *types.LifecycleSnapshot) {
-	if snapshot == nil || len(snapshot.Agents) == 0 {
-		return
-	}
-	agentID := snapshot.Agents[0].AgentID
-	snapshot.Activation = types.LifecycleActivationProjection{AgentID: agentID, State: types.RunPassivated}
-	if active, found, err := h.rt.activeRunByAgent(r.Context(), ownerID, agentID); err == nil && found {
-		snapshot.Activation.RunID = active.RunID
-		snapshot.Activation.State = active.State
-	}
 }
 
 func (h *APIHandler) streamLifecycleEvents(w http.ResponseWriter, r *http.Request, ownerID, trajectoryID string) {
@@ -196,19 +207,43 @@ func (h *APIHandler) HandleTrajectoryCancel(w http.ResponseWriter, r *http.Reque
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
 		return
 	}
-	trajectory, cancelledRunIDs, err := h.rt.CancelTrajectory(r.Context(), trajectoryID, ownerID)
+	var request trajectoryCancelRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+	decoder.DisallowUnknownFields()
+	if decodeErr := decoder.Decode(&request); decodeErr != nil && !errors.Is(decodeErr, io.EOF) {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid cancellation command"})
+		return
+	}
+	request.IdempotencyKey = strings.TrimSpace(request.IdempotencyKey)
+	request.ExpectedHeadRevisionID = strings.TrimSpace(request.ExpectedHeadRevisionID)
+	if request.IdempotencyKey == "" || request.ExpectedLifecycleVersion <= 0 || request.ExpectedHeadRevisionID == "" {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "idempotency_key, expected_lifecycle_version, and expected_head_revision_id are required"})
+		return
+	}
+	if len(request.IdempotencyKey) > 256 {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "idempotency_key is too long"})
+		return
+	}
+	result, cancelledRunIDs, err := h.rt.CancelTrajectoryCommand(
+		r.Context(), trajectoryID, ownerID, "public-cancel:"+request.IdempotencyKey, strings.TrimSpace(request.Reason),
+		request.ExpectedLifecycleVersion, request.ExpectedHeadRevisionID,
+	)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeAPIJSON(w, http.StatusNotFound, apiError{Error: "trajectory not found"})
 			return
 		}
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to cancel trajectory"})
+		writeLifecycleAPIError(w, err)
+		return
+	}
+	snapshot, snapshotErr := h.rt.Store().GetLifecycleSnapshot(r.Context(), ownerID, h.rt.TextureSandboxID(), trajectoryID)
+	if snapshotErr != nil {
+		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load cancelled lifecycle snapshot"})
 		return
 	}
 	writeAPIJSON(w, http.StatusOK, trajectoryCancelResponse{
-		TrajectoryID:    trajectory.TrajectoryID,
-		Status:          trajectory.Status,
-		CancelledRunIDs: cancelledRunIDs,
+		LifecycleSnapshot: snapshot, TrajectoryID: result.Trajectory.TrajectoryID,
+		Status: result.Trajectory.Status, CancelledRunIDs: cancelledRunIDs, Receipt: result.Receipt, Replay: result.Replay,
 	})
 }
 

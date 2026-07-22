@@ -28,7 +28,7 @@ import (
 
 const liveLLMOwnerID = "user-live-llm"
 
-func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) {
+func TestLiveLLMWorkflowWithFakeSearchGatewayResearchTextureEffectsOff(t *testing.T) {
 	if os.Getenv("GO_CHOIR_LIVE_LLM_FAKE_SEARCH") != "1" {
 		t.Skip("set GO_CHOIR_LIVE_LLM_FAKE_SEARCH=1 to run this live-LLM/fake-search dry-run")
 	}
@@ -177,110 +177,38 @@ func TestLiveLLMWorkflowWithFakeSearchGatewayResearchSuperTexture(t *testing.T) 
 	}
 
 	textureRegistry := rt.ToolRegistryForProfile(agentprofile.Texture)
-	superRequestRaw, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
+	if _, err := textureRegistry.Execute(toolregistry.WithExecutionContext(context.Background(), toolregistry.ExecutionContext{
 		RunID: initialTextureRun.RunID, AgentID: initialTextureRun.AgentID, OwnerID: initialTextureRun.OwnerID,
 		Profile: initialTextureRun.AgentProfile, Role: initialTextureRun.AgentRole, ChannelID: initialTextureRun.ChannelID,
 		SandboxID: initialTextureRun.SandboxID, RunRecord: initialTextureRun,
-	}), "request_super_execution", json.RawMessage(fmt.Sprintf(`{
-		"objective":%q,
-		"channel_id":%q,
-		"model":%q
-	}`, "Live verification: use write_file to create artifacts/live-evolution-ca.txt containing 'live deterministic CA artifact verified'. Then run bash to verify that the artifact exists and contains verified. Then call update_coagent without update_id as schema_version coagent_source_packet.v1, kind execution_result, a concise summary, sources for the file_artifact and test_run, and one revise_texture action for the parent texture agent. Do not finish until update_coagent returns.", decision.DocID, model)))
-	if err != nil {
-		t.Fatalf("request live super execution: %v", err)
-	}
-	var superRequest struct {
-		RunID string `json:"loop_id"`
-	}
-	if err := json.Unmarshal([]byte(superRequestRaw), &superRequest); err != nil {
-		t.Fatalf("decode live super request: %v\n%s", err, superRequestRaw)
-	}
-	superDone := waitLiveRun(t, rt, superRequest.RunID, liveLLMOwnerID, 180*time.Second)
-	if superDone.State != types.RunCompleted {
-		t.Fatalf("super state = %q error=%q result=%q", superDone.State, superDone.Error, superDone.Result)
-	}
-	updates, err = db.ListWorkerUpdatesByTrajectory(context.Background(), liveLLMOwnerID, conductorID, 20)
-	if err != nil {
-		t.Fatalf("list live worker updates: %v", err)
-	}
-	var superUpdate *types.CoagentSourcePacket
-	for i := range updates {
-		if updates[i].Role == "super" {
-			superUpdate = &updates[i]
-			break
-		}
-	}
-	if superUpdate == nil {
-		t.Fatalf("live super completed without durable worker update; updates=%+v result=%q", updates, superDone.Result)
-	}
-	if superUpdate.ChannelID != decision.DocID || superUpdate.MessageSeq == 0 {
-		t.Fatalf("live super update routed to channel=%q seq=%d, want channel=%q with message cursor; update=%+v result=%q", superUpdate.ChannelID, superUpdate.MessageSeq, decision.DocID, superUpdate, superDone.Result)
-	}
-	if superUpdate.TargetAgentID != "texture:"+decision.DocID {
-		t.Fatalf("live super update targeted %q, want texture:%s; update=%+v result=%q", superUpdate.TargetAgentID, decision.DocID, superUpdate, superDone.Result)
-	}
-	if len(liveCoagentPacketSourceURIs(superUpdate.Packet, "file_artifact")) == 0 || len(liveCoagentPacketSourceURIs(superUpdate.Packet, "test_run")) == 0 {
-		t.Fatalf("live super update missing artifact/test packet sources: %+v", superUpdate)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "artifacts", "live-evolution-ca.txt")); err != nil {
-		t.Fatalf("live super did not create artifact file: %v", err)
+	}), "request_super_execution", json.RawMessage(`{"objective":"effect request must be unavailable"}`)); err == nil {
+		t.Fatal("effects-OFF Texture registry exposed request_super_execution")
 	}
 
-	final := waitLiveConsumedSeqs(t, db, decision.DocID, conductorID, []int64{researchUpdate.MessageSeq, superUpdate.MessageSeq}, 180*time.Second)
-	if final.revision.RevisionID == "" {
-		t.Fatal("missing final texture revision")
+	final := waitLiveConsumedSeqs(t, db, decision.DocID, conductorID, []int64{researchUpdate.MessageSeq}, 180*time.Second)
+	if final.revision.RevisionID == "" || strings.TrimSpace(final.revision.Content) == "" {
+		t.Fatalf("missing final Texture revision after researcher delivery: %+v", final.revision)
 	}
-	if strings.TrimSpace(final.revision.Content) == "" {
-		t.Fatalf("final texture revision is empty: %+v", final.revision)
+	if !strings.Contains(strings.ToLower(final.revision.Content), "cellular automata") {
+		t.Fatalf("final Texture revision omitted grounded research: %s", final.revision.Content)
 	}
-	finalContent := final.revision.Content
-	for _, want := range []string{"cellular automata", "artifacts/live-evolution-ca.txt"} {
-		if !strings.Contains(strings.ToLower(finalContent), strings.ToLower(want)) {
-			t.Fatalf("final texture revision missing %q: %s", want, finalContent)
-		}
-	}
-	if !strings.Contains(strings.ToLower(finalContent), "verification") || !strings.Contains(strings.ToLower(finalContent), "verified") {
-		t.Fatalf("final texture revision missing verification result: %s", finalContent)
-	}
-	if strings.Contains(finalContent, "Task completed successfully") ||
-		strings.Contains(finalContent, "Worker update ready.") ||
-		strings.Contains(finalContent, "Coagent update ready.") ||
-		strings.Contains(finalContent, "Research findings ready.") {
-		t.Fatalf("final texture revision contains raw status/tool chatter: %s", finalContent)
-	}
-
 	eventsByTrajectory, err := db.ListEventsByTrajectory(context.Background(), liveLLMOwnerID, conductorID, 500)
 	if err != nil {
 		t.Fatalf("list live trace events: %v", err)
 	}
-	if !liveSuccessfulToolResult(eventsByTrajectory, "web_search") {
-		t.Fatalf("trace missing successful web_search tool result")
-	}
-	if !liveSuccessfulToolResult(eventsByTrajectory, "update_coagent") {
-		t.Fatalf("trace missing successful update_coagent tool result")
-	}
-	if !liveSuccessfulToolResult(eventsByTrajectory, "write_file") {
-		t.Fatalf("trace missing successful write_file tool result")
-	}
-	if !liveSuccessfulBashResult(eventsByTrajectory) {
-		t.Fatalf("trace missing successful bash verification result")
-	}
-	if !liveEventsContain(eventsByTrajectory, types.EventTextureAgentRevisionCompleted, "") {
-		t.Fatalf("trace missing Texture revision completion")
+	if !liveSuccessfulToolResult(eventsByTrajectory, "web_search") ||
+		!liveSuccessfulToolResult(eventsByTrajectory, "update_coagent") ||
+		!liveEventsContain(eventsByTrajectory, types.EventTextureAgentRevisionCompleted, "") {
+		t.Fatal("trace omitted research, durable update, or Texture revision evidence")
 	}
 	if _, err := h.VerifyTextureWorkflow(context.Background(), textureowner.TextureWorkflowVerificationOptions{
-		OwnerID:                     liveLLMOwnerID,
-		TrajectoryID:                conductorID,
-		PromptSubmissionID:          conductorID,
-		RequireResearchUpdates:      true,
-		RequireWorkerUpdates:        true,
-		RequirePersistentSuper:      true,
-		RequireSearchToolEvent:      true,
-		RequireArtifactWriteEvent:   true,
-		RequireVerificationCmdEvent: true,
-		RequireWorkerConsumption:    true,
+		OwnerID:                  liveLLMOwnerID,
+		TrajectoryID:             conductorID,
+		PromptSubmissionID:       conductorID,
+		RequireResearchUpdates:   true,
+		RequireWorkerConsumption: true,
 	}); err != nil {
-		t.Fatalf("event-log verifier rejected live workflow: %v", err)
+		t.Fatalf("event-log verifier rejected effects-OFF live workflow: %v", err)
 	}
 }
 

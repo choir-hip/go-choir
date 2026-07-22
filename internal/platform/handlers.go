@@ -382,6 +382,7 @@ func RegisterRoutes(s *server.Server, h *Handler) {
 	s.HandleFunc("/internal/computers/checkpoints", h.HandleComputerCheckpoint)
 	s.HandleFunc("/internal/computers/route-projection-certificates", h.HandleRouteProjectionCertificate)
 	s.HandleFunc("/internal/platform/control-key", h.HandlePlatformControlPublicKey)
+	s.HandleFunc("/internal/platform/execution-identity/attest", h.HandleExecutionIdentityAttestation)
 	s.HandleFunc("/internal/platform/publications/texture", h.HandleInternalPublishTexture)
 	s.HandleFunc("/internal/platform/publications/resolve", h.HandleInternalResolvePublication)
 	s.HandleFunc("/internal/platform/publications/export", h.HandleInternalExportPublication)

@@ -24,7 +24,7 @@ func startDurableTextureParent(t *testing.T, rt *agentcore.Runtime, ownerID, doc
 	start := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: computerID, CommandID: "email-start:" + docID, TrajectoryID: "email-trajectory:" + docID,
 		Kind:            types.TrajectoryKindDocument,
-		SettlementRule:  types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID},
 		InitialWork:     types.WorkItemRecord{WorkItemID: "email-work:" + docID, Objective: prompt, AssignedAgentID: agentID},
 		InitialDocument: types.Document{DocID: docID, Title: "Email source"},

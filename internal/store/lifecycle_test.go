@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ func lifecycleStartFixture() types.StartLifecycleRequest {
 		CommandID:    "command-start-1",
 		TrajectoryID: "trajectory-lifecycle-1", Kind: types.TrajectoryKindTask,
 		SubjectRefs:     map[string]string{"artifact": "texture://artifact/1", "doc_id": "document-lifecycle-1"},
-		SettlementRule:  types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork:     types.WorkItemRecord{WorkItemID: "work-lifecycle-1", Objective: "produce artifact"},
 		InitialDocument: types.Document{DocID: "document-lifecycle-1", Title: "Lifecycle artifact"},
 		InitialRevision: types.Revision{RevisionID: "revision-lifecycle-v0", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "Initial artifact"},
@@ -29,6 +30,25 @@ func lifecycleStartFixture() types.StartLifecycleRequest {
 	return req
 }
 
+func TestStartLifecycleRefusesUnknownOrIncompleteSettlementRule(t *testing.T) {
+	s := openTestStore(t)
+	for name, mutate := range map[string]func(*types.StartLifecycleRequest){
+		"missing version":     func(req *types.StartLifecycleRequest) { req.SettlementRule.Version = "" },
+		"unknown version":     func(req *types.StartLifecycleRequest) { req.SettlementRule.Version = "durable-work/v2" },
+		"missing predicate":   func(req *types.StartLifecycleRequest) { req.SettlementRule.RequireNoOpenWorkItems = false },
+		"missing subject ref": func(req *types.StartLifecycleRequest) { req.SettlementRule.RequiredSubjectRefs = []string{"missing"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			req := lifecycleStartFixture()
+			mutate(&req)
+			req.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(req)
+			if _, err := s.StartLifecycle(context.Background(), req); !errors.Is(err, ErrLifecycleInvalidTransition) {
+				t.Fatalf("start error=%v, want ErrLifecycleInvalidTransition", err)
+			}
+		})
+	}
+}
+
 func TestStartLifecycleAtomicReplayAndScope(t *testing.T) {
 	s := openTestStore(t)
 	ctx := context.Background()
@@ -40,6 +60,11 @@ func TestStartLifecycleAtomicReplayAndScope(t *testing.T) {
 	}
 	if result.Replay || result.Trajectory.ReducerSeq != 1 || len(result.Events) != 1 {
 		t.Fatalf("unexpected start result: %+v", result)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, req.OwnerID, req.ComputerID, req.TrajectoryID)
+	if err != nil || snapshot.Activation.AgentID != req.Agent.AgentID ||
+		snapshot.Activation.RunID != "" || snapshot.Activation.State != types.RunPassivated {
+		t.Fatalf("atomic start snapshot activation = %+v, %v", snapshot.Activation, err)
 	}
 	work, err := s.GetLifecycleWorkItem(ctx, req.OwnerID, req.ComputerID, req.InitialWork.WorkItemID)
 	if err != nil {
@@ -75,6 +100,118 @@ func TestStartLifecycleAtomicReplayAndScope(t *testing.T) {
 	conflict.StartRequestDigest = "sha256:different"
 	if _, err := s.StartLifecycle(ctx, conflict); !errors.Is(err, ErrLifecycleCommandConflict) {
 		t.Fatalf("conflicting replay error = %v, want ErrLifecycleCommandConflict", err)
+	}
+}
+
+func TestCommitLifecycleArtifactHeadAtomicReplayAndCAS(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	start := lifecycleStartFixture()
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	commit := types.CommitLifecycleArtifactHeadRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		CommandID: "commit-head-1", TrajectoryID: start.TrajectoryID,
+		ExpectedLifecycleVersion: 1, ExpectedHeadRevisionID: start.InitialRevision.RevisionID,
+		Revision: types.Revision{RevisionID: "revision-lifecycle-v1", AuthorKind: types.AuthorUser, AuthorLabel: "owner", Content: "Owner revision"},
+	}
+	commit.CommandDigest, _ = ComputeCommitLifecycleArtifactHeadDigest(commit)
+	result, err := s.CommitLifecycleArtifactHead(ctx, commit)
+	if err != nil {
+		t.Fatalf("commit lifecycle head: %v", err)
+	}
+	if result.Replay || result.Trajectory.ReducerSeq != 2 || result.Trajectory.LifecycleVersion != 2 ||
+		result.Revision == nil || result.Revision.RevisionID != commit.Revision.RevisionID ||
+		len(result.Events) != 1 || result.Events[0].Kind != types.LifecycleArtifactHeadAdvanced {
+		t.Fatalf("unexpected commit result: %+v", result)
+	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("get lifecycle snapshot: %v", err)
+	}
+	if snapshot.Document.CurrentRevisionID != commit.Revision.RevisionID || snapshot.HeadRevision.ParentRevisionID != start.InitialRevision.RevisionID ||
+		snapshot.HeadRevision.VersionNumber != 1 || snapshot.Trajectory.ReducerSeq != 2 {
+		t.Fatalf("unexpected committed snapshot: %+v", snapshot)
+	}
+	replay, err := s.CommitLifecycleArtifactHead(ctx, commit)
+	if err != nil || !replay.Replay || replay.Revision == nil || replay.Revision.RevisionID != commit.Revision.RevisionID {
+		t.Fatalf("unexpected replay: %+v, %v", replay, err)
+	}
+	second := commit
+	second.CommandID = "commit-head-2"
+	second.ExpectedLifecycleVersion = 2
+	second.ExpectedHeadRevisionID = commit.Revision.RevisionID
+	second.Revision = types.Revision{RevisionID: "revision-lifecycle-v2", AuthorKind: types.AuthorUser, AuthorLabel: "owner", Content: "Second owner revision"}
+	second.CommandDigest, _ = ComputeCommitLifecycleArtifactHeadDigest(second)
+	if _, err := s.CommitLifecycleArtifactHead(ctx, second); err != nil {
+		t.Fatalf("commit second lifecycle head: %v", err)
+	}
+	replay, err = s.CommitLifecycleArtifactHead(ctx, commit)
+	if err != nil || replay.Revision == nil || replay.Revision.RevisionID != commit.Revision.RevisionID {
+		t.Fatalf("replay after later head returned wrong revision: %+v, %v", replay, err)
+	}
+	startReplay, err := s.StartLifecycle(ctx, start)
+	if err != nil || !startReplay.Replay || startReplay.Revision == nil ||
+		startReplay.Revision.RevisionID != start.InitialRevision.RevisionID ||
+		startReplay.Trajectory.ReducerSeq != 1 {
+		t.Fatalf("start replay after head advance was not original result: %+v, %v", startReplay, err)
+	}
+	if err := s.PatchRevisionMetadata(ctx, start.OwnerID, commit.Revision.RevisionID, map[string]any{"mutable": true}); !errors.Is(err, ErrLifecycleAuthorityRequired) {
+		t.Fatalf("lifecycle revision metadata patch error = %v, want ErrLifecycleAuthorityRequired", err)
+	}
+	stale := second
+	stale.CommandID = "commit-head-stale"
+	stale.Revision.RevisionID = "revision-lifecycle-stale"
+	stale.CommandDigest, _ = ComputeCommitLifecycleArtifactHeadDigest(stale)
+	if _, err := s.CommitLifecycleArtifactHead(ctx, stale); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("stale commit error = %v, want ErrConcurrentStateChange", err)
+	}
+	events, err := s.ListLifecycleEvents(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || len(events) != 3 {
+		t.Fatalf("events after commits = %d, %v", len(events), err)
+	}
+}
+
+func TestStartLifecycleDigestIgnoresRetryEphemeraButBindsContent(t *testing.T) {
+	first := lifecycleStartFixture()
+	now := time.Now().UTC()
+	first.InitialWork.CreatedByRunID = "run-first"
+	first.InitialWork.CreatedAt, first.InitialWork.UpdatedAt = now, now
+	first.InitialDocument.CreatedAt, first.InitialDocument.UpdatedAt = now, now
+	first.InitialRevision.CreatedAt = now
+	first.InitialRevision.Metadata, _ = json.Marshal(map[string]any{
+		"seed_prompt": "write a durable note", "conductor_loop_id": "run-first", "prompt_unix_ts": now.Unix(),
+	})
+	first.Agent.CreatedAt, first.Agent.UpdatedAt = now, now
+	firstDigest, err := ComputeStartLifecycleRequestDigest(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retry := first
+	retry.InitialWork.CreatedByRunID = "run-retry"
+	retry.InitialWork.CreatedAt, retry.InitialWork.UpdatedAt = now.Add(time.Minute), now.Add(time.Minute)
+	retry.InitialDocument.CreatedAt, retry.InitialDocument.UpdatedAt = now.Add(time.Minute), now.Add(time.Minute)
+	retry.InitialRevision.CreatedAt = now.Add(time.Minute)
+	retry.InitialRevision.Metadata, _ = json.Marshal(map[string]any{
+		"seed_prompt": "write a durable note", "conductor_loop_id": "run-retry", "prompt_unix_ts": now.Add(time.Minute).Unix(),
+	})
+	retry.Agent.CreatedAt, retry.Agent.UpdatedAt = now.Add(time.Minute), now.Add(time.Minute)
+	retryDigest, err := ComputeStartLifecycleRequestDigest(retry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retryDigest != firstDigest {
+		t.Fatalf("retry digest = %q, want stable %q", retryDigest, firstDigest)
+	}
+	retry.InitialRevision.Content = "different durable note"
+	changedDigest, err := ComputeStartLifecycleRequestDigest(retry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changedDigest == firstDigest {
+		t.Fatal("semantic content change reused the start request digest")
 	}
 }
 
@@ -203,10 +340,27 @@ func TestCancelLifecycleTrajectoryCancelsWorkAndPendingUpdates(t *testing.T) {
 	if _, err := s.QueueLifecycleUpdate(ctx, queue); err != nil {
 		t.Fatalf("queue update: %v", err)
 	}
+	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("snapshot before cancel: %v", err)
+	}
 	cancel := types.CancelLifecycleRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		CommandID: "command-cancel-1", TrajectoryID: start.TrajectoryID,
-		Reason: "owner cancelled",
+		ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID:   snapshot.HeadRevision.RevisionID,
+		Reason:                   "owner cancelled",
+	}
+	stale := cancel
+	stale.ExpectedLifecycleVersion--
+	stale.CommandID = "command-cancel-stale"
+	stale.CommandDigest, _ = ComputeCancelLifecycleDigest(stale)
+	if _, err := s.CancelLifecycleTrajectory(ctx, stale); !errors.Is(err, ErrConcurrentStateChange) {
+		t.Fatalf("stale cancellation error = %v, want ErrConcurrentStateChange", err)
+	}
+	live, err := s.GetLifecycleTrajectory(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil || live.Status != types.TrajectoryLive {
+		t.Fatalf("stale cancellation changed trajectory = %+v, %v", live, err)
 	}
 	cancel.CommandDigest, _ = ComputeCancelLifecycleDigest(cancel)
 	result, err := s.CancelLifecycleTrajectory(ctx, cancel)
@@ -302,12 +456,15 @@ func TestLifecycleRejectedUpdateRefusesProducerWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reject update: %v", err)
 	}
-	if result.WorkItem == nil || result.WorkItem.Status != types.WorkItemRefused {
-		t.Fatalf("rejected producer work not refused: %+v", result.WorkItem)
+	if result.WorkItem == nil || result.WorkItem.Status != types.WorkItemRefused || result.WorkItem.ResultRef != apply.DispositionRef {
+		t.Fatalf("rejected producer work lacks refusal result: %+v", result.WorkItem)
 	}
 	for _, event := range result.Events {
 		if event.Kind == types.LifecycleWorkSettled {
 			t.Fatalf("rejected update emitted successful work settlement: %+v", result.Events)
+		}
+		if event.Kind == types.LifecycleWorkRefused && (len(event.ArtifactRefs) != 1 || event.ArtifactRefs[0] != apply.DispositionRef) {
+			t.Fatalf("work refusal event lacks durable ref: %+v", event)
 		}
 	}
 	snapshot, err := s.GetLifecycleSnapshot(ctx, start.OwnerID, start.ComputerID, start.TrajectoryID)
@@ -385,7 +542,7 @@ func TestLifecycleOpenAmendAndRecordRefs(t *testing.T) {
 		CommandID: "command-open-work-2", TrajectoryID: start.TrajectoryID,
 		WorkItem: types.WorkItemRecord{
 			WorkItemID: "work-lifecycle-2", Objective: "verify artifact",
-			AssignedAgentID: start.Agent.AgentID, AuthorityProfile: "reviewer", StepBudget: 4,
+			AssignedAgentID: start.Agent.AgentID, AuthorityProfile: "texture", StepBudget: 4,
 		},
 	}
 	open.CommandDigest, _ = ComputeOpenLifecycleWorkDigest(open)
@@ -400,12 +557,16 @@ func TestLifecycleOpenAmendAndRecordRefs(t *testing.T) {
 	refuse := types.RefuseLifecycleWorkRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		CommandID: "command-refuse-work-2", TrajectoryID: start.TrajectoryID,
-		WorkItemID: open.WorkItem.WorkItemID, Reason: "authority is too narrow",
+		WorkItemID: open.WorkItem.WorkItemID, Reason: "authority is too narrow", RefusalRef: "refusal://authority/profile-too-narrow",
 	}
 	refuse.CommandDigest, _ = ComputeRefuseLifecycleWorkDigest(refuse)
 	refused, err := s.RefuseLifecycleWork(ctx, refuse)
 	if err != nil {
 		t.Fatalf("refuse work: %v", err)
+	}
+	if refused.WorkItem == nil || refused.WorkItem.ResultRef != refuse.RefusalRef ||
+		len(refused.Events) != 1 || len(refused.Events[0].ArtifactRefs) != 1 || refused.Events[0].ArtifactRefs[0] != refuse.RefusalRef {
+		t.Fatalf("refused work lacks durable refusal ref: %+v", refused)
 	}
 
 	amend := types.AmendLifecycleWorkRequest{
@@ -480,7 +641,9 @@ func TestLifecycleArchiveRetainsHistoryAndRejectsRawMutation(t *testing.T) {
 	cancel := types.CancelLifecycleRequest{
 		OwnerID: start.OwnerID, ComputerID: start.ComputerID,
 		CommandID: "command-cancel-before-archive", TrajectoryID: start.TrajectoryID,
-		Reason: "owner completed lifecycle before archival",
+		ExpectedLifecycleVersion: started.Trajectory.LifecycleVersion,
+		ExpectedHeadRevisionID:   start.InitialRevision.RevisionID,
+		Reason:                   "owner completed lifecycle before archival",
 	}
 	cancel.CommandDigest, _ = ComputeCancelLifecycleDigest(cancel)
 	cancelled, err := s.CancelLifecycleTrajectory(ctx, cancel)
@@ -558,5 +721,84 @@ func TestLifecycleReplaceActivationCommitsRunAndProjectionAtomically(t *testing.
 	replay, err := s.ReplaceLifecycleActivation(ctx, replace)
 	if err != nil || !replay.Replay || replay.Trajectory.ReducerSeq != 2 {
 		t.Fatalf("activation replay = %+v, %v", replay, err)
+	}
+}
+
+func TestStartLifecycleRejectsCallerSuppliedRevisionHashMismatch(t *testing.T) {
+	s := openTestStore(t)
+	req := lifecycleStartFixture()
+	req.InitialRevision.RevisionHash = "sha256:caller-mismatch"
+	req.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(req)
+	if _, err := s.StartLifecycle(context.Background(), req); err == nil {
+		t.Fatal("lifecycle start accepted mismatched initial revision hash")
+	}
+}
+
+func TestLifecycleRejectsEffectsCapableSubjectAndAssignment(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	superStart := lifecycleStartFixture()
+	superStart.Agent.AgentID = "super:forbidden"
+	superStart.Agent.Profile, superStart.Agent.Role = "super", "super"
+	superStart.InitialWork.AssignedAgentID = superStart.Agent.AgentID
+	superStart.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(superStart)
+	if _, err := s.StartLifecycle(ctx, superStart); !errors.Is(err, ErrLifecycleInvalidTransition) {
+		t.Fatalf("effects-capable lifecycle start error = %v, want ErrLifecycleInvalidTransition", err)
+	}
+
+	start := lifecycleStartFixture()
+	start.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(start)
+	if _, err := s.StartLifecycle(ctx, start); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := s.UpsertAgent(ctx, types.AgentRecord{
+		AgentID: "super:forbidden", OwnerID: start.OwnerID, ComputerID: start.ComputerID,
+		SandboxID: start.ComputerID, Profile: "super", Role: "super", CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	open := types.OpenLifecycleWorkRequest{
+		OwnerID: start.OwnerID, ComputerID: start.ComputerID, CommandID: "command-open-forbidden",
+		TrajectoryID: start.TrajectoryID,
+		WorkItem: types.WorkItemRecord{
+			WorkItemID: "work-forbidden", Objective: "must not run",
+			AuthorityProfile: "super", AssignedAgentID: "super:forbidden",
+		},
+	}
+	open.CommandDigest, _ = ComputeOpenLifecycleWorkDigest(open)
+	if _, err := s.OpenLifecycleWork(ctx, open); !errors.Is(err, ErrLifecycleInvalidTransition) {
+		t.Fatalf("effects-capable assignment error = %v, want ErrLifecycleInvalidTransition", err)
+	}
+}
+
+func TestListLifecycleSubjectsIsComputerScoped(t *testing.T) {
+	s := openTestStore(t)
+	ctx := context.Background()
+	first := lifecycleStartFixture()
+	first.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(first)
+	if _, err := s.StartLifecycle(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	second := lifecycleStartFixture()
+	second.ComputerID = "computer-lifecycle-other"
+	second.CommandID = "command-start-other"
+	second.TrajectoryID = "trajectory-lifecycle-other"
+	second.InitialWork.WorkItemID = "work-lifecycle-other"
+	second.InitialDocument.DocID = "document-lifecycle-other"
+	second.InitialRevision.DocID = second.InitialDocument.DocID
+	second.InitialRevision.RevisionID = "revision-lifecycle-other"
+	second.Agent.AgentID = "texture:document-lifecycle-other"
+	second.Agent.ChannelID = second.InitialDocument.DocID
+	second.StartRequestDigest, _ = ComputeStartLifecycleRequestDigest(second)
+	if _, err := s.StartLifecycle(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	subjects, err := s.ListLifecycleSubjects(ctx, first.ComputerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(subjects) != 1 || subjects[0].ComputerID != first.ComputerID || subjects[0].AgentID != first.Agent.AgentID {
+		t.Fatalf("computer-scoped subjects = %+v", subjects)
 	}
 }

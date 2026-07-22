@@ -114,9 +114,9 @@ func TestTexturePromptForFactualFirstRevisionForbidsUngroundedContent(t *testing
 		"do not answer substantive world facts from model recall",
 		"immediate model-prior/interim V1 is allowed before retrieval only as an explicitly uncertain scaffold",
 		"Do not add factual claims, citations, or coding results from model priors as grounded",
-		"Probe and/or Execute morphisms are required",
-		"violates invariant 3 unless Texture Audits an audit-worthy reason",
-		"Never describe coordination as already done unless the tool action really happened",
+		"coding, execution, and verification claims require durable evidence packets",
+		"Do not include a [CMD] evidence label unless a durable source packet already contains actual command evidence",
+		"For coding or execution requests, effectful work is unavailable in this effects-OFF runtime",
 	} {
 		if !strings.Contains(request, want) {
 			t.Fatalf("factual first-revision prompt missing %q:\n%s", want, request)
@@ -593,8 +593,8 @@ func TestTexturePromptMixedObligationKeepsGeneralExecuteAffordanceWithoutKeyword
 	for _, want := range []string{
 		"This Texture run was woken by durable execution source packets",
 		"Make useful claims and packet sources visible with patch_texture",
-		"If the follow-up needs generated artifacts, execution, or verification, Execute (request_super_execution) is the morphism class for super-delivered evidence.",
-		"if Texture does not use it, Audit the blocker instead of making a source-grounded edit look final",
+		"If the follow-up needs generated artifacts, execution, or verification, record that effectful work is unavailable",
+		"do not request or spawn Super or CoSuper",
 		"Never use `[CMD]` as a pending/requested/target-only label",
 	} {
 		if !strings.Contains(request, want) {

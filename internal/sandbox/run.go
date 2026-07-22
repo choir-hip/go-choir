@@ -17,7 +17,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	"github.com/yusefmosiah/go-choir/internal/apihandler"
 	"github.com/yusefmosiah/go-choir/internal/browsercontrol"
-	"github.com/yusefmosiah/go-choir/internal/capsule"
 	"github.com/yusefmosiah/go-choir/internal/coagentowner"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/content"
@@ -28,7 +27,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/mediastate"
 	"github.com/yusefmosiah/go-choir/internal/provider"
 	"github.com/yusefmosiah/go-choir/internal/provideriface"
-	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 	"github.com/yusefmosiah/go-choir/internal/selfdev"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/store"
@@ -36,7 +34,6 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/trace"
 	"github.com/yusefmosiah/go-choir/internal/types"
-	"github.com/yusefmosiah/go-choir/internal/updater"
 	"github.com/yusefmosiah/go-choir/internal/zot"
 )
 
@@ -137,33 +134,6 @@ func Run() {
 	coreOpts := []agentcore.RuntimeOption{
 		agentcore.WithDesktopStateOwner(desktopHandler),
 		agentcore.WithContentService(contentService),
-	}
-	if updaterRoot := strings.TrimSpace(os.Getenv("CHOIR_UPDATER_ROOT")); updaterRoot != "" {
-		updaterClient, err := updater.NewClient("/run/choir/updater.sock")
-		if err != nil {
-			log.Fatalf("sandbox: configure self-development updater: %v", err)
-		}
-		coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentUpdater(updaterClient, updaterRoot, os.Getenv("CHOIR_COMPUTER_ID"), os.Getenv("CHOIR_REALIZATION_ID")))
-	}
-	if verifierSocket := strings.TrimSpace(os.Getenv("CHOIR_VERIFIER_AUTHORITY_SOCKET")); verifierSocket != "" {
-		verifierClient, err := receiptsigner.NewClient(verifierSocket, receiptsigner.ModeVerifier)
-		if err != nil {
-			log.Fatalf("sandbox: configure self-development verifier: %v", err)
-		}
-		coreOpts = append(coreOpts, agentcore.WithSelfDevelopmentVerifier(verifierClient))
-	}
-	if brokerPath := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_BROKER_PATH")); brokerPath != "" {
-		probePath := strings.TrimSpace(os.Getenv("CHOIR_KERNEL_CAPABILITY_PROBE"))
-		probe, probeErr := updater.ReadKernelCapabilityProbe(probePath)
-		if probeErr != nil || updater.VerifyKernelCapabilityProbe(probe, strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID")), strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID")), time.Now().UTC()) != nil {
-			log.Fatalf("sandbox: capsule admission refused: exact kernel capability probe unavailable")
-		}
-		stateDir := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_STATE_DIR"))
-		lowerRoot := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_LOWER_ROOT"))
-		sourceRoot := strings.TrimSpace(os.Getenv("CHOIR_CAPSULE_SOURCE_ROOT"))
-		executor := capsule.NewExecutorWithSource(stateDir, lowerRoot, sourceRoot, brokerPath, 6*1024*1024*1024)
-		coreOpts = append(coreOpts, agentcore.WithCapsuleExecutor(executor))
-		log.Printf("sandbox: guest-local capsule authority configured")
 	}
 	if credentialPath := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_CREDENTIAL_FILE")); credentialPath != "" {
 		computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))

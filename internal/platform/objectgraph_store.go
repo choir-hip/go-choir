@@ -88,6 +88,10 @@ func (o *ObjectGraphStore) ListObjects(ctx context.Context, filter objectgraph.L
 		query += ` AND owner_id = ?`
 		args = append(args, filter.OwnerID)
 	}
+	if filter.ComputerID != "" {
+		query += ` AND computer_id = ?`
+		args = append(args, filter.ComputerID)
+	}
 	if filter.Tombstone != nil {
 		query += ` AND tombstone = ?`
 		args = append(args, *filter.Tombstone)

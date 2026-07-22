@@ -12,7 +12,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/yusefmosiah/go-choir/internal/objectgraph"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -270,41 +269,48 @@ func (s *Store) ListOpenWorkItemsByKind(ctx context.Context, kind string, limit 
 // already name the durable agent responsible for processing them. This is the
 // boot-recovery query for cold actors whose update_coagent backlog is empty but
 // whose trajectory still has assigned work.
+// A zero limit returns every eligible item via bounded storage pages; callers
+// may impose a positive result cap without imposing a scan cap.
 func (s *Store) ListOpenAssignedWorkItems(ctx context.Context, limit int) ([]types.WorkItemRecord, error) {
-	if limit <= 0 {
-		limit = 100
+	if limit < 0 {
+		return nil, fmt.Errorf("list open assigned work items: limit must not be negative")
 	}
-	// Fetch a large window of work items from OG, filter for assigned +
-	// live trajectory. Use a large limit to avoid missing eligible items
-	// that are older than many ineligible ones.
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:  ogKindWorkItem,
-		Limit: 100000,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list open assigned work items: %w", err)
-	}
+	const pageSize = 1000
 	var candidates []types.WorkItemRecord
-	for _, obj := range objs {
-		var rec types.WorkItemRecord
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
-		}
-		if rec.Status != types.WorkItemOpen {
-			continue
-		}
-		if strings.TrimSpace(rec.AssignedAgentID) == "" {
-			continue
-		}
-		// Check trajectory is live.
-		traj, err := s.GetTrajectoryOG(ctx, rec.OwnerID, rec.TrajectoryID)
+	trajectoryStatus := make(map[string]types.TrajectoryStatus)
+	after := ""
+	for {
+		objs, err := s.ogStore.ListObjectsPage(ctx, string(ogKindWorkItem), after, pageSize)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("list open assigned work items: %w", err)
 		}
-		if traj.Status != types.TrajectoryLive {
-			continue
+		for _, obj := range objs {
+			var rec types.WorkItemRecord
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
+			}
+			if rec.Status != types.WorkItemOpen || strings.TrimSpace(rec.AssignedAgentID) == "" {
+				continue
+			}
+			key := rec.OwnerID + "\x00" + rec.TrajectoryID
+			status, found := trajectoryStatus[key]
+			if !found {
+				traj, getErr := s.GetTrajectoryOG(ctx, rec.OwnerID, rec.TrajectoryID)
+				if getErr != nil {
+					trajectoryStatus[key] = ""
+					continue
+				}
+				status = traj.Status
+				trajectoryStatus[key] = status
+			}
+			if status == types.TrajectoryLive {
+				candidates = append(candidates, rec)
+			}
 		}
-		candidates = append(candidates, rec)
+		if len(objs) < pageSize {
+			break
+		}
+		after = objs[len(objs)-1].CanonicalID
 	}
 	// Sort by updated_at ASC, created_at ASC, work_item_id ASC.
 	sort.Slice(candidates, func(i, j int) bool {
@@ -316,7 +322,7 @@ func (s *Store) ListOpenAssignedWorkItems(ctx context.Context, limit int) ([]typ
 		}
 		return candidates[i].WorkItemID < candidates[j].WorkItemID
 	})
-	if len(candidates) > limit {
+	if limit > 0 && len(candidates) > limit {
 		candidates = candidates[:limit]
 	}
 	return candidates, nil

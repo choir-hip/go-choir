@@ -31,7 +31,7 @@ func TestTextureOwnerStartRecoversDurableWakeAfterRestart(t *testing.T) {
 	start := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: "sandbox-texture-restart", CommandID: "start-texture-restart",
 		TrajectoryID: "trajectory-texture-restart", Kind: types.TrajectoryKindDocument,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + docID},
 		InitialWork: types.WorkItemRecord{
 			WorkItemID: "work-texture-restart", Objective: "incorporate durable finding", AssignedAgentID: agentID,

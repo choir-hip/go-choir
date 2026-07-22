@@ -22,6 +22,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/yusefmosiah/go-choir/internal/auth"
 	"github.com/yusefmosiah/go-choir/internal/buildinfo"
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/routeledger"
 	"github.com/yusefmosiah/go-choir/internal/server"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
@@ -117,20 +118,21 @@ func requestDesktopID(r *http.Request) string {
 
 // Handler provides HTTP and WebSocket handlers for the proxy routes.
 type Handler struct {
-	cfg             *Config
-	pubKey          ed25519.PublicKey
-	reverseProxy    *httputil.ReverseProxy
-	upgrader        websocket.Upgrader
-	dialer          *websocket.Dialer
-	corpusd         *http.Client
-	maild           *http.Client
-	sandboxHTTP     *http.Client
-	sandboxURL      *url.URL      // parsed sandbox URL for WS dial derivation
-	vmctlClient     *vmctl.Client // optional vmctl client for VM-backed routing
-	lifecycle       *lifecycleRecorder
-	recoveries      *computeRecoveryTracker
-	apiKeyValidator APIKeyValidator // optional: enables Bearer token (API key) auth
-	authStore       *auth.Store     // optional: owned auth store for API key validation
+	cfg                  *Config
+	pubKey               ed25519.PublicKey
+	reverseProxy         *httputil.ReverseProxy
+	upgrader             websocket.Upgrader
+	dialer               *websocket.Dialer
+	corpusd              *http.Client
+	maild                *http.Client
+	sandboxHTTP          *http.Client
+	sandboxURL           *url.URL      // parsed sandbox URL for WS dial derivation
+	vmctlClient          *vmctl.Client // optional vmctl client for VM-backed routing
+	lifecycle            *lifecycleRecorder
+	recoveries           *computeRecoveryTracker
+	apiKeyValidator      APIKeyValidator // optional: enables Bearer token (API key) auth
+	authStore            *auth.Store     // optional: owned auth store for API key validation
+	platformSignerDigest string
 }
 
 // NewHandler creates a proxy Handler with the given config and auth public key.
@@ -255,6 +257,11 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 		}
 	}
 
+	platformSignerDigest, err := computerevent.PlatformControlTrustDigest()
+	if err != nil {
+		return nil, fmt.Errorf("load platform trust anchor: %w", err)
+	}
+
 	// Build the handler. When authStore is nil, apiKeyValidator must be a
 	// nil interface (not a typed-nil *auth.Store) so the nil check in
 	// validateAPIKey works correctly.
@@ -270,15 +277,16 @@ func NewHandler(cfg *Config, pubKey ed25519.PublicKey) (*Handler, error) {
 				return true
 			},
 		},
-		dialer:      websocket.DefaultDialer,
-		corpusd:     &http.Client{Timeout: 30 * time.Second},
-		maild:       &http.Client{Timeout: 30 * time.Second},
-		sandboxHTTP: &http.Client{Timeout: 30 * time.Second},
-		sandboxURL:  sandboxURL,
-		vmctlClient: vmctlCli,
-		lifecycle:   newLifecycleRecorder(),
-		recoveries:  newComputeRecoveryTracker(),
-		authStore:   authStore,
+		dialer:               websocket.DefaultDialer,
+		corpusd:              &http.Client{Timeout: 30 * time.Second},
+		maild:                &http.Client{Timeout: 30 * time.Second},
+		sandboxHTTP:          &http.Client{Timeout: 30 * time.Second},
+		sandboxURL:           sandboxURL,
+		vmctlClient:          vmctlCli,
+		lifecycle:            newLifecycleRecorder(),
+		recoveries:           newComputeRecoveryTracker(),
+		authStore:            authStore,
+		platformSignerDigest: platformSignerDigest,
 	}
 	if authStore != nil {
 		h.apiKeyValidator = authStore
@@ -638,8 +646,8 @@ func (h *Handler) HandleAPI(w http.ResponseWriter, r *http.Request) {
 	case isSelfDevelopmentModePath(path):
 		h.HandleSelfDevelopmentMode(w, r)
 		return
-	case isSelfDevelopmentTarget(path, r.Method):
-		h.HandleSelfDevelopmentOperation(w, r)
+	case strings.HasPrefix(path, "/api/computers/") && strings.Contains(path, "/self-development/"):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "self-development effects are disabled"})
 		return
 	case path == "/api/pulse/summary":
 		h.HandlePulseSummary(w, r)

@@ -273,24 +273,25 @@ now:
   slice: C-build-disabled-candidate
   question: "Can the smallest conditional object-graph transaction plus scoped identity migration establish one restart-durable lifecycle without touching effect capabilities?"
   reconciliation:
-    observed_at: 2026-07-22T02:00:15Z
-    source_ref: refs/heads/convergence/kernel-contract-01@32a66a629647ad41b58f86faa33441460c3591e2
-    deploy_identity: "Public https://choir.news/health reported proxy build/deployed commit 832ae951e84400a54bd7f8ef52a312e872b5c3ef; exact host/guest joined identity remains unavailable without the new product path."
+    observed_at: 2026-07-22T07:01:00Z
+    source_ref: refs/heads/main@a8f849f1bfb74978ba6cd64e60f30313c260e762
+    deploy_identity: "Public https://choir.news/health remains at proxy build/deployed commit 832ae951e84400a54bd7f8ef52a312e872b5c3ef; this repaired candidate is local-only and has not entered the landing loop."
     authority_identities: [docs/choir-doctrine.md, docs/ACTIVE.md, docs/mission-graph.yaml, docs/doc-authority-manifest.yaml, docs/definitions/choir-coherent-computer-convergence-2026-07-21.md]
     policy_resolution_ref: not_applicable
     worktree_inventory_ref: "2026-07-21T21:03:29Z git worktree/status inventory: canonical main clean; architecture-recovery clean; terminal-outcome-closure and definition-v1-1 dirt preserved forbidden; other clean/historical worktrees untouched"
     status: reconciled
   candidate:
-    id: convergence-durable-work-runtime-01
-    state: repairing_frozen_candidate_review_26391a3b
-    ref: working-tree-candidate@sha256:26391a3bf65e78e7bf579b09f8ba01a92f9d42aeaada9c2a383725fc1e4b39d5
+    id: convergence-durable-work-runtime-03
+    state: accepted_candidate
+    ref: working-tree-code-diff-excluding-definition@sha256:62118724348d4abcc730b28aedee7def4eb0d8320dfc22a3d44d56feb5d06af2
     owner: owner-and-current-session
     base: a8f849f1bfb74978ba6cd64e60f30313c260e762
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
-    observed_problem: "Frozen candidate sha256:26391a3b passed focused lifecycle, proxy, runtime-shard, Go vet/build, frontend-build, and Node-B Nix-eval checks, but the independent landing gate returned REPAIR. Cursor and Codex independently reproduced two protected-surface blockers: the headless identity client reads the absent outer identity after selecting a joined guest envelope, and the proxy trusts a guest-supplied receipt key while returning an unsigned host/vmctl/route join with raw paths and no acceptance:read gate. Codex additionally reproduced non-atomic manual Texture head persistence, legacy cancellation DTOs without command/digest/version/head binding, non-replayable public start identity, and a fixed restart-enumeration cap. Panel health: Cursor and Codex completed; OpenCode failed after partial inspection; OMP GPT-5.5 and Gemini timed out."
-    remaining_error: "Candidate remains unaccepted. Preserve confirmed repairs: public raw reducer routes deleted; effects-capable Texture/Super startup and sandbox injection refused; lifecycle start integrity and subject binding tightened; activation projected inside snapshot; shared head transition calculation added; scoped lifecycle wake lookup; signed guest receipt verification; narrow read clients. Before another freeze: implement a pinned CI/platform/guest trust chain and one platform signature over the complete nonce/audience/expiry-bound join without paths; require acceptance:read; repair joined CLI validation; make every exercised Texture head write one conditional transaction with no compensation; make start and cancel public commands replayable and return choir.durable_work.v1; and page restart enumeration to exhaustion."
+    observed_problem: "The seventh frozen gate found no implementation defect in the two prior repairs but reproduced one masked proxy negative test and one legacy test fixture that constructed a now-invalid empty-ref settlement rule, breaking the affected package suite. The prior code-free problem receipt remains the governing repair prerequisite."
+    repair_evidence: "Candidate 6211872 restores the correct pinned digest before exercising the proxy arbitrary-key-ID rejection, so deleting the KeyID guard would fail the test. The pending-update obligation fixture now carries a valid artifact subject ref and closed settlement rule. Focused proxy and agentcore reproductions pass."
+    remaining_error: "Candidate 6211872 passed the bounded final review with two independent ACCEPT verdicts and no reproduced P0/P1. It is authorized to enter the commit/push/CI/staging landing loop; deployment and product-path acceptance remain outstanding."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -300,9 +301,9 @@ now:
     owner_ratification_ref: "Owner directed: step back and supersede the current defined mission with a new one"
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
-  evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, e4efcf4a0449aee38cddce3133992e9f054d5ca9, "working-tree candidate sha256:26391a3bf65e78e7bf579b09f8ba01a92f9d42aeaada9c2a383725fc1e4b39d5", /tmp/choir-durable-kernel-landing-gate/manifest.tsv, /tmp/choir-durable-kernel-landing-gate/cursor.out, /tmp/choir-durable-kernel-landing-gate/codex.out, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv, /tmp/choir-durable-kernel-final-review-e4efcf4a/manifest.tsv]
-  blocker_or_risk: "Frozen candidate sha256:26391a3b is rejected. Two independent high-confidence reviewers agree on the identity trust and joined-client failures. Codex's transaction, public command replay/conformance, and restart pagination findings are source-reproduced leads and binding until locally adjudicated. Current code must not land."
-  next_action: "Commit this code-free problem receipt. Then repair and locally reproduce every binding finding, rerun focused verification, and freeze a new candidate for independent review."
+  evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, e4efcf4a0449aee38cddce3133992e9f054d5ca9, "accepted candidate sha256:62118724348d4abcc730b28aedee7def4eb0d8320dfc22a3d44d56feb5d06af2", /tmp/choir-durable-kernel-accept-6211872/manifest.tsv, /tmp/choir-durable-kernel-accept-12f253b/manifest.tsv, /tmp/choir-durable-kernel-accept-ace48db/manifest.tsv, /tmp/choir-durable-kernel-accept-a9788c9/manifest.tsv, /tmp/choir-durable-kernel-accept-bec8009/manifest.tsv, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv]
+  blocker_or_risk: "Candidate 6211872 is accepted for landing but remains local-only. Staging still runs the prior deploy identity; trust-anchor rotation and the Definition's named deployed acceptance transitions remain unproved."
+  next_action: "Commit candidate 6211872 and this coherent Definition receipt, push origin/main, monitor CI/deploy, verify exact host/guest identity, then run the staged lifecycle/restart/cancellation/client acceptance path."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21

@@ -17,16 +17,20 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/receiptsigner"
 )
 
-const executionIdentitySchemaV1 = "choir.execution_identity.v1"
+const (
+	executionIdentitySchemaV1 = "choir.execution_identity.v1"
+	executionIdentityAudience = "choir.news/acceptance/execution-identity"
+)
 
 type executionIdentityArtifact struct {
-	Path   string `json:"path"`
+	Role   string `json:"role"`
 	SHA256 string `json:"sha256"`
 }
 
 type executionIdentityPayload struct {
 	Schema              string                    `json:"schema"`
 	Nonce               string                    `json:"nonce"`
+	Audience            string                    `json:"audience"`
 	ComputerID          string                    `json:"computer_id"`
 	RealizationID       string                    `json:"realization_id"`
 	VMEpoch             string                    `json:"vm_epoch"`
@@ -45,10 +49,10 @@ type executionIdentityEnvelope struct {
 	SignerPublicKey string                   `json:"signer_public_key"`
 }
 
-func digestIdentityArtifact(path string) (executionIdentityArtifact, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return executionIdentityArtifact{}, fmt.Errorf("identity artifact path is empty")
+func digestIdentityArtifact(role, path string) (executionIdentityArtifact, error) {
+	role, path = strings.TrimSpace(role), strings.TrimSpace(path)
+	if role == "" || path == "" {
+		return executionIdentityArtifact{}, fmt.Errorf("identity artifact role and path are required")
 	}
 	resolved, err := filepath.EvalSymlinks(path)
 	if err == nil {
@@ -63,7 +67,7 @@ func digestIdentityArtifact(path string) (executionIdentityArtifact, error) {
 	if _, err := io.Copy(hash, file); err != nil {
 		return executionIdentityArtifact{}, err
 	}
-	return executionIdentityArtifact{Path: path, SHA256: fmt.Sprintf("sha256:%x", hash.Sum(nil))}, nil
+	return executionIdentityArtifact{Role: role, SHA256: fmt.Sprintf("sha256:%x", hash.Sum(nil))}, nil
 }
 
 // HandleExecutionIdentity returns a nonce-bound, guest-core-signed, least-
@@ -87,9 +91,9 @@ func (h *APIHandler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Requ
 		writeAPIJSON(w, http.StatusServiceUnavailable, apiError{Error: "execution identity unavailable"})
 		return
 	}
-	executable, executableErr := digestIdentityArtifact(executablePath)
-	guestManifest, guestErr := digestIdentityArtifact(os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST"))
-	kernelConfig, kernelErr := digestIdentityArtifact(os.Getenv("CHOIR_KERNEL_CONFIG"))
+	executable, executableErr := digestIdentityArtifact("sandbox-service", executablePath)
+	guestManifest, guestErr := digestIdentityArtifact("guest-image-manifest", os.Getenv("CHOIR_GUEST_IMAGE_MANIFEST"))
+	kernelConfig, kernelErr := digestIdentityArtifact("guest-kernel-configuration", os.Getenv("CHOIR_KERNEL_CONFIG"))
 	computerID := strings.TrimSpace(os.Getenv("CHOIR_COMPUTER_ID"))
 	realizationID := strings.TrimSpace(os.Getenv("CHOIR_REALIZATION_ID"))
 	epoch := strings.TrimSpace(os.Getenv("VM_EPOCH"))
@@ -100,7 +104,7 @@ func (h *APIHandler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Requ
 	}
 	now := time.Now().UTC()
 	identity := executionIdentityPayload{
-		Schema: executionIdentitySchemaV1, Nonce: nonce, ComputerID: computerID,
+		Schema: executionIdentitySchemaV1, Nonce: nonce, Audience: executionIdentityAudience, ComputerID: computerID,
 		RealizationID: realizationID, VMEpoch: epoch, Executable: executable,
 		GuestImageManifest: guestManifest, KernelConfiguration: kernelConfig, Build: build,
 		IssuedAt: now.Format(time.RFC3339Nano), ExpiresAt: now.Add(2 * time.Minute).Format(time.RFC3339Nano),
@@ -120,7 +124,8 @@ func (h *APIHandler) HandleExecutionIdentity(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	fields := map[string]any{
-		"schema": identity.Schema, "nonce": identity.Nonce, "computer_id": identity.ComputerID,
+		"schema": identity.Schema, "nonce": identity.Nonce, "audience": identity.Audience,
+		"computer_id": identity.ComputerID,
 		"realization_id": identity.RealizationID, "vm_epoch": identity.VMEpoch,
 		"executable": identity.Executable, "guest_image_manifest": identity.GuestImageManifest,
 		"kernel_configuration": identity.KernelConfiguration, "build": identity.Build,

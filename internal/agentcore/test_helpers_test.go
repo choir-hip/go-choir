@@ -32,7 +32,7 @@ func seedDurableTextureSubject(t *testing.T, s *store.Store, ownerID, docID stri
 	req := types.StartLifecycleRequest{
 		OwnerID: ownerID, ComputerID: "sandbox-test", CommandID: "test-start:" + ownerID + ":" + docID,
 		TrajectoryID: "test-trajectory:" + ownerID + ":" + docID, Kind: types.TrajectoryKindDocument,
-		SettlementRule:  types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		SubjectRefs:     map[string]string{"artifact": "texture://documents/" + docID},
 		InitialWork:     types.WorkItemRecord{WorkItemID: "test-work:" + ownerID + ":" + docID, Objective: "process durable updates", AssignedAgentID: agentID},
 		InitialDocument: types.Document{DocID: docID, Title: "Durable test subject"},

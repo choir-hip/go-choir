@@ -1388,25 +1388,30 @@ jobs:
               echo "NixOS system closure identity is unavailable" >&2
               exit 1
             fi
+            nixos_closure_digest=$(nix hash path --type sha256 "$nixos_closure")
+            nixos_closure_digest="sha256:${nixos_closure_digest#sha256-}"
             host_services='{}'
             for service in auth proxy vmctl gateway corpusd maild sourcecycled; do
               package_path=$(readlink -f "/var/lib/go-choir/services/${service}")
+              package_digest=$(nix hash path --type sha256 "$package_path")
+              package_digest="sha256:${package_digest#sha256-}"
               port=$(service_health_port "$service")
               service_commit=$(curl -fsS --max-time 5 "http://127.0.0.1:${port}/health" | jq -er '.build.commit')
-              if [ -z "$package_path" ] || [[ "$package_path" != /nix/store/* ]] || [ "${#service_commit}" -ne 40 ]; then
+              if [ -z "$package_path" ] || [[ "$package_path" != /nix/store/* ]] || [[ "$package_digest" != sha256:* ]] || [ "${#service_commit}" -ne 40 ]; then
                 echo "Host service identity is incomplete for ${service}" >&2
                 exit 1
               fi
               host_services=$(printf '%s' "$host_services" |
-                jq --arg service "$service" --arg path "$package_path" --arg commit "$service_commit" \
-                  '. + {($service): {package_path: $path, embedded_commit: $commit}}')
+                jq --arg service "$service" --arg path "$package_path" --arg digest "$package_digest" --arg commit "$service_commit" \
+                  '. + {($service): {package_path: $path, package_digest: $digest, embedded_commit: $commit}}')
             done
             host_identity=$(jq -n \
               --arg canonical_ref "refs/heads/main@${DEPLOY_COMMIT}" \
               --arg checkout_head "$checkout_head" \
               --arg nixos_closure "$nixos_closure" \
+              --arg nixos_closure_digest "$nixos_closure_digest" \
               --argjson services "$host_services" \
-              '{canonical_ref: $canonical_ref, checkout_head: $checkout_head, checkout_clean: true, nixos_closure: $nixos_closure, services: $services}')
+              '{canonical_ref: $canonical_ref, checkout_head: $checkout_head, checkout_clean: true, nixos_closure: $nixos_closure, nixos_closure_digest: $nixos_closure_digest, services: $services}')
 
             activated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             receipt_tmp=/var/lib/go-choir/deploy-receipt.json.tmp

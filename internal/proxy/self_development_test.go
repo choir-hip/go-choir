@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yusefmosiah/go-choir/internal/computerevent"
 	"github.com/yusefmosiah/go-choir/internal/vmctl"
 )
 
@@ -115,114 +114,24 @@ func TestSelfDevelopmentModePathRequiresSingleEscapedComputerID(t *testing.T) {
 	}
 }
 
-func TestKernelCapabilityReceiptRequiresReadScopeRoute(t *testing.T) {
-	target, ok := parseSelfDevelopmentTarget("/api/computers/computer-a/self-development/kernel-capabilities", http.MethodGet)
-	if !ok || target.ComputerID != "computer-a" || target.RequiredScope != "computer:self_development:read" {
-		t.Fatalf("target = %+v accepted=%v", target, ok)
-	}
-	if _, ok := parseSelfDevelopmentTarget("/api/computers/computer-a/self-development/kernel-capabilities", http.MethodPost); ok {
-		t.Fatal("kernel capability mutation route was accepted")
-	}
-}
-
-func TestPublicDecisionDelegatesModeAuthorityToGuest(t *testing.T) {
-	var modeReads, decisionPosts int
-	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Authenticated-Computer") != "computer-decision" ||
-			r.Header.Get("X-Authenticated-User") != "owner-decision" {
-			t.Fatal("guest request lost authenticated binding")
-		}
-		var decision map[string]any
-		if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&decision) != nil ||
-			decision["idempotency_key"] != "decision-replay" {
-			t.Fatalf("invalid guest decision request: %#v", decision)
-		}
-		decisionPosts++
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"operation_id":"operation-decision","state":"rejected"}`))
-	}))
-	defer guest.Close()
-	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("computer_id") != "computer-decision" || r.URL.Query().Get("user_id") != "" {
-			t.Fatalf("configured target lookup query = %q user=%q", r.URL.Query().Get("computer_id"), r.URL.Query().Get("user_id"))
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"computer_id": "computer-decision", "desktop_id": "platform", "user_id": "universal-wire-platform",
-			"state": "active", "sandbox_url": guest.URL,
-		})
-	}))
-	defer ownership.Close()
-	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		modeReads++
-		http.Error(w, "proxy must not own decision mode state", http.StatusServiceUnavailable)
-	}))
-	defer corpusd.Close()
-	handler, _, _, store := testProxyEnvWithAuthStore(t)
-	handler.vmctlClient = vmctl.NewClient(ownership.URL)
-	handler.cfg.SelfDevelopmentDisposableComputerID = "computer-decision"
-	handler.cfg.CorpusdURL = corpusd.URL
-	user, err := store.CreateUser("owner-decision", "owner-decision@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "selfdev-decision", []string{"computer:self_development:approve"}, "computer-decision", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := `{"decision":"reject","idempotency_key":"decision-replay"}`
-	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-decision/self-development/operations/operation-decision/decision", strings.NewReader(body))
-	request.Header.Set("Authorization", "Bearer "+secret)
+func TestPublicDecisionRefusesEffectsOff(t *testing.T) {
+	handler, _, sandbox := testProxyEnv(t)
+	defer sandbox.Close()
+	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-decision/self-development/operations/operation-decision/decision", strings.NewReader(`{"decision":"reject"}`))
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
-	if response.Code != http.StatusOK || modeReads != 0 || decisionPosts != 1 {
-		t.Fatalf("decision status=%d mode_reads=%d decision_posts=%d body=%s", response.Code, modeReads, decisionPosts, response.Body.String())
+	if response.Code != http.StatusConflict {
+		t.Fatalf("effects-OFF decision status=%d body=%s", response.Code, response.Body.String())
 	}
 }
 
-func TestPublicProposalInjectsCurrentModeReceiptForGuestAuthority(t *testing.T) {
-	receipt := &computerevent.Receipt{ReceiptKind: "ModeReceipt", ReceiptID: "receipt-mode-propose"}
-	corpusd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(selfDevelopmentModeProjection{
-			ComputerID: "computer-propose", Mode: "propose_only", Generation: 4, Receipt: receipt,
-		})
-	}))
-	defer corpusd.Close()
-	guest := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var start proxiedSelfDevelopmentStart
-		if r.Method != http.MethodPost || json.NewDecoder(r.Body).Decode(&start) != nil {
-			t.Fatal("invalid guest proposal request")
-		}
-		if start.IdempotencyKey != "proposal-mode" || start.Prompt != "change runtime" ||
-			start.ModeReceipt == nil || start.ModeReceipt.ReceiptID != receipt.ReceiptID {
-			t.Fatalf("guest proposal binding = %+v", start)
-		}
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"operation_id":"operation-propose"}`))
-	}))
-	defer guest.Close()
-	ownership := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"computer_id": "computer-propose", "desktop_id": "primary", "user_id": "owner-propose",
-			"state": "active", "sandbox_url": guest.URL,
-		})
-	}))
-	defer ownership.Close()
-	handler, _, _, store := testProxyEnvWithAuthStore(t)
-	handler.cfg.CorpusdURL = corpusd.URL
-	handler.vmctlClient = vmctl.NewClient(ownership.URL)
-	user, err := store.CreateUser("owner-propose", "owner-propose@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, secret, err := store.CreateComputerScopedAPIKey(context.Background(), user.ID, "selfdev-propose", []string{"computer:self_development:propose"}, "computer-propose", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestPublicProposalRefusesEffectsOff(t *testing.T) {
+	handler, _, sandbox := testProxyEnv(t)
+	defer sandbox.Close()
 	request := httptest.NewRequest(http.MethodPost, "/api/computers/computer-propose/self-development/operations", strings.NewReader(`{"idempotency_key":"proposal-mode","prompt":"change runtime"}`))
-	request.Header.Set("Authorization", "Bearer "+secret)
 	response := httptest.NewRecorder()
 	handler.HandleAPI(response, request)
-	if response.Code != http.StatusCreated {
-		t.Fatalf("proposal status=%d body=%s", response.Code, response.Body.String())
+	if response.Code != http.StatusConflict {
+		t.Fatalf("effects-OFF proposal status=%d body=%s", response.Code, response.Body.String())
 	}
 }

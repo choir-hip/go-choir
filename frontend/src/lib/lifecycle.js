@@ -9,24 +9,6 @@ function requireDurableWorkSchema(value, label) {
   return value;
 }
 
-async function lifecycleRequest(path, request) {
-  if (!request?.command_id) {
-    throw new Error('Lifecycle command ID is required');
-  }
-  if (!request.command_digest) {
-    throw new Error('Lifecycle command digest is required');
-  }
-  const response = await fetchWithRenewal(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.reason || error.error || `Lifecycle request failed (${response.status})`);
-  }
-  return requireDurableWorkSchema(await response.json(), 'Lifecycle command');
-}
 
 
 export async function getLifecycleEvents(trajectoryId, options = {}) {
@@ -41,45 +23,8 @@ export async function getLifecycleEvents(trajectoryId, options = {}) {
   return requireDurableWorkSchema(await response.json(), 'Lifecycle events');
 }
 
-export function openLifecycleWork(request) {
-  return lifecycleRequest('/api/lifecycle/work/open', request);
-}
 
-export function amendLifecycleWork(request) {
-  return lifecycleRequest('/api/lifecycle/work/amend', request);
-}
 
-export function recordLifecycleRefs(request) {
-  return lifecycleRequest('/api/lifecycle/refs/record', request);
-}
-
-export function queueLifecycleUpdate(request) {
-  return lifecycleRequest('/api/lifecycle/updates/queue', request);
-}
-
-export function applyLifecycleUpdate(request) {
-  return lifecycleRequest('/api/lifecycle/updates/apply', request);
-}
-
-export function settleLifecycleWork(request) {
-  return lifecycleRequest('/api/lifecycle/work/settle', request);
-}
-
-export function refuseLifecycleWork(request) {
-  return lifecycleRequest('/api/lifecycle/work/refuse', request);
-}
-
-export function settleLifecycleTrajectory(request) {
-  return lifecycleRequest('/api/lifecycle/trajectories/settle', request);
-}
-
-export function cancelLifecycleTrajectory(request) {
-  return lifecycleRequest('/api/lifecycle/trajectories/cancel', request);
-}
-
-export function archiveLifecycleArtifact(request) {
-  return lifecycleRequest('/api/lifecycle/artifacts/archive', request);
-}
 
 
 export async function getLifecycleSnapshot(trajectoryId) {

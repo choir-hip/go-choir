@@ -35,7 +35,7 @@ func (rt *Handler) scheduleTextureWorkerWake(ownerID, docID, _ string) {
 // Start reconciles durable Texture documents after the generic core has
 // recovered interrupted activations and before the actor mailbox boot sweep.
 func (rt *Handler) Start(ctx context.Context) {
-	subjects, err := rt.Store.ListLifecycleSubjects(ctx, 2000)
+	subjects, err := rt.Store.ListLifecycleSubjects(ctx, rt.Core.TextureSandboxID())
 	if err != nil {
 		log.Printf("runtime: reconcile lifecycle Texture subjects: %v", err)
 		return

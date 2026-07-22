@@ -184,9 +184,10 @@ func (h *ObjectGraphHandler) listObjects(w http.ResponseWriter, r *http.Request)
 	}
 	q := r.URL.Query()
 	filter := objectgraph.ListFilter{
-		Kind:    objectgraph.ObjectKind(q.Get("kind")),
-		OwnerID: q.Get("owner"),
-		Limit:   parseLimit(q.Get("limit")),
+		Kind:       objectgraph.ObjectKind(q.Get("kind")),
+		OwnerID:    q.Get("owner"),
+		ComputerID: q.Get("computer"),
+		Limit:      parseLimit(q.Get("limit")),
 	}
 	if raw := q.Get("tombstone"); raw != "" {
 		t := strings.ToLower(raw) == "true" || raw == "1"

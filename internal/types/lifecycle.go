@@ -9,37 +9,39 @@ const DurableWorkSchemaV1 = "choir.durable_work.v1"
 type LifecycleCommandKind string
 
 const (
-	LifecycleStart             LifecycleCommandKind = "start"
-	LifecycleOpenWork          LifecycleCommandKind = "open_work"
-	LifecycleAmendWork         LifecycleCommandKind = "amend_work"
-	LifecycleRecordRefs        LifecycleCommandKind = "record_refs"
-	LifecycleQueueUpdate       LifecycleCommandKind = "queue_update"
-	LifecycleApplyUpdate       LifecycleCommandKind = "apply_update"
-	LifecycleReplaceActivation LifecycleCommandKind = "replace_activation"
-	LifecycleSettleWork        LifecycleCommandKind = "settle_work"
-	LifecycleRefuseWork        LifecycleCommandKind = "refuse_work"
-	LifecycleSettleTrajectory  LifecycleCommandKind = "settle_trajectory"
-	LifecycleCancelTrajectory  LifecycleCommandKind = "cancel_trajectory"
-	LifecycleArchiveArtifact   LifecycleCommandKind = "archive_artifact"
+	LifecycleStart              LifecycleCommandKind = "start"
+	LifecycleOpenWork           LifecycleCommandKind = "open_work"
+	LifecycleAmendWork          LifecycleCommandKind = "amend_work"
+	LifecycleRecordRefs         LifecycleCommandKind = "record_refs"
+	LifecycleQueueUpdate        LifecycleCommandKind = "queue_update"
+	LifecycleApplyUpdate        LifecycleCommandKind = "apply_update"
+	LifecycleCommitArtifactHead LifecycleCommandKind = "commit_artifact_head"
+	LifecycleReplaceActivation  LifecycleCommandKind = "replace_activation"
+	LifecycleSettleWork         LifecycleCommandKind = "settle_work"
+	LifecycleRefuseWork         LifecycleCommandKind = "refuse_work"
+	LifecycleSettleTrajectory   LifecycleCommandKind = "settle_trajectory"
+	LifecycleCancelTrajectory   LifecycleCommandKind = "cancel_trajectory"
+	LifecycleArchiveArtifact    LifecycleCommandKind = "archive_artifact"
 )
 
 type LifecycleEventKind string
 
 const (
-	LifecycleUpdateLate          LifecycleEventKind = "update_late"
-	LifecycleTrajectoryStarted   LifecycleEventKind = "trajectory_started"
-	LifecycleWorkOpened          LifecycleEventKind = "work_opened"
-	LifecycleWorkAmended         LifecycleEventKind = "work_amended"
-	LifecycleRefsRecorded        LifecycleEventKind = "refs_recorded"
-	LifecycleUpdateQueued        LifecycleEventKind = "update_queued"
-	LifecycleActivationReplaced  LifecycleEventKind = "activation_replaced"
-	LifecycleUpdateApplied       LifecycleEventKind = "update_applied"
-	LifecycleWorkSettled         LifecycleEventKind = "work_settled"
-	LifecycleUpdateRejected      LifecycleEventKind = "update_rejected"
-	LifecycleWorkRefused         LifecycleEventKind = "work_refused"
-	LifecycleTrajectorySettled   LifecycleEventKind = "trajectory_settled"
-	LifecycleTrajectoryCancelled LifecycleEventKind = "trajectory_cancelled"
-	LifecycleArtifactArchived    LifecycleEventKind = "artifact_archived"
+	LifecycleUpdateLate           LifecycleEventKind = "update_late"
+	LifecycleTrajectoryStarted    LifecycleEventKind = "trajectory_started"
+	LifecycleWorkOpened           LifecycleEventKind = "work_opened"
+	LifecycleWorkAmended          LifecycleEventKind = "work_amended"
+	LifecycleRefsRecorded         LifecycleEventKind = "refs_recorded"
+	LifecycleUpdateQueued         LifecycleEventKind = "update_queued"
+	LifecycleActivationReplaced   LifecycleEventKind = "activation_replaced"
+	LifecycleUpdateApplied        LifecycleEventKind = "update_applied"
+	LifecycleArtifactHeadAdvanced LifecycleEventKind = "artifact_head_advanced"
+	LifecycleWorkSettled          LifecycleEventKind = "work_settled"
+	LifecycleUpdateRejected       LifecycleEventKind = "update_rejected"
+	LifecycleWorkRefused          LifecycleEventKind = "work_refused"
+	LifecycleTrajectorySettled    LifecycleEventKind = "trajectory_settled"
+	LifecycleTrajectoryCancelled  LifecycleEventKind = "trajectory_cancelled"
+	LifecycleArtifactArchived     LifecycleEventKind = "artifact_archived"
 )
 
 type StartLifecycleRequest struct {
@@ -146,16 +148,19 @@ type RefuseLifecycleWorkRequest struct {
 	CommandDigest string `json:"command_digest"`
 	TrajectoryID  string `json:"trajectory_id"`
 	WorkItemID    string `json:"work_item_id"`
+	RefusalRef    string `json:"refusal_ref"`
 	Reason        string `json:"reason"`
 }
 
 type CancelLifecycleRequest struct {
-	OwnerID       string `json:"owner_id"`
-	ComputerID    string `json:"computer_id"`
-	CommandID     string `json:"command_id"`
-	CommandDigest string `json:"command_digest"`
-	TrajectoryID  string `json:"trajectory_id"`
-	Reason        string `json:"reason"`
+	OwnerID                  string `json:"owner_id"`
+	ComputerID               string `json:"computer_id"`
+	CommandID                string `json:"command_id"`
+	CommandDigest            string `json:"command_digest"`
+	TrajectoryID             string `json:"trajectory_id"`
+	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
+	ExpectedHeadRevisionID   string `json:"expected_head_revision_id"`
+	Reason                   string `json:"reason"`
 }
 
 type SettleLifecycleTrajectoryRequest struct {
@@ -166,6 +171,17 @@ type SettleLifecycleTrajectoryRequest struct {
 	TrajectoryID             string `json:"trajectory_id"`
 	ExpectedLifecycleVersion int64  `json:"expected_lifecycle_version"`
 	ExpectedHeadRevisionID   string `json:"expected_head_revision_id"`
+}
+
+type CommitLifecycleArtifactHeadRequest struct {
+	OwnerID                  string   `json:"owner_id"`
+	ComputerID               string   `json:"computer_id"`
+	CommandID                string   `json:"command_id"`
+	CommandDigest            string   `json:"command_digest"`
+	TrajectoryID             string   `json:"trajectory_id"`
+	ExpectedLifecycleVersion int64    `json:"expected_lifecycle_version"`
+	ExpectedHeadRevisionID   string   `json:"expected_head_revision_id"`
+	Revision                 Revision `json:"revision"`
 }
 
 type ArchiveLifecycleArtifactRequest struct {
@@ -179,17 +195,29 @@ type ArchiveLifecycleArtifactRequest struct {
 	Reason                   string `json:"reason,omitempty"`
 }
 
+type LifecycleStoredResult struct {
+	Trajectory TrajectoryRecord     `json:"trajectory"`
+	Schema     string               `json:"schema,omitempty"`
+	WorkItem   *WorkItemRecord      `json:"work_item,omitempty"`
+	Agent      *AgentRecord         `json:"agent,omitempty"`
+	Update     *CoagentSourcePacket `json:"update,omitempty"`
+	Events     []LifecycleEvent     `json:"events"`
+	Document   *Document            `json:"document,omitempty"`
+	Revision   *Revision            `json:"revision,omitempty"`
+}
+
 type LifecycleCommandReceipt struct {
-	CommandID       string               `json:"command_id"`
-	CommandDigest   string               `json:"command_digest"`
-	Kind            LifecycleCommandKind `json:"kind"`
-	OwnerID         string               `json:"owner_id"`
-	ComputerID      string               `json:"computer_id"`
-	TrajectoryID    string               `json:"trajectory_id"`
-	ReducerVersion  string               `json:"reducer_version"`
-	ReducerSeq      int64                `json:"reducer_seq"`
-	ResultEventRefs []string             `json:"result_event_refs"`
-	CreatedAt       time.Time            `json:"created_at"`
+	CommandID       string                 `json:"command_id"`
+	CommandDigest   string                 `json:"command_digest"`
+	Kind            LifecycleCommandKind   `json:"kind"`
+	OwnerID         string                 `json:"owner_id"`
+	ComputerID      string                 `json:"computer_id"`
+	TrajectoryID    string                 `json:"trajectory_id"`
+	ReducerVersion  string                 `json:"reducer_version"`
+	ReducerSeq      int64                  `json:"reducer_seq"`
+	ResultEventRefs []string               `json:"result_event_refs"`
+	CreatedAt       time.Time              `json:"created_at"`
+	StoredResult    *LifecycleStoredResult `json:"stored_result,omitempty"`
 }
 
 type LifecycleEvent struct {

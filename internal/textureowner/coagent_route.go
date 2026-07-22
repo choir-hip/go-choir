@@ -211,7 +211,7 @@ func (h *Handler) coagentTextureTargetDocument(ctx context.Context, parentRec *t
 		OwnerID: ownerID, ComputerID: computerID, CommandID: lifecycleKey,
 		TrajectoryID: trajectoryID, Kind: types.TrajectoryKindTask,
 		SubjectRefs:    map[string]string{"artifact": "texture://documents/" + doc.DocID},
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
 		InitialWork: types.WorkItemRecord{
 			WorkItemID: workItemID, Objective: firstNonEmpty(strings.TrimSpace(req.Objective), "Produce the requested Texture artifact."),
 			AssignedAgentID: agentID, AuthorityProfile: agentprofile.Texture,

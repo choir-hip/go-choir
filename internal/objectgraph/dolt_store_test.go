@@ -233,6 +233,24 @@ func TestDoltStoreListObjectsByMetadataPage(t *testing.T) {
 	if len(defaultLimitPage) != len(wantIDs) {
 		t.Fatalf("normalized limit page: got %d objects, want %d", len(defaultLimitPage), len(wantIDs))
 	}
+	var allRunIDs []string
+	cursor = ""
+	for {
+		page, err := store.ListObjectsPage(ctx, "choir.run", cursor, 3)
+		if err != nil {
+			t.Fatalf("list object-kind page after %q: %v", cursor, err)
+		}
+		if len(page) == 0 {
+			break
+		}
+		for _, obj := range page {
+			allRunIDs = append(allRunIDs, obj.CanonicalID)
+		}
+		cursor = page[len(page)-1].CanonicalID
+	}
+	if len(allRunIDs) != 7 || allRunIDs[0] != "obj:choir.run:owner:key-01" || allRunIDs[6] != "obj:choir.run:owner:key-09" {
+		t.Fatalf("object-kind pages = %v, want all seven run objects in canonical order", allRunIDs)
+	}
 }
 
 func TestDoltStoreListObjectsByMetadataPageErrors(t *testing.T) {

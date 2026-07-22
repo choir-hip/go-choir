@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 func TestMain(m *testing.M) {
@@ -235,6 +240,107 @@ func TestTrajectoriesHitsAPI(t *testing.T) {
 	}
 }
 
+func TestIdentityVerifiesJoinedGuestAndPlatformAttestations(t *testing.T) {
+	guestPublic, guestPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	platformPublic, platformPrivate, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	previousTrustDigest := executionIdentityPlatformTrustDigest
+	executionIdentityPlatformTrustDigest = func() (string, error) {
+		return "sha256:" + computerevent.DigestBytes(platformPublic), nil
+	}
+	t.Cleanup(func() { executionIdentityPlatformTrustDigest = previousTrustDigest })
+	guestSigner := computerevent.SigningKey{
+		SignerRef: computerevent.SignerRef{SignerDomain: "guest-core", KeyID: "guest-test"}, PrivateKey: guestPrivate,
+	}
+	platformKeyID := computerevent.DigestBytes(platformPublic)[:16]
+	platformSigner := computerevent.SigningKey{
+		SignerRef: computerevent.SignerRef{SignerDomain: "platform-control", KeyID: platformKeyID}, PrivateKey: platformPrivate,
+	}
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		issuedAt := time.Now().UTC()
+		identity := map[string]any{
+			"schema": "choir.execution_identity.v1", "nonce": r.URL.Query().Get("nonce"),
+			"audience":    "choir.news/acceptance/execution-identity",
+			"computer_id": "computer-test", "realization_id": "vm-test-epoch-1", "vm_epoch": "1",
+			"build":     map[string]any{"commit": "1234567890abcdef1234567890abcdef12345678", "deployed_commit": "1234567890abcdef1234567890abcdef12345678"},
+			"issued_at": issuedAt.Format(time.RFC3339Nano), "expires_at": issuedAt.Add(2 * time.Minute).Format(time.RFC3339Nano),
+		}
+		guestFields := make(map[string]any, len(identity)-1)
+		for key, value := range identity {
+			if key != "issued_at" {
+				guestFields[key] = value
+			}
+		}
+		guestReceipt, signErr := computerevent.NewSignedReceipt("ExecutionIdentity", "choir-sandbox", guestFields, []computerevent.SigningKey{guestSigner}, issuedAt)
+		if signErr != nil {
+			t.Fatal(signErr)
+		}
+		vmctlIdentity := map[string]any{"computer_id": "computer-test", "vm_id": "vm-test", "epoch": 1, "state": "active"}
+		route := json.RawMessage(`{"code_commit":"1234567890abcdef1234567890abcdef12345678"}`)
+		hostBuild := json.RawMessage(`{"service":"proxy","commit":"1234567890abcdef1234567890abcdef12345678","deployed_commit":"1234567890abcdef1234567890abcdef12345678"}`)
+		deployment := json.RawMessage(`{"target_commit":"1234567890abcdef1234567890abcdef12345678","host_identity":{"canonical_ref":"refs/heads/main@1234567890abcdef1234567890abcdef12345678","nixos_closure_digest":"sha256:nixos","services":{"proxy":{"role":"proxy","package_digest":"sha256:proxy","embedded_commit":"1234567890abcdef1234567890abcdef12345678"}}}}`)
+		guestDigest, _ := executionIdentityCLIDigest(guestReceipt)
+		routeDigest, _ := executionIdentityCLIDigest(route)
+		hostDigest, _ := executionIdentityCLIDigest(hostBuild)
+		deployDigest, _ := executionIdentityCLIDigest(deployment)
+		guestSignerDigest := "sha256:" + computerevent.DigestBytes(guestPublic)
+		platformFields := map[string]any{
+			"schema": "choir.execution_identity.v1", "nonce": identity["nonce"],
+			"audience": "choir.news/acceptance/execution-identity", "deployed_commit": "1234567890abcdef1234567890abcdef12345678",
+			"computer_id": identity["computer_id"], "realization_id": identity["realization_id"], "vm_epoch": identity["vm_epoch"],
+			"guest_receipt_digest": guestDigest, "guest_signer_key_digest": guestSignerDigest,
+			"vmctl": vmctlIdentity, "route_digest": routeDigest,
+			"host_build_digest": hostDigest, "deployment_receipt_digest": deployDigest,
+		}
+		platformReceipt, signErr := computerevent.NewSignedReceipt("ExecutionIdentityJoin", "corpusd", platformFields, []computerevent.SigningKey{platformSigner}, issuedAt)
+		if signErr != nil {
+			t.Fatal(signErr)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"schema": "choir.execution_identity.v1", "joined": true,
+			"guest": map[string]any{"schema": "choir.execution_identity.v1", "identity": identity, "receipt": guestReceipt, "signer_public_key": base64.RawStdEncoding.EncodeToString(guestPublic)},
+			"vmctl": vmctlIdentity, "route_digest": routeDigest, "host_build": hostBuild, "deployment_receipt": deployment,
+			"platform_attestation": map[string]any{"receipt": platformReceipt, "signer_public_key": base64.RawStdEncoding.EncodeToString(platformPublic)},
+		})
+	}))
+	defer stub.Close()
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"identity", "--host=" + stub.URL}, &out, &errOut)
+	if code != 0 {
+		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), `"joined": true`) {
+		t.Fatalf("stdout = %s, want joined identity", out.String())
+	}
+	platformSigner.SignerRef.KeyID = "untrusted-key-id"
+	out.Reset()
+	errOut.Reset()
+	if code := run([]string{"identity", "--host=" + stub.URL}, &out, &errOut); code != 1 ||
+		!strings.Contains(errOut.String(), "platform identity join verification failed") {
+		t.Fatalf("code=%d stderr=%q, want platform signer key-id refusal", code, errOut.String())
+	}
+}
+
+func TestIdentityRefusesUnjoinedGuestEnvelope(t *testing.T) {
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"schema": "choir.execution_identity.v1", "joined": false,
+		})
+	}))
+	defer stub.Close()
+	var out, errOut bytes.Buffer
+	code := run([]string{"identity", "--host=" + stub.URL}, &out, &errOut)
+	if code != 1 || !strings.Contains(errOut.String(), "platform identity join refused") {
+		t.Fatalf("code=%d stderr=%q, want joined-identity refusal", code, errOut.String())
+	}
+}
+
 func TestLifecycleEventsUsesDurableCursor(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/api/trajectories/trajectory-one/events" {
@@ -284,7 +390,7 @@ func TestTrajectoriesDecodesObjectSettlementRule(t *testing.T) {
 		t.Fatalf("settlement_rule = %s, want the rule object passed through", resp.Trajectories[0].SettlementRule)
 	}
 }
-func TestTrajectoryCancelPostsBodylessEscapedRequest(t *testing.T) {
+func TestTrajectoryCancelPostsCommandBoundEscapedRequest(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %q, want POST", r.Method)
@@ -295,19 +401,20 @@ func TestTrajectoryCancelPostsBodylessEscapedRequest(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer choir_sk_test" {
 			t.Errorf("Authorization = %q, want Bearer choir_sk_test", got)
 		}
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read request body: %v", err)
+		var request map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request body: %v", err)
 		}
-		if len(body) != 0 {
-			t.Errorf("body = %q, want empty", body)
+		if request["idempotency_key"] != "cancel-test-1" || request["reason"] != "operator request" ||
+			request["expected_lifecycle_version"] != float64(7) || request["expected_head_revision_id"] != "revision-7" {
+			t.Errorf("request = %#v, want command key, CAS preconditions, and reason", request)
 		}
 		_, _ = io.WriteString(w, `{"trajectory_id":"traj/with space","status":"cancelled","cancelled_run_ids":[]}`)
 	}))
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "traj/with space"}, &out, &errOut)
+	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "--idempotency-key=cancel-test-1", "--expected-lifecycle-version=7", "--expected-head-revision-id=revision-7", "--reason=operator request", "traj/with space"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -321,7 +428,7 @@ func TestTrajectoryCancelPrintsServerJSON(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
+	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "--idempotency-key=cancel-test-2", "--expected-lifecycle-version=3", "--expected-head-revision-id=revision-3", "traj-1"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -359,7 +466,7 @@ func TestTrajectoryCancelReportsServerError(t *testing.T) {
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "traj-1"}, &out, &errOut)
+	code := run([]string{"trajectory", "cancel", "--host=" + stub.URL, "--idempotency-key=cancel-test-3", "--expected-lifecycle-version=4", "--expected-head-revision-id=revision-4", "traj-1"}, &out, &errOut)
 	if code != 1 {
 		t.Fatalf("code = %d, want 1; stderr=%s", code, errOut.String())
 	}
@@ -526,14 +633,17 @@ func TestRunStartPostsToPromptBar(t *testing.T) {
 		if body["text"] != "hello world" {
 			t.Fatalf("text = %q, want hello world", body["text"])
 		}
+		if body["command_id"] != "cli-start-1" {
+			t.Fatalf("command_id = %q, want cli-start-1", body["command_id"])
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		_, _ = io.WriteString(w, `{"submission_id":"sub-123","state":"pending","created_at":"2026-07-06T00:00:00.000Z","status_url":"/api/prompt-bar/submissions/sub-123"}`)
+		_, _ = io.WriteString(w, `{"schema":"choir.durable_work.v1","submission_id":"sub-123","state":"pending","created_at":"2026-07-06T00:00:00.000Z","status_url":"/api/prompt-bar/submissions/sub-123","command_id":"command-123","start_request_digest":"digest-123","trajectory_id":"trajectory-123","doc_id":"document-123","revision_id":"revision-123","subject_id":"texture:document-123","obligation_ids":["work-123"],"reducer_seq":1,"snapshot_cursor":1}`)
 	}))
 	defer stub.Close()
 
 	var out, errOut bytes.Buffer
-	code := run([]string{"run", "start", "--host=" + stub.URL, "hello", "world"}, &out, &errOut)
+	code := run([]string{"run", "start", "--host=" + stub.URL, "--idempotency-key=cli-start-1", "hello", "world"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("code = %d, want 0; stderr=%s", code, errOut.String())
 	}
@@ -556,6 +666,14 @@ func TestRunStartRequiresText(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "prompt text required") {
 		t.Fatalf("stderr = %q, want prompt text required", errOut.String())
+	}
+}
+
+func TestRunStartRequiresIdempotencyKey(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := run([]string{"run", "start", "hello"}, &out, &errOut)
+	if code != 2 || !strings.Contains(errOut.String(), "--idempotency-key is required") {
+		t.Fatalf("code=%d stderr=%q", code, errOut.String())
 	}
 }
 
@@ -810,104 +928,6 @@ func TestSelfDevelopmentModeCLIUsesExplicitComputerAndCASBody(t *testing.T) {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), `"generation": 5`) {
-		t.Fatalf("stdout=%s", stdout.String())
-	}
-}
-
-func TestSelfDevelopmentCLIUsesExplicitTargetAndImmutableBindings(t *testing.T) {
-	var requests []map[string]any
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/computers/computer-exact/self-development/operations":
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatal(err)
-			}
-			requests = append(requests, body)
-			_, _ = io.WriteString(w, `{"operation_id":"operation-1","state":"executing"}`)
-		case r.Method == http.MethodGet && r.URL.Path == "/api/computers/computer-exact/self-development/operations/operation-1":
-			_, _ = io.WriteString(w, `{"operation_id":"operation-1","state":"awaiting_approval"}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/api/computers/computer-exact/self-development/operations/operation-1/decision":
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatal(err)
-			}
-			requests = append(requests, body)
-			_, _ = io.WriteString(w, `{"operation_id":"operation-1","state":"accepted"}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/api/computers/computer-exact/self-development/rollbacks":
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatal(err)
-			}
-			requests = append(requests, body)
-			_, _ = io.WriteString(w, `{"operation_id":"rollback-1","state":"rollback_pending"}`)
-		default:
-			t.Fatalf("unexpected request = %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer stub.Close()
-	promptPath := filepath.Join(t.TempDir(), "prompt.txt")
-	if err := os.WriteFile(promptPath, []byte("repair the updater"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var stdout, stderr bytes.Buffer
-	if code := run([]string{"self-dev", "start", "--computer=computer-exact", "--idempotency-key=start-1", "--prompt-file=" + promptPath, "--host=" + stub.URL}, &stdout, &stderr); code != 0 {
-		t.Fatalf("start code=%d stderr=%s", code, stderr.String())
-	}
-	if requests[0]["prompt"] != "repair the updater" || requests[0]["idempotency_key"] != "start-1" {
-		t.Fatalf("start body = %#v", requests[0])
-	}
-	stdout.Reset()
-	stderr.Reset()
-	if code := run([]string{"self-dev", "status", "--computer=computer-exact", "--host=" + stub.URL, "operation-1"}, &stdout, &stderr); code != 0 {
-		t.Fatalf("status code=%d stderr=%s", code, stderr.String())
-	}
-	digest := strings.Repeat("a", 64)
-	stdout.Reset()
-	stderr.Reset()
-	if code := run([]string{
-		"self-dev", "approve", "--computer=computer-exact", "--idempotency-key=approve-1",
-		"--expected-desired-head=" + digest, "--expected-effective-head=" + digest,
-		"--expected-desired-commitment=" + digest, "--expected-effective-commitment=" + digest,
-		"--bundle=" + digest, "--verifier=verification:1", "--host=" + stub.URL, "operation-1",
-	}, &stdout, &stderr); code != 0 {
-		t.Fatalf("approve code=%d stderr=%s", code, stderr.String())
-	}
-	decision := requests[1]
-	if decision["decision"] != "approve" || decision["bundle_digest"] != digest || decision["verifier_ref"] != "verification:1" ||
-		decision["expected_desired_state_commitment"] != digest || decision["expected_effective_state_commitment"] != digest {
-		t.Fatalf("decision body = %#v", decision)
-	}
-	stdout.Reset()
-	stderr.Reset()
-	if code := run([]string{
-		"self-dev", "rollback", "--computer=computer-exact", "--expected-desired-head=" + digest,
-		"--current-applied-head=" + digest, "--to-applied-head=" + digest,
-		"--prior-materialization=receipt:prior", "--prior-checkpoint=checkpoint:prior",
-		"--expected-route-generation=9", "--idempotency-key=rollback-1", "--host=" + stub.URL,
-	}, &stdout, &stderr); code != 0 {
-		t.Fatalf("rollback code=%d stderr=%s", code, stderr.String())
-	}
-	rollback := requests[2]
-	if rollback["to_applied_head"] != digest || rollback["prior_materialization"] != "receipt:prior" || rollback["prior_checkpoint"] != "checkpoint:prior" || rollback["expected_route_generation"] != float64(9) {
-		t.Fatalf("rollback body = %#v", rollback)
-	}
-}
-
-func TestSelfDevelopmentKernelCapabilitiesUsesPublicComputerAPI(t *testing.T) {
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/api/computers/computer-exact/self-development/kernel-capabilities" {
-			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
-		}
-		_, _ = io.WriteString(w, `{"receipt":{"receipt_kind":"KernelCapabilityReceipt"}}`)
-	}))
-	defer stub.Close()
-	var stdout, stderr bytes.Buffer
-	code := run([]string{"self-dev", "kernel-capabilities", "--computer=computer-exact", "--host=" + stub.URL}, &stdout, &stderr)
-	if code != 0 {
-		t.Fatalf("code=%d stderr=%s", code, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "KernelCapabilityReceipt") {
 		t.Fatalf("stdout=%s", stdout.String())
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yusefmosiah/go-choir/internal/sourcecontract"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/texturedoc"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
@@ -120,4 +121,56 @@ func runtimeStructuredRevisionFixture(t *testing.T) (json.RawMessage, json.RawMe
 		t.Fatalf("marshal source entities: %v", err)
 	}
 	return bodyDocJSON, sourceEntitiesJSON
+}
+
+func TestTextureRevisionAPICommitsLifecycleBoundHeadThroughReducer(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	start := types.StartLifecycleRequest{
+		OwnerID: "user-1", ComputerID: rt.TextureSandboxID(), CommandID: "start-public-revision",
+		TrajectoryID: "trajectory-public-revision", Kind: types.TrajectoryKindDocument,
+		SubjectRefs:     map[string]string{"artifact": "texture://document/public-revision", "doc_id": "document-public-revision"},
+		SettlementRule:  types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"}},
+		InitialWork:     types.WorkItemRecord{WorkItemID: "work-public-revision", Objective: "revise artifact"},
+		InitialDocument: types.Document{DocID: "document-public-revision", Title: "Public lifecycle revision"},
+		InitialRevision: types.Revision{RevisionID: "revision-public-v0", AuthorKind: types.AuthorAppAgent, AuthorLabel: "Choir", Content: "Initial"},
+		Agent:           types.AgentRecord{AgentID: "texture:document-public-revision", Profile: "texture", Role: "texture", ChannelID: "document-public-revision"},
+	}
+	start.StartRequestDigest, _ = store.ComputeStartLifecycleRequestDigest(start)
+	if _, err := rt.Store().StartLifecycle(t.Context(), start); err != nil {
+		t.Fatalf("start lifecycle: %v", err)
+	}
+	request := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
+		Content: "Owner-authored", ParentRevisionID: start.InitialRevision.RevisionID,
+		IdempotencyKey: "public-revision-command", ExpectedLifecycleVersion: 1,
+	})
+	response := httptest.NewRecorder()
+	handler.HandleTextureRevisions(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create lifecycle revision status = %d body=%s", response.Code, response.Body.String())
+	}
+	var revision textureRevisionResponse
+	if err := json.NewDecoder(response.Body).Decode(&revision); err != nil {
+		t.Fatalf("decode lifecycle revision: %v", err)
+	}
+	snapshot, err := rt.Store().GetLifecycleSnapshot(t.Context(), start.OwnerID, start.ComputerID, start.TrajectoryID)
+	if err != nil {
+		t.Fatalf("get lifecycle snapshot: %v", err)
+	}
+	if snapshot.HeadRevision.RevisionID != revision.RevisionID || snapshot.HeadRevision.Content != "Owner-authored" ||
+		snapshot.Trajectory.ReducerSeq != 2 || snapshot.Trajectory.LifecycleVersion != 2 {
+		t.Fatalf("unexpected lifecycle revision snapshot: %+v", snapshot)
+	}
+	replay := textureRequest(t, http.MethodPost, "/api/texture/documents/"+start.InitialDocument.DocID+"/revisions", textureCreateRevisionRequest{
+		Content: "Owner-authored", ParentRevisionID: start.InitialRevision.RevisionID,
+		IdempotencyKey: "public-revision-command", ExpectedLifecycleVersion: 1,
+	})
+	replayResponse := httptest.NewRecorder()
+	handler.HandleTextureRevisions(replayResponse, replay)
+	if replayResponse.Code != http.StatusCreated {
+		t.Fatalf("replay lifecycle revision status = %d body=%s", replayResponse.Code, replayResponse.Body.String())
+	}
+	var replayed textureRevisionResponse
+	if err := json.NewDecoder(replayResponse.Body).Decode(&replayed); err != nil || replayed.RevisionID != revision.RevisionID {
+		t.Fatalf("unexpected lifecycle revision replay: %+v, %v", replayed, err)
+	}
 }

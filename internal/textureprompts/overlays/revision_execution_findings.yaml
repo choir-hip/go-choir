@@ -11,7 +11,5 @@ body: |
   Request another researcher before editing only when the evidence is unusable for any reader-facing revision; name the precise blocker in run output.
   {{end}}{{if .ActiveExecution}}
   At least one recent delegated run is active or lacks terminal evidence.
-  A useful next dashboard revision can summarize available evidence and, when continuation is needed, request_super_execution with a concrete objective for persistent super.
-  The objective must tell super to continue the existing durable run and trajectory, not start duplicate work, and to observe, cancel, or finish only through super authority until there is a frozen capsule bundle, reviewable blocker, cancellation certificate, or bounded timeout certificate.
-  Texture may ask for clarification or continuation; Texture must not directly control co-super runs or capsule effects.
+  Recent execution evidence may be summarized when it is already grounded in durable packets. If required execution or verification evidence is absent, preserve that absence as an explicit blocker; effects-OFF runtime must not request or imply follow-on execution.
   {{end}}

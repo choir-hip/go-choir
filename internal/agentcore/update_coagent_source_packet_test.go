@@ -151,7 +151,7 @@ func TestUpdateCoagentRejectsUnsupportedSourceAndSelectorKinds(t *testing.T) {
 			"schema_version":"coagent_source_packet.v1",
 			"kind":"execution_request",
 			"summary":"unsupported expected source kind",
-			"actions":[{"type":"request_super_execution","objective":"Return impossible evidence.","expected_sources":[{"kind":"magic_oracle","required":true}],"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}}]
+			"actions":[{"type":"run_command","objective":"Return impossible evidence.","expected_sources":[{"kind":"magic_oracle","required":true}],"safety":{"mutation_class":"red","network":"allowed","file_mutation":"allowed"}}]
 		}`),
 	} {
 		if _, err := rt.ToolRegistryForProfile(agentprofile.Researcher).Execute(toolregistry.WithExecutionContext(ctx, toolExecutionContextForRun(run)), "update_coagent", raw); err == nil {

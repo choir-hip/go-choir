@@ -46,10 +46,11 @@ type Edge struct {
 }
 
 type ListFilter struct {
-	Kind      ObjectKind
-	OwnerID   string
-	Limit     int
-	Tombstone *bool
+	Kind       ObjectKind
+	OwnerID    string
+	ComputerID string
+	Limit      int
+	Tombstone  *bool
 }
 
 type EdgeFilter struct {

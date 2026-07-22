@@ -136,6 +136,10 @@ func (s *DoltStore) ListObjects(ctx context.Context, filter ListFilter) ([]Objec
 		query += ` AND owner_id = ?`
 		args = append(args, filter.OwnerID)
 	}
+	if filter.ComputerID != "" {
+		query += ` AND computer_id = ?`
+		args = append(args, filter.ComputerID)
+	}
 	if filter.Tombstone != nil {
 		query += ` AND tombstone = ?`
 		args = append(args, *filter.Tombstone)
@@ -408,6 +412,34 @@ func (s *DoltStore) ListObjectsByMetadata(ctx context.Context, kind, jsonPath, v
 		obj, err := scanDoltObject(rows)
 		if err != nil {
 			return nil, err
+		}
+		out = append(out, obj)
+	}
+	return out, rows.Err()
+}
+
+// ListObjectsPage scans one object kind in stable canonical-ID order. The
+// exclusive cursor makes full-table maintenance and recovery scans bounded
+// without imposing a correctness-limiting fixed window.
+func (s *DoltStore) ListObjectsPage(ctx context.Context, kind, afterCanonicalID string, limit int) ([]Object, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("objectgraph dolt: nil store")
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT canonical_id, object_kind, owner_id, computer_id, version_id, content_hash, body, metadata, created_at, updated_at, tombstone, superseded_by
+		 FROM og_objects
+		 WHERE object_kind = ? AND canonical_id > ?
+		 ORDER BY canonical_id ASC LIMIT ?`,
+		kind, afterCanonicalID, NormalizedLimit(limit))
+	if err != nil {
+		return nil, fmt.Errorf("objectgraph dolt: list objects page: %w", err)
+	}
+	defer rows.Close()
+	var out []Object
+	for rows.Next() {
+		obj, scanErr := scanDoltObject(rows)
+		if scanErr != nil {
+			return nil, scanErr
 		}
 		out = append(out, obj)
 	}

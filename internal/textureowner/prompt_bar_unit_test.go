@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
-	"github.com/yusefmosiah/go-choir/internal/toolregistry"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
@@ -53,7 +54,7 @@ func TestHandlePromptBarTextureRouteCompletesConductorSynchronously(t *testing.T
 	}
 }
 
-func TestHandlePromptBarOperationalProofInitialRunStartsWithTexture(t *testing.T) {
+func TestHandlePromptBarOperationalProofStartsWithTextureAndNoEffectActor(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	req := authenticatedRequest(http.MethodPost, "/api/prompt-bar", `{"text":"Universal Wire staging proof request: using product paths only, run the existing Universal Wire source-refresh/research/projection/publication flow, create or approve an Article Texture, update universal-wire/Wire.texture, then leave evidence ids and verifier proof. Do not use test-only routes."}`, "user-alice")
@@ -101,34 +102,6 @@ func TestHandlePromptBarOperationalProofInitialRunStartsWithTexture(t *testing.T
 		}
 	}
 
-	requestCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(initialRun))
-	superResult, err := handler.requestPersistentSuperExecution(requestCtx, "user-alice", decision.DocID, initialRun.RunID, initialRun.AgentID, "Run the Universal Wire verification steps and report evidence back to Texture.", "")
-	if err != nil {
-		t.Fatalf("texture request super execution: %v", err)
-	}
-	if got := superResult["profile"]; got != agentprofile.Super {
-		t.Fatalf("super profile = %v, want %s: %+v", got, agentprofile.Super, superResult)
-	}
-	if got := superResult["requested_by"]; got != initialRun.AgentID {
-		t.Fatalf("requested_by = %v, want %s", got, initialRun.AgentID)
-	}
-	workItemID, _ := superResult["work_item_id"].(string)
-	if workItemID == "" {
-		t.Fatalf("super request missing durable work identity: %+v", superResult)
-	}
-	snapshot, err := rt.Store().GetLifecycleSnapshot(context.Background(), "user-alice", initialRun.SandboxID, decision.TrajectoryID)
-	if err != nil {
-		t.Fatalf("load lifecycle after Super request: %v", err)
-	}
-	foundOpenWork := false
-	for _, work := range snapshot.WorkItems {
-		if work.WorkItemID == workItemID && work.Status == types.WorkItemOpen && work.AssignedAgentID == superResult["agent_id"] {
-			foundOpenWork = true
-		}
-	}
-	if !foundOpenWork {
-		t.Fatalf("Super request did not open canonical lifecycle obligation %q: %+v", workItemID, snapshot.WorkItems)
-	}
 }
 
 func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) {
@@ -229,7 +202,7 @@ func TestHandlePromptBarExplicitNoWorkerDecisionStartsWithTexture(t *testing.T) 
 	}
 }
 
-func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticSuper(t *testing.T) {
+func TestHandlePromptBarExplicitEffectPromptStartsWithTextureWithoutEffectActor(t *testing.T) {
 	rt, handler := testAPISetup(t)
 
 	prompt := "Create a Texture document for M32_CONTROL_PLANE_EXEC_TEST. Include this execution-shaped sentence verbatim: the document should ask downstream super execution to create a tiny file artifacts/m32_control_plane_exec_test.txt containing the marker, then report the requested execution handle. Do not request super execution in this proof; only write the note after Texture owns the artifact context."
@@ -296,20 +269,6 @@ func TestHandlePromptBarExplicitSuperExecutionStartsWithTextureWithoutAutomaticS
 		}
 	}
 
-	requestCtx := toolregistry.WithExecutionContext(context.Background(), toolExecutionContextForRun(initialRun))
-	superResult, err := handler.requestPersistentSuperExecution(requestCtx, "user-alice", decision.DocID, initialRun.RunID, initialRun.AgentID, "Create artifacts/m32_control_plane_exec_test.txt and report evidence back to Texture.", "")
-	if err != nil {
-		t.Fatalf("texture request super execution: %v", err)
-	}
-	if got := superResult["profile"]; got != agentprofile.Super {
-		t.Fatalf("super profile = %v, want %s: %+v", got, agentprofile.Super, superResult)
-	}
-	if got := superResult["requested_by"]; got != initialRun.AgentID {
-		t.Fatalf("requested_by = %v, want %s", got, initialRun.AgentID)
-	}
-	if got := superResult["requested_by_run_id"]; got != initialRun.RunID {
-		t.Fatalf("requested_by_run_id = %v, want %s", got, initialRun.RunID)
-	}
 }
 
 func waitForPromptBarUnitRunTerminal(t *testing.T, rt *Runtime, runID, ownerID string, timeout time.Duration) types.RunRecord {
@@ -373,5 +332,75 @@ func TestHandlePromptBarResearcherMentionDoesNotSetRoutingFlag(t *testing.T) {
 	}
 	if got := metadataStringValue(conductor.Metadata, "initial_handoff"); got == "persistent_super" {
 		t.Fatalf("initial_handoff = %q, want no researcher-driven route override", got)
+	}
+}
+
+func TestHandlePromptBarStableCommandReplaysOneLifecycle(t *testing.T) {
+	rt, handler := testAPISetup(t)
+	const ownerID = "user-command-replay"
+	const commandID = "prompt-command-replay-1"
+	const prompt = "Draft a concise durable note about retry-safe command handling, including the invariant that one caller command creates one trajectory and one initial activation."
+	body, _ := json.Marshal(map[string]string{"text": prompt, "command_id": commandID})
+
+	submit := func() promptBarSubmitResponse {
+		t.Helper()
+		request := authenticatedRequest(http.MethodPost, "/api/prompt-bar", string(body), ownerID)
+		response := httptest.NewRecorder()
+		handler.HandlePromptBar(response, request)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("prompt submission status=%d body=%s", response.Code, response.Body.String())
+		}
+		var result promptBarSubmitResponse
+		if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+
+	first := submit()
+	replay := submit()
+	if !reflect.DeepEqual(first, replay) {
+		t.Fatalf("replayed public result changed: first=%+v replay=%+v", first, replay)
+	}
+	conflictBody, _ := json.Marshal(map[string]string{"text": prompt + " changed", "command_id": commandID})
+	conflictRequest := authenticatedRequest(http.MethodPost, "/api/prompt-bar", string(conflictBody), ownerID)
+	conflictResponse := httptest.NewRecorder()
+	handler.HandlePromptBar(conflictResponse, conflictRequest)
+	if conflictResponse.Code != http.StatusConflict {
+		t.Fatalf("conflicting command status=%d body=%s, want 409", conflictResponse.Code, conflictResponse.Body.String())
+	}
+	if first.CommandID != commandID || replay.CommandID != commandID ||
+		first.StartRequestDigest == "" || replay.StartRequestDigest != first.StartRequestDigest ||
+		replay.TrajectoryID != first.TrajectoryID || replay.DocID != first.DocID ||
+		replay.RevisionID != first.RevisionID || replay.SubjectID != first.SubjectID {
+		t.Fatalf("replayed command diverged: first=%+v replay=%+v", first, replay)
+	}
+	firstRun, err := rt.GetRun(context.Background(), first.SubmissionID, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayRun, err := rt.GetRun(context.Background(), replay.SubmissionID, ownerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var firstDecision, replayDecision ConductorDecision
+	if err := json.Unmarshal([]byte(firstRun.Result), &firstDecision); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(replayRun.Result), &replayDecision); err != nil {
+		t.Fatal(err)
+	}
+	if firstDecision.InitialLoopID == "" || replayDecision.InitialLoopID != firstDecision.InitialLoopID {
+		t.Fatalf("initial activation diverged: first=%+v replay=%+v", firstDecision, replayDecision)
+	}
+	snapshot, err := rt.Store().GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureSandboxID(), first.TrajectoryID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.WorkItems) != 1 || len(snapshot.Agents) != 1 || snapshot.Activation.RunID != firstDecision.InitialLoopID {
+		t.Fatalf("replayed lifecycle duplicated durable subjects: %+v", snapshot)
+	}
+	if snapshot.Document.Title == prompt || len(strings.Fields(snapshot.Document.Title)) > 9 {
+		t.Fatalf("document title was not bounded from owner input: %q", snapshot.Document.Title)
 	}
 }

@@ -2,7 +2,9 @@ package computerevent
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -537,6 +539,27 @@ func (a *ComputerEventAppender) Reconstruct(ctx context.Context, source EventSou
 		return ErrNeedsProjectionRepair
 	}
 	return nil
+}
+
+const (
+	// PlatformControlTrustKeyID and PlatformControlTrustPublicKey pin the
+	// repository-reviewed staging trust root. Rotation requires a reviewed
+	// overlap policy before either value changes.
+	PlatformControlTrustKeyID     = "868f96cca8726f99"
+	PlatformControlTrustPublicKey = "sjka9TOy/Zx3Nl608bpWQ2Dft/s1yJEiMo7NzVBxwZs"
+)
+
+// PlatformControlTrustDigest validates and returns the pinned key digest.
+func PlatformControlTrustDigest() (string, error) {
+	publicKey, err := base64.RawStdEncoding.DecodeString(PlatformControlTrustPublicKey)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return "", fmt.Errorf("platform-control trust key is invalid")
+	}
+	digest := sha256.Sum256(publicKey)
+	if keyID := hex.EncodeToString(digest[:8]); keyID != PlatformControlTrustKeyID {
+		return "", fmt.Errorf("platform-control trust key id does not match its digest")
+	}
+	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
 
 func DigestBytes(value []byte) string {

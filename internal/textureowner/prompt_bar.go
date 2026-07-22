@@ -2,6 +2,7 @@ package textureowner
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -11,27 +12,30 @@ import (
 	"github.com/yusefmosiah/go-choir/internal/agentprofile"
 	contentowner "github.com/yusefmosiah/go-choir/internal/content"
 	"github.com/yusefmosiah/go-choir/internal/provider"
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 )
 
 type promptBarSubmitRequest struct {
-	Text string `json:"text"`
+	Text      string `json:"text"`
 	CommandID string `json:"command_id,omitempty"`
 }
 
 type promptBarSubmitResponse struct {
-	SubmissionID   string         `json:"submission_id"`
-	State          types.RunState `json:"state"`
-	CreatedAt      string         `json:"created_at"`
-	StatusURL      string         `json:"status_url"`
-	CommandID      string         `json:"command_id,omitempty"`
-	TrajectoryID   string         `json:"trajectory_id,omitempty"`
-	DocID          string         `json:"doc_id,omitempty"`
-	RevisionID     string         `json:"revision_id,omitempty"`
-	SubjectID      string         `json:"subject_id,omitempty"`
-	ObligationIDs  []string       `json:"obligation_ids,omitempty"`
-	ReducerSeq     int64          `json:"reducer_seq,omitempty"`
-	SnapshotCursor int64          `json:"snapshot_cursor,omitempty"`
+	Schema             string         `json:"schema"`
+	SubmissionID       string         `json:"submission_id"`
+	State              types.RunState `json:"state"`
+	CreatedAt          string         `json:"created_at"`
+	StatusURL          string         `json:"status_url"`
+	CommandID          string         `json:"command_id,omitempty"`
+	StartRequestDigest string         `json:"start_request_digest,omitempty"`
+	TrajectoryID       string         `json:"trajectory_id,omitempty"`
+	DocID              string         `json:"doc_id,omitempty"`
+	RevisionID         string         `json:"revision_id,omitempty"`
+	SubjectID          string         `json:"subject_id,omitempty"`
+	ObligationIDs      []string       `json:"obligation_ids,omitempty"`
+	ReducerSeq         int64          `json:"reducer_seq,omitempty"`
+	SnapshotCursor     int64          `json:"snapshot_cursor,omitempty"`
 }
 
 type promptBarSubmissionStatusResponse struct {
@@ -88,7 +92,7 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		"seed_prompt":            text,
 		"initial_document_title": title,
 		"submission_surface":     "prompt_bar",
-		"lifecycle_command_id": commandID,
+		"lifecycle_command_id":   commandID,
 	}
 	if ownerEmail := authenticatedUserEmail(r); ownerEmail != "" {
 		metadata["owner_email"] = ownerEmail
@@ -110,17 +114,23 @@ func (h *Handler) HandlePromptBar(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if err != nil {
+		if errors.Is(err, agentcore.ErrPromptCommandConflict) || errors.Is(err, store.ErrLifecycleCommandConflict) || errors.Is(err, store.ErrConcurrentStateChange) {
+			writeAPIJSON(w, http.StatusConflict, apiError{Error: "command identity conflicts with the stored request"})
+			return
+		}
 		log.Printf("texture prompt bar: submit: %v", err)
 		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to submit prompt"})
 		return
 	}
 	writeAPIJSON(w, http.StatusAccepted, promptBarSubmitResponse{
+		Schema:       types.DurableWorkSchemaV1,
 		SubmissionID: rec.RunID,
 		State:        rec.State,
 		CreatedAt:    rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
 		StatusURL:    "/api/prompt-bar/submissions/" + rec.RunID,
 		CommandID:    handoff.Conductor.CommandID, TrajectoryID: handoff.Conductor.TrajectoryID,
-		DocID: handoff.Conductor.DocID, RevisionID: handoff.Conductor.UserRevisionID,
+		StartRequestDigest: handoff.Conductor.StartRequestDigest,
+		DocID:              handoff.Conductor.DocID, RevisionID: handoff.Conductor.UserRevisionID,
 		SubjectID: handoff.Conductor.SubjectID, ObligationIDs: handoff.Conductor.ObligationIDs,
 		ReducerSeq: handoff.Conductor.ReducerSeq, SnapshotCursor: handoff.Conductor.SnapshotCursor,
 	})

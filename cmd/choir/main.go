@@ -28,21 +28,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/buildinfo"
 	"github.com/yusefmosiah/go-choir/internal/computerevent"
 )
 
 const (
-	defaultHost                 = "https://choir.news"
-	apiKeyEnvVar                = "CHOIR_API_KEY"
-	hostEnvVar                  = "CHOIR_HOST"
-	timeoutEnvVar               = "CHOIR_TIMEOUT"
-	apiKeyPrefix                = "choir_sk_"
-	defaultTimeout              = 75 * time.Second
-	defaultListLimit            = 50
-	lifecycleRequestMaxBytesCLI = 2 << 20
+	defaultHost      = "https://choir.news"
+	apiKeyEnvVar     = "CHOIR_API_KEY"
+	hostEnvVar       = "CHOIR_HOST"
+	timeoutEnvVar    = "CHOIR_TIMEOUT"
+	apiKeyPrefix     = "choir_sk_"
+	defaultTimeout   = 75 * time.Second
+	defaultListLimit = 50
 )
 
 var cliStdin io.Reader = os.Stdin
+var executionIdentityPlatformTrustDigest = computerevent.PlatformControlTrustDigest
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -106,7 +107,7 @@ Commands:
   trajectory cancel <id>  Cancel an owner-scoped trajectory
   lifecycle snapshot <id>  Reconstruct one durable lifecycle from canonical state
   lifecycle events <id>  Read reducer events after a durable cursor
-  lifecycle <open|amend|record|queue|apply|settle-work|refuse|settle|cancel|archive> --request <json-file>
+  lifecycle <snapshot|events>  Observe the narrow durable-work protocol
   identity            Verify a nonce-bound signed execution identity
   texture read <doc>  Read a Texture document's metadata (title, current revision id)
   texture history <doc>  List revision history for a document (metadata only)
@@ -431,6 +432,10 @@ func runTrajectory(args []string, stdout, stderr io.Writer) int {
 func runTrajectoryCancel(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir trajectory cancel", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	idempotencyKey := fs.String("idempotency-key", "", "Stable caller-supplied command key for replay/conflict detection")
+	expectedLifecycleVersion := fs.Int64("expected-lifecycle-version", 0, "Lifecycle version observed before cancellation")
+	expectedHeadRevisionID := fs.String("expected-head-revision-id", "", "Artifact head observed before cancellation")
+	reason := fs.String("reason", "owner cancellation", "Cancellation reason included in the request commitment")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir trajectory cancel: %v\n", err)
@@ -442,22 +447,42 @@ func runTrajectoryCancel(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	id := strings.TrimSpace(rest[0])
+	if strings.TrimSpace(*idempotencyKey) == "" || *expectedLifecycleVersion <= 0 || strings.TrimSpace(*expectedHeadRevisionID) == "" {
+		fmt.Fprintln(stderr, "choir trajectory cancel: --idempotency-key, --expected-lifecycle-version, and --expected-head-revision-id are required")
+		return 2
+	}
+	request := map[string]any{
+		"idempotency_key":            strings.TrimSpace(*idempotencyKey),
+		"expected_lifecycle_version": *expectedLifecycleVersion,
+		"expected_head_revision_id":  strings.TrimSpace(*expectedHeadRevisionID),
+		"reason":                     strings.TrimSpace(*reason),
+	}
 	var resp json.RawMessage
 	path := "/api/trajectories/" + url.PathEscape(id) + "/cancel"
-	if err := c.do(http.MethodPost, path, nil, &resp); err != nil {
+	if err := c.do(http.MethodPost, path, request, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir trajectory cancel %s: %v\n", id, err)
 		return 1
 	}
 	return writeJSON(stdout, resp)
 }
 
+type executionIdentityCLIPlatformAttestation struct {
+	Receipt         computerevent.Receipt `json:"receipt"`
+	SignerPublicKey string                `json:"signer_public_key"`
+}
+
 type executionIdentityCLIEnvelope struct {
-	Schema          string                        `json:"schema"`
-	Identity        map[string]any                `json:"identity"`
-	Receipt         computerevent.Receipt         `json:"receipt"`
-	SignerPublicKey string                        `json:"signer_public_key"`
-	Joined          bool                          `json:"joined,omitempty"`
-	Guest           *executionIdentityCLIEnvelope `json:"guest,omitempty"`
+	Schema              string                                   `json:"schema"`
+	Identity            map[string]any                           `json:"identity"`
+	Receipt             computerevent.Receipt                    `json:"receipt"`
+	SignerPublicKey     string                                   `json:"signer_public_key"`
+	Joined              bool                                     `json:"joined,omitempty"`
+	Guest               *executionIdentityCLIEnvelope            `json:"guest,omitempty"`
+	VMCTL               map[string]any                           `json:"vmctl,omitempty"`
+	RouteDigest         string                                   `json:"route_digest,omitempty"`
+	HostBuild           json.RawMessage                          `json:"host_build,omitempty"`
+	DeploymentReceipt   json.RawMessage                          `json:"deployment_receipt,omitempty"`
+	PlatformAttestation *executionIdentityCLIPlatformAttestation `json:"platform_attestation,omitempty"`
 }
 
 type executionIdentityCLIResolver struct {
@@ -478,10 +503,57 @@ func sameJSONValue(left, right any) bool {
 	return leftErr == nil && rightErr == nil && bytes.Equal(leftJSON, rightJSON)
 }
 
+func executionIdentityCLIDigest(value any) (string, error) {
+	canonical, err := computerevent.CanonicalJSON(value)
+	if err != nil {
+		return "", err
+	}
+	return "sha256:" + computerevent.DigestBytes(canonical), nil
+}
+
+const executionIdentityCLIAudience = "choir.news/acceptance/execution-identity"
+
+func executionIdentityCLICommonCommit(signed *executionIdentityCLIEnvelope, hostRaw, deploymentRaw json.RawMessage) (string, bool) {
+	if signed == nil {
+		return "", false
+	}
+	var host buildinfo.Info
+	var deployment struct {
+		TargetCommit string `json:"target_commit"`
+		HostIdentity struct {
+			CanonicalRef       string `json:"canonical_ref"`
+			NixOSClosureDigest string `json:"nixos_closure_digest"`
+			Services           map[string]struct {
+				Role           string `json:"role"`
+				PackageDigest  string `json:"package_digest"`
+				EmbeddedCommit string `json:"embedded_commit"`
+			} `json:"services"`
+		} `json:"host_identity"`
+	}
+	if json.Unmarshal(hostRaw, &host) != nil || json.Unmarshal(deploymentRaw, &deployment) != nil {
+		return "", false
+	}
+	target := strings.TrimSpace(deployment.TargetCommit)
+	build, ok := signed.Identity["build"].(map[string]any)
+	proxy := deployment.HostIdentity.Services["proxy"]
+	if !ok || len(target) != 40 || host.Commit != target || host.DeployedCommit != target ||
+		fmt.Sprint(build["commit"]) != target || fmt.Sprint(build["deployed_commit"]) != target ||
+		deployment.HostIdentity.CanonicalRef != "refs/heads/main@"+target ||
+		!strings.HasPrefix(deployment.HostIdentity.NixOSClosureDigest, "sha256:") ||
+		proxy.Role != "proxy" || !strings.HasPrefix(proxy.PackageDigest, "sha256:") || proxy.EmbeddedCommit != target {
+		return "", false
+	}
+	for role, service := range deployment.HostIdentity.Services {
+		if service.Role != role || !strings.HasPrefix(service.PackageDigest, "sha256:") || service.EmbeddedCommit != target {
+			return "", false
+		}
+	}
+	return target, true
+}
+
 func runExecutionIdentity(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir identity", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	expectedSignerKeyDigest := fs.String("signer-key-sha256", strings.TrimSpace(os.Getenv("CHOIR_GUEST_SIGNER_KEY_SHA256")), "Expected guest-core signer public-key digest from signed no-SSH inventory")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir identity: %v\n", err)
@@ -491,9 +563,10 @@ func runExecutionIdentity(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "choir identity: no positional arguments allowed")
 		return 2
 	}
-	if strings.TrimSpace(*expectedSignerKeyDigest) == "" {
-		fmt.Fprintln(stderr, "choir identity: --signer-key-sha256 or CHOIR_GUEST_SIGNER_KEY_SHA256 is required")
-		return 2
+	expectedPlatformSignerKeyDigest, trustErr := executionIdentityPlatformTrustDigest()
+	if trustErr != nil || !strings.HasPrefix(expectedPlatformSignerKeyDigest, "sha256:") {
+		fmt.Fprintln(stderr, "choir identity: platform trust configuration unavailable")
+		return 1
 	}
 	nonceBytes := make([]byte, 24)
 	if _, err := rand.Read(nonceBytes); err != nil {
@@ -506,15 +579,12 @@ func runExecutionIdentity(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "choir identity: %v\n", err)
 		return 1
 	}
-	signed := &envelope
-	if envelope.Guest != nil {
-		if !envelope.Joined {
-			fmt.Fprintln(stderr, "choir identity: platform identity join refused")
-			return 1
-		}
-		signed = envelope.Guest
+	if !envelope.Joined || envelope.Guest == nil || envelope.PlatformAttestation == nil {
+		fmt.Fprintln(stderr, "choir identity: platform identity join refused")
+		return 1
 	}
-	if signed.Schema != "choir.execution_identity.v1" || signed.Identity["schema"] != signed.Schema || signed.Identity["nonce"] != nonce {
+	signed := envelope.Guest
+	if signed.Schema != "choir.execution_identity.v1" || signed.Identity["schema"] != signed.Schema || signed.Identity["nonce"] != nonce || signed.Identity["audience"] != executionIdentityCLIAudience {
 		fmt.Fprintln(stderr, "choir identity: schema or nonce binding refused")
 		return 1
 	}
@@ -524,10 +594,6 @@ func runExecutionIdentity(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	actualSignerKeyDigest := "sha256:" + computerevent.DigestBytes(publicKey)
-	if !strings.EqualFold(strings.TrimSpace(*expectedSignerKeyDigest), actualSignerKeyDigest) {
-		fmt.Fprintln(stderr, "choir identity: signer key does not match no-SSH inventory")
-		return 1
-	}
 	if signed.Receipt.ReceiptKind != "ExecutionIdentity" {
 		fmt.Fprintln(stderr, "choir identity: unexpected receipt kind")
 		return 1
@@ -557,10 +623,50 @@ func runExecutionIdentity(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "choir identity: expired or invalid validity window")
 		return 1
 	}
-	build, ok := envelope.Identity["build"].(map[string]any)
+	build, ok := signed.Identity["build"].(map[string]any)
 	if !ok || strings.TrimSpace(fmt.Sprint(build["commit"])) == "" || build["commit"] != build["deployed_commit"] {
 		fmt.Fprintln(stderr, "choir identity: build/deploy identity conflict")
 		return 1
+	}
+	targetCommit, commonCommit := executionIdentityCLICommonCommit(signed, envelope.HostBuild, envelope.DeploymentReceipt)
+	if !commonCommit {
+		fmt.Fprintln(stderr, "choir identity: host, guest, route, and deployment commit join refused")
+		return 1
+	}
+	if envelope.PlatformAttestation != nil {
+		platformKey, decodeErr := base64.RawStdEncoding.DecodeString(envelope.PlatformAttestation.SignerPublicKey)
+		if decodeErr != nil || len(platformKey) != ed25519.PublicKeySize ||
+			!strings.EqualFold(expectedPlatformSignerKeyDigest, "sha256:"+computerevent.DigestBytes(platformKey)) {
+			fmt.Fprintln(stderr, "choir identity: platform signer key does not match the repository trust manifest")
+			return 1
+		}
+		guestDigest, guestDigestErr := executionIdentityCLIDigest(signed.Receipt)
+		routeDigest := strings.TrimSpace(envelope.RouteDigest)
+		hostBuildDigest, hostBuildDigestErr := executionIdentityCLIDigest(envelope.HostBuild)
+		deploymentDigest, deploymentDigestErr := executionIdentityCLIDigest(envelope.DeploymentReceipt)
+		if guestDigestErr != nil || !strings.HasPrefix(routeDigest, "sha256:") || hostBuildDigestErr != nil || deploymentDigestErr != nil {
+			fmt.Fprintln(stderr, "choir identity: platform join digest unavailable")
+			return 1
+		}
+		expectedFields := map[string]any{
+			"schema": signed.Schema, "nonce": signed.Identity["nonce"], "audience": executionIdentityCLIAudience,
+			"deployed_commit": targetCommit,
+			"computer_id":     signed.Identity["computer_id"], "realization_id": signed.Identity["realization_id"],
+			"vm_epoch": signed.Identity["vm_epoch"], "guest_receipt_digest": guestDigest,
+			"guest_signer_key_digest": actualSignerKeyDigest,
+			"vmctl":                   envelope.VMCTL, "route_digest": routeDigest, "host_build_digest": hostBuildDigest,
+			"deployment_receipt_digest": deploymentDigest,
+		}
+		platformReceipt := envelope.PlatformAttestation.Receipt
+		expectedKeyID := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(expectedPlatformSignerKeyDigest)), "sha256:")
+		if platformReceipt.ReceiptKind != "ExecutionIdentityJoin" || platformReceipt.Issuer != "corpusd" ||
+			len(platformReceipt.RequiredSigners) != 1 || platformReceipt.RequiredSigners[0].SignerDomain != "platform-control" ||
+			len(expectedKeyID) < 16 || !strings.EqualFold(platformReceipt.RequiredSigners[0].KeyID, expectedKeyID[:16]) ||
+			!sameJSONValue(platformReceipt.KindFields, expectedFields) ||
+			platformReceipt.Verify(executionIdentityCLIResolver{ref: platformReceipt.RequiredSigners[0], key: ed25519.PublicKey(platformKey)}) != nil {
+			fmt.Fprintln(stderr, "choir identity: platform identity join verification failed")
+			return 1
+		}
 	}
 	return writeJSON(stdout, envelope)
 }
@@ -580,13 +686,12 @@ func validateDurableWorkResponse(raw json.RawMessage) error {
 
 func runLifecycle(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir lifecycle: subcommand required (snapshot|events|open|amend|record|queue|apply|settle-work|refuse|settle|cancel|archive)")
+		fmt.Fprintln(stderr, "choir lifecycle: subcommand required (snapshot|events)")
 		return 2
 	}
 	subcommand := args[0]
 	fs := flag.NewFlagSet("choir lifecycle "+subcommand, flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	requestPath := fs.String("request", "", "JSON lifecycle command file; '-' reads stdin")
 	after := fs.Int64("after", 0, "Event cursor (events only)")
 	limit := fs.Int("limit", 100, "Maximum events per page (events only)")
 	c, err := newClient(fs, args[1:], stdout, stderr)
@@ -630,51 +735,8 @@ func runLifecycle(args []string, stdout, stderr io.Writer) int {
 		}
 		return writeJSON(stdout, response)
 	}
-	endpoints := map[string]string{
-		"open":        "/api/lifecycle/work/open",
-		"amend":       "/api/lifecycle/work/amend",
-		"record":      "/api/lifecycle/refs/record",
-		"queue":       "/api/lifecycle/updates/queue",
-		"apply":       "/api/lifecycle/updates/apply",
-		"settle-work": "/api/lifecycle/work/settle",
-		"refuse":      "/api/lifecycle/work/refuse",
-		"settle":      "/api/lifecycle/trajectories/settle",
-		"cancel":      "/api/lifecycle/trajectories/cancel",
-		"archive":     "/api/lifecycle/artifacts/archive",
-	}
-	endpoint, ok := endpoints[subcommand]
-	if !ok {
-		fmt.Fprintf(stderr, "choir lifecycle: unknown subcommand %q\n", subcommand)
-		return 2
-	}
-	if strings.TrimSpace(*requestPath) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintf(stderr, "choir lifecycle %s: --request <json-file> is required\n", subcommand)
-		return 2
-	}
-	var raw []byte
-	if *requestPath == "-" {
-		raw, err = io.ReadAll(io.LimitReader(cliStdin, lifecycleRequestMaxBytesCLI+1))
-	} else {
-		raw, err = os.ReadFile(*requestPath)
-	}
-	if err != nil {
-		fmt.Fprintf(stderr, "choir lifecycle %s: read request: %v\n", subcommand, err)
-		return 2
-	}
-	if len(raw) > lifecycleRequestMaxBytesCLI || !json.Valid(raw) {
-		fmt.Fprintf(stderr, "choir lifecycle %s: request must be valid JSON no larger than %d bytes\n", subcommand, lifecycleRequestMaxBytesCLI)
-		return 2
-	}
-	var response json.RawMessage
-	if err := c.do(http.MethodPost, endpoint, json.RawMessage(raw), &response); err != nil {
-		fmt.Fprintf(stderr, "choir lifecycle %s: %v\n", subcommand, err)
-		return 1
-	}
-	if err := validateDurableWorkResponse(response); err != nil {
-		fmt.Fprintf(stderr, "choir lifecycle %s: %v\n", subcommand, err)
-		return 1
-	}
-	return writeJSON(stdout, response)
+	fmt.Fprintf(stderr, "choir lifecycle: unknown subcommand %q\n", subcommand)
+	return 2
 }
 
 type trajectoriesListResponse struct {
@@ -773,317 +835,19 @@ func runSearch(args []string, stdout, stderr io.Writer) int {
 // ---- self-development ----
 
 func runSelfDevelopment(args []string, stdout, stderr io.Writer) int {
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "choir self-dev: subcommand required (start|status|inspect|approve|reject|rollback|wait|genesis|kernel-capabilities|mode)")
+	if len(args) < 2 || args[0] != "mode" {
+		fmt.Fprintln(stderr, "choir self-dev: effects are disabled; only mode get|set is available")
 		return 2
 	}
-	switch args[0] {
-	case "start":
-		return runSelfDevelopmentStart(args[1:], stdout, stderr)
-	case "status", "inspect":
-		return runSelfDevelopmentStatus(args[0], args[1:], stdout, stderr)
-	case "approve", "reject":
-		return runSelfDevelopmentDecision(args[0], args[1:], stdout, stderr)
-	case "wait":
-		return runSelfDevelopmentWait(args[1:], stdout, stderr)
-	case "genesis":
-		return runSelfDevelopmentGenesis(args[1:], stdout, stderr)
-	case "rollback":
-		return runSelfDevelopmentRollback(args[1:], stdout, stderr)
-	case "kernel-capabilities":
-		return runSelfDevelopmentKernelCapabilities(args[1:], stdout, stderr)
-	case "mode":
-		if len(args) < 2 {
-			fmt.Fprintln(stderr, "choir self-dev mode: subcommand required (get|set)")
-			return 2
-		}
-		switch args[1] {
-		case "get":
-			return runSelfDevelopmentModeGet(args[2:], stdout, stderr)
-		case "set":
-			return runSelfDevelopmentModeSet(args[2:], stdout, stderr)
-		default:
-			fmt.Fprintf(stderr, "choir self-dev mode: unknown subcommand %q\n", args[1])
-			return 2
-		}
+	switch args[1] {
+	case "get":
+		return runSelfDevelopmentModeGet(args[2:], stdout, stderr)
+	case "set":
+		return runSelfDevelopmentModeSet(args[2:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "choir self-dev: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(stderr, "choir self-dev mode: unknown subcommand %q\n", args[1])
 		return 2
 	}
-}
-
-func runSelfDevelopmentStart(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev start", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
-	promptFile := fs.String("prompt-file", "", "Prompt file path; '-' reads stdin")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev start: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*idempotencyKey) == "" || strings.TrimSpace(*promptFile) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir self-dev start: --computer, --idempotency-key, and --prompt-file are required; positional arguments are forbidden")
-		return 2
-	}
-	prompt, err := readCLIInputFile(*promptFile, 1<<20)
-	if err != nil || strings.TrimSpace(prompt) == "" {
-		fmt.Fprintf(stderr, "choir self-dev start: invalid prompt file: %v\n", err)
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations"
-	if err := c.do(http.MethodPost, path, map[string]any{"idempotency_key": strings.TrimSpace(*idempotencyKey), "prompt": prompt}, &response); err != nil {
-		fmt.Fprintf(stderr, "choir self-dev start: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runSelfDevelopmentStatus(command string, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev "+command, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 1 || strings.TrimSpace(fs.Args()[0]) == "" {
-		fmt.Fprintf(stderr, "choir self-dev %s: --computer and one operation id are required\n", command)
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations/" + url.PathEscape(strings.TrimSpace(fs.Args()[0]))
-	if command == "inspect" {
-		path += "/receipts"
-	}
-	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runSelfDevelopmentDecision(command string, args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev "+command, flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
-	desiredHead := fs.String("expected-desired-head", "", "Expected desired event head")
-	effectiveHead := fs.String("expected-effective-head", "", "Expected effective event head")
-	pendingRef := fs.String("expected-pending-ref", "", "Expected pending transition reference (empty when absent)")
-	desiredCommitment := fs.String("expected-desired-commitment", "", "Expected desired state commitment")
-	effectiveCommitment := fs.String("expected-effective-commitment", "", "Expected effective state commitment")
-	bundle := fs.String("bundle", "", "Exact frozen bundle digest")
-	verifier := fs.String("verifier", "", "Exact verifier evidence reference")
-	reasonFile := fs.String("reason-file", "", "Rejection reason file; '-' reads stdin")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*idempotencyKey) == "" || strings.TrimSpace(*desiredHead) == "" ||
-		strings.TrimSpace(*effectiveHead) == "" || strings.TrimSpace(*desiredCommitment) == "" || strings.TrimSpace(*effectiveCommitment) == "" ||
-		strings.TrimSpace(*bundle) == "" || strings.TrimSpace(*verifier) == "" || len(fs.Args()) != 1 {
-		fmt.Fprintf(stderr, "choir self-dev %s: exact computer, operation, heads, state commitments, bundle, verifier, and idempotency key are required\n", command)
-		return 2
-	}
-	body := map[string]any{
-		"decision": command, "idempotency_key": strings.TrimSpace(*idempotencyKey), "bundle_digest": strings.TrimSpace(*bundle),
-		"verifier_ref": strings.TrimSpace(*verifier), "expected_desired_event_head": strings.TrimSpace(*desiredHead),
-		"expected_effective_event_head":       strings.TrimSpace(*effectiveHead),
-		"expected_pending_transition_ref":     strings.TrimSpace(*pendingRef),
-		"expected_desired_state_commitment":   strings.TrimSpace(*desiredCommitment),
-		"expected_effective_state_commitment": strings.TrimSpace(*effectiveCommitment),
-	}
-	if command == "reject" {
-		if strings.TrimSpace(*reasonFile) == "" {
-			fmt.Fprintln(stderr, "choir self-dev reject: --reason-file is required")
-			return 2
-		}
-		reason, readErr := readCLIInputFile(*reasonFile, 256<<10)
-		if readErr != nil || strings.TrimSpace(reason) == "" {
-			fmt.Fprintf(stderr, "choir self-dev reject: invalid reason file: %v\n", readErr)
-			return 2
-		}
-		body["reason"] = reason
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations/" + url.PathEscape(strings.TrimSpace(fs.Args()[0])) + "/decision"
-	if err := c.do(http.MethodPost, path, body, &response); err != nil {
-		fmt.Fprintf(stderr, "choir self-dev %s: %v\n", command, err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runSelfDevelopmentWait(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev wait", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	pollInterval := fs.Duration("poll-interval", 2*time.Second, "Status polling interval")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev wait: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 1 || *pollInterval <= 0 {
-		fmt.Fprintln(stderr, "choir self-dev wait: --computer, one operation id, and a positive --poll-interval are required")
-		return 2
-	}
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/operations/" + url.PathEscape(strings.TrimSpace(fs.Args()[0]))
-	for {
-		var response json.RawMessage
-		if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-			fmt.Fprintf(stderr, "choir self-dev wait: %v\n", err)
-			return 1
-		}
-		var status struct {
-			State string `json:"state"`
-		}
-		if err := json.Unmarshal(response, &status); err != nil {
-			fmt.Fprintln(stderr, "choir self-dev wait: invalid operation response")
-			return 1
-		}
-		switch status.State {
-		case "applied", "rejected", "rolled_back", "failed", "degraded":
-			return writeJSON(stdout, response)
-		}
-		time.Sleep(*pollInterval)
-	}
-}
-
-func runSelfDevelopmentGenesis(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev genesis", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	baselineVersion := fs.String("baseline-version", "", "Baseline ComputerVersion digest")
-	baselineState := fs.String("baseline-state", "", "Baseline effective state digest")
-	expectedAbsent := fs.Bool("expected-absent", false, "Require absent event head")
-	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
-	g0Receipt := fs.String("g0-receipt", "", "Frozen G0 conformance receipt")
-	g1Receipt := fs.String("g1-receipt", "", "Frozen accepted G1 gate receipt")
-	candidateRef := fs.String("candidate-ref", "", "Exact frozen G1 code candidate commit")
-	deployedReleaseRef := fs.String("deployed-release-ref", "", "Exact deployed release commit")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev genesis: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*baselineVersion) == "" || strings.TrimSpace(*baselineState) == "" ||
-		strings.TrimSpace(*idempotencyKey) == "" || strings.TrimSpace(*g0Receipt) == "" || strings.TrimSpace(*g1Receipt) == "" ||
-		strings.TrimSpace(*candidateRef) == "" || strings.TrimSpace(*deployedReleaseRef) == "" || !*expectedAbsent || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir self-dev genesis: --computer, --baseline-version, --baseline-state, --expected-absent, --idempotency-key, --g0-receipt, --g1-receipt, --candidate-ref, and --deployed-release-ref are required")
-		return 2
-	}
-	body := map[string]any{
-		"baseline_version": strings.TrimSpace(*baselineVersion), "baseline_state": strings.TrimSpace(*baselineState),
-		"expected_absent": true, "idempotency_key": strings.TrimSpace(*idempotencyKey),
-		"g0_receipt": strings.TrimSpace(*g0Receipt), "g1_receipt": strings.TrimSpace(*g1Receipt),
-		"candidate_ref": strings.TrimSpace(*candidateRef), "deployed_release_ref": strings.TrimSpace(*deployedReleaseRef),
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/genesis"
-	if err := c.do(http.MethodPost, path, body, &response); err != nil {
-		fmt.Fprintf(stderr, "choir self-dev genesis: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runSelfDevelopmentRollback(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev rollback", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	expectedDesired := fs.String("expected-desired-head", "", "Expected desired event head")
-	currentApplied := fs.String("current-applied-head", "", "Current applied event head")
-	toApplied := fs.String("to-applied-head", "", "Prior applied event head")
-	priorMaterialization := fs.String("prior-materialization", "", "Prior materialization receipt digest")
-	priorCheckpoint := fs.String("prior-checkpoint", "", "Prior checkpoint digest")
-	expectedRouteGeneration := fs.Uint64("expected-route-generation", 0, "Expected route generation")
-	idempotencyKey := fs.String("idempotency-key", "", "Unique idempotency key")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev rollback: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || strings.TrimSpace(*expectedDesired) == "" || strings.TrimSpace(*currentApplied) == "" || strings.TrimSpace(*toApplied) == "" || strings.TrimSpace(*priorMaterialization) == "" || strings.TrimSpace(*priorCheckpoint) == "" || strings.TrimSpace(*idempotencyKey) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir self-dev rollback: complete computer, head, materialization, checkpoint, route generation, and idempotency bindings are required")
-		return 2
-	}
-	body := map[string]any{
-		"expected_desired_head": strings.TrimSpace(*expectedDesired), "current_applied_head": strings.TrimSpace(*currentApplied),
-		"to_applied_head": strings.TrimSpace(*toApplied), "prior_materialization": strings.TrimSpace(*priorMaterialization),
-		"prior_checkpoint": strings.TrimSpace(*priorCheckpoint), "expected_route_generation": *expectedRouteGeneration,
-		"idempotency_key": strings.TrimSpace(*idempotencyKey),
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/rollbacks"
-	if err := c.do(http.MethodPost, path, body, &response); err != nil {
-		fmt.Fprintf(stderr, "choir self-dev rollback: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func runSelfDevelopmentKernelCapabilities(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("choir self-dev kernel-capabilities", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	computerID := fs.String("computer", "", "Stable ComputerID")
-	c, err := newClient(fs, args, stdout, stderr)
-	if err != nil {
-		fmt.Fprintf(stderr, "choir self-dev kernel-capabilities: %v\n", err)
-		return 2
-	}
-	if strings.TrimSpace(*computerID) == "" || len(fs.Args()) != 0 {
-		fmt.Fprintln(stderr, "choir self-dev kernel-capabilities: --computer is required")
-		return 2
-	}
-	var response json.RawMessage
-	path := "/api/computers/" + url.PathEscape(strings.TrimSpace(*computerID)) + "/self-development/kernel-capabilities"
-	if err := c.do(http.MethodGet, path, nil, &response); err != nil {
-		fmt.Fprintf(stderr, "choir self-dev kernel-capabilities: %v\n", err)
-		return 1
-	}
-	return writeJSON(stdout, response)
-}
-
-func readCLIInputFile(path string, maximum int64) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", fmt.Errorf("file path is required")
-	}
-	var reader io.Reader
-	if path == "-" {
-		if cliStdin == nil {
-			return "", fmt.Errorf("stdin is unavailable")
-		}
-		reader = cliStdin
-	} else {
-		info, err := os.Lstat(path)
-		if err != nil {
-			return "", err
-		}
-		if !info.Mode().IsRegular() {
-			return "", fmt.Errorf("input must be a regular file")
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			return "", err
-		}
-		defer file.Close()
-		reader = file
-	}
-	raw, err := io.ReadAll(io.LimitReader(reader, maximum+1))
-	if err != nil {
-		return "", err
-	}
-	if int64(len(raw)) > maximum {
-		return "", fmt.Errorf("input exceeds %d bytes", maximum)
-	}
-	return string(raw), nil
 }
 
 func runSelfDevelopmentModeGet(args []string, stdout, stderr io.Writer) int {
@@ -1243,6 +1007,7 @@ func runRun(args []string, stdout, stderr io.Writer) int {
 func runRunStart(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("choir run start", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	idempotencyKey := fs.String("idempotency-key", "", "Stable caller-supplied lifecycle command key for replay/conflict detection")
 	c, err := newClient(fs, args, stdout, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "choir run start: %v\n", err)
@@ -1253,10 +1018,20 @@ func runRunStart(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "choir run start: prompt text required")
 		return 2
 	}
+	if strings.TrimSpace(*idempotencyKey) == "" {
+		fmt.Fprintln(stderr, "choir run start: --idempotency-key is required")
+		return 2
+	}
 	text := strings.TrimSpace(strings.Join(rest, " "))
 	var resp promptBarSubmitResponse
-	if err := c.do(http.MethodPost, "/api/prompt-bar", map[string]string{"text": text}, &resp); err != nil {
+	if err := c.do(http.MethodPost, "/api/prompt-bar", map[string]string{"text": text, "command_id": strings.TrimSpace(*idempotencyKey)}, &resp); err != nil {
 		fmt.Fprintf(stderr, "choir run start: %v\n", err)
+		return 1
+	}
+	if resp.Schema != "choir.durable_work.v1" || resp.CommandID == "" || resp.StartRequestDigest == "" ||
+		resp.TrajectoryID == "" || resp.DocID == "" || resp.RevisionID == "" ||
+		resp.SubjectID == "" || len(resp.ObligationIDs) == 0 || resp.ReducerSeq <= 0 || resp.SnapshotCursor <= 0 {
+		fmt.Fprintln(stderr, "choir run start: incomplete durable-work response")
 		return 1
 	}
 	return writeJSON(stdout, resp)
@@ -1334,10 +1109,20 @@ func runRunCancel(args []string, stdout, stderr io.Writer) int {
 
 // promptBarSubmitResponse mirrors textureowner.promptBarSubmitResponse.
 type promptBarSubmitResponse struct {
-	SubmissionID string `json:"submission_id"`
-	State        string `json:"state"`
-	CreatedAt    string `json:"created_at"`
-	StatusURL    string `json:"status_url"`
+	Schema             string   `json:"schema"`
+	CommandID          string   `json:"command_id"`
+	StartRequestDigest string   `json:"start_request_digest"`
+	TrajectoryID       string   `json:"trajectory_id"`
+	DocID              string   `json:"doc_id"`
+	RevisionID         string   `json:"revision_id"`
+	SubjectID          string   `json:"subject_id"`
+	ObligationIDs      []string `json:"obligation_ids"`
+	ReducerSeq         int64    `json:"reducer_seq"`
+	SnapshotCursor     int64    `json:"snapshot_cursor"`
+	SubmissionID       string   `json:"submission_id"`
+	State              string   `json:"state"`
+	CreatedAt          string   `json:"created_at"`
+	StatusURL          string   `json:"status_url"`
 }
 
 // ---- api-key ----

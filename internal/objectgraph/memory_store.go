@@ -106,6 +106,9 @@ func objectMatches(obj Object, filter ListFilter) bool {
 	if filter.OwnerID != "" && obj.OwnerID != filter.OwnerID {
 		return false
 	}
+	if filter.ComputerID != "" && obj.ComputerID != filter.ComputerID {
+		return false
+	}
 	return filter.Tombstone == nil || obj.Tombstone == *filter.Tombstone
 }
 

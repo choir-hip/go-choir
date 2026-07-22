@@ -2095,41 +2095,50 @@ func (s *Store) ListCoagentMailboxBacklog(ctx context.Context, ownerID, targetAg
 // ListCoagentMailboxBacklogAll returns actor mailbox backlog rows across
 // targets for boot-time re-warm sweeps.
 func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]types.CoagentSourcePacket, error) {
-	if limit <= 0 {
-		limit = 500
+	if limit < 0 {
+		return nil, fmt.Errorf("query coagent mailbox backlog all: limit must not be negative")
 	}
-	// Fetch a large window since ListObjects orders by updated_at DESC.
-	// We need all records to filter by cursor/pending state before
-	// applying the caller's limit. Using a small limit can miss older
-	// undelivered updates when many delivered records are more recently
-	// updated.
-	objs, err := s.og.ListObjects(ctx, objectgraph.ListFilter{
-		Kind:  objectgraph.ObjectKind("choir.worker_update"),
-		Limit: 100000,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("query coagent mailbox backlog all: %w", err)
+	if s.ogStore == nil {
+		return nil, fmt.Errorf("query coagent mailbox backlog all: object graph not initialized")
 	}
 	var updates []types.CoagentSourcePacket
-	for _, obj := range objs {
-		var rec types.CoagentSourcePacket
-		if err := ogDecode(obj, &rec); err != nil {
-			return nil, err
+	cursorByTarget := make(map[string]int64)
+	after := ""
+	for {
+		objs, err := s.ogStore.ListObjectsPage(ctx, "choir.worker_update", after, 1000)
+		if err != nil {
+			return nil, fmt.Errorf("query coagent mailbox backlog all: %w", err)
 		}
-		if rec.LifecycleVersion > 0 {
-			if rec.Disposition != types.UpdatePending {
-				continue
+		for _, obj := range objs {
+			var rec types.CoagentSourcePacket
+			if err := ogDecode(obj, &rec); err != nil {
+				return nil, err
 			}
-		} else {
-			cursor, _, _, cursorErr := s.GetCoagentMailboxCursor(ctx, rec.OwnerID, rec.TargetAgentID)
-			if cursorErr != nil {
-				return nil, fmt.Errorf("query coagent mailbox backlog all: read cursor for %s/%s: %w", rec.OwnerID, rec.TargetAgentID, cursorErr)
+			if rec.LifecycleVersion > 0 {
+				if rec.Disposition != types.UpdatePending {
+					continue
+				}
+			} else {
+				key := rec.OwnerID + "\x00" + rec.TargetAgentID
+				cursor, found := cursorByTarget[key]
+				if !found {
+					var cursorErr error
+					cursor, _, _, cursorErr = s.GetCoagentMailboxCursor(ctx, rec.OwnerID, rec.TargetAgentID)
+					if cursorErr != nil {
+						return nil, fmt.Errorf("query coagent mailbox backlog all: read cursor for %s/%s: %w", rec.OwnerID, rec.TargetAgentID, cursorErr)
+					}
+					cursorByTarget[key] = cursor
+				}
+				if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
+					continue
+				}
 			}
-			if rec.DeliveredToRunID != "" && rec.MessageSeq <= cursor {
-				continue
-			}
+			updates = append(updates, rec)
 		}
-		updates = append(updates, rec)
+		if len(objs) < 1000 {
+			break
+		}
+		after = objs[len(objs)-1].CanonicalID
 	}
 	sort.Slice(updates, func(i, j int) bool {
 		if updates[i].OwnerID != updates[j].OwnerID {
@@ -2146,7 +2155,7 @@ func (s *Store) ListCoagentMailboxBacklogAll(ctx context.Context, limit int) ([]
 		}
 		return updates[i].UpdateID < updates[j].UpdateID
 	})
-	if len(updates) > limit {
+	if limit > 0 && len(updates) > limit {
 		updates = updates[:limit]
 	}
 	return updates, nil

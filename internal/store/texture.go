@@ -877,6 +877,42 @@ func (s *Store) DeleteTextureAliasesByOwner(ctx context.Context, ownerID string)
 
 // ----- Revision CRUD -----
 
+// commitTextureHeadAuthority is the single artifact-head transition rule used
+// by both ordinary Texture revisions and reducer-owned lifecycle revisions.
+// Persistence remains caller-owned so a lifecycle reducer can include the head
+// transition in its larger serializable transaction.
+func commitTextureHeadAuthority(document types.Document, head *types.Revision, revision types.Revision, now time.Time) (types.Document, types.Revision, error) {
+	currentHead := strings.TrimSpace(document.CurrentRevisionID)
+	expectedHead := strings.TrimSpace(revision.ParentRevisionID)
+	if document.ArchivedAt != nil {
+		return types.Document{}, types.Revision{}, ErrLifecycleInvalidTransition
+	}
+	if currentHead != expectedHead {
+		return types.Document{}, types.Revision{}, fmt.Errorf("%w: document %s current head %s does not match parent %s", ErrStaleDocumentHead, revision.DocID, currentHead, expectedHead)
+	}
+	parentHash := ""
+	if currentHead == "" {
+		revision.VersionNumber = 0
+	} else {
+		if head == nil || strings.TrimSpace(head.RevisionID) != currentHead {
+			return types.Document{}, types.Revision{}, fmt.Errorf("%w: current head revision unavailable", ErrStaleDocumentHead)
+		}
+		revision.VersionNumber = head.VersionNumber + 1
+		parentHash = head.RevisionHash
+	}
+	expectedHash := types.ComputeStructuredRevisionHash(parentHash, revision.Content, revision.BodyDoc, revision.SourceEntities, revision.Provenance)
+	if revision.RevisionHash != "" && revision.RevisionHash != expectedHash {
+		return types.Document{}, types.Revision{}, fmt.Errorf("%w: revision hash mismatch", ErrLifecycleInvalidTransition)
+	}
+	revision.RevisionHash = expectedHash
+	if revision.CreatedAt.IsZero() {
+		revision.CreatedAt = now.UTC()
+	}
+	document.CurrentRevisionID = revision.RevisionID
+	document.UpdatedAt = revision.CreatedAt
+	return document, revision, nil
+}
+
 // CreateRevision inserts a new revision record and updates the document's
 // current_revision_id if this is the latest revision.
 func (s *Store) CreateRevision(ctx context.Context, rev types.Revision) error {
@@ -894,15 +930,11 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 	if strings.TrimSpace(rev.TrajectoryID) != "" {
 		return ErrLifecycleAuthorityRequired
 	}
-	preparedRev, bodyDocJSON, sourceEntitiesJSON, err := prepareTextureRevisionV2(rev)
+	preparedRev, _, _, err := prepareTextureRevisionV2(rev)
 	if err != nil {
 		return err
 	}
 	rev = preparedRev
-	provenance := string(rev.Provenance)
-	if strings.TrimSpace(provenance) == "" {
-		provenance = "{}"
-	}
 
 	// Serialize revision creation per store to preserve the stale-head
 	// compare-and-set semantics that the old SQL `WHERE current_revision_id
@@ -920,74 +952,90 @@ func (s *Store) createRevision(ctx context.Context, rev types.Revision, graph Te
 		return ErrLifecycleAuthorityRequired
 	}
 	currentHead := strings.TrimSpace(doc.CurrentRevisionID)
-	expectedHead := strings.TrimSpace(rev.ParentRevisionID)
-	if currentHead != expectedHead {
-		return fmt.Errorf("%w: document %s current head %s does not match parent %s", ErrStaleDocumentHead, rev.DocID, currentHead, expectedHead)
-	}
 
-	var versionNumber int
-	if currentHead == "" {
-		versionNumber = 0
-	} else {
-		existingRevs, err := s.ListTextureRevisionsByDocOG(ctx, rev.OwnerID, rev.DocID, 100000)
-		if err != nil {
-			return fmt.Errorf("query next texture revision version number: %w", err)
+	var head *types.Revision
+	if currentHead != "" {
+		parentRevision, getErr := s.GetTextureRevisionOG(ctx, rev.OwnerID, currentHead)
+		if getErr != nil {
+			return fmt.Errorf("query current texture revision: %w", getErr)
 		}
-		maxVersion := -1
-		for _, r := range existingRevs {
-			if r.VersionNumber > maxVersion {
-				maxVersion = r.VersionNumber
-			}
-		}
-		versionNumber = maxVersion + 1
+		head = &parentRevision
 	}
-	rev.VersionNumber = versionNumber
-
-	// Chain this revision's tamper-evident hash to its parent. The genesis
-	// revision (no parent) chains from the empty hash. Computing here (not in the
-	// caller) guarantees every revision is hashed regardless of write path.
-	var parentHash string
-	if expectedHead != "" {
-		parentRev, err := s.GetTextureRevisionOG(ctx, rev.OwnerID, expectedHead)
-		if err == nil {
-			parentHash = parentRev.RevisionHash
-		} else if err != ErrNotFound {
-			return fmt.Errorf("query parent revision hash: %w", err)
-		}
-	}
-	rev.RevisionHash = types.ComputeStructuredRevisionHash(parentHash, rev.Content, []byte(bodyDocJSON), []byte(sourceEntitiesJSON), []byte(provenance))
-
-	createdEntityKeys, writtenRefKeys, err := s.writeTextureSourceGraph(ctx, rev, graph)
+	doc, rev, err = commitTextureHeadAuthority(doc, head, rev, rev.CreatedAt)
 	if err != nil {
 		return err
 	}
 
-	if err := s.CreateTextureRevisionOG(ctx, rev); err != nil {
-		// Compensate: delete source refs/entities written for this revision.
-		s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-		return fmt.Errorf("insert texture revision: %w", err)
+	if s.ogStore == nil {
+		return fmt.Errorf("texture revision: object graph not initialized")
 	}
-
-	// Update the document's current_revision_id and updated_at. If this
-	// fails, compensate by deleting the revision and source graph so
-	// retries don't accumulate orphan revisions.
-	doc.CurrentRevisionID = rev.RevisionID
-	doc.UpdatedAt = rev.CreatedAt
-	if err := s.UpdateTextureDocumentOG(ctx, doc); err != nil {
-		// Best-effort compensating delete of the revision.
-		if revObj, delErr := s.ogGetByKey(ctx, ogKindTexRev, "revision_id", rev.RevisionID); delErr == nil {
-			_ = s.ogDelete(ctx, revObj.CanonicalID)
+	now := rev.CreatedAt.UTC()
+	revisionObj, err := lifecycleSourceGraphObject(ogKindTexRev, rev.OwnerID, rev.RevisionID, rev, map[string]any{
+		"revision_id": rev.RevisionID, "doc_id": rev.DocID, "author_kind": string(rev.AuthorKind),
+		"author_label": rev.AuthorLabel, "version_number": rev.VersionNumber,
+		"parent_revision_id": rev.ParentRevisionID, "revision_hash": rev.RevisionHash,
+		"created_at": now.Format(time.RFC3339Nano),
+	}, now)
+	if err != nil {
+		return err
+	}
+	documentObj, err := s.ogGetByKey(ctx, ogKindTexDoc, "doc_id", doc.DocID)
+	if err != nil {
+		return err
+	}
+	documentBody, err := json.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	documentMetadata, err := objectgraph.NormalizeMetadata(map[string]any{
+		"doc_id": doc.DocID, "title": doc.Title, "current_revision_id": doc.CurrentRevisionID,
+		"created_at": doc.CreatedAt.UTC().Format(time.RFC3339Nano), "updated_at": doc.UpdatedAt.UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return err
+	}
+	documentUpdated := documentObj
+	documentUpdated.Body, documentUpdated.Metadata, documentUpdated.UpdatedAt = documentBody, documentMetadata, doc.UpdatedAt.UTC()
+	documentUpdated.ContentHash = objectgraph.ContentHash(documentUpdated.ObjectKind, documentUpdated.Body, documentUpdated.Metadata)
+	sourceObjects, sourceConditions, err := s.lifecycleSourceGraphBatch(ctx, rev, graph, now)
+	if err != nil {
+		return fmt.Errorf("texture source graph batch: %w", err)
+	}
+	conditions := append([]objectgraph.ObjectCondition{
+		{CanonicalID: documentObj.CanonicalID, Exists: true, ExpectedContentHash: documentObj.ContentHash},
+		{CanonicalID: revisionObj.CanonicalID},
+	}, sourceConditions...)
+	edgeMetadata := json.RawMessage(`{}`)
+	documentEdgeID, err := objectgraph.BuildEdgeID(revisionObj.CanonicalID, documentObj.CanonicalID, ogEdgeDocRevision, edgeMetadata)
+	if err != nil {
+		return err
+	}
+	edges := []objectgraph.Edge{{EdgeID: documentEdgeID, FromID: revisionObj.CanonicalID, ToID: documentObj.CanonicalID, Kind: ogEdgeDocRevision, Metadata: edgeMetadata, CreatedAt: now}}
+	if currentHead != "" {
+		headObj, getErr := s.ogGetByKey(ctx, ogKindTexRev, "revision_id", currentHead)
+		if getErr != nil {
+			return getErr
 		}
-		// Compensate: delete source refs/entities written for this revision.
-		s.rollbackTextureSourceGraph(ctx, rev, graph, createdEntityKeys, writtenRefKeys)
-		return fmt.Errorf("update texture document head: %w", err)
+		conditions = append(conditions, objectgraph.ObjectCondition{CanonicalID: headObj.CanonicalID, Exists: true, ExpectedContentHash: headObj.ContentHash})
+		parentEdgeID, buildErr := objectgraph.BuildEdgeID(revisionObj.CanonicalID, headObj.CanonicalID, ogEdgeRevParent, edgeMetadata)
+		if buildErr != nil {
+			return buildErr
+		}
+		edges = append(edges, objectgraph.Edge{EdgeID: parentEdgeID, FromID: revisionObj.CanonicalID, ToID: headObj.CanonicalID, Kind: ogEdgeRevParent, Metadata: edgeMetadata, CreatedAt: now})
+	}
+	objects := append([]objectgraph.Object{documentUpdated, revisionObj}, sourceObjects...)
+	if err := s.ogStore.PutBatchConditional(ctx, conditions, objectgraph.Batch{Objects: objects, Edges: edges}); err != nil {
+		if errors.Is(err, objectgraph.ErrConflict) {
+			return ErrStaleDocumentHead
+		}
+		return fmt.Errorf("commit texture head: %w", err)
 	}
 	s.markDoltHistoryDirty()
 	return nil
 }
 
-// PatchRevisionMetadata merges patch into an existing revision's metadata_json.
-// Revisions are otherwise immutable; publication refs use this narrow update path.
+// PatchRevisionMetadata merges publication metadata into a manual revision.
+// Lifecycle revisions are immutable; their evidence refs belong to the reducer.
 func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID string, patch map[string]any) error {
 	if s == nil {
 		return fmt.Errorf("store unavailable")
@@ -1006,6 +1054,9 @@ func (s *Store) PatchRevisionMetadata(ctx context.Context, ownerID, revisionID s
 	rev, err := s.GetRevision(ctx, revisionID, ownerID)
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(rev.TrajectoryID) != "" {
+		return ErrLifecycleAuthorityRequired
 	}
 	meta := map[string]any{}
 	if len(rev.Metadata) > 0 {

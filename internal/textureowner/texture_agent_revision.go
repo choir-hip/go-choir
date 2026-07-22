@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -45,14 +44,6 @@ type textureAgentRevisionResponse struct {
 	DocID     string         `json:"doc_id"`
 	State     types.RunState `json:"state"`
 	CreatedAt string         `json:"created_at"`
-}
-
-type textureCancelRevisionResponse struct {
-	DocID           string   `json:"doc_id"`
-	RunID           string   `json:"loop_id,omitempty"`
-	Status          string   `json:"status"`
-	CancelledRunIDs []string `json:"cancelled_loop_ids,omitempty"`
-	Resumable       bool     `json:"resumable"`
 }
 
 // HandleTextureAgentRevision handles POST
@@ -151,85 +142,6 @@ func (h *Handler) HandleTextureAgentRevision(w http.ResponseWriter, r *http.Requ
 		DocID:     docID,
 		State:     rec.State,
 		CreatedAt: rec.CreatedAt.Format("2006-01-02T15:04:05.000Z"),
-	})
-}
-
-// HandleTextureCancelAgentRevision handles POST
-// /api/texture/documents/{id}/cancel. It cancels the pending Texture appagent
-// revision trajectory without changing the canonical document head.
-func (h *Handler) HandleTextureCancelAgentRevision(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeAPIJSON(w, http.StatusMethodNotAllowed, apiError{Error: "method not allowed"})
-		return
-	}
-	docID := extractDocID(r.URL.Path)
-	if docID == "" {
-		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "document ID is required"})
-		return
-	}
-	ownerID, err := authenticateUser(r)
-	if err != nil {
-		writeAPIJSON(w, http.StatusUnauthorized, apiError{Error: "authentication required"})
-		return
-	}
-	doc, err := h.Store.GetDocument(r.Context(), docID, ownerID)
-	if err != nil {
-		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
-		return
-	}
-	lifecycleCancelled := false
-	if strings.TrimSpace(doc.TrajectoryID) != "" {
-		cancel := types.CancelLifecycleRequest{
-			OwnerID: ownerID, ComputerID: doc.ComputerID,
-			CommandID:    "lifecycle-cancel:" + doc.TrajectoryID,
-			TrajectoryID: doc.TrajectoryID, Reason: "owner cancellation",
-		}
-		cancel.CommandDigest, _ = store.ComputeCancelLifecycleDigest(cancel)
-		if _, err := h.Store.CancelLifecycleTrajectory(r.Context(), cancel); err != nil {
-			writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-			return
-		}
-		lifecycleCancelled = true
-	}
-	mutation, err := h.pendingAgentMutationByDoc(r.Context(), docID, ownerID)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) && lifecycleCancelled {
-			writeAPIJSON(w, http.StatusOK, textureCancelRevisionResponse{DocID: docID, Status: "cancelled", Resumable: true})
-			return
-		}
-		if errors.Is(err, store.ErrNotFound) {
-			writeAPIJSON(w, http.StatusOK, textureCancelRevisionResponse{DocID: docID, Status: "no_pending_revision", Resumable: true})
-			return
-		}
-		log.Printf("texture api: get pending mutation for cancel: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to load pending revision"})
-		return
-	}
-	if mutation == nil {
-		status := "no_pending_revision"
-		if lifecycleCancelled {
-			status = "cancelled"
-		}
-		writeAPIJSON(w, http.StatusOK, textureCancelRevisionResponse{DocID: docID, Status: status, Resumable: true})
-		return
-	}
-	cancelled, err := h.Core.CancelRunTrajectory(r.Context(), mutation.RunID, ownerID)
-	if err != nil {
-		log.Printf("texture api: cancel revision trajectory: %v", err)
-		writeAPIJSON(w, http.StatusConflict, apiError{Error: err.Error()})
-		return
-	}
-	if err := h.Store.CancelAgentMutation(r.Context(), mutation.RunID); err != nil {
-		log.Printf("texture api: mark mutation cancelled: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to record cancellation"})
-		return
-	}
-	writeAPIJSON(w, http.StatusOK, textureCancelRevisionResponse{
-		DocID:           docID,
-		RunID:           mutation.RunID,
-		Status:          "cancelled",
-		CancelledRunIDs: cancelled,
-		Resumable:       true,
 	})
 }
 

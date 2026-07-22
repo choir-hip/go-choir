@@ -24,9 +24,9 @@ func testCoagentUpdatePacket(kind, summary string) types.CoagentSourcePacketPayl
 	return newCoagentPacket(kind, summary, []types.CoagentPacketClaim{coagentClaim(summary)}, nil, nil, nil, nil)
 }
 
-func testSuperExecutionRequestPacket(summary string) types.CoagentSourcePacketPayload {
+func testEffectfulExecutionRequestPacket(summary string) types.CoagentSourcePacketPayload {
 	return newCoagentPacket("execution_request", summary, nil, nil, []types.CoagentPacketAction{
-		coagentAction("request_super_execution", summary, nil, nil, types.CoagentPacketActionSafety{
+		coagentAction("run_command", summary, nil, nil, types.CoagentPacketActionSafety{
 			MutationClass: "red",
 			Network:       "allowed",
 			FileMutation:  "allowed",
@@ -48,7 +48,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 		OwnerID:        ownerID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 		ChannelID:     superAgent.ChannelID,
 		TrajectoryID:  trajectoryID,
 		Role:          agentprofile.CoSuper,
-		Packet:        testSuperExecutionRequestPacket("implementation evidence is ready"),
+		Packet:        testEffectfulExecutionRequestPacket("implementation evidence is ready"),
 		Content:       "implementation evidence is ready",
 		CreatedAt:     time.Now().UTC(),
 	}
@@ -120,7 +120,7 @@ func TestUpdateCoagentPendingUpdateSurvivesRestartAndDeliversOnce(t *testing.T) 
 	}
 }
 
-func TestStartSweepsAssignedOpenWorkItemsAfterPassivation(t *testing.T) {
+func TestStartPassivatesAndRefusesEffectsCapableAssignedWork(t *testing.T) {
 	dir := filepath.Join(os.TempDir(), "go-choir-m3-runtime-test")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("create temp dir: %v", err)
@@ -156,7 +156,7 @@ func TestStartSweepsAssignedOpenWorkItemsAfterPassivation(t *testing.T) {
 		TrajectoryID:   trajectoryID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestStartSweepsAssignedOpenWorkItemsAfterPassivation(t *testing.T) {
 	if err := s1.CreateRun(ctx, interrupted); err != nil {
 		t.Fatalf("create interrupted run: %v", err)
 	}
-	item, err := s1.CreateWorkItem(ctx, types.WorkItemRecord{
+	_, err = s1.CreateWorkItem(ctx, types.WorkItemRecord{
 		OwnerID:          ownerID,
 		TrajectoryID:     trajectoryID,
 		Objective:        "finish assigned open obligation",
@@ -230,32 +230,9 @@ func TestStartSweepsAssignedOpenWorkItemsAfterPassivation(t *testing.T) {
 		t.Fatalf("interrupted state = %q, want %q", passivated.State, types.RunPassivated)
 	}
 
-	var active types.RunRecord
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		active, err = s2.GetLatestActiveRunByAgent(ctx, ownerID, agentID)
-		if err == nil && active.RunID != interrupted.RunID {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatalf("get active replacement run: %v", err)
-	}
-	if active.RunID == "" || active.RunID == interrupted.RunID {
-		t.Fatalf("replacement run = %+v, want new active run", active)
-	}
-	if got := metadataStringValue(active.Metadata, "request_source"); got != "trajectory_work_item_sweep" {
-		t.Fatalf("request_source = %q, want trajectory_work_item_sweep", got)
-	}
-	if got := metadataStringValue(active.Metadata, runMetadataTrajectoryID); got != trajectoryID {
-		t.Fatalf("trajectory metadata = %q, want %q", got, trajectoryID)
-	}
-	if ids := metadataStringSlice(active.Metadata["work_item_ids"]); !containsString(ids, item.WorkItemID) {
-		t.Fatalf("work_item_ids = %+v, want %s", ids, item.WorkItemID)
-	}
-	if !strings.Contains(active.Prompt, "finish assigned open obligation") {
-		t.Fatalf("replacement prompt did not include work item objective: %q", active.Prompt)
+	time.Sleep(500 * time.Millisecond)
+	if active, activeErr := s2.GetLatestActiveRunByAgent(ctx, ownerID, agentID); activeErr == nil {
+		t.Fatalf("effects-OFF restart created CoSuper activation: %+v", active)
 	}
 }
 
@@ -286,7 +263,7 @@ func TestStartSynthesizesSpawnedWorkItemForPassivatedChildWithoutBacklog(t *test
 		TrajectoryID:   trajectoryID,
 		Kind:           types.TrajectoryKindDocument,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -475,7 +452,7 @@ func TestStartRewarmsAlreadyPassivatedSpawnedChildWithoutBacklog(t *testing.T) {
 		TrajectoryID:   trajectoryID,
 		Kind:           types.TrajectoryKindDocument,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -651,7 +628,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		TrajectoryID:   trajectoryID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -660,7 +637,7 @@ func TestStartRewarmsCoagentWithPendingUpdatesAndAssignedWork(t *testing.T) {
 		TrajectoryID:   otherTrajectoryID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create second trajectory: %v", err)
 	}
@@ -1256,7 +1233,7 @@ func seedSpawnedChildParent(t *testing.T, ctx context.Context, s spawnedChildPar
 		TrajectoryID:   trajectoryID,
 		Kind:           types.TrajectoryKindDocument,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 		SubjectRefs: map[string]string{
 			"root_loop_id": parentID,
 			"channel_id":   channelID,
@@ -1355,7 +1332,7 @@ func seedM3RestartBacklog(t *testing.T, ctx context.Context, s storeWriter) {
 		TrajectoryID:   m3RestartTrajectory,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create process-restart trajectory: %v", err)
 	}
@@ -1688,11 +1665,14 @@ func TestTrajectoryObligationsReportPendingUpdateCoagent(t *testing.T) {
 		t.Fatalf("ensure super agent: %v", err)
 	}
 	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
-		TrajectoryID:   trajectoryID,
-		OwnerID:        ownerID,
-		Kind:           types.TrajectoryKindTask,
-		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		TrajectoryID: trajectoryID,
+		OwnerID:      ownerID,
+		Kind:         types.TrajectoryKindTask,
+		Status:       types.TrajectoryLive,
+		SubjectRefs:  map[string]string{"artifact": "texture://artifact/pending-update"},
+		SettlementRule: types.SettlementRule{
+			Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"artifact"},
+		},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}

@@ -2,6 +2,7 @@ package agentcore
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -301,7 +302,7 @@ func TestCancelRunTrajectoryDrainsMoreThanOneActivePage(t *testing.T) {
 		OwnerID:        "user-alice",
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -359,7 +360,7 @@ func TestCancelTrajectoryIsOwnerScopedTerminalizesAuthorityAndActiveRuns(t *test
 		OwnerID:        ownerID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -486,7 +487,7 @@ func TestCancelTrajectoryRetriesActivationDrainForAlreadyCancelledAuthority(t *t
 		OwnerID:        ownerID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -549,7 +550,7 @@ func TestCancelTrajectoryReturnsSettledTruthWithoutCancellingActivations(t *test
 		OwnerID:        ownerID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -611,7 +612,7 @@ func TestCancelledRequestDoesNotInterruptPostAuthorityActivationDrain(t *testing
 		OwnerID:        ownerID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -720,7 +721,7 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 		OwnerID:        ownerID,
 		Kind:           types.TrajectoryKindTask,
 		Status:         types.TrajectoryLive,
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	}); err != nil {
 		t.Fatalf("create trajectory: %v", err)
 	}
@@ -772,8 +773,8 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 
 	cancelPath := escapedTrajectoryPath + "/cancel"
 	status, body = doRequest(http.MethodPost, cancelPath, "user-bob")
-	if status != http.StatusNotFound {
-		t.Fatalf("cross-owner cancel status = %d, body=%s", status, body)
+	if status != http.StatusBadRequest {
+		t.Fatalf("bodyless cross-owner cancel status = %d, body=%s", status, body)
 	}
 	trajectory, err := s.GetTrajectory(ctx, ownerID, trajectoryID)
 	if err != nil {
@@ -801,89 +802,6 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 		t.Fatalf("invalid HTTP path changed trajectory status to %s", trajectory.Status)
 	}
 
-	status, body = doRequest(http.MethodPost, cancelPath, ownerID)
-	if status != http.StatusOK {
-		t.Fatalf("cancel status = %d, body=%s", status, body)
-	}
-	var cancelResp trajectoryCancelResponse
-	if err := json.Unmarshal(body, &cancelResp); err != nil {
-		t.Fatalf("decode cancel response: %v", err)
-	}
-	if cancelResp.TrajectoryID != trajectoryID || cancelResp.Status != types.TrajectoryCancelled {
-		t.Fatalf("cancel response = %+v", cancelResp)
-	}
-	if len(cancelResp.CancelledRunIDs) != 1 || cancelResp.CancelledRunIDs[0] != activeRunID {
-		t.Fatalf("cancelled_run_ids = %+v, want [%s]", cancelResp.CancelledRunIDs, activeRunID)
-	}
-
-	status, body = doRequest(http.MethodGet, escapedTrajectoryPath, ownerID)
-	if status != http.StatusOK {
-		t.Fatalf("GET cancelled detail status = %d, body=%s", status, body)
-	}
-	var after TrajectoryObligations
-	if err := json.Unmarshal(body, &after); err != nil {
-		t.Fatalf("decode cancelled GET detail: %v", err)
-	}
-	if after.Trajectory.Status != types.TrajectoryCancelled || len(after.OpenWorkItems) != 0 {
-		t.Fatalf("cancelled GET detail = %+v", after)
-	}
-
-	const settledTrajectoryID = "traj-api-already-settled"
-	if _, err := s.CreateTrajectoryIfAbsent(ctx, types.TrajectoryRecord{
-		TrajectoryID: settledTrajectoryID,
-		OwnerID:      ownerID,
-		Kind:         types.TrajectoryKindTask,
-		Status:       types.TrajectoryLive,
-	}); err != nil {
-		t.Fatalf("create settled trajectory: %v", err)
-	}
-	const settledRunID = "run-api-settled-active"
-	if err := s.CreateRun(ctx, types.RunRecord{
-		RunID:        settledRunID,
-		AgentID:      "agent-api-settled-active",
-		AgentProfile: agentprofile.CoSuper,
-		AgentRole:    agentprofile.CoSuper,
-		OwnerID:      ownerID,
-		SandboxID:    "sandbox-test",
-		State:        types.RunPending,
-		Prompt:       "activation that must survive settled cancellation",
-		TrajectoryID: settledTrajectoryID,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Metadata: map[string]any{
-			runMetadataAgentProfile: agentprofile.CoSuper,
-			runMetadataAgentRole:    agentprofile.CoSuper,
-			runMetadataTrajectoryID: settledTrajectoryID,
-		},
-	}); err != nil {
-		t.Fatalf("create settled trajectory activation: %v", err)
-	}
-	if _, err := s.UpdateTrajectoryStatus(ctx, ownerID, settledTrajectoryID, types.TrajectorySettled); err != nil {
-		t.Fatalf("settle trajectory: %v", err)
-	}
-	settledCancelPath := "/api/trajectories/" + url.PathEscape(settledTrajectoryID) + "/cancel"
-	status, body = doRequest(http.MethodPost, settledCancelPath, ownerID)
-	if status != http.StatusOK {
-		t.Fatalf("settled cancellation status = %d, body=%s", status, body)
-	}
-	var settledResp trajectoryCancelResponse
-	if err := json.Unmarshal(body, &settledResp); err != nil {
-		t.Fatalf("decode settled cancellation response: %v", err)
-	}
-	if settledResp.TrajectoryID != settledTrajectoryID || settledResp.Status != types.TrajectorySettled {
-		t.Fatalf("settled cancellation response = %+v, want truthful settled status", settledResp)
-	}
-	if len(settledResp.CancelledRunIDs) != 0 {
-		t.Fatalf("settled cancellation claimed cancelled runs: %+v", settledResp.CancelledRunIDs)
-	}
-	settledRun, err := s.GetRun(ctx, settledRunID)
-	if err != nil {
-		t.Fatalf("get settled trajectory activation: %v", err)
-	}
-	if settledRun.State != types.RunPending {
-		t.Fatalf("settled trajectory activation state = %s, want pending", settledRun.State)
-	}
-
 	for _, malformedPath := range []string{
 		"/api/trajectories/%/cancel",
 		"/api/trajectories/%2/cancel",
@@ -904,17 +822,94 @@ func TestHandleTrajectoryDetailPreservesGETAndRoutesOwnerScopedCancellation(t *t
 	}
 }
 
+func TestTrajectoryCancelPublicCommandReplaysAndConflicts(t *testing.T) {
+	rt, s := testRuntime(t)
+	h := NewAPIHandler(rt)
+	const ownerID = "user-public-cancel"
+	trajectoryID := seedDurableTextureSubject(t, s, ownerID, "doc-public-cancel")
+	path := "/api/trajectories/" + url.PathEscape(trajectoryID) + "/cancel"
+	snapshot, err := s.GetLifecycleSnapshot(context.Background(), ownerID, rt.TextureSandboxID(), trajectoryID)
+	if err != nil {
+		t.Fatalf("snapshot before cancel: %v", err)
+	}
+	cancelBody := func(reason string) string {
+		body, _ := json.Marshal(trajectoryCancelRequest{
+			IdempotencyKey: "cancel-command-1", ExpectedLifecycleVersion: snapshot.Trajectory.LifecycleVersion,
+			ExpectedHeadRevisionID: snapshot.HeadRevision.RevisionID, Reason: reason,
+		})
+		return string(body)
+	}
+
+	callAs := func(requestOwner, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+		request.Header.Set("X-Authenticated-User", requestOwner)
+		response := httptest.NewRecorder()
+		h.HandleTrajectoryDetail(response, request)
+		return response
+	}
+	call := func(body string) *httptest.ResponseRecorder {
+		return callAs(ownerID, body)
+	}
+	if response := callAs("user-other", cancelBody("owner requested")); response.Code != http.StatusNotFound {
+		t.Fatalf("cross-owner cancel status=%d body=%s", response.Code, response.Body.String())
+	}
+	first := call(cancelBody("owner requested"))
+	if first.Code != http.StatusOK {
+		t.Fatalf("first cancel status=%d body=%s", first.Code, first.Body.String())
+	}
+	var firstResponse trajectoryCancelResponse
+	if err := json.Unmarshal(first.Body.Bytes(), &firstResponse); err != nil {
+		t.Fatal(err)
+	}
+	if firstResponse.Schema != types.DurableWorkSchemaV1 || firstResponse.Receipt.CommandID != "public-cancel:cancel-command-1" {
+		t.Fatalf("first cancellation response = %+v", firstResponse)
+	}
+	replay := call(cancelBody("owner requested"))
+	if replay.Code != http.StatusOK {
+		t.Fatalf("replay status=%d body=%s", replay.Code, replay.Body.String())
+	}
+	var replayResponse trajectoryCancelResponse
+	if err := json.Unmarshal(replay.Body.Bytes(), &replayResponse); err != nil {
+		t.Fatal(err)
+	}
+	if replayResponse.Receipt.CommandDigest != firstResponse.Receipt.CommandDigest ||
+		replayResponse.Receipt.ReducerSeq != firstResponse.Receipt.ReducerSeq {
+		t.Fatalf("replay receipt = %+v, want original %+v", replayResponse.Receipt, firstResponse.Receipt)
+	}
+	conflict := call(cancelBody("different request"))
+	if conflict.Code != http.StatusConflict {
+		t.Fatalf("conflicting replay status=%d body=%s", conflict.Code, conflict.Body.String())
+	}
+}
+
 func TestEvaluateTrajectorySettlementIsPureDataEvaluation(t *testing.T) {
 	rec := types.TrajectoryRecord{
 		Status:         types.TrajectoryLive,
 		SubjectRefs:    map[string]string{"publish_ref": "refs/publications/p-1", "edition_ref": "refs/editions/e-1"},
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"publish_ref", "edition_ref"}},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"publish_ref", "edition_ref"}},
 	}
 	if ready, waiting := EvaluateTrajectorySettlement(rec, 0); !ready || len(waiting) != 0 {
 		t.Fatalf("satisfied rule not ready: ready=%v waiting=%v", ready, waiting)
 	}
 	if ready, _ := EvaluateTrajectorySettlement(rec, 3); ready {
 		t.Fatalf("open work items did not block settlement")
+	}
+	for name, rule := range map[string]types.SettlementRule{
+		"missing version":   {RequireNoOpenWorkItems: true},
+		"unknown version":   {Version: "durable-work/v2", RequireNoOpenWorkItems: true},
+		"missing predicate": {Version: types.LifecycleReducerVersion},
+		"missing refs":      {Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
+		"duplicate ref":     {Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{"publish_ref", "publish_ref"}},
+		"empty ref":         {Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true, RequiredSubjectRefs: []string{""}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			malformed := rec
+			malformed.SettlementRule = rule
+			if ready, _ := EvaluateTrajectorySettlement(malformed, 0); ready {
+				t.Fatalf("malformed settlement rule reported ready: %+v", rule)
+			}
+		})
 	}
 	rec.SubjectRefs = nil
 	if ready, waiting := EvaluateTrajectorySettlement(rec, 0); ready || len(waiting) != 2 {

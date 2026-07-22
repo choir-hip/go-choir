@@ -78,6 +78,7 @@ func TestRegisterRoutesPreservesCanonicalTable(t *testing.T) {
 		"/api/agent/cancel",
 		"/api/universal-wire/stories",
 		"/internal/runtime/objectgraph/web-captures",
+		"/internal/self-development/restart-handoff",
 	} {
 		if registeredRouteResponds(srv, path) {
 			t.Fatalf("non-canonical route %q is registered", path)

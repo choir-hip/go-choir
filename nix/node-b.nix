@@ -29,14 +29,6 @@ let
   platformDoltDir = "/var/lib/go-choir/platform-dolt";
   platformDoltDBDir = "${platformDoltDir}/platform";
   platformArtifactsDir = "/var/lib/go-choir/platform-artifacts";
-  # Stable ComputerID for the explicitly disposable staging platform computer
-  # (owner universal-wire-platform, desktop platform). Genesis remains
-  # fail-closed for every other computer and on non-staging hosts.
-  expectedSelfDevelopmentDisposableComputerID = "computer-4c20ff4a21a021c4306d8c783be0037d";
-  selfDevelopmentDisposableComputerID =
-    if config.networking.hostName == "go-choir-b"
-    then expectedSelfDevelopmentDisposableComputerID
-    else "";
   platformDoltInit = pkgs.writeShellScript "platform-dolt-init" ''
     set -euo pipefail
     export HOME="${platformDoltDir}"
@@ -61,14 +53,6 @@ let
     fi
     exec "${package}/bin/${name}" "$@"
   '';
-  # EnvironmentFile values override systemd Environment assignments. Export
-  # this authority boundary in the immutable Nix launcher immediately before
-  # exec so no mutable deploy.env entry can select another genesis target.
-  proxyExec = pkgs.writeShellScript "go-choir-proxy-exec" ''
-    set -euo pipefail
-    export PROXY_SELF_DEVELOPMENT_DISPOSABLE_COMPUTER_ID="${selfDevelopmentDisposableComputerID}"
-    exec ${serviceExec "proxy" goChoirPackages.proxy} "$@"
-  '';
   # vmctl-priority.env is mutable by design, but may only tune priority IDs.
   # Reassert credential authority after EnvironmentFile expansion.
   vmctlExec = pkgs.writeShellScript "go-choir-vmctl-exec" ''
@@ -76,8 +60,6 @@ let
     export VMCTL_CORPUSD_URL="http://127.0.0.1:8086"
     exec ${serviceExec "vmctl" goChoirPackages.vmctl} "$@"
   '';
-  proxyDisposableTargetEnvironment =
-    "PROXY_SELF_DEVELOPMENT_DISPOSABLE_COMPUTER_ID=${selfDevelopmentDisposableComputerID}";
   diskRetentionSweep = pkgs.writeShellScript "go-choir-disk-retention-sweep" ''
     set -euo pipefail
     export PATH="${lib.makeBinPath [ pkgs.coreutils pkgs.curl pkgs.gnugrep pkgs.nix pkgs.systemd ]}:$PATH"
@@ -133,16 +115,6 @@ let
   };
 in
 {
-  assertions = [
-    {
-      assertion = config.networking.hostName != "go-choir-b" || (
-        selfDevelopmentDisposableComputerID == expectedSelfDevelopmentDisposableComputerID
-        && lib.elem proxyDisposableTargetEnvironment config.systemd.services.go-choir-proxy.serviceConfig.Environment
-        && config.systemd.services.go-choir-proxy.serviceConfig.ExecStart == "${proxyExec}"
-      );
-      message = "Node B proxy must execute with the exact immutable disposable ComputerID";
-    }
-  ];
 
   # Boot
   boot.loader.efi.canTouchEfiVariables = true;
@@ -362,7 +334,7 @@ in
     wants = [ "network-online.target" "go-choir-corpusd.service" "go-choir-maild.service" ];
     requires = [ "go-choir-auth.service" ];
     serviceConfig = commonServiceHardening // {
-      ExecStart = "${proxyExec}";
+      ExecStart = "${serviceExec "proxy" goChoirPackages.proxy}";
       Restart = "on-failure";
       RestartSec = 3;
       EnvironmentFile = "-/var/lib/go-choir/deploy.env";
@@ -385,7 +357,6 @@ in
         # VM_BOOT_READY_TIMEOUT and the retry/replay path (Phase D).
         "PROXY_VMCTL_TIMEOUT=60s"
         "PROXY_CORPUSD_URL=http://127.0.0.1:8086"
-        proxyDisposableTargetEnvironment
         "PROXY_MAILD_URL=http://127.0.0.1:8087"
       ];
     };

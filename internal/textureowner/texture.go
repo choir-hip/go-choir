@@ -184,13 +184,15 @@ type textureListDocsResponse struct {
 // POST /api/texture/documents/{id}/revisions. The public route always creates
 // user-authored revisions.
 type textureCreateRevisionRequest struct {
-	Content          string          `json:"content"`
-	BodyDoc          json.RawMessage `json:"body_doc,omitempty"`
-	SourceEntities   json.RawMessage `json:"source_entities,omitempty"`
-	Citations        json.RawMessage `json:"citations,omitempty"`
-	Metadata         json.RawMessage `json:"metadata,omitempty"`
-	ParentRevisionID string          `json:"parent_revision_id,omitempty"`
-	AllowRebase      bool            `json:"allow_rebase,omitempty"`
+	Content                  string          `json:"content"`
+	BodyDoc                  json.RawMessage `json:"body_doc,omitempty"`
+	SourceEntities           json.RawMessage `json:"source_entities,omitempty"`
+	Citations                json.RawMessage `json:"citations,omitempty"`
+	Metadata                 json.RawMessage `json:"metadata,omitempty"`
+	ParentRevisionID         string          `json:"parent_revision_id,omitempty"`
+	AllowRebase              bool            `json:"allow_rebase,omitempty"`
+	IdempotencyKey           string          `json:"idempotency_key,omitempty"`
+	ExpectedLifecycleVersion int64           `json:"expected_lifecycle_version,omitempty"`
 }
 
 // textureRevisionResponse is the JSON response for revision-related endpoints.
@@ -1141,18 +1143,19 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		writeAPIJSON(w, http.StatusNotFound, apiError{Error: "document not found"})
 		return
 	}
-	if strings.TrimSpace(doc.TrajectoryID) != "" {
-		writeAPIJSON(w, http.StatusConflict, apiError{
-			Error: "lifecycle-authored documents accept revisions only through the durable lifecycle",
-		})
+	lifecycleBound := strings.TrimSpace(doc.TrajectoryID) != ""
+	if lifecycleBound && (strings.TrimSpace(req.IdempotencyKey) == "" || req.ExpectedLifecycleVersion <= 0 || strings.TrimSpace(req.ParentRevisionID) == "") {
+		writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "idempotency_key, expected_lifecycle_version, and parent_revision_id are required for lifecycle revisions"})
 		return
 	}
 
 	now := time.Now().UTC()
-	if err := h.canonicalizeAliasedTextureDocumentTitle(r.Context(), ownerID, &doc, now); err != nil {
-		log.Printf("texture api: canonicalize aliased document title: %v", err)
-		writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
-		return
+	if !lifecycleBound {
+		if err := h.canonicalizeAliasedTextureDocumentTitle(r.Context(), ownerID, &doc, now); err != nil {
+			log.Printf("texture api: canonicalize aliased document title: %v", err)
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to canonicalize document title"})
+			return
+		}
 	}
 
 	// If parent_revision_id is not specified, use the document's current head.
@@ -1191,16 +1194,22 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 	if hasParentRev {
 		metadata = carryForwardDurableTextureMetadata(metadata, parentRev.Metadata)
 	}
-	if canonicalPath, err := h.ensureCanonicalTextureProjectionPath(r.Context(), ownerID, doc); err == nil && canonicalPath != "" {
-		metadata = mergeTextureRevisionMetadata(metadata, map[string]any{
-			canonicalTextureSourcePathMetadataKey: canonicalPath,
-		})
-	} else if err != nil {
-		log.Printf("texture api: ensure canonical texture projection path: %v", err)
+	if !lifecycleBound {
+		if canonicalPath, err := h.ensureCanonicalTextureProjectionPath(r.Context(), ownerID, doc); err == nil && canonicalPath != "" {
+			metadata = mergeTextureRevisionMetadata(metadata, map[string]any{
+				canonicalTextureSourcePathMetadataKey: canonicalPath,
+			})
+		} else if err != nil {
+			log.Printf("texture api: ensure canonical texture projection path: %v", err)
+		}
 	}
 
+	revisionID := uuid.New().String()
+	if lifecycleBound {
+		revisionID = uuid.NewSHA1(uuid.NameSpaceOID, []byte(strings.Join([]string{ownerID, doc.ComputerID, doc.TrajectoryID, strings.TrimSpace(req.IdempotencyKey)}, "\x00"))).String()
+	}
 	rev := types.Revision{
-		RevisionID:       uuid.New().String(),
+		RevisionID:       revisionID,
 		DocID:            docID,
 		OwnerID:          ownerID,
 		AuthorKind:       types.AuthorUser,
@@ -1212,6 +1221,39 @@ func (h *Handler) handleTextureCreateRevision(w http.ResponseWriter, r *http.Req
 		Metadata:         metadata,
 		ParentRevisionID: parentID,
 		CreatedAt:        now,
+	}
+
+	if lifecycleBound {
+		command := types.CommitLifecycleArtifactHeadRequest{
+			OwnerID: ownerID, ComputerID: doc.ComputerID,
+			CommandID:    "public-head:" + strings.TrimSpace(req.IdempotencyKey),
+			TrajectoryID: doc.TrajectoryID, ExpectedLifecycleVersion: req.ExpectedLifecycleVersion,
+			ExpectedHeadRevisionID: parentID, Revision: rev,
+		}
+		commandDigest, digestErr := store.ComputeCommitLifecycleArtifactHeadDigest(command)
+		if digestErr != nil {
+			log.Printf("texture api: digest lifecycle revision command: %v", digestErr)
+			writeAPIJSON(w, http.StatusBadRequest, apiError{Error: "invalid lifecycle revision payload"})
+			return
+		}
+		command.CommandDigest = commandDigest
+		result, commitErr := h.Store.CommitLifecycleArtifactHead(r.Context(), command)
+		if commitErr != nil {
+			if errors.Is(commitErr, store.ErrConcurrentStateChange) || errors.Is(commitErr, store.ErrLifecycleCommandConflict) || errors.Is(commitErr, store.ErrLifecycleInvalidTransition) {
+				writeAPIJSON(w, http.StatusConflict, apiError{Error: commitErr.Error()})
+			} else {
+				log.Printf("texture api: commit lifecycle revision: %v", commitErr)
+				writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "failed to commit lifecycle revision"})
+			}
+			return
+		}
+		if result.Revision == nil {
+			writeAPIJSON(w, http.StatusInternalServerError, apiError{Error: "lifecycle revision result unavailable"})
+			return
+		}
+		h.emitTextureDocumentRevisionEvent(r.Context(), ownerID, *result.Revision)
+		writeAPIJSON(w, http.StatusCreated, h.revisionResponseFromRecord(r.Context(), *result.Revision))
+		return
 	}
 
 	if err := h.Store.CreateRevision(r.Context(), rev); err != nil {

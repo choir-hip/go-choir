@@ -184,6 +184,20 @@ export async function createRevision(docId, { content, bodyDoc, sourceEntities, 
   if (allowRebase) {
     body.allow_rebase = true;
   }
+  const document = await getDocument(docId);
+  if (document?.trajectory_id) {
+    const lifecycleRes = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(document.trajectory_id)}`, {
+      method: 'GET',
+    });
+    if (!lifecycleRes.ok) {
+      await decodeError(lifecycleRes, `Load lifecycle snapshot failed (${lifecycleRes.status})`);
+    }
+    const lifecycle = await lifecycleRes.json();
+    body.idempotency_key = crypto.randomUUID();
+    body.expected_lifecycle_version = lifecycle?.trajectory?.lifecycle_version;
+    body.parent_revision_id = parentRevisionId || lifecycle?.head_revision?.revision_id;
+  }
+
 
   const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/revisions`), {
     method: 'POST',
@@ -405,15 +419,36 @@ export async function submitAgentRevision(docId, payload = {}) {
   return createAgentRevision(docId, payload);
 }
 
-export async function cancelAgentRevision(docId) {
-  const res = await fetchWithRenewal(texturePath(`/documents/${encodeURIComponent(docId)}/cancel`), {
+export async function cancelAgentRevision(docId, options = {}) {
+  const document = await getDocument(docId);
+  const trajectoryId = String(document.trajectory_id || '').trim();
+  if (!trajectoryId) {
+    throw new Error('Document has no durable lifecycle');
+  }
+  const snapshotResponse = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}`, { method: 'GET' });
+  if (!snapshotResponse.ok) {
+    await decodeError(snapshotResponse, `Lifecycle snapshot failed (${snapshotResponse.status})`);
+  }
+  const snapshot = await snapshotResponse.json();
+  const expectedVersion = snapshot?.trajectory?.lifecycle_version;
+  const expectedHead = snapshot?.head_revision?.revision_id;
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion <= 0 || !expectedHead) {
+    throw new Error('Lifecycle snapshot lacks cancellation preconditions');
+  }
+  const commandId = options.commandId || `desktop-cancel:${trajectoryId}:${expectedVersion}:${expectedHead}`;
+  const res = await fetchWithRenewal(`/api/trajectories/${encodeURIComponent(trajectoryId)}/cancel`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      idempotency_key: commandId,
+      expected_lifecycle_version: expectedVersion,
+      expected_head_revision_id: expectedHead,
+      reason: options.reason || 'owner cancellation',
+    }),
   });
-
   if (!res.ok) {
     await decodeError(res, `Cancel Texture revision failed (${res.status})`);
   }
-
   return res.json();
 }
 

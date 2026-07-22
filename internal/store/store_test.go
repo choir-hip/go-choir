@@ -829,6 +829,10 @@ func TestCoagentMailboxBacklogAllUsesActorCursors(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("mailbox backlog all = %v, want %v", got, want)
 	}
+	unbounded, err := s.ListCoagentMailboxBacklogAll(ctx, 0)
+	if err != nil || len(unbounded) != len(want) {
+		t.Fatalf("unbounded mailbox backlog all = %+v, err=%v; want %v", unbounded, err, want)
+	}
 }
 
 func TestCoagentMailboxBacklogIncludesFreshChannelBelowActorCursor(t *testing.T) {

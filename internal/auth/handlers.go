@@ -1221,6 +1221,7 @@ var validScopes = map[string]bool{
 	"write:base":                         true,
 	"read:runtime":                       true,
 	"write:runtime":                      true,
+	"acceptance:read":                    true,
 	"manage:keys":                        true,
 	"admin":                              true,
 	"computer:self_development:read":     true,

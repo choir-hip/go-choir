@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yusefmosiah/go-choir/internal/store"
 	"github.com/yusefmosiah/go-choir/internal/types"
 	"github.com/yusefmosiah/go-choir/internal/wirepublish"
 )
@@ -244,6 +245,24 @@ func (rt *Runtime) postWirePublishProxy(ctx context.Context, wireURL string, doc
 func (rt *Runtime) persistWirePlatformPublicationRef(ctx context.Context, ownerID string, rev types.Revision, pub *wirepublish.PublishTextureResponse) error {
 	if rt == nil || rt.store == nil || pub == nil {
 		return fmt.Errorf("persist wire publication ref: unavailable")
+	}
+	if strings.TrimSpace(rev.TrajectoryID) != "" {
+		command := types.RecordLifecycleRefsRequest{
+			OwnerID: ownerID, ComputerID: rev.ComputerID,
+			CommandID:    "publication:" + strings.TrimSpace(pub.PublicationVersionID),
+			TrajectoryID: rev.TrajectoryID,
+			ArtifactRefs: []string{strings.TrimSpace(pub.RoutePath)},
+			EvidenceRefs: []string{"corpusd://publication/" + strings.TrimSpace(pub.PublicationID) + "/versions/" + strings.TrimSpace(pub.PublicationVersionID)},
+			SubjectRefs:  map[string]string{"publication_id": pub.PublicationID, "publication_version_id": pub.PublicationVersionID},
+			Reason:       "platform publication accepted",
+		}
+		commandDigest, digestErr := store.ComputeRecordLifecycleRefsDigest(command)
+		if digestErr != nil {
+			return fmt.Errorf("digest lifecycle publication ref: %w", digestErr)
+		}
+		command.CommandDigest = commandDigest
+		_, err := rt.store.RecordLifecycleRefs(ctx, command)
+		return err
 	}
 	ref := map[string]any{
 		"publication_id":         pub.PublicationID,

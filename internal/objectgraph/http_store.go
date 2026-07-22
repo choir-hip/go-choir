@@ -98,6 +98,9 @@ func (h *HTTPStore) ListObjects(ctx context.Context, filter ListFilter) ([]Objec
 	if filter.OwnerID != "" {
 		q.Set("owner", filter.OwnerID)
 	}
+	if filter.ComputerID != "" {
+		q.Set("computer", filter.ComputerID)
+	}
 	if filter.Limit > 0 {
 		q.Set("limit", strconv.Itoa(filter.Limit))
 	}

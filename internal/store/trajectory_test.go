@@ -21,7 +21,7 @@ func TestTrajectoryCreateIsIdempotentAndKeepsFirstRecord(t *testing.T) {
 		OwnerID:        "user-alice",
 		Kind:           types.TrajectoryKindDocument,
 		SubjectRefs:    map[string]string{"channel_id": "channel-1", "root_loop_id": "run-1"},
-		SettlementRule: types.SettlementRule{RequireNoOpenWorkItems: true},
+		SettlementRule: types.SettlementRule{Version: types.LifecycleReducerVersion, RequireNoOpenWorkItems: true},
 	})
 	if err != nil {
 		t.Fatalf("create trajectory: %v", err)
@@ -326,6 +326,10 @@ func TestListOpenAssignedWorkItemsOnlyReturnsLiveAssignedOpenItems(t *testing.T)
 	}
 	if len(got) != 1 || got[0].WorkItemID != keeper.WorkItemID {
 		t.Fatalf("open assigned work items = %+v, want only %s", got, keeper.WorkItemID)
+	}
+	all, err := s.ListOpenAssignedWorkItems(ctx, 0)
+	if err != nil || len(all) != 1 || all[0].WorkItemID != keeper.WorkItemID {
+		t.Fatalf("unbounded open assigned work items = %+v, err=%v; want only %s", all, err, keeper.WorkItemID)
 	}
 }
 
