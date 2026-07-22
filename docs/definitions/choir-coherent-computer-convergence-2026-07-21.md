@@ -282,13 +282,15 @@ now:
     status: reconciled
   candidate:
     id: convergence-durable-work-runtime-01
-    state: authorized_not_started
+    state: implementation_blockers_documented
     ref: refs/heads/convergence/kernel-contract-01
     owner: owner-and-current-session
     base: 9f725b9bd2e38b6079b23eb265f081bc91d1835f
     accepted_contract: "9f725b9bd2e38b6079b23eb265f081bc91d1835f#kernel_contract sha256:6a661560d7a2459c68becaa908e37a5c85622763ab29d81dbe9cf7ab12199589"
     prior_contract_candidates: ["b05ed30bf3a3cc43a3d1aff707f30dcdce74a130", "3296209df8c3fa33fd0f5ecadcd3b1290c11d6f8", "15248ea876c6ff114b5ed307e57ccac858ad8e9d", "ab01a6493b5bf93b0777e02556724564ae19d23e"]
     scope: "Phase C protected paths only; effects OFF and uninjected"
+    observed_problem: "The first disabled implementation pass established a conditional lifecycle reducer and scoped actor substrate, but review preparation exposed incomplete contract coverage: request_super_execution still opens no canonical delayed obligation and uses a UUID worker-update identity; manual/import/merge/restore heads and archive remain outside CommitTextureHeadAuthority; and no signed least-disclosure /api/acceptance/execution-identity path exists. The removed raw-path identity experiment would have violated the contract."
+    remaining_error: "Do not land or deploy until the independent candidate gate and local source checks show one fate-shared authority for these exercised transitions, exact public protocol equivalence, and fail-closed signed execution identity. Partial lifecycle tests do not repair these gaps."
   decision:
     selected: "Supersede the incomplete self-development mission and first prove one generic durable-work lifecycle; do not repair Round 72 or start a comprehensive Texture redesign."
     kind: purpose
@@ -299,8 +301,8 @@ now:
     recorded_at: 2026-07-21T19:41:58Z
     consequence: "Documentation may cut over sole mission authority; subsequent runtime work is limited to the bounded generic lifecycle after the code-free contract gate."
   evidence_refs: [9f725b9bd2e38b6079b23eb265f081bc91d1835f, /tmp/choir-kernel-contract-review-9f725b9b/manifest.tsv, /tmp/choir-kernel-contract-review-9f725b9b/codex.out, /tmp/choir-kernel-contract-review-9f725b9b/cursor.out, /tmp/choir-kernel-contract-review-9f725b9b/omp-gemini35.out, /tmp/choir-kernel-contract-review-9f725b9b/omp-gpt55.out]
-  blocker_or_risk: "Contract gate accepted unanimously across four substantive reviewers. Runtime risk now concentrates at the conditional embedded-Dolt CAS seam and owner/computer scope migration; a partial cutover would create dual truth."
-  next_action: "Implement and focused-test the conditional object-graph batch/CAS plus owner/computer-scoped subject/wake substrate as the first coherent disabled candidate slice; inject no effect capability."
+  blocker_or_risk: "Implementation blocked from landing: Super delegation is not yet a durable lifecycle obligation, several Texture head/archive writers still bypass the canonical reducer, and signed no-SSH execution identity is absent. A partial cutover would preserve dual truth even though focused reducer tests pass."
+  next_action: "Complete the independent frozen-candidate review, adjudicate every reproducible blocker, then repair the documented authority/identity gaps with effects OFF before any candidate commit or deployment."
 
 receipts:
   - id: durable-work-contract-gate-2026-07-21
